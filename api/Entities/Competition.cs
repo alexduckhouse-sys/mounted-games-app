@@ -1,0 +1,28 @@
+namespace MountedGames.Api.Entities;
+
+public class Competition
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Location { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public bool IsActive { get; set; } = true;
+    public bool IsArchived { get; set; }
+    public string? Description { get; set; }
+    public string? What3Words { get; set; }
+    public string? AppleMapsUrl { get; set; }
+    /// <summary>One live-stream URL for the whole competition (YouTube, Twitch, etc).</summary>
+    public string? StreamUrl { get; set; }
+
+    public string? CreatedByUserId { get; set; }
+    public AppUser? CreatedBy { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<CompetitionSection> Sections { get; set; } = new List<CompetitionSection>();
+    public ICollection<Team> Teams { get; set; } = new List<Team>();
+    public ICollection<Session> Sessions { get; set; } = new List<Session>();
+    public ICollection<ChatMessage> ChatMessages { get; set; } = new List<ChatMessage>();
+}

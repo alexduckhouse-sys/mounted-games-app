@@ -1,0 +1,35 @@
+# Render Blueprint — free dev hosting for the Mounted Games scoreboard.
+# Deploy: push this repo to GitHub, then visit https://render.com → New → Blueprint → pick the repo.
+#
+# Free tier caveats (fine for dev, not for a live event):
+#   - The service SLEEPS after 15 minutes of inactivity; first request after wake takes ~30–60s
+#     and SignalR sockets drop. Reconnect on the client is automatic but introduces a hiccup.
+#   - There is NO persistent disk. SQLite lives in /tmp and is wiped on every restart, but
+#     DbInitializer re-seeds clubs, demo accounts and the race library every boot.
+#
+# For a real event with persistent data, switch to Fly.io (see DEPLOY.md).
+
+services:
+  - type: web
+    name: mounted-games-scoreboard
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://+:8080
+      # SQLite on free tier: ephemeral. Seeder re-runs on boot.
+      - key: ConnectionStrings__Default
+        value: Data Source=/tmp/mg.db
+      # Render generates a strong random value once and re-uses it across deploys.
+      - key: Jwt__Key
+        generateValue: true
+      # Set this in the Render dashboard ("Environment" tab) after first deploy.
+      # Any non-empty string works — it's the shared admin key for the Organiser sign-in.
+      - key: Admin__Key
+        sync: false

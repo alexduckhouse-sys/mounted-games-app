@@ -1,0 +1,31 @@
+# Keep the build context small
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.vite
+**/coverage
+
+# Local dev artefacts
+**/.env
+**/.env.local
+**/.vs
+**/.idea
+**/*.user
+
+# DB + logs
+**/*.db
+**/*.db-journal
+**/*.log
+
+# VCS + scratch
+.git
+.gitignore
+.github
+*.md
+
+# Build outputs are produced inside the image, not copied from host
+api/bin
+api/obj
+web/node_modules
+web/dist

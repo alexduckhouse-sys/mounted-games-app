@@ -1,0 +1,185 @@
+using MountedGames.Api.Entities;
+
+namespace MountedGames.Api.Dtos;
+
+public record ClubDto(int Id, string Name, string? Region, string? BibColour);
+
+public record CreateClubRequest(string Name, string? Region = null, string? BibColour = null);
+
+public record CompetitionSummary(
+    int Id, string Name, string? Location, DateTime StartDate, DateTime? EndDate,
+    bool IsActive, bool IsArchived, int SectionCount, int TeamCount, int SessionCount);
+
+public record CompetitionDetail(
+    int Id, string Name, string? Location, string? Description,
+    double? Latitude, double? Longitude,
+    string? What3Words, string? AppleMapsUrl,
+    DateTime StartDate, DateTime? EndDate,
+    bool IsActive, bool IsArchived,
+    IReadOnlyList<CompetitionSectionDto> Sections,
+    IReadOnlyList<TeamDto> Teams,
+    IReadOnlyList<SessionDto> Sessions,
+    string? StreamUrl = null);
+
+public record CreateCompetitionRequest(
+    string Name, string? Location, string? Description,
+    double? Latitude, double? Longitude,
+    string? What3Words, string? AppleMapsUrl,
+    DateTime StartDate, DateTime? EndDate,
+    string? Postcode = null,
+    string? StreamUrl = null);
+
+public record UpdateCompetitionRequest(
+    string Name, string? Location, string? Description,
+    double? Latitude, double? Longitude,
+    string? What3Words, string? AppleMapsUrl,
+    DateTime StartDate, DateTime? EndDate,
+    bool IsActive, bool IsArchived,
+    string? Postcode = null,
+    string? StreamUrl = null);
+
+public record GeocodeResult(double? Latitude, double? Longitude, string? Source);
+
+public record BlockAuthorRequest(string? Reason = null);
+
+public record RaceTemplateDto(
+    int Id, string Name, string? Summary, string? Rules, string? Category,
+    string? DiagramJson, bool IsBuiltIn);
+public record UpsertRaceTemplateRequest(
+    string Name, string? Summary, string? Rules, string? Category, string? DiagramJson);
+
+public record CompetitionSectionDto(
+    int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName);
+public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName);
+
+public record TeamDto(
+    int Id, int CompetitionId, int CompetitionSectionId, string SectionName,
+    int ClubId, string ClubName, string Suffix, string DisplayName,
+    string? BibColour, string? TrainerUserId, string? TrainerName,
+    bool IsHorsConcours);
+
+public record CreateTeamRequest(
+    int CompetitionSectionId, int ClubId, string Suffix,
+    string? BibColour, string? TrainerUserId,
+    bool IsHorsConcours = false);
+
+public record UpdateTeamRequest(
+    string? Suffix = null,
+    bool? IsHorsConcours = null);
+
+public record SessionDto(
+    int Id, int CompetitionId, int? CompetitionSectionId, string? SectionName,
+    string Name, string? ArenaName,
+    DateTime? ScheduledStart, DateTime? StartedAt, DateTime? FinishedAt,
+    SessionStatus Status, int OrderIndex, string? Notes,
+    bool IsBreak, int? DurationMinutes,
+    SessionKind Kind, string? Location,
+    string? StreamUrl, int? LanesPerHeat,
+    int? MinutesPerHeat, bool RaceOrderAlternating,
+    IReadOnlyList<HeatDto> Heats);
+
+public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating);
+
+public record HeatAssignmentEntry(string Label, IReadOnlyList<int> TeamIds);
+public record UpdateHeatAssignmentsRequest(IReadOnlyList<HeatAssignmentEntry> Assignments);
+
+public record CreateSessionRequest(
+    int? CompetitionSectionId, string Name, string? ArenaName,
+    DateTime? ScheduledStart, int OrderIndex, string? Notes,
+    bool IsBreak, int? DurationMinutes,
+    SessionKind? Kind, string? Location);
+
+public record UpdateSessionStatusRequest(SessionStatus Status);
+
+public record UpdateSessionStreamRequest(string? StreamUrl);
+public record UpdateSessionLanesRequest(int? LanesPerHeat);
+public record GenerateHeatsRequest(
+    IReadOnlyList<int> TeamIds,
+    IReadOnlyList<string> RaceNames,
+    int? LanesPerHeat,
+    bool ReplaceExisting);
+public record CreateFinalsRequest(
+    int? CompetitionSectionId,
+    int TopN,
+    IReadOnlyList<string> RaceNames,
+    int? LanesPerHeat,
+    string? Name);
+
+public record AutoTimetableRequest(
+    int? RacesPerHeat,
+    int? SessionsPerSection,
+    int? LanesPerHeat,
+    int? MinutesPerHeat,
+    int? MinutesBetweenSessions,
+    bool ReplaceExisting,
+    IReadOnlyList<int>? SectionIds);
+
+public record HeatDto(
+    int Id, int SessionId, string? Label,
+    int OrderIndex,
+    int? DurationMinutes,
+    DateTime? StartedAt, DateTime? FinishedAt,
+    IReadOnlyList<HeatEntryDto> Entries,
+    IReadOnlyList<RaceDto> Races);
+
+public record RaceDto(
+    int Id, int HeatId, string Name,
+    int OrderIndex, bool IsComplete,
+    DateTime? StartedAt, DateTime? FinishedAt,
+    IReadOnlyList<ResultDto> Results);
+
+public record UpdateHeatDurationRequest(int? DurationMinutes);
+
+public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex);
+
+public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points);
+
+public record CreateHeatRequest(
+    string? Label, int OrderIndex,
+    IReadOnlyList<int> TeamIds,
+    IReadOnlyList<string> RaceNames);
+
+public record SubmitRaceResultsRequest(IReadOnlyList<FinishingPlaceDto> Places);
+public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated);
+
+public record StandingRow(
+    int TeamId, string TeamName, string ClubName, string? BibColour,
+    int TotalPoints, int RacesRun, int Wins, int Eliminations);
+
+public record DeclarationFormDto(
+    int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,
+    string? SubmittedByUserId, string? SubmittedByName, string? SubmittedByPhone,
+    DateTime SubmittedAt,
+    string? Notes, bool IsLocked,
+    IReadOnlyList<RiderEntryDto> Riders);
+
+public record RiderEntryDto(
+    int Id, int? SavedRiderId, string FullName, DateTime? DateOfBirth,
+    string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex);
+
+public record SubmitDeclarationFormRequest(
+    int TeamId, string? Notes, IReadOnlyList<RiderEntryInput> Riders, bool SaveToRoster,
+    string? TrainerPhone);
+
+public record RiderEntryInput(
+    int? SavedRiderId, string FullName, DateTime? DateOfBirth,
+    string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex);
+
+public record SavedRiderDto(
+    int Id, int ClubId, string FullName, DateTime? DateOfBirth, string? HorseName, string? Notes);
+
+public record ChatMessageDto(
+    int Id, int CompetitionId, string? UserId, string AuthorName,
+    string Body, ChatMessageType Type, string? Tag, DateTime CreatedAt);
+
+public record PostChatMessageRequest(string Body, string? AuthorName);
+
+public record AnnouncementRequest(string Body, string? Tag);
+
+public record TrainerNoteDto(
+    int Id, string UserId, string? Title, string Body, DateTime CreatedAt, DateTime? UpdatedAt);
+
+public record SaveTrainerNoteRequest(string? Title, string Body);
+
+public record IpBlockDto(int Id, string IpAddress, string? Reason, string? CreatedByUserId, DateTime CreatedAt);
+public record CreateIpBlockRequest(string IpAddress, string? Reason);
