@@ -7,8 +7,9 @@ import {
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
+import { useLiveHub } from '../../live/useLiveHub';
 import { ForecastBadge } from '../../components/ForecastBadge';
-import type { DeclarationForm, Heat, HeatEntry, Race, Session } from '../../types';
+import type { DeclarationForm, Heat, HeatEntry, Race, Session, StewardCall } from '../../types';
 import { SessionEndTransition } from './SessionEndTransition';
 import { bibAccent } from '../../lib/bib';
 import { displaySectionName } from '../../lib/section';
@@ -85,6 +86,24 @@ export function SessionPage() {
   const [showGenerator, setShowGenerator] = useState(false);
   const [showLaneView, setShowLaneView] = useState(false);
   const [decForms, setDecForms] = useState<DeclarationForm[]>([]);
+  const [stewardCalls, setStewardCalls] = useState<StewardCall[]>([]);
+
+  useEffect(() => {
+    if (!session) return;
+    api.get<StewardCall[]>(`/competitions/${session.competitionId}/steward-calls`)
+      .then((r) => setStewardCalls(r.data))
+      .catch(() => setStewardCalls([]));
+  }, [session]);
+
+  useLiveHub(session?.competitionId ?? null, {
+    onStewardCall: (c) => {
+      const call = c as StewardCall;
+      setStewardCalls((cur) => cur.some((x) => x.id === call.id) ? cur : [call, ...cur]);
+    },
+    onStewardCallResolved: ({ id }) => {
+      setStewardCalls((cur) => cur.filter((x) => x.id !== id));
+    },
+  });
 
   useEffect(() => {
     if (!session) return;
@@ -278,6 +297,21 @@ export function SessionPage() {
             activeHeatId={activeHeatId}
             onSelect={(id) => { setActiveHeatId(id); setPending([]); }}
           />
+
+          {activeHeat && activeRace && (
+            <StewardCallBanner
+              calls={stewardCalls.filter((c) => c.raceId === activeRace.id)}
+              onApply={(call) => {
+                toggleElim(call.teamId);
+                api.delete(`/steward-calls/${call.id}`).catch(() => {});
+                setStewardCalls((cur) => cur.filter((x) => x.id !== call.id));
+              }}
+              onDismiss={(call) => {
+                api.delete(`/steward-calls/${call.id}`).catch(() => {});
+                setStewardCalls((cur) => cur.filter((x) => x.id !== call.id));
+              }}
+            />
+          )}
 
           {activeHeat ? (
             <ScoringSection
@@ -799,37 +833,35 @@ function HeatResultsTable({ heat, pending, activeRaceId, pointsFor }: {
       <table className="w-full text-xs sm:text-sm border-t border-slate-100 dark:border-slate-800">
         <thead>
           <tr className="text-left text-slate-500 dark:text-slate-400">
-            <th className="px-2 py-1.5 sticky left-0 bg-white dark:bg-slate-800">Race</th>
-            {teams.map((t) => (
-              <th key={t.teamId} className="px-2 py-1.5 text-center whitespace-nowrap"
-                  style={{ borderBottom: `3px solid ${bibAccent(t.bibColour)}` }}>
-                {t.teamName}
-              </th>
+            <th className="px-2 py-1.5 sticky left-0 bg-white dark:bg-slate-800">Team</th>
+            {races.map((r) => (
+              <th key={r.id} className="px-2 py-1.5 text-center whitespace-nowrap">{r.name}</th>
             ))}
+            <th className="px-2 py-1.5 text-center font-bold">Total</th>
           </tr>
         </thead>
         <tbody>
-          {races.map((r) => (
-            <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
-              <td className="px-2 py-1.5 font-medium sticky left-0 bg-white dark:bg-slate-800">{r.name}</td>
-              {teams.map((t) => (
-                <td key={t.teamId} className="px-2 py-1.5 text-center tabular-nums">
-                  {cellFor(r, t.teamId)}
+          {teams.map((t) => {
+            const total = races.reduce((sum, r) => sum + (r.results.find((x) => x.teamId === t.teamId)?.points ?? 0), 0);
+            return (
+              <tr key={t.teamId} className="border-t border-slate-100 dark:border-slate-800">
+                <td
+                  className="px-2 py-1.5 font-medium sticky left-0 bg-white dark:bg-slate-800 whitespace-nowrap"
+                  style={{ borderLeft: `3px solid ${bibAccent(t.bibColour)}` }}
+                >
+                  {t.teamName}
                 </td>
-              ))}
-            </tr>
-          ))}
-          <tr className="border-t-2 border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60">
-            <td className="px-2 py-1.5 font-bold">Total</td>
-            {teams.map((t) => {
-              const total = races.reduce((sum, r) => sum + (r.results.find((x) => x.teamId === t.teamId)?.points ?? 0), 0);
-              return (
-                <td key={t.teamId} className="px-2 py-1.5 text-center font-mono font-bold text-brand-700 dark:text-brand-200 tabular-nums">
+                {races.map((r) => (
+                  <td key={r.id} className="px-2 py-1.5 text-center tabular-nums">
+                    {cellFor(r, t.teamId)}
+                  </td>
+                ))}
+                <td className="px-2 py-1.5 text-center font-mono font-bold text-brand-700 dark:text-brand-200 tabular-nums border-l border-slate-200 dark:border-slate-700">
                   {total}
                 </td>
-              );
-            })}
-          </tr>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -965,40 +997,40 @@ export function HeatPublicTable({ heat, index, session }: { heat: Heat; index: n
         <table className="w-full text-[11px] tabular-nums">
           <thead>
             <tr className="text-slate-600 dark:text-slate-200">
-              <th className="px-1.5 py-1 text-left sticky left-0 bg-white dark:bg-slate-800 font-medium">Race</th>
-              {teams.map((t) => (
-                <th
-                  key={t.teamId}
-                  className="px-1 py-1 text-center"
-                  style={{ borderBottom: `2px solid ${bibAccent(t.bibColour)}` }}
-                  title={t.teamName}
-                >
-                  {shortLabel(t.teamName)}
+              <th className="px-1.5 py-1 text-left sticky left-0 bg-white dark:bg-slate-800 font-medium">Team</th>
+              {races.map((r, i) => (
+                <th key={r.id} className="px-1 py-1 text-center" title={r.name}>
+                  {i + 1}
                 </th>
               ))}
+              <th className="px-1.5 py-1 text-center font-bold">Total</th>
             </tr>
           </thead>
           <tbody>
-            {races.map((r, i) => (
-              <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
-                <td className="px-1.5 py-0.5 text-left sticky left-0 bg-white dark:bg-slate-800 truncate max-w-[80px]" title={r.name}>
-                  {i + 1}. {r.name}
+            {teams.map((t) => (
+              <tr key={t.teamId} className="border-t border-slate-100 dark:border-slate-800">
+                <td
+                  className="px-1.5 py-0.5 text-left sticky left-0 bg-white dark:bg-slate-800 truncate max-w-[100px]"
+                  style={{ borderLeft: `2px solid ${bibAccent(t.bibColour)}` }}
+                  title={t.teamName}
+                >
+                  {shortLabel(t.teamName)}
                 </td>
-                {teams.map((t) => (
-                  <td key={t.teamId} className="px-1 py-0.5 text-center">{cellPoints(r, t.teamId)}</td>
+                {races.map((r) => (
+                  <td key={r.id} className="px-1 py-0.5 text-center">{cellPoints(r, t.teamId)}</td>
                 ))}
-              </tr>
-            ))}
-            <tr className="border-t-2 border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60">
-              <td className="px-1.5 py-0.5 font-bold sticky left-0 bg-slate-50 dark:bg-slate-900/60">Total</td>
-              {teams.map((t) => (
-                <td key={t.teamId} className="px-1 py-0.5 text-center font-mono font-bold text-brand-700 dark:text-brand-200">
+                <td className="px-1.5 py-0.5 text-center font-mono font-bold text-brand-700 dark:text-brand-200 border-l border-slate-200 dark:border-slate-700">
                   {totals.get(t.teamId) ?? 0}
                 </td>
-              ))}
-            </tr>
+              </tr>
+            ))}
           </tbody>
         </table>
+      </div>
+      <div className="px-2 py-1 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400 flex flex-wrap gap-x-2 gap-y-0.5">
+        {races.map((r, i) => (
+          <span key={r.id} className="truncate"><span className="font-semibold">{i + 1}.</span> {r.name}</span>
+        ))}
       </div>
     </div>
   );
@@ -1171,6 +1203,52 @@ function HeatEndOverlay({
           </div>
         )}
       </motion.div>
+    </motion.div>
+  );
+}
+
+function StewardCallBanner({
+  calls, onApply, onDismiss,
+}: {
+  calls: StewardCall[];
+  onApply: (c: StewardCall) => void;
+  onDismiss: (c: StewardCall) => void;
+}) {
+  if (calls.length === 0) return null;
+  return (
+    <motion.div
+      initial={{ y: -4, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+      className="rounded-lg border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 p-2 space-y-1.5"
+    >
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-amber-900 dark:text-amber-100 font-bold">
+        <AlertTriangle className="w-3.5 h-3.5" />
+        Steward calls — {calls.length} pending
+      </div>
+      <ul className="space-y-1">
+        {calls.map((c) => (
+          <li key={c.id} className="flex items-center gap-1.5 text-xs">
+            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: bibAccent(c.teamBibColour) }} />
+            <span className="font-semibold truncate flex-1 min-w-0">{c.teamName}</span>
+            <span className="text-[10px] text-amber-700 dark:text-amber-200 shrink-0">
+              lane {c.laneIndex}{c.reporterName ? ` · ${c.reporterName}` : ''}
+            </span>
+            <button
+              onClick={() => onApply(c)}
+              className="btn-primary !py-0.5 !px-2 text-[11px]"
+              title="Mark this team eliminated in the current race"
+            >
+              Apply elim
+            </button>
+            <button
+              onClick={() => onDismiss(c)}
+              className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-slate-500"
+              title="Ignore this steward call"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </li>
+        ))}
+      </ul>
     </motion.div>
   );
 }

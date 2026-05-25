@@ -23,6 +23,7 @@ import { AdminPage } from './pages/AdminPage';
 import { CompetitionEditor } from './pages/admin/CompetitionEditor';
 import { RulesPage } from './pages/admin/RulesPage';
 import { ArenaPage } from './pages/competition/ArenaPage';
+import { StewardPage } from './pages/competition/StewardPage';
 import './App.css';
 
 export default function App() {
@@ -42,6 +43,7 @@ export default function App() {
                 <Route path="scoring" element={<ScoringTab />} />
                 <Route path="session/:sessionId" element={<SessionPage />} />
                 <Route path="arena" element={<ArenaPage />} />
+                <Route path="steward" element={<StewardPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="teams" element={<TeamsTab />} />
                 <Route path="declarations" element={<DeclarationsTab />} />
@@ -50,7 +52,7 @@ export default function App() {
                 <Route path="live" element={<Navigate to="../chat" replace />} />
               </Route>
               <Route path="teams" element={
-                <ProtectedRoute roles={['Trainer', 'Admin']}><MyTeamsPage /></ProtectedRoute>
+                <ProtectedRoute><MyTeamsPage /></ProtectedRoute>
               } />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
               <Route path="chat" element={<ChatIndexPage />} />

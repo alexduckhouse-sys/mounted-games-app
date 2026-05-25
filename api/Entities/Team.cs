@@ -24,7 +24,14 @@ public class Team
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Random short string the trainer shares with supporters so they can
+    /// request read access to this team's profile. Null when no key is set.
+    /// </summary>
+    public string? SupporterJoinKey { get; set; }
+
     public ICollection<DeclarationForm> DeclarationForms { get; set; } = new List<DeclarationForm>();
     public ICollection<HeatEntry> HeatEntries { get; set; } = new List<HeatEntry>();
     public ICollection<Result> Results { get; set; } = new List<Result>();
+    public ICollection<TeamSupporter> Supporters { get; set; } = new List<TeamSupporter>();
 }

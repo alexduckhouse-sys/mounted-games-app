@@ -15,7 +15,7 @@ public static class Mappings
         c.Sessions?.Count ?? 0);
 
     public static CompetitionSectionDto ToDto(this CompetitionSection s) =>
-        new(s.Id, s.CompetitionId, s.Format, s.AgeGroup, s.DisplayName);
+        new(s.Id, s.CompetitionId, s.Format, s.AgeGroup, s.DisplayName, s.RunoffRaceName, s.UsesRaceFinals);
 
     public static TeamDto ToDto(this Team t) => new(
         t.Id, t.CompetitionId, t.CompetitionSectionId,
@@ -24,6 +24,34 @@ public static class Mappings
         t.Suffix, t.DisplayName, t.BibColour,
         t.TrainerUserId, t.Trainer?.FullName,
         t.IsHorsConcours);
+
+    /// <summary>
+    /// Same as ToDto but populates the viewer-specific Relationship and
+    /// SupporterJoinKey fields used by the my-teams endpoint.
+    /// </summary>
+    public static TeamDto ToDtoFor(this Team t, string? viewerUserId)
+    {
+        var isTrainer = viewerUserId != null && t.TrainerUserId == viewerUserId;
+        var isSupporter = viewerUserId != null
+            && t.Supporters?.Any(s => s.UserId == viewerUserId && s.Status == TeamSupporterStatus.Accepted) == true;
+        return new TeamDto(
+            t.Id, t.CompetitionId, t.CompetitionSectionId,
+            t.Section?.DisplayName ?? string.Empty,
+            t.ClubId, t.Club?.Name ?? string.Empty,
+            t.Suffix, t.DisplayName, t.BibColour,
+            t.TrainerUserId, t.Trainer?.FullName,
+            t.IsHorsConcours,
+            Relationship: isTrainer ? "trainer" : isSupporter ? "supporter" : null,
+            SupporterJoinKey: isTrainer ? t.SupporterJoinKey : null);
+    }
+
+    public static TeamSupporterDto ToDto(this TeamSupporter s) => new(
+        s.Id, s.TeamId,
+        s.Team?.DisplayName ?? string.Empty,
+        s.UserId,
+        s.User?.FullName ?? s.User?.Email ?? "—",
+        s.User?.Email,
+        s.Status, s.CreatedAt);
 
     public static HeatEntryDto ToDto(this HeatEntry he) => new(
         he.Id, he.TeamId,
@@ -43,7 +71,8 @@ public static class Mappings
 
     public static HeatDto ToDto(this Heat h) => new(
         h.Id, h.SessionId, h.Label, h.OrderIndex,
-        h.DurationMinutes, h.StartedAt, h.FinishedAt,
+        h.DurationMinutes, h.ScheduledStart, h.StartedAt, h.FinishedAt,
+        h.RaceRoundId, h.RaceRoundStage,
         h.Entries.OrderBy(e => e.LaneIndex).Select(e => e.ToDto()).ToList(),
         h.Races.OrderBy(r => r.OrderIndex).Select(r => r.ToDto()).ToList());
 
@@ -78,4 +107,13 @@ public static class Mappings
 
     public static TrainerNoteDto ToDto(this TrainerNote n) =>
         new(n.Id, n.UserId, n.Title, n.Body, n.CreatedAt, n.UpdatedAt);
+
+    public static StewardCallDto ToDto(this StewardCall c) => new(
+        c.Id, c.RaceId,
+        c.Race?.HeatId ?? 0,
+        c.Race?.Heat?.Session?.CompetitionId ?? 0,
+        c.TeamId,
+        c.Team?.DisplayName ?? string.Empty,
+        c.Team?.BibColour,
+        c.LaneIndex, c.ReporterName, c.CreatedAt);
 }

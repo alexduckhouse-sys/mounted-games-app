@@ -194,9 +194,39 @@ public class CompetitionsController : ControllerBase
     [Authorize(Roles = Roles.Admin)]
     public async Task<IActionResult> Delete(int id)
     {
-        var c = await _db.Competitions.FindAsync(id);
+        var c = await _db.Competitions
+            .Include(x => x.Sections)
+            .Include(x => x.Teams)
+            .Include(x => x.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Entries)
+            .Include(x => x.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
+            .Include(x => x.ChatMessages)
+            .FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return NotFound();
+
+        // Walk the graph bottom-up so foreign-key constraints don't trip.
+        foreach (var session in c.Sessions)
+        foreach (var heat in session.Heats)
+        {
+            foreach (var race in heat.Races) _db.Results.RemoveRange(race.Results);
+            _db.Races.RemoveRange(heat.Races);
+            _db.HeatEntries.RemoveRange(heat.Entries);
+        }
+        foreach (var session in c.Sessions) _db.Heats.RemoveRange(session.Heats);
+        _db.Sessions.RemoveRange(c.Sessions);
+
+        var teamIds = c.Teams.Select(t => t.Id).ToList();
+        var decForms = await _db.DeclarationForms
+            .Include(d => d.Riders)
+            .Where(d => teamIds.Contains(d.TeamId))
+            .ToListAsync();
+        foreach (var d in decForms) _db.RiderEntries.RemoveRange(d.Riders);
+        _db.DeclarationForms.RemoveRange(decForms);
+
+        _db.Teams.RemoveRange(c.Teams);
+        _db.ChatMessages.RemoveRange(c.ChatMessages);
+        _db.CompetitionSections.RemoveRange(c.Sections);
         _db.Competitions.Remove(c);
+
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -214,9 +244,23 @@ public class CompetitionsController : ControllerBase
             CompetitionId = id,
             Format = req.Format,
             AgeGroup = req.AgeGroup,
-            DisplayName = display
+            DisplayName = display,
+            RunoffRaceName = string.IsNullOrWhiteSpace(req.RunoffRaceName) ? null : req.RunoffRaceName.Trim(),
+            UsesRaceFinals = req.UsesRaceFinals
         };
         _db.CompetitionSections.Add(section);
+        await _db.SaveChangesAsync();
+        return section.ToDto();
+    }
+
+    [HttpPut("{id:int}/sections/{sectionId:int}")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<CompetitionSectionDto>> UpdateSection(int id, int sectionId, UpdateSectionRequest req)
+    {
+        var section = await _db.CompetitionSections.FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == id);
+        if (section is null) return NotFound();
+        section.RunoffRaceName = string.IsNullOrWhiteSpace(req.RunoffRaceName) ? null : req.RunoffRaceName.Trim();
+        if (req.UsesRaceFinals.HasValue) section.UsesRaceFinals = req.UsesRaceFinals.Value;
         await _db.SaveChangesAsync();
         return section.ToDto();
     }

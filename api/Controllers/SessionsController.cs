@@ -155,6 +155,165 @@ public class SessionsController : ControllerBase
         return loaded.ToDto();
     }
 
+    [HttpPost("{id:int}/generate-race-finals")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<SessionDto>> GenerateRaceFinals(int competitionId, int id, GenerateRaceFinalsRequest req)
+    {
+        var s = await _db.Sessions
+            .Include(s => s.Heats)
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+
+        var teamIds = req.TeamIds.Distinct().ToList();
+        var raceNames = req.RaceNames.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
+        if (teamIds.Count == 0 || raceNames.Count == 0)
+            return BadRequest("At least one team and one race name are required.");
+
+        var lanes = req.LanesPerHeat ?? s.LanesPerHeat ?? Math.Max(1, (int)Math.Ceiling(teamIds.Count / 2.0));
+        if (lanes <= 0) lanes = teamIds.Count;
+        s.LanesPerHeat = lanes;
+
+        if (req.ReplaceExisting)
+        {
+            _db.Heats.RemoveRange(s.Heats);
+            await _db.SaveChangesAsync();
+        }
+
+        // For each race in the list: create 3 heats (Q1, Q2, Final). Q1 + Q2
+        // split the teams randomly; the Final stays empty until admin populates.
+        var rng = new Random();
+        var heatOrder = req.ReplaceExisting ? 1 : s.Heats.Count + 1;
+        var roundSeed = req.ReplaceExisting ? 1 : (s.Heats.Max(h => h.RaceRoundId ?? 0) + 1);
+
+        foreach (var raceName in raceNames)
+        {
+            var shuffled = teamIds.OrderBy(_ => rng.Next()).ToList();
+            var midpoint = (shuffled.Count + 1) / 2;
+            var q1Teams = shuffled.Take(midpoint).ToList();
+            var q2Teams = shuffled.Skip(midpoint).ToList();
+            var roundId = roundSeed++;
+
+            await CreateRoundHeatAsync(s.Id, raceName, $"{raceName} · Q1", heatOrder++, RaceRoundStage.Qualifier, roundId, q1Teams);
+            await CreateRoundHeatAsync(s.Id, raceName, $"{raceName} · Q2", heatOrder++, RaceRoundStage.Qualifier, roundId, q2Teams);
+            await CreateRoundHeatAsync(s.Id, raceName, $"{raceName} · Final", heatOrder++, RaceRoundStage.Final, roundId, Array.Empty<int>());
+        }
+
+        var dto = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+        await _live.SessionUpdated(competitionId, dto.ToDto());
+        return dto.ToDto();
+    }
+
+    private async Task CreateRoundHeatAsync(
+        int sessionId, string raceName, string label, int orderIndex,
+        RaceRoundStage stage, int roundId, IReadOnlyList<int> teamIds)
+    {
+        var heat = new Heat
+        {
+            SessionId = sessionId,
+            Label = label,
+            OrderIndex = orderIndex,
+            RaceRoundId = roundId,
+            RaceRoundStage = stage,
+        };
+        _db.Heats.Add(heat);
+        await _db.SaveChangesAsync();
+
+        var lane = 1;
+        foreach (var tid in teamIds)
+        {
+            _db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = tid, LaneIndex = lane++ });
+        }
+        _db.Races.Add(new Race { HeatId = heat.Id, Name = raceName, OrderIndex = 1 });
+        await _db.SaveChangesAsync();
+    }
+
+    [HttpPost("{id:int}/heats/{heatId:int}/populate-race-final")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<HeatDto>> PopulateRaceFinal(
+        int competitionId, int id, int heatId, PopulateRaceFinalRequest req)
+    {
+        var finalHeat = await _db.Heats
+            .Include(h => h.Session)
+            .Include(h => h.Entries)
+            .Include(h => h.Races)
+            .FirstOrDefaultAsync(h => h.Id == heatId && h.SessionId == id);
+        if (finalHeat is null || finalHeat.Session?.CompetitionId != competitionId) return NotFound();
+        if (finalHeat.RaceRoundStage != RaceRoundStage.Final || finalHeat.RaceRoundId is null)
+            return BadRequest("This heat isn't a race-final scaffold.");
+        if (req.TopN < 1) return BadRequest("TopN must be at least 1.");
+
+        var siblings = await _db.Heats
+            .Include(h => h.Races).ThenInclude(r => r.Results)
+            .Where(h => h.SessionId == id
+                && h.RaceRoundId == finalHeat.RaceRoundId
+                && h.RaceRoundStage == RaceRoundStage.Qualifier)
+            .OrderBy(h => h.OrderIndex)
+            .ToListAsync();
+        if (siblings.Count < 2) return BadRequest("Both qualifier heats must exist before populating the final.");
+
+        int?[] TopPlacings(Heat h) => h.Races
+            .SelectMany(r => r.Results)
+            .Where(r => !r.Eliminated && r.Placing.HasValue)
+            .OrderBy(r => r.Placing!.Value)
+            .Take(req.TopN)
+            .Select(r => (int?)r.TeamId)
+            .ToArray();
+
+        var q1Top = TopPlacings(siblings[0]);
+        var q2Top = TopPlacings(siblings[1]);
+        if (q1Top.Length == 0 && q2Top.Length == 0)
+            return BadRequest("No qualifier results recorded yet.");
+
+        // Interleave: Q1[1], Q2[1], Q1[2], Q2[2], ... up to LanesPerHeat lanes.
+        var lanes = finalHeat.Session?.LanesPerHeat ?? (q1Top.Length + q2Top.Length);
+        var interleaved = new List<int>();
+        for (var i = 0; i < req.TopN && interleaved.Count < lanes; i++)
+        {
+            if (i < q1Top.Length && q1Top[i].HasValue && interleaved.Count < lanes)
+                interleaved.Add(q1Top[i]!.Value);
+            if (i < q2Top.Length && q2Top[i].HasValue && interleaved.Count < lanes)
+                interleaved.Add(q2Top[i]!.Value);
+        }
+
+        _db.HeatEntries.RemoveRange(finalHeat.Entries);
+        await _db.SaveChangesAsync();
+
+        var lane = 1;
+        foreach (var tid in interleaved)
+        {
+            _db.HeatEntries.Add(new HeatEntry { HeatId = finalHeat.Id, TeamId = tid, LaneIndex = lane++ });
+        }
+        await _db.SaveChangesAsync();
+
+        var refreshed = await _db.Heats
+            .Include(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstAsync(h => h.Id == heatId);
+        var sessionDto = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+        await _live.SessionUpdated(competitionId, sessionDto.ToDto());
+        return refreshed.ToDto();
+    }
+
+    [HttpPut("{id:int}/heats/{heatId:int}/scheduled-start")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<HeatDto>> UpdateHeatScheduledStart(
+        int competitionId, int id, int heatId, UpdateHeatScheduledStartRequest req)
+    {
+        var heat = await _db.Heats
+            .Include(h => h.Session)
+            .Include(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstOrDefaultAsync(h => h.Id == heatId && h.SessionId == id);
+        if (heat is null || heat.Session?.CompetitionId != competitionId) return NotFound();
+
+        heat.ScheduledStart = req.ScheduledStart;
+        await _db.SaveChangesAsync();
+
+        var sessionDto = await SessionsWithDetail().FirstAsync(s => s.Id == id);
+        await _live.SessionUpdated(competitionId, sessionDto.ToDto());
+        return heat.ToDto();
+    }
+
     [HttpPut("{id:int}/stream")]
     [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<SessionDto>> SetStream(int competitionId, int id, UpdateSessionStreamRequest req)

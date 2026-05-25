@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Megaphone, Activity, Users, Radio, Save, ExternalLink, X, Trash2, Shield } from 'lucide-react';
+import { Send, Megaphone, Activity, Users, Radio, Save, ExternalLink, X, Trash2, Shield, MessagesSquare, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import { useLiveHub } from '../../live/useLiveHub';
-import type { ChatMessage } from '../../types';
+import type { ChatMessage, Club } from '../../types';
 
 function toEmbedUrl(raw: string): string | null {
   try {
@@ -30,6 +31,25 @@ function toEmbedUrl(raw: string): string | null {
 }
 
 const IDENTITY_KEY = 'mg.chatIdentity';
+const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
+
+interface LastChatComp {
+  id: number;
+  name: string;
+}
+
+function loadLastChatComp(): LastChatComp | null {
+  try {
+    const raw = localStorage.getItem(LAST_CHAT_COMP_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as LastChatComp;
+    return typeof v.id === 'number' && typeof v.name === 'string' ? v : null;
+  } catch { return null; }
+}
+
+function saveLastChatComp(v: LastChatComp) {
+  try { localStorage.setItem(LAST_CHAT_COMP_KEY, JSON.stringify(v)); } catch { /* quota */ }
+}
 
 interface ChatIdentity {
   firstName: string;
@@ -62,13 +82,20 @@ export function ChatTab() {
   const compStreamUrl = competition.streamUrl ?? null;
   const compStreamEmbed = compStreamUrl ? toEmbedUrl(compStreamUrl) : null;
 
-  const teamOptions = useMemo(() => {
-    return competition.teams.slice().sort((a, b) => a.displayName.localeCompare(b.displayName));
-  }, [competition.teams]);
+  // The "Team" affiliation picker is sourced from the full club list (Pony
+  // Club branches + admin-added customs), not just the teams entered in this
+  // comp — so spectators from any club can identify themselves correctly.
+  const [clubs, setClubs] = useState<Club[]>([]);
+  useEffect(() => {
+    api.get<Club[]>('/clubs').then((r) => setClubs(r.data)).catch(() => {});
+  }, []);
+  const teamOptions = useMemo(() => clubs.slice().sort((a, b) => a.name.localeCompare(b.name)), [clubs]);
 
   const [identity, setIdentity] = useState<ChatIdentity | null>(() => loadIdentity());
   const [draftName, setDraftName] = useState('');
   const [draftTeam, setDraftTeam] = useState('');
+  const [lastChatComp, setLastChatComp] = useState<LastChatComp | null>(() => loadLastChatComp());
+  const [dismissedCompWarning, setDismissedCompWarning] = useState(false);
 
   useEffect(() => {
     api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`).then((r) => setMessages(r.data));
@@ -139,6 +166,12 @@ export function ChatTab() {
         authorName: authorLabel,
       });
       setBody('');
+      // Remember which comp this user most recently posted to — used to warn
+      // when they open a different comp's chat next time.
+      const record: LastChatComp = { id: competition.id, name: competition.name };
+      saveLastChatComp(record);
+      setLastChatComp(record);
+      setDismissedCompWarning(true);
     } catch (e) {
       const status = (e as { response?: { status?: number } }).response?.status;
       if (status === 403) alert('Posting is blocked from this network. Contact an organiser.');
@@ -161,6 +194,40 @@ export function ChatTab() {
         </div>
       )}
       <div className="lg:col-span-2 card p-0 overflow-hidden flex flex-col" style={{ minHeight: '70vh' }}>
+        <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <MessagesSquare className="w-4 h-4 text-brand-600 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">
+              Chat for
+            </div>
+            <div className="text-sm font-bold truncate" title={competition.name}>{competition.name}</div>
+          </div>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400">
+            {messages.length} message{messages.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        {lastChatComp && lastChatComp.id !== competition.id && !dismissedCompWarning && (
+          <div className="px-3 py-2 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 flex items-start gap-2 text-xs">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              Your last post was on a different competition.{' '}
+              <Link
+                to={`/competitions/${lastChatComp.id}/chat`}
+                className="font-semibold underline hover:text-amber-700 dark:hover:text-amber-200"
+              >
+                Switch back to "{lastChatComp.name}"
+              </Link>{' '}
+              or post here.
+            </div>
+            <button
+              onClick={() => setDismissedCompWarning(true)}
+              className="shrink-0 text-amber-700 hover:text-amber-900 dark:text-amber-200"
+              title="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
           <AnimatePresence initial={false}>
             {messages.map((m) => (
@@ -198,7 +265,7 @@ export function ChatTab() {
                   onKeyDown={(e) => e.key === 'Enter' && applyIdentity()}
                 />
                 <datalist id="chat-team-options">
-                  {teamOptions.map((t) => <option key={t.id} value={t.displayName} />)}
+                  {teamOptions.map((c) => <option key={c.id} value={c.name} />)}
                 </datalist>
                 <button
                   className="btn-primary !py-1.5 !px-3 text-xs"

@@ -65,7 +65,11 @@ export interface CompetitionSection {
   format: SectionFormat;
   ageGroup: string;
   displayName: string;
+  runoffRaceName?: string | null;
+  usesRaceFinals?: boolean;
 }
+
+export type RaceRoundStage = 0 | 1 | 2; // None / Qualifier / Final
 
 export interface Team {
   id: number;
@@ -80,6 +84,23 @@ export interface Team {
   trainerUserId?: string | null;
   trainerName?: string | null;
   isHorsConcours: boolean;
+  /** "trainer", "supporter" or null — only set on /trainer/my-teams. */
+  relationship?: 'trainer' | 'supporter' | null;
+  /** Join key — set only when the viewer is the trainer of this team. */
+  supporterJoinKey?: string | null;
+}
+
+export type TeamSupporterStatus = 0 | 1; // Pending / Accepted
+
+export interface TeamSupporter {
+  id: number;
+  teamId: number;
+  teamName: string;
+  userId: string;
+  userName: string;
+  userEmail?: string | null;
+  status: TeamSupporterStatus;
+  createdAt: string;
 }
 
 export interface HeatEntry {
@@ -116,8 +137,11 @@ export interface Heat {
   label?: string | null;
   orderIndex: number;
   durationMinutes?: number | null;
+  scheduledStart?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
+  raceRoundId?: number | null;
+  raceRoundStage?: RaceRoundStage;
   entries: HeatEntry[];
   races: Race[];
 }
@@ -223,6 +247,19 @@ export interface SavedRider {
   notes?: string | null;
 }
 
+export interface StewardCall {
+  id: number;
+  raceId: number;
+  heatId: number;
+  competitionId: number;
+  teamId: number;
+  teamName: string;
+  teamBibColour?: string | null;
+  laneIndex: number;
+  reporterName?: string | null;
+  createdAt: string;
+}
+
 export interface TrainerNote {
   id: number;
   userId: string;
@@ -242,9 +279,70 @@ export interface RaceTemplate {
   isBuiltIn: boolean;
 }
 
+/**
+ * Where an element sits along the lane.
+ * - `x` is an absolute percentage 0-100 (Start at 0, Finish at 100).
+ * - `anchor` references a named landmark resolved at render time:
+ *   `pole1`, `pole2`, … `poleN` (the Nth pole in the elements array),
+ *   `start`, `finish`, `midline`, `changeover`.
+ * - `offset` is an optional displacement in percentage units added to the anchor.
+ * If both `x` and `anchor` are given, anchor wins.
+ *
+ * `on` is a stack of equipment placed ON this element (mug on a pole,
+ * tennis ball on a mug, etc). Renderer draws each level above the previous.
+ *
+ * `label` is the human-readable name for the element ("Mug", "EGUK flag", …).
+ */
+/** Equipment kind discriminator for `cone` and `item` elements. */
+export type ConeKind = 'flag' | 'ball';
+export type ItemKind =
+  | 'bucket' | 'bin' | 'mug' | 'ball' | 'flag' | 'sock' | 'sack'
+  | 'baton' | 'sword' | 'quoit' | 'card' | 'penny' | 'bottle' | 'box';
+
+export interface DiagramPos {
+  x?: number;
+  anchor?: string;
+  offset?: number;
+  label?: string;
+  /** Visual subtype — `cone` defaults to a flag-style cone; `item` defaults
+   * to a generic equipment square. Ignored on pole/midline. */
+  kind?: ConeKind | ItemKind;
+  on?: DiagramElement[];
+}
+
 export type DiagramElement =
-  | { t: 'pole'; x: number; label?: string }
-  | { t: 'cone'; x: number; label?: string }
-  | { t: 'item'; x: number; label?: string }
-  | { t: 'table'; x: number; label?: string }
+  | ({ t: 'pole' } & DiagramPos)
+  | ({ t: 'cone' } & DiagramPos)
+  | ({ t: 'item' } & DiagramPos)
+  | ({ t: 'in' } & DiagramPos)
+  /** Legacy alias for `in` — both names render identically. */
+  | ({ t: 'table' } & DiagramPos)
   | { t: 'midline' };
+
+/** All placeable shape types exposed in the diagram editor toolbar. */
+export interface DiagramTool {
+  t: DiagramElement['t'];
+  kind?: ConeKind | ItemKind;
+  label: string;
+}
+
+export const DIAGRAM_TOOLS: DiagramTool[] = [
+  { t: 'pole', label: 'Pole' },
+  { t: 'cone', kind: 'flag', label: 'Flag cone' },
+  { t: 'cone', kind: 'ball', label: 'Ball cone' },
+  { t: 'in', label: 'In / station' },
+  { t: 'item', kind: 'bucket', label: 'Bucket' },
+  { t: 'item', kind: 'bin', label: 'Bin' },
+  { t: 'item', kind: 'mug', label: 'Mug' },
+  { t: 'item', kind: 'ball', label: 'Ball' },
+  { t: 'item', kind: 'flag', label: 'Flag' },
+  { t: 'item', kind: 'sock', label: 'Sock' },
+  { t: 'item', kind: 'sack', label: 'Sack' },
+  { t: 'item', kind: 'bottle', label: 'Bottle' },
+  { t: 'item', kind: 'baton', label: 'Baton' },
+  { t: 'item', kind: 'sword', label: 'Sword' },
+  { t: 'item', kind: 'quoit', label: 'Quoit' },
+  { t: 'item', kind: 'card', label: 'Card' },
+  { t: 'item', kind: 'penny', label: 'Penny' },
+  { t: 'item', kind: 'box', label: 'Box' },
+];

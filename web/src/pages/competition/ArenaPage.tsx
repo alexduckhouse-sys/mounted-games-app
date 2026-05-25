@@ -146,12 +146,14 @@ export function ArenaPage() {
               </AnimatePresence>
             </div>
             {template.rules && (
-              <details className="mt-2">
-                <summary className="cursor-pointer text-sm font-semibold flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4 text-brand-600" /> Rules
-                </summary>
-                <p className="mt-2 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">{template.rules}</p>
-              </details>
+              <div className="mt-3 rounded-md border border-brand-200 dark:border-brand-700 bg-brand-50/60 dark:bg-brand-900/20 p-3">
+                <div className="text-sm font-bold flex items-center gap-1.5 text-brand-800 dark:text-brand-200 mb-1">
+                  <BookOpen className="w-4 h-4" /> Set-up rules
+                </div>
+                <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">
+                  {template.rules}
+                </p>
+              </div>
             )}
           </>
         ) : (

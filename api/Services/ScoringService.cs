@@ -48,11 +48,16 @@ public class ScoringService
         var entryTeamIds = heat.Entries.Select(e => e.TeamId).ToHashSet();
         var now = DateTime.UtcNow;
         var fresh = new List<Result>();
+        // Qualifier heats in race-finals format score 1 per finisher / 0 per
+        // elimination, regardless of placing. The race final scores normally.
+        var isQualifier = heat.RaceRoundStage == RaceRoundStage.Qualifier;
 
         foreach (var fp in finishingPlaces)
         {
             if (!entryTeamIds.Contains(fp.TeamId)) continue;
-            var points = PointsForPlace(fp.Place, sessionBase, fp.Eliminated);
+            var points = isQualifier
+                ? (fp.Eliminated ? 0 : 1)
+                : PointsForPlace(fp.Place, sessionBase, fp.Eliminated);
             fresh.Add(new Result
             {
                 RaceId = raceId,
@@ -69,6 +74,10 @@ public class ScoringService
         race.IsComplete = true;
         race.FinishedAt = now;
         if (race.StartedAt is null) race.StartedAt = now;
+        // Any pending steward calls for this race are resolved by the result —
+        // wipe them so they don't reappear next time admin opens the race.
+        var pending = await _db.StewardCalls.Where(c => c.RaceId == raceId).ToListAsync();
+        if (pending.Count > 0) _db.StewardCalls.RemoveRange(pending);
         await _db.SaveChangesAsync();
 
         return fresh;

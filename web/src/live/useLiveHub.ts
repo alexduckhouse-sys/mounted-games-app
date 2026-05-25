@@ -8,6 +8,8 @@ export interface LiveHandlers {
   onSessionUpdated?: (session: unknown) => void;
   onResultsUpdated?: (payload: unknown) => void;
   onAnnouncement?: (msg: unknown) => void;
+  onStewardCall?: (call: unknown) => void;
+  onStewardCallResolved?: (payload: { id: number }) => void;
 }
 
 export function useLiveHub(competitionId: number | null, handlers: LiveHandlers) {
@@ -18,10 +20,14 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
   useEffect(() => {
     if (competitionId == null) return;
     const token = readToken();
-    if (!token) return;
+    // Anonymous connections are allowed (steward / public timetable use them);
+    // attach the token only when we have one so authed-only features still work.
+    const url = token
+      ? `/hubs/live?access_token=${encodeURIComponent(token)}`
+      : '/hubs/live';
 
     const conn: HubConnection = new HubConnectionBuilder()
-      .withUrl(`/hubs/live?access_token=${encodeURIComponent(token)}`)
+      .withUrl(url)
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
       .build();
@@ -31,6 +37,8 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
     conn.on('sessionUpdated', (s) => handlersRef.current.onSessionUpdated?.(s));
     conn.on('resultsUpdated', (p) => handlersRef.current.onResultsUpdated?.(p));
     conn.on('announcement', (a) => handlersRef.current.onAnnouncement?.(a));
+    conn.on('stewardCall', (c) => handlersRef.current.onStewardCall?.(c));
+    conn.on('stewardCallResolved', (p) => handlersRef.current.onStewardCallResolved?.(p as { id: number }));
 
     let cancelled = false;
     conn.start()

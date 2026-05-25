@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Plus, Pencil, Trash2, X, Save, ChevronLeft, Lock, Search } from 'lucide-react';
+import { BookOpen, Plus, Pencil, Trash2, X, Save, ChevronLeft, Lock, Search, Code } from 'lucide-react';
 import { api } from '../../api';
 import type { RaceTemplate } from '../../types';
 import { RaceDiagram } from '../../components/RaceDiagram';
+import { DiagramEditor } from '../../components/DiagramEditor';
 
 type DraftForm = {
   id: number | null;
@@ -22,6 +23,7 @@ export function RulesPage() {
   const [draft, setDraft] = useState<DraftForm | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showJson, setShowJson] = useState(false);
 
   function load() {
     api.get<RaceTemplate[]>('/race-templates').then((r) => setList(r.data)).catch(() => {});
@@ -170,23 +172,33 @@ export function RulesPage() {
               onChange={(e) => setDraft({ ...draft, rules: e.target.value })}
             />
           </label>
-          <label className="block">
-            <span className="text-xs font-semibold">
-              Diagram (JSON array of elements)
-              <span className="text-slate-500 font-normal ml-1">
-                — types: <code>pole</code>, <code>cone</code>, <code>item</code>, <code>table</code>, <code>midline</code>. Positions are 0–100 along the lane.
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-semibold">Diagram</span>
+              <span className="text-[10px] text-slate-500 font-normal">
+                Tap a tool, click the lane to place. Drag elements; they snap to poles / midline / changeover.
               </span>
-            </span>
-            <textarea
-              rows={4}
-              className="input mt-1 text-xs font-mono"
-              placeholder='[{"t":"pole","x":50,"label":"1"}, {"t":"midline"}]'
+              <button
+                type="button"
+                onClick={() => setShowJson((v) => !v)}
+                className={`btn-ghost !py-0.5 !px-1.5 text-[10px] ml-auto ${showJson ? 'bg-slate-100 dark:bg-slate-700' : ''}`}
+                title="Show / hide the raw JSON for power users"
+              >
+                <Code className="w-3 h-3" /> {showJson ? 'Hide JSON' : 'Show JSON'}
+              </button>
+            </div>
+            <DiagramEditor
               value={draft.diagramJson}
-              onChange={(e) => setDraft({ ...draft, diagramJson: e.target.value })}
+              onChange={(json) => setDraft({ ...draft, diagramJson: json })}
             />
-          </label>
-          <div className="rounded-md border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <RaceDiagram diagramJson={draft.diagramJson} height={130} />
+            {showJson && (
+              <textarea
+                rows={4}
+                className="input mt-2 text-[11px] font-mono"
+                value={draft.diagramJson}
+                onChange={(e) => setDraft({ ...draft, diagramJson: e.target.value })}
+              />
+            )}
           </div>
           {error && (
             <div className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/30 p-2 rounded-md">{error}</div>

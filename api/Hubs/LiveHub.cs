@@ -20,6 +20,8 @@ public interface ILiveBroadcaster
     Task SessionUpdated(int competitionId, object session);
     Task ResultsUpdated(int competitionId, object payload);
     Task Announcement(int competitionId, object announcement);
+    Task StewardCallCreated(int competitionId, object call);
+    Task StewardCallResolved(int competitionId, int callId);
 }
 
 public class LiveBroadcaster : ILiveBroadcaster
@@ -41,4 +43,10 @@ public class LiveBroadcaster : ILiveBroadcaster
 
     public Task Announcement(int competitionId, object announcement)
         => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("announcement", announcement);
+
+    public Task StewardCallCreated(int competitionId, object call)
+        => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("stewardCall", call);
+
+    public Task StewardCallResolved(int competitionId, int callId)
+        => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("stewardCallResolved", new { id = callId });
 }

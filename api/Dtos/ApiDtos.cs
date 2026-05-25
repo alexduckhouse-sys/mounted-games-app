@@ -49,14 +49,22 @@ public record UpsertRaceTemplateRequest(
     string Name, string? Summary, string? Rules, string? Category, string? DiagramJson);
 
 public record CompetitionSectionDto(
-    int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName);
-public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName);
+    int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName,
+    string? RunoffRaceName, bool UsesRaceFinals);
+public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName,
+    string? RunoffRaceName = null, bool UsesRaceFinals = false);
+public record UpdateSectionRequest(string? RunoffRaceName, bool? UsesRaceFinals = null);
 
 public record TeamDto(
     int Id, int CompetitionId, int CompetitionSectionId, string SectionName,
     int ClubId, string ClubName, string Suffix, string DisplayName,
     string? BibColour, string? TrainerUserId, string? TrainerName,
-    bool IsHorsConcours);
+    bool IsHorsConcours,
+    /// <summary>"trainer" if the viewer owns this team, "supporter" if they're an
+    /// accepted supporter, null otherwise. Set by the my-teams endpoint.</summary>
+    string? Relationship = null,
+    /// <summary>Join key — exposed only to the trainer; null for everyone else.</summary>
+    string? SupporterJoinKey = null);
 
 public record CreateTeamRequest(
     int CompetitionSectionId, int ClubId, string Suffix,
@@ -127,9 +135,20 @@ public record HeatDto(
     int Id, int SessionId, string? Label,
     int OrderIndex,
     int? DurationMinutes,
+    DateTime? ScheduledStart,
     DateTime? StartedAt, DateTime? FinishedAt,
+    int? RaceRoundId,
+    RaceRoundStage RaceRoundStage,
     IReadOnlyList<HeatEntryDto> Entries,
     IReadOnlyList<RaceDto> Races);
+
+public record UpdateHeatScheduledStartRequest(DateTime? ScheduledStart);
+public record PopulateRaceFinalRequest(int TopN);
+public record GenerateRaceFinalsRequest(
+    IReadOnlyList<int> TeamIds,
+    IReadOnlyList<string> RaceNames,
+    int? LanesPerHeat,
+    bool ReplaceExisting);
 
 public record RaceDto(
     int Id, int HeatId, string Name,
@@ -192,3 +211,16 @@ public record SaveTrainerNoteRequest(string? Title, string Body);
 
 public record IpBlockDto(int Id, string IpAddress, string? Reason, string? CreatedByUserId, DateTime CreatedAt);
 public record CreateIpBlockRequest(string IpAddress, string? Reason);
+
+public record StewardCallDto(
+    int Id, int RaceId, int HeatId, int CompetitionId,
+    int TeamId, string TeamName, string? TeamBibColour,
+    int LaneIndex, string? ReporterName, DateTime CreatedAt);
+public record CreateStewardCallRequest(int TeamId, int LaneIndex, string? ReporterName);
+
+public record TeamSupporterDto(
+    int Id, int TeamId, string TeamName,
+    string UserId, string UserName, string? UserEmail,
+    TeamSupporterStatus Status, DateTime CreatedAt);
+public record JoinTeamRequest(string Key);
+public record GenerateJoinKeyResponse(string Key);

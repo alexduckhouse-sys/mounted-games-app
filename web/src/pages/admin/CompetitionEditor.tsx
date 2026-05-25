@@ -9,8 +9,96 @@ import type { Club, CompetitionDetail, CompetitionSection, DeclarationForm, Race
 
 type Format = 1 | 2 | 3;
 const FORMAT_LABEL: Record<Format, string> = { 1: 'Pairs', 2: 'Teams', 3: 'Individual' };
-const AGE_GROUPS = ['Under 10', 'Under 12', 'Under 14', 'Under 15', 'Under 17', 'Open'];
-const DEFAULT_RACES = 'Litter Lifter\nFlag\nBottle\nMug\nBall and Cone';
+const AGE_GROUPS = [
+  'Under 10', 'Under 12', 'Under 14', 'Under 15', 'Under 17', 'Open',
+  'Juniors', 'Seniors', 'Novices',
+];
+
+// Zone 2026 race lists. "(x2)" in the source means the same race runs twice
+// consecutively, so we expand into two entries in the default list.
+const ZONE_SENIORS = [
+  'Bending',
+  'Hollywood Bowl Boule & Bucket',
+  'Bottle',
+  'Litter',
+  'Tally Ho Farm Ball & Socket',
+  'STRUK Pole',
+  'PGSports UK Shopping Spree',
+  'Stepping Stones',
+  'Spell EGUK',
+  'Big Sack',
+];
+const ZONE_JUNIORS = [
+  'Bending',
+  'Hollywood Bowl Old Sock',
+  'Tally Ho Farm Ball & Socket',
+  'STRUK Pole (JV)',
+  'PGSports UK Shopping Spree',
+  'Stepping Stones',
+  'Spell EGUK (JV)',
+  '5 Flag',
+];
+const ZONE_PAIRS = [
+  'Bending',
+  'Hollywood Bowl Boule & Bucket',
+  'Bottle',
+  'Litter', 'Litter',
+  'Tally Ho Farm Ball & Socket', 'Tally Ho Farm Ball & Socket',
+  'STRUK Pole', 'STRUK Pole',
+  'PGSports UK Shopping Spree',
+  'Stepping Stones',
+  'EGUK Mug Changes',
+  '5 Flag', '5 Flag',
+];
+
+// Area 2026 race lists — sponsored names + dedicated junior variants. Spare
+// race for ties / run-offs at area level is also "2 Flag".
+const AREA_SENIORS = [
+  'Bending',
+  '5 Mug',
+  'Old Sock',
+  'Tally Ho Farm Ball & Socket',
+  'PGUK Pyramid',
+  'Hollywood Bowl Bottle',
+  'Stepping Stones',
+  'EGUK 5 Flag',
+];
+const AREA_JUNIORS = [
+  'Bending',
+  'Old Sock (junior version)',
+  'Tally Ho Farm Ball & Socket',
+  'PGUK Pyramid (junior version)',
+  'Hollywood Bowl Bottle (junior version)',
+  'Stepping Stones',
+  'EGUK 5 Flag',
+];
+const AREA_PAIRS = [
+  'Bending',
+  '2 Mug',
+  'Old Sock',
+  'Tally Ho Farm Ball & Socket', 'Tally Ho Farm Ball & Socket',
+  'PGUK Pyramid', 'PGUK Pyramid',
+  'Hollywood Bowl Bottle',
+  'Stepping Stones',
+  'EGUK 5 Flag', 'EGUK 5 Flag',
+];
+
+const ZONE_RUNOFF = '2 Flag';
+export type SectionScope = 'Zone' | 'Area';
+
+/**
+ * Pick a default race list for a section based on (scope, format, ageGroup).
+ * Pairs → *_PAIRS; Teams+Juniors/Novices → *_JUNIORS; Teams+Seniors/Open/etc → *_SENIORS.
+ */
+function defaultRacesFor(scope: SectionScope, format: Format, ageGroup: string): string {
+  const isJunior = ageGroup.toLowerCase().includes('junior') || ageGroup.toLowerCase().includes('novice');
+  const lists = scope === 'Area'
+    ? { pairs: AREA_PAIRS, juniors: AREA_JUNIORS, seniors: AREA_SENIORS }
+    : { pairs: ZONE_PAIRS, juniors: ZONE_JUNIORS, seniors: ZONE_SENIORS };
+  if (format === 1) return lists.pairs.join('\n');
+  if (isJunior) return lists.juniors.join('\n');
+  return lists.seniors.join('\n');
+}
 
 interface SectionDraft {
   // Carries the saved id when editing an existing section.
@@ -22,6 +110,9 @@ interface SectionDraft {
   minsPerHeat: number;
   maxTeamsPerHeat: number;
   sessionCount: number;
+  runoffRaceName: string;
+  scope: SectionScope;
+  usesRaceFinals: boolean;
 }
 
 interface TeamDraft {
@@ -36,15 +127,49 @@ interface TeamDraft {
 const STEPS = ['Basics', 'Sections & races', 'Teams', 'Review'] as const;
 type Step = typeof STEPS[number];
 
+interface PersistedDraft {
+  step: Step;
+  name: string;
+  location: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+  what3Words: string;
+  postcode: string;
+  appleMapsUrl: string;
+  lat: string;
+  lon: string;
+  description: string;
+  sections: SectionDraft[];
+  teams: TeamDraft[];
+}
+
+function readPersistedDraft(key: string): PersistedDraft | null {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedDraft;
+    // Sanity-check the shape so a corrupted entry doesn't crash the wizard.
+    if (!parsed || typeof parsed.name !== 'string' || !Array.isArray(parsed.sections)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function defaultSection(): SectionDraft {
   return {
     format: 2,
-    ageGroup: 'Under 12',
-    sessionName: 'Under 12',
-    races: DEFAULT_RACES,
+    ageGroup: 'Seniors',
+    sessionName: 'Seniors',
+    races: defaultRacesFor('Zone', 2, 'Seniors'),
     minsPerHeat: 25,
     maxTeamsPerHeat: 6,
     sessionCount: 1,
+    runoffRaceName: ZONE_RUNOFF,
+    scope: 'Zone',
+    usesRaceFinals: false,
   };
 }
 
@@ -63,32 +188,41 @@ export function CompetitionEditor() {
   const { id } = useParams<{ id: string }>();
   const editingId = id ? parseInt(id, 10) : null;
   const isEdit = editingId != null;
+  const storageKey = `competitionEditor:${isEdit ? `edit:${editingId}` : 'new'}`;
 
-  const [step, setStep] = useState<Step>('Basics');
-  const [loading, setLoading] = useState(isEdit);
+  // Pull any persisted draft once so initial useState calls can use it.
+  const persisted = readPersistedDraft(storageKey);
+
+  const [step, setStep] = useState<Step>(persisted?.step ?? 'Basics');
+  const [loading, setLoading] = useState(isEdit && !persisted);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
 
   // Basics
-  const [name, setName] = useState('');
-  const [location, setLocation] = useState('');
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [startTime, setStartTime] = useState('09:00');
-  const [endDate, setEndDate] = useState('');
-  const [what3Words, setWhat3Words] = useState('');
-  const [postcode, setPostcode] = useState('');
-  const [appleMapsUrl, setAppleMapsUrl] = useState('');
-  const [lat, setLat] = useState('');
-  const [lon, setLon] = useState('');
-  const [description, setDescription] = useState('');
+  const [name, setName] = useState(persisted?.name ?? '');
+  const [location, setLocation] = useState(persisted?.location ?? '');
+  const [startDate, setStartDate] = useState(
+    persisted?.startDate ?? (() => new Date().toISOString().slice(0, 10))()
+  );
+  const [startTime, setStartTime] = useState(persisted?.startTime ?? '09:00');
+  const [endDate, setEndDate] = useState(persisted?.endDate ?? '');
+  const [endTime, setEndTime] = useState(persisted?.endTime ?? '17:00');
+  const [what3Words, setWhat3Words] = useState(persisted?.what3Words ?? '');
+  const [postcode, setPostcode] = useState(persisted?.postcode ?? '');
+  const [appleMapsUrl, setAppleMapsUrl] = useState(persisted?.appleMapsUrl ?? '');
+  const [lat, setLat] = useState(persisted?.lat ?? '');
+  const [lon, setLon] = useState(persisted?.lon ?? '');
+  const [description, setDescription] = useState(persisted?.description ?? '');
 
   // Sections + races
-  const [sections, setSections] = useState<SectionDraft[]>([defaultSection()]);
+  const [sections, setSections] = useState<SectionDraft[]>(
+    persisted?.sections && persisted.sections.length > 0 ? persisted.sections : [defaultSection()]
+  );
 
   // Teams
   const [clubs, setClubs] = useState<Club[]>([]);
-  const [teams, setTeams] = useState<TeamDraft[]>([]);
+  const [teams, setTeams] = useState<TeamDraft[]>(persisted?.teams ?? []);
   const [decTeamIds, setDecTeamIds] = useState<Set<number>>(new Set());
   const [showAllClubs, setShowAllClubs] = useState(true);
 
@@ -100,8 +234,26 @@ export function CompetitionEditor() {
     api.get<RaceTemplate[]>('/race-templates').then((r) => setRaceTemplates(r.data)).catch(() => {});
   }, []);
 
+  // Autosave the wizard's full state so a reload (or accidental navigation away)
+  // doesn't wipe everything. We persist on every change and clear on submit.
   useEffect(() => {
-    if (!isEdit || !editingId) return;
+    const draft: PersistedDraft = {
+      step,
+      name, location,
+      startDate, startTime, endDate, endTime,
+      what3Words, postcode, appleMapsUrl, lat, lon,
+      description,
+      sections,
+      teams,
+    };
+    try { window.localStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* quota */ }
+  }, [storageKey, step, name, location, startDate, startTime, endDate, endTime,
+      what3Words, postcode, appleMapsUrl, lat, lon, description, sections, teams]);
+
+  useEffect(() => {
+    // Skip the server fetch on edit if we already have a local draft — the user
+    // hasn't finished editing yet and we don't want to clobber their changes.
+    if (!isEdit || !editingId || persisted) return;
     api.get<CompetitionDetail>(`/competitions/${editingId}`)
       .then((r) => {
         const c = r.data;
@@ -110,7 +262,9 @@ export function CompetitionEditor() {
         const start = new Date(c.startDate);
         setStartDate(start.toISOString().slice(0, 10));
         setStartTime(start.toTimeString().slice(0, 5));
-        setEndDate(c.endDate ? new Date(c.endDate).toISOString().slice(0, 10) : '');
+        const end = c.endDate ? new Date(c.endDate) : null;
+        setEndDate(end ? end.toISOString().slice(0, 10) : '');
+        if (end) setEndTime(end.toTimeString().slice(0, 5));
         setWhat3Words(c.what3Words ?? '');
         setAppleMapsUrl(c.appleMapsUrl ?? '');
         setLat(c.latitude != null ? String(c.latitude) : '');
@@ -121,6 +275,13 @@ export function CompetitionEditor() {
       })
       .catch(() => setError('Could not load competition.'))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `persisted` is captured once per render and used only as a one-shot guard.
+  }, [isEdit, editingId]);
+
+  // Dec form fetch always runs in edit mode — independent of whether we hydrated
+  // form state from localStorage.
+  useEffect(() => {
+    if (!isEdit || !editingId) return;
     api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: editingId } })
       .then((r) => setDecTeamIds(new Set(r.data.map((f) => f.teamId))))
       .catch(() => {});
@@ -156,6 +317,15 @@ export function CompetitionEditor() {
       if (s.sessionName === sectionDisplayName(s) || s.sessionName.trim().length === 0) {
         merged.sessionName = autoName;
       }
+      // If scope / format / age group changes, refresh the default race list,
+      // but only when the existing list is still the default for the old keys.
+      if ((patch.format !== undefined || patch.ageGroup !== undefined || patch.scope !== undefined)
+          && s.races === defaultRacesFor(s.scope, s.format, s.ageGroup)) {
+        merged.races = defaultRacesFor(merged.scope, merged.format, merged.ageGroup);
+      }
+      // Race-finals already creates 3 heats per race — multiple sessions would
+      // double that. Pin to a single session whenever the toggle is on.
+      if (merged.usesRaceFinals) merged.sessionCount = 1;
       return merged;
     }));
   }
@@ -223,6 +393,8 @@ export function CompetitionEditor() {
           format: s.format,
           ageGroup: s.ageGroup.trim(),
           displayName: sectionDisplayName(s),
+          runoffRaceName: s.runoffRaceName.trim() || null,
+          usesRaceFinals: s.usesRaceFinals,
         });
         sectionIds.push(r.data.id);
       }
@@ -276,12 +448,22 @@ export function CompetitionEditor() {
           cursor += durationMins * 60_000;
 
           if (teamIds.length > 0) {
-            await api.post(`/competitions/${compId}/sessions/${session.data.id}/generate-heats`, {
-              teamIds,
-              raceNames: parseRaces(sec.races),
-              lanesPerHeat: sec.maxTeamsPerHeat,
-              replaceExisting: true,
-            });
+            if (sec.usesRaceFinals) {
+              // One race per heat; 3 heats per race (Q1, Q2, Final scaffold).
+              await api.post(`/competitions/${compId}/sessions/${session.data.id}/generate-race-finals`, {
+                teamIds,
+                raceNames: parseRaces(sec.races),
+                lanesPerHeat: sec.maxTeamsPerHeat,
+                replaceExisting: true,
+              });
+            } else {
+              await api.post(`/competitions/${compId}/sessions/${session.data.id}/generate-heats`, {
+                teamIds,
+                raceNames: parseRaces(sec.races),
+                lanesPerHeat: sec.maxTeamsPerHeat,
+                replaceExisting: true,
+              });
+            }
           }
           // Record minutesPerHeat on the session so the timetable knows how long heats run.
           await api.put(`/competitions/${compId}/sessions/${session.data.id}/settings`, {
@@ -291,6 +473,7 @@ export function CompetitionEditor() {
         }
       }
 
+      try { window.localStorage.removeItem(storageKey); } catch { /* ignore */ }
       navigate(`/competitions/${compId}`);
     } catch (e) {
       const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
@@ -311,6 +494,7 @@ export function CompetitionEditor() {
         isActive: true,
         isArchived: false,
       });
+      try { window.localStorage.removeItem(storageKey); } catch { /* ignore */ }
       navigate('/admin');
     } catch {
       setError('Could not save changes.');
@@ -330,7 +514,9 @@ export function CompetitionEditor() {
       postcode: postcode.trim() || null,
       appleMapsUrl: appleMapsUrl.trim() || null,
       startDate: combinedStartIso(),
-      endDate: endDate ? new Date(`${endDate}T23:59`).toISOString() : null,
+      endDate: endDate || endTime
+        ? new Date(`${endDate || startDate}T${endTime || '17:00'}`).toISOString()
+        : null,
     };
   }
 
@@ -348,6 +534,21 @@ export function CompetitionEditor() {
           {isEdit ? <Sparkles className="w-6 h-6 text-brand-600" /> : <Trophy className="w-6 h-6 text-brand-600" />}
           {isEdit ? 'Edit competition' : 'Create competition'}
         </h1>
+        <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
+          <span className="hidden sm:inline">Draft auto-saved · survives reload</span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!confirm('Discard this saved draft and start over?')) return;
+              try { window.localStorage.removeItem(storageKey); } catch { /* ignore */ }
+              window.location.reload();
+            }}
+            className="btn-ghost !py-0.5 !px-1.5 text-[11px]"
+            title="Wipe the locally-saved wizard state and reset"
+          >
+            Discard draft
+          </button>
+        </span>
       </div>
 
       <StepStrip current={stepIndex} onJump={isEdit ? (i) => setStep(STEPS[i]) : undefined} />
@@ -360,6 +561,7 @@ export function CompetitionEditor() {
             startDate={startDate} setStartDate={setStartDate}
             startTime={startTime} setStartTime={setStartTime}
             endDate={endDate} setEndDate={setEndDate}
+            endTime={endTime} setEndTime={setEndTime}
             postcode={postcode} setPostcode={setPostcode}
             what3Words={what3Words} setWhat3Words={setWhat3Words}
             appleMapsUrl={appleMapsUrl} setAppleMapsUrl={setAppleMapsUrl}
@@ -396,7 +598,8 @@ export function CompetitionEditor() {
         )}
         {step === 'Review' && (
           <ReviewStep
-            name={name} location={location} startDate={startDate} startTime={startTime} endDate={endDate}
+            name={name} location={location} startDate={startDate} startTime={startTime}
+            endDate={endDate} endTime={endTime}
             sections={sections} teams={teams} clubs={clubs}
             sessionPreview={sessionPreview}
           />
@@ -442,7 +645,8 @@ function existingToDraft(s: CompetitionSection, c: CompetitionDetail): SectionDr
   // Try to find the corresponding session for race list defaults.
   const sectionSessions = c.sessions.filter((x) => x.competitionSectionId === s.id && x.kind === 0);
   const sess = sectionSessions[0];
-  const raceNames = sess?.heats[0]?.races.map((r) => r.name).join('\n') ?? DEFAULT_RACES;
+  const raceNames = sess?.heats[0]?.races.map((r) => r.name).join('\n')
+    ?? defaultRacesFor('Zone', s.format as Format, s.ageGroup);
   const teamCount = c.teams.filter((t) => t.competitionSectionId === s.id).length;
   const maxLanes = sess?.lanesPerHeat ?? Math.max(2, Math.min(6, teamCount));
   const minsPerHeat = sess?.minutesPerHeat ?? 25;
@@ -455,6 +659,9 @@ function existingToDraft(s: CompetitionSection, c: CompetitionDetail): SectionDr
     minsPerHeat,
     maxTeamsPerHeat: maxLanes,
     sessionCount: Math.max(1, sectionSessions.length),
+    runoffRaceName: s.runoffRaceName ?? ZONE_RUNOFF,
+    scope: 'Zone',
+    usesRaceFinals: s.usesRaceFinals ?? false,
   };
 }
 
@@ -505,6 +712,7 @@ interface BasicsProps {
   startDate: string; setStartDate: (s: string) => void;
   startTime: string; setStartTime: (s: string) => void;
   endDate: string; setEndDate: (s: string) => void;
+  endTime: string; setEndTime: (s: string) => void;
   postcode: string; setPostcode: (s: string) => void;
   what3Words: string; setWhat3Words: (s: string) => void;
   appleMapsUrl: string; setAppleMapsUrl: (s: string) => void;
@@ -545,7 +753,7 @@ function BasicsStep(p: BasicsProps) {
         <span className="text-sm font-semibold flex items-center gap-1"><MapPin className="w-4 h-4" /> Venue / location</span>
         <input className="input mt-1" placeholder="Stoneleigh Park, Warwickshire" value={p.location} onChange={(e) => p.setLocation(e.target.value)} />
       </label>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <label className="block">
           <span className="text-sm font-semibold flex items-center gap-1"><CalendarDays className="w-4 h-4" /> Start date</span>
           <input type="date" className="input mt-1" value={p.startDate} onChange={(e) => p.setStartDate(e.target.value)} required />
@@ -555,8 +763,12 @@ function BasicsStep(p: BasicsProps) {
           <input type="time" className="input mt-1" value={p.startTime} onChange={(e) => p.setStartTime(e.target.value)} required />
         </label>
         <label className="block">
-          <span className="text-sm font-semibold">End date (optional)</span>
+          <span className="text-sm font-semibold">End date</span>
           <input type="date" className="input mt-1" value={p.endDate} onChange={(e) => p.setEndDate(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="text-sm font-semibold flex items-center gap-1"><Clock className="w-4 h-4" /> End time</span>
+          <input type="time" className="input mt-1" value={p.endTime} onChange={(e) => p.setEndTime(e.target.value)} />
         </label>
       </div>
 
@@ -677,7 +889,7 @@ function SectionsStep({
                   {AGE_GROUPS.map((a) => <option key={a} value={a}>{a}</option>)}
                 </select>
               </label>
-              <label className="sm:col-span-4">
+              <label className="sm:col-span-2">
                 <span className="text-xs text-slate-500">Session name</span>
                 <input
                   className="input mt-1 text-sm"
@@ -685,6 +897,19 @@ function SectionsStep({
                   onChange={(e) => onUpdate(i, { sessionName: e.target.value })}
                   disabled={disabled}
                 />
+              </label>
+              <label className="sm:col-span-2">
+                <span className="text-xs text-slate-500">Race list</span>
+                <select
+                  className="input mt-1 text-sm"
+                  value={s.scope}
+                  onChange={(e) => onUpdate(i, { scope: e.target.value as SectionScope })}
+                  disabled={disabled}
+                  title="Switching auto-fills the default race list — your edits to the list are preserved"
+                >
+                  <option value="Zone">Zone 2026</option>
+                  <option value="Area">Area 2026</option>
+                </select>
               </label>
               <div className="sm:col-span-2 flex items-end justify-end">
                 {sections.length > 1 && !disabled && (
@@ -713,7 +938,8 @@ function SectionsStep({
                     className="input mt-1 text-sm"
                     value={s.sessionCount}
                     onChange={(e) => onUpdate(i, { sessionCount: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-                    disabled={disabled}
+                    disabled={disabled || s.usesRaceFinals}
+                    title={s.usesRaceFinals ? 'Race-finals format always uses a single session per section.' : undefined}
                   />
                 </label>
                 <label className="block">
@@ -739,6 +965,36 @@ function SectionsStep({
                 <div className="col-span-3 text-xs text-slate-500 mt-1">
                   → {parseRaces(s.races).length} race{parseRaces(s.races).length === 1 ? '' : 's'} per heat
                 </div>
+                <label className="col-span-3 block">
+                  <span className="text-xs text-slate-500">Run-off race (for ties)</span>
+                  <input
+                    list={`runoff-templates-${i}`}
+                    className="input mt-1 text-sm"
+                    placeholder={ZONE_RUNOFF}
+                    value={s.runoffRaceName}
+                    onChange={(e) => onUpdate(i, { runoffRaceName: e.target.value })}
+                  />
+                  <datalist id={`runoff-templates-${i}`}>
+                    {raceTemplates.map((t) => <option key={t.id} value={t.name} />)}
+                  </datalist>
+                </label>
+                <label className="col-span-3 flex items-start gap-2 mt-1 text-xs cursor-pointer p-2 rounded-md bg-slate-50 dark:bg-slate-800/60">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={s.usesRaceFinals}
+                    onChange={(e) => onUpdate(i, { usesRaceFinals: e.target.checked })}
+                    disabled={disabled}
+                  />
+                  <span>
+                    <span className="font-semibold">Race-finals format.</span>{' '}
+                    <span className="text-slate-500 dark:text-slate-300">
+                      Each race becomes 3 heats: two random qualifier heats (1 pt per finisher, 0 if eliminated)
+                      and a final filled with the top X from each qualifier. Finals lanes interleave Q1/Q2 placings.
+                      Heat times below should represent one heat of <em>one</em> race.
+                    </span>
+                  </span>
+                </label>
               </div>
             </div>
           </div>
@@ -946,7 +1202,8 @@ function TeamsStep({
 }
 
 interface ReviewProps {
-  name: string; location: string; startDate: string; startTime: string; endDate: string;
+  name: string; location: string; startDate: string; startTime: string;
+  endDate: string; endTime: string;
   sections: SectionDraft[]; teams: TeamDraft[]; clubs: Club[];
   sessionPreview: { idx: number; sessionNumber: number; section: SectionDraft; teamCount: number; heatCount: number; durationMins: number; start: Date | null }[];
 }
@@ -961,7 +1218,7 @@ function ReviewStep(p: ReviewProps) {
       <div className="rounded-md border border-slate-200 dark:border-slate-700 p-3 space-y-1 text-sm">
         <h4 className="font-semibold flex items-center gap-1"><Trophy className="w-4 h-4 text-brand-600" /> {p.name || '(unnamed)'}</h4>
         <p className="text-slate-600 dark:text-slate-300">
-          {p.location || 'No venue'} · {p.startDate} {p.startTime}{p.endDate ? ` → ${p.endDate}` : ''}
+          {p.location || 'No venue'} · {p.startDate} {p.startTime} → {p.endDate || p.startDate} {p.endTime}
         </p>
       </div>
 
@@ -985,6 +1242,12 @@ function ReviewStep(p: ReviewProps) {
             </li>
           ))}
         </ul>
+        {p.sections.some((s) => s.runoffRaceName.trim()) && (
+          <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-700/60">
+            Run-off:{' '}
+            {Array.from(new Set(p.sections.map((s) => s.runoffRaceName.trim()).filter(Boolean))).join(' · ')}
+          </p>
+        )}
         {finishesAt && (
           <p className="text-xs text-slate-500">
             Total runtime ~{Math.round(totalMins)} min · ends ~{finishesAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1059,12 +1322,15 @@ function RacePicker({
   }
 
   const q = search.trim().toLowerCase();
+  const notInList = (t: RaceTemplate) => !list.some((r) => r.toLowerCase() === t.name.toLowerCase());
+  // With an empty query, show the first few alphabetical suggestions so the
+  // user knows the library is wired up. With a query, filter by name/category.
   const matches = q.length === 0
-    ? [] as RaceTemplate[]
+    ? templates.filter(notInList).slice(0, 8)
     : templates
         .filter((t) => t.name.toLowerCase().includes(q) || (t.category ?? '').toLowerCase().includes(q))
-        .filter((t) => !list.some((r) => r.toLowerCase() === t.name.toLowerCase()))
-        .slice(0, 8);
+        .filter(notInList)
+        .slice(0, 10);
 
   return (
     <div className="space-y-1.5">

@@ -80,18 +80,27 @@ export function computeTimings(sessions: Session[]): Map<number, SessionTiming> 
 
     for (const h of heats) {
       const dur = heatDurationMinutes(h, s);
-      let hScheduled = scheduledCursor ? new Date(scheduledCursor) : null;
+      // Per-heat scheduledStart, when set, pins the heat (and resets the
+      // cascade cursor for subsequent heats).
+      const pinned = h.scheduledStart ? new Date(h.scheduledStart) : null;
+      let hScheduled = pinned ?? (scheduledCursor ? new Date(scheduledCursor) : null);
       let hEffective: Date | null = null;
       if (h.startedAt) {
         hEffective = new Date(h.startedAt);
+      } else if (pinned) {
+        hEffective = new Date(pinned);
       } else if (heatCursor) {
         hEffective = new Date(heatCursor);
       }
+      // Only flag a shift once the delta is at least 5 minutes — smaller
+      // drifts round away to the same 5-min slot anyway and just look noisy.
       const hShifted = !!(hScheduled && hEffective
-        && Math.abs(hEffective.getTime() - hScheduled.getTime()) >= 60_000);
+        && Math.abs(hEffective.getTime() - hScheduled.getTime()) >= 5 * 60_000);
       heatTimings.push({ heatId: h.id, scheduled: hScheduled, effective: hEffective, shifted: hShifted });
-      if (heatCursor) heatCursor = new Date(heatCursor.getTime() + dur * 60_000);
-      if (scheduledCursor) scheduledCursor = new Date(scheduledCursor.getTime() + dur * 60_000);
+      const advanceFrom = pinned ?? heatCursor;
+      heatCursor = advanceFrom ? new Date(advanceFrom.getTime() + dur * 60_000) : null;
+      const advanceFromScheduled = pinned ?? scheduledCursor;
+      scheduledCursor = advanceFromScheduled ? new Date(advanceFromScheduled.getTime() + dur * 60_000) : null;
     }
 
     const dur = sessionDurationMinutes(s);
@@ -99,7 +108,7 @@ export function computeTimings(sessions: Session[]): Map<number, SessionTiming> 
     if (effectiveEnd) lastEffectiveEnd = effectiveEnd;
 
     const shifted = !!(scheduled && effective
-      && Math.abs(effective.getTime() - scheduled.getTime()) >= 60_000);
+      && Math.abs(effective.getTime() - scheduled.getTime()) >= 5 * 60_000);
 
     result.set(s.id, { sessionId: s.id, scheduled, effective, effectiveEnd, shifted, heats: heatTimings });
   }

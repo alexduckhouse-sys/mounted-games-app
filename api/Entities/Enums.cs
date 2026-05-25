@@ -28,3 +28,14 @@ public enum SessionKind
     Briefing = 2,
     Custom = 3
 }
+
+/// <summary>
+/// Used by sections in "race-finals" format. A round is the 3 heats that share
+/// a race: two qualifiers and one race-final.
+/// </summary>
+public enum RaceRoundStage
+{
+    None = 0,
+    Qualifier = 1,
+    Final = 2
+}

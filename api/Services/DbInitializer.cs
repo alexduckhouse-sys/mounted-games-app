@@ -35,6 +35,38 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Teams", "IsHorsConcours", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "ChatMessages", "IpAddress", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "StreamUrl", "TEXT NULL");
+        await EnsureColumnAsync(db, "Heats", "ScheduledStart", "TEXT NULL");
+        await EnsureColumnAsync(db, "Heats", "RaceRoundId", "INTEGER NULL");
+        await EnsureColumnAsync(db, "Heats", "RaceRoundStage", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "CompetitionSections", "RunoffRaceName", "TEXT NULL");
+        await EnsureColumnAsync(db, "CompetitionSections", "UsesRaceFinals", "INTEGER NOT NULL DEFAULT 0");
+        await db.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""StewardCalls"" (
+                ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_StewardCalls"" PRIMARY KEY AUTOINCREMENT,
+                ""RaceId"" INTEGER NOT NULL,
+                ""TeamId"" INTEGER NOT NULL,
+                ""LaneIndex"" INTEGER NOT NULL DEFAULT 0,
+                ""ReporterName"" TEXT NULL,
+                ""IpAddress"" TEXT NULL,
+                ""CreatedAt"" TEXT NOT NULL DEFAULT (datetime('now')),
+                CONSTRAINT ""FK_StewardCalls_Races_RaceId"" FOREIGN KEY (""RaceId"") REFERENCES ""Races"" (""Id"") ON DELETE CASCADE,
+                CONSTRAINT ""FK_StewardCalls_Teams_TeamId"" FOREIGN KEY (""TeamId"") REFERENCES ""Teams"" (""Id"") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS ""IX_StewardCalls_RaceId"" ON ""StewardCalls"" (""RaceId"");
+        ");
+        await EnsureColumnAsync(db, "Teams", "SupporterJoinKey", "TEXT NULL");
+        await db.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""TeamSupporters"" (
+                ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_TeamSupporters"" PRIMARY KEY AUTOINCREMENT,
+                ""TeamId"" INTEGER NOT NULL,
+                ""UserId"" TEXT NOT NULL,
+                ""Status"" INTEGER NOT NULL DEFAULT 0,
+                ""CreatedAt"" TEXT NOT NULL DEFAULT (datetime('now')),
+                CONSTRAINT ""FK_TeamSupporters_Teams_TeamId"" FOREIGN KEY (""TeamId"") REFERENCES ""Teams"" (""Id"") ON DELETE CASCADE,
+                CONSTRAINT ""FK_TeamSupporters_AspNetUsers_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""AspNetUsers"" (""Id"") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TeamSupporters_TeamId_UserId"" ON ""TeamSupporters"" (""TeamId"", ""UserId"");
+        ");
 
         foreach (var r in Roles.All)
         {
@@ -408,6 +440,379 @@ public static class DbInitializer
             db.DeclarationForms.Add(decForm);
             await db.SaveChangesAsync();
         }
+
+        await SeedRaceFinalsDemoAsync(db, admin);
+        await SeedTwoDayZoneCompAsync(db, admin);
+    }
+
+    /// <summary>
+    /// Race-finals format demo: 12 teams across Seniors / Juniors / Pairs.
+    /// Each section has the race-finals toggle on, so every race expands to
+    /// Q1 / Q2 / Final scaffold heats (Final is empty until admin populates).
+    /// </summary>
+    private static async Task SeedRaceFinalsDemoAsync(AppDbContext db, AppUser? admin)
+    {
+        const string compName = "Race-Finals Demo 2026";
+        if (await db.Competitions.AnyAsync(c => c.Name == compName)) return;
+
+        var startDate = DateTime.UtcNow.Date.AddDays(7).AddHours(9);
+        var comp = new Competition
+        {
+            Name = compName,
+            Location = "Demo Arena",
+            Description = "Example: heat-to-heat race-finals format. 12 teams across Seniors, Juniors and Pairs. " +
+                          "Every race becomes Q1 + Q2 + Final scaffold; admin populates each final with top-N.",
+            StartDate = startDate,
+            EndDate = startDate.AddHours(8),
+            IsActive = true,
+            CreatedByUserId = admin?.Id,
+        };
+        db.Competitions.Add(comp);
+        await db.SaveChangesAsync();
+
+        var secSeniors = new CompetitionSection
+        {
+            CompetitionId = comp.Id, Format = SectionFormat.Teams, AgeGroup = "Seniors",
+            DisplayName = "Seniors", UsesRaceFinals = true, RunoffRaceName = "2 Flag",
+        };
+        var secJuniors = new CompetitionSection
+        {
+            CompetitionId = comp.Id, Format = SectionFormat.Teams, AgeGroup = "Juniors",
+            DisplayName = "Juniors", UsesRaceFinals = true, RunoffRaceName = "2 Flag",
+        };
+        var secPairs = new CompetitionSection
+        {
+            CompetitionId = comp.Id, Format = SectionFormat.Pairs, AgeGroup = "Open",
+            DisplayName = "Pairs", UsesRaceFinals = true, RunoffRaceName = "2 Flag",
+        };
+        db.CompetitionSections.AddRange(secSeniors, secJuniors, secPairs);
+        await db.SaveChangesAsync();
+
+        var clubs = await db.Clubs.OrderBy(c => c.Id).Take(12).ToListAsync();
+        var teamsBySection = new Dictionary<int, List<Team>>();
+        var sliceMap = new (CompetitionSection section, IEnumerable<Club> clubs)[]
+        {
+            (secSeniors, clubs.Take(4)),
+            (secJuniors, clubs.Skip(4).Take(4)),
+            (secPairs, clubs.Skip(8).Take(4)),
+        };
+        foreach (var (section, slice) in sliceMap)
+        {
+            var list = new List<Team>();
+            foreach (var club in slice)
+            {
+                list.Add(new Team
+                {
+                    CompetitionId = comp.Id,
+                    CompetitionSectionId = section.Id,
+                    ClubId = club.Id,
+                    Suffix = "A",
+                    DisplayName = $"{club.Name} A",
+                    BibColour = club.BibColour,
+                });
+            }
+            db.Teams.AddRange(list);
+            teamsBySection[section.Id] = list;
+        }
+        await db.SaveChangesAsync();
+
+        var seniorRaces = new[]
+        {
+            "Bending", "Hollywood Bowl Boule & Bucket", "Bottle", "Litter", "Tally Ho Farm Ball & Socket",
+            "STRUK Pole", "PGSports UK Shopping Spree", "Stepping Stones", "Spell EGUK", "Big Sack",
+        };
+        var juniorRaces = new[]
+        {
+            "Bending", "Hollywood Bowl Old Sock", "Tally Ho Farm Ball & Socket", "STRUK Pole (JV)",
+            "PGSports UK Shopping Spree", "Stepping Stones", "Spell EGUK (JV)", "5 Flag",
+        };
+        var pairsRaces = new[]
+        {
+            "Bending", "Hollywood Bowl Boule & Bucket", "Bottle",
+            "Litter", "Litter",
+            "Tally Ho Farm Ball & Socket", "Tally Ho Farm Ball & Socket",
+            "STRUK Pole", "STRUK Pole",
+            "PGSports UK Shopping Spree", "Stepping Stones", "EGUK Mug Changes",
+            "5 Flag", "5 Flag",
+        };
+
+        var cursor = startDate;
+        var order = 1;
+        var roundIdSeed = 1;
+        foreach (var (section, races) in new[]
+        {
+            (secSeniors, seniorRaces), (secJuniors, juniorRaces), (secPairs, pairsRaces),
+        })
+        {
+            var teams = teamsBySection[section.Id];
+            var session = new Session
+            {
+                CompetitionId = comp.Id,
+                CompetitionSectionId = section.Id,
+                Name = section.DisplayName,
+                ArenaName = "Main",
+                OrderIndex = order++,
+                ScheduledStart = cursor,
+                LanesPerHeat = 4,
+                MinutesPerHeat = 5,
+                Status = SessionStatus.Upcoming,
+            };
+            db.Sessions.Add(session);
+            await db.SaveChangesAsync();
+
+            // Deterministic shuffle so the seed is repeatable.
+            var rng = new Random(section.Id * 31 + 7);
+            var heatOrder = 1;
+            foreach (var raceName in races)
+            {
+                var shuffled = teams.OrderBy(_ => rng.Next()).ToList();
+                var midpoint = (shuffled.Count + 1) / 2;
+                var q1 = shuffled.Take(midpoint).ToList();
+                var q2 = shuffled.Skip(midpoint).ToList();
+                var roundId = roundIdSeed++;
+
+                heatOrder = await SeedRoundHeatAsync(db, session.Id, raceName,
+                    $"{raceName} · Q1", heatOrder, RaceRoundStage.Qualifier, roundId, q1);
+                heatOrder = await SeedRoundHeatAsync(db, session.Id, raceName,
+                    $"{raceName} · Q2", heatOrder, RaceRoundStage.Qualifier, roundId, q2);
+                heatOrder = await SeedRoundHeatAsync(db, session.Id, raceName,
+                    $"{raceName} · Final", heatOrder, RaceRoundStage.Final, roundId, new List<Team>());
+            }
+            // Each race = 3 heats × 5 min, plus a 10-min gap before the next section.
+            cursor = cursor.AddMinutes(races.Length * 3 * 5 + 10);
+        }
+    }
+
+    /// <summary>
+    /// Creates a single heat in race-finals format (one race per heat, linked
+    /// to its siblings via RaceRoundId). Returns the next heat-order to use.
+    /// </summary>
+    private static async Task<int> SeedRoundHeatAsync(
+        AppDbContext db, int sessionId, string raceName, string label, int orderIndex,
+        RaceRoundStage stage, int roundId, IReadOnlyList<Team> teams)
+    {
+        var heat = new Heat
+        {
+            SessionId = sessionId,
+            Label = label,
+            OrderIndex = orderIndex,
+            RaceRoundId = roundId,
+            RaceRoundStage = stage,
+        };
+        db.Heats.Add(heat);
+        await db.SaveChangesAsync();
+
+        var lane = 1;
+        foreach (var t in teams)
+        {
+            db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = t.Id, LaneIndex = lane++ });
+        }
+        db.Races.Add(new Race { HeatId = heat.Id, Name = raceName, OrderIndex = 1 });
+        await db.SaveChangesAsync();
+        return orderIndex + 1;
+    }
+
+    /// <summary>
+    /// Two-day demo: Seniors / Juniors / Pairs with two qualifier sessions each
+    /// (round-robin order) cascading across day 1 and day 2, then an empty
+    /// finals session per section on day 2 to be populated from standings.
+    /// </summary>
+    private static async Task SeedTwoDayZoneCompAsync(AppDbContext db, AppUser? admin)
+    {
+        const string compName = "Two-Day Zone Champs 2026";
+        if (await db.Competitions.AnyAsync(c => c.Name == compName)) return;
+
+        var day1Start = DateTime.UtcNow.Date.AddDays(14).AddHours(9);
+        var day2Start = day1Start.AddDays(1);
+        var comp = new Competition
+        {
+            Name = compName,
+            Location = "Stoneleigh Park",
+            Description = "Example: two-day Zone 2026 competition. Each section runs two qualifier sessions " +
+                          "(round-robin across day 1 and day 2 morning) and a finals session on day 2 afternoon.",
+            StartDate = day1Start,
+            EndDate = day2Start.AddHours(8),
+            IsActive = true,
+            CreatedByUserId = admin?.Id,
+        };
+        db.Competitions.Add(comp);
+        await db.SaveChangesAsync();
+
+        var secSeniors = new CompetitionSection
+        {
+            CompetitionId = comp.Id, Format = SectionFormat.Teams, AgeGroup = "Seniors",
+            DisplayName = "Seniors", RunoffRaceName = "2 Flag",
+        };
+        var secJuniors = new CompetitionSection
+        {
+            CompetitionId = comp.Id, Format = SectionFormat.Teams, AgeGroup = "Juniors",
+            DisplayName = "Juniors", RunoffRaceName = "2 Flag",
+        };
+        var secPairs = new CompetitionSection
+        {
+            CompetitionId = comp.Id, Format = SectionFormat.Pairs, AgeGroup = "Open",
+            DisplayName = "Pairs", RunoffRaceName = "2 Flag",
+        };
+        db.CompetitionSections.AddRange(secSeniors, secJuniors, secPairs);
+        await db.SaveChangesAsync();
+
+        // 6 teams per section, drawn from clubs after the race-finals demo's slice.
+        var clubs = await db.Clubs.OrderBy(c => c.Id).Skip(12).Take(18).ToListAsync();
+        var teamsBySection = new Dictionary<int, List<Team>>();
+        foreach (var (section, slice) in new[]
+        {
+            (secSeniors, clubs.Take(6)),
+            (secJuniors, clubs.Skip(6).Take(6)),
+            (secPairs, clubs.Skip(12).Take(6)),
+        })
+        {
+            var list = new List<Team>();
+            foreach (var club in slice)
+            {
+                list.Add(new Team
+                {
+                    CompetitionId = comp.Id,
+                    CompetitionSectionId = section.Id,
+                    ClubId = club.Id,
+                    Suffix = "A",
+                    DisplayName = $"{club.Name} A",
+                    BibColour = club.BibColour,
+                });
+            }
+            db.Teams.AddRange(list);
+            teamsBySection[section.Id] = list;
+        }
+        await db.SaveChangesAsync();
+
+        var zoneSenior = new[]
+        {
+            "Bending", "Hollywood Bowl Boule & Bucket", "Bottle", "Litter", "Tally Ho Farm Ball & Socket",
+            "STRUK Pole", "PGSports UK Shopping Spree", "Stepping Stones", "Spell EGUK", "Big Sack",
+        };
+        var zoneJunior = new[]
+        {
+            "Bending", "Hollywood Bowl Old Sock", "Tally Ho Farm Ball & Socket", "STRUK Pole (JV)",
+            "PGSports UK Shopping Spree", "Stepping Stones", "Spell EGUK (JV)", "5 Flag",
+        };
+        var zonePairs = new[]
+        {
+            "Bending", "Hollywood Bowl Boule & Bucket", "Bottle", "Tally Ho Farm Ball & Socket",
+            "STRUK Pole", "PGSports UK Shopping Spree", "Stepping Stones", "EGUK Mug Changes", "5 Flag",
+        };
+
+        // Round-robin qualifier sessions across day 1 (session 1 for each section)
+        // and day 2 morning (session 2 for each section). Each session has heats
+        // of 6 lanes (one heat per 6 teams; with 6 teams = 1 heat per section).
+        var order = 1;
+        var sessionsPlan = new[]
+        {
+            (secSeniors, zoneSenior, day1Start),
+            (secJuniors, zoneJunior, day1Start.AddHours(2)),
+            (secPairs, zonePairs, day1Start.AddHours(4)),
+            (secSeniors, zoneSenior, day2Start),
+            (secJuniors, zoneJunior, day2Start.AddHours(2)),
+            (secPairs, zonePairs, day2Start.AddHours(4)),
+        };
+
+        foreach (var (section, races, start) in sessionsPlan)
+        {
+            var session = new Session
+            {
+                CompetitionId = comp.Id,
+                CompetitionSectionId = section.Id,
+                Name = section.DisplayName,
+                ArenaName = "Main",
+                OrderIndex = order++,
+                ScheduledStart = start,
+                LanesPerHeat = 6,
+                MinutesPerHeat = 5,
+                Status = SessionStatus.Upcoming,
+            };
+            db.Sessions.Add(session);
+            await db.SaveChangesAsync();
+
+            var teams = teamsBySection[section.Id];
+            var groups = SplitGroupsBalanced(teams, 6);
+            var heatOrder = 1;
+            foreach (var group in groups)
+            {
+                var heat = new Heat
+                {
+                    SessionId = session.Id,
+                    Label = $"Heat {heatOrder}",
+                    OrderIndex = heatOrder,
+                };
+                db.Heats.Add(heat);
+                await db.SaveChangesAsync();
+
+                var lane = 1;
+                foreach (var t in group)
+                {
+                    db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = t.Id, LaneIndex = lane++ });
+                }
+                var ri = 1;
+                foreach (var r in races)
+                {
+                    db.Races.Add(new Race { HeatId = heat.Id, Name = r, OrderIndex = ri++ });
+                }
+                await db.SaveChangesAsync();
+                heatOrder++;
+            }
+        }
+
+        // Day 2 afternoon: empty A Final + B Final per section, races pre-loaded.
+        var finalStart = day2Start.AddHours(6);
+        foreach (var (section, races) in new[]
+        {
+            (secSeniors, zoneSenior), (secJuniors, zoneJunior), (secPairs, zonePairs),
+        })
+        {
+            var finalsSession = new Session
+            {
+                CompetitionId = comp.Id,
+                CompetitionSectionId = section.Id,
+                Name = $"{section.DisplayName} · Finals",
+                ArenaName = "Main",
+                OrderIndex = order++,
+                ScheduledStart = finalStart,
+                LanesPerHeat = 6,
+                MinutesPerHeat = 5,
+                Status = SessionStatus.Upcoming,
+            };
+            db.Sessions.Add(finalsSession);
+            await db.SaveChangesAsync();
+
+            foreach (var (label, idx) in new[] { ("A Final", 1), ("B Final", 2) })
+            {
+                var heat = new Heat
+                {
+                    SessionId = finalsSession.Id,
+                    Label = label,
+                    OrderIndex = idx,
+                };
+                db.Heats.Add(heat);
+                await db.SaveChangesAsync();
+                var ri = 1;
+                foreach (var r in races)
+                {
+                    db.Races.Add(new Race { HeatId = heat.Id, Name = r, OrderIndex = ri++ });
+                }
+                await db.SaveChangesAsync();
+            }
+            finalStart = finalStart.AddMinutes(45);
+        }
+    }
+
+    /// <summary>Splits a list into as-even-as-possible groups of at most maxSize.</summary>
+    private static List<List<Team>> SplitGroupsBalanced(List<Team> teams, int maxSize)
+    {
+        var n = teams.Count;
+        if (n == 0) return new List<List<Team>>();
+        var groupCount = Math.Max(1, (int)Math.Ceiling(n / (double)maxSize));
+        var result = new List<List<Team>>();
+        for (var i = 0; i < groupCount; i++) result.Add(new List<Team>());
+        for (var i = 0; i < n; i++) result[i % groupCount].Add(teams[i]);
+        return result;
     }
 
     /// <summary>

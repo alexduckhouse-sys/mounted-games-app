@@ -13,6 +13,7 @@ import { SessionKind } from '../../types';
 import { bibAccent } from '../../lib/bib';
 import { computeTimings, roundTo5Min, formatTime, type SessionTiming, type HeatTiming } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
+import { WeatherNow, WeatherAt } from '../../components/WeatherChips';
 
 type AddKind = 'break' | 'briefing' | 'custom';
 
@@ -28,6 +29,23 @@ function sessionTitle(s: Session): string {
   // Prefer the section name (e.g. "Senior Pairs"); fall back to the session's own name.
   const raw = s.sectionName?.trim() || s.name?.trim() || 'Section';
   return displaySectionName(raw);
+}
+
+/**
+ * Heat headline. When the session's own name diverges from the section's name
+ * (e.g. "Seniors · Session 2"), include that detail so trainers can tell which
+ * session a heat belongs to.
+ */
+function heatHeadline(session: Session, heatLabel: string): string {
+  const sectionPart = sessionTitle(session);
+  const sessionPart = session.name?.trim();
+  const looksLikeExtraInfo = sessionPart
+    && sessionPart.toLowerCase() !== sectionPart.toLowerCase()
+    && !sectionPart.toLowerCase().includes(sessionPart.toLowerCase());
+  if (looksLikeExtraInfo) {
+    return `${sectionPart} · ${sessionPart} — ${heatLabel}`;
+  }
+  return `${sectionPart} — ${heatLabel}`;
 }
 
 interface TimeChipProps {
@@ -113,6 +131,14 @@ export function SessionsTab() {
         >
           <Activity className="w-3.5 h-3.5" /> Arena setup
         </Link>
+        <Link
+          to="steward"
+          className="btn-ghost !py-1.5 !px-2.5 text-xs text-rose-700 dark:text-rose-200 bg-rose-50 dark:bg-rose-900/30 hover:bg-rose-100"
+          title="Volunteer steward — report eliminations from a lane"
+        >
+          <AlertTriangle className="w-3.5 h-3.5" /> Steward mode
+        </Link>
+        <WeatherNow lat={competition.latitude} lon={competition.longitude} />
         <div className="ml-auto" />
         {hasRole('Admin') && (
           <>
@@ -368,7 +394,7 @@ function HeatRow({
   const [statusMenu, setStatusMenu] = useState(false);
   const complete = heatIsComplete(heat);
   const heatLabel = heat.label?.trim() || `Heat ${heatIndex + 1}`;
-  const headline = `${title} — ${heatLabel}`;
+  const headline = heatHeadline(session, heatLabel);
 
   async function setStatus(status: number) {
     await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/status`, { status });
@@ -397,6 +423,7 @@ function HeatRow({
       >
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <TimeChip scheduled={timing?.scheduled ?? null} effective={timing?.effective ?? null} shifted={timing?.shifted ?? false} big />
+          <HeatWeatherChip when={timing?.effective ?? timing?.scheduled ?? null} />
           <span className="font-bold text-base sm:text-lg leading-tight flex-1 min-w-0 truncate">
             {headline}
           </span>
@@ -438,6 +465,10 @@ function HeatRow({
               )}
             </>
           )}
+          <HeatTimePinner session={session} heat={heat} timing={timing} onSaved={onUpdated} />
+          {heat.raceRoundStage === 2 && heat.entries.length === 0 && (
+            <PopulateRaceFinalButton session={session} heat={heat} onSaved={onUpdated} />
+          )}
           {isFirst && (
             <button onClick={onManageHeats} className="btn-ghost !py-0.5 !px-1.5 text-[11px]" title="Manage heat assignments">
               <SettingsIcon className="w-3 h-3" /> Manage heats
@@ -447,6 +478,162 @@ function HeatRow({
       )}
     </div>
   );
+}
+
+function HeatTimePinner({
+  session, heat, timing, onSaved,
+}: {
+  session: Session;
+  heat: Heat;
+  timing: HeatTiming | undefined;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const isPinned = !!heat.scheduledStart;
+
+  // Pre-fill with whatever time the row currently shows so the admin only
+  // tweaks the minutes, not re-types the whole stamp.
+  const initial = heat.scheduledStart
+    ?? (timing?.scheduled ? timing.scheduled.toISOString() : null);
+  const initialLocal = initial ? toLocalInputValue(new Date(initial)) : '';
+  const [value, setValue] = useState(initialLocal);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await api.put(
+        `/competitions/${session.competitionId}/sessions/${session.id}/heats/${heat.id}/scheduled-start`,
+        { scheduledStart: value ? new Date(value).toISOString() : null },
+      );
+      setOpen(false);
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clear() {
+    setBusy(true);
+    try {
+      await api.put(
+        `/competitions/${session.competitionId}/sessions/${session.id}/heats/${heat.id}/scheduled-start`,
+        { scheduledStart: null },
+      );
+      setOpen(false);
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className={`btn-ghost !py-0.5 !px-1.5 text-[11px] ${isPinned ? 'text-brand-700 dark:text-brand-200' : ''}`}
+        title={isPinned ? 'This heat has a pinned start time' : 'Pin this heat to a specific start time'}
+      >
+        <Clock className="w-3 h-3" /> {isPinned ? 'Pinned' : 'Pin time'}
+      </button>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        type="datetime-local"
+        className="input !py-0.5 !px-1 text-[11px]"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      <button onClick={save} disabled={busy} className="btn-primary !py-0.5 !px-1.5 text-[11px]">
+        {busy ? '…' : 'Save'}
+      </button>
+      {isPinned && (
+        <button onClick={clear} disabled={busy} className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-rose-500">
+          Clear
+        </button>
+      )}
+      <button onClick={() => setOpen(false)} className="btn-ghost !py-0.5 !px-1.5 text-[11px]">
+        Cancel
+      </button>
+    </span>
+  );
+}
+
+// datetime-local needs YYYY-MM-DDTHH:MM in local time, not an ISO string.
+function toLocalInputValue(d: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function PopulateRaceFinalButton({
+  session, heat, onSaved,
+}: {
+  session: Session;
+  heat: Heat;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [topN, setTopN] = useState(3);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function populate() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(
+        `/competitions/${session.competitionId}/sessions/${session.id}/heats/${heat.id}/populate-race-final`,
+        { topN },
+      );
+      setOpen(false);
+      onSaved();
+    } catch (e) {
+      const msg = (e as { response?: { data?: string | { message?: string } } }).response?.data;
+      setError(typeof msg === 'string' ? msg : msg?.message ?? 'Could not populate.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-amber-600 dark:text-amber-200"
+        title="Fill the final with top X from each qualifier"
+      >
+        <Trophy className="w-3 h-3" /> Populate final
+      </button>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <label className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+        Top
+        <input
+          type="number" min={1} max={20}
+          className="input !py-0.5 !px-1 text-[11px] w-12"
+          value={topN}
+          onChange={(e) => setTopN(Math.max(1, parseInt(e.target.value, 10) || 1))}
+        />
+        per heat
+      </label>
+      <button onClick={populate} disabled={busy} className="btn-primary !py-0.5 !px-1.5 text-[11px]">
+        {busy ? '…' : 'Fill'}
+      </button>
+      <button onClick={() => setOpen(false)} className="btn-ghost !py-0.5 !px-1.5 text-[11px]">Cancel</button>
+      {error && <span className="text-[11px] text-rose-600 dark:text-rose-300">{error}</span>}
+    </span>
+  );
+}
+
+/** WeatherAt that reads lat/lon from the comp context so callers don't repeat themselves. */
+function HeatWeatherChip({ when }: { when: Date | null }) {
+  const { competition } = useCompetition();
+  if (!when) return null;
+  return <WeatherAt lat={competition.latitude} lon={competition.longitude} when={when} />;
 }
 
 function BreakRow({ s, timing }: { s: Session; timing: SessionTiming | undefined }) {
@@ -990,7 +1177,7 @@ function TeamQuickSearch() {
     <div className="card p-3 space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
         <label className="text-sm font-semibold flex items-center gap-1">
-          <Users className="w-4 h-4 text-brand-600" /> Find my team
+          <Users className="w-4 h-4 text-brand-600" /> When is my team in?
         </label>
         <input
           className="input !py-1.5 text-sm flex-1 min-w-[160px]"

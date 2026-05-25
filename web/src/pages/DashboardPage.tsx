@@ -13,7 +13,7 @@ import type { CompetitionSummary, CompetitionDetail } from '../types';
 type GlobalCard = { to: string; label: string; icon: typeof Trophy; accent: string; needsAuth?: boolean; trainerOnly?: boolean };
 const globalCards: GlobalCard[] = [
   { to: '/competitions', label: 'Competitions', icon: Trophy, accent: 'from-brand-400 to-brand-600' },
-  { to: '/teams', label: 'My Teams', icon: Users, accent: 'from-sky-400 to-sky-600', needsAuth: true, trainerOnly: true },
+  { to: '/teams', label: 'My Teams', icon: Users, accent: 'from-sky-400 to-sky-600', needsAuth: true },
   { to: '/declarations', label: 'Dec Forms', icon: ClipboardList, accent: 'from-violet-400 to-violet-600', needsAuth: true },
   { to: '/chat', label: 'Live Feed', icon: MessagesSquare, accent: 'from-rose-400 to-rose-600' },
 ];
@@ -47,8 +47,10 @@ export function DashboardPage() {
   }, [focusId]);
 
   const cards = globalCards.filter((c) => {
-    if (c.trainerOnly && hasRole('Admin') && !hasRole('Trainer')) return false;
-    return !c.needsAuth || hasRole('Trainer') || hasRole('Admin');
+    // Anything that doesn't require auth is always shown. Auth-gated cards
+    // (My Teams, Dec Forms) appear for any logged-in user — supporters land
+    // on My Teams too.
+    return !c.needsAuth || user != null;
   });
 
   return (

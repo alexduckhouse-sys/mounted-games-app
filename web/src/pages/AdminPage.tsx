@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Settings, Trophy, Users2, Sparkles, Shield, Plus, Trash2, Pencil, BookOpen } from 'lucide-react';
+import { Settings, Trophy, Users2, Sparkles, Shield, Plus, Trash2, Pencil, BookOpen } from 'lucide-react'; // BookOpen + Pencil also used by Race-rules card
 import { api } from '../api';
 import type { Club, CompetitionSummary } from '../types';
 import { bibAccent, bibLabel } from '../lib/bib';
 
 interface IpBlock { id: number; ipAddress: string; reason?: string | null; createdAt: string }
+interface RaceSummary { id: number; name: string; category?: string | null; isBuiltIn: boolean }
 
 export function AdminPage() {
   const [comps, setComps] = useState<CompetitionSummary[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [blocks, setBlocks] = useState<IpBlock[]>([]);
+  const [races, setRaces] = useState<RaceSummary[]>([]);
   const [newIp, setNewIp] = useState('');
   const [newReason, setNewReason] = useState('');
   const [myIp, setMyIp] = useState<string | null>(null);
@@ -21,6 +23,7 @@ export function AdminPage() {
     api.get<Club[]>('/clubs').then((r) => setClubs(r.data));
     api.get<IpBlock[]>('/ip-blocks').then((r) => setBlocks(r.data)).catch(() => setBlocks([]));
     api.get<{ ip: string }>('/ip-blocks/mine').then((r) => setMyIp(r.data.ip)).catch(() => setMyIp(null));
+    api.get<RaceSummary[]>('/race-templates').then((r) => setRaces(r.data)).catch(() => setRaces([]));
   }
   useEffect(load, []);
 
@@ -40,6 +43,29 @@ export function AdminPage() {
   async function removeBlock(id: number) {
     await api.delete(`/ip-blocks/${id}`);
     load();
+  }
+
+  async function deleteComp(c: CompetitionSummary) {
+    const prompt = `Delete "${c.name}" forever?\n\n` +
+      `This wipes ${c.teamCount} team${c.teamCount === 1 ? '' : 's'}, ` +
+      `${c.sectionCount} section${c.sectionCount === 1 ? '' : 's'}, ` +
+      `${c.sessionCount} session${c.sessionCount === 1 ? '' : 's'}, ` +
+      `every heat, race, result, dec form and chat message.\n\n` +
+      `There is no undo. Type the comp name to confirm.`;
+    const typed = window.prompt(prompt);
+    if (typed == null) return;
+    if (typed.trim() !== c.name) {
+      alert('Name did not match — nothing deleted.');
+      return;
+    }
+    try {
+      await api.delete(`/competitions/${c.id}`);
+      // Wipe any local wizard draft for this comp so it doesn't reappear on /admin/competitions/:id.
+      try { window.localStorage.removeItem(`competitionEditor:edit:${c.id}`); } catch { /* ignore */ }
+      load();
+    } catch {
+      alert('Delete failed. Check the API logs.');
+    }
   }
 
   const iAmBlocked = useMemo(() => myIp != null && blocks.some((b) => b.ipAddress === myIp), [myIp, blocks]);
@@ -93,6 +119,13 @@ export function AdminPage() {
                 >
                   <Pencil className="w-3.5 h-3.5" /> Edit
                 </Link>
+                <button
+                  onClick={() => deleteComp(c)}
+                  className="btn-ghost !py-1 !px-2 text-xs shrink-0 text-rose-600 hover:text-rose-800"
+                  title="Delete competition permanently"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                </button>
               </li>
             ))}
           </ul>
@@ -121,6 +154,41 @@ export function AdminPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="font-semibold flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-brand-600" /> Race rules &amp; diagrams
+          </h2>
+          <span className="text-xs text-slate-500">{races.length} races in the library</span>
+          <Link to="/admin/rules" className="btn-primary !py-1.5 !px-2.5 text-xs ml-auto">
+            <Pencil className="w-3.5 h-3.5" /> Edit races
+          </Link>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-300">
+          Add new races, fix diagrams, edit rules. Built-in races can be re-shaped using the drag editor.
+        </p>
+        {races.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {races.slice(0, 12).map((r) => (
+              <Link
+                key={r.id}
+                to="/admin/rules"
+                className="text-[11px] px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-brand-100 dark:hover:bg-brand-900/30"
+                title={r.category ?? ''}
+              >
+                {r.name}
+                {!r.isBuiltIn && <span className="ml-1 text-[9px] text-amber-600 font-bold uppercase">custom</span>}
+              </Link>
+            ))}
+            {races.length > 12 && (
+              <Link to="/admin/rules" className="text-[11px] px-2 py-1 rounded-md text-brand-600 dark:text-brand-300 hover:underline">
+                + {races.length - 12} more →
+              </Link>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="card p-5 space-y-3">

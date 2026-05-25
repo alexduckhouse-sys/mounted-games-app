@@ -362,5 +362,96 @@ internal static class RaceLibrarySeed
             "Five-rider race — hook rosettes from a bin and hand them to Number Five to spell PGUK.",
             "Bin on the Centre Line containing four coloured rosettes (Blue P at 12, Red G at 3, Green U at 6, Yellow K at 9); Number Five 3 m beyond the Changeover holding a gibbet. Each rider hooks any rosette, rides on and waits behind the Changeover while Number Five places it on the correct hook so the gibbet spells P G U K left-to-right from the Start/Finish view. Dropped rosettes may be retrieved.",
             FishingSetup),
+
+        // ── Zone 2026 sponsored aliases ───────────────────────────────────
+        // Same rules/diagrams as the canonical races above, but listed with
+        // the sponsor-branded names used by Zone 2026 race cards.
+        new Entry("Hollywood Bowl Boule & Bucket", "Zone 2026 · Ball",
+            "Zone 2026 sponsored name for Boule and Bucket.",
+            "Four plastic boules per team in a circle 3 m behind the Changeover; bucket on the Centre Line. Each rider in turn drops a boule in the bucket on the way up, dismounts at the Changeover to collect another and brings it back. Number Four drops the last on the way back. Winner: first Number Four over the line with 5 boules in the bucket.",
+            ConeMidAndChangeover),
+
+        new Entry("Hollywood Bowl Old Sock", "Zone 2026 · Equipment",
+            "Zone 2026 sponsored name for Old Sock.",
+            "Four sock-balls in a circle 3 m behind the Changeover; bucket on the Centre Line. Number One (carrying a sock) drops it in the bucket, rides on, dismounts, picks up another sock and brings it back. Numbers 2, 3 and 4 repeat. Number Four drops the last sock on the way back. Winner: first Number Four over the line with 5 socks in the bucket.",
+            ConeMidAndChangeover),
+
+        new Entry("Tally Ho Farm Ball & Socket", "Zone 2026 · Ball",
+            "Zone 2026 sponsored name for Ball and Socket.",
+            "Four Ball Cones level with Poles 1–4, each holding a tennis ball; a Bending Pole topped with a 4-socket Socket Board 3 m beyond the Changeover. Each rider in turn carries a ball, places it into a socket, then collects a ball from any cone on the way back. Drops can be replaced dismounted. Winner: Number Four first over the line carrying the last ball.",
+            FourConesAtPoles),
+
+        new Entry("PGSports UK Shopping Spree", "Zone 2026 · Other",
+            "Zone 2026 sponsored name for the Shopping Spree race.",
+            "Bending pole on the Centre Line topped with a Penny Dish that has four hooks underneath; four pennies stacked in the dish. Table 3 m beyond the Changeover holding a bucket with four branded shopping bags (each containing a Junior bottle). Each rider in turn carries a penny to Number Five at the Changeover, swaps it for a shopping bag and hangs both handles on a free hook under the Penny Dish. Winner: Number Four first over the line with four pennies in the bucket and four bags hanging correctly.",
+            CircleAtChangeover),
+
+        new Entry("STRUK Pole (JV)", "Zone 2026 · Letter Pole",
+            "Junior version of STRUK Pole — same rules, fewer cartons.",
+            "Junior version of STRUK Pole. Bending pole level with Pole 1; cartons in a circle 3 m beyond the Changeover with letters S, T, R, U, K plus blanks. Riders take turns slotting their carton (and bringing back the next). Final order top-to-bottom: S, T, R, U, K, blank, blank, blank.",
+            LetterPole),
+
+        new Entry("Spell EGUK (JV)", "Zone 2026 · Spelling",
+            "Junior version of Spell EGUK — same rules.",
+            "Junior version of Spell E G U K. Table on the Centre Line with eight cards (four letters E, G, U, K and four with the EGUK logo). Gibbet 3 m beyond the Changeover with two crossbars of four hooks each. Each of the four riders collects two cards in turn and hangs them on the correct hooks so the top row spells EGUK and the bottom row shows logos.",
+            SpellTableAndGibbet),
+
+        new Entry("EGUK Mug Changes", "Zone 2026 · Mug",
+            "Zone 2026 sponsored name for Mug Changes.",
+            "Four Bending Poles 7–9 m apart, mugs on Poles 2 and 4. Riders 1 & 3 start at Start/Finish; 2 & 4 at Changeover. Number One (carrying a mug) places on Pole 1, picks from Pole 2 and places on Pole 3, picks from Pole 4 and hands to Number Two. Pattern reverses going back. Mugs must be placed in correct order — any error must be corrected before continuing. Winner: Number Four first over the line, mounted, with mugs on Poles 2 and 4.",
+            FourPoles),
+
+        new Entry("2 Flag", "Zone 2026 · Flag",
+            "Zone 2026 name for Two Flag — the standard run-off race.",
+            "Two Flag Cones per team level with Poles 1 and 4; flag starts in the Pole 4 cone. Numbers 1 & 3 at Start/Finish, 2 & 4 at Changeover. Each rider in turn carries a flag, places it in one cone and collects from the other. Knocked cones must be reset immediately by the rider. Winner: Number Four first over the line carrying a flag.",
+            """[{"t":"cone","x":17,"label":"Flag"},{"t":"cone","x":83,"label":"Flag"}]"""),
+
+        new Entry("5 Flag", "Zone 2026 · Flag",
+            "Zone 2026 name for Five Flag.",
+            "Flag Cone 3 m behind the Changeover and another on the Centre Line; five flags — four start in the centre cone, one carried by Number One. Each rider in turn places their flag in the Changeover cone and brings one back from the centre cone. Winner: Number Four first over the line carrying a flag, with four flags in the Changeover cone.",
+            ThreeFlagCones),
+
+        // ── Area 2026 sponsored aliases + junior variants ─────────────────
+        // Used by area-level competitions; mostly the same rules with different
+        // sponsor names, plus dedicated junior versions where the rules differ.
+        new Entry("5 Mug", "Area 2026 · Mug",
+            "Area 2026 name for Five Mug – Pole Specific.",
+            "Five Bending Poles 7–9 m apart; table 3 m behind Changeover with four inverted mugs (one with EGUK logo at front-left). Each rider places a mug on the designated pole (2, 3, 4 in turn) and brings back another mug. Number Four places on Pole 5, collects the EGUK mug, and places it on Pole 1 on the way back. Mugs must be replaced inverted. Winner: Number Four first over the line with a mug on every pole and the EGUK mug on Pole 1.",
+            FivePoles),
+
+        new Entry("2 Mug", "Area 2026 · Mug",
+            "Area 2026 name for Two Mug.",
+            "Four Bending Poles 7–9 m apart; mugs on Poles 1 and 3. Numbers 1 & 3 at Start/Finish, 2 & 4 at Changeover. Number One moves Mug from 1→2 then 3→4, then crosses Changeover. Number Two moves Mug from 4→3 then 2→1, then crosses Start/Finish. Numbers 3 & 4 repeat. Mugs must move in the correct sequence — any error must be corrected. Winner: Number Four first over the line with mugs on Poles 1 and 3.",
+            FourPoles),
+
+        new Entry("PGUK Pyramid", "Area 2026 · Equipment",
+            "Area 2026 name for Pyramid – PGUK Version.",
+            "Table on the Centre Line and another 3 m beyond the Changeover. The Changeover table holds four unstacked 500 g plastic boxes lettered K, U, G, P (front-right, back-right, back-left, front-left as viewed from Start/Finish). Number One collects K and places it on the centre table; Number Two adds U; Number Three adds G; Number Four adds P. Stack must spell P G U K top-to-bottom. Boxes can be adjusted before/after placing.",
+            TableMidlineAndChangeover),
+
+        new Entry("PGUK Pyramid (junior version)", "Area 2026 · Equipment",
+            "Junior version of PGUK Pyramid — same stacking pattern with the JV equipment set.",
+            "Junior version of Pyramid – PGUK Version. Table on the Centre Line and another 3 m beyond the Changeover. JV equipment set. Stack must spell P G U K top-to-bottom.",
+            TableMidlineAndChangeover),
+
+        new Entry("Hollywood Bowl Bottle", "Area 2026 · Bottle",
+            "Area 2026 sponsored name for Bottle.",
+            "Two tables per team: one on the Centre Line, the other 3 m beyond the Changeover. A 750 ml bottle weighing 500 g sits on the Changeover table; another similar bottle is carried by Number One. Each rider in turn places one bottle on the centre table, collects the other from the Changeover table and hands it on. Knocked bottles/tables must be replaced upright. Winner: Number Four first over the line, mounted, carrying the bottle.",
+            TableMidlineAndChangeover),
+
+        new Entry("Hollywood Bowl Bottle (junior version)", "Area 2026 · Bottle",
+            "Junior version of Hollywood Bowl Bottle.",
+            "Junior version. Two tables per team: one on the Centre Line, the other 3 m beyond the Changeover. JV bottle weight. Each rider in turn places one bottle on the centre table, collects the other and hands it on. Winner: Number Four first over the line carrying the bottle.",
+            TableMidlineAndChangeover),
+
+        new Entry("Old Sock (junior version)", "Area 2026 · Equipment",
+            "Junior version of Old Sock.",
+            "Junior version. Four sock-balls in a circle 3 m behind the Changeover; bucket on the Centre Line. Number One (carrying a sock) drops it in the bucket, rides on, dismounts, picks up another sock and brings it back. Numbers 2, 3 and 4 repeat. Number Four drops the last sock on the way back. Winner: first Number Four over the line with 5 socks in the bucket.",
+            ConeMidAndChangeover),
+
+        new Entry("EGUK 5 Flag", "Area 2026 · Flag",
+            "Area 2026 sponsored name for 5 Flag / Five Flag.",
+            "Flag Cone 3 m behind the Changeover and another on the Centre Line; five flags — four start in the centre cone, one carried by Number One. Each rider in turn places their flag in the Changeover cone and brings one back from the centre cone. Winner: Number Four first over the line carrying a flag, with four flags in the Changeover cone.",
+            ThreeFlagCones),
     };
 }
