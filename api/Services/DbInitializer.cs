@@ -871,10 +871,12 @@ public static class DbInitializer
             }
         }
 
-        var existing = await db.RaceTemplates.Select(r => r.Name).ToListAsync();
-        var have = existing.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingTemplates = await db.RaceTemplates.ToListAsync();
+        var byName = existingTemplates.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase);
+
+        // INSERT new races from the seed.
         var toAdd = RaceLibrarySeed.All
-            .Where(r => !have.Contains(r.Name))
+            .Where(r => !byName.ContainsKey(r.Name))
             .Select(r => new Entities.RaceTemplate
             {
                 Name = r.Name,
@@ -890,6 +892,28 @@ public static class DbInitializer
             db.RaceTemplates.AddRange(toAdd);
             await db.SaveChangesAsync();
         }
+
+        // REFRESH built-in races whose rules/diagram are listed in RaceLibraryUpdates.
+        // Admin-edited customs (IsBuiltIn=false) are left alone. Built-ins that the
+        // admin may have hand-edited via /admin/rules will be overwritten — accept
+        // that until we add a "library version" column for differential refresh.
+        var changed = 0;
+        foreach (var (name, entry) in RaceLibraryUpdates.ByName)
+        {
+            if (!byName.TryGetValue(name, out var row) || !row.IsBuiltIn) continue;
+            var summary = entry.Summary ?? row.Summary;
+            var rules = entry.Rules ?? row.Rules;
+            var diagram = entry.DiagramJson ?? row.DiagramJson;
+            var category = entry.Category ?? row.Category;
+            if (row.Summary == summary && row.Rules == rules
+                && row.DiagramJson == diagram && row.Category == category) continue;
+            row.Summary = summary;
+            row.Rules = rules;
+            row.DiagramJson = diagram;
+            row.Category = category;
+            changed++;
+        }
+        if (changed > 0) await db.SaveChangesAsync();
     }
 
 }

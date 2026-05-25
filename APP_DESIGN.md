@@ -181,3 +181,25 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 - `ScoringService.ApplyRaceResultsAsync` no longer overwrites a manually-set FinishedAt — admin's live-clock duration is preserved when results are submitted.
 - The active race tile in `SessionPage` renders a `RaceClock` chip: a pulsing rose mm:ss timer while running, plus a Start (green) / Stop (rose) button. After results are submitted the duration shows as a static slate badge.
 - Broadcasts via `resultsUpdated` so other admin tabs see the clock change in real time.
+
+## Background push notifications
+- VAPID keypair lives in `api/vapid-keys.json` (gitignored — auto-generated on first run by `VapidKeyService`). Endpoint: `GET /api/push/vapid-public-key`.
+- `PushSubscription` entity stores per-user subscriptions; `POST /api/push/subscribe` upserts and `DELETE /api/push/subscribe` removes by endpoint or in bulk.
+- `PushNotifier` wraps `WebPushClient`; stale subscriptions (HTTP 410/404) are auto-purged.
+- `NotificationScheduler` (`IHostedService`) polls every minute and pushes the same triggers as the foreground hook (1-hour-before-session, 30-min-before-briefing) to every trainer + accepted supporter of every team in the section. Dedupe per (kind, session).
+- Service worker (`web/src/sw.ts`, built via `vite-plugin-pwa` injectManifest) handles incoming `push` events and `notificationclick`. The Notifications toggle in `MyTeamsPage` calls `subscribeForPush()` / `unsubscribeFromPush()` to sync.
+
+## Per-session race lists
+- Each section now holds `sessions: SessionConfig[]` (was a single shared `races` string). Every session has its own name, race list and Zone/Area scope. UI: per-session sub-cards inside the section block in the wizard; admin can add/remove sessions per section.
+- Race-finals format pins the section to a single session (the toggle removes extras).
+- `submitCreate` and `submitEditAll` iterate `sec.sessions`; each session POSTs its own generate-heats / generate-race-finals call with that session's race list.
+
+## Wizard edit-mode
+- Editing `/admin/competitions/:id` no longer disables Sections and Teams steps. The full pipeline (`submitEditAll`) walks the draft: PUTs basics, DELETEs removed teams + sections, PUTs existing sections (runoff + race-finals), PUTs existing teams (suffix + HC), POSTs new sections + teams, generates heats for any new section's sessions. Existing sessions/heats/results survive untouched.
+- New `DELETE /api/competitions/:id/sections/:sid` endpoint walks the section's graph (sessions → heats → entries/races/results, plus dec forms for the section's teams).
+- Hors Concours toggle: per-team HC pill on every team row in the wizard's TeamsStep — italic + grey club name when HC is on so non-scoring teams are obvious at a glance. `Team.IsHorsConcours` flows through both create and edit flows.
+
+## Race-library refresh
+- `RaceLibraryUpdates.ByName` is a per-race override map (`Summary`, `Rules`, `DiagramJson`, `Category` — any field set to null keeps the existing DB value). On every API startup, `SeedRaceTemplatesAsync` walks this map and PUTs the override values into any matching built-in `RaceTemplate` row.
+- This lets us push canonical rule text or diagram refinements to existing DBs without manual admin work. Admin-edited customs (`IsBuiltIn=false`) are not touched.
+- Source: `docs/pc-mounted-games-race-rules-2026.md` (Pony Club Mounted Games Race Rules 2026). Currently covers ~15 of the highest-traffic races; the remaining ~40 are filled in incrementally as needed.
