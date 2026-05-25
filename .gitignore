@@ -44,3 +44,6 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+
+# Secrets — auto-generated VAPID keypair for web push (private key inside).
+api/vapid-keys.json
