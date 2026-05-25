@@ -237,6 +237,29 @@ function SessionHeatRows({
   const heats = orderedHeats(session);
   const title = sessionTitle(session);
   const [editingAssignments, setEditingAssignments] = useState(false);
+  const [populating, setPopulating] = useState(false);
+
+  // A scaffolded finals session: has at least one heat labelled "X Final" and all heats are empty.
+  const isEmptyFinals = useMemo(() => {
+    if (heats.length === 0) return false;
+    if (heats.some((h) => h.entries.length > 0)) return false;
+    return heats.some((h) => /\bfinal\b/i.test(h.label ?? ''));
+  }, [heats]);
+
+  async function populateFinals() {
+    if (!confirm('Populate these finals heats with the top teams from standings?')) return;
+    setPopulating(true);
+    try {
+      await api.post(`/competitions/${session.competitionId}/sessions/${session.id}/populate-finals`);
+      onUpdated();
+    } catch (e) {
+      const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message
+        ?? 'Could not populate finals.';
+      alert(msg);
+    } finally {
+      setPopulating(false);
+    }
+  }
 
   // The "in-arena" heat is the first not-complete heat while the session is live.
   const activeHeatId = useMemo(() => {
@@ -275,6 +298,26 @@ function SessionHeatRows({
 
   return (
     <div className="space-y-2">
+      {isEmptyFinals && isAdmin && (
+        <div className="rounded-lg border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-900/20 p-3 flex items-center gap-2 flex-wrap">
+          <Trophy className="w-5 h-5 text-amber-600 dark:text-amber-300 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-sm text-amber-900 dark:text-amber-100 truncate">
+              {title} — finals scaffolded
+            </div>
+            <div className="text-xs text-amber-700 dark:text-amber-200">
+              {heats.length} empty {heats.length === 1 ? 'heat' : 'heats'} ({heats.map((h) => h.label).filter(Boolean).join(', ')}). Populate when you're ready to seed from current standings.
+            </div>
+          </div>
+          <button
+            onClick={populateFinals}
+            disabled={populating}
+            className="btn-primary !py-1.5 !px-3 text-xs"
+          >
+            <Wand2 className="w-3.5 h-3.5" /> {populating ? 'Populating…' : 'Populate from standings'}
+          </button>
+        </div>
+      )}
       {heats.map((h, idx) => {
         const ht = timing?.heats[idx];
         const isActive = h.id === activeHeatId;
@@ -712,6 +755,7 @@ function CreateFinalsModal({
   const [lanes, setLanes] = useState(6);
   const [name, setName] = useState('');
   const [raceNames, setRaceNames] = useState('Litter Lifter\nFlag\nBottle\nMug\nBall and Cone');
+  const [scaffoldOnly, setScaffoldOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [boundary, setBoundary] = useState<{ tied: boolean; teams?: { id: number; name: string; total: number; wins: number }[]; cutoff?: number } | null>(null);
@@ -737,17 +781,29 @@ function CreateFinalsModal({
     setError(null);
     setBusy(true);
     try {
-      await api.post(`/competitions/${competitionId}/finals`, {
-        competitionSectionId: sectionId === '' ? null : sectionId,
-        topN,
-        raceNames: races,
-        lanesPerHeat: lanes,
-        name: name.trim() || null,
-      });
+      if (scaffoldOnly) {
+        const numHeats = Math.max(1, Math.ceil(topN / Math.max(1, lanes)));
+        await api.post(`/competitions/${competitionId}/finals/scaffold`, {
+          competitionSectionId: sectionId === '' ? null : sectionId,
+          raceNames: races,
+          lanesPerHeat: lanes,
+          numHeats,
+          name: name.trim() || null,
+        });
+      } else {
+        await api.post(`/competitions/${competitionId}/finals`, {
+          competitionSectionId: sectionId === '' ? null : sectionId,
+          topN,
+          raceNames: races,
+          lanesPerHeat: lanes,
+          name: name.trim() || null,
+        });
+      }
       onCreated();
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: string } })?.response?.data;
-      setError(typeof msg === 'string' ? msg : 'Could not create finals.');
+      const msg = (e as { response?: { data?: string | { message?: string } } })?.response?.data;
+      const text = typeof msg === 'string' ? msg : msg?.message ?? 'Could not create finals.';
+      setError(text);
     } finally {
       setBusy(false);
     }
@@ -824,6 +880,23 @@ function CreateFinalsModal({
               value={raceNames}
               onChange={(e) => setRaceNames(e.target.value)}
             />
+          </label>
+
+          <label className="flex items-start gap-2 text-xs cursor-pointer p-2 rounded-md bg-slate-50 dark:bg-slate-800/60">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={scaffoldOnly}
+              onChange={(e) => setScaffoldOnly(e.target.checked)}
+            />
+            <span>
+              <span className="font-semibold">Scaffold only — populate later.</span>{' '}
+              <span className="text-slate-500 dark:text-slate-300">
+                Creates the finals session with empty A/B/C Final heats and the race list.
+                You can fill them with the top teams from standings later via the
+                "Populate from standings" button on the timetable.
+              </span>
+            </span>
           </label>
 
           {boundary?.tied && boundary.teams && (

@@ -105,6 +105,15 @@ public record CreateFinalsRequest(
     int? LanesPerHeat,
     string? Name);
 
+public record ScaffoldFinalsRequest(
+    int? CompetitionSectionId,
+    IReadOnlyList<string> RaceNames,
+    int LanesPerHeat,
+    int NumHeats,
+    string? Name,
+    int? MinutesPerHeat,
+    DateTime? ScheduledStart);
+
 public record AutoTimetableRequest(
     int? RacesPerHeat,
     int? SessionsPerSection,

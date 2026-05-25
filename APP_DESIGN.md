@@ -79,8 +79,15 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 - **Round-robin ordering**: when creating a comp, all sections' Session 1 run first (in section order), then all Session 2, etc. Each section picks its own session count.
 - **Section display name** drops the "Teams" format word (e.g. "Under 12", not "Teams Under 12"). Pairs / Individual keep theirs.
 - **Finals** heats are labelled `A Final`, `B Final`, `C Final`, … (top group first). Teams flagged HC are excluded from seeding.
+- **Two ways to create finals**:
+  - *Create + populate* (existing): pick TopN, races, lanes — server seeds heats with current top teams.
+  - *Scaffold only* (new): tick "Scaffold only" in the modal. Creates the finals session with empty A/B/C Final heats and races/timing pre-set. Later, an admin clicks **Populate from standings** on the timetable to fill them. Endpoint: `POST /competitions/:id/sessions/:sid/populate-finals`.
 - **Tie warning**: the create-finals modal calls `/finals/boundary` and warns admin when teams are tied on points at the qualification cutoff.
 - **Move to next day**: admin button pushes all unstarted sessions forward by 24h (POST `/competitions/:id/shift-day?days=1`).
+
+## Scoring
+- **Editing existing race results**: when admin clicks a completed race tab in `SessionPage`, the scoring tiles pre-fill with the saved placings/eliminations. Submitting overwrites cleanly — the API already does `RemoveRange(race.Results)` on every POST.
+- **Heat-end transition**: when the heat the admin is scoring transitions from in-progress → complete, a `HeatEndOverlay` shows the next heat's dec forms and a Continue button that advances `activeHeatId` (so the UI doesn't loop back to the just-finished heat).
 
 ## Race library
 - Built-in races + admin-added customs live in the `RaceTemplates` table. Built-ins can't be deleted. Admin manages them at `/admin/rules`.

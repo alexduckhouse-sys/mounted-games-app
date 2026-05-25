@@ -405,6 +405,113 @@ public class CompetitionsController : ControllerBase
         return groups;
     }
 
+    [HttpPost("{id:int}/finals/scaffold")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<SessionDto>> ScaffoldFinals(int id, ScaffoldFinalsRequest req)
+    {
+        var comp = await _db.Competitions.FirstOrDefaultAsync(c => c.Id == id);
+        if (comp is null) return NotFound();
+
+        var raceNames = req.RaceNames.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
+        if (raceNames.Count == 0) return BadRequest(new { message = "At least one race name is required." });
+        if (req.NumHeats < 1) return BadRequest(new { message = "numHeats must be >= 1." });
+        if (req.LanesPerHeat < 1) return BadRequest(new { message = "lanesPerHeat must be >= 1." });
+
+        var maxOrder = await _db.Sessions.Where(s => s.CompetitionId == id).Select(s => (int?)s.OrderIndex).MaxAsync() ?? 0;
+        var sectionLabel = req.CompetitionSectionId.HasValue
+            ? (await _db.CompetitionSections.Where(s => s.Id == req.CompetitionSectionId.Value).Select(s => s.DisplayName).FirstOrDefaultAsync() ?? "Finals")
+            : "Finals";
+        var name = string.IsNullOrWhiteSpace(req.Name) ? $"Finals · {sectionLabel}" : req.Name!.Trim();
+
+        var session = new Session
+        {
+            CompetitionId = id,
+            CompetitionSectionId = req.CompetitionSectionId,
+            Name = name,
+            OrderIndex = maxOrder + 1,
+            Status = SessionStatus.Upcoming,
+            LanesPerHeat = req.LanesPerHeat,
+            MinutesPerHeat = req.MinutesPerHeat,
+            ScheduledStart = req.ScheduledStart,
+        };
+        _db.Sessions.Add(session);
+        await _db.SaveChangesAsync();
+
+        for (var gi = 0; gi < req.NumHeats; gi++)
+        {
+            var letter = (char)('A' + gi);
+            var heat = new Heat
+            {
+                SessionId = session.Id,
+                Label = $"{letter} Final",
+                OrderIndex = gi + 1
+            };
+            _db.Heats.Add(heat);
+            await _db.SaveChangesAsync();
+            for (var ri = 0; ri < raceNames.Count; ri++)
+            {
+                _db.Races.Add(new Race { HeatId = heat.Id, Name = raceNames[ri], OrderIndex = ri + 1 });
+            }
+        }
+        await _db.SaveChangesAsync();
+
+        var reloaded = await SessionsWithDetail().FirstAsync(s => s.Id == session.Id);
+        var dto = reloaded.ToDto();
+        await _live.SessionUpdated(id, dto);
+        return dto;
+    }
+
+    [HttpPost("{id:int}/sessions/{sessionId:int}/populate-finals")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<SessionDto>> PopulateFinals(int id, int sessionId)
+    {
+        var session = await _db.Sessions
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.CompetitionId == id);
+        if (session is null) return NotFound();
+        var heats = session.Heats.OrderBy(h => h.OrderIndex).ToList();
+        if (heats.Count == 0) return BadRequest(new { message = "Session has no heats to populate." });
+        if (heats.Any(h => h.Entries.Count > 0))
+            return BadRequest(new { message = "Heats already have teams. Clear them first via heat assignments." });
+
+        var teamsQ = _db.Teams
+            .Include(t => t.Results)
+            .Where(t => t.CompetitionId == id && !t.IsHorsConcours);
+        if (session.CompetitionSectionId.HasValue)
+            teamsQ = teamsQ.Where(t => t.CompetitionSectionId == session.CompetitionSectionId.Value);
+        var teams = await teamsQ.ToListAsync();
+        var ordered = teams
+            .Select(t => new
+            {
+                t.Id,
+                Total = t.Results.Sum(r => r.Points),
+                Wins = t.Results.Count(r => r.Placing == 1 && !r.Eliminated)
+            })
+            .OrderByDescending(x => x.Total)
+            .ThenByDescending(x => x.Wins)
+            .Select(x => x.Id)
+            .ToList();
+        if (ordered.Count == 0) return BadRequest(new { message = "No teams with results to seed finals." });
+
+        var perHeat = session.LanesPerHeat ?? 6;
+        // Distribute by ranking: top group → A Final, next → B Final, etc.
+        var idx = 0;
+        foreach (var heat in heats)
+        {
+            var lane = 1;
+            for (var k = 0; k < perHeat && idx < ordered.Count; k++, idx++)
+            {
+                _db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = ordered[idx], LaneIndex = lane++ });
+            }
+        }
+        await _db.SaveChangesAsync();
+
+        var reloaded = await SessionsWithDetail().FirstAsync(s => s.Id == session.Id);
+        var dto = reloaded.ToDto();
+        await _live.SessionUpdated(id, dto);
+        return dto;
+    }
+
     [HttpPost("{id:int}/auto-timetable")]
     [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<CompetitionDetail>> AutoTimetable(int id, AutoTimetableRequest req)

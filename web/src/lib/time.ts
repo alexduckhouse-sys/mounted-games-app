@@ -95,7 +95,7 @@ export function computeTimings(sessions: Session[]): Map<number, SessionTiming> 
     }
 
     const dur = sessionDurationMinutes(s);
-    const effectiveEnd = effective ? new Date(effective.getTime() + dur * 60_000) : null;
+    const effectiveEnd: Date | null = effective ? new Date(effective.getTime() + dur * 60_000) : null;
     if (effectiveEnd) lastEffectiveEnd = effectiveEnd;
 
     const shifted = !!(scheduled && effective

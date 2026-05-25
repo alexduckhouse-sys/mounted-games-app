@@ -389,6 +389,9 @@ export function CompetitionEditor() {
             setShowAllClubs={setShowAllClubs}
             decTeamIds={decTeamIds}
             disabled={isEdit}
+            onClubsChanged={() => {
+              api.get<Club[]>('/clubs').then((r) => setClubs(r.data)).catch(() => {});
+            }}
           />
         )}
         {step === 'Review' && (
@@ -752,6 +755,7 @@ function SectionsStep({
 
 function TeamsStep({
   sections, clubs, teams, onAdd, onRemove, onUpdate, showAllClubs, setShowAllClubs, decTeamIds, disabled,
+  onClubsChanged,
 }: {
   sections: SectionDraft[];
   clubs: Club[];
@@ -763,9 +767,14 @@ function TeamsStep({
   setShowAllClubs: (v: boolean) => void;
   decTeamIds: Set<number>;
   disabled: boolean;
+  onClubsChanged: () => void;
 }) {
   const [sectionFilter, setSectionFilter] = useState<number>(0);
-  const visibleClubs = useMemo(() => {
+  const [search, setSearch] = useState('');
+  const [customName, setCustomName] = useState('');
+  const [customBusy, setCustomBusy] = useState(false);
+
+  const pool = useMemo(() => {
     if (showAllClubs) return clubs;
     // Filter to clubs that already have at least one dec-formed team in this comp.
     const clubIdsWithDec = new Set(
@@ -773,6 +782,30 @@ function TeamsStep({
     );
     return clubs.filter((c) => clubIdsWithDec.has(c.id));
   }, [clubs, showAllClubs, teams, decTeamIds]);
+
+  const matches = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (q.length === 0) return pool.slice(0, 10);
+    return pool
+      .filter((c) => c.name.toLowerCase().includes(q))
+      .slice(0, 12);
+  }, [pool, search]);
+
+  async function addCustomTeam() {
+    const name = customName.trim();
+    if (!name) return;
+    setCustomBusy(true);
+    try {
+      const { data } = await api.post<Club>('/clubs', { name, region: 'Custom' });
+      onAdd(sectionFilter, data.id);
+      setCustomName('');
+      onClubsChanged();
+    } catch {
+      alert('Could not add custom team.');
+    } finally {
+      setCustomBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -807,23 +840,57 @@ function TeamsStep({
         </label>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-64 overflow-auto p-2 border border-slate-200 dark:border-slate-700 rounded-md">
-        {visibleClubs.length === 0 && (
-          <p className="col-span-full text-xs text-slate-500">
-            {showAllClubs ? 'No clubs loaded.' : 'No clubs with dec forms yet — toggle "Show all pony clubs" above.'}
-          </p>
-        )}
-        {visibleClubs.map((c) => (
-          <button
-            key={c.id}
-            type="button"
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <input
+            className="input !py-1.5 text-sm flex-1"
+            placeholder={`Search ${pool.length} clubs…`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             disabled={disabled}
-            onClick={() => onAdd(sectionFilter, c.id)}
-            className="text-left px-2 py-1.5 rounded-md text-xs bg-slate-50 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-900/30 border border-slate-200 dark:border-slate-700 disabled:opacity-50"
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-64 overflow-auto p-2 border border-slate-200 dark:border-slate-700 rounded-md">
+          {matches.length === 0 ? (
+            <p className="col-span-full text-xs text-slate-500">
+              No clubs match "{search}". Add a custom team below.
+            </p>
+          ) : matches.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => onAdd(sectionFilter, c.id)}
+              className="text-left px-2 py-1.5 rounded-md text-xs bg-slate-50 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-900/30 border border-slate-200 dark:border-slate-700 disabled:opacity-50"
+            >
+              <Plus className="inline w-3 h-3 mr-1" /> {c.name}
+              {c.region === 'Custom' && (
+                <span className="ml-1 text-[9px] uppercase tracking-wide text-slate-400">custom</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-1.5 mt-1">
+          <Plus className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <input
+            className="input !py-1.5 text-sm flex-1"
+            placeholder="Custom team name (e.g. Visiting — Local PC)"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomTeam(); } }}
+            disabled={disabled || customBusy}
+          />
+          <button
+            type="button"
+            onClick={addCustomTeam}
+            disabled={disabled || customBusy || !customName.trim()}
+            className="btn-ghost !py-1.5 !px-2 text-xs disabled:opacity-30"
           >
-            <Plus className="inline w-3 h-3 mr-1" /> {c.name}
+            {customBusy ? '…' : 'Add custom'}
           </button>
-        ))}
+        </div>
       </div>
 
       <div className="space-y-2">

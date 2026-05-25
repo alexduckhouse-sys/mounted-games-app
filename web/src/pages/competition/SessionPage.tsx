@@ -1,8 +1,8 @@
 import { useParams, Link } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import {
-  ChevronLeft, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Coffee, Wand2, X, Clock, Columns3, ClipboardList, Users,
+  ChevronLeft, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Coffee, Wand2, X, Clock, Columns3, ClipboardList, Users, CheckCircle2,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -118,10 +118,44 @@ export function SessionPage() {
 
   useEffect(() => {
     if (!activeHeat) { setActiveRaceId(null); return; }
-    const nextRace = orderedRaces.find((r) => !r.isComplete) ?? orderedRaces[0] ?? null;
+    // Don't loop back to race 1 when all are complete — leave activeRaceId null so the
+    // UI shows "Select a race" and the admin can re-score by clicking a race tab.
+    const nextRace = orderedRaces.find((r) => !r.isComplete) ?? null;
     setActiveRaceId(nextRace?.id ?? null);
     setPending([]);
   }, [activeHeat, orderedRaces]);
+
+  // When admin clicks a completed race tab to edit results, pre-fill pending from existing results.
+  useEffect(() => {
+    if (!activeRaceId) return;
+    const race = orderedRaces.find((r) => r.id === activeRaceId);
+    if (!race || !race.isComplete) { setPending([]); return; }
+    const seeded: PendingPlace[] = race.results
+      .slice()
+      .sort((a, b) => (a.placing ?? 999) - (b.placing ?? 999))
+      .map((r, i) => ({
+        teamId: r.teamId,
+        place: r.placing ?? i + 1,
+        eliminated: r.eliminated,
+      }));
+    setPending(seeded);
+  }, [activeRaceId, orderedRaces]);
+
+  // Detect when the heat the admin is scoring transitions from in-progress → complete,
+  // and prompt to advance to the next heat.
+  const prevHeatStateRef = useRef<{ id: number; complete: boolean } | null>(null);
+  const [heatEndOverlay, setHeatEndOverlay] = useState<{ finishedHeat: Heat; nextHeat: Heat | null } | null>(null);
+  useEffect(() => {
+    if (!activeHeat) { prevHeatStateRef.current = null; return; }
+    const now = { id: activeHeat.id, complete: heatIsComplete(activeHeat) };
+    const prev = prevHeatStateRef.current;
+    if (prev && prev.id === now.id && !prev.complete && now.complete) {
+      const idx = orderedHeats.findIndex((h) => h.id === activeHeat.id);
+      const nextHeat = orderedHeats[idx + 1] ?? null;
+      setHeatEndOverlay({ finishedHeat: activeHeat, nextHeat });
+    }
+    prevHeatStateRef.current = now;
+  }, [activeHeat, orderedHeats]);
 
   useEffect(() => {
     if (!session) return;
@@ -271,6 +305,22 @@ export function SessionPage() {
       ) : (
         <PublicResultsView session={session} heats={orderedHeats} />
       )}
+
+      <AnimatePresence>
+        {heatEndOverlay && (
+          <HeatEndOverlay
+            finishedHeat={heatEndOverlay.finishedHeat}
+            nextHeat={heatEndOverlay.nextHeat}
+            decFormByTeamId={decFormByTeamId}
+            onAdvance={() => {
+              const { nextHeat } = heatEndOverlay;
+              setHeatEndOverlay(null);
+              if (nextHeat) setActiveHeatId(nextHeat.id);
+            }}
+            onClose={() => setHeatEndOverlay(null)}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showTransition && (
@@ -1014,6 +1064,113 @@ function NextUpCard({ heat, decFormByTeamId }: { heat: Heat; decFormByTeamId: Ma
           );
         })}
       </div>
+    </motion.div>
+  );
+}
+
+/**
+ * Pops up when the heat the admin was scoring just finished. Shows the
+ * next heat's teams with dec form summaries; "Continue" advances activeHeatId.
+ */
+function HeatEndOverlay({
+  finishedHeat, nextHeat, decFormByTeamId, onAdvance, onClose,
+}: {
+  finishedHeat: Heat;
+  nextHeat: Heat | null;
+  decFormByTeamId: Map<number, DeclarationForm>;
+  onAdvance: () => void;
+  onClose: () => void;
+}) {
+  const teams = nextHeat ? nextHeat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex) : [];
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm grid place-items-center p-3"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
+        className="card w-full max-w-xl max-h-[90vh] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
+          <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-base truncate">{finishedHeat.label ?? 'Heat'} complete</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-300">Results are saved.</p>
+          </div>
+          <button onClick={onClose} className="btn-ghost !py-1 !px-1.5">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {nextHeat ? (
+          <>
+            <div className="p-4 space-y-2">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-600 text-white text-[10px] font-bold uppercase">
+                  Up next
+                </span>
+                <span className="font-bold text-base truncate">{nextHeat.label ?? 'Next heat'}</span>
+                <span className="ml-auto text-[11px] text-slate-500 inline-flex items-center gap-1">
+                  <Users className="w-3 h-3" /> {teams.length} team{teams.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {teams.map((t) => {
+                  const form = decFormByTeamId.get(t.teamId);
+                  const riders = form?.riders.filter((r) => !r.isReserve) ?? [];
+                  return (
+                    <div key={t.teamId} className="rounded-md bg-slate-50 dark:bg-slate-800/70 px-2 py-1.5 text-xs flex gap-2 items-start">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full mt-1 shrink-0"
+                        style={{ background: bibAccent(t.bibColour) }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold truncate text-sm">{t.teamName}</div>
+                        {form ? (
+                          <div className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                            {riders.length === 0 ? (
+                              <span className="text-slate-400 italic">No active riders listed</span>
+                            ) : (
+                              riders.slice(0, 4).map((r, i) => (
+                                <span key={r.id}>
+                                  {i > 0 && ', '}
+                                  <span className={r.isCaptain ? 'font-semibold' : ''}>{r.fullName}</span>
+                                  {r.horseName && <span className="text-slate-400"> · {r.horseName}</span>}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-amber-700 dark:text-amber-300 italic inline-flex items-center gap-1">
+                            <ClipboardList className="w-3 h-3" /> Dec form not yet submitted
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="p-3 border-t border-slate-200 dark:border-slate-800 flex items-center gap-2">
+              <button onClick={onClose} className="btn-ghost !py-1.5 !px-3 text-xs">Stay on this heat</button>
+              <button onClick={onAdvance} className="btn-primary !py-1.5 !px-3 text-xs ml-auto">
+                Continue to {nextHeat.label ?? 'next heat'} <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="p-4">
+            <p className="text-sm text-slate-700 dark:text-slate-200">
+              That was the last heat of this session. Click below to wrap up.
+            </p>
+            <div className="mt-3 flex justify-end">
+              <button onClick={onClose} className="btn-primary !py-1.5 !px-3 text-xs">Got it</button>
+            </div>
+          </div>
+        )}
+      </motion.div>
     </motion.div>
   );
 }

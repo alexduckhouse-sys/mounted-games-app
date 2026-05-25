@@ -8,9 +8,11 @@ obj/
 *.swp
 appsettings.Development.json.bak
 
-# EF Core
+# EF Core / SQLite
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite-journal
 
