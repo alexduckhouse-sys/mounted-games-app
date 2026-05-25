@@ -127,6 +127,8 @@ interface TeamDraft {
   sectionIndex: number;
   clubId: number;
   suffix: string;
+  /** Hors Concours — team competes but is excluded from scoring + standings. */
+  isHorsConcours?: boolean;
 }
 
 const STEPS = ['Basics', 'Sections & races', 'Teams', 'Review'] as const;
@@ -241,10 +243,14 @@ export function CompetitionEditor() {
   const [sections, setSections] = useState<SectionDraft[]>(
     persisted?.sections && persisted.sections.length > 0 ? persisted.sections : [defaultSection()]
   );
+  // In edit mode, track which previously-existing section ids the admin
+  // deleted so we can DELETE them on submit.
+  const [removedSectionIds, setRemovedSectionIds] = useState<number[]>([]);
 
   // Teams
   const [clubs, setClubs] = useState<Club[]>([]);
   const [teams, setTeams] = useState<TeamDraft[]>(persisted?.teams ?? []);
+  const [removedTeamIds, setRemovedTeamIds] = useState<number[]>([]);
   const [decTeamIds, setDecTeamIds] = useState<Set<number>>(new Set());
   const [showAllClubs, setShowAllClubs] = useState(true);
 
@@ -400,10 +406,19 @@ export function CompetitionEditor() {
     setSections((cur) => [...cur, defaultSection()]);
   }
   function removeSection(i: number) {
-    setSections((cur) => cur.filter((_, idx) => idx !== i));
-    setTeams((cur) => cur
-      .filter((t) => t.sectionIndex !== i)
-      .map((t) => ({ ...t, sectionIndex: t.sectionIndex > i ? t.sectionIndex - 1 : t.sectionIndex })));
+    setSections((cur) => {
+      const removed = cur[i];
+      if (removed?.existingId) setRemovedSectionIds((ids) => [...ids, removed.existingId!]);
+      return cur.filter((_, idx) => idx !== i);
+    });
+    setTeams((cur) => {
+      const droppedTeamIds = cur.filter((t) => t.sectionIndex === i && t.existingId)
+        .map((t) => t.existingId!);
+      if (droppedTeamIds.length > 0) setRemovedTeamIds((ids) => [...ids, ...droppedTeamIds]);
+      return cur
+        .filter((t) => t.sectionIndex !== i)
+        .map((t) => ({ ...t, sectionIndex: t.sectionIndex > i ? t.sectionIndex - 1 : t.sectionIndex }));
+    });
   }
 
   function addTeam(sectionIndex: number, clubId: number) {
@@ -412,7 +427,11 @@ export function CompetitionEditor() {
     setTeams((cur) => [...cur, { sectionIndex, clubId, suffix: next }]);
   }
   function removeTeam(i: number) {
-    setTeams((cur) => cur.filter((_, idx) => idx !== i));
+    setTeams((cur) => {
+      const removed = cur[i];
+      if (removed?.existingId) setRemovedTeamIds((ids) => [...ids, removed.existingId!]);
+      return cur.filter((_, idx) => idx !== i);
+    });
   }
   function updateTeam(i: number, patch: Partial<TeamDraft>) {
     setTeams((cur) => cur.map((t, idx) => idx === i ? { ...t, ...patch } : t));
@@ -486,6 +505,7 @@ export function CompetitionEditor() {
           suffix: t.suffix.trim() || String.fromCharCode(65 + i),
           bibColour: null,
           trainerUserId: null,
+          isHorsConcours: !!t.isHorsConcours,
         });
         const list = sectionToTeamIds.get(t.sectionIndex) ?? [];
         list.push(created.data.id);
@@ -580,6 +600,147 @@ export function CompetitionEditor() {
     }
   }
 
+  /**
+   * Edit-mode submit that walks the whole draft: updates basics, applies
+   * section/team adds + deletes, and PUTs runoff/race-finals tweaks to
+   * existing sections. Existing sessions' race lists aren't rewritten (would
+   * mean tearing down heats + results); admin uses the comp page tabs for
+   * that. New sections also get their heats generated.
+   */
+  async function submitEditAll() {
+    if (!editingId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setProgress('Saving basics…');
+      await api.put(`/competitions/${editingId}`, {
+        ...basicsPayload(),
+        isActive: true,
+        isArchived: false,
+      });
+
+      // Delete removed teams first so foreign-key cascades are clean.
+      if (removedTeamIds.length > 0) {
+        setProgress(`Removing ${removedTeamIds.length} team${removedTeamIds.length === 1 ? '' : 's'}…`);
+        for (const id of removedTeamIds) {
+          await api.delete(`/competitions/${editingId}/teams/${id}`).catch(() => {});
+        }
+      }
+      if (removedSectionIds.length > 0) {
+        setProgress(`Removing ${removedSectionIds.length} section${removedSectionIds.length === 1 ? '' : 's'}…`);
+        for (const id of removedSectionIds) {
+          await api.delete(`/competitions/${editingId}/sections/${id}`).catch(() => {});
+        }
+      }
+
+      // Existing sections — PUT updates (runoff + race-finals); new sections
+      // POST and then generate their heats from session config[0].
+      setProgress('Saving sections…');
+      const newSectionIds = new Map<number, number>(); // sectionIndex → server id
+      for (let i = 0; i < sections.length; i++) {
+        const s = sections[i];
+        if (s.existingId) {
+          await api.put(`/competitions/${editingId}/sections/${s.existingId}`, {
+            runoffRaceName: s.runoffRaceName.trim() || null,
+            usesRaceFinals: s.usesRaceFinals,
+          }).catch(() => {});
+        } else {
+          const r = await api.post<{ id: number }>(`/competitions/${editingId}/sections`, {
+            format: s.format,
+            ageGroup: s.ageGroup.trim(),
+            displayName: sectionDisplayName(s),
+            runoffRaceName: s.runoffRaceName.trim() || null,
+            usesRaceFinals: s.usesRaceFinals,
+          });
+          newSectionIds.set(i, r.data.id);
+        }
+      }
+
+      // Teams: PUT existing teams to sync HC flag (no-op if unchanged on
+      // server); POST new teams.
+      setProgress('Saving teams…');
+      const newTeamIdsBySection = new Map<number, number[]>();
+      for (let i = 0; i < teams.length; i++) {
+        const t = teams[i];
+        if (t.existingId) {
+          await api.put(`/competitions/${editingId}/teams/${t.existingId}`, {
+            suffix: t.suffix.trim() || null,
+            isHorsConcours: !!t.isHorsConcours,
+          }).catch(() => {});
+          continue;
+        }
+        const sectionServerId = sections[t.sectionIndex].existingId ?? newSectionIds.get(t.sectionIndex);
+        if (!sectionServerId) continue;
+        const created = await api.post<{ id: number }>(`/competitions/${editingId}/teams`, {
+          competitionSectionId: sectionServerId,
+          clubId: t.clubId,
+          suffix: t.suffix.trim() || 'A',
+          bibColour: null,
+          trainerUserId: null,
+          isHorsConcours: !!t.isHorsConcours,
+        });
+        const list = newTeamIdsBySection.get(t.sectionIndex) ?? [];
+        list.push(created.data.id);
+        newTeamIdsBySection.set(t.sectionIndex, list);
+      }
+
+      // For brand-new sections only, create their sessions + heats from the
+      // wizard's session configs (same logic as create flow).
+      if (newSectionIds.size > 0) {
+        setProgress('Generating heats for new sections…');
+        // Round-robin: just iterate new sections (existing sections keep
+        // their pre-existing sessions/heats untouched).
+        for (const [sectionIndex, sectionServerId] of newSectionIds.entries()) {
+          const sec = sections[sectionIndex];
+          const newTeams = newTeamIdsBySection.get(sectionIndex) ?? [];
+          // Stack onto the end — use the current max session order as the offset.
+          for (let sessIdx = 0; sessIdx < sec.sessions.length; sessIdx++) {
+            const sessionConfig = sec.sessions[sessIdx];
+            const heatCount = Math.max(1, Math.ceil(Math.max(1, newTeams.length) / Math.max(1, sec.maxTeamsPerHeat)));
+            const durationMins = heatCount * sec.minsPerHeat;
+            const session = await api.post<{ id: number }>(`/competitions/${editingId}/sessions`, {
+              competitionSectionId: sectionServerId,
+              name: sessionConfig.name.trim() || sectionDisplayName(sec),
+              arenaName: null,
+              scheduledStart: null,  // admin pins these on the timetable
+              orderIndex: 999 + sessIdx,
+              notes: null,
+              isBreak: false,
+              durationMinutes: durationMins,
+              kind: 0,
+              location: null,
+            });
+            if (newTeams.length > 0) {
+              const raceNames = parseRaces(sessionConfig.races);
+              if (sec.usesRaceFinals) {
+                await api.post(`/competitions/${editingId}/sessions/${session.data.id}/generate-race-finals`, {
+                  teamIds: newTeams, raceNames, lanesPerHeat: sec.maxTeamsPerHeat, replaceExisting: true,
+                });
+              } else {
+                await api.post(`/competitions/${editingId}/sessions/${session.data.id}/generate-heats`, {
+                  teamIds: newTeams, raceNames, lanesPerHeat: sec.maxTeamsPerHeat, replaceExisting: true,
+                });
+              }
+            }
+            await api.put(`/competitions/${editingId}/sessions/${session.data.id}/settings`, {
+              minutesPerHeat: sec.minsPerHeat,
+              raceOrderAlternating: null,
+            });
+          }
+        }
+      }
+
+      try { window.localStorage.removeItem(storageKey); } catch { /* ignore */ }
+      navigate(`/competitions/${editingId}`);
+    } catch (e) {
+      const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
+      setError(typeof msg === 'string' ? msg : msg?.message ?? 'Could not save changes.');
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  }
+
   function basicsPayload() {
     return {
       name: name.trim(),
@@ -656,7 +817,7 @@ export function CompetitionEditor() {
             onAddSession={addSession}
             onRemoveSession={removeSession}
             raceTemplates={raceTemplates}
-            disabled={isEdit /* destructive edits to existing sections not yet supported */}
+            disabled={false}
           />
         )}
         {step === 'Teams' && (
@@ -670,7 +831,7 @@ export function CompetitionEditor() {
             showAllClubs={showAllClubs}
             setShowAllClubs={setShowAllClubs}
             decTeamIds={decTeamIds}
-            disabled={isEdit}
+            disabled={false}
             onClubsChanged={() => {
               api.get<Club[]>('/clubs').then((r) => setClubs(r.data)).catch(() => {});
             }}
@@ -708,9 +869,9 @@ export function CompetitionEditor() {
             Next <ChevronRight className="w-4 h-4" />
           </button>
         ) : isEdit ? (
-          <span className="text-xs text-slate-500 italic">
-            Edit-mode timetable rebuilds aren't supported yet — use the timetable tab on the comp.
-          </span>
+          <button onClick={submitEditAll} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
+            <Check className="w-4 h-4" /> {busy ? (progress ?? 'Saving…') : 'Save all changes'}
+          </button>
         ) : (
           <button onClick={submitCreate} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
             <Check className="w-4 h-4" /> {busy ? (progress ?? 'Creating…') : 'Create competition'}
@@ -754,7 +915,13 @@ function existingToDraft(s: CompetitionSection, c: CompetitionDetail): SectionDr
 
 function existingTeamToDraft(t: Team, sections: CompetitionSection[]): TeamDraft {
   const idx = Math.max(0, sections.findIndex((s) => s.id === t.competitionSectionId));
-  return { existingId: t.id, sectionIndex: idx, clubId: t.clubId, suffix: t.suffix };
+  return {
+    existingId: t.id,
+    sectionIndex: idx,
+    clubId: t.clubId,
+    suffix: t.suffix,
+    isHorsConcours: t.isHorsConcours,
+  };
 }
 
 function StepStrip({ current, onJump }: { current: number; onJump?: (i: number) => void }) {
@@ -1275,7 +1442,9 @@ function TeamsStep({
                     const hasDec = t.existingId != null && decTeamIds.has(t.existingId);
                     return (
                       <div key={i} className="flex items-center gap-2 px-2 py-1 rounded bg-slate-50 dark:bg-slate-800">
-                        <span className="text-sm flex-1 truncate">{club?.name ?? `Club #${t.clubId}`}</span>
+                        <span className={`text-sm flex-1 truncate ${t.isHorsConcours ? 'italic text-slate-500' : ''}`}>
+                          {club?.name ?? `Club #${t.clubId}`}
+                        </span>
                         <input
                           className="input !py-0.5 !px-1 text-xs w-12 uppercase"
                           maxLength={4}
@@ -1283,6 +1452,23 @@ function TeamsStep({
                           onChange={(e) => onUpdate(i, { suffix: e.target.value })}
                           disabled={disabled}
                         />
+                        <label
+                          className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-bold cursor-pointer ${
+                            t.isHorsConcours
+                              ? 'bg-amber-200 text-amber-900 dark:bg-amber-800/60 dark:text-amber-100'
+                              : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'
+                          }`}
+                          title="Hors Concours — team competes but is excluded from standings"
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={!!t.isHorsConcours}
+                            onChange={(e) => onUpdate(i, { isHorsConcours: e.target.checked })}
+                            disabled={disabled}
+                          />
+                          HC
+                        </label>
                         {hasDec && (
                           <span title="Dec form submitted" className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200 text-[9px] font-semibold">
                             <ClipboardList className="w-2.5 h-2.5" /> DEC

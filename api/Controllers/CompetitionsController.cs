@@ -265,6 +265,42 @@ public class CompetitionsController : ControllerBase
         return section.ToDto();
     }
 
+    [HttpDelete("{id:int}/sections/{sectionId:int}")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<IActionResult> DeleteSection(int id, int sectionId)
+    {
+        var section = await _db.CompetitionSections
+            .Include(s => s.Teams)
+            .Include(s => s.Sessions).ThenInclude(ss => ss.Heats).ThenInclude(h => h.Entries)
+            .Include(s => s.Sessions).ThenInclude(ss => ss.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
+            .FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == id);
+        if (section is null) return NotFound();
+
+        // Walk bottom-up so foreign keys don't complain.
+        foreach (var ss in section.Sessions)
+        foreach (var heat in ss.Heats)
+        {
+            foreach (var race in heat.Races) _db.Results.RemoveRange(race.Results);
+            _db.Races.RemoveRange(heat.Races);
+            _db.HeatEntries.RemoveRange(heat.Entries);
+        }
+        foreach (var ss in section.Sessions) _db.Heats.RemoveRange(ss.Heats);
+        _db.Sessions.RemoveRange(section.Sessions);
+
+        var teamIds = section.Teams.Select(t => t.Id).ToList();
+        var decForms = await _db.DeclarationForms
+            .Include(d => d.Riders)
+            .Where(d => teamIds.Contains(d.TeamId))
+            .ToListAsync();
+        foreach (var d in decForms) _db.RiderEntries.RemoveRange(d.Riders);
+        _db.DeclarationForms.RemoveRange(decForms);
+
+        _db.Teams.RemoveRange(section.Teams);
+        _db.CompetitionSections.Remove(section);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
     [HttpGet("{id:int}/standings")]
     public async Task<ActionResult<IReadOnlyList<StandingRow>>> Standings(int id, [FromQuery] int? sectionId = null)
     {
