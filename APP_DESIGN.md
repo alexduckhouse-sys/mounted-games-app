@@ -199,6 +199,105 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 - New `DELETE /api/competitions/:id/sections/:sid` endpoint walks the section's graph (sessions → heats → entries/races/results, plus dec forms for the section's teams).
 - Hors Concours toggle: per-team HC pill on every team row in the wizard's TeamsStep — italic + grey club name when HC is on so non-scoring teams are obvious at a glance. `Team.IsHorsConcours` flows through both create and edit flows.
 
+## v2 lifecycle — pay-to-join + format-after-signups (planned)
+This section captures the bigger competition lifecycle change the user has
+asked for. **Only the foundations are shipped today** (entities + skeleton
+API + signup widget + section pricing in the wizard). The full flow is queued.
+
+### The shape we're moving to
+1. **Comp creation (organiser)**: name, dates, venue, organiser name,
+   payment destination, sections + their prices. **No teams, no races,
+   no sessions, no heats, no timings at creation time.** This is what
+   the public sees so people know what they're signing up for.
+2. **Public signup**: anyone can sign up to a section via the comp's
+   public page. They pay the section's price; signup captures name,
+   pony club, contact info, and the amount.
+3. **Payment confirmation**: organiser sees a list of pending vs paid
+   signups and ticks them through as money lands. Stripe Connect will
+   automate this.
+4. **Format wizard** (post-signups, runs once entries are closed): organiser
+   sets sessions per section, races per session, lanes per heat. The
+   system bins paid signups into teams using the chosen lanes/heats.
+5. **Dec forms**: trainers / team managers fill these in later (or on
+   the day) once teams are formed.
+6. **Equipment list** (auto): generated from the formatted comp using
+   the equipment calculator.
+
+### Shipped today (foundation)
+- **`Competition.OrganiserName`** and **`Competition.PaymentDestination`**
+  columns + wizard inputs on Basics step.
+- **`CompetitionSection.PriceMinor`** column (pence) + wizard input per
+  section ("Signup price per team").
+- **`SectionSignup` entity** + endpoints:
+  `POST /api/competitions/:cid/sections/:sid/signups` (public),
+  `GET /api/competitions/:cid/signups` (public),
+  `PUT /api/signups/:id/status` (admin/trainer — flip to Paid),
+  `DELETE /api/signups/:id`. Status enum: Pending / Paid / Refunded / Cancelled.
+- **Public signup widget** on the comp's Details tab — one card per
+  section showing price + paid count + "Sign up" form. Signups for
+  free sections auto-mark Paid.
+- **Trainers can create + edit competitions** (route opened, controllers'
+  Create/Update/AddSection/UpdateSection/Teams accept Trainer role).
+  `canOrganise()` helper in AuthContext (returns true for Admin OR
+  Trainer); wizard Save buttons use it instead of `canEdit()`.
+- "Create competition" CTA on `/teams` for trainers.
+
+### Deferred (next turns)
+- **Payment provider integration** — Stripe Connect recommended for
+  launch. Each organiser links a Stripe account; signups pay them
+  direct; platform takes a fee. Or Stripe direct (platform-controlled)
+  for a simpler day-1. PayPal as fallback.
+- **Format-after-signups wizard** — split the current Sections + Teams
+  steps so they're separate from comp creation. Triggered when the
+  organiser closes signups; bins paid signups into teams using
+  configurable lanes/heats; generates sessions + heat schedule.
+- **Team formation tooling** — auto-bin signups, allow drag-to-reorder
+  before commit, handle late additions.
+- **Locking signups** — toggle on Competition: when off, public signup
+  form hides on the Details tab.
+- **Refund + cancellation flow** — webhook-driven once Stripe is in.
+
+## Shop / marketplace
+Public peer-to-peer marketplace on `/shop`.
+
+- **Entities**: `ShopPost { Title, Body, PriceMinor?, ContactInfo?,
+  AuthorName, PonyClubName?, ImageBase64?, IsDeleted, DeletedAt,
+  DeletedByUserId, IpAddress }`. Soft-deleted so reported content can
+  be hidden but kept for audit. `ShopComment { Body, AuthorName,
+  IsPrivate, ToUserId? }` — private comments are visible to the comment
+  author, the named recipient (`ToUserId`, defaulting to post author),
+  post author, and admins. `ShopReport { PostId, ReporterUserId?,
+  Reason?, IsResolved }`.
+- **Endpoints** under `/api/shop/`: `GET posts`, `GET posts/:id`,
+  `POST posts` (auth), `DELETE posts/:id` (admin or own), `GET posts/:id/comments`,
+  `POST posts/:id/comments` (auth), `DELETE comments/:id`,
+  `POST posts/:id/report` (anonymous).
+- **Images**: inline base64 in the DB, client-side resized to 800px
+  max-side JPEG @ 0.82 quality, capped at ≈500 KB before upload.
+- **Anti-abuse**: IP-block check on post + report endpoints (reuses the
+  existing chat `IpBlocks` table).
+- **UI**: `/shop` page lists posts in a card grid, lets logged-in users
+  compose posts with images, public/private comment threads per post,
+  Report button for anyone, Delete for admins + post owner.
+- **Admin** can soft-delete posts and comments. Reported posts surface
+  to admins via the report count on each card (TODO: report queue UI).
+
+## Equipment calculator
+Backend service (`EquipmentCalculator`) parses every race in every session
+of a competition, looks up the diagram from `RaceTemplates`, counts each
+equipment element (recursing into stacked `on:` children), multiplies by the
+largest heat size in that session, deduplicates across sessions taking the
+MAX per (kind, bucket), and returns a flat list.
+
+- **Buckets**: `Lane` (poles + anything anchored to `poleN`), `Start`,
+  `Mid` (midline / x≈50), `Top` (changeover, top, finish, x>80),
+  `Side` (other named anchors), `Other` (no anchor / no x).
+- **Endpoint**: `GET /api/competitions/:id/equipment` (public; returns
+  `{ lines, sessions, racesCounted }`).
+- **UI**: expandable "Equipment required" block on the comp Details tab.
+- **Dedup rule**: if Session A needs 10 Litter Cones and Session B needs
+  12, the order is **12**, not 22 — equipment is shared between sessions.
+
 ## Admin: View only vs Edit mode
 - Admins land in **View only** by default — destructive write affordances (Delete competition / race / dec form, Score submit, Status toggles, Create finals, Save-all / Create-comp in the wizard, Generate join key admin controls) are hidden. A small **View only / Edit mode** toggle sits in the header (lock / unlock icon).
 - Wrapper: `canEdit()` in `AuthContext` returns `editorMode && hasRole('Admin')`. State persisted to `localStorage` (`mg.adminEditorMode`) and reset to `false` on logout / identity change.

@@ -23,6 +23,14 @@ public class CompetitionSection
     /// </summary>
     public bool UsesRaceFinals { get; set; }
 
+    /// <summary>
+    /// Cost (in minor units — pence / cents) to sign up a team for this section.
+    /// Zero means free. Used by the pay-to-join signup flow.
+    /// </summary>
+    public int PriceMinor { get; set; }
+
+    public ICollection<SectionSignup> Signups { get; set; } = new List<SectionSignup>();
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Team> Teams { get; set; } = new List<Team>();

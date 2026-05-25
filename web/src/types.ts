@@ -67,6 +67,7 @@ export interface CompetitionSection {
   displayName: string;
   runoffRaceName?: string | null;
   usesRaceFinals?: boolean;
+  priceMinor?: number;
 }
 
 export type RaceRoundStage = 0 | 1 | 2; // None / Qualifier / Final
@@ -187,6 +188,57 @@ export interface CompetitionDetail {
   teams: Team[];
   sessions: Session[];
   streamUrl?: string | null;
+  organiserName?: string | null;
+  paymentDestination?: string | null;
+}
+
+export type SignupPaymentStatus = 0 | 1 | 2 | 3; // Pending / Paid / Refunded / Cancelled
+
+export interface SectionSignup {
+  id: number;
+  competitionSectionId: number;
+  sectionName: string;
+  fullName: string;
+  ponyClubName?: string | null;
+  contactInfo?: string | null;
+  amountMinor: number;
+  status: SignupPaymentStatus;
+  paidAt?: string | null;
+  teamId?: number | null;
+  createdAt: string;
+}
+
+export interface ShopPost {
+  id: number;
+  authorName: string;
+  ponyClubName?: string | null;
+  authorUserId?: string | null;
+  title: string;
+  body: string;
+  priceMinor?: number | null;
+  contactInfo?: string | null;
+  imageBase64?: string | null;
+  createdAt: string;
+  isDeleted: boolean;
+  commentCount: number;
+  reportCount: number;
+}
+
+export interface ShopComment {
+  id: number;
+  postId: number;
+  authorUserId?: string | null;
+  authorName: string;
+  body: string;
+  isPrivate: boolean;
+  toUserId?: string | null;
+  createdAt: string;
+}
+
+export interface EquipmentLine {
+  kind: string;
+  bucket: string;
+  count: number;
 }
 
 export interface StandingRow {

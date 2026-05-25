@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, FileText, Clock, Activity, CheckCircle2, KeyRound, UserPlus, X, RefreshCw, Copy, Check, Bell, BellOff } from 'lucide-react';
+import { Users, FileText, Clock, Activity, CheckCircle2, KeyRound, UserPlus, X, RefreshCw, Copy, Check, Bell, BellOff, Sparkles } from 'lucide-react';
 import { api } from '../api';
 import type { CompetitionDetail, Heat, Session, Team, TeamSupporter, TrainerNote } from '../types';
 import { bibAccent, bibLabel } from '../lib/bib';
@@ -101,6 +101,9 @@ export function MyTeamsPage() {
         <h1 className="text-2xl font-bold flex items-center gap-2 flex-1">
           <Users className="w-6 h-6 text-brand-600" /> My Teams
         </h1>
+        <Link to="/admin/competitions/new" className="btn-primary !py-1.5 !px-3 text-sm">
+          <Sparkles className="w-4 h-4" /> Create competition
+        </Link>
         <NotificationToggle enabled={notify.enabled} permission={notify.permission} onChange={notify.setEnabled} />
       </div>
 

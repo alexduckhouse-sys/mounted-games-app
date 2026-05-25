@@ -17,6 +17,19 @@ public class Competition
     /// <summary>One live-stream URL for the whole competition (YouTube, Twitch, etc).</summary>
     public string? StreamUrl { get; set; }
 
+    /// <summary>
+    /// Free-text name of the organising person / club. Set when a trainer
+    /// self-promotes to "organiser" by creating a comp.
+    /// </summary>
+    public string? OrganiserName { get; set; }
+
+    /// <summary>
+    /// Where signup money should go — PayPal handle, bank account details,
+    /// venmo etc. Free text for v1; will be replaced by a structured Stripe
+    /// Connect account id when real payments land.
+    /// </summary>
+    public string? PaymentDestination { get; set; }
+
     public string? CreatedByUserId { get; set; }
     public AppUser? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

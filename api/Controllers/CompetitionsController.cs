@@ -110,11 +110,11 @@ public class CompetitionsController : ControllerBase
             c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
             c.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
-            c.StreamUrl);
+            c.StreamUrl, c.OrganiserName, c.PaymentDestination);
     }
 
     [HttpPost]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
     public async Task<ActionResult<CompetitionSummary>> Create(CreateCompetitionRequest req)
     {
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();
@@ -142,6 +142,8 @@ public class CompetitionsController : ControllerBase
             What3Words = string.IsNullOrWhiteSpace(req.What3Words) ? null : req.What3Words.Trim(),
             AppleMapsUrl = appleUrl,
             StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim(),
+            OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
+            PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
             StartDate = req.StartDate,
             EndDate = req.EndDate,
             CreatedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
@@ -152,7 +154,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
     public async Task<ActionResult<CompetitionSummary>> Update(int id, UpdateCompetitionRequest req)
     {
         var c = await _db.Competitions
@@ -182,6 +184,8 @@ public class CompetitionsController : ControllerBase
         c.StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim();
         c.What3Words = string.IsNullOrWhiteSpace(req.What3Words) ? null : req.What3Words.Trim();
         c.AppleMapsUrl = appleUrl;
+        c.OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim();
+        c.PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
         c.StartDate = req.StartDate;
         c.EndDate = req.EndDate;
         c.IsActive = req.IsActive;
@@ -232,7 +236,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/sections")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
     public async Task<ActionResult<CompetitionSectionDto>> AddSection(int id, CreateSectionRequest req)
     {
         if (!await _db.Competitions.AnyAsync(c => c.Id == id)) return NotFound();
@@ -246,7 +250,8 @@ public class CompetitionsController : ControllerBase
             AgeGroup = req.AgeGroup,
             DisplayName = display,
             RunoffRaceName = string.IsNullOrWhiteSpace(req.RunoffRaceName) ? null : req.RunoffRaceName.Trim(),
-            UsesRaceFinals = req.UsesRaceFinals
+            UsesRaceFinals = req.UsesRaceFinals,
+            PriceMinor = Math.Max(0, req.PriceMinor)
         };
         _db.CompetitionSections.Add(section);
         await _db.SaveChangesAsync();
@@ -254,13 +259,14 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPut("{id:int}/sections/{sectionId:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
     public async Task<ActionResult<CompetitionSectionDto>> UpdateSection(int id, int sectionId, UpdateSectionRequest req)
     {
         var section = await _db.CompetitionSections.FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == id);
         if (section is null) return NotFound();
         section.RunoffRaceName = string.IsNullOrWhiteSpace(req.RunoffRaceName) ? null : req.RunoffRaceName.Trim();
         if (req.UsesRaceFinals.HasValue) section.UsesRaceFinals = req.UsesRaceFinals.Value;
+        if (req.PriceMinor.HasValue) section.PriceMinor = Math.Max(0, req.PriceMinor.Value);
         await _db.SaveChangesAsync();
         return section.ToDto();
     }

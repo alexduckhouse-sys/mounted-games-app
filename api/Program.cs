@@ -72,6 +72,7 @@ builder.Services.AddScoped<ScoringService>();
 builder.Services.AddSingleton<ILiveBroadcaster, LiveBroadcaster>();
 builder.Services.AddSingleton<VapidKeyService>();
 builder.Services.AddScoped<PushNotifier>();
+builder.Services.AddScoped<EquipmentCalculator>();
 builder.Services.AddHostedService<NotificationScheduler>();
 
 builder.Services.AddHttpClient("weather", c =>

@@ -24,6 +24,7 @@ import { CompetitionEditor } from './pages/admin/CompetitionEditor';
 import { RulesPage } from './pages/admin/RulesPage';
 import { ArenaPage } from './pages/competition/ArenaPage';
 import { StewardPage } from './pages/competition/StewardPage';
+import { ShopPage } from './pages/ShopPage';
 import './App.css';
 
 export default function App() {
@@ -56,14 +57,15 @@ export default function App() {
               } />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
               <Route path="chat" element={<ChatIndexPage />} />
+              <Route path="shop" element={<ShopPage />} />
               <Route path="admin" element={
                 <ProtectedRoute roles={['Admin']}><AdminPage /></ProtectedRoute>
               } />
               <Route path="admin/competitions/new" element={
-                <ProtectedRoute roles={['Admin']}><CompetitionEditor /></ProtectedRoute>
+                <ProtectedRoute roles={['Admin', 'Trainer']}><CompetitionEditor /></ProtectedRoute>
               } />
               <Route path="admin/competitions/:id" element={
-                <ProtectedRoute roles={['Admin']}><CompetitionEditor /></ProtectedRoute>
+                <ProtectedRoute roles={['Admin', 'Trainer']}><CompetitionEditor /></ProtectedRoute>
               } />
               <Route path="admin/rules" element={
                 <ProtectedRoute roles={['Admin']}><RulesPage /></ProtectedRoute>

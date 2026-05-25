@@ -27,6 +27,10 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<StewardCall> StewardCalls => Set<StewardCall>();
     public DbSet<TeamSupporter> TeamSupporters => Set<TeamSupporter>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    public DbSet<SectionSignup> SectionSignups => Set<SectionSignup>();
+    public DbSet<ShopPost> ShopPosts => Set<ShopPost>();
+    public DbSet<ShopComment> ShopComments => Set<ShopComment>();
+    public DbSet<ShopReport> ShopReports => Set<ShopReport>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -248,6 +252,58 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .HasForeignKey(p => p.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(p => p.Endpoint).IsUnique();
+        });
+
+        b.Entity<SectionSignup>(e =>
+        {
+            e.Property(s => s.FullName).HasMaxLength(200).IsRequired();
+            e.HasOne(s => s.Section)
+                .WithMany(cs => cs.Signups)
+                .HasForeignKey(s => s.CompetitionSectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(s => new { s.CompetitionSectionId, s.UserId });
+        });
+
+        b.Entity<ShopPost>(e =>
+        {
+            e.Property(p => p.Title).HasMaxLength(200).IsRequired();
+            e.Property(p => p.Body).HasMaxLength(4000).IsRequired();
+            e.Property(p => p.AuthorName).HasMaxLength(150).IsRequired();
+            e.HasOne(p => p.Author)
+                .WithMany()
+                .HasForeignKey(p => p.AuthorUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(p => new { p.IsDeleted, p.CreatedAt });
+        });
+
+        b.Entity<ShopComment>(e =>
+        {
+            e.Property(c => c.Body).HasMaxLength(2000).IsRequired();
+            e.Property(c => c.AuthorName).HasMaxLength(150).IsRequired();
+            e.HasOne(c => c.Post)
+                .WithMany(p => p.Comments)
+                .HasForeignKey(c => c.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(c => c.Author)
+                .WithMany()
+                .HasForeignKey(c => c.AuthorUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<ShopReport>(e =>
+        {
+            e.HasOne(r => r.Post)
+                .WithMany(p => p.Reports)
+                .HasForeignKey(r => r.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(r => r.Reporter)
+                .WithMany()
+                .HasForeignKey(r => r.ReporterUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

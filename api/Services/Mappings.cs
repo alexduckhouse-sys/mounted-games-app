@@ -15,7 +15,24 @@ public static class Mappings
         c.Sessions?.Count ?? 0);
 
     public static CompetitionSectionDto ToDto(this CompetitionSection s) =>
-        new(s.Id, s.CompetitionId, s.Format, s.AgeGroup, s.DisplayName, s.RunoffRaceName, s.UsesRaceFinals);
+        new(s.Id, s.CompetitionId, s.Format, s.AgeGroup, s.DisplayName,
+            s.RunoffRaceName, s.UsesRaceFinals, s.PriceMinor);
+
+    public static SectionSignupDto ToDto(this SectionSignup s) => new(
+        s.Id, s.CompetitionSectionId,
+        s.Section?.DisplayName ?? string.Empty,
+        s.FullName, s.PonyClubName, s.ContactInfo,
+        s.AmountMinor, s.Status, s.PaidAt, s.TeamId, s.CreatedAt);
+
+    public static ShopPostDto ToDto(this ShopPost p) => new(
+        p.Id, p.AuthorName, p.PonyClubName, p.AuthorUserId,
+        p.Title, p.Body, p.PriceMinor, p.ContactInfo, p.ImageBase64,
+        p.CreatedAt, p.IsDeleted,
+        p.Comments?.Count ?? 0, p.Reports?.Count ?? 0);
+
+    public static ShopCommentDto ToDto(this ShopComment c) => new(
+        c.Id, c.PostId, c.AuthorUserId, c.AuthorName,
+        c.Body, c.IsPrivate, c.ToUserId, c.CreatedAt);
 
     public static TeamDto ToDto(this Team t) => new(
         t.Id, t.CompetitionId, t.CompetitionSectionId,

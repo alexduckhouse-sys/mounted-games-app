@@ -20,6 +20,13 @@ interface AuthContextValue {
   editorMode: boolean;
   setEditorMode: (v: boolean) => void;
   canEdit: () => boolean;
+  /**
+   * Trainers self-promote to "comp organiser" — they can create + edit
+   * competitions they own. This returns true for Admins (always) and for
+   * Trainers regardless of editorMode (no view/edit toggle for trainers).
+   * Use for organiser-only surfaces like the comp creator wizard's Save.
+   */
+  canOrganise: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -115,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const canEdit = useCallback(() => editorMode && hasRole('Admin'), [editorMode, hasRole]);
+  const canOrganise = useCallback(() => hasRole('Admin') || hasRole('Trainer'), [hasRole]);
 
   const value: AuthContextValue = {
     user,
@@ -128,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     editorMode,
     setEditorMode,
     canEdit,
+    canOrganise,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

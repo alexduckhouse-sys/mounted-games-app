@@ -119,6 +119,8 @@ interface SectionDraft {
   maxTeamsPerHeat: number;
   runoffRaceName: string;
   usesRaceFinals: boolean;
+  /** Cost in pounds (decimal). Persisted to PriceMinor as pennies. */
+  priceGbp: string;
 }
 
 interface TeamDraft {
@@ -149,6 +151,8 @@ interface PersistedDraft {
   lat: string;
   lon: string;
   description: string;
+  organiserName?: string;
+  paymentDestination?: string;
   sections: SectionDraft[];
   teams: TeamDraft[];
 }
@@ -195,7 +199,16 @@ function defaultSection(): SectionDraft {
     maxTeamsPerHeat: 6,
     runoffRaceName: ZONE_RUNOFF,
     usesRaceFinals: false,
+    priceGbp: '',
   };
+}
+
+/** Parse "12.50" / "12" / "" → integer pennies. Negative values clamp to zero. */
+function priceGbpToMinor(input: string): number {
+  if (!input || !input.trim()) return 0;
+  const n = parseFloat(input);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n * 100);
 }
 
 function sectionDisplayName(s: SectionDraft): string {
@@ -210,7 +223,7 @@ function parseRaces(text: string): string[] {
 
 export function CompetitionEditor() {
   const navigate = useNavigate();
-  const { canEdit } = useAuth();
+  const { canOrganise } = useAuth();
   const { id } = useParams<{ id: string }>();
   const editingId = id ? parseInt(id, 10) : null;
   const isEdit = editingId != null;
@@ -240,6 +253,8 @@ export function CompetitionEditor() {
   const [lat, setLat] = useState(persisted?.lat ?? '');
   const [lon, setLon] = useState(persisted?.lon ?? '');
   const [description, setDescription] = useState(persisted?.description ?? '');
+  const [organiserName, setOrganiserName] = useState(persisted?.organiserName ?? '');
+  const [paymentDestination, setPaymentDestination] = useState(persisted?.paymentDestination ?? '');
 
   // Sections + races
   const [sections, setSections] = useState<SectionDraft[]>(
@@ -273,12 +288,14 @@ export function CompetitionEditor() {
       startDate, startTime, endDate, endTime,
       what3Words, postcode, appleMapsUrl, lat, lon,
       description,
+      organiserName, paymentDestination,
       sections,
       teams,
     };
     try { window.localStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* quota */ }
   }, [storageKey, step, name, location, startDate, startTime, endDate, endTime,
-      what3Words, postcode, appleMapsUrl, lat, lon, description, sections, teams]);
+      what3Words, postcode, appleMapsUrl, lat, lon, description,
+      organiserName, paymentDestination, sections, teams]);
 
   useEffect(() => {
     // Skip the server fetch on edit if we already have a local draft — the user
@@ -492,6 +509,7 @@ export function CompetitionEditor() {
           displayName: sectionDisplayName(s),
           runoffRaceName: s.runoffRaceName.trim() || null,
           usesRaceFinals: s.usesRaceFinals,
+          priceMinor: priceGbpToMinor(s.priceGbp),
         });
         sectionIds.push(r.data.id);
       }
@@ -645,6 +663,7 @@ export function CompetitionEditor() {
           await api.put(`/competitions/${editingId}/sections/${s.existingId}`, {
             runoffRaceName: s.runoffRaceName.trim() || null,
             usesRaceFinals: s.usesRaceFinals,
+            priceMinor: priceGbpToMinor(s.priceGbp),
           }).catch(() => {});
         } else {
           const r = await api.post<{ id: number }>(`/competitions/${editingId}/sections`, {
@@ -653,6 +672,7 @@ export function CompetitionEditor() {
             displayName: sectionDisplayName(s),
             runoffRaceName: s.runoffRaceName.trim() || null,
             usesRaceFinals: s.usesRaceFinals,
+            priceMinor: priceGbpToMinor(s.priceGbp),
           });
           newSectionIds.set(i, r.data.id);
         }
@@ -753,6 +773,8 @@ export function CompetitionEditor() {
       what3Words: what3Words.trim() || null,
       postcode: postcode.trim() || null,
       appleMapsUrl: appleMapsUrl.trim() || null,
+      organiserName: organiserName.trim() || null,
+      paymentDestination: paymentDestination.trim() || null,
       startDate: combinedStartIso(),
       endDate: endDate || endTime
         ? new Date(`${endDate || startDate}T${endTime || '17:00'}`).toISOString()
@@ -807,6 +829,8 @@ export function CompetitionEditor() {
             appleMapsUrl={appleMapsUrl} setAppleMapsUrl={setAppleMapsUrl}
             lat={lat} setLat={setLat} lon={lon} setLon={setLon}
             description={description} setDescription={setDescription}
+            organiserName={organiserName} setOrganiserName={setOrganiserName}
+            paymentDestination={paymentDestination} setPaymentDestination={setPaymentDestination}
           />
         )}
         {step === 'Sections & races' && (
@@ -861,7 +885,7 @@ export function CompetitionEditor() {
           </button>
         )}
         <div className="ml-auto" />
-        {isEdit && step === 'Basics' && canEdit() && (
+        {isEdit && step === 'Basics' && canOrganise() && (
           <button onClick={submitEditBasics} disabled={busy} className="btn-primary !py-1.5 !px-3 text-sm">
             <Check className="w-4 h-4" /> {busy ? 'Saving…' : 'Save basics'}
           </button>
@@ -871,7 +895,7 @@ export function CompetitionEditor() {
             Next <ChevronRight className="w-4 h-4" />
           </button>
         ) : isEdit ? (
-          canEdit() ? (
+          canOrganise() ? (
             <button onClick={submitEditAll} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
               <Check className="w-4 h-4" /> {busy ? (progress ?? 'Saving…') : 'Save all changes'}
             </button>
@@ -880,7 +904,7 @@ export function CompetitionEditor() {
               View only — flip to <span className="font-semibold">Edit mode</span> in the header to save changes.
             </span>
           )
-        ) : canEdit() ? (
+        ) : canOrganise() ? (
           <button onClick={submitCreate} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
             <Check className="w-4 h-4" /> {busy ? (progress ?? 'Creating…') : 'Create competition'}
           </button>
@@ -922,6 +946,7 @@ function existingToDraft(s: CompetitionSection, c: CompetitionDetail): SectionDr
     maxTeamsPerHeat: maxLanes,
     runoffRaceName: s.runoffRaceName ?? ZONE_RUNOFF,
     usesRaceFinals: s.usesRaceFinals ?? false,
+    priceGbp: s.priceMinor ? (s.priceMinor / 100).toFixed(2) : '',
   };
 }
 
@@ -985,6 +1010,8 @@ interface BasicsProps {
   lat: string; setLat: (s: string) => void;
   lon: string; setLon: (s: string) => void;
   description: string; setDescription: (s: string) => void;
+  organiserName: string; setOrganiserName: (s: string) => void;
+  paymentDestination: string; setPaymentDestination: (s: string) => void;
 }
 
 function BasicsStep(p: BasicsProps) {
@@ -1019,6 +1046,30 @@ function BasicsStep(p: BasicsProps) {
         <span className="text-sm font-semibold flex items-center gap-1"><MapPin className="w-4 h-4" /> Venue / location</span>
         <input className="input mt-1" placeholder="Stoneleigh Park, Warwickshire" value={p.location} onChange={(e) => p.setLocation(e.target.value)} />
       </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <label className="block">
+          <span className="text-sm font-semibold">Organiser name</span>
+          <input
+            className="input mt-1"
+            placeholder="Warwickshire Pony Club"
+            value={p.organiserName}
+            onChange={(e) => p.setOrganiserName(e.target.value)}
+          />
+          <span className="text-[10px] text-slate-500">Shown publicly on the comp and on signup invoices.</span>
+        </label>
+        <label className="block">
+          <span className="text-sm font-semibold">Payment destination (optional)</span>
+          <input
+            className="input mt-1"
+            placeholder="PayPal: me@example.com  •  Bank: 12-34-56 1234 5678"
+            value={p.paymentDestination}
+            onChange={(e) => p.setPaymentDestination(e.target.value)}
+          />
+          <span className="text-[10px] text-slate-500">
+            Where signup fees should be sent. Free text for now; Stripe Connect integration coming.
+          </span>
+        </label>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <label className="block">
           <span className="text-sm font-semibold flex items-center gap-1"><CalendarDays className="w-4 h-4" /> Start date</span>
@@ -1251,6 +1302,19 @@ function SectionsStep({
 
             {/* Section-wide options */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+              <label className="block">
+                <span className="text-xs text-slate-500">Signup price per team (£)</span>
+                <input
+                  type="number" min={0} step={0.5}
+                  className="input mt-1 text-sm"
+                  placeholder="0 = free"
+                  value={s.priceGbp}
+                  onChange={(e) => onUpdate(i, { priceGbp: e.target.value })}
+                />
+                <span className="text-[10px] text-slate-500">
+                  What each team pays to enter this section. Used by the signup flow on the public comp page.
+                </span>
+              </label>
               <label className="block">
                 <span className="text-xs text-slate-500">Run-off race (for ties)</span>
                 <input

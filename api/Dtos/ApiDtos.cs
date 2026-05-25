@@ -19,7 +19,9 @@ public record CompetitionDetail(
     IReadOnlyList<CompetitionSectionDto> Sections,
     IReadOnlyList<TeamDto> Teams,
     IReadOnlyList<SessionDto> Sessions,
-    string? StreamUrl = null);
+    string? StreamUrl = null,
+    string? OrganiserName = null,
+    string? PaymentDestination = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -27,7 +29,9 @@ public record CreateCompetitionRequest(
     string? What3Words, string? AppleMapsUrl,
     DateTime StartDate, DateTime? EndDate,
     string? Postcode = null,
-    string? StreamUrl = null);
+    string? StreamUrl = null,
+    string? OrganiserName = null,
+    string? PaymentDestination = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -36,7 +40,9 @@ public record UpdateCompetitionRequest(
     DateTime StartDate, DateTime? EndDate,
     bool IsActive, bool IsArchived,
     string? Postcode = null,
-    string? StreamUrl = null);
+    string? StreamUrl = null,
+    string? OrganiserName = null,
+    string? PaymentDestination = null);
 
 public record GeocodeResult(double? Latitude, double? Longitude, string? Source);
 
@@ -50,10 +56,43 @@ public record UpsertRaceTemplateRequest(
 
 public record CompetitionSectionDto(
     int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName,
-    string? RunoffRaceName, bool UsesRaceFinals);
+    string? RunoffRaceName, bool UsesRaceFinals, int PriceMinor);
 public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName,
-    string? RunoffRaceName = null, bool UsesRaceFinals = false);
-public record UpdateSectionRequest(string? RunoffRaceName, bool? UsesRaceFinals = null);
+    string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0);
+public record UpdateSectionRequest(string? RunoffRaceName, bool? UsesRaceFinals = null, int? PriceMinor = null);
+
+public record SectionSignupDto(
+    int Id, int CompetitionSectionId, string SectionName,
+    string FullName, string? PonyClubName, string? ContactInfo,
+    int AmountMinor, SignupPaymentStatus Status, DateTime? PaidAt,
+    int? TeamId, DateTime CreatedAt);
+
+public record CreateSectionSignupRequest(
+    string FullName, string? PonyClubName, string? ContactInfo);
+
+public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
+
+public record ShopPostDto(
+    int Id, string AuthorName, string? PonyClubName,
+    string? AuthorUserId,
+    string Title, string Body, int? PriceMinor, string? ContactInfo,
+    string? ImageBase64,
+    DateTime CreatedAt, bool IsDeleted,
+    int CommentCount, int ReportCount);
+
+public record CreateShopPostRequest(
+    string Title, string Body, int? PriceMinor,
+    string? ContactInfo, string AuthorName, string? PonyClubName,
+    string? ImageBase64);
+
+public record ShopCommentDto(
+    int Id, int PostId, string? AuthorUserId, string AuthorName,
+    string Body, bool IsPrivate, string? ToUserId, DateTime CreatedAt);
+
+public record CreateShopCommentRequest(
+    string Body, string AuthorName, bool IsPrivate, string? ToUserId);
+
+public record CreateShopReportRequest(string? Reason);
 
 public record TeamDto(
     int Id, int CompetitionId, int CompetitionSectionId, string SectionName,

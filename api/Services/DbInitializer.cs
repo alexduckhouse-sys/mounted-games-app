@@ -81,6 +81,81 @@ public static class DbInitializer
             CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PushSubscriptions_Endpoint"" ON ""PushSubscriptions"" (""Endpoint"");
         ");
 
+        // V2 (signups + shop + organiser) — additive columns + new tables.
+        await EnsureColumnAsync(db, "Competitions", "OrganiserName", "TEXT NULL");
+        await EnsureColumnAsync(db, "Competitions", "PaymentDestination", "TEXT NULL");
+        await EnsureColumnAsync(db, "CompetitionSections", "PriceMinor", "INTEGER NOT NULL DEFAULT 0");
+        await db.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""SectionSignups"" (
+                ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_SectionSignups"" PRIMARY KEY AUTOINCREMENT,
+                ""CompetitionSectionId"" INTEGER NOT NULL,
+                ""UserId"" TEXT NULL,
+                ""FullName"" TEXT NOT NULL,
+                ""PonyClubName"" TEXT NULL,
+                ""ContactInfo"" TEXT NULL,
+                ""AmountMinor"" INTEGER NOT NULL DEFAULT 0,
+                ""Status"" INTEGER NOT NULL DEFAULT 0,
+                ""PaidAt"" TEXT NULL,
+                ""TeamId"" INTEGER NULL,
+                ""CreatedAt"" TEXT NOT NULL DEFAULT (datetime('now')),
+                CONSTRAINT ""FK_SectionSignups_CompetitionSections_CompetitionSectionId""
+                    FOREIGN KEY (""CompetitionSectionId"") REFERENCES ""CompetitionSections"" (""Id"") ON DELETE CASCADE,
+                CONSTRAINT ""FK_SectionSignups_AspNetUsers_UserId""
+                    FOREIGN KEY (""UserId"") REFERENCES ""AspNetUsers"" (""Id"") ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS ""IX_SectionSignups_CompetitionSectionId_UserId""
+                ON ""SectionSignups"" (""CompetitionSectionId"", ""UserId"");
+            CREATE TABLE IF NOT EXISTS ""ShopPosts"" (
+                ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_ShopPosts"" PRIMARY KEY AUTOINCREMENT,
+                ""AuthorUserId"" TEXT NULL,
+                ""AuthorName"" TEXT NOT NULL,
+                ""PonyClubName"" TEXT NULL,
+                ""Title"" TEXT NOT NULL,
+                ""Body"" TEXT NOT NULL,
+                ""PriceMinor"" INTEGER NULL,
+                ""ContactInfo"" TEXT NULL,
+                ""ImageBase64"" TEXT NULL,
+                ""CreatedAt"" TEXT NOT NULL DEFAULT (datetime('now')),
+                ""IsDeleted"" INTEGER NOT NULL DEFAULT 0,
+                ""DeletedAt"" TEXT NULL,
+                ""DeletedByUserId"" TEXT NULL,
+                ""IpAddress"" TEXT NULL,
+                CONSTRAINT ""FK_ShopPosts_AspNetUsers_AuthorUserId""
+                    FOREIGN KEY (""AuthorUserId"") REFERENCES ""AspNetUsers"" (""Id"") ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS ""IX_ShopPosts_IsDeleted_CreatedAt""
+                ON ""ShopPosts"" (""IsDeleted"", ""CreatedAt"");
+            CREATE TABLE IF NOT EXISTS ""ShopComments"" (
+                ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_ShopComments"" PRIMARY KEY AUTOINCREMENT,
+                ""PostId"" INTEGER NOT NULL,
+                ""AuthorUserId"" TEXT NULL,
+                ""AuthorName"" TEXT NOT NULL,
+                ""Body"" TEXT NOT NULL,
+                ""IsPrivate"" INTEGER NOT NULL DEFAULT 0,
+                ""ToUserId"" TEXT NULL,
+                ""CreatedAt"" TEXT NOT NULL DEFAULT (datetime('now')),
+                ""IsDeleted"" INTEGER NOT NULL DEFAULT 0,
+                ""IpAddress"" TEXT NULL,
+                CONSTRAINT ""FK_ShopComments_ShopPosts_PostId""
+                    FOREIGN KEY (""PostId"") REFERENCES ""ShopPosts"" (""Id"") ON DELETE CASCADE,
+                CONSTRAINT ""FK_ShopComments_AspNetUsers_AuthorUserId""
+                    FOREIGN KEY (""AuthorUserId"") REFERENCES ""AspNetUsers"" (""Id"") ON DELETE SET NULL
+            );
+            CREATE TABLE IF NOT EXISTS ""ShopReports"" (
+                ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_ShopReports"" PRIMARY KEY AUTOINCREMENT,
+                ""PostId"" INTEGER NOT NULL,
+                ""ReporterUserId"" TEXT NULL,
+                ""Reason"" TEXT NULL,
+                ""CreatedAt"" TEXT NOT NULL DEFAULT (datetime('now')),
+                ""IsResolved"" INTEGER NOT NULL DEFAULT 0,
+                ""IpAddress"" TEXT NULL,
+                CONSTRAINT ""FK_ShopReports_ShopPosts_PostId""
+                    FOREIGN KEY (""PostId"") REFERENCES ""ShopPosts"" (""Id"") ON DELETE CASCADE,
+                CONSTRAINT ""FK_ShopReports_AspNetUsers_ReporterUserId""
+                    FOREIGN KEY (""ReporterUserId"") REFERENCES ""AspNetUsers"" (""Id"") ON DELETE SET NULL
+            );
+        ");
+
         foreach (var r in Roles.All)
         {
             if (!await roles.RoleExistsAsync(r))
