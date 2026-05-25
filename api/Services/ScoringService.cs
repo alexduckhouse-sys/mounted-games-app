@@ -72,8 +72,10 @@ public class ScoringService
 
         await _db.Results.AddRangeAsync(fresh);
         race.IsComplete = true;
-        race.FinishedAt = now;
+        // Preserve admin-recorded start/finish times if they've used the live
+        // clock; only fill in if neither was set.
         if (race.StartedAt is null) race.StartedAt = now;
+        if (race.FinishedAt is null) race.FinishedAt = now;
         // Any pending steward calls for this race are resolved by the result —
         // wipe them so they don't reappear next time admin opens the race.
         var pending = await _db.StewardCalls.Where(c => c.RaceId == raceId).ToListAsync();

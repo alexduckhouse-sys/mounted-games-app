@@ -761,9 +761,12 @@ function ScoringSection({
 
       {activeRace ? (
         <div className="card p-3">
-          <h3 className="font-semibold mb-1 flex items-center gap-1.5 text-sm">
-            <Flag className="w-4 h-4 text-brand-600" /> Scoring · {activeRace.name}
-          </h3>
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <h3 className="font-semibold flex items-center gap-1.5 text-sm flex-1 min-w-0">
+              <Flag className="w-4 h-4 text-brand-600 shrink-0" /> Scoring · {activeRace.name}
+            </h3>
+            <RaceClock race={activeRace} />
+          </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-300 mb-3">
             Tap a team to assign its place · swipe a tile <span className="font-semibold">downwards</span> to eliminate (0 pts).
           </p>
@@ -1229,6 +1232,69 @@ function HeatEndOverlay({
         )}
       </motion.div>
     </motion.div>
+  );
+}
+
+/**
+ * Live race clock — Start/Stop buttons + an elapsed timer that ticks every
+ * second while the race is running. Optimistic: posts to the server but
+ * doesn't wait to update the UI.
+ */
+function RaceClock({ race }: { race: Race }) {
+  const started = race.startedAt ? new Date(race.startedAt) : null;
+  const finished = race.finishedAt ? new Date(race.finishedAt) : null;
+  const running = started != null && finished == null;
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (!running) return;
+    const i = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(i);
+  }, [running]);
+
+  function elapsed(): string {
+    if (!started) return '—';
+    const end = finished?.getTime() ?? Date.now();
+    const s = Math.max(0, Math.round((end - started.getTime()) / 1000));
+    const m = Math.floor(s / 60);
+    const sec = (s % 60).toString().padStart(2, '0');
+    return `${m}:${sec}`;
+  }
+
+  async function startClock() {
+    try { await api.post(`/races/${race.id}/start`); } catch { /* ignore */ }
+  }
+  async function stopClock() {
+    try { await api.post(`/races/${race.id}/stop`); } catch { /* ignore */ }
+  }
+
+  if (race.isComplete) {
+    // After results submitted, just show the final duration.
+    return started && finished ? (
+      <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+        <Clock className="inline w-3 h-3 -mt-px" /> {elapsed()}
+      </span>
+    ) : null;
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`font-mono tabular-nums font-bold text-sm px-2 py-0.5 rounded-md ${
+        running
+          ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200 animate-pulse'
+          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+      }`}>
+        <Clock className="inline w-3 h-3 -mt-px" /> {elapsed()}
+      </span>
+      {running ? (
+        <button onClick={stopClock} className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-rose-600">
+          Stop
+        </button>
+      ) : (
+        <button onClick={startClock} className="btn-primary !py-0.5 !px-2 text-[11px]">
+          Start
+        </button>
+      )}
+    </span>
   );
 }
 

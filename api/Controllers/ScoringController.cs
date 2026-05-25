@@ -48,6 +48,46 @@ public class ScoringController : ControllerBase
         return dto;
     }
 
+    /// <summary>
+    /// Admin starts a live clock for a race. Sets `StartedAt = now` (idempotent
+    /// — won't reset if already started) and clears `FinishedAt` so the timer
+    /// runs again if you re-start a race in error.
+    /// </summary>
+    [HttpPost("api/races/{raceId:int}/start")]
+    public async Task<ActionResult<RaceDto>> StartRace(int raceId)
+    {
+        var race = await _db.Races
+            .Include(r => r.Heat).ThenInclude(h => h!.Session)
+            .Include(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstOrDefaultAsync(r => r.Id == raceId);
+        if (race is null) return NotFound();
+        if (race.StartedAt is null) race.StartedAt = DateTime.UtcNow;
+        race.FinishedAt = null;
+        await _db.SaveChangesAsync();
+        var dto = race.ToDto();
+        await _live.ResultsUpdated(race.Heat!.Session!.CompetitionId,
+            new { sessionId = race.Heat.SessionId, raceId, started = race.StartedAt });
+        return dto;
+    }
+
+    /// <summary>Admin stops the live clock — sets `FinishedAt = now`.</summary>
+    [HttpPost("api/races/{raceId:int}/stop")]
+    public async Task<ActionResult<RaceDto>> StopRace(int raceId)
+    {
+        var race = await _db.Races
+            .Include(r => r.Heat).ThenInclude(h => h!.Session)
+            .Include(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstOrDefaultAsync(r => r.Id == raceId);
+        if (race is null) return NotFound();
+        if (race.StartedAt is null) race.StartedAt = DateTime.UtcNow.AddSeconds(-1);
+        race.FinishedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        var dto = race.ToDto();
+        await _live.ResultsUpdated(race.Heat!.Session!.CompetitionId,
+            new { sessionId = race.Heat.SessionId, raceId, finished = race.FinishedAt });
+        return dto;
+    }
+
     [HttpPut("api/heats/{heatId:int}/duration")]
     public async Task<ActionResult<HeatDto>> SetHeatDuration(int heatId, UpdateHeatDurationRequest req)
     {

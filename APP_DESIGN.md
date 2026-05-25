@@ -175,3 +175,9 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 ## Draft auto-save (other forms)
 - **Dec form** drafts auto-save to `mg.draft.decform:{compId}` while the trainer is typing — riders, notes, phone. Restored on reload, cleared on submit or Cancel-with-confirmation. (Wizard auto-save was already in place for comp creation.)
 - **Scoring placings** per-race auto-save to `mg.draft.scoring:{heatId}:{raceId}` — the admin's pending placings survive a reload mid-scoring.
+
+## Per-race timing
+- `Race.StartedAt` and `Race.FinishedAt` are already in the schema. Two new admin endpoints expose them: `POST /api/races/:id/start` (idempotent — won't reset an already-running clock; clears FinishedAt if you're re-starting) and `POST /api/races/:id/stop` (sets FinishedAt = now).
+- `ScoringService.ApplyRaceResultsAsync` no longer overwrites a manually-set FinishedAt — admin's live-clock duration is preserved when results are submitted.
+- The active race tile in `SessionPage` renders a `RaceClock` chip: a pulsing rose mm:ss timer while running, plus a Start (green) / Stop (rose) button. After results are submitted the duration shows as a static slate badge.
+- Broadcasts via `resultsUpdated` so other admin tabs see the clock change in real time.
