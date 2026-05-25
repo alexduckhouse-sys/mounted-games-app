@@ -100,18 +100,23 @@ function defaultRacesFor(scope: SectionScope, format: Format, ageGroup: string):
   return lists.seniors.join('\n');
 }
 
+/** A single named session within a section, with its own race list + scope. */
+interface SessionConfig {
+  name: string;
+  races: string;
+  scope: SectionScope;
+}
+
 interface SectionDraft {
   // Carries the saved id when editing an existing section.
   existingId?: number;
   format: Format;
   ageGroup: string;
-  sessionName: string;
-  races: string;
+  /** 1 or more sessions; the first is created by defaultSection. */
+  sessions: SessionConfig[];
   minsPerHeat: number;
   maxTeamsPerHeat: number;
-  sessionCount: number;
   runoffRaceName: string;
-  scope: SectionScope;
   usesRaceFinals: boolean;
 }
 
@@ -150,25 +155,42 @@ function readPersistedDraft(key: string): PersistedDraft | null {
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistedDraft;
-    // Sanity-check the shape so a corrupted entry doesn't crash the wizard.
     if (!parsed || typeof parsed.name !== 'string' || !Array.isArray(parsed.sections)) return null;
+    // Migrate older drafts that stored a single race list per section
+    // (sessionName + races + scope + sessionCount) into the new per-session
+    // structure (sessions: SessionConfig[]).
+    parsed.sections = parsed.sections.map((s: unknown) => {
+      const sec = s as Record<string, unknown> & Partial<SectionDraft>;
+      if (Array.isArray(sec.sessions) && sec.sessions.length > 0) return sec as SectionDraft;
+      const legacyName = typeof sec.sessionName === 'string' ? sec.sessionName : 'Session 1';
+      const legacyRaces = typeof sec.races === 'string' ? sec.races : '';
+      const legacyScope = (sec.scope === 'Area' ? 'Area' : 'Zone') as SectionScope;
+      const legacyCount = typeof sec.sessionCount === 'number' ? sec.sessionCount : 1;
+      const sessions: SessionConfig[] = Array.from({ length: Math.max(1, legacyCount) }, (_, idx) => ({
+        name: idx === 0 ? legacyName : `${legacyName} · Session ${idx + 1}`,
+        races: legacyRaces,
+        scope: legacyScope,
+      }));
+      return { ...(sec as SectionDraft), sessions };
+    });
     return parsed;
   } catch {
     return null;
   }
 }
 
+function defaultSession(scope: SectionScope, format: Format, ageGroup: string, name: string): SessionConfig {
+  return { name, races: defaultRacesFor(scope, format, ageGroup), scope };
+}
+
 function defaultSection(): SectionDraft {
   return {
     format: 2,
     ageGroup: 'Seniors',
-    sessionName: 'Seniors',
-    races: defaultRacesFor('Zone', 2, 'Seniors'),
+    sessions: [defaultSession('Zone', 2, 'Seniors', 'Seniors')],
     minsPerHeat: 25,
     maxTeamsPerHeat: 6,
-    sessionCount: 1,
     runoffRaceName: ZONE_RUNOFF,
-    scope: 'Zone',
     usesRaceFinals: false,
   };
 }
@@ -290,7 +312,10 @@ export function CompetitionEditor() {
   const stepIndex = STEPS.indexOf(step);
   const basicsValid = name.trim().length > 0 && startDate.length > 0 && startTime.length > 0;
   const sectionsValid = sections.length > 0 && sections.every((s) =>
-    s.ageGroup.trim().length > 0 && parseRaces(s.races).length > 0 && s.minsPerHeat > 0
+    s.ageGroup.trim().length > 0
+    && s.sessions.length > 0
+    && s.sessions.every((sess) => parseRaces(sess.races).length > 0)
+    && s.minsPerHeat > 0
   );
 
   function next() {
@@ -311,22 +336,64 @@ export function CompetitionEditor() {
   function updateSection(i: number, patch: Partial<SectionDraft>) {
     setSections((cur) => cur.map((s, idx) => {
       if (idx !== i) return s;
-      const merged = { ...s, ...patch };
-      // Auto-fill session name when format/age changes and user hasn't customised it.
-      const autoName = sectionDisplayName(merged);
-      if (s.sessionName === sectionDisplayName(s) || s.sessionName.trim().length === 0) {
-        merged.sessionName = autoName;
+      const merged: SectionDraft = { ...s, ...patch };
+      // If the section's format or age group changes, refresh every session's
+      // race list IF that session's list is still the default for the old keys.
+      if (patch.format !== undefined || patch.ageGroup !== undefined) {
+        merged.sessions = merged.sessions.map((sess) => {
+          if (sess.races !== defaultRacesFor(sess.scope, s.format, s.ageGroup)) return sess;
+          return { ...sess, races: defaultRacesFor(sess.scope, merged.format, merged.ageGroup) };
+        });
       }
-      // If scope / format / age group changes, refresh the default race list,
-      // but only when the existing list is still the default for the old keys.
-      if ((patch.format !== undefined || patch.ageGroup !== undefined || patch.scope !== undefined)
-          && s.races === defaultRacesFor(s.scope, s.format, s.ageGroup)) {
-        merged.races = defaultRacesFor(merged.scope, merged.format, merged.ageGroup);
+      // Auto-rename the first session if it's still the auto-name.
+      const oldAuto = sectionDisplayName(s);
+      const newAuto = sectionDisplayName(merged);
+      if (merged.sessions[0] && (merged.sessions[0].name === oldAuto || merged.sessions[0].name.trim().length === 0)) {
+        merged.sessions = [{ ...merged.sessions[0], name: newAuto }, ...merged.sessions.slice(1)];
       }
-      // Race-finals already creates 3 heats per race — multiple sessions would
-      // double that. Pin to a single session whenever the toggle is on.
-      if (merged.usesRaceFinals) merged.sessionCount = 1;
+      // Race-finals always uses one session per section.
+      if (merged.usesRaceFinals && merged.sessions.length > 1) {
+        merged.sessions = [merged.sessions[0]];
+      }
       return merged;
+    }));
+  }
+
+  function updateSession(sectionIdx: number, sessionIdx: number, patch: Partial<SessionConfig>) {
+    setSections((cur) => cur.map((s, idx) => {
+      if (idx !== sectionIdx) return s;
+      const nextSessions = s.sessions.map((sess, j) => {
+        if (j !== sessionIdx) return sess;
+        const merged = { ...sess, ...patch };
+        // If scope changes and the races are still the default for the old
+        // scope, refresh them to the new scope's default.
+        if (patch.scope !== undefined && sess.races === defaultRacesFor(sess.scope, s.format, s.ageGroup)) {
+          merged.races = defaultRacesFor(merged.scope, s.format, s.ageGroup);
+        }
+        return merged;
+      });
+      return { ...s, sessions: nextSessions };
+    }));
+  }
+
+  function addSession(sectionIdx: number) {
+    setSections((cur) => cur.map((s, idx) => {
+      if (idx !== sectionIdx) return s;
+      const last = s.sessions[s.sessions.length - 1];
+      const newSess: SessionConfig = {
+        name: `${sectionDisplayName(s)} · Session ${s.sessions.length + 1}`,
+        races: last?.races ?? defaultRacesFor('Zone', s.format, s.ageGroup),
+        scope: last?.scope ?? 'Zone',
+      };
+      return { ...s, sessions: [...s.sessions, newSess] };
+    }));
+  }
+
+  function removeSession(sectionIdx: number, sessionIdx: number) {
+    setSections((cur) => cur.map((s, idx) => {
+      if (idx !== sectionIdx) return s;
+      if (s.sessions.length <= 1) return s;
+      return { ...s, sessions: s.sessions.filter((_, j) => j !== sessionIdx) };
     }));
   }
   function addSection() {
@@ -359,19 +426,28 @@ export function CompetitionEditor() {
   const sessionPreview = useMemo(() => {
     const start = startDate && startTime ? new Date(`${startDate}T${startTime}`) : null;
     const initialCursor = start ? start.getTime() : null;
-    type Row = { idx: number; sessionNumber: number; section: SectionDraft; teamCount: number; heatCount: number; durationMins: number; start: Date | null };
+    type Row = { idx: number; sessionNumber: number; section: SectionDraft; sessionName: string; teamCount: number; heatCount: number; durationMins: number; start: Date | null };
     const rows: Row[] = [];
     let cursor = initialCursor;
-    const maxSessions = sections.reduce((m, s) => Math.max(m, s.sessionCount), 1);
+    const maxSessions = sections.reduce((m, s) => Math.max(m, s.sessions.length), 1);
     for (let sessIdx = 0; sessIdx < maxSessions; sessIdx++) {
       for (let i = 0; i < sections.length; i++) {
         const sec = sections[i];
-        if (sessIdx >= sec.sessionCount) continue;
+        if (sessIdx >= sec.sessions.length) continue;
         const teamsInSection = teams.filter((t) => t.sectionIndex === i).length;
         const heatCount = Math.max(1, Math.ceil(teamsInSection / Math.max(1, sec.maxTeamsPerHeat)));
         const durationMins = heatCount * sec.minsPerHeat;
         const sessStart = cursor != null ? new Date(cursor) : null;
-        rows.push({ idx: i, sessionNumber: sessIdx + 1, section: sec, teamCount: teamsInSection, heatCount, durationMins, start: sessStart });
+        rows.push({
+          idx: i,
+          sessionNumber: sessIdx + 1,
+          section: sec,
+          sessionName: sec.sessions[sessIdx].name,
+          teamCount: teamsInSection,
+          heatCount,
+          durationMins,
+          start: sessStart,
+        });
         if (cursor != null) cursor = cursor + durationMins * 60_000;
       }
     }
@@ -418,20 +494,20 @@ export function CompetitionEditor() {
 
       setProgress('Creating sessions & heats…');
       // Round-robin by session index: section1 sess1, section2 sess1, …, then section1 sess2, etc.
-      // This means all "first sessions" run before any second sessions across the day.
+      // Each session can have its own race list (sec.sessions[sessIdx].races).
       let cursor = new Date(combinedStartIso()).getTime();
       let orderIndex = 1;
-      const maxSessions = sections.reduce((m, s) => Math.max(m, s.sessionCount), 1);
+      const maxSessions = sections.reduce((m, s) => Math.max(m, s.sessions.length), 1);
       for (let sessIdx = 0; sessIdx < maxSessions; sessIdx++) {
         for (let i = 0; i < sections.length; i++) {
           const sec = sections[i];
-          if (sessIdx >= sec.sessionCount) continue; // this section is done
+          if (sessIdx >= sec.sessions.length) continue; // this section is done
+          const sessionConfig = sec.sessions[sessIdx];
           const sectionId = sectionIds[i];
           const teamIds = sectionToTeamIds.get(i) ?? [];
           const heatCount = Math.max(1, Math.ceil(Math.max(1, teamIds.length) / Math.max(1, sec.maxTeamsPerHeat)));
           const durationMins = heatCount * sec.minsPerHeat;
-          const baseName = sec.sessionName.trim() || sectionDisplayName(sec);
-          const displayName = sec.sessionCount > 1 ? `${baseName} · Session ${sessIdx + 1}` : baseName;
+          const displayName = sessionConfig.name.trim() || sectionDisplayName(sec);
           const session = await api.post<{ id: number }>(`/competitions/${compId}/sessions`, {
             competitionSectionId: sectionId,
             name: displayName,
@@ -448,18 +524,19 @@ export function CompetitionEditor() {
           cursor += durationMins * 60_000;
 
           if (teamIds.length > 0) {
+            const raceNames = parseRaces(sessionConfig.races);
             if (sec.usesRaceFinals) {
               // One race per heat; 3 heats per race (Q1, Q2, Final scaffold).
               await api.post(`/competitions/${compId}/sessions/${session.data.id}/generate-race-finals`, {
                 teamIds,
-                raceNames: parseRaces(sec.races),
+                raceNames,
                 lanesPerHeat: sec.maxTeamsPerHeat,
                 replaceExisting: true,
               });
             } else {
               await api.post(`/competitions/${compId}/sessions/${session.data.id}/generate-heats`, {
                 teamIds,
-                raceNames: parseRaces(sec.races),
+                raceNames,
                 lanesPerHeat: sec.maxTeamsPerHeat,
                 replaceExisting: true,
               });
@@ -575,6 +652,9 @@ export function CompetitionEditor() {
             onAdd={addSection}
             onRemove={removeSection}
             onUpdate={updateSection}
+            onUpdateSession={updateSession}
+            onAddSession={addSession}
+            onRemoveSession={removeSession}
             raceTemplates={raceTemplates}
             disabled={isEdit /* destructive edits to existing sections not yet supported */}
           />
@@ -642,25 +722,32 @@ export function CompetitionEditor() {
 }
 
 function existingToDraft(s: CompetitionSection, c: CompetitionDetail): SectionDraft {
-  // Try to find the corresponding session for race list defaults.
+  // Map every existing session of this section to a SessionConfig with its
+  // own race list (taken from the first heat in that session).
   const sectionSessions = c.sessions.filter((x) => x.competitionSectionId === s.id && x.kind === 0);
-  const sess = sectionSessions[0];
-  const raceNames = sess?.heats[0]?.races.map((r) => r.name).join('\n')
-    ?? defaultRacesFor('Zone', s.format as Format, s.ageGroup);
+  const sortedSessions = sectionSessions.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+  const sessions: SessionConfig[] = sortedSessions.map((sess) => ({
+    name: sess.name,
+    races: sess.heats[0]?.races.map((r) => r.name).join('\n')
+      ?? defaultRacesFor('Zone', s.format as Format, s.ageGroup),
+    scope: 'Zone',
+  }));
+  if (sessions.length === 0) {
+    sessions.push(defaultSession('Zone', s.format as Format, s.ageGroup, s.displayName));
+  }
+
+  const first = sortedSessions[0];
   const teamCount = c.teams.filter((t) => t.competitionSectionId === s.id).length;
-  const maxLanes = sess?.lanesPerHeat ?? Math.max(2, Math.min(6, teamCount));
-  const minsPerHeat = sess?.minutesPerHeat ?? 25;
+  const maxLanes = first?.lanesPerHeat ?? Math.max(2, Math.min(6, teamCount));
+  const minsPerHeat = first?.minutesPerHeat ?? 25;
   return {
     existingId: s.id,
     format: s.format as Format,
     ageGroup: s.ageGroup,
-    sessionName: sess?.name ?? s.displayName,
-    races: raceNames,
+    sessions,
     minsPerHeat,
     maxTeamsPerHeat: maxLanes,
-    sessionCount: Math.max(1, sectionSessions.length),
     runoffRaceName: s.runoffRaceName ?? ZONE_RUNOFF,
-    scope: 'Zone',
     usesRaceFinals: s.usesRaceFinals ?? false,
   };
 }
@@ -842,19 +929,23 @@ function BasicsStep(p: BasicsProps) {
 }
 
 function SectionsStep({
-  sections, onAdd, onRemove, onUpdate, raceTemplates, disabled,
+  sections, onAdd, onRemove, onUpdate, onUpdateSession, onAddSession, onRemoveSession,
+  raceTemplates, disabled,
 }: {
   sections: SectionDraft[];
   onAdd: () => void;
   onRemove: (i: number) => void;
   onUpdate: (i: number, patch: Partial<SectionDraft>) => void;
+  onUpdateSession: (sectionIdx: number, sessionIdx: number, patch: Partial<SessionConfig>) => void;
+  onAddSession: (sectionIdx: number) => void;
+  onRemoveSession: (sectionIdx: number, sessionIdx: number) => void;
   raceTemplates: RaceTemplate[];
   disabled: boolean;
 }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        Each section gets its own session. Set the races to be run, how long each heat takes, and the max teams per heat.
+        Each section gets one or more sessions. Each session has its own race list — useful for splitting morning/afternoon heats with different race cards.
       </p>
       {disabled && (
         <div className="text-xs text-amber-700 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30 p-2 rounded-md">
@@ -863,7 +954,7 @@ function SectionsStep({
       )}
       <div className="space-y-3">
         {sections.map((s, i) => (
-          <div key={i} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+          <div key={i} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
               <label className="sm:col-span-3">
                 <span className="text-xs text-slate-500">Format</span>
@@ -890,26 +981,24 @@ function SectionsStep({
                 </select>
               </label>
               <label className="sm:col-span-2">
-                <span className="text-xs text-slate-500">Session name</span>
+                <span className="text-xs text-slate-500">Mins / heat</span>
                 <input
+                  type="number" min={1} max={120}
                   className="input mt-1 text-sm"
-                  value={s.sessionName}
-                  onChange={(e) => onUpdate(i, { sessionName: e.target.value })}
+                  value={s.minsPerHeat}
+                  onChange={(e) => onUpdate(i, { minsPerHeat: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                   disabled={disabled}
                 />
               </label>
               <label className="sm:col-span-2">
-                <span className="text-xs text-slate-500">Race list</span>
-                <select
+                <span className="text-xs text-slate-500">Max teams / heat</span>
+                <input
+                  type="number" min={2} max={20}
                   className="input mt-1 text-sm"
-                  value={s.scope}
-                  onChange={(e) => onUpdate(i, { scope: e.target.value as SectionScope })}
+                  value={s.maxTeamsPerHeat}
+                  onChange={(e) => onUpdate(i, { maxTeamsPerHeat: Math.max(2, parseInt(e.target.value, 10) || 2) })}
                   disabled={disabled}
-                  title="Switching auto-fills the default race list — your edits to the list are preserved"
-                >
-                  <option value="Zone">Zone 2026</option>
-                  <option value="Area">Area 2026</option>
-                </select>
+                />
               </label>
               <div className="sm:col-span-2 flex items-end justify-end">
                 {sections.length > 1 && !disabled && (
@@ -920,82 +1009,98 @@ function SectionsStep({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="block">
-                <span className="text-xs text-slate-500">Races (in order)</span>
-                <RacePicker
-                  value={s.races}
-                  onChange={(next) => onUpdate(i, { races: next })}
-                  templates={raceTemplates}
+            {/* Per-session race lists */}
+            <div className="space-y-2">
+              {s.sessions.map((sess, si) => (
+                <div key={si} className="rounded-md border border-slate-200 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-800/30 p-2 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] uppercase tracking-wide font-bold text-slate-500 dark:text-slate-400 shrink-0">
+                      Session {si + 1}
+                    </span>
+                    <input
+                      className="input !py-1 text-sm flex-1 min-w-[120px]"
+                      value={sess.name}
+                      placeholder="Session name"
+                      onChange={(e) => onUpdateSession(i, si, { name: e.target.value })}
+                      disabled={disabled}
+                    />
+                    <select
+                      className="input !py-1 text-sm w-32"
+                      value={sess.scope}
+                      onChange={(e) => onUpdateSession(i, si, { scope: e.target.value as SectionScope })}
+                      disabled={disabled}
+                      title="Switching auto-fills the default race list — your edits are preserved"
+                    >
+                      <option value="Zone">Zone 2026</option>
+                      <option value="Area">Area 2026</option>
+                    </select>
+                    {s.sessions.length > 1 && !disabled && !s.usesRaceFinals && (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveSession(i, si)}
+                        className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-rose-500"
+                        title="Remove this session"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-500">Races (in order)</span>
+                    <RacePicker
+                      value={sess.races}
+                      onChange={(next) => onUpdateSession(i, si, { races: next })}
+                      templates={raceTemplates}
+                      disabled={disabled}
+                    />
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      → {parseRaces(sess.races).length} race{parseRaces(sess.races).length === 1 ? '' : 's'} per heat
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {!disabled && !s.usesRaceFinals && (
+                <button
+                  type="button"
+                  onClick={() => onAddSession(i)}
+                  className="btn-ghost !py-1 !px-2 text-[11px]"
+                >
+                  <Plus className="w-3 h-3" /> Add another session
+                </button>
+              )}
+            </div>
+
+            {/* Section-wide options */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+              <label className="block">
+                <span className="text-xs text-slate-500">Run-off race (for ties)</span>
+                <input
+                  list={`runoff-templates-${i}`}
+                  className="input mt-1 text-sm"
+                  placeholder={ZONE_RUNOFF}
+                  value={s.runoffRaceName}
+                  onChange={(e) => onUpdate(i, { runoffRaceName: e.target.value })}
+                />
+                <datalist id={`runoff-templates-${i}`}>
+                  {raceTemplates.map((t) => <option key={t.id} value={t.name} />)}
+                </datalist>
+              </label>
+              <label className="flex items-start gap-2 text-xs cursor-pointer p-2 rounded-md bg-slate-50 dark:bg-slate-800/60">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={s.usesRaceFinals}
+                  onChange={(e) => onUpdate(i, { usesRaceFinals: e.target.checked })}
                   disabled={disabled}
                 />
-              </div>
-              <div className="grid grid-cols-3 gap-2 self-start">
-                <label className="block">
-                  <span className="text-xs text-slate-500">Sessions</span>
-                  <input
-                    type="number" min={1} max={10}
-                    className="input mt-1 text-sm"
-                    value={s.sessionCount}
-                    onChange={(e) => onUpdate(i, { sessionCount: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-                    disabled={disabled || s.usesRaceFinals}
-                    title={s.usesRaceFinals ? 'Race-finals format always uses a single session per section.' : undefined}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-slate-500">Mins / heat</span>
-                  <input
-                    type="number" min={1} max={120}
-                    className="input mt-1 text-sm"
-                    value={s.minsPerHeat}
-                    onChange={(e) => onUpdate(i, { minsPerHeat: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-                    disabled={disabled}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-slate-500">Max teams / heat</span>
-                  <input
-                    type="number" min={2} max={20}
-                    className="input mt-1 text-sm"
-                    value={s.maxTeamsPerHeat}
-                    onChange={(e) => onUpdate(i, { maxTeamsPerHeat: Math.max(2, parseInt(e.target.value, 10) || 2) })}
-                    disabled={disabled}
-                  />
-                </label>
-                <div className="col-span-3 text-xs text-slate-500 mt-1">
-                  → {parseRaces(s.races).length} race{parseRaces(s.races).length === 1 ? '' : 's'} per heat
-                </div>
-                <label className="col-span-3 block">
-                  <span className="text-xs text-slate-500">Run-off race (for ties)</span>
-                  <input
-                    list={`runoff-templates-${i}`}
-                    className="input mt-1 text-sm"
-                    placeholder={ZONE_RUNOFF}
-                    value={s.runoffRaceName}
-                    onChange={(e) => onUpdate(i, { runoffRaceName: e.target.value })}
-                  />
-                  <datalist id={`runoff-templates-${i}`}>
-                    {raceTemplates.map((t) => <option key={t.id} value={t.name} />)}
-                  </datalist>
-                </label>
-                <label className="col-span-3 flex items-start gap-2 mt-1 text-xs cursor-pointer p-2 rounded-md bg-slate-50 dark:bg-slate-800/60">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={s.usesRaceFinals}
-                    onChange={(e) => onUpdate(i, { usesRaceFinals: e.target.checked })}
-                    disabled={disabled}
-                  />
-                  <span>
-                    <span className="font-semibold">Race-finals format.</span>{' '}
-                    <span className="text-slate-500 dark:text-slate-300">
-                      Each race becomes 3 heats: two random qualifier heats (1 pt per finisher, 0 if eliminated)
-                      and a final filled with the top X from each qualifier. Finals lanes interleave Q1/Q2 placings.
-                      Heat times below should represent one heat of <em>one</em> race.
-                    </span>
+                <span>
+                  <span className="font-semibold">Race-finals format.</span>{' '}
+                  <span className="text-slate-500 dark:text-slate-300">
+                    Each race becomes 3 heats: two random qualifier heats (1 pt per finisher, 0 if eliminated)
+                    and a final with the top X from each qualifier. Pins the section to a single session.
                   </span>
-                </label>
-              </div>
+                </span>
+              </label>
             </div>
           </div>
         ))}
@@ -1205,7 +1310,7 @@ interface ReviewProps {
   name: string; location: string; startDate: string; startTime: string;
   endDate: string; endTime: string;
   sections: SectionDraft[]; teams: TeamDraft[]; clubs: Club[];
-  sessionPreview: { idx: number; sessionNumber: number; section: SectionDraft; teamCount: number; heatCount: number; durationMins: number; start: Date | null }[];
+  sessionPreview: { idx: number; sessionNumber: number; section: SectionDraft; sessionName: string; teamCount: number; heatCount: number; durationMins: number; start: Date | null }[];
 }
 
 function ReviewStep(p: ReviewProps) {
@@ -1231,8 +1336,8 @@ function ReviewStep(p: ReviewProps) {
                 {s.start ? s.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
               </span>
               <span className="font-semibold flex-1 truncate">
-                {s.section.sessionName || sectionDisplayName(s.section)}
-                {s.section.sessionCount > 1 && (
+                {s.sessionName || sectionDisplayName(s.section)}
+                {s.section.sessions.length > 1 && (
                   <span className="text-slate-500 font-normal"> · Session {s.sessionNumber}</span>
                 )}
               </span>
