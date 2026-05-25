@@ -121,7 +121,7 @@ function TimeChip({ scheduled, effective, shifted, big }: TimeChipProps) {
 
 export function SessionsTab() {
   const { competition, reload } = useCompetition();
-  const { hasRole } = useAuth();
+  const { canEdit } = useAuth();
   const [addKind, setAddKind] = useState<AddKind | null>(null);
   const [autoBusy, setAutoBusy] = useState(false);
   const [autoOpen, setAutoOpen] = useState(false);
@@ -194,7 +194,7 @@ export function SessionsTab() {
           <Download className="w-3.5 h-3.5" /> CSV
         </button>
         <div className="ml-auto" />
-        {hasRole('Admin') && (
+        {canEdit() && (
           <>
           <button className="btn-primary !py-1.5 !px-2.5 text-xs" onClick={() => setAutoOpen((v) => !v)} disabled={autoBusy}>
             <Wand2 className="w-3.5 h-3.5" /> Auto-generate
@@ -223,7 +223,7 @@ export function SessionsTab() {
         )}
       </div>
 
-      {autoOpen && hasRole('Admin') && (
+      {autoOpen && canEdit() && (
         <div className="card p-3 space-y-2">
           <p className="text-xs text-slate-600 dark:text-slate-200">
             One session per section with balanced heats. Replaces existing race sessions.
@@ -259,7 +259,7 @@ export function SessionsTab() {
         </div>
       )}
 
-      {addKind && hasRole('Admin') && (
+      {addKind && canEdit() && (
         <AddEntryForm kind={addKind} onCancel={() => setAddKind(null)} onSaved={() => { setAddKind(null); reload(); }} />
       )}
 
@@ -284,7 +284,7 @@ export function SessionsTab() {
         onUpdated={reload}
       />
 
-      {hasRole('Admin') && hasAnyHeats && (
+      {canEdit() && hasAnyHeats && (
         <FinalsCta onOpen={() => setFinalsOpen(true)} />
       )}
 
@@ -307,8 +307,8 @@ function SessionHeatRows({
   timing: SessionTiming | undefined;
   onUpdated: () => void;
 }) {
-  const { hasRole } = useAuth();
-  const isAdmin = hasRole('Admin');
+  const { canEdit } = useAuth();
+  const isAdmin = canEdit();
   const heats = orderedHeats(session);
   const title = sessionTitle(session);
   const [editingAssignments, setEditingAssignments] = useState(false);

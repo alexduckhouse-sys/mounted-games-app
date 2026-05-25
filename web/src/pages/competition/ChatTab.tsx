@@ -73,7 +73,7 @@ function saveIdentity(v: ChatIdentity | null) {
 
 export function ChatTab() {
   const { competition, reload } = useCompetition();
-  const { user, hasRole } = useAuth();
+  const { user, canEdit } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [body, setBody] = useState('');
   const [announcement, setAnnouncement] = useState('');
@@ -112,14 +112,14 @@ export function ChatTab() {
   });
 
   async function deleteMessage(id: number) {
-    if (!hasRole('Admin')) return;
+    if (!canEdit()) return;
     if (!confirm('Delete this message?')) return;
     await api.delete(`/competitions/${competition.id}/chat/${id}`);
     setMessages((cur) => cur.filter((m) => m.id !== id));
   }
 
   async function blockMessageAuthor(id: number) {
-    if (!hasRole('Admin')) return;
+    if (!canEdit()) return;
     if (!confirm("Block this message author's IP from posting in chat?")) return;
     try {
       const { data } = await api.post<{ alreadyBlocked: boolean; ipAddress: string }>(
@@ -234,7 +234,7 @@ export function ChatTab() {
               <MessageBubble
                 key={m.id}
                 m={m}
-                isAdmin={hasRole('Admin')}
+                isAdmin={canEdit()}
                 onDelete={() => deleteMessage(m.id)}
                 onBlock={() => blockMessageAuthor(m.id)}
               />
@@ -303,7 +303,7 @@ export function ChatTab() {
       </div>
 
       <aside className="space-y-4">
-        {hasRole('Admin') && (
+        {canEdit() && (
           <div className="card p-4">
             <h3 className="font-semibold flex items-center gap-2 mb-2">
               <Megaphone className="w-5 h-5 text-amber-600" /> Announce
@@ -317,7 +317,7 @@ export function ChatTab() {
             </button>
           </div>
         )}
-        {hasRole('Admin') && (
+        {canEdit() && (
           <CompStreamEditor competition={competition} onSaved={reload} />
         )}
         <div className="card p-4">

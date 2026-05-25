@@ -31,7 +31,7 @@ function bibSwatch(name?: string | null): string {
 
 export function SessionEndTransition({ competition, finishedSession, onClose, onAdvanced }: Props) {
   const nav = useNavigate();
-  const { hasRole } = useAuth();
+  const { canEdit } = useAuth();
   const [forms, setForms] = useState<DeclarationForm[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -63,7 +63,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
   }
 
   async function continueFlow() {
-    if (!hasRole('Admin')) {
+    if (!canEdit()) {
       onClose();
       return;
     }

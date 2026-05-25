@@ -199,6 +199,11 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 - New `DELETE /api/competitions/:id/sections/:sid` endpoint walks the section's graph (sessions → heats → entries/races/results, plus dec forms for the section's teams).
 - Hors Concours toggle: per-team HC pill on every team row in the wizard's TeamsStep — italic + grey club name when HC is on so non-scoring teams are obvious at a glance. `Team.IsHorsConcours` flows through both create and edit flows.
 
+## Admin: View only vs Edit mode
+- Admins land in **View only** by default — destructive write affordances (Delete competition / race / dec form, Score submit, Status toggles, Create finals, Save-all / Create-comp in the wizard, Generate join key admin controls) are hidden. A small **View only / Edit mode** toggle sits in the header (lock / unlock icon).
+- Wrapper: `canEdit()` in `AuthContext` returns `editorMode && hasRole('Admin')`. State persisted to `localStorage` (`mg.adminEditorMode`) and reset to `false` on logout / identity change.
+- Migrated surfaces: AdminPage (Delete comp), SessionsTab (full admin toolbar + status menu + heat-time pin + populate-final + manage heats + finals CTA), SessionPage (scoring section + Set-up heats + status toggles), ChatTab (delete message, block IP, announcement form, stream editor), ScoringTab / StandingsTab (Create finals), TeamsTab (HC toggle), CompetitionEditor (Save basics, Save all, Create comp), RulesPage (Add race / Edit / Delete), SessionEndTransition (Continue flow), LiveTab (stream cards). Non-destructive admin features (reading the AdminPage, navigating the wizard, viewing the chat IP block list) stay visible — they're inspections, not mutations.
+
 ## Race-library refresh
 - `RaceLibraryUpdates.ByName` is a per-race override map (`Summary`, `Rules`, `DiagramJson`, `Category` — any field set to null keeps the existing DB value). On every API startup, `SeedRaceTemplatesAsync` walks this map and PUTs the override values into any matching built-in `RaceTemplate` row.
 - This lets us push canonical rule text or diagram refinements to existing DBs without manual admin work. Admin-edited customs (`IsBuiltIn=false`) are not touched.

@@ -31,8 +31,8 @@ function toEmbedUrl(raw: string): string | null {
 
 export function LiveTab() {
   const { competition, reload } = useCompetition();
-  const { hasRole } = useAuth();
-  const isAdmin = hasRole('Admin');
+  const { canEdit } = useAuth();
+  const isAdmin = canEdit();
 
   const sessions = useMemo(
     () => competition.sessions.filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0),

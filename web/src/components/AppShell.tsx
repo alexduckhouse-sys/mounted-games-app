@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard, Trophy, Users, ClipboardList, MessagesSquare,
-  Settings, LogOut, Palette, LogIn, Eye, X, Timer, Flag,
+  Settings, LogOut, Palette, LogIn, Eye, X, Timer, Flag, Lock, Unlock,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES, useTheme } from '../theme/ThemeContext';
@@ -11,7 +11,7 @@ import { useCurrentCompetition } from '../competition/CurrentCompetitionContext'
 import { useNavExtras } from './NavExtrasContext';
 
 export function AppShell() {
-  const { user, logout, hasRole } = useAuth();
+  const { user, logout, hasRole, editorMode, setEditorMode } = useAuth();
   const { theme, setTheme } = useTheme();
   const { current, clear } = useCurrentCompetition();
   const { extras } = useNavExtras();
@@ -67,6 +67,22 @@ export function AppShell() {
           )}
           <div className="ml-auto flex items-center gap-1.5">
             <WeatherBadge />
+            {hasRole('Admin') && (
+              <button
+                onClick={() => setEditorMode(!editorMode)}
+                className={`btn-ghost !py-1 !px-2 text-[11px] flex items-center gap-1 ${
+                  editorMode
+                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200 ring-1 ring-rose-300 dark:ring-rose-700'
+                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                }`}
+                title={editorMode
+                  ? 'Edit mode is ON — destructive admin controls visible. Click to switch to View only.'
+                  : 'View only — destructive admin controls hidden. Click to enable Edit mode.'}
+              >
+                {editorMode ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                <span className="hidden sm:inline">{editorMode ? 'Edit mode' : 'View only'}</span>
+              </button>
+            )}
             <div className="relative group">
               <button className="btn-ghost !py-1.5 !px-2" title="Theme">
                 <Palette className="w-4 h-4" />

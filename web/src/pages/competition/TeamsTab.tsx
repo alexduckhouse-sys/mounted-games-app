@@ -8,7 +8,7 @@ import { displaySectionName } from '../../lib/section';
 
 export function TeamsTab() {
   const { competition, reload } = useCompetition();
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, canEdit } = useAuth();
   const [sectionId, setSectionId] = useState<number | 'all'>('all');
   const [clubs, setClubs] = useState<Club[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -186,7 +186,7 @@ export function TeamsTab() {
                       {t.trainerName ?? 'No trainer assigned'}
                     </div>
                   </div>
-                  {hasRole('Admin') && (
+                  {canEdit() && (
                     <button
                       onClick={async () => {
                         await api.put(`/competitions/${competition.id}/teams/${t.id}`, {

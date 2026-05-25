@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Settings, Trophy, Users2, Sparkles, Shield, Plus, Trash2, Pencil, BookOpen } from 'lucide-react'; // BookOpen + Pencil also used by Race-rules card
 import { api } from '../api';
+import { useAuth } from '../auth/AuthContext';
 import type { Club, CompetitionSummary } from '../types';
 import { bibAccent, bibLabel } from '../lib/bib';
 
@@ -9,6 +10,7 @@ interface IpBlock { id: number; ipAddress: string; reason?: string | null; creat
 interface RaceSummary { id: number; name: string; category?: string | null; isBuiltIn: boolean }
 
 export function AdminPage() {
+  const { canEdit } = useAuth();
   const [comps, setComps] = useState<CompetitionSummary[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [blocks, setBlocks] = useState<IpBlock[]>([]);
@@ -119,13 +121,15 @@ export function AdminPage() {
                 >
                   <Pencil className="w-3.5 h-3.5" /> Edit
                 </Link>
-                <button
-                  onClick={() => deleteComp(c)}
-                  className="btn-ghost !py-1 !px-2 text-xs shrink-0 text-rose-600 hover:text-rose-800"
-                  title="Delete competition permanently"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Delete
-                </button>
+                {canEdit() && (
+                  <button
+                    onClick={() => deleteComp(c)}
+                    className="btn-ghost !py-1 !px-2 text-xs shrink-0 text-rose-600 hover:text-rose-800"
+                    title="Delete competition permanently"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                  </button>
+                )}
               </li>
             ))}
           </ul>

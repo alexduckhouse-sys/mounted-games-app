@@ -30,7 +30,7 @@ function TimeChip({ scheduled, effective, shifted }: TimeChipProps) {
 
 export function ScoringTab() {
   const { competition, reload } = useCompetition();
-  const { hasRole } = useAuth();
+  const { canEdit } = useAuth();
   const navigate = useNavigate();
   const firstSectionId = competition.sections[0]?.id ?? null;
   const [sectionId, setSectionId] = useState<number | null>(firstSectionId);
@@ -78,7 +78,7 @@ export function ScoringTab() {
           >
             <Trophy className="w-3.5 h-3.5" /> Toplist
           </button>
-          {hasRole('Admin') && sectionId != null && (
+          {canEdit() && sectionId != null && (
             <button onClick={() => setShowFinals(true)} className="btn-primary !py-1.5 !px-2.5 text-xs">
               <Sparkles className="w-3.5 h-3.5" /> Create finals
             </button>

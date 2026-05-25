@@ -9,7 +9,7 @@ import { bibAccent } from '../../lib/bib';
 
 export function StandingsTab() {
   const { competition, reload } = useCompetition();
-  const { hasRole } = useAuth();
+  const { canEdit } = useAuth();
   const firstSectionId = competition.sections[0]?.id ?? null;
   const [sectionId, setSectionId] = useState<number | null>(firstSectionId);
   const [rows, setRows] = useState<StandingRow[]>([]);
@@ -34,7 +34,7 @@ export function StandingsTab() {
             {s.displayName}
           </button>
         ))}
-        {hasRole('Admin') && sectionId != null && (
+        {canEdit() && sectionId != null && (
           <button
             onClick={() => setShowFinals(true)}
             className="ml-auto btn-primary !py-1 !px-2.5 text-xs"

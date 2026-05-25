@@ -55,7 +55,7 @@ export function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const sid = sessionId ? parseInt(sessionId, 10) : null;
   const { competition, reload } = useCompetition();
-  const { hasRole } = useAuth();
+  const { canEdit } = useAuth();
 
   const session = useMemo<Session | null>(
     () => competition.sessions.find((s) => s.id === sid) ?? null,
@@ -288,7 +288,7 @@ export function SessionPage() {
         <Link to=".." className="btn-ghost !py-1.5 !px-2.5 text-xs">
           <ChevronLeft className="w-3.5 h-3.5" /> Sessions
         </Link>
-        {hasRole('Admin') && (
+        {canEdit() && (
           <div className="flex gap-1.5">
             <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
               <Wand2 className="w-3.5 h-3.5" /> Set up heats
@@ -314,7 +314,7 @@ export function SessionPage() {
         <NextUpCard heat={nextUpHeat} decFormByTeamId={decFormByTeamId} />
       )}
 
-      {hasRole('Admin') ? (
+      {canEdit() ? (
         <>
           <HeatTabs
             session={session}

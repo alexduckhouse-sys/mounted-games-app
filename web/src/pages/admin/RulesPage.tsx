@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, Plus, Pencil, Trash2, X, Save, ChevronLeft, Lock, Search, Code } from 'lucide-react';
 import { api } from '../../api';
+import { useAuth } from '../../auth/AuthContext';
 import type { RaceTemplate } from '../../types';
 import { RaceDiagram } from '../../components/RaceDiagram';
 import { DiagramEditor } from '../../components/DiagramEditor';
@@ -18,6 +19,7 @@ type DraftForm = {
 const EMPTY: DraftForm = { id: null, name: '', category: '', summary: '', rules: '', diagramJson: '[]' };
 
 export function RulesPage() {
+  const { canEdit } = useAuth();
   const [list, setList] = useState<RaceTemplate[]>([]);
   const [search, setSearch] = useState('');
   const [draft, setDraft] = useState<DraftForm | null>(null);
@@ -111,9 +113,11 @@ export function RulesPage() {
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <BookOpen className="w-6 h-6 text-brand-600" /> Race rules
         </h1>
-        <button onClick={startNew} className="btn-primary !py-1.5 !px-3 text-sm ml-auto">
-          <Plus className="w-4 h-4" /> Add race
-        </button>
+        {canEdit() && (
+          <button onClick={startNew} className="btn-primary !py-1.5 !px-3 text-sm ml-auto">
+            <Plus className="w-4 h-4" /> Add race
+          </button>
+        )}
       </div>
 
       <div className="card p-3 flex items-center gap-2">
@@ -230,10 +234,12 @@ export function RulesPage() {
                     </h3>
                     {r.summary && <p className="text-xs text-slate-600 dark:text-slate-300">{r.summary}</p>}
                   </div>
-                  <button onClick={() => startEdit(r)} className="btn-ghost !py-1 !px-1.5" title="Edit">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                  {!r.isBuiltIn && (
+                  {canEdit() && (
+                    <button onClick={() => startEdit(r)} className="btn-ghost !py-1 !px-1.5" title="Edit">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {canEdit() && !r.isBuiltIn && (
                     <button onClick={() => remove(r)} className="btn-ghost !py-1 !px-1.5 text-rose-500" title="Delete">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

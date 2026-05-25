@@ -11,13 +11,29 @@ interface AuthContextValue {
   signupTrainer: (username: string, password: string) => Promise<void>;
   logout: () => void;
   hasRole: (role: Role) => boolean;
+  /**
+   * Admin "Edit mode" — when off, admin gets the public-view UI without write
+   * affordances (no Delete buttons, no Save/Score submit, no status toggles).
+   * Use `canEdit()` to gate destructive controls. Non-admin users always
+   * have this off; flipping it requires `Admin` role.
+   */
+  editorMode: boolean;
+  setEditorMode: (v: boolean) => void;
+  canEdit: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const EDITOR_MODE_KEY = 'mg.adminEditorMode';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<StoredAuth | null>(() => readStoredAuth());
   const [loading, setLoading] = useState(false);
+  // Default off: admins land in safe "View only" mode and have to opt into
+  // Edit mode explicitly. Persisted so it survives navigation.
+  const [editorMode, setEditorModeState] = useState<boolean>(() => {
+    try { return localStorage.getItem(EDITOR_MODE_KEY) === '1'; } catch { return false; }
+  });
 
   useEffect(() => {
     if (!auth) return;
@@ -77,6 +93,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [auth]);
 
+  const hasRole = useCallback((role: Role) => !!user?.roles.includes(role), [user]);
+
+  // Logging out / changing identity should reset Edit mode so the next user
+  // doesn't inherit a dangerous unlocked state.
+  useEffect(() => {
+    if (!user) {
+      setEditorModeState(false);
+      try { localStorage.removeItem(EDITOR_MODE_KEY); } catch { /* quota */ }
+    }
+  }, [user?.id]);
+
+  const setEditorMode = useCallback((v: boolean) => {
+    // Only admins can flip the switch; non-admins are pinned to false.
+    const next = v && !!user?.roles.includes('Admin');
+    setEditorModeState(next);
+    try {
+      if (next) localStorage.setItem(EDITOR_MODE_KEY, '1');
+      else localStorage.removeItem(EDITOR_MODE_KEY);
+    } catch { /* quota */ }
+  }, [user]);
+
+  const canEdit = useCallback(() => editorMode && hasRole('Admin'), [editorMode, hasRole]);
+
   const value: AuthContextValue = {
     user,
     token: auth?.token ?? null,
@@ -85,7 +124,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithAdminKey,
     signupTrainer,
     logout,
-    hasRole: (role) => !!user?.roles.includes(role),
+    hasRole,
+    editorMode,
+    setEditorMode,
+    canEdit,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -5,6 +5,7 @@ import {
   Plus, Trash2, Sparkles, Wand2, Clock, ClipboardList, Search, ArrowUp, ArrowDown, BookOpen,
 } from 'lucide-react';
 import { api } from '../../api';
+import { useAuth } from '../../auth/AuthContext';
 import type { Club, CompetitionDetail, CompetitionSection, DeclarationForm, RaceTemplate, Team } from '../../types';
 
 type Format = 1 | 2 | 3;
@@ -209,6 +210,7 @@ function parseRaces(text: string): string[] {
 
 export function CompetitionEditor() {
   const navigate = useNavigate();
+  const { canEdit } = useAuth();
   const { id } = useParams<{ id: string }>();
   const editingId = id ? parseInt(id, 10) : null;
   const isEdit = editingId != null;
@@ -859,7 +861,7 @@ export function CompetitionEditor() {
           </button>
         )}
         <div className="ml-auto" />
-        {isEdit && step === 'Basics' && (
+        {isEdit && step === 'Basics' && canEdit() && (
           <button onClick={submitEditBasics} disabled={busy} className="btn-primary !py-1.5 !px-3 text-sm">
             <Check className="w-4 h-4" /> {busy ? 'Saving…' : 'Save basics'}
           </button>
@@ -869,13 +871,23 @@ export function CompetitionEditor() {
             Next <ChevronRight className="w-4 h-4" />
           </button>
         ) : isEdit ? (
-          <button onClick={submitEditAll} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
-            <Check className="w-4 h-4" /> {busy ? (progress ?? 'Saving…') : 'Save all changes'}
-          </button>
-        ) : (
+          canEdit() ? (
+            <button onClick={submitEditAll} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
+              <Check className="w-4 h-4" /> {busy ? (progress ?? 'Saving…') : 'Save all changes'}
+            </button>
+          ) : (
+            <span className="text-xs text-slate-500 italic">
+              View only — flip to <span className="font-semibold">Edit mode</span> in the header to save changes.
+            </span>
+          )
+        ) : canEdit() ? (
           <button onClick={submitCreate} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
             <Check className="w-4 h-4" /> {busy ? (progress ?? 'Creating…') : 'Create competition'}
           </button>
+        ) : (
+          <span className="text-xs text-slate-500 italic">
+            View only — flip to <span className="font-semibold">Edit mode</span> in the header to create.
+          </span>
         )}
       </div>
     </div>
