@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   CheckCircle2, Activity, Coffee, Plus, X, Users, CalendarDays,
-  Megaphone, Sparkles, MapPin, Clock, Settings as SettingsIcon, Save, Wand2, AlertTriangle, Trophy,
+  Megaphone, Sparkles, MapPin, Clock, Settings as SettingsIcon, Save, Wand2, AlertTriangle, Trophy, Download,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -14,8 +14,55 @@ import { bibAccent } from '../../lib/bib';
 import { computeTimings, roundTo5Min, formatTime, type SessionTiming, type HeatTiming } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { WeatherNow, WeatherAt } from '../../components/WeatherChips';
+import { toCsv, downloadCsv, safeFilename } from '../../lib/csv';
 
 type AddKind = 'break' | 'briefing' | 'custom';
+
+/** Flatten the live timetable into one CSV row per heat (or one row per break/briefing). */
+function exportTimetableCsv(
+  competitionName: string,
+  sessions: Session[],
+  timings: Map<number, SessionTiming>,
+): void {
+  const header = ['Date', 'Time', 'Arena', 'Section', 'Session', 'Heat', 'Status', 'Teams'];
+  const rows: ReadonlyArray<string>[] = [];
+  for (const s of sessions) {
+    const t = timings.get(s.id);
+    const kind = (s.kind ?? (s.isBreak ? SessionKind.Break : SessionKind.Race)) as SessionKindType;
+    if (kind !== SessionKind.Race) {
+      const when = t?.effective ?? t?.scheduled ?? null;
+      rows.push([
+        when ? when.toLocaleDateString() : '',
+        when ? when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+        s.arenaName ?? '',
+        '',
+        s.name,
+        kind === SessionKind.Break ? 'BREAK' : kind === SessionKind.Briefing ? 'BRIEFING' : 'CUSTOM',
+        '',
+        '',
+      ]);
+      continue;
+    }
+    const heats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+    heats.forEach((h, i) => {
+      const ht = t?.heats[i];
+      const when = ht?.effective ?? ht?.scheduled ?? null;
+      const complete = h.races.length > 0 && h.races.every((r) => r.isComplete);
+      const isLive = s.status === 1 && !complete;
+      rows.push([
+        when ? when.toLocaleDateString() : '',
+        when ? when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+        s.arenaName ?? '',
+        s.sectionName ?? '',
+        s.name,
+        h.label ?? `Heat ${i + 1}`,
+        complete ? 'OVER' : isLive ? 'IN ARENA' : 'UPCOMING',
+        h.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex).map((e) => e.teamName).join(' | '),
+      ]);
+    });
+  }
+  downloadCsv(`${safeFilename(competitionName)}-timetable.csv`, toCsv(header, rows));
+}
 
 function heatIsComplete(heat: Heat): boolean {
   return heat.races.length > 0 && heat.races.every((r) => r.isComplete);
@@ -139,6 +186,13 @@ export function SessionsTab() {
           <AlertTriangle className="w-3.5 h-3.5" /> Steward mode
         </Link>
         <WeatherNow lat={competition.latitude} lon={competition.longitude} />
+        <button
+          onClick={() => exportTimetableCsv(competition.name, orderedSessions, timings)}
+          className="btn-ghost !py-1.5 !px-2.5 text-xs"
+          title="Download timetable as CSV"
+        >
+          <Download className="w-3.5 h-3.5" /> CSV
+        </button>
         <div className="ml-auto" />
         {hasRole('Admin') && (
           <>
@@ -224,16 +278,11 @@ export function SessionsTab() {
         <TeamQuickSearch />
       )}
 
-      <div className="space-y-2">
-        {orderedSessions.map((s) => {
-          const t = timings.get(s.id);
-          const kind = (s.kind ?? (s.isBreak ? SessionKind.Break : SessionKind.Race)) as SessionKindType;
-          if (kind === SessionKind.Break) return <BreakRow key={s.id} s={s} timing={t} />;
-          if (kind === SessionKind.Briefing) return <BriefingRow key={s.id} s={s} timing={t} />;
-          if (kind === SessionKind.Custom) return <CustomRow key={s.id} s={s} timing={t} />;
-          return <SessionHeatRows key={s.id} session={s} timing={t} onUpdated={reload} />;
-        })}
-      </div>
+      <ArenaSplitView
+        sessions={orderedSessions}
+        timings={timings}
+        onUpdated={reload}
+      />
 
       {hasRole('Admin') && hasAnyHeats && (
         <FinalsCta onOpen={() => setFinalsOpen(true)} />
@@ -354,7 +403,6 @@ function SessionHeatRows({
             session={session}
             heat={h}
             heatIndex={idx}
-            title={title}
             timing={ht}
             isActive={isActive}
             isFirst={isFirst}
@@ -377,12 +425,11 @@ function SessionHeatRows({
 }
 
 function HeatRow({
-  session, heat, heatIndex, title, timing, isActive, isFirst, isAdmin, onManageHeats, onUpdated,
+  session, heat, heatIndex, timing, isActive, isFirst, isAdmin, onManageHeats, onUpdated,
 }: {
   session: Session;
   heat: Heat;
   heatIndex: number;
-  title: string;
   timing: HeatTiming | undefined;
   isActive: boolean;
   isFirst: boolean;
@@ -626,6 +673,92 @@ function PopulateRaceFinalButton({
       <button onClick={() => setOpen(false)} className="btn-ghost !py-0.5 !px-1.5 text-[11px]">Cancel</button>
       {error && <span className="text-[11px] text-rose-600 dark:text-rose-300">{error}</span>}
     </span>
+  );
+}
+
+/**
+ * Groups the timetable by Session.ArenaName. When more than one arena is in
+ * use, render a tab-strip with each arena's sessions in its own list. With a
+ * single arena (or none), fall back to the original single-column layout.
+ */
+function ArenaSplitView({
+  sessions, timings, onUpdated,
+}: {
+  sessions: Session[];
+  timings: Map<number, SessionTiming>;
+  onUpdated: () => void;
+}) {
+  const arenas = useMemo(() => {
+    const map = new Map<string, Session[]>();
+    for (const s of sessions) {
+      const key = (s.arenaName ?? '').trim() || '—';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(s);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [sessions]);
+  const [active, setActive] = useState<string | 'all'>('all');
+  // If there's only one arena (or none labelled), single-list view.
+  const single = arenas.length <= 1;
+
+  function renderSession(s: Session) {
+    const t = timings.get(s.id);
+    const kind = (s.kind ?? (s.isBreak ? SessionKind.Break : SessionKind.Race)) as SessionKindType;
+    if (kind === SessionKind.Break) return <BreakRow key={s.id} s={s} timing={t} />;
+    if (kind === SessionKind.Briefing) return <BriefingRow key={s.id} s={s} timing={t} />;
+    if (kind === SessionKind.Custom) return <CustomRow key={s.id} s={s} timing={t} />;
+    return <SessionHeatRows key={s.id} session={s} timing={t} onUpdated={onUpdated} />;
+  }
+
+  if (single) {
+    return <div className="space-y-2">{sessions.map(renderSession)}</div>;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="card p-1.5 flex overflow-x-auto gap-1 items-center text-xs">
+        <span className="text-[10px] uppercase tracking-wide text-slate-500 px-1 shrink-0">Arena</span>
+        <button
+          onClick={() => setActive('all')}
+          className={`whitespace-nowrap px-3 py-1 rounded-md text-xs font-medium ${
+            active === 'all'
+              ? 'bg-brand-600 text-white shadow-soft'
+              : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          All ({sessions.length})
+        </button>
+        {arenas.map(([name, list]) => (
+          <button
+            key={name}
+            onClick={() => setActive(name)}
+            className={`whitespace-nowrap px-3 py-1 rounded-md text-xs font-medium ${
+              active === name
+                ? 'bg-brand-600 text-white shadow-soft'
+                : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            {name === '—' ? 'No arena' : name} <span className="opacity-60">({list.length})</span>
+          </button>
+        ))}
+      </div>
+      {active === 'all' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-3 gap-y-2">
+          {arenas.map(([name, list]) => (
+            <div key={name} className="space-y-2">
+              <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-bold px-1 flex items-center gap-1">
+                <MapPin className="w-3 h-3" /> {name === '—' ? 'No arena' : name}
+              </div>
+              {list.map(renderSession)}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {(arenas.find(([n]) => n === active)?.[1] ?? []).map(renderSession)}
+        </div>
+      )}
+    </div>
   );
 }
 

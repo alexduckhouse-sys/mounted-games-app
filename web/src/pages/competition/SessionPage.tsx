@@ -80,6 +80,31 @@ export function SessionPage() {
   const [activeHeatId, setActiveHeatId] = useState<number | null>(firstIncompleteHeatId);
   const [activeRaceId, setActiveRaceId] = useState<number | null>(null);
   const [pending, setPending] = useState<PendingPlace[]>([]);
+
+  // Auto-save the admin's in-progress placings per (heat, race) so a reload
+  // doesn't wipe them. Cleared on submit + reset.
+  const scoringDraftKey = activeHeatId && activeRaceId
+    ? `mg.draft.scoring:${activeHeatId}:${activeRaceId}` : null;
+  useEffect(() => {
+    if (!scoringDraftKey) return;
+    try {
+      const raw = localStorage.getItem(scoringDraftKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as PendingPlace[];
+        if (Array.isArray(parsed)) setPending(parsed);
+      }
+    } catch { /* ignore */ }
+    // Only hydrate when the active race changes — admin's interactive
+    // changes are saved by the next effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scoringDraftKey]);
+  useEffect(() => {
+    if (!scoringDraftKey) return;
+    try {
+      if (pending.length === 0) localStorage.removeItem(scoringDraftKey);
+      else localStorage.setItem(scoringDraftKey, JSON.stringify(pending));
+    } catch { /* quota */ }
+  }, [scoringDraftKey, pending]);
   const [saving, setSaving] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [showTransition, setShowTransition] = useState(false);

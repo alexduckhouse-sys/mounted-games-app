@@ -128,11 +128,17 @@ function maybeFire(
 
   const minsAhead = (scheduled - now) / 60_000;
 
+  // Prefix the title so supporters see "Supporting X" rather than implying
+  // they are the trainer.
+  const teamLabel = team.relationship === 'supporter'
+    ? `Supporting ${team.displayName}`
+    : team.displayName;
+
   // 1-hour-before-session — fire once in the [60, 55] minute window.
   if (kind === SessionKind.Race && minsAhead <= 60 && minsAhead > 55) {
     fireOnce(
-      `1h:${sess.id}`,
-      `${team.displayName} — 1 hour to go`,
+      `1h:${sess.id}:${team.id}`,
+      `${teamLabel} — 1 hour to go`,
       `${sess.name} starts at ${fmt(timing!.scheduled!)} (${compName}).`,
     );
   }
@@ -140,23 +146,24 @@ function maybeFire(
   // 30-minutes-before-briefing — fire once in the [30, 25] minute window.
   if (kind === SessionKind.Briefing && minsAhead <= 30 && minsAhead > 25) {
     fireOnce(
-      `briefing:${sess.id}`,
+      `briefing:${sess.id}:${team.id}`,
       `Briefing in 30 minutes`,
-      `${sess.name} — ${compName}`,
+      `${sess.name} — ${compName} (${teamLabel})`,
     );
   }
 
   // Schedule shifted — fire at every 10-minute slip bucket starting at 15 min.
-  if (timing?.shifted && timing.effective && timing.scheduled && sess.status !== 2) {
+  // (status === 2 / Finished was already filtered at the top of this function.)
+  if (timing?.shifted && timing.effective && timing.scheduled) {
     const slipMs = timing.effective.getTime() - timing.scheduled.getTime();
     const absSlip = Math.abs(slipMs) / 60_000;
     if (absSlip >= 15) {
       const bucket = Math.floor((absSlip - 15) / 10) * 10 + 15; // 15, 25, 35…
       const dir = slipMs >= 0 ? 'behind' : 'ahead';
       fireOnce(
-        `shift:${sess.id}:${bucket}`,
+        `shift:${sess.id}:${bucket}:${team.id}`,
         `${compName} running ${dir}`,
-        `${sess.name} now expected at ${fmt(timing.effective)} (${bucket}+ min ${dir}).`,
+        `${sess.name} now expected at ${fmt(timing.effective)} (${bucket}+ min ${dir}). ${teamLabel}.`,
       );
     }
   }

@@ -68,7 +68,7 @@ export function DiagramEditor({ value, onChange }: Props) {
     let cur: DiagramElement | undefined = elements[path[0]];
     if (!cur) return null;
     for (let i = 1; i < path.length; i++) {
-      const kids = (cur as DiagramPos).on ?? [];
+      const kids: DiagramElement[] = (cur as DiagramPos).on ?? [];
       cur = kids[path[i]];
       if (!cur) return null;
     }

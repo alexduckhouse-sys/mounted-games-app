@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Trash2, Star, Shield, Save, LogIn, Phone } from 'lucide-react';
+import { Plus, Trash2, Star, Shield, Save, LogIn, Phone, Download } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { DeclarationForm, SavedRider, Team } from '../../types';
+import { toCsv, downloadCsv, safeFilename } from '../../lib/csv';
 
 interface RiderDraft {
   savedRiderId?: number | null;
@@ -32,17 +33,58 @@ function bibSwatch(name?: string | null): string {
   }
 }
 
+interface DecFormDraft {
+  teamId: number;
+  riders: RiderDraft[];
+  notes: string;
+  trainerPhone: string;
+}
+
+function decDraftKey(competitionId: number): string {
+  return `mg.draft.decform:${competitionId}`;
+}
+function readDecDraft(competitionId: number): DecFormDraft | null {
+  try {
+    const raw = localStorage.getItem(decDraftKey(competitionId));
+    if (!raw) return null;
+    const v = JSON.parse(raw) as DecFormDraft;
+    return typeof v.teamId === 'number' && Array.isArray(v.riders) ? v : null;
+  } catch { return null; }
+}
+
 export function DeclarationsTab() {
   const { competition } = useCompetition();
   const { user, hasRole } = useAuth();
   const [forms, setForms] = useState<DeclarationForm[]>([]);
-  const [draftTeam, setDraftTeam] = useState<Team | null>(null);
-  const [riders, setRiders] = useState<RiderDraft[]>([]);
-  const [notes, setNotes] = useState('');
-  const [trainerPhone, setTrainerPhone] = useState('');
+  const persistedDraft = readDecDraft(competition.id);
+  const [draftTeam, setDraftTeam] = useState<Team | null>(() => {
+    if (!persistedDraft) return null;
+    return competition.teams.find((t) => t.id === persistedDraft.teamId) ?? null;
+  });
+  const [riders, setRiders] = useState<RiderDraft[]>(persistedDraft?.riders ?? []);
+  const [notes, setNotes] = useState(persistedDraft?.notes ?? '');
+  const [trainerPhone, setTrainerPhone] = useState(persistedDraft?.trainerPhone ?? '');
   const [saveRoster, setSaveRoster] = useState(true);
   const [saved, setSaved] = useState<SavedRider[]>([]);
   const [busy, setBusy] = useState(false);
+
+  // Auto-save the in-progress dec form so a reload doesn't wipe it.
+  useEffect(() => {
+    if (!draftTeam) return;
+    const draft: DecFormDraft = { teamId: draftTeam.id, riders, notes, trainerPhone };
+    try { localStorage.setItem(decDraftKey(competition.id), JSON.stringify(draft)); } catch { /* quota */ }
+  }, [competition.id, draftTeam, riders, notes, trainerPhone]);
+
+  // If we restored a draft on mount, also re-fetch the team's saved riders so
+  // the rider-picker is populated.
+  useEffect(() => {
+    if (persistedDraft && draftTeam) {
+      api.get<SavedRider[]>(`/clubs/${draftTeam.clubId}/saved-riders`)
+        .then((r) => setSaved(r.data))
+        .catch(() => setSaved([]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on mount
+  }, []);
 
   // Trainers can submit for any team that's either assigned to them or unassigned.
   // (Teams claimed by a different trainer stay hidden so two trainers don't fight over a roster.)
@@ -118,6 +160,7 @@ export function DeclarationsTab() {
       setDraftTeam(null);
       setRiders([]);
       setNotes('');
+      try { localStorage.removeItem(decDraftKey(competition.id)); } catch { /* ignore */ }
     } finally {
       setBusy(false);
     }
@@ -128,8 +171,42 @@ export function DeclarationsTab() {
     setForms((cur) => cur.filter((f) => f.id !== id));
   }
 
+  function exportCsv() {
+    const header = ['Team', 'Captain', 'Reserve', 'Rider', 'DOB', 'Horse', 'Bib', 'Submitted by', 'Phone', 'Submitted at', 'Notes'];
+    const rows: ReadonlyArray<string>[] = [];
+    for (const f of forms) {
+      const riders = f.riders.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+      for (const r of riders) {
+        rows.push([
+          f.teamName,
+          r.isCaptain ? 'yes' : '',
+          r.isReserve ? 'yes' : '',
+          r.fullName,
+          r.dateOfBirth ? new Date(r.dateOfBirth).toLocaleDateString() : '',
+          r.horseName ?? '',
+          r.bibColour ?? '',
+          f.submittedByName ?? '',
+          f.submittedByPhone ?? '',
+          new Date(f.submittedAt).toLocaleString(),
+          f.notes ?? '',
+        ]);
+      }
+    }
+    downloadCsv(`${safeFilename(competition.name)}-dec-forms.csv`, toCsv(header, rows));
+  }
+
   return (
     <div className="space-y-3">
+      <div className="flex justify-end">
+        <button
+          onClick={exportCsv}
+          disabled={forms.length === 0}
+          className="btn-ghost !py-1.5 !px-2.5 text-xs"
+          title="Download all submitted dec forms as CSV"
+        >
+          <Download className="w-3.5 h-3.5" /> Export CSV ({forms.length})
+        </button>
+      </div>
       <div className="card p-3">
         {!user ? (
           <div className="flex items-center gap-2 p-2.5 rounded-lg bg-brand-50 dark:bg-brand-900/30 text-xs">
@@ -249,7 +326,17 @@ export function DeclarationsTab() {
               Save new riders to club roster
             </label>
             <div className="ml-auto flex gap-1.5">
-              <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setDraftTeam(null)}>Cancel</button>
+              <button
+                className="btn-ghost !py-1.5 !px-2.5 text-xs"
+                onClick={() => {
+                  if (riders.some((r) => r.fullName.trim())
+                      && !confirm('Discard the in-progress dec form?')) return;
+                  setDraftTeam(null);
+                  setRiders([]);
+                  setNotes('');
+                  try { localStorage.removeItem(decDraftKey(competition.id)); } catch { /* ignore */ }
+                }}
+              >Cancel</button>
               <button className="btn-primary !py-1.5 !px-2.5 text-xs" onClick={submit} disabled={busy}>
                 <Save className="w-3.5 h-3.5" /> {busy ? 'Saving…' : 'Submit'}
               </button>

@@ -27,7 +27,7 @@ const competitionSections: SectionCard[] = [
 ];
 
 export function DashboardPage() {
-  const { user, hasRole } = useAuth();
+  const { user } = useAuth();
   const { current } = useCurrentCompetition();
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
   const [focusedDetail, setFocusedDetail] = useState<CompetitionDetail | null>(null);

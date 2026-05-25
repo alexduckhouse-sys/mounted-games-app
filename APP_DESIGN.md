@@ -153,3 +153,25 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 
 ## Declarations entry points
 - The global `/declarations` page (`DeclarationsIndexPage`) now has a **Submit dec form** CTA at the top. If a current competition is set, it deep-links to that comp's Declarations tab. Otherwise it pops an inline comp picker.
+
+## Multi-arena timetable
+- `Session.ArenaName` groups the timetable per arena. When a comp has more than one arena in use, `SessionsTab` renders an arena tab-strip with an "All" view that columns the arenas side-by-side, plus a per-arena single-column view.
+- Single-arena (or unnamed) comps fall back to the original single-list view.
+
+## CSV exports
+- **Timetable export** — button on the SessionsTab toolbar. One row per heat (or per break/briefing) with: date, time, arena, section, session, heat label, status, teams.
+- **Dec forms export** — button on the DeclarationsTab. One row per rider with: team, captain/reserve flags, name, DOB, horse, bib, submitter, phone, submission timestamp, notes.
+- Both use the helpers in `web/src/lib/csv.ts` — client-side BOM-prefixed UTF-8 CSV with proper quoting; Excel-friendly.
+
+## Reference docs
+- `docs/pc-mounted-games-race-rules-2026.md` — full PC Mounted Games Race Rules 2026 text. Used as the source of truth when refreshing `RaceLibrarySeed` (senior + pairs + JV variants) and tuning diagrams.
+
+## PWA + offline
+- `vite-plugin-pwa` generates a Workbox service worker (`dist/sw.js`) on every build. Manifest declares the app as installable to a phone's home screen (`Mounted Games`, brand-colour splash).
+- **Precache**: shell (JS/CSS/HTML) so the app shell loads offline.
+- **Runtime caching**: `/api/*` is `NetworkFirst` with a 4s timeout and a 24-hour cache fallback — the timetable, comp detail, race templates and weather all open instantly when offline (showing the last good response). `/hubs/*` (SignalR) is `NetworkOnly` because realtime is meaningless from cache.
+- SW registration in `web/src/pwa.ts` shows a "new version ready" prompt on update.
+
+## Draft auto-save (other forms)
+- **Dec form** drafts auto-save to `mg.draft.decform:{compId}` while the trainer is typing — riders, notes, phone. Restored on reload, cleared on submit or Cancel-with-confirmation. (Wizard auto-save was already in place for comp creation.)
+- **Scoring placings** per-race auto-save to `mg.draft.scoring:{heatId}:{raceId}` — the admin's pending placings survive a reload mid-scoring.
