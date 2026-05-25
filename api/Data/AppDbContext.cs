@@ -26,6 +26,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
     public DbSet<StewardCall> StewardCalls => Set<StewardCall>();
     public DbSet<TeamSupporter> TeamSupporters => Set<TeamSupporter>();
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -238,6 +239,15 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .HasForeignKey(s => s.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(s => new { s.TeamId, s.UserId }).IsUnique();
+        });
+
+        b.Entity<PushSubscription>(e =>
+        {
+            e.HasOne(p => p.User)
+                .WithMany()
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(p => p.Endpoint).IsUnique();
         });
     }
 }

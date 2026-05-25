@@ -67,6 +67,19 @@ public static class DbInitializer
             );
             CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TeamSupporters_TeamId_UserId"" ON ""TeamSupporters"" (""TeamId"", ""UserId"");
         ");
+        await db.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""PushSubscriptions"" (
+                ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_PushSubscriptions"" PRIMARY KEY AUTOINCREMENT,
+                ""UserId"" TEXT NOT NULL,
+                ""Endpoint"" TEXT NOT NULL,
+                ""P256dh"" TEXT NOT NULL,
+                ""Auth"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL DEFAULT (datetime('now')),
+                ""LastSeenAt"" TEXT NOT NULL DEFAULT (datetime('now')),
+                CONSTRAINT ""FK_PushSubscriptions_AspNetUsers_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""AspNetUsers"" (""Id"") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PushSubscriptions_Endpoint"" ON ""PushSubscriptions"" (""Endpoint"");
+        ");
 
         foreach (var r in Roles.All)
         {

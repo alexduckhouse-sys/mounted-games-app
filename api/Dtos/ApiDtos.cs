@@ -224,3 +224,7 @@ public record TeamSupporterDto(
     TeamSupporterStatus Status, DateTime CreatedAt);
 public record JoinTeamRequest(string Key);
 public record GenerateJoinKeyResponse(string Key);
+
+public record VapidPublicKeyResponse(string PublicKey);
+public record PushSubscribeRequest(string Endpoint, string P256dh, string Auth);
+public record SendTestPushRequest(string? Title, string? Body);

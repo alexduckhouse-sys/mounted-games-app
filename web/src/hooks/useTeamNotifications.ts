@@ -3,6 +3,7 @@ import { api } from '../api';
 import type { CompetitionDetail, Session, Team } from '../types';
 import { SessionKind } from '../types';
 import { computeTimings } from '../lib/time';
+import { subscribeForPush, unsubscribeFromPush } from '../lib/push';
 
 const ENABLED_KEY = 'mg.notify.enabled';
 const FIRED_PREFIX = 'mg.notify.fired:';
@@ -106,6 +107,11 @@ export function useTeamNotifications(teams: Team[]) {
       if (res !== 'granted') return;
     }
     setEnabledState(v);
+    // Sync the browser's web-push subscription with the backend. The
+    // foreground hook continues to fire while the tab is open; this gives us
+    // background pushes too (1-hour-before-session etc.).
+    if (v) await subscribeForPush();
+    else await unsubscribeFromPush();
   }
 
   return { enabled, setEnabled, permission };
