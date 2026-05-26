@@ -30,6 +30,14 @@ public class Competition
     /// </summary>
     public string? PaymentDestination { get; set; }
 
+    /// <summary>
+    /// When true, the public signup form is hidden on the comp Details tab
+    /// and the API rejects new signups. Flip this on once entries close so
+    /// the organiser can run the format-after-signups wizard against a
+    /// stable signup list. Existing signups stay editable (refund / cancel).
+    /// </summary>
+    public bool SignupsLocked { get; set; }
+
     public string? CreatedByUserId { get; set; }
     public AppUser? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -110,7 +110,23 @@ public class CompetitionsController : ControllerBase
             c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
             c.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
-            c.StreamUrl, c.OrganiserName, c.PaymentDestination);
+            c.StreamUrl, c.OrganiserName, c.PaymentDestination,
+            c.SignupsLocked);
+    }
+
+    /// <summary>
+    /// Toggle whether public signups are accepted for this competition.
+    /// Used by the format-after-signups flow to "close entries" before forming teams.
+    /// </summary>
+    [HttpPost("{id:int}/signups-locked")]
+    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    public async Task<ActionResult<object>> SetSignupsLocked(int id, SetSignupsLockedRequest req)
+    {
+        var c = await _db.Competitions.FirstOrDefaultAsync(c => c.Id == id);
+        if (c is null) return NotFound();
+        c.SignupsLocked = req.Locked;
+        await _db.SaveChangesAsync();
+        return new { signupsLocked = c.SignupsLocked };
     }
 
     [HttpPost]

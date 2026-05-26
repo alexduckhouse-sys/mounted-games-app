@@ -21,7 +21,8 @@ public record CompetitionDetail(
     IReadOnlyList<SessionDto> Sessions,
     string? StreamUrl = null,
     string? OrganiserName = null,
-    string? PaymentDestination = null);
+    string? PaymentDestination = null,
+    bool SignupsLocked = false);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -43,6 +44,32 @@ public record UpdateCompetitionRequest(
     string? StreamUrl = null,
     string? OrganiserName = null,
     string? PaymentDestination = null);
+
+public record SetSignupsLockedRequest(bool Locked);
+
+public record FormTeamsFromSignupsRequest(int? RidersPerTeam, bool Preview, bool ReplaceExisting);
+
+public record FormedTeamPreview(
+    string ClubName,
+    int ClubId,
+    string Suffix,
+    IReadOnlyList<int> SignupIds,
+    IReadOnlyList<string> RiderNames);
+
+public record FormTeamsResult(
+    bool Preview,
+    int RidersPerTeam,
+    int PaidSignups,
+    IReadOnlyList<FormedTeamPreview> Teams,
+    IReadOnlyList<TeamDto> Created);
+
+public record MySignupDto(
+    int Id, int CompetitionId, string CompetitionName,
+    DateTime CompetitionStart,
+    int CompetitionSectionId, string SectionName,
+    string FullName, string? PonyClubName, string? ContactInfo,
+    int AmountMinor, SignupPaymentStatus Status, DateTime? PaidAt,
+    int? TeamId, string? TeamName, DateTime CreatedAt);
 
 public record GeocodeResult(double? Latitude, double? Longitude, string? Source);
 

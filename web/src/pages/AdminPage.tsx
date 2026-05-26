@@ -121,6 +121,13 @@ export function AdminPage() {
                 >
                   <Pencil className="w-3.5 h-3.5" /> Edit
                 </Link>
+                <Link
+                  to={`/admin/competitions/${c.id}/format`}
+                  className="btn-ghost !py-1 !px-2 text-xs shrink-0 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-200"
+                  title="Lock signups and auto-form teams"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Format
+                </Link>
                 {canEdit() && (
                   <button
                     onClick={() => deleteComp(c)}

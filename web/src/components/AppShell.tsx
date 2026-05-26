@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import {
   LayoutDashboard, Trophy, Users, ClipboardList, MessagesSquare,
   Settings, LogOut, Palette, LogIn, Eye, X, Timer, Flag, Lock, Unlock, ShoppingBag,
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES, useTheme } from '../theme/ThemeContext';
@@ -27,6 +28,7 @@ export function AppShell() {
       : []),
     { to: '/teams', label: 'My Teams', icon: Users, end: false, show: hasRole('Trainer') && !hasRole('Admin'), live: false },
     { to: '/declarations', label: 'Dec Forms', icon: ClipboardList, end: false, show: hasRole('Trainer') || hasRole('Admin'), live: false },
+    { to: '/me/signups', label: 'My Signups', icon: CreditCard, end: false, show: !!user, live: false },
     { to: '/chat', label: 'Live Feed', icon: MessagesSquare, end: false, show: true, live: true },
     { to: '/shop', label: 'Shop', icon: ShoppingBag, end: false, show: true, live: false },
     { to: '/admin', label: 'Admin', icon: Settings, end: false, show: hasRole('Admin'), live: false },

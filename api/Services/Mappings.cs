@@ -24,6 +24,18 @@ public static class Mappings
         s.FullName, s.PonyClubName, s.ContactInfo,
         s.AmountMinor, s.Status, s.PaidAt, s.TeamId, s.CreatedAt);
 
+    public static MySignupDto ToMyDto(this SectionSignup s, Team? team = null) => new(
+        s.Id,
+        s.Section?.CompetitionId ?? 0,
+        s.Section?.Competition?.Name ?? string.Empty,
+        s.Section?.Competition?.StartDate ?? default,
+        s.CompetitionSectionId,
+        s.Section?.DisplayName ?? string.Empty,
+        s.FullName, s.PonyClubName, s.ContactInfo,
+        s.AmountMinor, s.Status, s.PaidAt,
+        s.TeamId, team?.DisplayName,
+        s.CreatedAt);
+
     public static ShopPostDto ToDto(this ShopPost p) => new(
         p.Id, p.AuthorName, p.PonyClubName, p.AuthorUserId,
         p.Title, p.Body, p.PriceMinor, p.ContactInfo, p.ImageBase64,

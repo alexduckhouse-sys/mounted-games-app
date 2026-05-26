@@ -84,6 +84,7 @@ public static class DbInitializer
         // V2 (signups + shop + organiser) — additive columns + new tables.
         await EnsureColumnAsync(db, "Competitions", "OrganiserName", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "PaymentDestination", "TEXT NULL");
+        await EnsureColumnAsync(db, "Competitions", "SignupsLocked", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "PriceMinor", "INTEGER NOT NULL DEFAULT 0");
         await db.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS ""SectionSignups"" (

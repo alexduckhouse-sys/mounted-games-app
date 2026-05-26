@@ -190,6 +190,42 @@ export interface CompetitionDetail {
   streamUrl?: string | null;
   organiserName?: string | null;
   paymentDestination?: string | null;
+  /** When true the public signup form is hidden and the API rejects new signups. */
+  signupsLocked?: boolean;
+}
+
+export interface MySignup {
+  id: number;
+  competitionId: number;
+  competitionName: string;
+  competitionStart: string;
+  competitionSectionId: number;
+  sectionName: string;
+  fullName: string;
+  ponyClubName?: string | null;
+  contactInfo?: string | null;
+  amountMinor: number;
+  status: SignupPaymentStatus;
+  paidAt?: string | null;
+  teamId?: number | null;
+  teamName?: string | null;
+  createdAt: string;
+}
+
+export interface FormedTeamPreview {
+  clubName: string;
+  clubId: number;
+  suffix: string;
+  signupIds: number[];
+  riderNames: string[];
+}
+
+export interface FormTeamsResult {
+  preview: boolean;
+  ridersPerTeam: number;
+  paidSignups: number;
+  teams: FormedTeamPreview[];
+  created: Team[];
 }
 
 export type SignupPaymentStatus = 0 | 1 | 2 | 3; // Pending / Paid / Refunded / Cancelled

@@ -21,10 +21,12 @@ import { DeclarationsIndexPage } from './pages/DeclarationsIndexPage';
 import { ChatIndexPage } from './pages/ChatIndexPage';
 import { AdminPage } from './pages/AdminPage';
 import { CompetitionEditor } from './pages/admin/CompetitionEditor';
+import { FormatPage } from './pages/admin/FormatPage';
 import { RulesPage } from './pages/admin/RulesPage';
 import { ArenaPage } from './pages/competition/ArenaPage';
 import { StewardPage } from './pages/competition/StewardPage';
 import { ShopPage } from './pages/ShopPage';
+import { MySignupsPage } from './pages/MySignupsPage';
 import './App.css';
 
 export default function App() {
@@ -67,8 +69,14 @@ export default function App() {
               <Route path="admin/competitions/:id" element={
                 <ProtectedRoute roles={['Admin', 'Trainer']}><CompetitionEditor /></ProtectedRoute>
               } />
+              <Route path="admin/competitions/:id/format" element={
+                <ProtectedRoute roles={['Admin', 'Trainer']}><FormatPage /></ProtectedRoute>
+              } />
               <Route path="admin/rules" element={
                 <ProtectedRoute roles={['Admin']}><RulesPage /></ProtectedRoute>
+              } />
+              <Route path="me/signups" element={
+                <ProtectedRoute><MySignupsPage /></ProtectedRoute>
               } />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

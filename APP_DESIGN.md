@@ -199,63 +199,74 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 - New `DELETE /api/competitions/:id/sections/:sid` endpoint walks the section's graph (sessions → heats → entries/races/results, plus dec forms for the section's teams).
 - Hors Concours toggle: per-team HC pill on every team row in the wizard's TeamsStep — italic + grey club name when HC is on so non-scoring teams are obvious at a glance. `Team.IsHorsConcours` flows through both create and edit flows.
 
-## v2 lifecycle — pay-to-join + format-after-signups (planned)
-This section captures the bigger competition lifecycle change the user has
-asked for. **Only the foundations are shipped today** (entities + skeleton
-API + signup widget + section pricing in the wizard). The full flow is queued.
+## v2 lifecycle — pay-to-join + format-after-signups
+Lifecycle the app supports today:
 
-### The shape we're moving to
 1. **Comp creation (organiser)**: name, dates, venue, organiser name,
-   payment destination, sections + their prices. **No teams, no races,
-   no sessions, no heats, no timings at creation time.** This is what
-   the public sees so people know what they're signing up for.
+   payment destination, sections + their prices.
 2. **Public signup**: anyone can sign up to a section via the comp's
-   public page. They pay the section's price; signup captures name,
-   pony club, contact info, and the amount.
+   public page. They see a `Pay £X` button that opens a "Online payment
+   coming soon — pay the organiser directly" modal and confirms a Pending
+   signup. Free sections skip the modal and auto-mark Paid.
 3. **Payment confirmation**: organiser sees a list of pending vs paid
-   signups and ticks them through as money lands. Stripe Connect will
-   automate this.
-4. **Format wizard** (post-signups, runs once entries are closed): organiser
-   sets sessions per section, races per session, lanes per heat. The
-   system bins paid signups into teams using the chosen lanes/heats.
-5. **Dec forms**: trainers / team managers fill these in later (or on
+   signups on the Details tab and ticks them paid as money lands. Refund
+   and cancel also live on the same row.
+4. **Close signups**: organiser flips `Competition.SignupsLocked` via the
+   Details tab or the Format page. The public signup form hides and the
+   API rejects new entries; existing signups stay editable.
+5. **Format wizard** (`/admin/competitions/:id/format`): a 3-step page —
+   close signups, auto-form teams from paid signups (with preview), then
+   hand off to the existing editor wizard for sessions/races/lanes.
+6. **Dec forms**: trainers / team managers fill these in later (or on
    the day) once teams are formed.
-6. **Equipment list** (auto): generated from the formatted comp using
+7. **Equipment list** (auto): generated from the formatted comp using
    the equipment calculator.
 
-### Shipped today (foundation)
-- **`Competition.OrganiserName`** and **`Competition.PaymentDestination`**
-  columns + wizard inputs on Basics step.
+### Foundation entities + endpoints
+- **`Competition.OrganiserName`**, **`Competition.PaymentDestination`**,
+  **`Competition.SignupsLocked`** columns + wizard inputs on Basics step.
 - **`CompetitionSection.PriceMinor`** column (pence) + wizard input per
   section ("Signup price per team").
 - **`SectionSignup` entity** + endpoints:
-  `POST /api/competitions/:cid/sections/:sid/signups` (public),
-  `GET /api/competitions/:cid/signups` (public),
-  `PUT /api/signups/:id/status` (admin/trainer — flip to Paid),
-  `DELETE /api/signups/:id`. Status enum: Pending / Paid / Refunded / Cancelled.
-- **Public signup widget** on the comp's Details tab — one card per
-  section showing price + paid count + "Sign up" form. Signups for
-  free sections auto-mark Paid.
-- **Trainers can create + edit competitions** (route opened, controllers'
-  Create/Update/AddSection/UpdateSection/Teams accept Trainer role).
-  `canOrganise()` helper in AuthContext (returns true for Admin OR
-  Trainer); wizard Save buttons use it instead of `canEdit()`.
-- "Create competition" CTA on `/teams` for trainers.
+  - `POST /api/competitions/:cid/sections/:sid/signups` (public; rejects when locked),
+  - `GET /api/competitions/:cid/signups` (public),
+  - `PUT /api/signups/:id/status` (admin/trainer — Pending / Paid / Refunded / Cancelled),
+  - `DELETE /api/signups/:id`,
+  - `GET /api/me/signups` (authenticated — powers `/me/signups` page),
+  - `POST /api/competitions/:id/signups-locked` `{ locked: bool }`,
+  - `POST /api/competitions/:cid/sections/:sid/form-teams` `{ ridersPerTeam, preview, replaceExisting }`
+    — bins paid signups by pony club into A/B/C teams. Preview returns the
+    bin without writing; commit creates Team rows and sets each signup's TeamId.
+
+### Trainer-as-organiser
+Trainers can create + edit competitions (controllers'
+Create/Update/AddSection/UpdateSection/Teams accept Trainer role).
+`canOrganise()` helper in AuthContext (returns true for Admin OR Trainer);
+wizard Save buttons use it instead of `canEdit()`. "Create competition"
+CTA on `/teams` for trainers; the AdminPage row gets a `Format` button
+next to `Edit` for jumping straight into the post-signups flow.
+
+### Public surfaces
+- **`/me/signups`** lists every signup the logged-in user has made, with
+  pay status, comp date, linked team (once formed), and amount.
+- Per-section signup card on the comp's Details tab now shows a Pay button
+  that opens a payment-placeholder modal showing the comp's
+  `PaymentDestination` so the entrant knows where to send funds.
+
+### Organiser CSV exports
+- `signupsToCsv` in `web/src/lib/csv.ts`; comp-level button on the Details
+  tab (organiser tools strip) and per-section in the Manage panel.
 
 ### Deferred (next turns)
 - **Payment provider integration** — Stripe Connect recommended for
   launch. Each organiser links a Stripe account; signups pay them
-  direct; platform takes a fee. Or Stripe direct (platform-controlled)
-  for a simpler day-1. PayPal as fallback.
-- **Format-after-signups wizard** — split the current Sections + Teams
-  steps so they're separate from comp creation. Triggered when the
-  organiser closes signups; bins paid signups into teams using
-  configurable lanes/heats; generates sessions + heat schedule.
-- **Team formation tooling** — auto-bin signups, allow drag-to-reorder
-  before commit, handle late additions.
-- **Locking signups** — toggle on Competition: when off, public signup
-  form hides on the Details tab.
-- **Refund + cancellation flow** — webhook-driven once Stripe is in.
+  direct; platform takes a fee. The placeholder modal is sized so the
+  Stripe Checkout button can drop straight in.
+- **Drag-to-reorder team formation** — current `form-teams` endpoint bins
+  by pony club deterministically; could add a "Preview → drag to merge / swap
+  riders → commit" pass before creating Team rows.
+- **Late additions after lock** — admin-only "force signup" that bypasses the
+  lock for last-minute entries.
 
 ## Shop / marketplace
 Public peer-to-peer marketplace on `/shop`.
