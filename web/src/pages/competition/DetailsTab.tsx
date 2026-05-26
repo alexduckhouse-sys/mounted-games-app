@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Banknote, Trophy,
   Hammer, Check, ChevronDown, ChevronUp, Lock, Unlock, Sparkles, Download,
-  X, CreditCard, RotateCcw, Ban,
+  X, RotateCcw, Ban,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { api } from '../../api';
@@ -215,6 +215,7 @@ export function DetailsTab() {
                 competitionName={competition.name}
                 onChanged={() => { refreshSignups(); reload(); }}
                 canManage={canEdit() || canOrganise()}
+                hideJoin={hasRole('Admin')}
               />
             ))}
           </div>
@@ -228,8 +229,8 @@ export function DetailsTab() {
 
 function SectionSignupCard({
   competitionId, section, allSignups, signupsLocked,
-  paymentDestination, competitionName,
-  onChanged, canManage,
+  competitionName,
+  onChanged, canManage, hideJoin,
 }: {
   competitionId: number;
   section: CompetitionSection;
@@ -239,45 +240,48 @@ function SectionSignupCard({
   competitionName: string;
   onChanged: () => void;
   canManage: boolean;
+  /** True when the viewer is an admin — hide the Join CTA + form, keep manage list. */
+  hideJoin: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [ponyClub, setPonyClub] = useState('');
   const [contact, setContact] = useState('');
+  const [teamCode, setTeamCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
-  const [showPay, setShowPay] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const signups = allSignups.filter((s) => s.competitionSectionId === section.id);
   const paidCount = signups.filter((s) => s.status === 1).length;
-  const pendingCount = signups.filter((s) => s.status === 0).length;
+  const max = section.maxParticipants;
+  const seatsLeft = max ? Math.max(0, max - paidCount) : null;
+  const full = seatsLeft != null && seatsLeft === 0;
 
   async function submit() {
     if (!fullName.trim()) return;
     setBusy(true);
+    setErr(null);
     try {
       await api.post(`/competitions/${competitionId}/sections/${section.id}/signups`, {
         fullName: fullName.trim(),
         ponyClubName: ponyClub.trim() || null,
         contactInfo: contact.trim() || null,
+        teamCode: teamCode.trim() || null,
       });
-      setFullName(''); setPonyClub(''); setContact('');
-      setDone(section.priceMinor
-        ? `Signed up. Pay ${priceLabel(section.priceMinor)} to the organiser; you'll be marked paid once they confirm.`
-        : 'Signed up.');
+      setFullName(''); setPonyClub(''); setContact(''); setTeamCode('');
+      setDone(teamCode.trim()
+        ? `You're in — linked to team ${teamCode.trim().toUpperCase()} if it exists.`
+        : 'You\'re in!');
       setTimeout(() => setDone(null), 6000);
       onChanged();
       setOpen(false);
-      setShowPay(false);
+    } catch (e) {
+      const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
+      setErr(typeof msg === 'string' ? msg : msg?.message ?? 'Could not sign up.');
     } finally {
       setBusy(false);
     }
-  }
-
-  function openPayFlow() {
-    // Free sections skip the modal entirely.
-    if (!section.priceMinor) { submit(); return; }
-    setShowPay(true);
   }
 
   function exportCsv() {
@@ -295,37 +299,52 @@ function SectionSignupCard({
         <span className="text-sm font-bold text-brand-700 dark:text-brand-200">{priceLabel(section.priceMinor)}</span>
       </div>
       <div className="text-[11px] text-slate-500 dark:text-slate-400">
-        {signups.length} signup{signups.length === 1 ? '' : 's'}
-        {section.priceMinor ? ` · ${paidCount} paid` : ''}
-        {pendingCount > 0 && section.priceMinor ? ` · ${pendingCount} pending` : ''}
+        {paidCount} in
+        {max ? ` · ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left` : ` · ${signups.length} signup${signups.length === 1 ? '' : 's'}`}
       </div>
-      {signupsLocked ? (
+      {hideJoin ? (
+        <p className="text-[11px] text-slate-500 italic">
+          Admin view — entrants only.
+        </p>
+      ) : signupsLocked ? (
         <p className="text-[11px] text-amber-700 dark:text-amber-200 italic">
-          Entries closed for this competition.
+          Entries closed.
+        </p>
+      ) : full ? (
+        <p className="text-[11px] text-rose-700 dark:text-rose-200 italic">
+          Section is full.
         </p>
       ) : !open ? (
-        <button onClick={() => setOpen(true)} className="btn-ghost !py-1 !px-2 text-[11px] w-full">
-          <Trophy className="w-3 h-3" /> Sign up
+        <button onClick={() => setOpen(true)} className="btn-primary !py-1 !px-2 text-[11px] w-full">
+          <Trophy className="w-3 h-3" /> Join {section.priceMinor ? `(${priceLabel(section.priceMinor)})` : ''}
         </button>
       ) : (
         <div className="space-y-1.5">
           <input className="input !py-1 text-xs" placeholder="Your full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
           <input className="input !py-1 text-xs" placeholder="Pony Club (optional)" value={ponyClub} onChange={(e) => setPonyClub(e.target.value)} />
           <input className="input !py-1 text-xs" placeholder="Phone / email (optional)" value={contact} onChange={(e) => setContact(e.target.value)} />
+          <input
+            className="input !py-1 text-xs font-mono uppercase"
+            placeholder="Team code (optional) — e.g. STOCKPORT-A"
+            value={teamCode}
+            onChange={(e) => setTeamCode(e.target.value)}
+          />
           <div className="flex gap-1">
             <button
-              onClick={openPayFlow}
+              onClick={submit}
               disabled={busy || !fullName.trim()}
               className="btn-primary !py-1 !px-2 text-xs flex-1"
             >
-              {section.priceMinor
-                ? <><CreditCard className="w-3 h-3" /> Pay {priceLabel(section.priceMinor)}</>
-                : (busy ? '…' : 'Sign up')}
+              <Check className="w-3 h-3" /> {busy ? 'Joining…' : 'Confirm'}
             </button>
             <button onClick={() => setOpen(false)} className="btn-ghost !py-1 !px-2 text-xs">Cancel</button>
           </div>
+          <p className="text-[10px] text-slate-500 italic">
+            Online payment isn't live yet — for now anyone can join for free. The organiser will reconcile money on the day.
+          </p>
         </div>
       )}
+      {err && <p className="text-[11px] text-rose-700 dark:text-rose-300">{err}</p>}
       {done && (
         <p className="text-[11px] text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
           <Check className="w-3 h-3" /> {done}
@@ -352,16 +371,6 @@ function SectionSignupCard({
         </details>
       )}
 
-      {showPay && (
-        <PaymentPlaceholderModal
-          amount={priceLabel(section.priceMinor)}
-          section={section.displayName}
-          paymentDestination={paymentDestination}
-          busy={busy}
-          onConfirm={submit}
-          onClose={() => setShowPay(false)}
-        />
-      )}
     </div>
   );
 }
@@ -419,57 +428,6 @@ function SignupRow({ signup, onChanged }: { signup: SectionSignup; onChanged: ()
         <X className="w-3 h-3" />
       </button>
     </li>
-  );
-}
-
-function PaymentPlaceholderModal({
-  amount, section, paymentDestination, busy, onConfirm, onClose,
-}: {
-  amount: string;
-  section: string;
-  paymentDestination: string | null;
-  busy: boolean;
-  onConfirm: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div
-        className="card p-4 max-w-sm w-full space-y-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2">
-          <CreditCard className="w-5 h-5 text-brand-600" />
-          <h3 className="font-bold text-base">Pay {amount}</h3>
-          <button onClick={onClose} className="ml-auto btn-ghost !py-1 !px-1.5 text-xs"><X className="w-3 h-3" /></button>
-        </div>
-        <div className="rounded-md border border-amber-300/60 bg-amber-50 dark:bg-amber-900/20 p-2 text-[11px] text-amber-800 dark:text-amber-200">
-          <strong>Online payment coming soon.</strong> For now please pay the organiser directly
-          using the details below. Click <em>Confirm signup</em> and the organiser will mark
-          you paid once the funds land.
-        </div>
-        <dl className="text-xs space-y-1">
-          <div className="flex gap-2">
-            <dt className="font-semibold w-24 shrink-0 text-slate-500">Section</dt>
-            <dd>{section}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="font-semibold w-24 shrink-0 text-slate-500">Amount</dt>
-            <dd className="font-bold text-brand-700 dark:text-brand-200">{amount}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="font-semibold w-24 shrink-0 text-slate-500">Pay to</dt>
-            <dd className="font-mono break-all">{paymentDestination || 'Ask the organiser'}</dd>
-          </div>
-        </dl>
-        <div className="flex gap-2">
-          <button onClick={onConfirm} disabled={busy} className="btn-primary !py-1.5 !px-3 text-sm flex-1">
-            <Check className="w-4 h-4" /> {busy ? 'Submitting…' : 'Confirm signup'}
-          </button>
-          <button onClick={onClose} className="btn-ghost !py-1.5 !px-3 text-sm">Cancel</button>
-        </div>
-      </div>
-    </div>
   );
 }
 

@@ -75,6 +75,8 @@ export interface CompetitionSection {
   runoffRaceName?: string | null;
   usesRaceFinals?: boolean;
   priceMinor?: number;
+  /** Cap on active signups (null/undefined = unlimited). */
+  maxParticipants?: number | null;
 }
 
 export type RaceRoundStage = 0 | 1 | 2; // None / Qualifier / Final

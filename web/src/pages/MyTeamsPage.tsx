@@ -327,6 +327,9 @@ function SupportersBlock({ team, onTeamUpdated }: { team: Team; onTeamUpdated: (
   const [supporters, setSupporters] = useState<TeamSupporter[]>([]);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [codeErr, setCodeErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   async function load() {
     try {
@@ -346,11 +349,28 @@ function SupportersBlock({ team, onTeamUpdated }: { team: Team; onTeamUpdated: (
     }
   }
   async function revoke() {
-    if (!confirm('Revoke this join key? Existing supporters will stay, but no one new can join until you make a new key.')) return;
+    if (!confirm('Revoke this team code? Existing supporters stay, but no one new can join until you set a new code.')) return;
     setBusy(true);
     try {
       await api.delete(`/teams/${team.id}/supporter-key`);
       onTeamUpdated();
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveCustomCode() {
+    const code = codeInput.trim().toUpperCase();
+    if (code.length < 3) { setCodeErr('At least 3 characters.'); return; }
+    setBusy(true);
+    setCodeErr(null);
+    try {
+      await api.put(`/teams/${team.id}/team-code`, { code });
+      onTeamUpdated();
+      setEditing(false);
+      setCodeInput('');
+    } catch (e) {
+      const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
+      setCodeErr(typeof msg === 'string' ? msg : msg?.message ?? 'Could not set code.');
     } finally {
       setBusy(false);
     }
@@ -393,30 +413,62 @@ function SupportersBlock({ team, onTeamUpdated }: { team: Team; onTeamUpdated: (
       {open && (
         <div className="px-1 mt-2 space-y-2">
           <div className="text-[11px] text-slate-500 dark:text-slate-300">
-            Share this key with supporters; they enter it on their <em>My Teams</em> page to request access.
+            Share this <strong>team code</strong> with friends — anyone signing up to a competition
+            can type it in to be linked to this team, and supporters can use it on their <em>My Teams</em> page.
           </div>
-          <div className="flex items-center gap-1.5">
-            {team.supporterJoinKey ? (
-              <>
-                <code className="flex-1 font-mono text-base tracking-widest font-bold text-brand-700 dark:text-brand-200 bg-brand-50 dark:bg-brand-900/40 px-2 py-1 rounded-md text-center">
-                  {team.supporterJoinKey}
-                </code>
-                <button onClick={copyKey} className="btn-ghost !py-1 !px-1.5 text-xs" title="Copy">
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+          {editing ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5">
+                <input
+                  className="input !py-1 text-sm font-mono uppercase flex-1"
+                  placeholder="STOCKPORT-A"
+                  value={codeInput}
+                  onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+                  maxLength={32}
+                  autoFocus
+                />
+                <button onClick={saveCustomCode} disabled={busy} className="btn-primary !py-1 !px-2 text-xs">
+                  <Check className="w-3.5 h-3.5" /> Save
                 </button>
-                <button onClick={rotate} disabled={busy} className="btn-ghost !py-1 !px-1.5 text-xs" title="Generate new key (old one stops working)">
-                  <RefreshCw className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={revoke} disabled={busy} className="btn-ghost !py-1 !px-1.5 text-xs text-rose-500" title="Revoke key">
+                <button onClick={() => { setEditing(false); setCodeInput(''); setCodeErr(null); }} className="btn-ghost !py-1 !px-1.5 text-xs">
                   <X className="w-3.5 h-3.5" />
                 </button>
-              </>
-            ) : (
-              <button onClick={rotate} disabled={busy} className="btn-primary !py-1.5 !px-3 text-xs">
-                <KeyRound className="w-3.5 h-3.5" /> Generate join key
-              </button>
-            )}
-          </div>
+              </div>
+              <p className="text-[10px] text-slate-500">3–32 chars, letters/digits/dash/underscore only. Must be unique within this competition.</p>
+              {codeErr && <p className="text-[11px] text-rose-700 dark:text-rose-300">{codeErr}</p>}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              {team.supporterJoinKey ? (
+                <>
+                  <code className="flex-1 font-mono text-base tracking-widest font-bold text-brand-700 dark:text-brand-200 bg-brand-50 dark:bg-brand-900/40 px-2 py-1 rounded-md text-center">
+                    {team.supporterJoinKey}
+                  </code>
+                  <button onClick={copyKey} className="btn-ghost !py-1 !px-1.5 text-xs" title="Copy">
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                  <button onClick={() => { setEditing(true); setCodeInput(team.supporterJoinKey ?? ''); }} className="btn-ghost !py-1 !px-1.5 text-xs" title="Set a custom code">
+                    Edit
+                  </button>
+                  <button onClick={rotate} disabled={busy} className="btn-ghost !py-1 !px-1.5 text-xs" title="Generate a new random code">
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={revoke} disabled={busy} className="btn-ghost !py-1 !px-1.5 text-xs text-rose-500" title="Revoke code">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setEditing(true)} className="btn-primary !py-1.5 !px-3 text-xs">
+                    <KeyRound className="w-3.5 h-3.5" /> Set team code
+                  </button>
+                  <button onClick={rotate} disabled={busy} className="btn-ghost !py-1.5 !px-3 text-xs" title="Or auto-generate one">
+                    <RefreshCw className="w-3.5 h-3.5" /> Random
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {supporters.length > 0 && (
             <ul className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs">
               {supporters.map((s) => (

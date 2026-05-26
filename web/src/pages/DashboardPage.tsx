@@ -10,12 +10,12 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import type { CompetitionSummary, CompetitionDetail } from '../types';
 
-type GlobalCard = { to: string; label: string; icon: typeof Trophy; accent: string; needsAuth?: boolean; trainerOnly?: boolean };
+type GlobalCard = { to: string; label: string; icon: typeof Trophy; accent: string; needsAuth?: boolean; hideForAdmin?: boolean };
 const globalCards: GlobalCard[] = [
   { to: '/competitions', label: 'Competitions', icon: Trophy, accent: 'from-brand-400 to-brand-600' },
   { to: '/teams', label: 'My Teams', icon: Users, accent: 'from-sky-400 to-sky-600', needsAuth: true },
   { to: '/declarations', label: 'Dec Forms', icon: ClipboardList, accent: 'from-violet-400 to-violet-600', needsAuth: true },
-  { to: '/me/signups', label: 'My Signups', icon: CreditCard, accent: 'from-emerald-400 to-emerald-600', needsAuth: true },
+  { to: '/me/signups', label: 'My Signups', icon: CreditCard, accent: 'from-emerald-400 to-emerald-600', needsAuth: true, hideForAdmin: true },
   { to: '/shop', label: 'Shop', icon: ShoppingBag, accent: 'from-amber-400 to-amber-600' },
   { to: '/chat', label: 'Live Feed', icon: MessagesSquare, accent: 'from-rose-400 to-rose-600' },
 ];
@@ -29,7 +29,7 @@ const competitionSections: SectionCard[] = [
 ];
 
 export function DashboardPage() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const { current } = useCurrentCompetition();
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
   const [focusedDetail, setFocusedDetail] = useState<CompetitionDetail | null>(null);
@@ -48,11 +48,11 @@ export function DashboardPage() {
       .catch(() => setFocusedDetail(null));
   }, [focusId]);
 
+  const isAdmin = hasRole('Admin');
   const cards = globalCards.filter((c) => {
-    // Anything that doesn't require auth is always shown. Auth-gated cards
-    // (My Teams, Dec Forms) appear for any logged-in user — supporters land
-    // on My Teams too.
-    return !c.needsAuth || user != null;
+    if (c.needsAuth && user == null) return false;
+    if (c.hideForAdmin && isAdmin) return false;
+    return true;
   });
 
   return (

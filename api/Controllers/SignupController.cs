@@ -25,8 +25,14 @@ public class SignupController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<SectionSignupDto>> Create(int competitionId, int sectionId, CreateSectionSignupRequest req)
     {
+        // Admin role runs comps — they explicitly shouldn't be entering them.
+        // Guard at the API layer too so a stray UI bug or curl can't slip through.
+        if (User.IsInRole(Roles.Admin))
+            return StatusCode(403, new { message = "Admins organise comps and can't sign up as entrants." });
+
         var section = await _db.CompetitionSections
             .Include(s => s.Competition)
+            .Include(s => s.Signups)
             .FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == competitionId);
         if (section is null) return NotFound();
         if (section.Competition?.SignupsLocked == true)
@@ -34,10 +40,37 @@ public class SignupController : ControllerBase
         var name = req.FullName?.Trim();
         if (string.IsNullOrEmpty(name)) return BadRequest(new { message = "Full name required." });
 
+        // Honour the section's signup cap, counting Paid + Pending only.
+        if (section.MaxParticipants.HasValue)
+        {
+            var active = section.Signups.Count(s =>
+                s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending);
+            if (active >= section.MaxParticipants.Value)
+                return StatusCode(403, new { message = $"Section is full ({section.MaxParticipants} max)." });
+        }
+
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         if (!string.IsNullOrEmpty(ip) && await _db.IpBlocks.AnyAsync(b => b.IpAddress == ip))
             return StatusCode(403, new { message = "Signups from this network are blocked." });
 
+        // Optional team-code join: if the entrant supplies a code that matches
+        // a team in this comp (case-insensitive), link the signup directly.
+        int? teamId = null;
+        var teamCode = req.TeamCode?.Trim();
+        if (!string.IsNullOrEmpty(teamCode))
+        {
+            var lowered = teamCode.ToLower();
+            var team = await _db.Teams
+                .Where(t => t.CompetitionId == competitionId
+                    && t.SupporterJoinKey != null
+                    && t.SupporterJoinKey.ToLower() == lowered)
+                .Select(t => new { t.Id })
+                .FirstOrDefaultAsync();
+            if (team is not null) teamId = team.Id;
+        }
+
+        // Skeleton payment flow: everything is free until Stripe lands. Status
+        // goes straight to Paid so organisers don't have to tick anything.
         var signup = new SectionSignup
         {
             CompetitionSectionId = sectionId,
@@ -46,8 +79,9 @@ public class SignupController : ControllerBase
             PonyClubName = req.PonyClubName?.Trim(),
             ContactInfo = req.ContactInfo?.Trim(),
             AmountMinor = section.PriceMinor,
-            Status = section.PriceMinor == 0 ? SignupPaymentStatus.Paid : SignupPaymentStatus.Pending,
-            PaidAt = section.PriceMinor == 0 ? DateTime.UtcNow : null,
+            TeamId = teamId,
+            Status = SignupPaymentStatus.Paid,
+            PaidAt = DateTime.UtcNow,
         };
         _db.SectionSignups.Add(signup);
         await _db.SaveChangesAsync();

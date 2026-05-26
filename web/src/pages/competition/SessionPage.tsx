@@ -980,14 +980,140 @@ function ScoreTile({
 }
 
 function PublicResultsView({ session, heats }: { session: Session; heats: Heat[] }) {
+  const [expanded, setExpanded] = useState(false);
   if (heats.length === 0) {
     return <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>;
   }
+  const isRaceFinals = heats.some((h) => (h.raceRoundStage ?? 0) > 0);
   return (
     <div className="space-y-3">
-      {heats.map((heat, i) => (
-        <HeatPublicTable key={heat.id} heat={heat} index={i} session={session} />
-      ))}
+      <div className="flex items-center gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold flex items-center gap-1.5 flex-1 min-w-0">
+          <Trophy className="w-4 h-4 text-brand-600 shrink-0" />
+          <span className="truncate">
+            {isRaceFinals ? 'Race scores' : 'Session scores'}
+          </span>
+          <span className="text-[10px] uppercase tracking-wide text-slate-500 font-bold shrink-0">
+            {isRaceFinals ? 'Q1 + Q2 + Final combined' : 'Per race'}
+          </span>
+        </h3>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className={`btn-ghost !py-1 !px-2 text-[11px] ${expanded ? 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-200' : ''}`}
+          title={expanded ? 'Hide per-heat breakdown' : 'Show per-heat breakdown'}
+        >
+          {expanded ? 'Hide heat breakdown' : 'Show heat breakdown'}
+        </button>
+      </div>
+      <SessionScoresTable heats={heats} />
+      {expanded && (
+        <div className="space-y-3">
+          {heats.map((heat, i) => (
+            <HeatPublicTable key={heat.id} heat={heat} index={i} session={session} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One combined public scores table for the whole session. Teams as rows,
+ * distinct race names as columns, points summed across all heats that share
+ * the same race name. For race-finals sections this collapses Q1+Q2+Final
+ * into a single column per race, so the public never sees the qualifier
+ * breakdown unless they expand it.
+ */
+function SessionScoresTable({ heats }: { heats: Heat[] }) {
+  const grid = useMemo(() => {
+    const raceNames: string[] = [];
+    const raceSet = new Set<string>();
+    const teamsById = new Map<number, { id: number; name: string; bib?: string | null }>();
+    const cells = new Map<string, { points: number; elim: boolean }>();
+    for (const heat of heats) {
+      for (const e of heat.entries) {
+        if (!teamsById.has(e.teamId)) {
+          teamsById.set(e.teamId, { id: e.teamId, name: e.teamName, bib: e.bibColour });
+        }
+      }
+      const races = heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+      for (const race of races) {
+        if (!raceSet.has(race.name)) { raceSet.add(race.name); raceNames.push(race.name); }
+        for (const r of race.results) {
+          if (!teamsById.has(r.teamId)) {
+            teamsById.set(r.teamId, { id: r.teamId, name: r.teamName, bib: null });
+          }
+          const k = `${r.teamId}|${race.name}`;
+          const cur = cells.get(k) ?? { points: 0, elim: false };
+          cur.points += r.points;
+          if (r.eliminated && r.points === 0) cur.elim = true;
+          cells.set(k, cur);
+        }
+      }
+    }
+    const teams = Array.from(teamsById.values()).map((t) => ({
+      ...t,
+      total: raceNames.reduce((s, n) => s + (cells.get(`${t.id}|${n}`)?.points ?? 0), 0),
+    })).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    return { raceNames, teams, cells };
+  }, [heats]);
+
+  if (grid.raceNames.length === 0 || grid.teams.length === 0) {
+    return (
+      <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">
+        No results yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs sm:text-sm border-collapse">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <th className="text-left font-semibold px-1.5 py-1 sticky left-0 bg-white dark:bg-slate-800 z-10">#</th>
+              <th className="text-left font-semibold px-1.5 py-1 sticky left-6 bg-white dark:bg-slate-800 z-10 min-w-[120px]">Team</th>
+              {grid.raceNames.map((n) => (
+                <th key={n} className="text-center font-semibold px-1.5 py-1 max-w-[80px] truncate" title={n}>
+                  {n}
+                </th>
+              ))}
+              <th className="text-right font-bold px-1.5 py-1 text-brand-700 dark:text-brand-200">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {grid.teams.map((t, idx) => (
+              <tr key={t.id} className="border-t border-slate-100 dark:border-slate-700/60">
+                <td className="px-1.5 py-1 font-mono font-bold text-brand-700 dark:text-brand-200 sticky left-0 bg-white dark:bg-slate-800">
+                  {idx + 1}
+                </td>
+                <td
+                  className="px-1.5 py-1 sticky left-6 bg-white dark:bg-slate-800 truncate"
+                  style={{ borderLeft: `3px solid ${bibAccent(t.bib)}` }}
+                >
+                  {t.name}
+                </td>
+                {grid.raceNames.map((n) => {
+                  const cell = grid.cells.get(`${t.id}|${n}`);
+                  return (
+                    <td key={n} className="px-1.5 py-1 text-center font-mono tabular-nums">
+                      {cell == null
+                        ? <span className="text-slate-300">—</span>
+                        : cell.elim && cell.points === 0
+                          ? <span className="text-rose-500">0</span>
+                          : <span className="font-semibold">{cell.points}</span>}
+                    </td>
+                  );
+                })}
+                <td className="px-1.5 py-1 text-right font-mono font-bold text-brand-700 dark:text-brand-200 tabular-nums">
+                  {t.total}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -125,6 +125,32 @@ public class TeamsController : ControllerBase
         return new GenerateJoinKeyResponse(team.SupporterJoinKey!);
     }
 
+    /// <summary>
+    /// Trainer sets a custom team code (replaces the random one). Must be
+    /// unique within the team's competition so entrants can join unambiguously.
+    /// </summary>
+    [HttpPut("{teamId:int}/team-code")]
+    [Authorize]
+    public async Task<ActionResult<GenerateJoinKeyResponse>> SetTeamCode(int teamId, SetTeamCodeRequest req)
+    {
+        var (team, err) = await LoadTeamForTrainerAsync(teamId);
+        if (err != null) return err;
+        var code = (req.Code ?? string.Empty).Trim().ToUpperInvariant();
+        if (code.Length < 3 || code.Length > 32)
+            return BadRequest(new { message = "Team code must be 3-32 characters." });
+        if (!System.Text.RegularExpressions.Regex.IsMatch(code, "^[A-Z0-9_-]+$"))
+            return BadRequest(new { message = "Letters, digits, dash and underscore only." });
+        var clash = await _db.Teams
+            .AnyAsync(t => t.Id != team!.Id
+                && t.CompetitionId == team.CompetitionId
+                && t.SupporterJoinKey != null
+                && t.SupporterJoinKey.ToUpper() == code);
+        if (clash) return Conflict(new { message = "Another team in this competition already uses that code." });
+        team!.SupporterJoinKey = code;
+        await _db.SaveChangesAsync();
+        return new GenerateJoinKeyResponse(code);
+    }
+
     [HttpDelete("{teamId:int}/supporter-key")]
     [Authorize]
     public async Task<IActionResult> RevokeJoinKey(int teamId)

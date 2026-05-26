@@ -16,7 +16,7 @@ public static class Mappings
 
     public static CompetitionSectionDto ToDto(this CompetitionSection s) =>
         new(s.Id, s.CompetitionId, s.Format, s.AgeGroup, s.DisplayName,
-            s.RunoffRaceName, s.UsesRaceFinals, s.PriceMinor);
+            s.RunoffRaceName, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants);
 
     public static SectionSignupDto ToDto(this SectionSignup s) => new(
         s.Id, s.CompetitionSectionId,

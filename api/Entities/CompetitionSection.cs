@@ -29,6 +29,13 @@ public class CompetitionSection
     /// </summary>
     public int PriceMinor { get; set; }
 
+    /// <summary>
+    /// Optional cap on the number of active (Pending + Paid) signups this
+    /// section accepts. Null = unlimited. The signup endpoint refuses with
+    /// "Section is full" once the cap is reached.
+    /// </summary>
+    public int? MaxParticipants { get; set; }
+
     public ICollection<SectionSignup> Signups { get; set; } = new List<SectionSignup>();
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -44,26 +44,7 @@ export function StandingsTab() {
         )}
       </div>
 
-      <div className="card p-5">
-        <h2 className="font-semibold flex items-center gap-2 mb-3">
-          <Trophy className="w-5 h-5 text-brand-600" /> Standings
-        </h2>
-        {sectionId == null && <p className="text-slate-500 text-sm">No sections in this competition.</p>}
-        {sectionId != null && rows.length === 0 && <p className="text-slate-500 text-sm">No results yet.</p>}
-        <ol className="divide-y divide-slate-100 dark:divide-slate-700">
-          {rows.map((r, idx) => (
-            <li key={r.teamId} className="flex items-center gap-2 px-1.5 py-1">
-              <span className="w-5 text-right shrink-0 font-mono font-bold text-brand-700 dark:text-brand-200 text-xs tabular-nums">
-                {idx + 1}
-              </span>
-              <div className="flex-1 min-w-0 text-xs truncate">{r.teamName}</div>
-              <div className="font-mono text-sm font-bold text-brand-700 dark:text-brand-200 tabular-nums">
-                {r.totalPoints}
-              </div>
-            </li>
-          ))}
-        </ol>
-      </div>
+      <PerRaceScoresTable competition={competition} sectionId={sectionId} totals={rows} />
 
       <AnimatePresence>
         {showFinals && (
@@ -74,6 +55,127 @@ export function StandingsTab() {
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Per-race × per-team score grid. Works for both standard sections and
+ * race-finals sections — for race-finals it sums points across Q1+Q2+Final
+ * heats that share the same race name, so the public sees one column per
+ * race exactly like a standard heat layout. No lane info shown.
+ */
+function PerRaceScoresTable({
+  competition, sectionId, totals,
+}: {
+  competition: ReturnType<typeof useCompetition>['competition'];
+  sectionId: number | null;
+  totals: StandingRow[];
+}) {
+  const grid = useMemo(() => {
+    if (sectionId == null) return null;
+    // Collect distinct race-name columns (in the order they first appear).
+    const raceNames: string[] = [];
+    const raceSet = new Set<string>();
+    // Points keyed by `${teamId}|${raceName}`.
+    const cells = new Map<string, number>();
+    const elimSet = new Set<string>(); // teamId|raceName → at least one elim with zero
+    for (const sess of competition.sessions) {
+      if (sess.competitionSectionId !== sectionId) continue;
+      const heats = sess.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+      for (const heat of heats) {
+        for (const race of heat.races) {
+          if (!raceSet.has(race.name)) { raceSet.add(race.name); raceNames.push(race.name); }
+          for (const r of race.results) {
+            const k = `${r.teamId}|${race.name}`;
+            cells.set(k, (cells.get(k) ?? 0) + r.points);
+            if (r.eliminated && r.points === 0) elimSet.add(k);
+          }
+        }
+      }
+    }
+    return { raceNames, cells, elimSet };
+  }, [competition.sessions, sectionId]);
+
+  if (sectionId == null) {
+    return (
+      <div className="card p-5">
+        <h2 className="font-semibold flex items-center gap-2 mb-3">
+          <Trophy className="w-5 h-5 text-brand-600" /> Standings
+        </h2>
+        <p className="text-slate-500 text-sm">No sections in this competition.</p>
+      </div>
+    );
+  }
+  if (!grid || grid.raceNames.length === 0 || totals.length === 0) {
+    return (
+      <div className="card p-5">
+        <h2 className="font-semibold flex items-center gap-2 mb-3">
+          <Trophy className="w-5 h-5 text-brand-600" /> Standings
+        </h2>
+        <p className="text-slate-500 text-sm">No results yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-3 sm:p-4 space-y-2">
+      <div className="flex items-center gap-2">
+        <Trophy className="w-5 h-5 text-brand-600" />
+        <h2 className="font-semibold flex-1">Standings</h2>
+        <span className="text-[10px] uppercase tracking-wide text-slate-500 font-bold">
+          Points per race
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs sm:text-sm border-collapse">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wide text-slate-500">
+              <th className="text-left font-semibold px-1.5 py-1 sticky left-0 bg-white dark:bg-slate-900 z-10">#</th>
+              <th className="text-left font-semibold px-1.5 py-1 sticky left-6 bg-white dark:bg-slate-900 z-10 min-w-[120px]">Team</th>
+              {grid.raceNames.map((n) => (
+                <th key={n} className="text-center font-semibold px-1.5 py-1 max-w-[80px] truncate" title={n}>
+                  {n}
+                </th>
+              ))}
+              <th className="text-right font-bold px-1.5 py-1 text-brand-700 dark:text-brand-200">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {totals.map((row, idx) => (
+              <tr
+                key={row.teamId}
+                className="border-t border-slate-100 dark:border-slate-700/60"
+              >
+                <td className="px-1.5 py-1 font-mono font-bold text-brand-700 dark:text-brand-200 sticky left-0 bg-white dark:bg-slate-900">
+                  {idx + 1}
+                </td>
+                <td className="px-1.5 py-1 sticky left-6 bg-white dark:bg-slate-900 truncate">
+                  {row.teamName}
+                </td>
+                {grid.raceNames.map((n) => {
+                  const k = `${row.teamId}|${n}`;
+                  const pts = grid.cells.get(k);
+                  const elim = grid.elimSet.has(k);
+                  return (
+                    <td key={n} className="px-1.5 py-1 text-center font-mono tabular-nums">
+                      {pts == null
+                        ? <span className="text-slate-300">—</span>
+                        : elim && pts === 0
+                          ? <span className="text-rose-500">0</span>
+                          : <span className="font-semibold">{pts}</span>}
+                    </td>
+                  );
+                })}
+                <td className="px-1.5 py-1 text-right font-mono font-bold text-brand-700 dark:text-brand-200 tabular-nums">
+                  {row.totalPoints}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
     </div>
   );
 }

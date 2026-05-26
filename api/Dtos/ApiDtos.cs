@@ -83,10 +83,13 @@ public record UpsertRaceTemplateRequest(
 
 public record CompetitionSectionDto(
     int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName,
-    string? RunoffRaceName, bool UsesRaceFinals, int PriceMinor);
+    string? RunoffRaceName, bool UsesRaceFinals, int PriceMinor,
+    int? MaxParticipants = null);
 public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName,
-    string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0);
-public record UpdateSectionRequest(string? RunoffRaceName, bool? UsesRaceFinals = null, int? PriceMinor = null);
+    string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0,
+    int? MaxParticipants = null);
+public record UpdateSectionRequest(string? RunoffRaceName, bool? UsesRaceFinals = null, int? PriceMinor = null,
+    int? MaxParticipants = null);
 
 public record SectionSignupDto(
     int Id, int CompetitionSectionId, string SectionName,
@@ -95,7 +98,8 @@ public record SectionSignupDto(
     int? TeamId, DateTime CreatedAt);
 
 public record CreateSectionSignupRequest(
-    string FullName, string? PonyClubName, string? ContactInfo);
+    string FullName, string? PonyClubName, string? ContactInfo,
+    string? TeamCode = null);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 
@@ -290,6 +294,7 @@ public record TeamSupporterDto(
     TeamSupporterStatus Status, DateTime CreatedAt);
 public record JoinTeamRequest(string Key);
 public record GenerateJoinKeyResponse(string Key);
+public record SetTeamCodeRequest(string Code);
 
 public record VapidPublicKeyResponse(string PublicKey);
 public record PushSubscribeRequest(string Endpoint, string P256dh, string Auth);

@@ -267,7 +267,10 @@ public class CompetitionsController : ControllerBase
             DisplayName = display,
             RunoffRaceName = string.IsNullOrWhiteSpace(req.RunoffRaceName) ? null : req.RunoffRaceName.Trim(),
             UsesRaceFinals = req.UsesRaceFinals,
-            PriceMinor = Math.Max(0, req.PriceMinor)
+            PriceMinor = Math.Max(0, req.PriceMinor),
+            MaxParticipants = req.MaxParticipants.HasValue && req.MaxParticipants.Value > 0
+                ? req.MaxParticipants
+                : null,
         };
         _db.CompetitionSections.Add(section);
         await _db.SaveChangesAsync();
@@ -283,6 +286,8 @@ public class CompetitionsController : ControllerBase
         section.RunoffRaceName = string.IsNullOrWhiteSpace(req.RunoffRaceName) ? null : req.RunoffRaceName.Trim();
         if (req.UsesRaceFinals.HasValue) section.UsesRaceFinals = req.UsesRaceFinals.Value;
         if (req.PriceMinor.HasValue) section.PriceMinor = Math.Max(0, req.PriceMinor.Value);
+        if (req.MaxParticipants.HasValue)
+            section.MaxParticipants = req.MaxParticipants.Value > 0 ? req.MaxParticipants.Value : null;
         await _db.SaveChangesAsync();
         return section.ToDto();
     }

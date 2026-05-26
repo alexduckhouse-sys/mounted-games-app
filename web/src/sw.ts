@@ -10,9 +10,35 @@ declare const self: ServiceWorkerGlobalScope;
 // Precache the app shell — emitted by vite-plugin-pwa at build time.
 precacheAndRoute(self.__WB_MANIFEST);
 
-// API responses cached for offline viewing of timetables / dec forms / etc.
+// User-generated / mutation-heavy endpoints must NEVER be cached — a 24h
+// cached list would mask a freshly-posted shop entry or new signup so it
+// looks like the POST silently failed. NetworkOnly for these.
+const NETWORK_ONLY_PREFIXES = [
+  '/api/shop/',
+  '/api/signups',
+  '/api/competitions/',  // catches /signups, /signups-locked, /form-teams etc.
+  '/api/me/',
+  '/api/declaration-forms',
+  '/api/push/',
+  '/api/auth/',
+  '/api/ip-blocks',
+  '/api/teams/',
+  '/api/team-supporters/',
+  '/api/trainer/',
+] as const;
+function isNetworkOnly(pathname: string): boolean {
+  return NETWORK_ONLY_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
 registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/'),
+  ({ url }) => url.pathname.startsWith('/api/') && isNetworkOnly(url.pathname),
+  new NetworkOnly(),
+);
+
+// Other API responses (race templates, weather, clubs, geocode) cached for
+// offline viewing — these change rarely and tolerate staleness.
+registerRoute(
+  ({ url }) => url.pathname.startsWith('/api/') && !isNetworkOnly(url.pathname),
   new NetworkFirst({
     cacheName: 'mg-api',
     networkTimeoutSeconds: 4,
