@@ -258,15 +258,27 @@ next to `Edit` for jumping straight into the post-signups flow.
   tab (organiser tools strip) and per-section in the Manage panel.
 
 ### Deferred (next turns)
-- **Payment provider integration** — Stripe Connect recommended for
-  launch. Each organiser links a Stripe account; signups pay them
-  direct; platform takes a fee. The placeholder modal is sized so the
-  Stripe Checkout button can drop straight in.
+- **Stripe Connect integration** — each organiser links a Stripe account;
+  signups pay them direct; platform takes a fee. The placeholder modal in
+  `DetailsTab.tsx` is sized so the Stripe Checkout button drops straight in
+  — replace the `onConfirm` handler with a Checkout session redirect, and
+  let a webhook flip `SignupPaymentStatus` to Paid.
 - **Drag-to-reorder team formation** — current `form-teams` endpoint bins
-  by pony club deterministically; could add a "Preview → drag to merge / swap
-  riders → commit" pass before creating Team rows.
-- **Late additions after lock** — admin-only "force signup" that bypasses the
-  lock for last-minute entries.
+  by pony club deterministically; add a "Preview → drag to merge / swap
+  riders → commit" pass before creating Team rows. Useful when families
+  are split across teams or a club has one extra rider that should slot
+  into another club's team.
+- **Admin force-signup after lock** — admin-only override that bypasses
+  `SignupsLocked` so late entries can still be added on the day without
+  re-opening the public form.
+- **Push opt-in prompt on the Format page** — once teams are formed,
+  prompt every linked signup's user account (via `UserId`) to enable
+  push notifications so they get the 1-hour-before-session alert.
+- **Public "entries so far" widget** — show entrants on the Details tab
+  (paid count, list of clubs / regions represented) so people deciding
+  whether to enter can see who's already coming. Reuse the existing
+  `/api/competitions/:id/signups` endpoint; format as anonymised counts
+  per club rather than a name list to avoid PII concerns.
 
 ## Shop / marketplace
 Public peer-to-peer marketplace on `/shop`.
