@@ -1,4 +1,11 @@
-export type Role = 'Admin' | 'Trainer' | 'Rider';
+export type Role = 'Admin' | 'Trainer' | 'Manager' | 'Member' | 'Rider';
+
+/** Self-service signup tiers — three identical-capability labels users pick on the signup form. */
+export const SIGNUP_ROLES: { value: 'Trainer' | 'Manager' | 'Member'; label: string; description: string }[] = [
+  { value: 'Trainer', label: 'Trainer', description: 'Coach your pony club\'s teams; submit dec forms.' },
+  { value: 'Manager', label: 'Team manager', description: 'Run the team\'s admin side: dec forms, contact, signups.' },
+  { value: 'Member', label: 'Pony Club member', description: 'Follow your club\'s teams; see dec forms.' },
+];
 
 export interface UserProfile {
   id: string;

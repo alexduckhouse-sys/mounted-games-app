@@ -26,7 +26,7 @@ public class TeamsController : ControllerBase
         .Select(t => t.ToDto());
 
     [HttpPost]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize(Roles = Roles.Organiser)]
     public async Task<ActionResult<TeamDto>> Create(int competitionId, CreateTeamRequest req)
     {
         var section = await _db.CompetitionSections.FindAsync(req.CompetitionSectionId);
@@ -66,7 +66,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize(Roles = Roles.Organiser)]
     public async Task<ActionResult<TeamDto>> Update(int competitionId, int id, UpdateTeamRequest req)
     {
         var t = await _db.Teams
@@ -86,7 +86,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize(Roles = Roles.Organiser)]
     public async Task<IActionResult> Delete(int competitionId, int id)
     {
         var t = await _db.Teams.FirstOrDefaultAsync(t => t.Id == id && t.CompetitionId == competitionId);

@@ -8,7 +8,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   loginWithAdminKey: (key: string) => Promise<void>;
-  signupTrainer: (username: string, password: string) => Promise<void>;
+  signupTrainer: (username: string, password: string, role?: string, clubName?: string) => Promise<void>;
   logout: () => void;
   hasRole: (role: Role) => boolean;
   /**
@@ -72,10 +72,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const signupTrainer = useCallback(async (username: string, password: string) => {
+  const signupTrainer = useCallback(async (username: string, password: string, role?: string, clubName?: string) => {
     setLoading(true);
     try {
-      const { data } = await api.post<StoredAuth>('/auth/signup-trainer', { username, password });
+      const { data } = await api.post<StoredAuth>('/auth/signup-trainer', {
+        username, password, role, clubName,
+      });
       writeStoredAuth(data);
       setAuth(data);
     } finally {
@@ -122,7 +124,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const canEdit = useCallback(() => editorMode && hasRole('Admin'), [editorMode, hasRole]);
-  const canOrganise = useCallback(() => hasRole('Admin') || hasRole('Trainer'), [hasRole]);
+  // Manager is treated as an organiser (same as Trainer); Member is intentionally NOT.
+  const canOrganise = useCallback(
+    () => hasRole('Admin') || hasRole('Trainer') || hasRole('Manager'),
+    [hasRole]);
 
   const value: AuthContextValue = {
     user,

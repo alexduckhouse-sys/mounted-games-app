@@ -1,8 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LogIn, AlertCircle, KeyRound, Mail, ArrowLeft, UserPlus } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { api } from '../api';
+import { SIGNUP_ROLES, type Club } from '../types';
 
 type Tab = 'trainer' | 'signup' | 'admin';
 
@@ -17,6 +19,14 @@ export function LoginPage() {
   const [password, setPassword] = useState('Trainer!234');
   const [signupUser, setSignupUser] = useState('');
   const [signupPw, setSignupPw] = useState('');
+  const [signupRole, setSignupRole] = useState<'Trainer' | 'Manager' | 'Member'>('Trainer');
+  const [signupClub, setSignupClub] = useState('');
+  const [clubs, setClubs] = useState<Club[]>([]);
+
+  useEffect(() => {
+    if (tab !== 'signup' || clubs.length > 0) return;
+    api.get<Club[]>('/clubs').then((r) => setClubs(r.data)).catch(() => {});
+  }, [tab, clubs.length]);
   const [adminKey, setAdminKey] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +37,7 @@ export function LoginPage() {
       if (tab === 'trainer') {
         await login(email, password);
       } else if (tab === 'signup') {
-        await signupTrainer(signupUser, signupPw);
+        await signupTrainer(signupUser, signupPw, signupRole, signupClub.trim() || undefined);
       } else {
         await loginWithAdminKey(adminKey);
       }
@@ -118,6 +128,48 @@ export function LoginPage() {
               />
               <span className="text-xs text-slate-500 mt-1 block">An email is fine too.</span>
             </label>
+            <label className="block mb-3">
+              <span className="text-sm font-medium">I'm signing up as a</span>
+              <div className="grid grid-cols-3 gap-1 mt-1">
+                {SIGNUP_ROLES.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() => setSignupRole(r.value)}
+                    className={`px-2 py-1.5 rounded-md text-xs font-semibold border transition ${
+                      signupRole === r.value
+                        ? 'bg-brand-600 text-white border-brand-600 shadow-soft'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                    }`}
+                    title={r.description}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-slate-500 mt-1 block">
+                {SIGNUP_ROLES.find((r) => r.value === signupRole)?.description}
+              </span>
+            </label>
+            <label className="block mb-3">
+              <span className="text-sm font-medium">Pony Club <span className="text-slate-400 font-normal">(optional)</span></span>
+              <input
+                type="text"
+                className="input mt-1"
+                list="signup-clubs"
+                placeholder="Start typing to autocomplete…"
+                value={signupClub}
+                onChange={(e) => setSignupClub(e.target.value)}
+              />
+              <datalist id="signup-clubs">
+                {clubs.map((c) => (
+                  <option key={c.id} value={c.name} />
+                ))}
+              </datalist>
+              <span className="text-xs text-slate-500 mt-1 block">
+                Links your account to your club so you can see its teams + dec forms.
+              </span>
+            </label>
             <label className="block mb-4">
               <span className="text-sm font-medium">Password</span>
               <input
@@ -156,7 +208,7 @@ export function LoginPage() {
           {tab === 'signup' ? <UserPlus className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
           {loading
             ? (tab === 'signup' ? 'Creating account…' : 'Signing in…')
-            : (tab === 'signup' ? 'Create trainer account' : 'Sign in')}
+            : (tab === 'signup' ? `Create ${signupRole.toLowerCase()} account` : 'Sign in')}
         </button>
 
         <div className="mt-6 text-xs text-slate-500">

@@ -119,7 +119,7 @@ public class CompetitionsController : ControllerBase
     /// Used by the format-after-signups flow to "close entries" before forming teams.
     /// </summary>
     [HttpPost("{id:int}/signups-locked")]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize(Roles = Roles.Organiser)]
     public async Task<ActionResult<object>> SetSignupsLocked(int id, SetSignupsLockedRequest req)
     {
         var c = await _db.Competitions.FirstOrDefaultAsync(c => c.Id == id);
@@ -130,7 +130,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize(Roles = Roles.Organiser)]
     public async Task<ActionResult<CompetitionSummary>> Create(CreateCompetitionRequest req)
     {
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();
@@ -170,7 +170,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize(Roles = Roles.Organiser)]
     public async Task<ActionResult<CompetitionSummary>> Update(int id, UpdateCompetitionRequest req)
     {
         var c = await _db.Competitions
@@ -252,7 +252,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/sections")]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize(Roles = Roles.Organiser)]
     public async Task<ActionResult<CompetitionSectionDto>> AddSection(int id, CreateSectionRequest req)
     {
         if (!await _db.Competitions.AnyAsync(c => c.Id == id)) return NotFound();
@@ -275,7 +275,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPut("{id:int}/sections/{sectionId:int}")]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize(Roles = Roles.Organiser)]
     public async Task<ActionResult<CompetitionSectionDto>> UpdateSection(int id, int sectionId, UpdateSectionRequest req)
     {
         var section = await _db.CompetitionSections.FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == id);

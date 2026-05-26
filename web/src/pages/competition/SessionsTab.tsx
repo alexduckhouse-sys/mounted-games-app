@@ -72,6 +72,28 @@ function orderedHeats(session: Session): Heat[] {
   return session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
 }
 
+/**
+ * Race-finals sections explode every race into 3 heats (Q1 / Q2 / Final) tied
+ * by `raceRoundId`. The public should only see the Final (the canonical
+ * "result" heat) — admins see the full breakdown so they can score Q1/Q2.
+ */
+function visibleHeats(session: Session, isAdmin: boolean): Heat[] {
+  const all = orderedHeats(session);
+  if (isAdmin) return all;
+  return all.filter((h) => (h.raceRoundStage ?? 0) !== 1);
+}
+
+/** Strip "· Q1 / · Q2 / · Final" suffix for the public view of race-finals heats. */
+function publicHeatLabel(heat: Heat, fallback: string): string {
+  const raw = heat.label?.trim() || fallback;
+  if ((heat.raceRoundStage ?? 0) === 2) {
+    // "Bending · Final" → "Bending"; bare "A Final" stays as-is.
+    const stripped = raw.replace(/\s*[·\-—]\s*(Final|Race\s*Final)$/i, '');
+    return stripped || raw;
+  }
+  return raw;
+}
+
 function sessionTitle(s: Session): string {
   // Prefer the section name (e.g. "Senior Pairs"); fall back to the session's own name.
   const raw = s.sectionName?.trim() || s.name?.trim() || 'Section';
@@ -307,9 +329,13 @@ function SessionHeatRows({
   timing: SessionTiming | undefined;
   onUpdated: () => void;
 }) {
-  const { canEdit } = useAuth();
+  const { canEdit, canOrganise } = useAuth();
   const isAdmin = canEdit();
-  const heats = orderedHeats(session);
+  // Organisers (admin + trainer + manager) see the full Q1/Q2/Final
+  // breakdown of race-finals heats; public viewers see one row per race.
+  const showFullBreakdown = canOrganise();
+  const allHeats = orderedHeats(session);
+  const heats = visibleHeats(session, showFullBreakdown);
   const title = sessionTitle(session);
   const [editingAssignments, setEditingAssignments] = useState(false);
   const [populating, setPopulating] = useState(false);
@@ -407,6 +433,7 @@ function SessionHeatRows({
             isActive={isActive}
             isFirst={isFirst}
             isAdmin={isAdmin}
+            showFullBreakdown={showFullBreakdown}
             onManageHeats={() => setEditingAssignments(true)}
             onUpdated={onUpdated}
           />
@@ -415,7 +442,7 @@ function SessionHeatRows({
       {editingAssignments && isAdmin && (
         <HeatAssignmentEditor
           session={session}
-          heats={heats}
+          heats={allHeats}
           onClose={() => setEditingAssignments(false)}
           onSaved={() => { setEditingAssignments(false); onUpdated(); }}
         />
@@ -425,7 +452,8 @@ function SessionHeatRows({
 }
 
 function HeatRow({
-  session, heat, heatIndex, timing, isActive, isFirst, isAdmin, onManageHeats, onUpdated,
+  session, heat, heatIndex, timing, isActive, isFirst, isAdmin, showFullBreakdown,
+  onManageHeats, onUpdated,
 }: {
   session: Session;
   heat: Heat;
@@ -434,13 +462,19 @@ function HeatRow({
   isActive: boolean;
   isFirst: boolean;
   isAdmin: boolean;
+  showFullBreakdown: boolean;
   onManageHeats: () => void;
   onUpdated: () => void;
 }) {
   const navigate = useNavigate();
   const [statusMenu, setStatusMenu] = useState(false);
   const complete = heatIsComplete(heat);
-  const heatLabel = heat.label?.trim() || `Heat ${heatIndex + 1}`;
+  const defaultLabel = `Heat ${heatIndex + 1}`;
+  // Public sees "Bending" instead of "Bending · Final" for race-finals rows.
+  // Admin/organiser keeps the "· Final" suffix so they can tell stages apart.
+  const heatLabel = showFullBreakdown
+    ? (heat.label?.trim() || defaultLabel)
+    : publicHeatLabel(heat, defaultLabel);
   const headline = heatHeadline(session, heatLabel);
 
   async function setStatus(status: number) {
@@ -489,6 +523,31 @@ function HeatRow({
           )}
         </div>
       </div>
+
+      {/* Lanes preview — shown to any organiser (admin, trainer, manager) so
+          the lane assignment is visible without opening the scoring screen.
+          Populated automatically from heat.entries; for finals this comes from
+          the Q1[1], Q2[1], Q1[2], Q2[2] interleave produced by populate-race-final. */}
+      {showFullBreakdown && heat.entries.length > 0 && (
+        <div
+          className="px-3 pb-2 pt-1.5 border-t border-slate-100 dark:border-slate-700/70 flex flex-wrap gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="text-[10px] uppercase font-bold tracking-wide text-slate-400 self-center mr-1">Lanes</span>
+          {heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex).map((e) => (
+            <span
+              key={e.id}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700/60 text-[11px]"
+              title={`Lane ${e.laneIndex} — ${e.teamName}`}
+            >
+              <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm bg-slate-900 text-white text-[9px] font-black tabular-nums">
+                {e.laneIndex}
+              </span>
+              <span className="truncate max-w-[120px]">{e.teamName}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       {isAdmin && (
         <div

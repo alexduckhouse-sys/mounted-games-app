@@ -59,7 +59,7 @@ public class DeclarationFormsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize(Roles = Roles.TeamWork)]
     public async Task<ActionResult<DeclarationFormDto>> Submit(SubmitDeclarationFormRequest req)
     {
         var team = await _db.Teams.Include(t => t.Club).Include(t => t.Competition)
@@ -140,7 +140,7 @@ public class DeclarationFormsController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize(Roles = Roles.TeamWork)]
     public async Task<IActionResult> Delete(int id)
     {
         var d = await _db.DeclarationForms.Include(d => d.Team).FirstOrDefaultAsync(d => d.Id == id);

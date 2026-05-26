@@ -939,8 +939,19 @@ function ScoreTile({
       onTap={!disabled ? onTap : undefined}
       style={!place && !eliminated ? { borderLeft: `6px solid ${colour}` } : undefined}
     >
-      <div className="text-sm leading-tight">{teamName}</div>
-      <div className="text-[10px] opacity-80 mt-0.5">Lane {lane}</div>
+      <div className="flex items-start gap-2">
+        <span
+          className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-sm font-black tabular-nums ${
+            place != null || eliminated
+              ? 'bg-white/20 text-white'
+              : 'bg-slate-900/90 text-white dark:bg-white dark:text-slate-900'
+          }`}
+          title={`Lane ${lane}`}
+        >
+          {lane}
+        </span>
+        <div className="text-sm leading-tight flex-1 min-w-0">{teamName}</div>
+      </div>
       {!place && !eliminated && !disabled && (
         <div className="absolute bottom-1 right-2 text-[9px] opacity-40 font-normal">swipe ↓ elim</div>
       )}

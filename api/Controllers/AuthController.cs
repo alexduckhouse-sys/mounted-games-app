@@ -81,22 +81,42 @@ public class AuthController : ControllerBase
         if (await _users.FindByEmailAsync(email) is not null)
             return Conflict(new { message = "That username is already taken." });
 
+        // Pick role from the three self-service tiers; default to Trainer for
+        // backwards compat with the existing button. Manager/Member behave
+        // identically today — the choice is just a self-label.
+        var requested = (req.Role ?? Roles.Trainer).Trim();
+        var role = requested.Equals(Roles.Manager, StringComparison.OrdinalIgnoreCase) ? Roles.Manager
+                 : requested.Equals(Roles.Member, StringComparison.OrdinalIgnoreCase) ? Roles.Member
+                 : Roles.Trainer;
+
+        // Optional pony club name → ClubId. Case-insensitive exact match; if
+        // no match we just leave ClubId null (we don't auto-create clubs).
+        int? clubId = null;
+        var clubName = (req.ClubName ?? string.Empty).Trim();
+        if (clubName.Length > 0)
+        {
+            var club = await _db.Clubs.FirstOrDefaultAsync(c => c.Name.ToLower() == clubName.ToLower());
+            if (club is not null) clubId = club.Id;
+        }
+
         var user = new AppUser
         {
             UserName = email,
             Email = email,
             FullName = fullName,
+            ClubId = clubId,
             EmailConfirmed = true
         };
         var result = await _users.CreateAsync(user, req.Password);
         if (!result.Succeeded)
             return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
 
-        await _users.AddToRoleAsync(user, Roles.Trainer);
+        await _users.AddToRoleAsync(user, role);
 
-        var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
+        var (token, expiresAt, rolesOut) = await _tokens.CreateTokenAsync(user);
+        var clubNameOut = clubId.HasValue ? (await _db.Clubs.FindAsync(clubId.Value))?.Name : null;
         return new AuthResponse(token, expiresAt,
-            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, null, roles.ToList()));
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, clubNameOut, rolesOut.ToList()));
     }
 
     private static string Sanitise(string s)
