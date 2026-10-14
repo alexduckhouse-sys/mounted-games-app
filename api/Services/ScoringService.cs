@@ -76,10 +76,6 @@ public class ScoringService
         // clock; only fill in if neither was set.
         if (race.StartedAt is null) race.StartedAt = now;
         if (race.FinishedAt is null) race.FinishedAt = now;
-        // Any pending steward calls for this race are resolved by the result —
-        // wipe them so they don't reappear next time admin opens the race.
-        var pending = await _db.StewardCalls.Where(c => c.RaceId == raceId).ToListAsync();
-        if (pending.Count > 0) _db.StewardCalls.RemoveRange(pending);
         await _db.SaveChangesAsync();
 
         return fresh;

@@ -344,19 +344,6 @@ export interface SavedRider {
   notes?: string | null;
 }
 
-export interface StewardCall {
-  id: number;
-  raceId: number;
-  heatId: number;
-  competitionId: number;
-  teamId: number;
-  teamName: string;
-  teamBibColour?: string | null;
-  laneIndex: number;
-  reporterName?: string | null;
-  createdAt: string;
-}
-
 export interface TrainerNote {
   id: number;
   userId: string;

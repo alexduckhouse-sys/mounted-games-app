@@ -44,10 +44,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!auth) return;
-    api.get('/auth/me').catch(() => {
-      setAuth(null);
-      writeStoredAuth(null);
+    let cancelled = false;
+    api.get('/auth/me').catch((error: { response?: { status?: number } }) => {
+      // A dropped connection does not mean the saved login is invalid.
+      if (!cancelled && error.response?.status === 401) {
+        setAuth(null);
+        writeStoredAuth(null);
+      }
     });
+    return () => { cancelled = true; };
   }, [auth?.token]);
 
   const login = useCallback(async (email: string, password: string) => {

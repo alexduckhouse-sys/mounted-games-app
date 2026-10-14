@@ -109,14 +109,6 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 - **One stream per competition** (`Competition.StreamUrl`). YouTube and Twitch are auto-embedded; other URLs link out.
 - Admins set/clear the stream from the chat tab's sidebar; viewers see it embedded above the chat.
 
-## Steward mode
-- Public/anonymous **`/competitions/:id/steward`** page so volunteer stewards can report eliminations from a phone.
-- Steward picks the lane they're watching (1..heatSize). The page resolves which team is currently in that lane for the active race using the same `displayLaneFor` rotation as the scoring screen, then offers one big **Mark ELIMINATED** button.
-- Reports are stored as `StewardCall` rows (RaceId + TeamId + LaneIndex + ReporterName + IpAddress). Endpoint `POST /api/races/:rid/steward-calls` is anonymous; IP-blocked addresses are rejected, and a per-IP+team+race rate-limit prevents spam (one call per minute).
-- Admin's scoring screen (SessionPage) subscribes via SignalR and renders a `StewardCallBanner` above the scoring tiles for the active race. Each pending call has **Apply elim** (toggles the team into the pending placings as eliminated and dismisses the call) and a dismiss-only button. Live events: `stewardCall`, `stewardCallResolved`.
-- When admin submits a race result, all pending calls for that race are auto-purged by `ScoringService.ApplyRaceResultsAsync` so they don't reappear on next view.
-- Stewards see the live list of pending calls below their report button for transparency.
-
 ## Chat moderation
 - Admins click any chat message to reveal Delete and **Block IP** buttons. Block IP uses the IP captured when the message was posted (`ChatMessage.IpAddress`) and adds it to `IpBlocks`. System messages and old messages without a recorded IP can't be blocked.
 - Deletion broadcasts via the SignalR `chatMessageDeleted` event so other clients drop the message live.

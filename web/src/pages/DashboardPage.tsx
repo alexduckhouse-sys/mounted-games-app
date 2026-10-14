@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Trophy, Users, ClipboardList, Timer,
-  Sparkles, MessagesSquare, Flag, Radio, Info, CreditCard, ShoppingBag,
+  Sparkles, MessagesSquare, Flag, Radio, Info, CreditCard,
 } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
@@ -16,14 +16,13 @@ const globalCards: GlobalCard[] = [
   { to: '/teams', label: 'My Teams', icon: Users, accent: 'from-sky-400 to-sky-600', needsAuth: true },
   { to: '/declarations', label: 'Dec Forms', icon: ClipboardList, accent: 'from-violet-400 to-violet-600', needsAuth: true },
   { to: '/me/signups', label: 'My Signups', icon: CreditCard, accent: 'from-emerald-400 to-emerald-600', needsAuth: true, hideForAdmin: true },
-  { to: '/shop', label: 'Shop', icon: ShoppingBag, accent: 'from-amber-400 to-amber-600' },
   { to: '/chat', label: 'Live Feed', icon: MessagesSquare, accent: 'from-rose-400 to-rose-600' },
 ];
 
 type SectionCard = { sub: string; label: string; icon: typeof Trophy; accent: string };
 const competitionSections: SectionCard[] = [
   { sub: '', label: 'Timetable', icon: Timer, accent: 'from-emerald-400 to-emerald-600' },
-  { sub: 'scoring', label: 'Scoring · Toplist', icon: Flag, accent: 'from-amber-400 to-amber-600' },
+  { sub: 'scoring', label: 'Section', icon: Flag, accent: 'from-amber-400 to-amber-600' },
   { sub: 'chat', label: 'Live Feed · Stream', icon: Radio, accent: 'from-rose-400 to-rose-600' },
   { sub: 'details', label: 'Details', icon: Info, accent: 'from-slate-400 to-slate-600' },
 ];

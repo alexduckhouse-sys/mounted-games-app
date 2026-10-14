@@ -11,7 +11,7 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Mounted Games — Live',
@@ -29,6 +29,8 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // Admin tools need a connection; don't download them for every spectator.
+        globIgnores: ['**/CompetitionEditor-*.js', '**/FormatPage-*.js', '**/RulesPage-*.js', '**/AdminPage-*.js'],
       },
       devOptions: {
         enabled: true,

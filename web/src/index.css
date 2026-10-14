@@ -71,3 +71,20 @@ body {
 [data-theme="dark"] .text-slate-500 { color: #cbd5e1 !important; }
 [data-theme="dark"] .text-slate-400 { color: #cbd5e1 !important; }
 [data-theme="dark"] .text-slate-600 { color: #e2e8f0 !important; }
+
+/* Navigation follows the palette without changing status colours in the arena. */
+:root { --navigation-colour: #2f634d; }
+[data-theme="dark"] { --navigation-colour: #475569; }
+[data-theme="ocean"] { --navigation-colour: #0369a1; }
+[data-theme="sunset"] { --navigation-colour: #c2410c; }
+.navigation-selected {
+  background-color: var(--navigation-colour) !important;
+  color: #fff !important;
+}
+nav a, nav a:hover, nav a:focus, nav a:visited {
+  text-decoration: none;
+}
+nav a:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--navigation-colour);
+  outline-offset: 2px;
+}

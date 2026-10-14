@@ -44,6 +44,7 @@ const baseURL = import.meta.env.VITE_API_BASE ?? '/api';
 export const api: AxiosInstance = axios.create({ baseURL });
 
 api.interceptors.request.use((config) => {
+  if (config.method?.toLowerCase() === 'get' && !config.timeout) config.timeout = 15_000;
   const token = readToken();
   if (token) {
     config.headers = config.headers ?? {};

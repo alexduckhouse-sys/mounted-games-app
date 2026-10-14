@@ -1,59 +1,50 @@
 /// <reference lib="webworker" />
-import { precacheAndRoute } from 'workbox-precaching';
-import { registerRoute } from 'workbox-routing';
+import { createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
+import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { NetworkFirst, NetworkOnly } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
-import { CacheableResponsePlugin } from 'workbox-cacheable-response';
+import { canCachePublicApi, markSavedResponse, stampPublicResponse } from './offline/cachePolicy';
 
 declare const self: ServiceWorkerGlobalScope;
 
 // Precache the app shell — emitted by vite-plugin-pwa at build time.
 precacheAndRoute(self.__WB_MANIFEST);
 
-// User-generated / mutation-heavy endpoints must NEVER be cached — a 24h
-// cached list would mask a freshly-posted shop entry or new signup so it
-// looks like the POST silently failed. NetworkOnly for these.
-const NETWORK_ONLY_PREFIXES = [
-  '/api/shop/',
-  '/api/signups',
-  '/api/competitions/',  // catches /signups, /signups-locked, /form-teams etc.
-  '/api/me/',
-  '/api/declaration-forms',
-  '/api/push/',
-  '/api/auth/',
-  '/api/ip-blocks',
-  '/api/teams/',
-  '/api/team-supporters/',
-  '/api/trainer/',
-] as const;
-function isNetworkOnly(pathname: string): boolean {
-  return NETWORK_ONLY_PREFIXES.some((p) => pathname.startsWith(p));
+// A saved app shell must also serve direct links opened without a connection.
+if (import.meta.env.PROD) {
+  registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), {
+    denylist: [/^\/api(?:\/|$)/, /^\/hubs(?:\/|$)/],
+  }));
 }
 
 registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/') && isNetworkOnly(url.pathname),
-  new NetworkOnly(),
-);
-
-// Other API responses (race templates, weather, clubs, geocode) cached for
-// offline viewing — these change rarely and tolerate staleness.
-registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/') && !isNetworkOnly(url.pathname),
+  ({ url, request }) => url.origin === self.location.origin && canCachePublicApi(url.pathname, request.method),
   new NetworkFirst({
-    cacheName: 'mg-api',
-    networkTimeoutSeconds: 4,
+    cacheName: 'mg-public-api-v2',
+    networkTimeoutSeconds: 3,
     plugins: [
-      new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 }),
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      {
+        cacheWillUpdate: async ({ response }: { response: Response }) => stampPublicResponse(response),
+        cachedResponseWillBeUsed: async ({ cachedResponse }: { cachedResponse?: Response }) => markSavedResponse(cachedResponse),
+      },
+      new ExpirationPlugin({ maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 }),
     ],
   }),
 );
 
-// SignalR is realtime — don't try to cache it.
-registerRoute(({ url }) => url.pathname.startsWith('/hubs/'), new NetworkOnly());
+// Account data, forms and writes always go to the server.
+registerRoute(({ url }) => url.pathname.startsWith('/api/') || url.pathname.startsWith('/hubs/'), new NetworkOnly());
 
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    await caches.delete('mg-api');
+    await self.clients.claim();
+  })());
+});
+// Allow the existing refresh prompt to activate a waiting update.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting();
+});
 
 interface PushPayload {
   title?: string;

@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "test": "node --test tests/*.test.mjs",
+    "preview": "vite preview",
+    "test:coverage:unit": "node scripts/unit-coverage.mjs"
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.0",

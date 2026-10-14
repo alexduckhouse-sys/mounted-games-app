@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import {
@@ -7,9 +7,8 @@ import {
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import { useLiveHub } from '../../live/useLiveHub';
 import { ForecastBadge } from '../../components/ForecastBadge';
-import type { DeclarationForm, Heat, HeatEntry, Race, Session, StewardCall } from '../../types';
+import type { DeclarationForm, Heat, HeatEntry, Race, Session } from '../../types';
 import { SessionEndTransition } from './SessionEndTransition';
 import { bibAccent } from '../../lib/bib';
 import { displaySectionName } from '../../lib/section';
@@ -53,6 +52,8 @@ function heatIsComplete(heat: Heat): boolean {
 
 export function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const [searchParams] = useSearchParams();
+  const requestedHeat = Number(searchParams.get('heat'));
   const sid = sessionId ? parseInt(sessionId, 10) : null;
   const { competition, reload } = useCompetition();
   const { canEdit } = useAuth();
@@ -77,7 +78,7 @@ export function SessionPage() {
     [orderedHeats]
   );
 
-  const [activeHeatId, setActiveHeatId] = useState<number | null>(firstIncompleteHeatId);
+  const [activeHeatId, setActiveHeatId] = useState<number | null>(() => orderedHeats.find((heat) => heat.id === requestedHeat)?.id ?? firstIncompleteHeatId);
   const [activeRaceId, setActiveRaceId] = useState<number | null>(null);
   const [pending, setPending] = useState<PendingPlace[]>([]);
 
@@ -106,29 +107,12 @@ export function SessionPage() {
     } catch { /* quota */ }
   }, [scoringDraftKey, pending]);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
   const [showLaneView, setShowLaneView] = useState(false);
   const [decForms, setDecForms] = useState<DeclarationForm[]>([]);
-  const [stewardCalls, setStewardCalls] = useState<StewardCall[]>([]);
-
-  useEffect(() => {
-    if (!session) return;
-    api.get<StewardCall[]>(`/competitions/${session.competitionId}/steward-calls`)
-      .then((r) => setStewardCalls(r.data))
-      .catch(() => setStewardCalls([]));
-  }, [session]);
-
-  useLiveHub(session?.competitionId ?? null, {
-    onStewardCall: (c) => {
-      const call = c as StewardCall;
-      setStewardCalls((cur) => cur.some((x) => x.id === call.id) ? cur : [call, ...cur]);
-    },
-    onStewardCallResolved: ({ id }) => {
-      setStewardCalls((cur) => cur.filter((x) => x.id !== id));
-    },
-  });
 
   useEffect(() => {
     if (!session) return;
@@ -268,14 +252,17 @@ export function SessionPage() {
   async function submit() {
     if (!activeRace || !activeHeat || !session) return;
     setSaving(true);
+    setSaveError(null);
     try {
-      await api.post<Heat>(`/races/${activeRace.id}/results`, { places: pending });
+      await api.post<Heat>(`/races/${activeRace.id}/results`, { places: pending }, { timeout: 15_000 });
       setPending([]);
       reload();
       const nextRace = orderedRaces.find((r) => !r.isComplete && r.id !== activeRace.id);
       if (nextRace) {
         setActiveRaceId(nextRace.id);
       }
+    } catch {
+      setSaveError('Couldn’t confirm the save. Your placings are still here. Check the results when your connection returns before trying again.');
     } finally {
       setSaving(false);
     }
@@ -314,6 +301,7 @@ export function SessionPage() {
         <NextUpCard heat={nextUpHeat} decFormByTeamId={decFormByTeamId} />
       )}
 
+      {saveError && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{saveError}</p>}
       {canEdit() ? (
         <>
           <HeatTabs
@@ -322,21 +310,6 @@ export function SessionPage() {
             activeHeatId={activeHeatId}
             onSelect={(id) => { setActiveHeatId(id); setPending([]); }}
           />
-
-          {activeHeat && activeRace && (
-            <StewardCallBanner
-              calls={stewardCalls.filter((c) => c.raceId === activeRace.id)}
-              onApply={(call) => {
-                toggleElim(call.teamId);
-                api.delete(`/steward-calls/${call.id}`).catch(() => {});
-                setStewardCalls((cur) => cur.filter((x) => x.id !== call.id));
-              }}
-              onDismiss={(call) => {
-                api.delete(`/steward-calls/${call.id}`).catch(() => {});
-                setStewardCalls((cur) => cur.filter((x) => x.id !== call.id));
-              }}
-            />
-          )}
 
           {activeHeat ? (
             <ScoringSection
@@ -1432,51 +1405,5 @@ function RaceClock({ race }: { race: Race }) {
         </button>
       )}
     </span>
-  );
-}
-
-function StewardCallBanner({
-  calls, onApply, onDismiss,
-}: {
-  calls: StewardCall[];
-  onApply: (c: StewardCall) => void;
-  onDismiss: (c: StewardCall) => void;
-}) {
-  if (calls.length === 0) return null;
-  return (
-    <motion.div
-      initial={{ y: -4, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-      className="rounded-lg border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 p-2 space-y-1.5"
-    >
-      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-amber-900 dark:text-amber-100 font-bold">
-        <AlertTriangle className="w-3.5 h-3.5" />
-        Steward calls — {calls.length} pending
-      </div>
-      <ul className="space-y-1">
-        {calls.map((c) => (
-          <li key={c.id} className="flex items-center gap-1.5 text-xs">
-            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: bibAccent(c.teamBibColour) }} />
-            <span className="font-semibold truncate flex-1 min-w-0">{c.teamName}</span>
-            <span className="text-[10px] text-amber-700 dark:text-amber-200 shrink-0">
-              lane {c.laneIndex}{c.reporterName ? ` · ${c.reporterName}` : ''}
-            </span>
-            <button
-              onClick={() => onApply(c)}
-              className="btn-primary !py-0.5 !px-2 text-[11px]"
-              title="Mark this team eliminated in the current race"
-            >
-              Apply elim
-            </button>
-            <button
-              onClick={() => onDismiss(c)}
-              className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-slate-500"
-              title="Ignore this steward call"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </li>
-        ))}
-      </ul>
-    </motion.div>
   );
 }

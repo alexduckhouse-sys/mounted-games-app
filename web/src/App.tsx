@@ -1,3 +1,5 @@
+import { lazy, Suspense } from 'react';
+import { PageLoadBoundary } from './components/PageLoadBoundary';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -5,29 +7,29 @@ import { CurrentCompetitionProvider } from './competition/CurrentCompetitionCont
 import { NavExtrasProvider } from './components/NavExtrasContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppShell } from './components/AppShell';
-import { LoginPage } from './pages/LoginPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { CompetitionsPage } from './pages/CompetitionsPage';
+import { StartPage } from './pages/StartPage';
 import { CompetitionPage } from './pages/CompetitionPage';
 import { SessionsTab } from './pages/competition/SessionsTab';
-import { ScoringTab } from './pages/competition/ScoringTab';
-import { SessionPage } from './pages/competition/SessionPage';
-import { TeamsTab } from './pages/competition/TeamsTab';
-import { DeclarationsTab } from './pages/competition/DeclarationsTab';
-import { ChatTab } from './pages/competition/ChatTab';
-import { DetailsTab } from './pages/competition/DetailsTab';
-import { MyTeamsPage } from './pages/MyTeamsPage';
-import { DeclarationsIndexPage } from './pages/DeclarationsIndexPage';
-import { ChatIndexPage } from './pages/ChatIndexPage';
-import { AdminPage } from './pages/AdminPage';
-import { CompetitionEditor } from './pages/admin/CompetitionEditor';
-import { FormatPage } from './pages/admin/FormatPage';
-import { RulesPage } from './pages/admin/RulesPage';
-import { ArenaPage } from './pages/competition/ArenaPage';
-import { StewardPage } from './pages/competition/StewardPage';
-import { ShopPage } from './pages/ShopPage';
-import { MySignupsPage } from './pages/MySignupsPage';
 import './App.css';
+
+const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })));
+const CompetitionsPage = lazy(() => import('./pages/CompetitionsPage').then((module) => ({ default: module.CompetitionsPage })));
+const ScoringTab = lazy(() => import('./pages/competition/ScoringTab').then((module) => ({ default: module.ScoringTab })));
+const SessionPage = lazy(() => import('./pages/competition/SessionPage').then((module) => ({ default: module.SessionPage })));
+const TeamsTab = lazy(() => import('./pages/competition/TeamsTab').then((module) => ({ default: module.TeamsTab })));
+const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab').then((module) => ({ default: module.DeclarationsTab })));
+const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
+const DetailsTab = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.DetailsTab })));
+const MyTeamsPage = lazy(() => import('./pages/MyTeamsPage').then((module) => ({ default: module.MyTeamsPage })));
+const DeclarationsIndexPage = lazy(() => import('./pages/DeclarationsIndexPage').then((module) => ({ default: module.DeclarationsIndexPage })));
+const ChatIndexPage = lazy(() => import('./pages/ChatIndexPage').then((module) => ({ default: module.ChatIndexPage })));
+const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })));
+const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
+const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
+const RulesPage = lazy(() => import('./pages/admin/RulesPage').then((module) => ({ default: module.RulesPage })));
+const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
+const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 
 export default function App() {
   return (
@@ -36,17 +38,20 @@ export default function App() {
         <CurrentCompetitionProvider>
         <NavExtrasProvider>
         <BrowserRouter>
+          <PageLoadBoundary page="app">
+          <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<AppShell />}>
-              <Route index element={<DashboardPage />} />
+              <Route index element={<StartPage />} />
+              <Route path="dashboard" element={<DashboardPage />} />
               <Route path="competitions" element={<CompetitionsPage />} />
               <Route path="competitions/:id" element={<CompetitionPage />}>
                 <Route index element={<SessionsTab />} />
                 <Route path="scoring" element={<ScoringTab />} />
+                <Route path="toplists" element={<ScoringTab key="toplists" toplistOnly />} />
                 <Route path="session/:sessionId" element={<SessionPage />} />
                 <Route path="arena" element={<ArenaPage />} />
-                <Route path="steward" element={<StewardPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="teams" element={<TeamsTab />} />
                 <Route path="declarations" element={<DeclarationsTab />} />
@@ -59,7 +64,7 @@ export default function App() {
               } />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
               <Route path="chat" element={<ChatIndexPage />} />
-              <Route path="shop" element={<ShopPage />} />
+              <Route path="shop" element={<Navigate to="/" replace />} />
               <Route path="admin" element={
                 <ProtectedRoute roles={['Admin']}><AdminPage /></ProtectedRoute>
               } />
@@ -81,6 +86,8 @@ export default function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
+          </PageLoadBoundary>
         </BrowserRouter>
         </NavExtrasProvider>
         </CurrentCompetitionProvider>
