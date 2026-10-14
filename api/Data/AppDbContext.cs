@@ -24,7 +24,6 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<TrainerNote> TrainerNotes => Set<TrainerNote>();
     public DbSet<IpBlock> IpBlocks => Set<IpBlock>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
-    public DbSet<StewardCall> StewardCalls => Set<StewardCall>();
     public DbSet<TeamSupporter> TeamSupporters => Set<TeamSupporter>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<SectionSignup> SectionSignups => Set<SectionSignup>();
@@ -217,19 +216,6 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             e.Property(r => r.Name).HasMaxLength(150).IsRequired();
             e.HasIndex(r => r.Name).IsUnique();
-        });
-
-        b.Entity<StewardCall>(e =>
-        {
-            e.HasOne(c => c.Race)
-                .WithMany()
-                .HasForeignKey(c => c.RaceId)
-                .OnDelete(DeleteBehavior.Cascade);
-            e.HasOne(c => c.Team)
-                .WithMany()
-                .HasForeignKey(c => c.TeamId)
-                .OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(c => c.RaceId);
         });
 
         b.Entity<TeamSupporter>(e =>

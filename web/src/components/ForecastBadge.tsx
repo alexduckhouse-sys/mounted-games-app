@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Cloud, CloudRain, CloudSnow, Sun, CloudFog, CloudLightning } from 'lucide-react';
-import { api } from '../api';
+import { getWeather } from '../weather/weather';
 
 interface ForecastData {
   daily?: {
@@ -38,11 +38,12 @@ export function ForecastBadge({ lat, lon, date, className = '' }: Props) {
   const [data, setData] = useState<ForecastData | null>(null);
 
   useEffect(() => {
+    setData(null);
     if (lat == null || lon == null || !date) return;
     let cancelled = false;
     const day = new Date(date).toISOString().slice(0, 10);
-    api.get<ForecastData>('/weather/forecast', { params: { lat, lon, date: day } })
-      .then((r) => { if (!cancelled) setData(r.data); })
+    getWeather<ForecastData>('/weather/forecast', { lat, lon, date: day })
+      .then((r) => { if (!cancelled) setData(r); })
       .catch(() => { if (!cancelled) setData(null); });
     return () => { cancelled = true; };
   }, [lat, lon, date]);

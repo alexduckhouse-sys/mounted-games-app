@@ -7,7 +7,7 @@ scoring to post-event standings — on phones in a field.
 - **Frontend**: React + Vite + TypeScript + Tailwind + Framer Motion (`/web`),
   installable as a PWA with offline shell + 24h API cache.
 - **Backend**: ASP.NET Core 10 + EF Core + SQLite + SignalR + Identity/JWT (`/api`).
-- **Realtime**: SignalR powers chat, session status, scoring, steward calls.
+- **Realtime**: SignalR powers chat, session status, scoring.
 - **Push**: VAPID Web Push for background "your team's up" notifications.
 
 ## Who it's for
@@ -19,9 +19,7 @@ scoring to post-event standings — on phones in a field.
    key with parents, get a notification when their team is on deck.
 3. **Supporters** — anyone with a team's join key can follow that team's
    schedule and dec forms.
-4. **Stewards** — volunteers on a phone, anonymous, can mark eliminations
-   from the lane they're watching; admins confirm via banner before scoring.
-5. **Spectators** — public timetable, live scoring, chat, equipment list,
+4. **Spectators** — public timetable, live scoring, chat, equipment list,
    stream embed (YouTube / Twitch), shop / marketplace.
 
 ## v2 competition lifecycle
@@ -38,7 +36,7 @@ scoring to post-event standings — on phones in a field.
  │      b. Auto-bin paid signups into teams (Pony Club, A/B/C)             │
  │      c. Open editor wizard to pick sessions / races / lanes             │
  │      d. Heats are generated; equipment list auto-computes               │
- │ 5. Day-of: heat status, scoring, steward calls, live feed, weather.    │
+ │ 5. Day-of: heat status, scoring, live feed, weather.                   │
  │ 6. Finals: create-and-populate or scaffold-and-populate-from-standings.│
  └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -97,13 +95,6 @@ scoring to post-event standings — on phones in a field.
 - Bib colour, captain / reserve flags, DOB, horse name, optional notes.
 - CSV export.
 - "Submit dec form" CTA on the global `/declarations` page.
-
-### Steward mode
-- Public `/competitions/:id/steward` page — pick the lane you're watching;
-  one big "Mark ELIMINATED" button.
-- Reports queue as advisory `StewardCall` rows; admin's scoring screen
-  shows a banner with Apply / Dismiss.
-- IP-blocked and per-IP+team+race rate-limited.
 
 ### Race library
 - ~60 built-in PC Mounted Games races with rules text and drag-editable
@@ -169,6 +160,6 @@ scoring to post-event standings — on phones in a field.
 - The frontend talks to the API at `/api` (Vite dev-server proxy in
   development; same-origin in production).
 - All public endpoints respect the `IpBlocks` table.
-- New since v1: shop/, signups/, push subscriptions, steward calls,
+- New since v1: shop/, signups/, push subscriptions,
   supporter join keys, per-race timing clocks, multi-arena timetable,
   PWA, push notifications, equipment calculator.

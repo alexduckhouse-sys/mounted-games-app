@@ -28,13 +28,13 @@ function TimeChip({ scheduled, effective, shifted }: TimeChipProps) {
   );
 }
 
-export function ScoringTab() {
+export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const { competition, reload } = useCompetition();
   const { canEdit } = useAuth();
   const navigate = useNavigate();
   const firstSectionId = competition.sections[0]?.id ?? null;
   const [sectionId, setSectionId] = useState<number | null>(firstSectionId);
-  const [showToplist, setShowToplist] = useState(false);
+  const [showToplist, setShowToplist] = useState(toplistOnly);
   const [showFinals, setShowFinals] = useState(false);
 
   const raceSessions = useMemo(
@@ -47,37 +47,38 @@ export function ScoringTab() {
 
   const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
 
-  const [standings, setStandings] = useState<StandingRow[]>([]);
+  const [standingsResult, setStandingsResult] = useState<{ sectionId: number; rows: StandingRow[]; error: boolean; savedCopy: boolean } | null>(null);
+  const [retry, setRetry] = useState(0);
+  const standings = standingsResult?.sectionId === sectionId ? standingsResult.rows : [];
+  const standingsLoading = sectionId != null && standingsResult?.sectionId !== sectionId;
+  const standingsError = standingsResult?.sectionId === sectionId && standingsResult.error;
   useEffect(() => {
-    if (sectionId == null) { setStandings([]); return; }
+    if (sectionId == null) return;
+    let cancelled = false;
     api.get<StandingRow[]>(`/competitions/${competition.id}/standings`, { params: { sectionId } })
-      .then((r) => setStandings(r.data))
-      .catch(() => setStandings([]));
-  }, [competition.id, sectionId, competition.sessions]);
+      .then((r) => { if (!cancelled) setStandingsResult({ sectionId, rows: r.data, error: false, savedCopy: r.headers['x-mg-saved-copy'] === '1' }); })
+      .catch(() => { if (!cancelled) setStandingsResult({ sectionId, rows: [], error: true, savedCopy: false }); });
+    return () => { cancelled = true; };
+  }, [competition.id, sectionId, competition.sessions, retry]);
 
   return (
     <div className="space-y-3">
-      <div className="card p-1.5 flex overflow-x-auto gap-1 -mx-1 px-1 items-center">
-        {competition.sections.map((sec) => (
-          <button
-            key={sec.id}
-            onClick={() => setSectionId(sec.id)}
-            className={`whitespace-nowrap px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition ${
-              sectionId === sec.id
-                ? 'bg-brand-600 text-white shadow-soft'
-                : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800'
-            }`}
-          >
-            {sec.displayName}
-          </button>
-        ))}
+      <h1 className="text-xl font-bold">{toplistOnly ? 'Toplists' : 'Section'}</h1>
+      <div className="card flex flex-wrap items-end gap-3 p-3">
+        <label className="min-w-0 flex-1 basis-48 text-sm font-semibold">
+          Section
+          <select className="input mt-1 min-h-12 w-full" value={sectionId ?? ''} onChange={(e) => setSectionId(Number(e.target.value))} disabled={competition.sections.length === 0}>
+            {competition.sections.length === 0 && <option value="">No sections yet</option>}
+            {competition.sections.map((sec) => <option key={sec.id} value={sec.id}>{sec.displayName}</option>)}
+          </select>
+        </label>
         <div className="ml-auto flex gap-1">
-          <button
+          {!toplistOnly && <button
             onClick={() => setShowToplist((v) => !v)}
             className={`btn-ghost !py-1.5 !px-2.5 text-xs ${showToplist ? 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-200' : ''}`}
           >
             <Trophy className="w-3.5 h-3.5" /> Toplist
-          </button>
+          </button>}
           {canEdit() && sectionId != null && (
             <button onClick={() => setShowFinals(true)} className="btn-primary !py-1.5 !px-2.5 text-xs">
               <Sparkles className="w-3.5 h-3.5" /> Create finals
@@ -87,7 +88,7 @@ export function ScoringTab() {
       </div>
 
       <AnimatePresence initial={false}>
-        {showToplist && (
+        {(toplistOnly || showToplist) && (
           <motion.div
             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
@@ -97,14 +98,17 @@ export function ScoringTab() {
                 Toplist · {competition.sections.find((s) => s.id === sectionId)?.displayName ?? '—'}
               </div>
               {sectionId == null && <p className="text-slate-500 text-xs">Pick a section.</p>}
-              {sectionId != null && standings.length === 0 && <p className="text-slate-500 text-xs">No results yet.</p>}
+              {standingsResult?.sectionId === sectionId && standingsResult.savedCopy && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Showing saved results. Positions may have changed.</p>}
+              {standingsLoading && <p role="status" className="p-3 text-sm text-slate-500">Loading results…</p>}
+              {standingsError && <div role="alert" className="space-y-2 p-3 text-sm"><p>Couldn’t load results. Check your connection and try again.</p><button className="btn-ghost min-h-11" onClick={() => { setStandingsResult(null); setRetry((n) => n + 1); }}>Try again</button></div>}
+              {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="p-3 text-sm text-slate-500">No results yet.</p>}
               <ol className="divide-y divide-slate-100 dark:divide-slate-700">
                 {standings.map((r, idx) => (
-                  <li key={r.teamId} className="flex items-center gap-2 px-1.5 py-1">
+                  <li key={r.teamId} className="flex min-h-12 items-center gap-3 px-3 py-2">
                     <span className="w-5 text-right shrink-0 font-mono font-bold text-brand-700 dark:text-brand-200 text-xs tabular-nums">
                       {idx + 1}
                     </span>
-                    <div className="flex-1 min-w-0 text-xs truncate">{r.teamName}</div>
+                    <div className="min-w-0 flex-1 break-words text-sm">{r.teamName}</div>
                     <div className="font-mono text-sm font-bold text-brand-700 dark:text-brand-200 tabular-nums">
                       {r.totalPoints}
                     </div>
@@ -116,11 +120,11 @@ export function ScoringTab() {
         )}
       </AnimatePresence>
 
-      {raceSessions.length === 0 && (
+      {!toplistOnly && raceSessions.length === 0 && (
         <p className="text-slate-500 dark:text-slate-300 text-sm">No race sessions in this section.</p>
       )}
 
-      <div className="space-y-1.5">
+      {!toplistOnly && <div className="space-y-1.5">
         {raceSessions.map((s, si) => {
           const t = timings.get(s.id);
           const heats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
@@ -188,7 +192,7 @@ export function ScoringTab() {
             </div>
           );
         })}
-      </div>
+      </div>}
 
       <AnimatePresence>
         {showFinals && sectionId != null && (

@@ -197,8 +197,8 @@ export function FormatPage() {
           <h2 className="font-semibold text-base">Ready to run</h2>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-300">
-          Trainers can submit dec forms for their formed teams, stewards can mark eliminations
-          from their phones, and the live scoring screen is ready for the day.
+          Trainers can submit dec forms for their formed teams, and the live scoring screen
+          is ready for the day.
         </p>
         <div className="flex items-center gap-2 flex-wrap">
           <Link to={`/competitions/${comp.id}`} className="btn-ghost !py-1 !px-2 text-xs">

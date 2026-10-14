@@ -136,13 +136,4 @@ public static class Mappings
 
     public static TrainerNoteDto ToDto(this TrainerNote n) =>
         new(n.Id, n.UserId, n.Title, n.Body, n.CreatedAt, n.UpdatedAt);
-
-    public static StewardCallDto ToDto(this StewardCall c) => new(
-        c.Id, c.RaceId,
-        c.Race?.HeatId ?? 0,
-        c.Race?.Heat?.Session?.CompetitionId ?? 0,
-        c.TeamId,
-        c.Team?.DisplayName ?? string.Empty,
-        c.Team?.BibColour,
-        c.LaneIndex, c.ReporterName, c.CreatedAt);
 }

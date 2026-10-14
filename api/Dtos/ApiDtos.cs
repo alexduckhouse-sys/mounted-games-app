@@ -282,12 +282,6 @@ public record SaveTrainerNoteRequest(string? Title, string Body);
 public record IpBlockDto(int Id, string IpAddress, string? Reason, string? CreatedByUserId, DateTime CreatedAt);
 public record CreateIpBlockRequest(string IpAddress, string? Reason);
 
-public record StewardCallDto(
-    int Id, int RaceId, int HeatId, int CompetitionId,
-    int TeamId, string TeamName, string? TeamBibColour,
-    int LaneIndex, string? ReporterName, DateTime CreatedAt);
-public record CreateStewardCallRequest(int TeamId, int LaneIndex, string? ReporterName);
-
 public record TeamSupporterDto(
     int Id, int TeamId, string TeamName,
     string UserId, string UserName, string? UserEmail,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Cloud, CloudRain, CloudSnow, Sun, CloudFog, CloudLightning, Moon } from 'lucide-react';
-import { api } from '../api';
+import { getWeather } from '../weather/weather';
+import { forecastHour, WEATHER_REFRESH_MS } from '../weather/requestCache';
 
 interface AtResponse {
   hour?: string;
@@ -35,13 +36,14 @@ export function WeatherAt({
   className?: string;
 }) {
   const [data, setData] = useState<AtResponse | null>(null);
-  const iso = when ? (when instanceof Date ? when.toISOString() : when) : null;
+  const iso = when ? forecastHour(when) : null;
 
   useEffect(() => {
+    setData(null);
     if (lat == null || lon == null || !iso) return;
     let cancelled = false;
-    api.get<AtResponse>('/weather/at', { params: { lat, lon, when: iso } })
-      .then((r) => { if (!cancelled) setData(r.data); })
+    getWeather<AtResponse>('/weather/at', { lat, lon, when: iso })
+      .then((r) => { if (!cancelled) setData(r); })
       .catch(() => { if (!cancelled) setData(null); });
     return () => { cancelled = true; };
   }, [lat, lon, iso]);
@@ -62,7 +64,7 @@ export function WeatherAt({
   );
 }
 
-/** Current-conditions chip — refreshes every 15 minutes. */
+/** Current-conditions chip — refreshes every 30 minutes. */
 export function WeatherNow({
   lat, lon, className = '',
 }: {
@@ -73,15 +75,17 @@ export function WeatherNow({
   const [data, setData] = useState<CurrentResponse | null>(null);
 
   useEffect(() => {
+    setData(null);
     if (lat == null || lon == null) return;
     let cancelled = false;
     function pull() {
-      api.get<CurrentResponse>('/weather/current', { params: { lat, lon } })
-        .then((r) => { if (!cancelled) setData(r.data); })
+      if (!navigator.onLine || document.visibilityState !== 'visible') return;
+      getWeather<CurrentResponse>('/weather/current', { lat: lat!, lon: lon! })
+        .then((r) => { if (!cancelled) setData(r); })
         .catch(() => { if (!cancelled) setData(null); });
     }
     pull();
-    const i = setInterval(pull, 15 * 60_000);
+    const i = setInterval(pull, WEATHER_REFRESH_MS);
     return () => { cancelled = true; clearInterval(i); };
   }, [lat, lon]);
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, Outlet } from 'react-router-dom';
+import { Link, useParams, Outlet } from 'react-router-dom';
 import { api } from '../api';
 import type { CompetitionDetail, Session, Heat } from '../types';
 import { useLiveHub } from '../live/useLiveHub';
@@ -9,20 +9,41 @@ import { useNavExtras } from '../components/NavExtrasContext';
 
 export function CompetitionPage() {
   const { id } = useParams<{ id: string }>();
-  const competitionId = id ? parseInt(id, 10) : null;
+  const competitionId = id ? Number(id) : null;
+  if (competitionId == null || !Number.isSafeInteger(competitionId) || competitionId < 1) {
+    return <Link to="/competitions">Select a competition</Link>;
+  }
+  return <CompetitionContent key={competitionId} competitionId={competitionId} />;
+}
+
+function CompetitionContent({ competitionId }: { competitionId: number }) {
+  const [error, setError] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<CompetitionDetail | null>(null);
-  const { setCurrent } = useCurrentCompetition();
+  const { setCurrent, setVenue } = useCurrentCompetition();
 
-  const load = useCallback(() => {
-    if (competitionId == null) return;
-    api.get<CompetitionDetail>(`/competitions/${competitionId}`).then((r) => setData(r.data));
-  }, [competitionId]);
-
-  useEffect(load, [load]);
+  const load = useCallback(() => setAttempt((n) => n + 1), []);
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    setError(false);
+    api.get<CompetitionDetail>(`/competitions/${competitionId}`, { signal: controller.signal })
+      .then((r) => {
+        if (cancelled) return;
+        setData(r.data);
+        setSavedAt(r.headers['x-mg-saved-copy'] === '1' ? String(r.headers['x-mg-saved-at'] ?? '') : null);
+      })
+      .catch(() => { if (!cancelled) setError(true); });
+    return () => { cancelled = true; controller.abort(); };
+  }, [competitionId, attempt]);
 
   useEffect(() => {
-    if (data) setCurrent({ id: data.id, name: data.name });
-  }, [data, setCurrent]);
+    if (data) {
+      setCurrent({ id: data.id, name: data.name });
+      setVenue(data.latitude != null && data.longitude != null ? { competitionId: data.id, lat: data.latitude, lon: data.longitude } : null);
+    }
+  }, [data, setCurrent, setVenue]);
 
   const { setExtras, clear } = useNavExtras();
   useEffect(() => {
@@ -30,7 +51,8 @@ export function CompetitionPage() {
     return () => clear();
   }, [competitionId, setExtras, clear]);
 
-  useLiveHub(competitionId, {
+  const { connected } = useLiveHub(competitionId, {
+    onReady: load,
     onSessionUpdated: (s) => {
       const updated = s as Session;
       setData((cur) => {
@@ -53,11 +75,42 @@ export function CompetitionPage() {
     },
   });
 
-  if (!data || competitionId == null) return <p className="text-slate-500">Loading competition…</p>;
+  useEffect(() => {
+    function refresh() { if (navigator.onLine && document.visibilityState === 'visible') load(); }
+    window.addEventListener('online', refresh);
+    navigator.serviceWorker?.addEventListener('controllerchange', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    const timer = !connected ? setInterval(refresh, 30_000) : undefined;
+    return () => {
+      window.removeEventListener('online', refresh);
+      navigator.serviceWorker?.removeEventListener('controllerchange', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+      if (timer !== undefined) clearInterval(timer);
+    };
+  }, [connected, load]);
+
+  if (error && !data) return (
+    <div className="card space-y-3 p-4" role="alert">
+      <p>Couldn’t load this competition. Check your connection or choose another event.</p>
+      <div className="flex flex-wrap gap-2">
+        <button className="btn-primary min-h-11" onClick={load}>Try again</button>
+        <Link className="btn-ghost min-h-11" to="/competitions">Choose another competition</Link>
+      </div>
+    </div>
+  );
+  if (!data) return <p className="text-slate-500">Loading competition…</p>;
 
   return (
     <CompetitionContext.Provider value={{ competition: data, reload: load }}>
       <div className="space-y-3">
+        {(savedAt !== null || error || !connected) && (
+          <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="flex-1">
+              {savedAt !== null ? `Showing a saved timetable${savedAt && !Number.isNaN(Date.parse(savedAt)) ? ` from ${new Date(savedAt).toLocaleString('en-GB')}` : ''}. Times and results may have changed.` : error ? 'Couldn’t refresh. Showing the last timetable received.' : 'Connecting to live updates. The timetable refreshes periodically while this page is open.'}
+            </p>
+            <button className="btn-ghost min-h-11" onClick={load}>Refresh</button>
+          </div>
+        )}
         <Outlet />
       </div>
     </CompetitionContext.Provider>

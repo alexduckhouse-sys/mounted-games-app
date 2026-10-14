@@ -40,20 +40,6 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Heats", "RaceRoundStage", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "RunoffRaceName", "TEXT NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "UsesRaceFinals", "INTEGER NOT NULL DEFAULT 0");
-        await db.Database.ExecuteSqlRawAsync(@"
-            CREATE TABLE IF NOT EXISTS ""StewardCalls"" (
-                ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_StewardCalls"" PRIMARY KEY AUTOINCREMENT,
-                ""RaceId"" INTEGER NOT NULL,
-                ""TeamId"" INTEGER NOT NULL,
-                ""LaneIndex"" INTEGER NOT NULL DEFAULT 0,
-                ""ReporterName"" TEXT NULL,
-                ""IpAddress"" TEXT NULL,
-                ""CreatedAt"" TEXT NOT NULL DEFAULT (datetime('now')),
-                CONSTRAINT ""FK_StewardCalls_Races_RaceId"" FOREIGN KEY (""RaceId"") REFERENCES ""Races"" (""Id"") ON DELETE CASCADE,
-                CONSTRAINT ""FK_StewardCalls_Teams_TeamId"" FOREIGN KEY (""TeamId"") REFERENCES ""Teams"" (""Id"") ON DELETE CASCADE
-            );
-            CREATE INDEX IF NOT EXISTS ""IX_StewardCalls_RaceId"" ON ""StewardCalls"" (""RaceId"");
-        ");
         await EnsureColumnAsync(db, "Teams", "SupporterJoinKey", "TEXT NULL");
         await db.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS ""TeamSupporters"" (
