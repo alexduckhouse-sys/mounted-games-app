@@ -11,6 +11,12 @@ test('writes never use cached public responses', () => {
   for (const method of ['POST', 'PUT', 'DELETE', 'PATCH']) assert.equal(canCachePublicApi('/api/competitions/42', method), false);
 });
 
+test('the lightweight picker is cacheable but its writes and unrelated routes are not', () => {
+  assert.equal(canCachePublicApi('/api/competitions/picker'), true);
+  assert.equal(canCachePublicApi('/api/competitions/picker', 'POST'), false);
+  assert.equal(canCachePublicApi('/api/competitions/picker/private'), false);
+});
+
 test('saved responses carry a timestamp and a saved-copy marker without changing the live response', async () => {
   const original = Response.json({ name: 'Example competition' });
   const stored = await stampPublicResponse(original);

@@ -10,12 +10,13 @@ using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+var migrateDatabase = args.Contains("--migrate-database");
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? "Data Source=mg.db";
 
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlite(connectionString));
+    DatabaseConfiguration.Configure(opt, builder.Configuration, migrateDatabase));
 
 builder.Services
     .AddIdentity<AppUser, IdentityRole>(o =>
@@ -99,6 +100,25 @@ builder.Services.AddSignalR();
 
 var app = builder.Build();
 
+if (args.Contains("--seed-review-competitions"))
+{
+    await DbInitializer.SeedAsync(app.Services);
+    using var scope = app.Services.CreateScope();
+    var count = await ReviewCompetitionSeeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), DateTime.UtcNow);
+    Console.WriteLine($"Created {count} demo competitions with sections, teams, timetables and sample results.");
+    return;
+}
+
+if (migrateDatabase)
+{
+    if (!DatabaseConfiguration.UsesPostgres(builder.Configuration))
+        throw new InvalidOperationException("The migration command requires PostgreSQL configuration.");
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    Console.WriteLine("PostgreSQL migrations applied successfully.");
+    return;
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -131,7 +151,8 @@ if (Directory.Exists(wwwroot))
 app.MapGet("/healthz", () => Results.Ok(new { ok = true })).AllowAnonymous();
 
 // Ensure the SQLite folder exists when the connection string points at /data/mg.db (Fly volume).
-EnsureSqliteFolderExists(connectionString);
+if (!DatabaseConfiguration.UsesPostgres(builder.Configuration))
+    EnsureSqliteFolderExists(connectionString);
 
 await DbInitializer.SeedAsync(app.Services);
 

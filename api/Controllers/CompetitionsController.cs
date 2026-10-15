@@ -75,6 +75,17 @@ public class CompetitionsController : ControllerBase
         return (null, null);
     }
 
+    [HttpGet("picker")]
+    [AllowAnonymous]
+    public async Task<ActionResult<CompetitionPickerPage>> Picker(
+        [FromQuery] bool past = false, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
+        CancellationToken ct = default)
+    {
+        if (page is < 1 or > 10000 || pageSize is < 1 or > 50)
+            return Problem(statusCode: 400, title: "Invalid page", detail: "Use a page from 1 to 10000 and a page size from 1 to 50.");
+        return await CompetitionPickerQuery.LoadAsync(_db, past, page, pageSize, DateTime.UtcNow.Date, ct);
+    }
+
     [HttpGet]
     public async Task<IEnumerable<CompetitionSummary>> List([FromQuery] bool includeArchived = false)
     {
@@ -91,6 +102,8 @@ public class CompetitionsController : ControllerBase
     public async Task<ActionResult<CompetitionDetail>> Get(int id)
     {
         var c = await _db.Competitions
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(c => c.Sections)
             .Include(c => c.Teams).ThenInclude(t => t.Club)
             .Include(c => c.Teams).ThenInclude(t => t.Section)
@@ -111,7 +124,7 @@ public class CompetitionsController : ControllerBase
             c.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
-            c.SignupsLocked);
+            c.SignupsLocked, c.Icon);
     }
 
     /// <summary>
@@ -151,6 +164,7 @@ public class CompetitionsController : ControllerBase
         var c = new Competition
         {
             Name = req.Name,
+            Icon = req.Icon ?? "flag",
             Location = req.Location,
             Description = req.Description,
             Latitude = lat,
@@ -178,6 +192,7 @@ public class CompetitionsController : ControllerBase
             .FirstOrDefaultAsync(c => c.Id == id);
         if (c is null) return NotFound();
         c.Name = req.Name;
+        if (req.Icon is not null) c.Icon = req.Icon;
         c.Location = req.Location;
         c.Description = req.Description;
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();

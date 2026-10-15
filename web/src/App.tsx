@@ -46,6 +46,7 @@ export default function App() {
               <Route index element={<StartPage />} />
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="competitions" element={<CompetitionsPage />} />
+              <Route path="competitions/past" element={<CompetitionsPage past />} />
               <Route path="competitions/:id" element={<CompetitionPage />}>
                 <Route index element={<SessionsTab />} />
                 <Route path="scoring" element={<ScoringTab />} />

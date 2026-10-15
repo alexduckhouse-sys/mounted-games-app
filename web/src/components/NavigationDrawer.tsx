@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Timer, Flag, Trophy, LogIn, LogOut, Radio, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard } from 'lucide-react';
+import { Timer, Flag, Trophy, LogIn, LogOut, Radio, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useNavExtras } from './NavExtrasContext';
@@ -48,6 +48,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
         <nav aria-label="Main navigation" className="space-y-1">
           {links.map((item) => <NavLink key={item.label} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => linkClass(isActive && (current !== null || item.to !== '/competitions'))}><item.icon className="h-5 w-5 shrink-0" />{item.label}</NavLink>)}
           <button onClick={onChangeCompetition} className={`${linkClass(false)} w-full text-left`}><ArrowLeftRight className="h-5 w-5 shrink-0" />Change competition</button>
+          <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => linkClass(isActive)}><History className="h-5 w-5 shrink-0" />Past competitions</NavLink>
         </nav>
         {(accountLinks.length > 0 || extras.length > 0) && (
           <nav aria-label="Account and management" className="mt-4 space-y-1 border-t border-slate-200 pt-4 dark:border-slate-700">

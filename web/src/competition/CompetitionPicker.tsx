@@ -1,90 +1,81 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { CalendarDays, ChevronRight, Search, Trophy, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CalendarDays, ChevronRight, X } from 'lucide-react';
 import { api } from '../api';
-import type { CompetitionSummary } from '../types';
+import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
+import { competitionIcon } from './icons';
 
-export function CompetitionPicker({ onClose }: { onClose?: () => void }) {
-  const headingId = useId();
-  const { current, setCurrent } = useCurrentCompetition();
-  const navigate = useNavigate();
-  const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
-  const [query, setQuery] = useState('');
-  const [includeArchived, setIncludeArchived] = useState(false);
+export function CompetitionPicker({ onClose, past = false }: { onClose?: () => void; past?: boolean }) {
   const [attempt, setAttempt] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [savedCopy, setSavedCopy] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
-    api.get<CompetitionSummary[]>('/competitions', { params: { includeArchived } })
-      .then(({ data, headers }) => { if (!cancelled) { setCompetitions(data); setSavedCopy(headers['x-mg-saved-copy'] === '1'); } })
-      .catch(() => { if (!cancelled) setError(true); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [includeArchived, attempt]);
-
   useEffect(() => {
     const refresh = () => setAttempt((n) => n + 1);
     window.addEventListener('online', refresh);
-    navigator.serviceWorker?.addEventListener('controllerchange', refresh);
     return () => {
       window.removeEventListener('online', refresh);
-      navigator.serviceWorker?.removeEventListener('controllerchange', refresh);
     };
   }, []);
+  return <CompetitionList key={`${past}-${attempt}`} past={past} onClose={onClose} onRetry={() => setAttempt((n) => n + 1)} />;
+}
 
-  const matches = competitions.filter((c) => `${c.name} ${c.location ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()))
-    .sort((a, b) => Number(b.isActive) - Number(a.isActive) || b.startDate.localeCompare(a.startDate));
+function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onRetry: () => void; past: boolean }) {
+  const headingId = useId();
+  const { current, setCurrent } = useCurrentCompetition();
+  const navigate = useNavigate();
+  const [page, setPage] = useState(1);
+  const [state, setState] = useState({ items: [] as CompetitionPickerItem[], page: 0, hasMore: false, error: false, savedCopy: false });
+  const loading = state.page !== page;
+  useEffect(() => {
+    const controller = new AbortController();
+    api.get<CompetitionPickerPage>('/competitions/picker', { params: { past, page }, signal: controller.signal })
+      .then(({ data, headers }) => {
+        if (controller.signal.aborted) return;
+        setState((previous) => ({
+          items: [...previous.items, ...data.items.filter((item) => !previous.items.some((existing) => existing.id === item.id))],
+          page, hasMore: data.hasMore, error: false,
+          savedCopy: previous.savedCopy || headers['x-mg-saved-copy'] === '1',
+        }));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setState((previous) => ({ ...previous, page, error: true }));
+      });
+    return () => controller.abort();
+  }, [past, page]);
+
+  const formatDate = (date: string) => new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   return (
-    <section className="mx-auto w-full max-w-lg space-y-4 p-1 sm:p-4" aria-labelledby={headingId}>
-      <div className="flex items-start gap-3">
-        <Trophy className="mt-1 h-7 w-7 shrink-0 text-brand-600" />
-        <div className="flex-1">
-          <h1 id={headingId} className="text-2xl font-bold">Select a competition</h1>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Choose the event you’re following to see its timetable.</p>
-        </div>
-        {onClose && <button onClick={onClose} className="btn-ghost min-h-11 min-w-11" aria-label="Close competition picker"><X className="h-5 w-5" /></button>}
+    <section className="mx-auto w-full max-w-lg space-y-4 py-2 sm:py-4" aria-labelledby={headingId}>
+      <div className="flex items-center gap-3">
+        <h1 id={headingId} className="flex-1 text-2xl font-bold tracking-tight">{past ? 'Past competitions' : 'Select a competition'}</h1>
+        {onClose && <button autoFocus onClick={onClose} className="btn-ghost min-h-11 min-w-11" aria-label="Close competition picker"><X className="h-5 w-5" /></button>}
       </div>
-      <label className="relative block">
-        <span className="sr-only">Search competitions</span>
-        <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-        <input autoFocus={!!onClose} className="input min-h-12 !pl-10" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or location" />
-      </label>
-      <label className="flex min-h-11 items-center gap-2 text-sm">
-        <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} /> Include archived competitions
-      </label>
-      {savedCopy && !loading && !error && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Showing a saved competition list. New events may be missing until your connection returns.</p>}
-      <div className="space-y-3" aria-live="polite">
-        {loading ? <p className="py-6 text-center text-slate-500">Loading competitions…</p> : error ? (
-          <div className="card p-4 space-y-3" role="alert">
-            <p>Couldn’t load competitions. Check your connection and try again.</p>
-            <button className="btn-primary min-h-11" onClick={() => setAttempt((n) => n + 1)}>Try again</button>
-          </div>
-        ) : matches.length === 0 ? <p className="card p-4">{query ? 'No competitions match your search.' : 'No competitions available yet.'}</p> : matches.map((c) => (
-          <button key={c.id} className="card flex w-full items-center gap-3 p-4 text-left hover:border-brand-500 focus-visible:outline-brand-500" onClick={() => {
-            setCurrent({ id: c.id, name: c.name });
-            navigate(`/competitions/${c.id}`);
-            onClose?.();
-          }}>
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="flex flex-wrap gap-2 text-xs font-semibold text-brand-700 dark:text-brand-300">
-                {c.isActive && !c.isArchived && <span>Live</span>}
-                {c.isArchived && <span>Archived</span>}
-                {current?.id === c.id && <span>Selected</span>}
-              </div>
-              <h2 className="break-words text-lg font-semibold">{c.name}</h2>
-              {c.location && <p className="text-sm text-slate-600 dark:text-slate-300">{c.location}</p>}
-              <p className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400"><CalendarDays className="h-4 w-4" />{new Date(c.startDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-            </div>
-            <ChevronRight className="h-5 w-5 shrink-0 text-brand-600" />
-          </button>
-        ))}
+      {state.savedCopy && !loading && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Showing a saved list. It will refresh when your connection returns.</p>}
+      <div className="space-y-3" aria-busy={loading}>
+        {state.items.map((competition) => {
+          const icon = competitionIcon(competition.icon);
+          const selected = current?.id === competition.id;
+          const endDate = competition.endDate ? formatDate(competition.endDate) : null;
+          const startDate = formatDate(competition.startDate);
+          return (
+            <button key={competition.id} aria-pressed={selected} className={`flex min-h-24 w-full items-center gap-4 rounded-2xl border p-4 text-left shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${selected ? 'border-brand-500 bg-brand-50 dark:bg-brand-900' : 'border-slate-200 bg-white hover:border-brand-400 hover:bg-brand-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800'}`} onClick={() => {
+              setCurrent({ id: competition.id, name: competition.name });
+              navigate(`/competitions/${competition.id}`);
+              onClose?.();
+            }}>
+              <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-3xl dark:bg-slate-800">{icon.symbol}</span>
+              <span className="min-w-0 flex-1 space-y-1.5">
+                <span className="block break-words text-base font-semibold leading-snug">{competition.name}</span>
+                <span className="flex items-start gap-1.5 text-sm text-slate-500 dark:text-slate-400"><CalendarDays aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{startDate}{endDate && endDate !== startDate ? ` – ${endDate}` : ''}</span></span>
+              </span>
+              <ChevronRight aria-hidden="true" className="h-5 w-5 shrink-0 text-brand-600" />
+            </button>
+          );
+        })}
+        {loading && <p role="status" className="py-6 text-center text-sm text-slate-500">Loading competitions…</p>}
+        {!loading && state.error && <div className="card space-y-3 p-4" role="alert"><p>Couldn’t load competitions. Check your connection and try again.</p><button className="btn-primary min-h-11" onClick={onRetry}>Try again</button></div>}
+        {!loading && !state.error && state.items.length === 0 && <p className="card p-4">{past ? 'No past competitions yet.' : 'No competitions available yet.'}</p>}
+        {!loading && !state.error && state.hasMore && <button className="btn-ghost min-h-12 w-full" onClick={() => setPage((value) => value + 1)}>Load more competitions</button>}
       </div>
-      {!onClose && <Link to="/dashboard" className="inline-flex min-h-11 items-center text-sm text-brand-700 dark:text-brand-300 underline">Open dashboard</Link>}
     </section>
   );
 }
