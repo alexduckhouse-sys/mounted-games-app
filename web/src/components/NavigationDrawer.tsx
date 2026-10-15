@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Timer, Flag, Trophy, LogIn, LogOut, Radio, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES, useTheme } from '../theme/ThemeContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useNavExtras } from './NavExtrasContext';
 import { WeatherBadge } from './WeatherBadge';
+import { useAgeGroups } from './AgeGroupsContext';
 
 const WEATHER_KEY = 'mg.showWeather';
 
@@ -15,6 +16,8 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
   const { user, hasRole, logout } = useAuth();
   const { extras } = useNavExtras();
   const navigate = useNavigate();
+  const ageGroups = useAgeGroups();
+  const location = useLocation();
   const { theme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showWeather, setShowWeather] = useState(() => { try { return localStorage.getItem(WEATHER_KEY) === '1'; } catch { return false; } });
@@ -33,7 +36,6 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
   const base = current ? `/competitions/${current.id}` : '/competitions';
   const links = [
     { to: base, label: 'Timetable', icon: Timer, end: true },
-    { to: current ? `${base}/scoring` : '/competitions', label: 'Age group', icon: Flag, end: true },
     { to: current ? `${base}/toplists` : '/competitions', label: 'Toplists', icon: Trophy, end: true },
     { to: current ? `${base}/chat` : '/chat', label: 'Live feed / stream', icon: Radio, end: true },
   ];
@@ -75,6 +77,16 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
           </section>
         )}
         {showWeather && <div className="mb-4 flex min-h-12 items-center gap-3 rounded-xl bg-slate-100 px-4 py-2 dark:bg-slate-800"><CloudSun className="h-5 w-5 shrink-0" /><span className="font-medium">Weather</span><span className="ml-auto"><WeatherBadge /></span></div>}
+        {current && ageGroups.competitionId === current.id && ageGroups.groups.length > 0 && (
+          <nav aria-label="Age groups" className="mb-4 rounded-2xl border-2 border-brand-200 bg-brand-50 p-3 dark:border-brand-700 dark:bg-brand-900/40">
+            <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-brand-700 dark:text-brand-200"><Flag className="h-4 w-4" />Age groups</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {ageGroups.groups.map((group) => (
+                <NavLink key={group.id} to={`${base}/scoring?section=${group.id}`} onClick={onClose} className={() => `flex min-h-12 items-center justify-center rounded-xl border-2 px-3 py-2 text-center text-base font-bold !no-underline hover:!no-underline ${location.pathname === `${base}/scoring` && (new URLSearchParams(location.search).get('section') === String(group.id) || (!location.search && group.id === ageGroups.groups[0].id)) ? 'navigation-selected border-transparent' : 'border-brand-300 bg-white text-brand-800 hover:bg-brand-100 dark:border-brand-600 dark:bg-slate-900 dark:text-brand-100 dark:hover:bg-slate-800'}`}>{group.name}</NavLink>
+              ))}
+            </div>
+          </nav>
+        )}
         <nav aria-label="Main navigation" className="space-y-1">
           {links.map((item) => <NavLink key={item.label} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => linkClass(isActive && (current !== null || item.to !== '/competitions'))}><item.icon className="h-5 w-5 shrink-0" />{item.label}</NavLink>)}
           <button onClick={onChangeCompetition} className={`${linkClass(false)} w-full text-left`}><ArrowLeftRight className="h-5 w-5 shrink-0" />Change competition</button>

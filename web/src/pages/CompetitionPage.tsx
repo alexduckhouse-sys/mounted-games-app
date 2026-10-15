@@ -8,6 +8,8 @@ import { useLiveHub } from '../live/useLiveHub';
 import { CompetitionContext } from './competition/context';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useNavExtras } from '../components/NavExtrasContext';
+import { useAgeGroups } from '../components/AgeGroupsContext';
+import { displaySectionName } from '../lib/section';
 
 export function CompetitionPage() {
   const { id } = useParams<{ id: string }>();
@@ -46,6 +48,12 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       setVenue(data.latitude != null && data.longitude != null ? { competitionId: data.id, lat: data.latitude, lon: data.longitude } : null);
     }
   }, [data, setCurrent, setVenue]);
+
+  const { setGroups } = useAgeGroups();
+  useEffect(() => {
+    if (data) setGroups(data.id, data.sections.map((s) => ({ id: s.id, name: displaySectionName(s.displayName) })));
+    return () => setGroups(null, []);
+  }, [data, setGroups]);
 
   const { setExtras, clear } = useNavExtras();
   useEffect(() => {

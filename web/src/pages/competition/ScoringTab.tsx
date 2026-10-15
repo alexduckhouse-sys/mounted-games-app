@@ -1,6 +1,6 @@
 import { displaySectionName } from '../../lib/section';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Activity, Flag, Trophy, Sparkles, X, AlertTriangle, Clock } from 'lucide-react';
 import { useCompetition } from './context';
@@ -33,8 +33,10 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const { competition, reload } = useCompetition();
   const { canEdit } = useAuth();
   const navigate = useNavigate();
-  const firstSectionId = competition.sections[0]?.id ?? null;
-  const [sectionId, setSectionId] = useState<number | null>(firstSectionId);
+  // The age group lives in the URL (?section=ID) so the menu can link straight to one.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSection = Number(searchParams.get('section'));
+  const sectionId = competition.sections.find((s) => s.id === requestedSection)?.id ?? competition.sections[0]?.id ?? null;
   const [showToplist, setShowToplist] = useState(toplistOnly);
   const [showFinals, setShowFinals] = useState(false);
 
@@ -67,7 +69,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
       <div className="flex flex-wrap items-center gap-3">
         <label className="min-w-0 flex-1 basis-48">
           <span className="sr-only">Age group</span>
-          <select className="input min-h-12 w-full !text-xl !font-bold" value={sectionId ?? ''} onChange={(e) => setSectionId(Number(e.target.value))} disabled={competition.sections.length === 0}>
+          <select className="input min-h-12 w-full !text-xl !font-bold" value={sectionId ?? ''} onChange={(e) => setSearchParams({ section: e.target.value }, { replace: true })} disabled={competition.sections.length === 0}>
             {competition.sections.length === 0 && <option value="">No age groups yet</option>}
             {competition.sections.map((sec) => <option key={sec.id} value={sec.id}>{displaySectionName(sec.displayName)}</option>)}
           </select>
