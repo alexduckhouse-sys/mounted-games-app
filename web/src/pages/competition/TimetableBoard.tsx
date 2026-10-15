@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { computeTimings, formatTime } from '../../lib/time';
+import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { TIMETABLE_COLOURS, groupRowsBySession, sessionOrdinals, sessionTitle, timetableRows, type TimetableRow } from '../../lib/timetableRows';
 import './timetable.css';
@@ -50,13 +51,17 @@ export function TimetableBoard() {
         </div>
         {arenas.length > 1 && <label className="timetable-arena">Arena<select value={selectedArena} onChange={(e) => setArena(e.target.value)}><option value="">All arenas</option>{arenas.map((name) => <option key={name}>{name}</option>)}</select></label>}
       </header>
-      {groupRowsBySession(visibleRows).map((group) => {
+      {groupRowsBySession(visibleRows.filter((row) => row.group === 'Heats')).map((group) => {
         const title = group.race ? sessionTitle(group.session, ordinals) : null;
         return <section key={group.key} aria-label={title ?? group.session.name}>
           {title && <div className="timetable-section-head"><h2>{title}</h2><span>{group.rows.length} {group.rows.length === 1 ? 'heat' : 'heats'}</span></div>}
           {group.rows.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena} />)}
         </section>;
       })}
+      {visibleRows.some((row) => row.group === 'Finals') && <section aria-label="Finals">
+        <div className="timetable-section-head"><h2>Finals</h2></div>
+        {visibleRows.filter((row) => row.group === 'Finals').map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena} showAgeGroup />)}
+      </section>}
       {visibleRows.length === 0 && <p className="timetable-empty">Nothing scheduled for this day.</p>}
       <ul className="timetable-legend" aria-label="Status colours">
         {Object.entries(statusLabels).map(([status, label]) => <li key={status}><span style={{ backgroundColor: TIMETABLE_COLOURS[status as keyof typeof TIMETABLE_COLOURS] }} aria-hidden="true" />{label}</li>)}
@@ -65,11 +70,12 @@ export function TimetableBoard() {
   );
 }
 
-function TimetableEvent({ row, competitionId, showArena }: { row: TimetableRow; competitionId: number; showArena: boolean }) {
+function TimetableEvent({ row, competitionId, showArena, showAgeGroup = false }: { row: TimetableRow; competitionId: number; showArena: boolean; showAgeGroup?: boolean }) {
   const { session, heat, status, delayMinutes } = row;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
-  const name = race ? heatName : session.name;
+  const ageGroup = displaySectionName(session.sectionName || session.name);
+  const name = race ? (showAgeGroup && !heatName.toLowerCase().includes(ageGroup.toLowerCase()) ? `${ageGroup} ${heatName}` : heatName) : session.name;
   const label = race ? '' : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
   const content = <>
     <span className="timetable-time">{formatTime(row.effective)}{delayMinutes > 0 && row.scheduled && <s>{formatTime(row.scheduled)}</s>}</span>

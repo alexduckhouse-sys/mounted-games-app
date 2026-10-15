@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { THEMES, useTheme } from '../theme/ThemeContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useNavExtras } from './NavExtrasContext';
+import { WeatherBadge } from './WeatherBadge';
 
 export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: () => void; onChangeCompetition: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -43,7 +44,8 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
         <div className="mb-4 flex items-center gap-3 border-b border-slate-200 pb-3 dark:border-slate-700">
           <div className="min-w-0 flex-1">
             <h2 id="navigation-title" className="text-xl font-bold">Menu</h2>
-            {current && <p className="mt-1 break-words text-sm text-slate-500 dark:text-slate-300">{current.name}</p>}
+            {current && <p className="mt-1 break-words text-sm font-medium text-slate-600 dark:text-slate-200">{current.name}</p>}
+            {current && <div className="mt-2"><WeatherBadge /></div>}
           </div>
           <button onClick={() => setPaletteOpen((v) => !v)} className={`btn-ghost min-h-11 min-w-11 ${paletteOpen ? 'navigation-selected' : ''}`} aria-label="Choose colour theme" aria-expanded={paletteOpen}><Palette className="h-5 w-5" /></button>
           <button autoFocus onClick={onClose} className="btn-ghost min-h-11 min-w-11" aria-label="Close menu"><X className="h-5 w-5" /></button>

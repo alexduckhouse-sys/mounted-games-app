@@ -7,11 +7,9 @@ import {
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import { ForecastBadge } from '../../components/ForecastBadge';
 import type { DeclarationForm, Heat, HeatEntry, Race, Session } from '../../types';
 import { SessionEndTransition } from './SessionEndTransition';
 import { bibAccent } from '../../lib/bib';
-import { sessionOrdinals, sessionTitle } from '../../lib/timetableRows';
 
 function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
   if (heatSize <= 0) return baseLane;
@@ -62,8 +60,6 @@ export function SessionPage() {
     () => competition.sessions.find((s) => s.id === sid) ?? null,
     [competition, sid]
   );
-
-  const ordinals = useMemo(() => sessionOrdinals(competition.sessions), [competition.sessions]);
 
   const sessionBase = useMemo(() => {
     if (!session) return 0;
@@ -280,18 +276,6 @@ export function SessionPage() {
         )}
       </div>
 
-      <div className="card p-3">
-        <div className="flex items-start gap-2 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-base sm:text-lg font-bold truncate">{sessionTitle(session, ordinals)}</h2>
-          </div>
-          <ForecastBadge lat={competition.latitude} lon={competition.longitude} date={session.scheduledStart ?? competition.startDate} />
-          <span className="pill bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200">
-            1st – {sessionBase} pts
-          </span>
-        </div>
-      </div>
-
       {saveError && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{saveError}</p>}
       {canEdit() ? (
         <>
@@ -326,7 +310,7 @@ export function SessionPage() {
           )}
         </>
       ) : (
-        <PublicResultsView heats={orderedHeats} />
+        <PublicResultsView heats={orderedHeats} activeHeatId={activeHeatId} />
       )}
 
       <AnimatePresence>
@@ -943,16 +927,18 @@ function ScoreTile({
   );
 }
 
-function PublicResultsView({ heats }: { heats: Heat[] }) {
-  if (heats.length === 0) {
+function PublicResultsView({ heats, activeHeatId }: { heats: Heat[]; activeHeatId: number | null }) {
+  const index = Math.max(0, heats.findIndex((heat) => heat.id === activeHeatId));
+  const heat = heats[index];
+  if (!heat) {
     return <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>;
   }
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold flex items-center gap-1.5">
-        <Trophy className="w-4 h-4 text-brand-600 shrink-0" />Heats
-      </h3>
-      <SessionScoresTable heats={heats} />
+      <h1 className="flex items-center gap-2 text-2xl font-bold">
+        <Trophy className="h-6 w-6 shrink-0 text-brand-600" />{heat.label ?? `Heat ${index + 1}`} scores
+      </h1>
+      <SessionScoresTable heats={[heat]} />
     </div>
   );
 }
@@ -1009,28 +995,28 @@ function SessionScoresTable({ heats }: { heats: Heat[] }) {
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-xs sm:text-sm border-collapse">
+        <table className="w-full text-base sm:text-lg border-collapse">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              <th className="text-left font-semibold px-1.5 py-1 sticky left-0 bg-white dark:bg-slate-800 z-10 min-w-[120px]">Team</th>
+            <tr className="text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
+              <th className="text-left font-semibold px-3 py-2 sticky left-0 bg-white dark:bg-slate-800 z-10 min-w-[130px]">Team</th>
               {grid.raceNames.map((n) => (
-                <th key={n} className="text-center font-semibold px-1.5 py-1 max-w-[80px] truncate" title={n}>
+                <th key={n} className="text-center font-semibold px-2 py-2 max-w-[90px] truncate" title={n}>
                   {n}
                 </th>
               ))}
-              <th className="text-right font-bold px-1.5 py-1 text-brand-700 dark:text-brand-200">Total</th>
+              <th className="text-right font-bold px-3 py-2 text-brand-700 dark:text-brand-200">Total</th>
             </tr>
           </thead>
           <tbody>
             {grid.teams.map((t) => (
               <tr key={t.id} className="border-t border-slate-100 dark:border-slate-700/60">
-                <td className="px-1.5 py-1 sticky left-0 bg-white dark:bg-slate-800 truncate">
+                <td className="px-3 py-3 font-semibold sticky left-0 bg-white dark:bg-slate-800">
                   {t.name}
                 </td>
                 {grid.raceNames.map((n) => {
                   const cell = grid.cells.get(`${t.id}|${n}`);
                   return (
-                    <td key={n} className="px-1.5 py-1 text-center font-mono tabular-nums">
+                    <td key={n} className="px-2 py-3 text-center font-mono tabular-nums">
                       {cell == null
                         ? <span className="text-slate-300">—</span>
                         : cell.elim && cell.points === 0
@@ -1039,7 +1025,7 @@ function SessionScoresTable({ heats }: { heats: Heat[] }) {
                     </td>
                   );
                 })}
-                <td className="px-1.5 py-1 text-right font-mono font-bold text-brand-700 dark:text-brand-200 tabular-nums">
+                <td className="px-3 py-3 text-right font-mono text-xl font-bold text-brand-700 dark:text-brand-200 tabular-nums">
                   {t.total}
                 </td>
               </tr>

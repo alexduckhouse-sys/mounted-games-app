@@ -103,15 +103,15 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   return (
     <CompetitionContext.Provider value={{ competition: data, reload: load }}>
       <div className="space-y-3">
+        <Outlet />
         {(savedAt !== null || error || !connected) && (
           <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
             <p className="flex-1">
-              {savedAt !== null ? `Showing a saved timetable${savedAt && !Number.isNaN(Date.parse(savedAt)) ? ` from ${new Date(savedAt).toLocaleString('en-GB')}` : ''}. Times and results may have changed.` : error ? 'Couldn’t refresh. Showing the last timetable received.' : 'Connecting to live updates. The timetable refreshes periodically while this page is open.'}
+              {savedAt !== null ? `Last updated ${savedAt && !Number.isNaN(Date.parse(savedAt)) ? new Date(savedAt).toLocaleString('en-GB') : 'earlier'}.` : error ? 'Couldn’t refresh. Showing the last timetable received.' : 'Connecting to live updates. The timetable refreshes periodically while this page is open.'}
             </p>
             <button className="btn-ghost min-h-11" onClick={load}>Refresh</button>
           </div>
         )}
-        <Outlet />
       </div>
     </CompetitionContext.Provider>
   );
