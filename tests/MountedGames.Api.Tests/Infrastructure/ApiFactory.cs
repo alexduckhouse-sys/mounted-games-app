@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -25,11 +24,10 @@ public class ApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["ConnectionStrings:Default"] = $"Data Source={_dbPath}",
-            ["Admin:Key"] = AdminKey,
-        }));
+        // UseSetting (not ConfigureAppConfiguration): Program.cs reads the connection string while
+        // building, before late configuration callbacks are applied.
+        builder.UseSetting("ConnectionStrings:Default", $"Data Source={_dbPath}");
+        builder.UseSetting("Admin:Key", AdminKey);
         builder.ConfigureServices(services =>
         {
             var scheduler = services.Single(d => d.ImplementationType == typeof(NotificationScheduler));
