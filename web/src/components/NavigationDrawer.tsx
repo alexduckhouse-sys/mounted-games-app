@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Timer, Flag, Trophy, LogIn, LogOut, Radio, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, Palette } from 'lucide-react';
+import { Timer, Flag, Trophy, LogIn, LogOut, Radio, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, Palette, Pin } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES, useTheme } from '../theme/ThemeContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
@@ -8,7 +8,7 @@ import { useNavExtras } from './NavExtrasContext';
 
 export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: () => void; onChangeCompetition: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const { current } = useCurrentCompetition();
+  const { current, rememberChoice, setRememberChoice } = useCurrentCompetition();
   const { user, hasRole, logout } = useAuth();
   const { extras } = useNavExtras();
   const navigate = useNavigate();
@@ -60,6 +60,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
         <nav aria-label="Main navigation" className="space-y-1">
           {links.map((item) => <NavLink key={item.label} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => linkClass(isActive && (current !== null || item.to !== '/competitions'))}><item.icon className="h-5 w-5 shrink-0" />{item.label}</NavLink>)}
           <button onClick={onChangeCompetition} className={`${linkClass(false)} w-full text-left`}><ArrowLeftRight className="h-5 w-5 shrink-0" />Change competition</button>
+          {current && <button onClick={() => setRememberChoice(rememberChoice === 'remember' ? 'visit' : 'ask')} className={`${linkClass(false)} w-full text-left`}><Pin className="h-5 w-5 shrink-0" />{rememberChoice === 'remember' ? 'Stop remembering on this device' : 'Remember on this device'}</button>}
           <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => linkClass(isActive)}><History className="h-5 w-5 shrink-0" />Past competitions</NavLink>
         </nav>
         {(accountLinks.length > 0 || extras.length > 0) && (

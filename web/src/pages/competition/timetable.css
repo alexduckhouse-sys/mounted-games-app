@@ -27,9 +27,9 @@ body:has(.timetable-board) { background: var(--timetable-bg); }
   font-family: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', system-ui, sans-serif;
 }
 .timetable-board h1 { margin: 0; font-size: 30px; font-weight: 800; line-height: 1; text-transform: uppercase; }
-.timetable-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 8px; margin-top: 14px; }
-.timetable-days button { min-height: 48px; border-radius: 8px; border: 1px solid var(--timetable-rule); background: transparent; font-size: 16px; font-weight: 600; padding: 6px; }
-.timetable-days button span { display: block; font-size: 11px; font-weight: 400; }
+.timetable-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.timetable-days { display: flex; flex-wrap: wrap; gap: 8px; }
+.timetable-days button { min-height: 44px; min-width: 72px; border-radius: 8px; border: 1px solid var(--timetable-rule); background: transparent; font-size: 16px; font-weight: 600; padding: 6px 12px; }
 .timetable-days button[aria-pressed="true"] { background: var(--timetable-ink); color: var(--timetable-bg); border-color: var(--timetable-ink); }
 .timetable-arena { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 14px; }
 .timetable-arena select { min-height: 44px; flex: 1; border: 1px solid var(--timetable-rule); border-radius: 8px; background: var(--timetable-bg); padding: 6px; }

@@ -220,13 +220,15 @@ export function TimetableManagement() {
         </label>
       </div>
       <div className="flex flex-wrap gap-1.5 items-start">
-        <Link
-          to="arena"
-          className="btn-ghost !py-1.5 !px-2.5 text-xs bg-arena-live/20 text-amber-800 dark:text-amber-100 hover:bg-arena-live/30"
-          title="See the current arena setup with race diagrams"
-        >
-          <Activity className="w-3.5 h-3.5" /> Arena setup
-        </Link>
+        {orderedSessions.some((s) => s.arenaName?.trim()) && (
+          <Link
+            to="arena"
+            className="btn-ghost !py-1.5 !px-2.5 text-xs bg-arena-live/20 text-amber-800 dark:text-amber-100 hover:bg-arena-live/30"
+            title="See the current arena setup with race diagrams"
+          >
+            <Activity className="w-3.5 h-3.5" /> Arena setup
+          </Link>
+        )}
         <WeatherNow lat={competition.latitude} lon={competition.longitude} />
         <button
           onClick={() => exportTimetableCsv(competition.name, orderedSessions, timings)}

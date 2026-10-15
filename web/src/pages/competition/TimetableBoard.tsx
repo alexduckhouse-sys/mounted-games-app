@@ -40,11 +40,13 @@ export function TimetableBoard() {
   return (
     <div className="timetable-board">
       <header>
+        <div className="timetable-head">
         <h1>Timetable</h1>
         <div className="timetable-days" role="group" aria-label="Choose day">
-          {days.map((day, index) => <button key={day} type="button" aria-pressed={selectedDay === day} onClick={() => { setPickedDay(day); setArena(''); }}>
-            Day {index + 1}<span>{new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}{day === today ? ' · Today' : ''}</span>
+          {days.map((day, index) => <button key={day} type="button" aria-pressed={selectedDay === day} aria-label={`Day ${index + 1}, ${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${day === today ? ', today' : ''}`} onClick={() => { setPickedDay(day); setArena(''); }}>
+            Day {index + 1}
           </button>)}
+        </div>
         </div>
         {arenas.length > 1 && <label className="timetable-arena">Arena<select value={selectedArena} onChange={(e) => setArena(e.target.value)}><option value="">All arenas</option>{arenas.map((name) => <option key={name}>{name}</option>)}</select></label>}
       </header>
