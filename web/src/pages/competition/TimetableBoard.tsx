@@ -6,10 +6,10 @@ import { useAuth } from '../../auth/AuthContext';
 import { computeTimings, formatTime } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
-import { groupRowsBySession, hiddenFinishedKeys, sessionOrdinals, statusLabel, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
+import { groupRowsBySession, hiddenFinishedKeys, sessionOrdinals, statusLabel, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
 import './timetable.css';
 
-const PILL_CLASS: Record<TimetableStatus, string> = { 'on-time': 'mg-pill-ontime', late: 'mg-pill-late', live: 'mg-pill-live', finished: 'mg-pill-done' };
+const STATUS_KEY: ReadonlyArray<[TimetableStatus, string]> = [['on-time', 'On time'], ['late', 'Late'], ['live', 'On now'], ['finished', 'Finished']];
 
 /**
  * The public timetable: a white band with the title, last update and day/arena choices, then one card per
@@ -112,6 +112,11 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
           </section>;
         })}
         {(hasCompleted || showAll) && <button type="button" className="mg-btn mg-btn-secondary w-full" aria-pressed={showAll} onClick={() => setShowAll((v) => !v)}>{showAll ? 'Hide completed sessions' : 'View complete timetable'}</button>}
+        {visibleRows.length > 0 && (
+          <ul className="tt-key" aria-label="Status colours">
+            {STATUS_KEY.map(([status, label]) => <li key={status}><span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />{label}</li>)}
+          </ul>
+        )}
         {visibleRows.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">Nothing scheduled for this day.</p>}
         {footer}
       </div>
@@ -131,21 +136,22 @@ function finalsByAgeGroup(rows: TimetableRow[]) {
   return [...groups.values()];
 }
 
-/** One timetable line: time (with the planned time struck through when late), name, status pill. */
-export function TimetableEvent({ row, competitionId, showArena, detail }: { row: TimetableRow; competitionId: number; showArena: boolean; detail?: string }) {
+/** One timetable line: time (with the planned time struck through when late), name, status colour dot. */
+function TimetableEvent({ row, competitionId, showArena }: { row: TimetableRow; competitionId: number; showArena: boolean }) {
   const { session, heat, status, delayMinutes } = row;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
   const name = race ? heatName : session.name;
   const label = race ? '' : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
-  const sub = [detail, label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
+  const sub = [label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
   const content = <>
     <span className="tt-time">
       {delayMinutes > 0 && row.scheduled && <s><span className="sr-only">Planned </span>{formatTime(row.scheduled)}</s>}
       <span>{delayMinutes > 0 && row.scheduled && <span className="sr-only">, now </span>}{formatTime(row.effective)}</span>
     </span>
     <span className="tt-event"><strong>{name}</strong>{sub && <span>{sub}</span>}</span>
-    <span className={`mg-pill ${PILL_CLASS[status]}`}>{statusLabel(status, delayMinutes)}</span>
+    <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
+    <span className="sr-only">{statusLabel(status, delayMinutes)}</span>
     {race ? <ChevronRight className="tt-chevron" size={16} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
   </>;
   const className = `tt-row tt-${status}`;

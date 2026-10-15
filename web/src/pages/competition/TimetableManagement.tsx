@@ -16,7 +16,6 @@ import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { displaySectionName } from '../../lib/section';
 import { WeatherNow, WeatherAt } from '../../components/WeatherChips';
 import { exportTimetableCsv } from '../../lib/timetableCsv';
-import { TeamFinder } from './TeamFinder';
 
 type AddKind = 'break' | 'briefing' | 'custom';
 
@@ -271,10 +270,6 @@ export function TimetableManagement() {
 
       {orderedSessions.length === 0 && (
         <p className="text-slate-500 dark:text-slate-300 text-sm">Nothing scheduled yet.</p>
-      )}
-
-      {competition.teams.length > 0 && orderedSessions.length > 0 && (
-        <TeamFinder />
       )}
 
       {orderedSessions.length > 0 && daySessions.length === 0 && <p className="card p-4 text-sm text-slate-600 dark:text-slate-300">Nothing scheduled for this day. Choose another day to see more.</p>}
