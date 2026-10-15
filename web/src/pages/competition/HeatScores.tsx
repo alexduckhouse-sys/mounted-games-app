@@ -73,8 +73,8 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
           <span className="flex-1" />
           {badge}
         </div>
-        <div className="flex items-baseline gap-2.5">
-          <h1 className="mg-display shrink-0 text-[28px] font-bold leading-none text-[rgb(var(--mg-heading))]">{heat ? `${section ? `${section} · ` : ''}${heatLabel}` : heatLabel}</h1>
+        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
+          <h1 className="mg-display min-w-0 break-words text-[28px] font-bold leading-none text-[rgb(var(--mg-heading))]">{heat ? `${section ? `${section} · ` : ''}${heatLabel}` : heatLabel}</h1>
           {meta && <span className="min-w-0 text-[13px] font-medium leading-none text-[rgb(var(--mg-muted))]">{meta}</span>}
         </div>
       </header>
