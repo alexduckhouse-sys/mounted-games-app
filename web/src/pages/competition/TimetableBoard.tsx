@@ -5,8 +5,7 @@ import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { computeTimings, formatTime } from '../../lib/time';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
-import { displaySectionName } from '../../lib/section';
-import { TIMETABLE_COLOURS, groupRowsBySession, sessionOrdinals, timetableRows, type TimetableRow } from '../../lib/timetableRows';
+import { TIMETABLE_COLOURS, groupRowsBySession, sessionOrdinals, sessionTitle, timetableRows, type TimetableRow } from '../../lib/timetableRows';
 import './timetable.css';
 
 const statusLabels = { 'on-time': 'On time', late: 'Late', live: 'On now', finished: 'Finished' };
@@ -52,7 +51,7 @@ export function TimetableBoard() {
         {arenas.length > 1 && <label className="timetable-arena">Arena<select value={selectedArena} onChange={(e) => setArena(e.target.value)}><option value="">All arenas</option>{arenas.map((name) => <option key={name}>{name}</option>)}</select></label>}
       </header>
       {groupRowsBySession(visibleRows).map((group) => {
-        const title = group.race ? `${displaySectionName(group.session.sectionName || group.session.name)} Session ${ordinals.get(group.session.id) ?? 1}` : null;
+        const title = group.race ? sessionTitle(group.session, ordinals) : null;
         return <section key={group.key} aria-label={title ?? group.session.name}>
           {title && <div className="timetable-section-head"><h2>{title}</h2><span>{group.rows.length} {group.rows.length === 1 ? 'heat' : 'heats'}</span></div>}
           {group.rows.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena} />)}

@@ -1,4 +1,5 @@
 import type { Heat, Session } from '../types';
+import { displaySectionName } from './section';
 import type { HeatTiming, SessionTiming } from './time';
 
 export type TimetableStatus = 'on-time' | 'late' | 'live' | 'finished';
@@ -71,4 +72,9 @@ export function groupRowsBySession(rows: TimetableRow[]): TimetableGroup[] {
     else groups.push({ key: `${row.session.id}-${groups.length}`, session: row.session, race: isRace(row.session), rows: [row] });
   }
   return groups;
+}
+
+/** "Seniors Session 1": the age group (without "Teams") plus its session number. */
+export function sessionTitle(session: Session, ordinals: Map<number, number>): string {
+  return `${displaySectionName(session.sectionName || session.name)} Session ${ordinals.get(session.id) ?? 1}`;
 }
