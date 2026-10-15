@@ -31,8 +31,11 @@ body:has(.timetable-board) { background: var(--timetable-bg); }
 .timetable-days { display: flex; flex-wrap: wrap; gap: 8px; }
 .timetable-days button { min-height: 44px; min-width: 72px; border-radius: 8px; border: 1px solid var(--timetable-rule); background: transparent; font-size: 16px; font-weight: 600; padding: 6px 12px; }
 .timetable-days button[aria-pressed="true"] { background: var(--timetable-ink); color: var(--timetable-bg); border-color: var(--timetable-ink); }
-.timetable-arena { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 14px; }
-.timetable-arena select { min-height: 44px; flex: 1; border: 1px solid var(--timetable-rule); border-radius: 8px; background: var(--timetable-bg); padding: 6px; }
+.timetable-arenas { position: sticky; top: 61px; z-index: 20; display: flex; gap: 8px; margin: 0 -8px; padding: 8px; overflow-x: auto; scrollbar-width: none; background: var(--timetable-bg); border-bottom: 1px solid var(--timetable-rule); }
+.timetable-arenas button { flex: 1 0 auto; min-height: 44px; min-width: 88px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 16px; border-radius: 999px; border: 1.5px solid var(--timetable-muted); background: transparent; font-size: 16px; font-weight: 600; white-space: nowrap; }
+.timetable-arenas button[aria-pressed="true"] { background: var(--timetable-ink); color: var(--timetable-bg); border-color: var(--timetable-ink); }
+.timetable-arenas button:focus-visible { outline: 2px solid var(--timetable-ink); outline-offset: 2px; }
+.timetable-live-dot { width: 8px; height: 8px; border-radius: 50%; animation: timetable-pulse 1.6s ease-in-out infinite; }
 .timetable-section-head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 3px solid var(--timetable-ink); padding-bottom: 6px; }
 .timetable-section-head h2 { margin: 0; font-size: 26px; font-weight: 700; text-transform: uppercase; }
 .timetable-section-head > span { font-size: 13px; color: var(--timetable-muted); }
@@ -64,4 +67,4 @@ a.timetable-row:hover, a.timetable-row:active { background: var(--timetable-hove
   .timetable-event > span { font-size: 17px; }
   .timetable-delay { font-size: 15px; }
 }
-@media (prefers-reduced-motion: reduce) { .timetable-live .timetable-dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .timetable-live .timetable-dot, .timetable-live-dot { animation: none; } }
