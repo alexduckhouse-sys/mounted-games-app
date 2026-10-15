@@ -10,6 +10,8 @@ import { api } from '../../api';
 import type { StandingRow } from '../../types';
 import { buildToplist } from '../../lib/toplist';
 import { ToplistView } from './ToplistView';
+import { ToplistRowsSkeleton } from '../../components/Skeletons';
+import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../../offline/savedCopies';
 
 const NO_ROWS: StandingRow[] = [];
 
@@ -25,15 +27,37 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
 
   const [standingsResult, setStandingsResult] = useState<{ sectionId: number; rows: StandingRow[]; error: boolean; savedCopy: boolean } | null>(null);
   const [retry, setRetry] = useState(0);
-  const standings = standingsResult?.sectionId === sectionId ? standingsResult.rows : NO_ROWS;
+  // While the first answer for this age group is on its way, show the copy this phone saved last time.
+  const savedStandings = useMemo(
+    () => (sectionId == null ? null : readSavedCopy<StandingRow[]>(savedCopyKeys.standings(competition.id, sectionId))),
+    [competition.id, sectionId],
+  );
   const standingsLoading = sectionId != null && standingsResult?.sectionId !== sectionId;
+  const standings = !standingsLoading && standingsResult ? standingsResult.rows : savedStandings?.data ?? NO_ROWS;
   const standingsError = standingsResult?.sectionId === sectionId && standingsResult.error;
   useEffect(() => {
     if (sectionId == null) return;
     let cancelled = false;
+    const key = savedCopyKeys.standings(competition.id, sectionId);
     api.get<StandingRow[]>(`/competitions/${competition.id}/standings`, { params: { sectionId } })
-      .then((r) => { if (!cancelled) setStandingsResult({ sectionId, rows: r.data, error: false, savedCopy: r.headers['x-mg-saved-copy'] === '1' }); })
-      .catch(() => { if (!cancelled) setStandingsResult({ sectionId, rows: [], error: true, savedCopy: false }); });
+      .then((r) => {
+        if (cancelled) return;
+        const fallback = serviceWorkerSavedAt(r.headers);
+        if (fallback === null) writeSavedCopy(key, r.data);
+        // The service worker's fallback can be older than what this page saved from a later visit.
+        const local = fallback === null ? null : readSavedCopy<StandingRow[]>(key);
+        const preferLocal = local != null && (fallback === 'unknown' || Date.parse(local.savedAt) >= (fallback as Date).getTime());
+        setStandingsResult({ sectionId, rows: preferLocal ? local.data : r.data, error: false, savedCopy: fallback !== null });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setStandingsResult((previous) => {
+          // A failed refresh keeps the list on screen rather than blanking it.
+          if (previous?.sectionId === sectionId && !previous.error) return { ...previous, savedCopy: true };
+          const local = readSavedCopy<StandingRow[]>(key);
+          return local ? { sectionId, rows: local.data, error: false, savedCopy: true } : { sectionId, rows: [], error: true, savedCopy: false };
+        });
+      });
     return () => { cancelled = true; };
   }, [competition.id, sectionId, competition.sessions, retry]);
 
@@ -58,7 +82,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const toplist = (
     <section aria-label={`Toplist${sectionName ? `, ${sectionName}` : ''}`} className="flex flex-col gap-2.5">
       {standingsResult?.sectionId === sectionId && standingsResult.savedCopy && <p role="status" className="mg-notice">Showing saved results. Positions may have changed.</p>}
-      {standingsLoading && <p role="status" className="mg-meta py-3">Loading results…</p>}
+      {standingsLoading && !savedStandings && <ToplistRowsSkeleton />}
       {standingsError && <div role="alert" className="mg-card flex flex-col items-start gap-3 p-4"><p>Couldn’t load results. Check your connection and try again.</p><button className="mg-btn mg-btn-secondary" onClick={() => { setStandingsResult(null); setRetry((n) => n + 1); }}>Try again</button></div>}
       {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No results yet.</p>}
       {standings.length > 0 && <ToplistView list={list} section={section} />}
