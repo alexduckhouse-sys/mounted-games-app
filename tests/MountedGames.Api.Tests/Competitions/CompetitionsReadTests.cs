@@ -154,6 +154,29 @@ public class CompetitionsReadTests : IClassFixture<ApiFactory>
         Assert.Equal(new[] { "First", "Second" }, d.Sessions.Select(s => s.Name));
     }
 
+    [Fact]
+    public async Task Get_IncludesRaceResultsOrderedByPlacing_WithEliminatedLast()
+    {
+        var comp = await _f.SeedCompetitionAsync();
+        var section = await _f.SeedSectionAsync(comp);
+        var club = await _f.SeedClubAsync();
+        var first = await _f.SeedTeamAsync(comp, section, club, "Winners");
+        var second = await _f.SeedTeamAsync(comp, section, club, "Runners-up");
+        var out1 = await _f.SeedTeamAsync(comp, section, club, "Eliminated");
+        await _f.SeedScoredRaceAsync(comp, section, new (int, int?, bool, int)[]
+        {
+            (out1, null, true, 0), (second, 2, false, 4), (first, 1, false, 5),
+        });
+
+        var d = await (await _f.CreateClient().GetAsync($"/api/competitions/{comp}")).ReadAsync<CompetitionDetail>();
+
+        var race = d.Sessions.Single().Heats.Single().Races.Single();
+        Assert.Equal(new[] { "Winners", "Runners-up", "Eliminated" }, race.Results.Select(x => x.TeamName));
+        Assert.Equal(new[] { 5, 4, 0 }, race.Results.Select(x => x.Points));
+        Assert.True(race.Results[2].Eliminated);
+        Assert.Null(race.Results[2].Placing);
+    }
+
     // ---- standings ----
 
     [Fact]
