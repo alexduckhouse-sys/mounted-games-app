@@ -58,10 +58,10 @@ export function TimetableBoard() {
           {group.rows.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena} />)}
         </section>;
       })}
-      {visibleRows.some((row) => row.group === 'Finals') && <section aria-label="Finals">
-        <div className="timetable-section-head"><h2>Finals</h2></div>
-        {visibleRows.filter((row) => row.group === 'Finals').map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena} showAgeGroup />)}
-      </section>}
+      {finalsByAgeGroup(visibleRows).map(({ key, title, rows: finals }) => <section key={key} aria-label={title}>
+        <div className="timetable-section-head"><h2>{title}</h2><span>{finals.length} {finals.length === 1 ? 'final' : 'finals'}</span></div>
+        {finals.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena} />)}
+      </section>)}
       {visibleRows.length === 0 && <p className="timetable-empty">Nothing scheduled for this day.</p>}
       <ul className="timetable-legend" aria-label="Status colours">
         {Object.entries(statusLabels).map(([status, label]) => <li key={status}><span style={{ backgroundColor: TIMETABLE_COLOURS[status as keyof typeof TIMETABLE_COLOURS] }} aria-hidden="true" />{label}</li>)}
@@ -70,12 +70,23 @@ export function TimetableBoard() {
   );
 }
 
-function TimetableEvent({ row, competitionId, showArena, showAgeGroup = false }: { row: TimetableRow; competitionId: number; showArena: boolean; showAgeGroup?: boolean }) {
+/** Final heats, one block per age group (in running order), after all the sessions. */
+function finalsByAgeGroup(rows: TimetableRow[]) {
+  const groups = new Map<string, { key: string; title: string; rows: TimetableRow[] }>();
+  for (const row of rows.filter((item) => item.group === 'Finals')) {
+    const key = row.session.competitionSectionId != null ? `id-${row.session.competitionSectionId}` : `name-${row.session.sectionName ?? row.session.name}`;
+    const group = groups.get(key) ?? { key, title: `${displaySectionName(row.session.sectionName || row.session.name)} Finals`, rows: [] };
+    group.rows.push(row);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+function TimetableEvent({ row, competitionId, showArena }: { row: TimetableRow; competitionId: number; showArena: boolean }) {
   const { session, heat, status, delayMinutes } = row;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
-  const ageGroup = displaySectionName(session.sectionName || session.name);
-  const name = race ? (showAgeGroup && !heatName.toLowerCase().includes(ageGroup.toLowerCase()) ? `${ageGroup} ${heatName}` : heatName) : session.name;
+  const name = race ? heatName : session.name;
   const label = race ? '' : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
   const content = <>
     <span className="timetable-time">{formatTime(row.effective)}{delayMinutes > 0 && row.scheduled && <s>{formatTime(row.scheduled)}</s>}</span>
