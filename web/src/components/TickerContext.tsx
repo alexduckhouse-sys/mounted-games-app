@@ -1,11 +1,14 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { sameTickerItems, type TickerItem } from '../lib/ticker';
 
-interface TickerState { items: string[]; setItems: (items: string[]) => void }
+interface TickerState { items: TickerItem[]; setItems: (items: TickerItem[]) => void }
 const Ctx = createContext<TickerState | null>(null);
 
 export function TickerProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<string[]>([]);
-  const value = useMemo(() => ({ items, setItems }), [items]);
+  const [items, setRawItems] = useState<TickerItem[]>([]);
+  // The page republishes every minute; keep the same list when nothing changed so the rotation is not reset.
+  const setItems = useCallback((next: TickerItem[]) => setRawItems((current) => (sameTickerItems(current, next) ? current : next)), []);
+  const value = useMemo(() => ({ items, setItems }), [items, setItems]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

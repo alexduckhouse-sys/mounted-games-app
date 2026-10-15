@@ -76,7 +76,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     return () => controller.abort();
   }, [competitionId, attempt]);
   useEffect(() => {
-    setItems(data ? tickerItems(data.sessions, announcements, now) : []);
+    setItems(data ? tickerItems(data.sessions, announcements, now, data.name) : []);
     return () => setItems([]);
   }, [data, announcements, now, setItems]);
 
