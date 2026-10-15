@@ -10,6 +10,7 @@ import { api } from '../../api';
 import type { DeclarationForm, Heat, HeatEntry, Race, Session } from '../../types';
 import { SessionEndTransition } from './SessionEndTransition';
 import { bibAccent } from '../../lib/bib';
+import { retryOnNetworkError } from '../../lib/liveUpdates';
 
 function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
   if (heatSize <= 0) return baseLane;
@@ -53,7 +54,7 @@ export function SessionPage() {
   const [searchParams] = useSearchParams();
   const requestedHeat = Number(searchParams.get('heat'));
   const sid = sessionId ? parseInt(sessionId, 10) : null;
-  const { competition, reload } = useCompetition();
+  const { competition, reload, applyHeat } = useCompetition();
   const { canEdit } = useAuth();
 
   const session = useMemo<Session | null>(
@@ -246,15 +247,18 @@ export function SessionPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      await api.post<Heat>(`/races/${activeRace.id}/results`, { places: pending }, { timeout: 15_000 });
+      // Saving replaces the race's results, so resending after a dropped
+      // connection can't double-count.
+      const { data: heat } = await retryOnNetworkError(() =>
+        api.post<Heat>(`/races/${activeRace.id}/results`, { places: pending }, { timeout: 15_000 }));
       setPending([]);
-      reload();
+      applyHeat(session.id, heat);
       const nextRace = orderedRaces.find((r) => !r.isComplete && r.id !== activeRace.id);
       if (nextRace) {
         setActiveRaceId(nextRace.id);
       }
     } catch {
-      setSaveError('Couldn’t confirm the save. Your placings are still here. Check the results when your connection returns before trying again.');
+      setSaveError('Couldn’t confirm the save. Your placings are still here. Tap Save again when you have signal. It’s safe to resend.');
     } finally {
       setSaving(false);
     }
@@ -713,7 +717,7 @@ function ScoringSection({
             <h3 className="font-semibold flex items-center gap-1.5 text-sm flex-1 min-w-0">
               <Flag className="w-4 h-4 text-brand-600 shrink-0" /> Scoring · {activeRace.name}
             </h3>
-            <RaceClock race={activeRace} />
+            <RaceClock key={activeRace.id} race={activeRace} />
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-300 mb-3">
             Tap a team to assign its place · swipe a tile <span className="font-semibold">downwards</span> to eliminate (0 pts).
@@ -1146,10 +1150,19 @@ function HeatEndOverlay({
 
 /**
  * Live race clock — Start/Stop buttons + an elapsed timer that ticks every
- * second while the race is running. Optimistic: posts to the server but
- * doesn't wait to update the UI.
+ * second while the race is running. Optimistic: shows the tap at once and
+ * sends the tap time, so a slow connection doesn't shift the race time.
  */
-function RaceClock({ race }: { race: Race }) {
+function RaceClock({ race: serverRace }: { race: Race }) {
+  type Action = 'start' | 'stop';
+  interface Tap { action: Action; at: string; startedAt: string | null; finishedAt: string | null; unsent: boolean; basis: string }
+  // The tap waiting on (or confirmed by) the server. It applies only while the
+  // live competition data still shows what was on screen when it was tapped.
+  const [tap, setTap] = useState<Tap | null>(null);
+  const basis = `${serverRace.startedAt ?? ''}|${serverRace.finishedAt ?? ''}`;
+  const pendingTap = tap?.basis === basis ? tap : null;
+  const race = pendingTap ? { ...serverRace, startedAt: pendingTap.startedAt, finishedAt: pendingTap.finishedAt } : serverRace;
+
   const started = race.startedAt ? new Date(race.startedAt) : null;
   const finished = race.finishedAt ? new Date(race.finishedAt) : null;
   const running = started != null && finished == null;
@@ -1169,11 +1182,22 @@ function RaceClock({ race }: { race: Race }) {
     return `${m}:${sec}`;
   }
 
-  async function startClock() {
-    try { await api.post(`/races/${race.id}/start`); } catch { /* ignore */ }
+  async function send(action: Action, at: string) {
+    // A reply only counts for its own tap: Stop may be tapped before Start's reply lands.
+    const update = (change: Partial<Tap>) => setTap((t) => (t && t.at === at && t.action === action ? { ...t, ...change } : t));
+    update({ unsent: false });
+    try {
+      const { data } = await retryOnNetworkError(() => api.post<Race>(`/races/${serverRace.id}/${action}`, { at }));
+      update({ startedAt: data.startedAt ?? null, finishedAt: data.finishedAt ?? null });
+    } catch {
+      update({ unsent: true });
+    }
   }
-  async function stopClock() {
-    try { await api.post(`/races/${race.id}/stop`); } catch { /* ignore */ }
+  function press(action: Action) {
+    const at = new Date().toISOString();
+    const startedAt = race.startedAt ?? at;
+    setTap({ action, at, startedAt, finishedAt: action === 'start' ? null : at, unsent: false, basis });
+    void send(action, at);
   }
 
   if (race.isComplete) {
@@ -1195,12 +1219,17 @@ function RaceClock({ race }: { race: Race }) {
         <Clock className="inline w-3 h-3 -mt-px" /> {elapsed()}
       </span>
       {running ? (
-        <button onClick={stopClock} className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-rose-600">
+        <button onClick={() => press('stop')} className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-rose-600">
           Stop
         </button>
       ) : (
-        <button onClick={startClock} className="btn-primary !py-0.5 !px-2 text-[11px]">
+        <button onClick={() => press('start')} className="btn-primary !py-0.5 !px-2 text-[11px]">
           Start
+        </button>
+      )}
+      {pendingTap?.unsent && (
+        <button role="alert" onClick={() => void send(pendingTap.action, pendingTap.at)} className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-amber-700">
+          Not sent · Retry
         </button>
       )}
     </span>
