@@ -19,7 +19,12 @@ export function TimetableBoard() {
   const rows = useMemo(() => timetableRows(competition.sessions, timings, showQualifiers), [competition.sessions, timings, showQualifiers]);
   const ordinals = useMemo(() => sessionOrdinals(competition.sessions), [competition.sessions]);
   const [pickedDay, setPickedDay] = useState<string | null>(null);
-  const [arena, setArena] = useState('');
+  const arenaKey = `mg.tt.arena.${competition.id}`;
+  const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
+  function chooseArena(name: string) {
+    setArena(name);
+    try { if (name) localStorage.setItem(arenaKey, name); else localStorage.removeItem(arenaKey); } catch { /* storage blocked */ }
+  }
   const today = dayKey(new Date());
   const startDay = dayKey(new Date(competition.startDate));
   const endDay = dayKey(new Date(competition.endDate ?? competition.startDate));
@@ -44,13 +49,23 @@ export function TimetableBoard() {
         <div className="timetable-head">
         <h1>Timetable</h1>
         <div className="timetable-days" role="group" aria-label="Choose day">
-          {days.map((day, index) => <button key={day} type="button" aria-pressed={selectedDay === day} aria-label={`Day ${index + 1}, ${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${day === today ? ', today' : ''}`} onClick={() => { setPickedDay(day); setArena(''); }}>
+          {days.map((day, index) => <button key={day} type="button" aria-pressed={selectedDay === day} aria-label={`Day ${index + 1}, ${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${day === today ? ', today' : ''}`} onClick={() => setPickedDay(day)}>
             Day {index + 1}
           </button>)}
         </div>
         </div>
-        {arenas.length > 1 && <label className="timetable-arena">Arena<select value={selectedArena} onChange={(e) => setArena(e.target.value)}><option value="">All arenas</option>{arenas.map((name) => <option key={name}>{name}</option>)}</select></label>}
       </header>
+      {arenas.length > 1 && (
+        <div className="timetable-arenas" role="group" aria-label="Choose arena">
+          {['', ...arenas].map((name) => {
+            const live = !!name && dayRows.some((row) => row.status === 'live' && row.session.arenaName?.trim() === name);
+            return <button key={name || 'all'} type="button" aria-pressed={selectedArena === name} onClick={(e) => { chooseArena(name); e.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest' }); }}>
+              {name || 'All arenas'}
+              {live && <><span className="timetable-live-dot" style={{ backgroundColor: TIMETABLE_COLOURS.live }} aria-hidden="true" /><span className="sr-only">, on now</span></>}
+            </button>;
+          })}
+        </div>
+      )}
       {groupRowsBySession(visibleRows.filter((row) => row.group === 'Heats')).map((group) => {
         const title = group.race ? sessionTitle(group.session, ordinals) : null;
         return <section key={group.key} aria-label={title ?? group.session.name}>

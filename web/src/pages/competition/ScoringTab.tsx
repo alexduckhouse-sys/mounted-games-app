@@ -1,3 +1,4 @@
+import { displaySectionName } from '../../lib/section';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -63,13 +64,12 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
 
   return (
     <div className="space-y-3">
-      <h1 className="text-xl font-bold">{toplistOnly ? 'Toplists' : 'Section'}</h1>
-      <div className="card flex flex-wrap items-end gap-3 p-3">
-        <label className="min-w-0 flex-1 basis-48 text-sm font-semibold">
-          Section
-          <select className="input mt-1 min-h-12 w-full" value={sectionId ?? ''} onChange={(e) => setSectionId(Number(e.target.value))} disabled={competition.sections.length === 0}>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="min-w-0 flex-1 basis-48">
+          <span className="sr-only">Age group</span>
+          <select className="input min-h-12 w-full !text-xl !font-bold" value={sectionId ?? ''} onChange={(e) => setSectionId(Number(e.target.value))} disabled={competition.sections.length === 0}>
             {competition.sections.length === 0 && <option value="">No age groups yet</option>}
-            {competition.sections.map((sec) => <option key={sec.id} value={sec.id}>{sec.displayName}</option>)}
+            {competition.sections.map((sec) => <option key={sec.id} value={sec.id}>{displaySectionName(sec.displayName)}</option>)}
           </select>
         </label>
         <div className="ml-auto flex gap-1">
@@ -95,9 +95,9 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
           >
             <div className="card p-2">
               <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold mb-1 px-1">
-                Toplist · {competition.sections.find((s) => s.id === sectionId)?.displayName ?? '—'}
+                Toplist · {displaySectionName(competition.sections.find((s) => s.id === sectionId)?.displayName) || '—'}
               </div>
-              {sectionId == null && <p className="text-slate-500 text-xs">Pick a section.</p>}
+              {sectionId == null && <p className="text-slate-500 text-xs">Pick an age group.</p>}
               {standingsResult?.sectionId === sectionId && standingsResult.savedCopy && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Showing saved results. Positions may have changed.</p>}
               {standingsLoading && <p role="status" className="p-3 text-sm text-slate-500">Loading results…</p>}
               {standingsError && <div role="alert" className="space-y-2 p-3 text-sm"><p>Couldn’t load results. Check your connection and try again.</p><button className="btn-ghost min-h-11" onClick={() => { setStandingsResult(null); setRetry((n) => n + 1); }}>Try again</button></div>}
@@ -121,7 +121,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
       </AnimatePresence>
 
       {!toplistOnly && raceSessions.length === 0 && (
-        <p className="text-slate-500 dark:text-slate-300 text-sm">No race sessions in this section.</p>
+        <p className="text-slate-500 dark:text-slate-300 text-sm">No race sessions in this age group.</p>
       )}
 
       {!toplistOnly && <div className="space-y-1.5">
