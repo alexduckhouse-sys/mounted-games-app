@@ -5,6 +5,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Services;
+using MountedGames.Api.Security;
 
 namespace MountedGames.Api.Controllers;
 
@@ -35,12 +36,12 @@ public class PushController : ControllerBase
     {
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
-        if (string.IsNullOrWhiteSpace(req.Endpoint)) return BadRequest();
+        if (!PushEndpointPolicy.IsAllowed(req.Endpoint)) return BadRequest();
 
         var existing = await _db.PushSubscriptions.FirstOrDefaultAsync(s => s.Endpoint == req.Endpoint);
         if (existing != null)
         {
-            existing.UserId = userId;
+            if (existing.UserId != userId) return Conflict();
             existing.P256dh = req.P256dh;
             existing.Auth = req.Auth;
             existing.LastSeenAt = DateTime.UtcNow;

@@ -27,7 +27,8 @@ public static class DbInitializer
 
         await SeedReferenceDataAsync(db, roles);
         var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-        if (!(configuration.GetValue<bool?>("Database:SeedDemoData") ?? db.Database.IsSqlite()))
+        if (!scope.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment()
+            || !(configuration.GetValue<bool?>("Database:SeedDemoData") ?? db.Database.IsSqlite()))
         {
             if (!string.IsNullOrWhiteSpace(configuration["Admin:Key"]))
                 await EnsureSharedAdminAsync(users);
@@ -73,6 +74,7 @@ public static class DbInitializer
             );
             CREATE UNIQUE INDEX IF NOT EXISTS ""IX_RaceTemplates_Name"" ON ""RaceTemplates"" (""Name"");
         ");
+        await EnsureColumnAsync(db, "SavedRiders", "CreatedByUserId", "TEXT NULL");
         await EnsureColumnAsync(db, "Teams", "IsHorsConcours", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "ChatMessages", "IpAddress", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "StreamUrl", "TEXT NULL");

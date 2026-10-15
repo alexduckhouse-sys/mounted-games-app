@@ -10,6 +10,11 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 - **Trainer** (username + password, self-service signup at `/login` → Sign up tab). Submits dec forms for any team in the comp that isn't already claimed by another trainer. Manages their team's saved riders. Passwords hashed by ASP.NET Identity (PBKDF2).
 - **Admin** (shared key, no individual accounts). Sets up competitions, edits timetable, controls heat status, creates finals.
 
+## Organiser access (15 October 2026)
+Admins can manage every competition. Trainers can create competitions and use organiser tools only for competitions they created. Manager and member roles do not grant organiser access. The API checks stored ownership on every organiser request; frontend controls reflect the same rule. Existing admin-only scoring, timetable and moderation operations stay admin-only.
+
+Signup contact/payment records are private to the organiser. Public declarations show the competition line-up without dates of birth, phone numbers or private notes. Saved rider records belong to the account that saved them; legacy records with no recorded owner remain admin-only. See `docs/security-review.md` for deployment requirements and verification limits.
+
 ## Core domain model
 - **Club** — pony club (reference data).
 - **Team** = Club + suffix (e.g. "Stockport A"). Grouped by **Section**.

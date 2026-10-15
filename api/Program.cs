@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using MountedGames.Api.Security;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -12,6 +13,13 @@ using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+SecurityConfiguration.Validate(builder.Configuration, builder.Environment);
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.AddServerHeader = false;
+    options.Limits.MaxRequestBodySize = 1024 * 1024;
+});
+
 var migrateDatabase = args.Contains("--migrate-database");
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
@@ -29,6 +37,8 @@ builder.Services
         o.Password.RequireNonAlphanumeric = true;
         o.Password.RequiredLength = 8;
         o.User.RequireUniqueEmail = true;
+        o.Lockout.MaxFailedAccessAttempts = 5;
+        o.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
@@ -106,6 +116,9 @@ builder.Services.AddResponseCompression(o =>
 builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 
+builder.Services.AddRequestLimits();
+builder.Services.AddTrustedProxies(builder.Configuration);
+builder.Services.AddProblemDetails();
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
@@ -136,6 +149,11 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseForwardedHeaders();
+app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseExceptionHandler();
+app.UseRouting();
+
 // Not for sign-in responses (they carry tokens) or the SignalR hub.
 app.UseWhen(
     ctx => !ctx.Request.Path.StartsWithSegments("/api/auth") && !ctx.Request.Path.StartsWithSegments("/hubs"),
@@ -143,6 +161,7 @@ app.UseWhen(
 
 app.UseCors();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.UseWhen(

@@ -32,7 +32,8 @@ public record CompetitionDetail(
     string? OrganiserName = null,
     string? PaymentDestination = null,
     bool SignupsLocked = false,
-    string Icon = "flag");
+    string Icon = "flag",
+    string? CreatedByUserId = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,

@@ -28,6 +28,7 @@ public class DeclarationFormsController : ControllerBase
         [FromQuery] int? teamId = null)
     {
         var isAdmin = User.IsInRole(Roles.Admin);
+        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
         var q = _db.DeclarationForms
             .Include(d => d.Team).ThenInclude(t => t!.Competition)
@@ -35,15 +36,16 @@ public class DeclarationFormsController : ControllerBase
             .Include(d => d.Riders)
             .AsQueryable();
 
-        // Everyone (anonymous, trainer, admin) sees all locked forms; admins also see drafts.
+        // Public declarations omit private details; drafts are visible only to their owners.
         if (!isAdmin)
-            q = q.Where(d => d.IsLocked);
+            q = q.Where(d => d.IsLocked || (uid != null && (d.SubmittedByUserId == uid || d.Team!.TrainerUserId == uid
+                || (User.IsInRole(Roles.Trainer) && d.Team.Competition!.CreatedByUserId == uid))));
         if (competitionId.HasValue)
             q = q.Where(d => d.Team!.CompetitionId == competitionId);
         if (teamId.HasValue)
             q = q.Where(d => d.TeamId == teamId);
 
-        return (await q.OrderByDescending(d => d.SubmittedAt).ToListAsync()).Select(d => d.ToDto());
+        return (await q.OrderByDescending(d => d.SubmittedAt).ToListAsync()).Select(d => d.ToDto(CanReadPrivate(d)));
     }
 
     [HttpGet("{id:int}")]
@@ -54,8 +56,16 @@ public class DeclarationFormsController : ControllerBase
             .Include(d => d.SubmittedBy)
             .Include(d => d.Riders)
             .FirstOrDefaultAsync(d => d.Id == id);
-        if (d is null) return NotFound();
-        return d.ToDto();
+        if (d is null || (!d.IsLocked && !CanReadPrivate(d))) return NotFound();
+        return d.ToDto(CanReadPrivate(d));
+    }
+
+    private bool CanReadPrivate(DeclarationForm form)
+    {
+        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return User.IsInRole(Roles.Admin) || (!string.IsNullOrEmpty(uid)
+            && (form.SubmittedByUserId == uid || form.Team?.TrainerUserId == uid
+                || (User.IsInRole(Roles.Trainer) && form.Team?.Competition?.CreatedByUserId == uid)));
     }
 
     [HttpPost]
@@ -71,6 +81,11 @@ public class DeclarationFormsController : ControllerBase
         // Trainers may submit for any team unless it's already assigned to a *different* trainer.
         if (!isAdmin && team.TrainerUserId is not null && team.TrainerUserId != userId)
             return Forbid();
+
+        var savedIds = req.Riders.Where(r => r.SavedRiderId.HasValue).Select(r => r.SavedRiderId!.Value).Distinct().ToArray();
+        var permittedSavedCount = await _db.SavedRiders.CountAsync(r => savedIds.Contains(r.Id)
+            && r.ClubId == team.ClubId && (isAdmin || (userId != null && r.CreatedByUserId == userId)));
+        if (permittedSavedCount != savedIds.Length) return BadRequest(new { message = "A saved rider is not available to this account." });
 
         if (!string.IsNullOrWhiteSpace(req.TrainerPhone) && userId is not null)
         {
@@ -112,12 +127,13 @@ public class DeclarationFormsController : ControllerBase
             foreach (var r in req.Riders.Where(r => r.SavedRiderId is null && !string.IsNullOrWhiteSpace(r.FullName)))
             {
                 var existing = await _db.SavedRiders.FirstOrDefaultAsync(s =>
-                    s.ClubId == team.ClubId && s.FullName == r.FullName);
+                    s.ClubId == team.ClubId && s.CreatedByUserId == userId && s.FullName == r.FullName);
                 if (existing is null)
                 {
                     _db.SavedRiders.Add(new SavedRider
                     {
                         ClubId = team.ClubId,
+                        CreatedByUserId = userId,
                         FullName = r.FullName,
                         DateOfBirth = r.DateOfBirth,
                         HorseName = r.HorseName
@@ -136,7 +152,7 @@ public class DeclarationFormsController : ControllerBase
 
         await _db.Entry(form).Reference(f => f.Team).LoadAsync();
         await _db.Entry(form).Reference(f => f.SubmittedBy).LoadAsync();
-        return form.ToDto();
+        return form.ToDto(includePrivate: true);
     }
 
     [HttpDelete("{id:int}")]

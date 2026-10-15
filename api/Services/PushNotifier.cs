@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
 using WebPush;
+using MountedGames.Api.Security;
 
 namespace MountedGames.Api.Services;
 
@@ -43,11 +44,13 @@ public class PushNotifier
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         });
-        var client = new WebPushClient();
+        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(10) };
+        using var client = new WebPushClient(http);
         var vapid = _vapid.Details();
         var stale = new List<int>();
         foreach (var s in subs)
         {
+            if (!PushEndpointPolicy.IsAllowed(s.Endpoint)) continue;
             var subscription = new WebPush.PushSubscription(s.Endpoint, s.P256dh, s.Auth);
             try
             {

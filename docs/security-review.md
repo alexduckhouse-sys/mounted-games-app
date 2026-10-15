@@ -1,0 +1,39 @@
+# Security review, 15 October 2026
+
+This review uses WhiteLabelApp's `app/src/lib/security-headers.ts`, `app/next.config.mjs` and `app/docs/08-security.md` as the reference. It is a source review with local regression tests, not a penetration test or a certification of the deployed service.
+
+## Changes
+
+- The API and Vercel send matching security headers on pages, assets and errors. The production CSP blocks inline scripts, inline event handlers, framing and arbitrary resource origins. It permits the existing YouTube/Twitch embeds and Render live-score endpoint. Vite emits external scripts, so this policy uses same-origin scripts rather than copying Next.js's per-request nonce mechanism. Inline style attributes remain available for the existing React components; inline style elements are blocked.
+- Admins retain access to all competitions. Trainers can create competitions and use organiser endpoints only for competitions they created. Manager and member accounts cannot use organiser endpoints. Existing admin-only scoring, timetable and moderation operations remain admin-only.
+- Signup contact/payment records require organiser access. Public locked declarations omit dates of birth, phone numbers, notes and saved-rider references. Drafts are restricted to admins, their submitter, the team's trainer and the trainer who created the competition.
+- Saved riders belong to the account that saved them. Selecting a club at signup does not grant access to that club's roster. Legacy records have no provable owner and remain available to admins; no owner is guessed during migration.
+- Private marketplace messages no longer treat an anonymous user's null ID as a matching recipient. Push subscription URLs are restricted to supported browser push providers, checked again before delivery, and redirects are disabled. An account cannot take over another account's stored subscription.
+- Password failures trigger account lockout. Login, registration and admin-key attempts have a separate rate limit. API writes have per-account limits for signed-in users and per-IP limits for anonymous users. Private API responses use `no-store`; the public offline-cache allowlist remains available.
+- Production refuses file-based or short JWT/admin secrets and demo seeding. The shared admin account cannot use the old demo password login outside Development. Unexpected API errors return a generic response; Kestrel omits its server header and limits request bodies to 1 MiB.
+
+## Before deployment
+
+1. Apply `20261015220000_AddSavedRiderOwnership` to PostgreSQL before starting the updated API. It adds one nullable column and does not delete existing records. SQLite's existing startup upgrade path adds the same column.
+2. Supply `Jwt__Key` (at least 32 random bytes) and, if shared admin login is used, `Admin__Key` (at least 20 random bytes) through deployment secrets. Set `Database__SeedDemoData=false` outside Development. Repository defaults are deliberately rejected. No credentials were inspected, rotated or changed in this review.
+3. Review any previously deployed demo accounts and rotate any secrets that ever matched repository defaults. Turning off seeding does not remove existing accounts or revoke previously issued tokens.
+4. If the API sits behind a proxy, configure `Security__KnownProxies__0` and further indexed entries with the trusted immediate proxy IP addresses. Only one forwarding hop is accepted. Without an explicit list, forwarded headers are ignored: anonymous clients may share the proxy's rate-limit partition. Never trust arbitrary client-supplied `X-Forwarded-For` values.
+5. Check the deployed headers and browser behaviour on both hosting paths. A custom API/hub origin requires a deliberate CSP update. HSTS covers the serving host; subdomain inclusion and preload are not enabled without a DNS ownership decision.
+
+## Verification and remaining limits
+
+The security suite exercises HTTP refusal paths, private-field redaction, draft access, cross-competition and child-resource checks, saved-rider references, separate rate-limit partitions, matching API/Vercel headers, exception responses and legacy migration data preservation. Test data is fictional. PostgreSQL model/migration parity is checked without connecting to a real database. The new column operation is also exercised against a synthetic SQLite legacy table.
+
+The review found and corrected a stale demo-seed test: the seeder already creates 5–6 teams per age group, while the test still expected four. No seeder behaviour was changed.
+
+Runtime dependency advisories were addressed with same-major updates and patched .NET dependency pins. Tailwind 3 still brings build-time dependency advisories; npm proposes Tailwind 4, a breaking migration that needs its own stylesheet and browser regression pass. These findings are not suppressed.
+
+This remains a shared-key admin system with bearer tokens stored in browser localStorage, a default one-day token lifetime, and no server-side token revocation. Rate limits are per process and reset on restart; multiple instances need a shared or edge limiter. The review did not verify production configuration, existing data, secret rotation, backups or monitoring. No deployment or database migration was performed. A browser connection and local PostgreSQL were unavailable, so browser enforcement and a PostgreSQL migration rehearsal remain outstanding.
+
+### Recorded check results
+
+- API: release publish passed; 56 tests passed, including 34 security cases. One existing EF1002 warning remains in the SQLite schema helper, whose interpolated identifiers come from fixed internal calls.
+- Frontend: production build and all 99 tests passed. Fresh-install lint reports 45 errors and six warnings; unchanged `HEAD` reports 46 errors and seven warnings with the same installed tools. No new file/rule findings were introduced. No lint rule was disabled.
+- Dependency audit: no runtime npm advisories and no NuGet advisories. The full npm audit still reports seven Tailwind build-tool advisories (five high, two moderate).
+- Release HTTP smoke test: pages, fingerprinted assets and API responses carry the security headers; private endpoints return 401 and `no-store` without authentication.
+- Independent review: the reviewer identified the shared anonymous/organiser rate-limit partition; it was corrected and covered by a regression test.

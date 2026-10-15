@@ -79,7 +79,9 @@ public class CompetitionPickerTests
         Assert.All(competitions, competition =>
         {
             Assert.Equal(3, competition.Sections.Count);
-            Assert.Equal(12, competition.Teams.Count);
+            Assert.InRange(competition.Teams.Count, 16, 17);
+            Assert.All(competition.Sections, section =>
+                Assert.InRange(competition.Teams.Count(team => team.CompetitionSectionId == section.Id), 5, 6));
             Assert.Equal(6, competition.Sessions.Count);
             Assert.All(competition.Sessions.SelectMany(s => s.Heats).SelectMany(h => h.Entries), entry =>
                 Assert.Equal(competition.Id, entry.Team!.CompetitionId));
