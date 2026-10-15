@@ -1,54 +1,23 @@
 import { displaySectionName } from '../../lib/section';
+import { TimetableBoard } from './TimetableBoard';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Activity, Flag, Trophy, Sparkles, X, AlertTriangle, Clock } from 'lucide-react';
+import { Trophy, Sparkles, X, AlertTriangle } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import type { Session, StandingRow } from '../../types';
-import { SessionKind } from '../../types';
-import { computeTimings, roundTo5Min, formatTime } from '../../lib/time';
-
-function heatIsComplete(h: Session['heats'][number]): boolean {
-  return h.races.length > 0 && h.races.every((r) => r.isComplete);
-}
-
-interface TimeChipProps { scheduled: Date | null; effective: Date | null; shifted: boolean }
-function TimeChip({ scheduled, effective, shifted }: TimeChipProps) {
-  const eff = roundTo5Min(effective);
-  const sch = roundTo5Min(scheduled);
-  return (
-    <span className="inline-flex items-baseline gap-1 font-mono tabular-nums text-[11px] shrink-0">
-      <Clock className="inline w-3 h-3 -mt-px text-slate-400" />
-      {shifted && sch && <span className="line-through text-slate-400">{formatTime(sch)}</span>}
-      <span className={shifted ? 'font-semibold text-amber-700 dark:text-amber-300' : ''}>
-        {formatTime(eff ?? sch)}
-      </span>
-    </span>
-  );
-}
+import type { StandingRow } from '../../types';
 
 export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const { competition, reload } = useCompetition();
   const { canEdit } = useAuth();
-  const navigate = useNavigate();
   // The age group lives in the URL (?section=ID) so the menu can link straight to one.
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSection = Number(searchParams.get('section'));
   const sectionId = competition.sections.find((s) => s.id === requestedSection)?.id ?? competition.sections[0]?.id ?? null;
   const [showToplist, setShowToplist] = useState(toplistOnly);
   const [showFinals, setShowFinals] = useState(false);
-
-  const raceSessions = useMemo(
-    () => competition.sessions
-      .filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === SessionKind.Race)
-      .filter((s) => sectionId == null || s.competitionSectionId === sectionId)
-      .sort((a, b) => a.orderIndex - b.orderIndex),
-    [competition.sessions, sectionId]
-  );
-
-  const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
 
   const [standingsResult, setStandingsResult] = useState<{ sectionId: number; rows: StandingRow[]; error: boolean; savedCopy: boolean } | null>(null);
   const [retry, setRetry] = useState(0);
@@ -77,9 +46,9 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
         <div className="ml-auto flex gap-1">
           {!toplistOnly && <button
             onClick={() => setShowToplist((v) => !v)}
-            className={`btn-ghost !py-1.5 !px-2.5 text-xs ${showToplist ? 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-200' : ''}`}
+            className={`btn-ghost min-h-11 !px-3 text-sm ${showToplist ? 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-200' : ''}`}
           >
-            <Trophy className="w-3.5 h-3.5" /> Toplist
+            <Trophy className="w-3.5 h-3.5" /> {showToplist ? 'Hide toplist' : 'Show toplist'}
           </button>}
           {canEdit() && sectionId != null && (
             <button onClick={() => setShowFinals(true)} className="btn-primary !py-1.5 !px-2.5 text-xs">
@@ -122,79 +91,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
         )}
       </AnimatePresence>
 
-      {!toplistOnly && raceSessions.length === 0 && (
-        <p className="text-slate-500 dark:text-slate-300 text-sm">No race sessions in this age group.</p>
-      )}
-
-      {!toplistOnly && <div className="space-y-1.5">
-        {raceSessions.map((s, si) => {
-          const t = timings.get(s.id);
-          const heats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-          const sessionIndex = si + 1;
-          return (
-            <div
-              key={s.id}
-              className={`rounded-lg border ${
-                s.status === 1
-                  ? 'border-yellow-300 dark:border-yellow-700 ring-1 ring-yellow-300/60'
-                  : 'border-slate-200 dark:border-slate-700'
-              } bg-white/60 dark:bg-slate-800/40 overflow-hidden`}
-            >
-              <div className="px-2 py-1 flex items-center gap-1.5 flex-wrap text-[11px] bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-700">
-                {s.status === 1 && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-arena-live/90 text-yellow-900 text-[9px] font-bold">
-                    <Activity className="w-2.5 h-2.5" /> IN ARENA
-                  </span>
-                )}
-                {s.status === 2 && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-arena-finished/90 text-white text-[9px] font-bold">
-                    <CheckCircle2 className="w-2.5 h-2.5" /> DONE
-                  </span>
-                )}
-                <span className="font-semibold truncate flex-1 min-w-0">
-                  Session {sessionIndex} <span className="text-slate-500 dark:text-slate-400 font-normal">· {s.name}</span>
-                </span>
-              </div>
-              {heats.length === 0 ? (
-                <p className="px-3 py-2 text-[11px] text-slate-500 dark:text-slate-300">No heats yet.</p>
-              ) : (
-                <ul className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {heats.map((h, idx) => {
-                    const ht = t?.heats[idx];
-                    const complete = heatIsComplete(h);
-                    const racesDone = h.races.filter((r) => r.isComplete).length;
-                    return (
-                      <li
-                        key={h.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => navigate(`../session/${s.id}`)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            navigate(`../session/${s.id}`);
-                          }
-                        }}
-                        className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 transition ${
-                          complete ? 'text-slate-400 dark:text-slate-500' : ''
-                        }`}
-                      >
-                        <TimeChip scheduled={ht?.scheduled ?? null} effective={ht?.effective ?? null} shifted={ht?.shifted ?? false} />
-                        <span className="font-semibold text-xs truncate flex-1">{h.label ?? `Heat ${idx + 1}`}</span>
-                        <Flag className="w-3 h-3 text-brand-500 shrink-0" />
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0 tabular-nums">
-                          {h.entries.length}t · {racesDone}/{h.races.length}
-                        </span>
-                        {complete && <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          );
-        })}
-      </div>}
+      {!toplistOnly && sectionId != null && <TimetableBoard sectionId={sectionId} hideTitle />}
 
       <AnimatePresence>
         {showFinals && sectionId != null && (

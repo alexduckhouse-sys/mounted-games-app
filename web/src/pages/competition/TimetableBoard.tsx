@@ -11,12 +11,15 @@ import './timetable.css';
 
 const statusLabels = { 'on-time': 'On time', late: 'Late', live: 'On now', finished: 'Finished' };
 
-export function TimetableBoard() {
+export function TimetableBoard({ sectionId = null, hideTitle = false }: { sectionId?: number | null; hideTitle?: boolean } = {}) {
   const { competition } = useCompetition();
   const { canOrganise } = useAuth();
   const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
   const showQualifiers = canOrganise();
-  const rows = useMemo(() => timetableRows(competition.sessions, timings, showQualifiers), [competition.sessions, timings, showQualifiers]);
+  const rows = useMemo(
+    () => timetableRows(competition.sessions, timings, showQualifiers).filter((row) => sectionId == null || row.session.competitionSectionId === sectionId),
+    [competition.sessions, timings, showQualifiers, sectionId],
+  );
   const ordinals = useMemo(() => sessionOrdinals(competition.sessions), [competition.sessions]);
   const [pickedDay, setPickedDay] = useState<string | null>(null);
   const arenaKey = `mg.tt.arena.${competition.id}`;
@@ -54,7 +57,7 @@ export function TimetableBoard() {
     <div className="timetable-board">
       <header>
         <div className="timetable-head">
-        <h1>Timetable</h1>
+        {!hideTitle && <h1>Timetable</h1>}
         <div className="timetable-days" role="group" aria-label="Choose day">
           {days.map((day, index) => <button key={day} type="button" aria-pressed={selectedDay === day} aria-label={`Day ${index + 1}, ${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${day === today ? ', today' : ''}`} onClick={() => setPickedDay(day)}>
             Day {index + 1}
