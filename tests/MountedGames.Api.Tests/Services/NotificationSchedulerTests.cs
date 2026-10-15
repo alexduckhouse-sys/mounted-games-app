@@ -251,6 +251,19 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
         Assert.True(run.IsCompletedSuccessfully);
     }
 
+    [Fact]
+    public void ResolvesFromContainer_WithProductionDefaultDelays()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHostedService<NotificationScheduler>();
+        using var provider = services.BuildServiceProvider();
+
+        var hosted = provider.GetServices<Microsoft.Extensions.Hosting.IHostedService>();
+
+        Assert.IsType<NotificationScheduler>(Assert.Single(hosted));
+    }
+
     // BackgroundService.StartAsync may cancel the task before ExecuteAsync ever runs, so drive ExecuteAsync directly.
     private sealed class Exposed : NotificationScheduler
     {
