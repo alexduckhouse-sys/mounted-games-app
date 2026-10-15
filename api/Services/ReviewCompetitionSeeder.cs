@@ -21,8 +21,10 @@ public static class ReviewCompetitionSeeder
             db.ChangeTracker.Clear();
             await using var transaction = await db.Database.BeginTransactionAsync();
             var created = 0;
+            var eventIndex = -1;
             foreach (var (name, icon, offset) in events)
             {
+                eventIndex++;
                 if (await db.Competitions.AnyAsync(c => c.Name == name)) continue;
                 var day = DateTime.SpecifyKind(todayUtc.Date.AddDays(offset), DateTimeKind.Utc);
                 var clubName = $"{name} Club";
@@ -40,8 +42,13 @@ public static class ReviewCompetitionSeeder
                     Description = "Sample competition for trying the app. All teams and results are fictional.",
                 };
                 var sessionOrder = 0;
-                foreach (var ageGroup in new[] { "Seniors", "Juniors", "Novices" })
+                var ageGroups = new[] { "Seniors", "Juniors", "Novices" };
+                for (var ageIndex = 0; ageIndex < ageGroups.Length; ageIndex++)
                 {
+                    var ageGroup = ageGroups[ageIndex];
+                    // 5-6 teams per age group and 7-8 races per heat, varied across events.
+                    var teamCount = 5 + (eventIndex + ageIndex) % 2;
+                    var raceCount = 7 + (eventIndex + ageIndex) % 2;
                     var section = new CompetitionSection
                     {
                         Competition = competition,
@@ -50,20 +57,20 @@ public static class ReviewCompetitionSeeder
                         DisplayName = $"{ageGroup} teams",
                     };
                     competition.Sections.Add(section);
-                    var teams = Enumerable.Range(1, 4).Select(number => new Team
+                    var teams = Enumerable.Range(1, teamCount).Select(number => new Team
                     {
                         Competition = competition,
                         Section = section,
                         Club = club,
                         DisplayName = $"{name.Replace("Demo ", "")} {ageGroup} {number}",
                         Suffix = number.ToString(),
-                        BibColour = new[] { "Red", "Blue", "Green", "Yellow" }[number - 1],
+                        BibColour = new[] { "Red", "Blue", "Green", "Yellow", "Orange", "Purple" }[number - 1],
                     }).ToArray();
                     foreach (var team in teams) competition.Teams.Add(team);
 
                     for (var round = 0; round < 2; round++)
                     {
-                        var start = day.AddHours(9).AddMinutes(sessionOrder * 65);
+                        var start = day.AddHours(9).AddMinutes(sessionOrder * 80);
                         var finished = offset < 0 || (offset == 0 && sessionOrder == 0);
                         var running = offset == 0 && sessionOrder == 1;
                         var session = new Session
@@ -74,11 +81,11 @@ public static class ReviewCompetitionSeeder
                             ArenaName = round == 0 ? "Demo main arena" : "Demo final arena",
                             ScheduledStart = start,
                             OrderIndex = ++sessionOrder,
-                            MinutesPerHeat = 25,
-                            LanesPerHeat = 2,
+                            MinutesPerHeat = 35,
+                            LanesPerHeat = 3,
                             Status = finished ? SessionStatus.Finished : running ? SessionStatus.InArena : SessionStatus.Upcoming,
                             StartedAt = finished || running ? start : null,
-                            FinishedAt = finished ? start.AddMinutes(50) : null,
+                            FinishedAt = finished ? start.AddMinutes(70) : null,
                         };
                         competition.Sessions.Add(session);
                         for (var heatNumber = 0; heatNumber < 2; heatNumber++)
@@ -88,20 +95,20 @@ public static class ReviewCompetitionSeeder
                                 Session = session,
                                 Label = $"{(round == 0 ? "Heat" : "Final")} {heatNumber + 1}",
                                 OrderIndex = heatNumber + 1,
-                                DurationMinutes = 25,
-                                ScheduledStart = start.AddMinutes(heatNumber * 25),
-                                StartedAt = finished || (running && heatNumber == 0) ? start.AddMinutes(heatNumber * 25) : null,
-                                FinishedAt = finished ? start.AddMinutes((heatNumber + 1) * 25) : null,
+                                DurationMinutes = 35,
+                                ScheduledStart = start.AddMinutes(heatNumber * 35),
+                                StartedAt = finished || (running && heatNumber == 0) ? start.AddMinutes(heatNumber * 35) : null,
+                                FinishedAt = finished ? start.AddMinutes((heatNumber + 1) * 35) : null,
                             };
                             session.Heats.Add(heat);
-                            var entrants = teams.Skip(heatNumber * 2).Take(2).ToArray();
+                            var entrants = teams.Skip(heatNumber * 3).Take(3).ToArray();
                             for (var lane = 0; lane < entrants.Length; lane++)
                                 heat.Entries.Add(new HeatEntry { Heat = heat, Team = entrants[lane], LaneIndex = lane + 1 });
-                            var raceNames = new[] { "Two Flag", "Mug Shuffle", "Bottle Shuttle" };
+                            var raceNames = new[] { "Two Flag", "Mug Shuffle", "Bottle Shuttle", "Litter Lifter", "Bending", "Five Flag", "Stepping Stones", "Tack Shop" }.Take(raceCount).ToArray();
                             for (var raceNumber = 0; raceNumber < raceNames.Length; raceNumber++)
                             {
                                 var complete = finished || (running && heatNumber == 0 && raceNumber == 0);
-                                var raceStart = start.AddMinutes(heatNumber * 25 + raceNumber * 7);
+                                var raceStart = start.AddMinutes(heatNumber * 35 + raceNumber * 4);
                                 var race = new Race
                                 {
                                     Heat = heat,
@@ -109,14 +116,14 @@ public static class ReviewCompetitionSeeder
                                     OrderIndex = raceNumber + 1,
                                     IsComplete = complete,
                                     StartedAt = complete ? raceStart : null,
-                                    FinishedAt = complete ? raceStart.AddMinutes(5) : null,
+                                    FinishedAt = complete ? raceStart.AddMinutes(3) : null,
                                 };
                                 heat.Races.Add(race);
                                 if (complete)
                                     for (var lane = 0; lane < entrants.Length; lane++)
                                     {
-                                        var placing = (lane + raceNumber) % 2 + 1;
-                                        race.Results.Add(new Result { Race = race, Team = entrants[lane], Placing = placing, Points = 3 - placing, RecordedAt = raceStart.AddMinutes(5) });
+                                        var placing = (lane + raceNumber) % entrants.Length + 1;
+                                        race.Results.Add(new Result { Race = race, Team = entrants[lane], Placing = placing, Points = entrants.Length - placing + 1, RecordedAt = raceStart.AddMinutes(3) });
                                     }
                             }
                         }
