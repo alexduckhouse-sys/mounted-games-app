@@ -35,6 +35,8 @@ public class ApiFactory : WebApplicationFactory<Program>
             var scheduler = services.Single(d => d.ImplementationType == typeof(NotificationScheduler));
             services.Remove(scheduler);
 
+            services.AddTransient<IStartupFilter, TestIpStartupFilter>();
+
             services.ConfigureAll<HttpClientFactoryOptions>(o =>
                 o.HttpMessageHandlerBuilderActions.Add(b => b.PrimaryHandler = Http));
         });
