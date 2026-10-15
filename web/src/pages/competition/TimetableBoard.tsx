@@ -6,7 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { computeTimings, formatTime } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
-import { TIMETABLE_COLOURS, groupRowsBySession, sessionOrdinals, sessionTitle, timetableRows, type TimetableRow } from '../../lib/timetableRows';
+import { TIMETABLE_COLOURS, groupRowsBySession, hiddenFinishedKeys, sessionOrdinals, sessionTitle, timetableRows, type TimetableRow } from '../../lib/timetableRows';
 import './timetable.css';
 
 const statusLabels = { 'on-time': 'On time', late: 'Late', live: 'On now', finished: 'Finished' };
@@ -20,6 +20,7 @@ export function TimetableBoard() {
   const ordinals = useMemo(() => sessionOrdinals(competition.sessions), [competition.sessions]);
   const [pickedDay, setPickedDay] = useState<string | null>(null);
   const arenaKey = `mg.tt.arena.${competition.id}`;
+  const [showAll, setShowAll] = useState(false);
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
   function chooseArena(name: string) {
     setArena(name);
@@ -42,6 +43,12 @@ export function TimetableBoard() {
   const arenas = [...new Set(dayRows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
   const selectedArena = arenas.includes(arena) ? arena : '';
   const visibleRows = dayRows.filter((row) => !selectedArena || row.session.arenaName?.trim() === selectedArena || !row.session.arenaName?.trim());
+
+  const sessionGroups = groupRowsBySession(visibleRows.filter((row) => row.group === 'Heats'));
+  const finalGroups = finalsByAgeGroup(visibleRows);
+  const hiddenKeys = showAll ? new Set<string>() : hiddenFinishedKeys([...sessionGroups, ...finalGroups]);
+  const hasCompleted = hiddenFinishedKeys([...sessionGroups, ...finalGroups]).size > 0;
+  const groupDone = (rows: TimetableRow[]) => rows.every((row) => row.status === 'finished');
 
   return (
     <div className="timetable-board">
@@ -66,17 +73,18 @@ export function TimetableBoard() {
           })}
         </div>
       )}
-      {groupRowsBySession(visibleRows.filter((row) => row.group === 'Heats')).map((group) => {
+      {sessionGroups.filter((group) => !hiddenKeys.has(group.key)).map((group) => {
         const title = group.race ? sessionTitle(group.session, ordinals) : null;
-        return <section key={group.key} aria-label={title ?? group.session.name}>
+        return <section key={group.key} aria-label={title ?? group.session.name} className={groupDone(group.rows) ? 'timetable-group-done' : undefined}>
           {title && <div className="timetable-section-head"><h2>{title}</h2><span>{group.rows.length} {group.rows.length === 1 ? 'heat' : 'heats'}</span></div>}
           {group.rows.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena} />)}
         </section>;
       })}
-      {finalsByAgeGroup(visibleRows).map(({ key, title, rows: finals }) => <section key={key} aria-label={title}>
+      {finalGroups.filter((group) => !hiddenKeys.has(group.key)).map(({ key, title, rows: finals }) => <section key={key} aria-label={title} className={groupDone(finals) ? 'timetable-group-done' : undefined}>
         <div className="timetable-section-head"><h2>{title}</h2><span>{finals.length} {finals.length === 1 ? 'final' : 'finals'}</span></div>
         {finals.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena} />)}
       </section>)}
+      {(hasCompleted || showAll) && <button type="button" className="btn-ghost min-h-11 w-full" aria-pressed={showAll} onClick={() => setShowAll((v) => !v)}>{showAll ? 'Hide completed sessions' : 'View complete timetable'}</button>}
       {visibleRows.length === 0 && <p className="timetable-empty">Nothing scheduled for this day.</p>}
       <ul className="timetable-legend" aria-label="Status colours">
         {Object.entries(statusLabels).map(([status, label]) => <li key={status}><span style={{ backgroundColor: TIMETABLE_COLOURS[status as keyof typeof TIMETABLE_COLOURS] }} aria-hidden="true" />{label}</li>)}
