@@ -12,13 +12,14 @@ import { CompetitionContext } from './competition/context';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useNavExtras } from '../components/NavExtrasContext';
 import { useAgeGroups } from '../components/AgeGroupsContext';
+import { useCompetitionMeta } from '../components/competitionMeta';
 import { displaySectionName } from '../lib/section';
 
 export function CompetitionPage() {
   const { id } = useParams<{ id: string }>();
   const competitionId = id ? Number(id) : null;
   if (competitionId == null || !Number.isSafeInteger(competitionId) || competitionId < 1) {
-    return <Link to="/competitions">Select a competition</Link>;
+    return <p className="pt-6"><Link className="mg-text-link" to="/competitions">Select a competition</Link></p>;
   }
   return <CompetitionContent key={competitionId} competitionId={competitionId} />;
 }
@@ -28,6 +29,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<CompetitionDetail | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const { setCurrent, setVenue } = useCurrentCompetition();
 
   const load = useCallback(() => setAttempt((n) => n + 1), []);
@@ -39,7 +41,9 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       .then((r) => {
         if (cancelled) return;
         setData(r.data);
-        setSavedAt(r.headers['x-mg-saved-copy'] === '1' ? String(r.headers['x-mg-saved-at'] ?? '') : null);
+        const saved = r.headers['x-mg-saved-copy'] === '1' ? String(r.headers['x-mg-saved-at'] ?? '') : null;
+        setSavedAt(saved);
+        setUpdatedAt(saved && !Number.isNaN(Date.parse(saved)) ? new Date(saved) : saved !== null ? null : new Date());
       })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; controller.abort(); };
@@ -51,6 +55,12 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       setVenue(data.latitude != null && data.longitude != null ? { competitionId: data.id, lat: data.latitude, lon: data.longitude } : null);
     }
   }, [data, setCurrent, setVenue]);
+
+  const { setMeta } = useCompetitionMeta();
+  useEffect(() => {
+    if (data) setMeta({ id: data.id, name: data.name, startDate: data.startDate, endDate: data.endDate, location: data.location, live: data.sessions.some((s) => s.status === 1) });
+  }, [data, setMeta]);
+  useEffect(() => () => setMeta(null), [setMeta]);
 
   const { setGroups } = useAgeGroups();
   useEffect(() => {
@@ -79,7 +89,8 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     return () => controller.abort();
   }, [competitionId, attempt]);
   useEffect(() => {
-    setItems(data ? tickerItems(data.sessions, announcements, now, data.name) : []);
+    // No name fallback: the header already shows it, so the strip stays hidden when there is no news.
+    setItems(data ? tickerItems(data.sessions, announcements, now) : []);
     return () => setItems([]);
   }, [data, announcements, now, setItems]);
 
@@ -93,9 +104,11 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         const sessions = cur.sessions.map((x) => (x.id === updated.id ? updated : x));
         return { ...cur, sessions };
       });
+      setUpdatedAt(new Date());
     },
     onResultsUpdated: (p) => {
       setData((cur) => (cur ? applyResultsUpdate(cur, p as ResultsUpdate) : cur));
+      setUpdatedAt(new Date());
     },
   });
 
@@ -128,27 +141,27 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   }, [connected, load]);
 
   if (error && !data) return (
-    <div className="card space-y-3 p-4" role="alert">
+    <div className="mg-card mx-auto mt-6 flex max-w-xl flex-col gap-3 p-4" role="alert">
       <p>Couldn’t load this competition. Check your connection or choose another event.</p>
       <div className="flex flex-wrap gap-2">
-        <button className="btn-primary min-h-11" onClick={load}>Try again</button>
-        <Link className="btn-ghost min-h-11" to="/competitions">Choose another competition</Link>
+        <button className="mg-btn mg-btn-primary" onClick={load}>Try again</button>
+        <Link className="mg-btn mg-btn-secondary" to="/competitions">Choose another competition</Link>
       </div>
     </div>
   );
-  if (!data) return <p className="text-slate-500">Loading competition…</p>;
+  if (!data) return <p role="status" className="mg-meta py-6 text-center">Loading competition…</p>;
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load }}>
-      <div className="space-y-3">
-        <ScoreOutboxPanel competitionId={data.id} />
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt }}>
+      <div className="flex flex-col gap-4">
+        <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />
         {(savedAt !== null || error || !connected) && (
-          <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+          <div role="status" className="mg-notice mx-auto flex w-full max-w-xl flex-wrap items-center gap-2">
             <p className="flex-1">
               {savedAt !== null ? `Last updated ${savedAt && !Number.isNaN(Date.parse(savedAt)) ? new Date(savedAt).toLocaleString('en-GB') : 'earlier'}.` : error ? 'Couldn’t refresh. Showing the last timetable received.' : 'Connecting to live updates. The timetable refreshes periodically while this page is open.'}
             </p>
-            <button className="btn-ghost min-h-11" onClick={load}>Refresh</button>
+            <button className="mg-btn mg-btn-secondary !min-h-11" onClick={load}>Refresh</button>
           </div>
         )}
       </div>

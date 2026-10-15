@@ -286,6 +286,7 @@ public class CompetitionsController : ControllerBase
             MaxParticipants = req.MaxParticipants.HasValue && req.MaxParticipants.Value > 0
                 ? req.MaxParticipants
                 : null,
+            FinalistCount = req.FinalistCount,
         };
         _db.CompetitionSections.Add(section);
         await _db.SaveChangesAsync();
@@ -303,6 +304,9 @@ public class CompetitionsController : ControllerBase
         if (req.PriceMinor.HasValue) section.PriceMinor = Math.Max(0, req.PriceMinor.Value);
         if (req.MaxParticipants.HasValue)
             section.MaxParticipants = req.MaxParticipants.Value > 0 ? req.MaxParticipants.Value : null;
+        // Unlike the optional fields above, an omitted FinalistCount clears it: the editor
+        // always sends the full section, and null is how an organiser unsets it.
+        section.FinalistCount = req.FinalistCount;
         await _db.SaveChangesAsync();
         return section.ToDto();
     }

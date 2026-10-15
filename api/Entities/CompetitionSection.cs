@@ -17,6 +17,12 @@ public class CompetitionSection
     public string? RunoffRaceName { get; set; }
 
     /// <summary>
+    /// How many teams go through to the final ("Top 6 make the final").
+    /// Null = not set yet. Valid range 1-50.
+    /// </summary>
+    public int? FinalistCount { get; set; }
+
+    /// <summary>
     /// When true, this section runs in "race-finals" format: each race in the
     /// list becomes a round of 3 heats (Q1, Q2, Final). Q1/Q2 score 1 (no elim)
     /// or 0 (elim); the Final scores on placing and adds to the qualifier total.

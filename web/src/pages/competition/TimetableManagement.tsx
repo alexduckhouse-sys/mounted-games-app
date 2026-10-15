@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  CheckCircle2, Activity, Coffee, Plus, X, Users, CalendarDays,
+  CheckCircle2, Activity, Coffee, Plus, X, CalendarDays,
   Megaphone, Sparkles, MapPin, Clock, Settings as SettingsIcon, Save, Wand2, AlertTriangle, Trophy, Download,
 } from 'lucide-react';
 import { useCompetition } from './context';
@@ -15,55 +15,10 @@ import { computeTimings, roundTo5Min, formatTime, type SessionTiming, type HeatT
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { displaySectionName } from '../../lib/section';
 import { WeatherNow, WeatherAt } from '../../components/WeatherChips';
-import { toCsv, downloadCsv, safeFilename } from '../../lib/csv';
+import { exportTimetableCsv } from '../../lib/timetableCsv';
+import { TeamFinder } from './TeamFinder';
 
 type AddKind = 'break' | 'briefing' | 'custom';
-
-/** Flatten the live timetable into one CSV row per heat (or one row per break/briefing). */
-function exportTimetableCsv(
-  competitionName: string,
-  sessions: Session[],
-  timings: Map<number, SessionTiming>,
-): void {
-  const header = ['Date', 'Time', 'Arena', 'Age group', 'Session', 'Heat', 'Status', 'Teams'];
-  const rows: ReadonlyArray<string>[] = [];
-  for (const s of sessions) {
-    const t = timings.get(s.id);
-    const kind = (s.kind ?? (s.isBreak ? SessionKind.Break : SessionKind.Race)) as SessionKindType;
-    if (kind !== SessionKind.Race) {
-      const when = t?.effective ?? t?.scheduled ?? null;
-      rows.push([
-        when ? when.toLocaleDateString() : '',
-        when ? when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
-        s.arenaName ?? '',
-        '',
-        s.name,
-        kind === SessionKind.Break ? 'BREAK' : kind === SessionKind.Briefing ? 'BRIEFING' : 'CUSTOM',
-        '',
-        '',
-      ]);
-      continue;
-    }
-    const heats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-    heats.forEach((h, i) => {
-      const ht = t?.heats[i];
-      const when = ht?.effective ?? ht?.scheduled ?? null;
-      const complete = h.races.length > 0 && h.races.every((r) => r.isComplete);
-      const isLive = s.status === 1 && !complete;
-      rows.push([
-        when ? when.toLocaleDateString() : '',
-        when ? when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
-        s.arenaName ?? '',
-        s.sectionName ?? '',
-        s.name,
-        h.label ?? `Heat ${i + 1}`,
-        complete ? 'OVER' : isLive ? 'IN ARENA' : 'UPCOMING',
-        h.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex).map((e) => e.teamName).join(' | '),
-      ]);
-    });
-  }
-  downloadCsv(`${safeFilename(competitionName)}-timetable.csv`, toCsv(header, rows));
-}
 
 function heatIsComplete(heat: Heat): boolean {
   return heat.races.length > 0 && heat.races.every((r) => r.isComplete);
@@ -319,7 +274,7 @@ export function TimetableManagement() {
       )}
 
       {competition.teams.length > 0 && orderedSessions.length > 0 && (
-        <TeamQuickSearch />
+        <TeamFinder />
       )}
 
       {orderedSessions.length > 0 && daySessions.length === 0 && <p className="card p-4 text-sm text-slate-600 dark:text-slate-300">Nothing scheduled for this day. Choose another day to see more.</p>}
@@ -1337,137 +1292,5 @@ function CreateFinalsModal({
         </div>
       </motion.div>
     </motion.div>
-  );
-}
-
-function TeamQuickSearch() {
-  const { competition } = useCompetition();
-  const navigate = useNavigate();
-  const [pickedId, setPickedId] = useState<number | null>(null);
-  const [query, setQuery] = useState('');
-
-  const teamsSorted = useMemo(
-    () => competition.teams.slice().sort((a, b) => a.displayName.localeCompare(b.displayName)),
-    [competition.teams]
-  );
-
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (q.length === 0) return [] as typeof teamsSorted;
-    return teamsSorted.filter((t) => t.displayName.toLowerCase().includes(q)).slice(0, 8);
-  }, [query, teamsSorted]);
-
-  const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
-
-  const summary = useMemo(() => {
-    if (pickedId == null) return null;
-    const team = competition.teams.find((t) => t.id === pickedId);
-    if (!team) return null;
-    type Row = { sessionId: number; sessionName: string; heatId: number; heatLabel: string; effective: Date | null; scheduled: Date | null; complete: boolean };
-    const rows: Row[] = [];
-    const sessions = competition.sessions
-      .filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
-      .slice().sort((a, b) => a.orderIndex - b.orderIndex);
-    for (const s of sessions) {
-      const heats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-      const sessTiming = timings.get(s.id);
-      heats.forEach((h, idx) => {
-        if (!h.entries.some((e) => e.teamId === pickedId)) return;
-        const ht = sessTiming?.heats[idx];
-        const complete = h.races.length > 0 && h.races.every((r) => r.isComplete);
-        rows.push({
-          sessionId: s.id,
-          sessionName: s.sectionName ?? s.name,
-          heatId: h.id,
-          heatLabel: h.label ?? `Heat ${idx + 1}`,
-          effective: ht?.effective ?? null,
-          scheduled: ht?.scheduled ?? null,
-          complete,
-        });
-      });
-    }
-    return { team, rows, next: rows.find((r) => !r.complete) ?? null };
-  }, [pickedId, competition.teams, competition.sessions, timings]);
-
-  return (
-    <div className="card p-3 space-y-2">
-      <div className="flex items-center gap-2 flex-wrap">
-        <label className="text-sm font-semibold flex items-center gap-1">
-          <Users className="w-4 h-4 text-brand-600" /> When is my team in?
-        </label>
-        <input
-          className="input !py-1.5 text-sm flex-1 min-w-[160px]"
-          placeholder="Type a team name…"
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setPickedId(null); }}
-          list="team-quick-search"
-        />
-        <datalist id="team-quick-search">
-          {teamsSorted.map((t) => <option key={t.id} value={t.displayName} />)}
-        </datalist>
-        {pickedId != null && (
-          <button onClick={() => { setPickedId(null); setQuery(''); }} className="btn-ghost !py-1 !px-2 text-xs">
-            <X className="w-3.5 h-3.5" /> Clear
-          </button>
-        )}
-      </div>
-
-      {matches.length > 0 && pickedId == null && (
-        <div className="flex flex-wrap gap-1.5">
-          {matches.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => { setPickedId(t.id); setQuery(t.displayName); }}
-              className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-700 hover:bg-brand-100 dark:hover:bg-brand-900/40 text-xs font-medium"
-            >
-              {t.displayName}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {summary && (
-        <div className="rounded-md bg-brand-50 dark:bg-brand-900/30 border border-brand-200 dark:border-brand-800 p-2.5 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-sm">{summary.team.displayName}</span>
-            {summary.next ? (
-              <>
-                <span className="text-xs text-slate-500">next up:</span>
-                <span className="font-mono font-bold text-base text-brand-700 dark:text-brand-200 tabular-nums">
-                  {formatTime(roundTo5Min(summary.next.effective ?? summary.next.scheduled))}
-                </span>
-                <span className="text-xs text-slate-600 dark:text-slate-300 truncate">
-                  · {summary.next.heatLabel}
-                </span>
-                <button
-                  onClick={() => navigate(`session/${summary.next!.sessionId}`)}
-                  className="btn-ghost !py-0.5 !px-2 text-[11px] ml-auto"
-                >
-                  View heat
-                </button>
-              </>
-            ) : summary.rows.length > 0 ? (
-              <span className="text-xs text-emerald-700 dark:text-emerald-300">All heats over.</span>
-            ) : (
-              <span className="text-xs text-slate-500">Not in any heats yet.</span>
-            )}
-          </div>
-          {summary.rows.length > 1 && (
-            <ul className="text-[11px] space-y-0.5">
-              {summary.rows.map((r) => (
-                <li key={r.heatId} className="flex items-center gap-2">
-                  <span className={`font-mono tabular-nums w-10 ${r.complete ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-100 font-semibold'}`}>
-                    {formatTime(roundTo5Min(r.effective ?? r.scheduled))}
-                  </span>
-                  <span className={`truncate flex-1 ${r.complete ? 'line-through text-slate-400' : ''}`}>
-                    {r.heatLabel}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
   );
 }

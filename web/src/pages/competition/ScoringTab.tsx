@@ -3,11 +3,15 @@ import { TimetableBoard } from './TimetableBoard';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Sparkles, X, AlertTriangle } from 'lucide-react';
+import { ChevronRight, Trophy, Sparkles, X, AlertTriangle } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { StandingRow } from '../../types';
+import { buildToplist } from '../../lib/toplist';
+import { ToplistView } from './ToplistView';
+
+const NO_ROWS: StandingRow[] = [];
 
 export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const { competition, reload } = useCompetition();
@@ -21,7 +25,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
 
   const [standingsResult, setStandingsResult] = useState<{ sectionId: number; rows: StandingRow[]; error: boolean; savedCopy: boolean } | null>(null);
   const [retry, setRetry] = useState(0);
-  const standings = standingsResult?.sectionId === sectionId ? standingsResult.rows : [];
+  const standings = standingsResult?.sectionId === sectionId ? standingsResult.rows : NO_ROWS;
   const standingsLoading = sectionId != null && standingsResult?.sectionId !== sectionId;
   const standingsError = standingsResult?.sectionId === sectionId && standingsResult.error;
   useEffect(() => {
@@ -33,76 +37,101 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     return () => { cancelled = true; };
   }, [competition.id, sectionId, competition.sessions, retry]);
 
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="min-w-0 flex-1 basis-48">
-          <span className="sr-only">Age group</span>
-          <select className="input min-h-12 w-full !text-xl !font-bold" value={sectionId ?? ''} onChange={(e) => setSearchParams({ section: e.target.value }, { replace: true })} disabled={competition.sections.length === 0}>
-            {competition.sections.length === 0 && <option value="">No age groups yet</option>}
-            {competition.sections.map((sec) => <option key={sec.id} value={sec.id}>{displaySectionName(sec.displayName)}</option>)}
-          </select>
-        </label>
-        <div className="ml-auto flex gap-1">
-          {!toplistOnly && <button
-            onClick={() => setShowToplist((v) => !v)}
-            className={`btn-ghost min-h-11 !px-3 text-sm ${showToplist ? 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-200' : ''}`}
-          >
-            <Trophy className="w-3.5 h-3.5" /> {showToplist ? 'Hide toplist' : 'Show toplist'}
-          </button>}
-          {canEdit() && sectionId != null && (
-            <button onClick={() => setShowFinals(true)} className="btn-primary !py-1.5 !px-2.5 text-xs">
-              <Sparkles className="w-3.5 h-3.5" /> Create finals
-            </button>
+  const section = competition.sections.find((s) => s.id === sectionId) ?? null;
+  const sectionName = displaySectionName(section?.displayName);
+  const list = useMemo(
+    () => buildToplist(standings, competition.sessions, competition.teams, sectionId ?? -1, section?.finalistCount),
+    [standings, competition.sessions, competition.teams, sectionId, section?.finalistCount],
+  );
+  const progress = list.sessionsTotal === 0 ? null
+    : list.sessionsDone === list.sessionsTotal ? (list.sessionsTotal === 1 ? 'After session 1' : `After all ${list.sessionsTotal} sessions`)
+    : list.sessionsDone > 0 ? `After session ${list.sessionsDone} of ${list.sessionsTotal}` : null;
+  const chips = competition.sections.length > 1 && (
+    <div className="mg-chips" role="group" aria-label="Age group">
+      {competition.sections.map((sec) => (
+        <button key={sec.id} type="button" className="mg-chip" aria-pressed={sec.id === sectionId} onClick={() => setSearchParams({ section: String(sec.id) }, { replace: true })}>
+          {displaySectionName(sec.displayName)}
+        </button>
+      ))}
+    </div>
+  );
+  const toplist = (
+    <section aria-label={`Toplist${sectionName ? `, ${sectionName}` : ''}`} className="flex flex-col gap-2.5">
+      {standingsResult?.sectionId === sectionId && standingsResult.savedCopy && <p role="status" className="mg-notice">Showing saved results. Positions may have changed.</p>}
+      {standingsLoading && <p role="status" className="mg-meta py-3">Loading results…</p>}
+      {standingsError && <div role="alert" className="mg-card flex flex-col items-start gap-3 p-4"><p>Couldn’t load results. Check your connection and try again.</p><button className="mg-btn mg-btn-secondary" onClick={() => { setStandingsResult(null); setRetry((n) => n + 1); }}>Try again</button></div>}
+      {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No results yet.</p>}
+      {standings.length > 0 && <ToplistView list={list} section={section} />}
+    </section>
+  );
+  const finalsButton = canEdit() && sectionId != null && (
+    <button onClick={() => setShowFinals(true)} className="mg-btn mg-btn-primary">
+      <Sparkles className="h-4 w-4" /> Create finals
+    </button>
+  );
+  const finalsModal = (
+    <AnimatePresence>
+      {showFinals && sectionId != null && (
+        <FinalsModal
+          sectionId={sectionId}
+          onClose={() => setShowFinals(false)}
+          onCreated={() => { setShowFinals(false); reload(); }}
+        />
+      )}
+    </AnimatePresence>
+  );
+
+  if (toplistOnly || sectionId == null) {
+    return (
+      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-4">
+        <div className="mg-band flex flex-col gap-3 pb-3.5 pt-3">
+          <div className="flex items-baseline gap-2.5">
+            <h1 className="mg-h1 mg-h1-sm flex-1">{toplistOnly ? 'Toplist' : 'Age groups'}</h1>
+            {progress && <span className="mg-meta shrink-0 font-medium">{progress}</span>}
+          </div>
+          {competition.sections.length > 1 && (
+            <div className="mg-seg" role="group" aria-label="Age group">
+              {competition.sections.map((sec) => (
+                <button key={sec.id} type="button" aria-pressed={sec.id === sectionId} onClick={() => setSearchParams({ section: String(sec.id) }, { replace: true })}>
+                  {displaySectionName(sec.displayName)}
+                </button>
+              ))}
+            </div>
           )}
         </div>
+        {sectionId == null ? <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No age groups yet.</p> : toplist}
+        {finalsButton}
+        {finalsModal}
       </div>
+    );
+  }
 
-      <AnimatePresence initial={false}>
-        {(toplistOnly || showToplist) && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="card p-2">
-              <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold mb-1 px-1">
-                Toplist · {displaySectionName(competition.sections.find((s) => s.id === sectionId)?.displayName) || '—'}
-              </div>
-              {sectionId == null && <p className="text-slate-500 text-xs">Pick an age group.</p>}
-              {standingsResult?.sectionId === sectionId && standingsResult.savedCopy && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Showing saved results. Positions may have changed.</p>}
-              {standingsLoading && <p role="status" className="p-3 text-sm text-slate-500">Loading results…</p>}
-              {standingsError && <div role="alert" className="space-y-2 p-3 text-sm"><p>Couldn’t load results. Check your connection and try again.</p><button className="btn-ghost min-h-11" onClick={() => { setStandingsResult(null); setRetry((n) => n + 1); }}>Try again</button></div>}
-              {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="p-3 text-sm text-slate-500">No results yet.</p>}
-              <ol className="divide-y divide-slate-100 dark:divide-slate-700">
-                {standings.map((r, idx) => (
-                  <li key={r.teamId} className="flex min-h-12 items-center gap-3 px-3 py-2">
-                    <span className="w-5 text-right shrink-0 font-mono font-bold text-brand-700 dark:text-brand-200 text-xs tabular-nums">
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0 flex-1 break-words text-sm">{r.teamName}</div>
-                    <div className="font-mono text-sm font-bold text-brand-700 dark:text-brand-200 tabular-nums">
-                      {r.totalPoints}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {!toplistOnly && sectionId != null && <TimetableBoard sectionId={sectionId} hideTitle />}
-
-      <AnimatePresence>
-        {showFinals && sectionId != null && (
-          <FinalsModal
-            sectionId={sectionId}
-            onClose={() => setShowFinals(false)}
-            onCreated={() => { setShowFinals(false); reload(); }}
-          />
-        )}
-      </AnimatePresence>
-    </div>
+  return (
+    <>
+      <TimetableBoard
+        sectionId={sectionId}
+        title={sectionName || 'Age group'}
+        bandExtra={chips}
+        lead={
+          <div className="flex flex-col gap-3">
+            <button type="button" className="mg-tint-link" aria-expanded={showToplist} onClick={() => setShowToplist((v) => !v)}>
+              <Trophy aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
+              <span className="flex-1">{showToplist ? 'Hide toplist' : `Show ${sectionName ? `${sectionName} ` : ''}toplist`}</span>
+              <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none ${showToplist ? 'rotate-90' : ''}`} />
+            </button>
+            <AnimatePresence initial={false}>
+              {showToplist && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                  {toplist}
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {finalsButton}
+          </div>
+        }
+      />
+      {finalsModal}
+    </>
   );
 }
 

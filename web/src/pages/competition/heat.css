@@ -1,0 +1,45 @@
+/* Heat score grid: rotated race names above 21px columns (docs/designs/public-pages-proposal.html). */
+.heat-grid { width: 100%; table-layout: fixed; border-collapse: collapse; color: rgb(var(--mg-ink)); }
+.heat-grid th, .heat-grid td { padding: 0; box-sizing: border-box; }
+
+.heat-grid thead th {
+  position: relative; height: 92px; vertical-align: bottom; padding-top: 10px;
+  border-bottom: 1px solid rgb(var(--mg-ink));
+  font: 700 12px/1 'Barlow Condensed', sans-serif; letter-spacing: .03em; text-transform: uppercase; color: rgb(var(--mg-muted)); text-align: left;
+}
+.heat-grid .heat-rank { width: 30px; padding-left: 12px; }
+.heat-grid .heat-race { width: 23px; }
+.heat-grid .heat-pts { width: 44px; padding-right: 12px; }
+
+.heat-grid thead th.heat-pts { text-align: right; padding-bottom: 8px; color: rgb(var(--mg-heading)); }
+.heat-grid thead th:first-child { padding-left: 12px; }
+.heat-grid thead th.heat-rank + th { padding-left: 0; }
+
+.heat-name {
+  position: absolute; left: 17px; bottom: 1px; max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transform-origin: 0 100%; transform: rotate(-55deg); color: rgb(var(--mg-ink));
+}
+.heat-name-running { color: rgb(var(--mg-red)); }
+.heat-sep {
+  position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: rgb(var(--mg-ink));
+  transform-origin: 0 50%; transform: rotate(-55deg);
+}
+
+.heat-grid tbody th, .heat-grid tbody td { height: 52px; border-bottom: 1px solid rgb(var(--mg-ink)); }
+.heat-grid tbody td.heat-rank-cell { padding-left: 12px; text-align: left; font: 700 17px/1 'Barlow Condensed', sans-serif; color: rgb(var(--mg-muted)); }
+.heat-team {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; text-align: left;
+  font: 600 14px/1.2 'Barlow', sans-serif; color: rgb(var(--mg-ink));
+}
+.heat-grid tbody th.heat-team:first-child { padding-left: 12px; }
+.heat-cell {
+  text-align: center; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: rgb(var(--mg-ink));
+  border-left: 1px solid rgb(var(--mg-ink));
+}
+.heat-grid td.heat-cell-first { border-left: 0; }
+.heat-grid td.heat-total {
+  text-align: right; padding-right: 12px; border-left: 1px solid rgb(var(--mg-ink));
+  font: 700 21px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading));
+}
+.heat-dash { color: rgb(var(--mg-dash)); }
+.heat-elim { color: rgb(var(--mg-elim)); }
