@@ -74,6 +74,17 @@ export function groupRowsBySession(rows: TimetableRow[]): TimetableGroup[] {
   return groups;
 }
 
+/**
+ * Keys of the finished groups to hide: once a later group has finished too, only the most recent
+ * finished group stays (greyed) and the older ones drop away.
+ */
+export function hiddenFinishedKeys(groups: { key: string; rows: TimetableRow[] }[]): Set<string> {
+  const finished = groups.filter((group) => group.rows.length > 0 && group.rows.every((row) => row.status === 'finished'));
+  const endOf = (group: { rows: TimetableRow[] }) => Math.max(...group.rows.map((row) => row.effective?.getTime() ?? 0));
+  const newest = finished.reduce<typeof finished[number] | null>((best, group) => (!best || endOf(group) >= endOf(best) ? group : best), null);
+  return new Set(finished.filter((group) => group !== newest).map((group) => group.key));
+}
+
 /** "Seniors Session 1": the age group (without "Teams") plus its session number. */
 export function sessionTitle(session: Session, ordinals: Map<number, number>): string {
   return `${displaySectionName(session.sectionName || session.name)} Session ${ordinals.get(session.id) ?? 1}`;

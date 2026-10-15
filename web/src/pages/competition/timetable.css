@@ -55,6 +55,8 @@ a.timetable-row:hover, a.timetable-row:active { background: var(--timetable-hove
 .timetable-late .timetable-time { color: #C08308; }
 .timetable-live .timetable-dot { animation: timetable-pulse 1.6s ease-in-out infinite; }
 .timetable-finished { opacity: .55; }
+.timetable-group-done { filter: grayscale(1); }
+.timetable-group-done .timetable-section-head { opacity: .55; }
 .timetable-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; list-style: none; padding: 0; margin: 0; font-size: 12px; color: var(--timetable-muted); }
 .timetable-legend li { display: flex; align-items: center; gap: 6px; }
 .timetable-legend li > span { width: 8px; height: 8px; border-radius: 50%; }

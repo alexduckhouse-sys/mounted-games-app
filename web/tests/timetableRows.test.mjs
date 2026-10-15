@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { groupRowsBySession, sessionOrdinals, timetableRows, timetableStatus } from '../src/lib/timetableRows.ts';
+import { hiddenFinishedKeys, groupRowsBySession, sessionOrdinals, timetableRows, timetableStatus } from '../src/lib/timetableRows.ts';
 
 const scheduled = new Date('2026-06-01T09:00:00Z');
 const delayed = new Date('2026-06-01T09:12:00Z');
@@ -52,4 +52,17 @@ test('numbers sessions within each age group and groups rows by session in time 
   assert.deepEqual([1, 2, 3, 4].map((id) => ordinals.get(id)), [1, 1, undefined, 2]);
   const groups = groupRowsBySession(timetableRows(sessions, new Map(), false));
   assert.deepEqual(groups.map((group) => [group.session.id, group.race, group.rows.length]), [[1, true, 2], [2, true, 1], [3, false, 1], [4, true, 1]]);
+});
+
+test('keeps only the most recent finished group visible', () => {
+  const row = (status, ms) => ({ status, effective: new Date(ms) });
+  const groups = [
+    { key: 'a', rows: [row('finished', 1000)] },
+    { key: 'b', rows: [row('finished', 2000)] },
+    { key: 'c', rows: [row('finished', 3000), row('live', 3500)] },
+    { key: 'd', rows: [row('on-time', 4000)] },
+  ];
+  assert.deepEqual([...hiddenFinishedKeys(groups)], ['a']);
+  assert.equal(hiddenFinishedKeys([groups[0]]).size, 0);
+  assert.equal(hiddenFinishedKeys([]).size, 0);
 });
