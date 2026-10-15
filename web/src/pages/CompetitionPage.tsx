@@ -5,6 +5,7 @@ import type { ChatMessage, CompetitionDetail, Session, Heat } from '../types';
 import { tickerItems } from '../lib/ticker';
 import { useTicker } from '../components/TickerContext';
 import { useLiveHub } from '../live/useLiveHub';
+import { applyResultsUpdate, replaceHeat, type ResultsUpdate } from '../lib/liveUpdates';
 import { CompetitionContext } from './competition/context';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useNavExtras } from '../components/NavExtrasContext';
@@ -92,18 +93,13 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       });
     },
     onResultsUpdated: (p) => {
-      const payload = p as { sessionId: number; heat: Heat };
-      setData((cur) => {
-        if (!cur) return cur;
-        const sessions = cur.sessions.map((s) => {
-          if (s.id !== payload.sessionId) return s;
-          const heats = s.heats.map((h) => (h.id === payload.heat.id ? payload.heat : h));
-          return { ...s, heats };
-        });
-        return { ...cur, sessions };
-      });
+      setData((cur) => (cur ? applyResultsUpdate(cur, p as ResultsUpdate) : cur));
     },
   });
+
+  const applyHeat = useCallback((sessionId: number, heat: Heat) => {
+    setData((cur) => (cur ? replaceHeat(cur, sessionId, heat) : cur));
+  }, []);
 
   useEffect(() => {
     function refresh() { if (navigator.onLine && document.visibilityState === 'visible') load(); }
@@ -131,7 +127,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   if (!data) return <p className="text-slate-500">Loading competition…</p>;
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, applyHeat }}>
       <div className="space-y-3">
         <Outlet />
         {(savedAt !== null || error || !connected) && (

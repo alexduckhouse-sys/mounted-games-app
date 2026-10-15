@@ -240,6 +240,9 @@ public record RaceDto(
 
 public record UpdateHeatDurationRequest(int? DurationMinutes);
 
+/// <summary>When the scorer tapped Start/Stop, so a slow connection doesn't shift the race time.</summary>
+public record RaceClockRequest(DateTime? At);
+
 public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex);
 
 public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points);

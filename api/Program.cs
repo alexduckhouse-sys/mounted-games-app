@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Text;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -94,6 +96,16 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .AllowAnyMethod()
     .AllowCredentials()));
 
+// Phones at events are often on one bar of signal: JSON shrinks ~80% compressed.
+builder.Services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.Providers.Add<BrotliCompressionProvider>();
+    o.Providers.Add<GzipCompressionProvider>();
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
@@ -124,9 +136,18 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// Not for sign-in responses (they carry tokens) or the SignalR hub.
+app.UseWhen(
+    ctx => !ctx.Request.Path.StartsWithSegments("/api/auth") && !ctx.Request.Path.StartsWithSegments("/hubs"),
+    branch => branch.UseResponseCompression());
+
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseWhen(
+    ctx => HttpMethods.IsGet(ctx.Request.Method) && ctx.Request.Path.StartsWithSegments("/api"),
+    branch => branch.UseMiddleware<JsonEtagMiddleware>());
 
 // In production, the Vite SPA is copied into wwwroot by the Dockerfile.
 // Serve it as static files and fall back to index.html so React Router
@@ -135,7 +156,15 @@ var wwwroot = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
 if (Directory.Exists(wwwroot))
 {
     app.UseDefaultFiles();
-    app.UseStaticFiles();
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        // Vite fingerprints everything under /assets, so phones never need to re-check it.
+        OnPrepareResponse = ctx =>
+        {
+            if (ctx.Context.Request.Path.StartsWithSegments("/assets"))
+                ctx.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        }
+    });
 }
 
 app.MapControllers();

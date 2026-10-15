@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Megaphone, Activity, Users, Radio, Save, ExternalLink, X, Trash2, Shield, MessagesSquare, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -97,11 +97,17 @@ export function ChatTab() {
   const [lastChatComp, setLastChatComp] = useState<LastChatComp | null>(() => loadLastChatComp());
   const [dismissedCompWarning, setDismissedCompWarning] = useState(false);
 
-  useEffect(() => {
-    api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`).then((r) => setMessages(r.data));
+  // Fetch on open and again whenever live updates reconnect, so messages and
+  // announcements sent during a signal drop aren't missed.
+  const loadMessages = useCallback(() => {
+    api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`)
+      .then((r) => setMessages(r.data))
+      .catch(() => { /* keep what's on screen; the next reconnect retries */ });
   }, [competition.id]);
+  useEffect(loadMessages, [loadMessages]);
 
   useLiveHub(competition.id, {
+    onReady: loadMessages,
     onChatMessage: (m) => {
       const msg = m as ChatMessage;
       setMessages((cur) => cur.some((c) => c.id === msg.id) ? cur : [...cur, msg]);

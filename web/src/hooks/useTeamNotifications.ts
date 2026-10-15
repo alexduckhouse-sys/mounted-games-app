@@ -63,6 +63,8 @@ export function useTeamNotifications(teams: Team[]) {
     const compIds = Array.from(new Set(teams.map((t) => t.competitionId)));
     let cancelled = false;
     function pull() {
+      // A locked phone or no signal: skip, and catch up when the page is back.
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
       Promise.all(compIds.map((id) =>
         api.get<CompetitionDetail>(`/competitions/${id}`).then((r) => [id, r.data] as const).catch(() => null)
       )).then((rows) => {
@@ -74,7 +76,14 @@ export function useTeamNotifications(teams: Team[]) {
     }
     pull();
     const i = setInterval(pull, 60_000);
-    return () => { cancelled = true; clearInterval(i); };
+    document.addEventListener('visibilitychange', pull);
+    window.addEventListener('online', pull);
+    return () => {
+      cancelled = true;
+      clearInterval(i);
+      document.removeEventListener('visibilitychange', pull);
+      window.removeEventListener('online', pull);
+    };
   }, [enabled, teams]);
 
   const tickRef = useRef<number | null>(null);

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -49,19 +50,24 @@ public class ScoringController : ControllerBase
     }
 
     /// <summary>
-    /// Admin starts a live clock for a race. Sets `StartedAt = now` (idempotent
-    /// — won't reset if already started) and clears `FinishedAt` so the timer
-    /// runs again if you re-start a race in error.
+    /// Admin starts a live clock for a race. Sets `StartedAt` to the tap time
+    /// (idempotent — won't reset if already started) and clears `FinishedAt` so
+    /// the timer runs again if you re-start a race in error.
     /// </summary>
     [HttpPost("api/races/{raceId:int}/start")]
-    public async Task<ActionResult<RaceDto>> StartRace(int raceId)
+    public async Task<ActionResult<RaceDto>> StartRace(int raceId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null)
     {
         var race = await _db.Races
             .Include(r => r.Heat).ThenInclude(h => h!.Session)
             .Include(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstOrDefaultAsync(r => r.Id == raceId);
         if (race is null) return NotFound();
-        if (race.StartedAt is null) race.StartedAt = DateTime.UtcNow;
+        var tappedAt = ClockTime(req?.At, DateTime.UtcNow);
+        // A retried Start can arrive after the Stop that followed it: keep the finish.
+        if (req?.At is not null && race.FinishedAt is not null && race.FinishedAt >= tappedAt)
+            return race.ToDto();
+        if (race.StartedAt is null) race.StartedAt = tappedAt;
         race.FinishedAt = null;
         await _db.SaveChangesAsync();
         var dto = race.ToDto();
@@ -70,17 +76,20 @@ public class ScoringController : ControllerBase
         return dto;
     }
 
-    /// <summary>Admin stops the live clock — sets `FinishedAt = now`.</summary>
+    /// <summary>Admin stops the live clock — sets `FinishedAt` to the tap time.</summary>
     [HttpPost("api/races/{raceId:int}/stop")]
-    public async Task<ActionResult<RaceDto>> StopRace(int raceId)
+    public async Task<ActionResult<RaceDto>> StopRace(int raceId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null)
     {
         var race = await _db.Races
             .Include(r => r.Heat).ThenInclude(h => h!.Session)
             .Include(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstOrDefaultAsync(r => r.Id == raceId);
         if (race is null) return NotFound();
-        if (race.StartedAt is null) race.StartedAt = DateTime.UtcNow.AddSeconds(-1);
-        race.FinishedAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        var finishedAt = ClockTime(req?.At, now);
+        if (race.StartedAt is null || race.StartedAt > finishedAt) race.StartedAt = finishedAt.AddSeconds(-1);
+        race.FinishedAt = finishedAt;
         await _db.SaveChangesAsync();
         var dto = race.ToDto();
         await _live.ResultsUpdated(race.Heat!.Session!.CompetitionId,
@@ -105,5 +114,18 @@ public class ScoringController : ControllerBase
         var competitionId = heat.Session!.CompetitionId;
         await _live.ResultsUpdated(competitionId, new { sessionId = heat.SessionId, heat = dto });
         return dto;
+    }
+
+    /// <summary>
+    /// Use the device's tap time when it is plausible: a request can sit in a
+    /// phone's queue for a while on patchy signal, but never in the future.
+    /// </summary>
+    internal static DateTime ClockTime(DateTime? at, DateTime utcNow)
+    {
+        if (at is null) return utcNow;
+        var tapped = at.Value.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(at.Value, DateTimeKind.Utc)
+            : at.Value.ToUniversalTime();
+        return tapped > utcNow || tapped < utcNow.AddMinutes(-10) ? utcNow : tapped;
     }
 }
