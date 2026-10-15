@@ -89,7 +89,7 @@ export function MySignupsPage() {
                 </div>
                 <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 text-[11px]">
                   <div>
-                    <dt className="text-slate-500 uppercase font-semibold">Section</dt>
+                    <dt className="text-slate-500 uppercase font-semibold">Age group</dt>
                     <dd className="font-medium">{s.sectionName}</dd>
                   </div>
                   <div>

@@ -133,7 +133,7 @@ export function DetailsTab() {
           <div className="flex items-start gap-2">
             <Layers className="w-4 h-4 text-brand-600 mt-0.5 shrink-0" />
             <div>
-              <dt className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">Sections</dt>
+              <dt className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">Age groups</dt>
               <dd>{competition.sections.length || '—'}</dd>
             </div>
           </div>

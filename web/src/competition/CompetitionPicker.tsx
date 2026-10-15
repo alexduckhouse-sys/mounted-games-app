@@ -62,7 +62,7 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
               navigate(`/competitions/${competition.id}`);
               onClose?.();
             }}>
-              <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-3xl dark:bg-slate-800">{icon.symbol}</span>
+              <span aria-hidden="true" className="flex w-14 shrink-0 items-center justify-center text-5xl leading-none">{icon.symbol}</span>
               <span className="min-w-0 flex-1 space-y-1.5">
                 <span className="block break-words text-base font-semibold leading-snug">{competition.name}</span>
                 <span className="flex items-start gap-1.5 text-sm text-slate-500 dark:text-slate-400"><CalendarDays aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{startDate}{endDate && endDate !== startDate ? ` – ${endDate}` : ''}</span></span>

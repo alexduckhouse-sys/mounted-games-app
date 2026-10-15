@@ -5,18 +5,10 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#f1f7f4',
-          100: '#dcebe2',
-          200: '#b9d7c6',
-          300: '#8fbda5',
-          400: '#5e9c80',
-          500: '#3f7d62',
-          600: '#2f634d',
-          700: '#264f3e',
-          800: '#1f4032',
-          900: '#173024',
-        },
+        // Channels live in index.css per theme, so each palette recolours the whole app.
+        brand: Object.fromEntries(
+          [50, 100, 200, 300, 400, 500, 600, 700, 800, 900].map((n) => [n, `rgb(var(--brand-${n}) / <alpha-value>)`]),
+        ),
         arena: {
           live: '#facc15',
           liveDark: '#a16207',

@@ -11,7 +11,7 @@ import { ForecastBadge } from '../../components/ForecastBadge';
 import type { DeclarationForm, Heat, HeatEntry, Race, Session } from '../../types';
 import { SessionEndTransition } from './SessionEndTransition';
 import { bibAccent } from '../../lib/bib';
-import { displaySectionName } from '../../lib/section';
+import { sessionOrdinals, sessionTitle } from '../../lib/timetableRows';
 
 function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
   if (heatSize <= 0) return baseLane;
@@ -62,6 +62,8 @@ export function SessionPage() {
     () => competition.sessions.find((s) => s.id === sid) ?? null,
     [competition, sid]
   );
+
+  const ordinals = useMemo(() => sessionOrdinals(competition.sessions), [competition.sessions]);
 
   const sessionBase = useMemo(() => {
     if (!session) return 0;
@@ -126,12 +128,6 @@ export function SessionPage() {
     for (const f of decForms) m.set(f.teamId, f);
     return m;
   }, [decForms]);
-
-  const nextUpHeat = useMemo<Heat | null>(() => {
-    const activeIdx = orderedHeats.findIndex((h) => !heatIsComplete(h));
-    if (activeIdx < 0) return null;
-    return orderedHeats[activeIdx + 1] ?? null;
-  }, [orderedHeats]);
 
   useEffect(() => {
     if (activeHeatId == null && firstIncompleteHeatId != null) setActiveHeatId(firstIncompleteHeatId);
@@ -287,19 +283,14 @@ export function SessionPage() {
       <div className="card p-3">
         <div className="flex items-start gap-2 flex-wrap">
           <div className="flex-1 min-w-0">
-            <h2 className="text-base sm:text-lg font-bold truncate">{session.name}</h2>
-            <span className="text-[11px] text-slate-500 dark:text-slate-300">{displaySectionName(session.sectionName)}</span>
+            <h2 className="text-base sm:text-lg font-bold truncate">{sessionTitle(session, ordinals)}</h2>
           </div>
           <ForecastBadge lat={competition.latitude} lon={competition.longitude} date={session.scheduledStart ?? competition.startDate} />
           <span className="pill bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-200">
-            1st = {sessionBase} pts
+            1st – {sessionBase} pts
           </span>
         </div>
       </div>
-
-      {nextUpHeat && (
-        <NextUpCard heat={nextUpHeat} decFormByTeamId={decFormByTeamId} />
-      )}
 
       {saveError && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{saveError}</p>}
       {canEdit() ? (
@@ -335,7 +326,7 @@ export function SessionPage() {
           )}
         </>
       ) : (
-        <PublicResultsView session={session} heats={orderedHeats} />
+        <PublicResultsView heats={orderedHeats} />
       )}
 
       <AnimatePresence>
@@ -952,40 +943,16 @@ function ScoreTile({
   );
 }
 
-function PublicResultsView({ session, heats }: { session: Session; heats: Heat[] }) {
-  const [expanded, setExpanded] = useState(false);
+function PublicResultsView({ heats }: { heats: Heat[] }) {
   if (heats.length === 0) {
     return <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>;
   }
-  const isRaceFinals = heats.some((h) => (h.raceRoundStage ?? 0) > 0);
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 flex-wrap">
-        <h3 className="text-sm font-semibold flex items-center gap-1.5 flex-1 min-w-0">
-          <Trophy className="w-4 h-4 text-brand-600 shrink-0" />
-          <span className="truncate">
-            {isRaceFinals ? 'Race scores' : 'Session scores'}
-          </span>
-          <span className="text-[10px] uppercase tracking-wide text-slate-500 font-bold shrink-0">
-            {isRaceFinals ? 'Q1 + Q2 + Final combined' : 'Per race'}
-          </span>
-        </h3>
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className={`btn-ghost !py-1 !px-2 text-[11px] ${expanded ? 'bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-200' : ''}`}
-          title={expanded ? 'Hide per-heat breakdown' : 'Show per-heat breakdown'}
-        >
-          {expanded ? 'Hide heat breakdown' : 'Show heat breakdown'}
-        </button>
-      </div>
+      <h3 className="text-sm font-semibold flex items-center gap-1.5">
+        <Trophy className="w-4 h-4 text-brand-600 shrink-0" />Heats
+      </h3>
       <SessionScoresTable heats={heats} />
-      {expanded && (
-        <div className="space-y-3">
-          {heats.map((heat, i) => (
-            <HeatPublicTable key={heat.id} heat={heat} index={i} session={session} />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -1045,8 +1012,7 @@ function SessionScoresTable({ heats }: { heats: Heat[] }) {
         <table className="w-full text-xs sm:text-sm border-collapse">
           <thead>
             <tr className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              <th className="text-left font-semibold px-1.5 py-1 sticky left-0 bg-white dark:bg-slate-800 z-10">#</th>
-              <th className="text-left font-semibold px-1.5 py-1 sticky left-6 bg-white dark:bg-slate-800 z-10 min-w-[120px]">Team</th>
+              <th className="text-left font-semibold px-1.5 py-1 sticky left-0 bg-white dark:bg-slate-800 z-10 min-w-[120px]">Team</th>
               {grid.raceNames.map((n) => (
                 <th key={n} className="text-center font-semibold px-1.5 py-1 max-w-[80px] truncate" title={n}>
                   {n}
@@ -1056,15 +1022,9 @@ function SessionScoresTable({ heats }: { heats: Heat[] }) {
             </tr>
           </thead>
           <tbody>
-            {grid.teams.map((t, idx) => (
+            {grid.teams.map((t) => (
               <tr key={t.id} className="border-t border-slate-100 dark:border-slate-700/60">
-                <td className="px-1.5 py-1 font-mono font-bold text-brand-700 dark:text-brand-200 sticky left-0 bg-white dark:bg-slate-800">
-                  {idx + 1}
-                </td>
-                <td
-                  className="px-1.5 py-1 sticky left-6 bg-white dark:bg-slate-800 truncate"
-                  style={{ borderLeft: `3px solid ${bibAccent(t.bib)}` }}
-                >
+                <td className="px-1.5 py-1 sticky left-0 bg-white dark:bg-slate-800 truncate">
                   {t.name}
                 </td>
                 {grid.raceNames.map((n) => {
@@ -1088,153 +1048,6 @@ function SessionScoresTable({ heats }: { heats: Heat[] }) {
         </table>
       </div>
     </div>
-  );
-}
-
-export function HeatPublicTable({ heat, index, session }: { heat: Heat; index: number; session: Session }) {
-  const races = heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-  const teams = heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
-  const start = heatStartTime(session, heat, index);
-
-  const totals = useMemo(() => {
-    const m = new Map<number, number>();
-    for (const r of races) {
-      for (const res of r.results) {
-        m.set(res.teamId, (m.get(res.teamId) ?? 0) + res.points);
-      }
-    }
-    return m;
-  }, [races]);
-
-  function cellPoints(r: Race, teamId: number) {
-    const res = r.results.find((x) => x.teamId === teamId);
-    if (!res) return <span className="text-slate-400">—</span>;
-    if (res.eliminated) return <span className="text-rose-500">0</span>;
-    return <span className="font-semibold">{res.points}</span>;
-  }
-
-  function shortLabel(name: string): string {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].slice(0, 3);
-    const tail = parts[parts.length - 1];
-    if (/^[A-Z0-9]{1,3}$/.test(tail)) return parts[0].slice(0, 3) + tail;
-    return parts.map((p) => p[0] ?? '').join('').slice(0, 4).toUpperCase();
-  }
-
-  return (
-    <div className="card overflow-hidden">
-      <div className="px-2 py-1 border-b border-slate-100 dark:border-slate-800 flex items-center gap-1.5 flex-wrap text-[11px]">
-        <Trophy className="w-3.5 h-3.5 text-brand-600 shrink-0" />
-        <h3 className="font-semibold flex-1 truncate">{heat.label ?? `Heat ${index + 1}`}</h3>
-        <span className="text-slate-500 dark:text-slate-300 flex items-center gap-0.5 shrink-0">
-          <Clock className="w-2.5 h-2.5" />{formatTime(start)}
-        </span>
-        <span className="text-slate-400 shrink-0 tabular-nums">{teams.length}t · {races.length}r</span>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-[11px] tabular-nums">
-          <thead>
-            <tr className="text-slate-600 dark:text-slate-200">
-              <th className="px-1.5 py-1 text-left sticky left-0 bg-white dark:bg-slate-800 font-medium">Team</th>
-              {races.map((r, i) => (
-                <th key={r.id} className="px-1 py-1 text-center" title={r.name}>
-                  {i + 1}
-                </th>
-              ))}
-              <th className="px-1.5 py-1 text-center font-bold">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {teams.map((t) => (
-              <tr key={t.teamId} className="border-t border-slate-100 dark:border-slate-800">
-                <td
-                  className="px-1.5 py-0.5 text-left sticky left-0 bg-white dark:bg-slate-800 truncate max-w-[100px]"
-                  style={{ borderLeft: `2px solid ${bibAccent(t.bibColour)}` }}
-                  title={t.teamName}
-                >
-                  {shortLabel(t.teamName)}
-                </td>
-                {races.map((r) => (
-                  <td key={r.id} className="px-1 py-0.5 text-center">{cellPoints(r, t.teamId)}</td>
-                ))}
-                <td className="px-1.5 py-0.5 text-center font-mono font-bold text-brand-700 dark:text-brand-200 border-l border-slate-200 dark:border-slate-700">
-                  {totals.get(t.teamId) ?? 0}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="px-2 py-1 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400 flex flex-wrap gap-x-2 gap-y-0.5">
-        {races.map((r, i) => (
-          <span key={r.id} className="truncate"><span className="font-semibold">{i + 1}.</span> {r.name}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function NextUpCard({ heat, decFormByTeamId }: { heat: Heat; decFormByTeamId: Map<number, DeclarationForm> }) {
-  const teams = heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
-  return (
-    <motion.div
-      initial={{ y: 6, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-      className="rounded-xl border-2 border-dashed border-sky-300 dark:border-sky-700 bg-sky-50/70 dark:bg-sky-900/20 p-3"
-    >
-      <div className="flex items-center gap-2 mb-2">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-600 text-white text-[10px] font-bold uppercase tracking-wide">
-          Up next
-        </span>
-        <span className="font-bold text-sm sm:text-base text-sky-900 dark:text-sky-100 truncate">
-          {heat.label ?? 'Next heat'}
-        </span>
-        <span className="ml-auto text-[11px] text-sky-700 dark:text-sky-200 inline-flex items-center gap-1">
-          <Users className="w-3 h-3" /> {teams.length} team{teams.length === 1 ? '' : 's'}
-        </span>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-        {teams.map((t) => {
-          const form = decFormByTeamId.get(t.teamId);
-          const riders = form?.riders.filter((r) => !r.isReserve) ?? [];
-          const reserves = form?.riders.filter((r) => r.isReserve) ?? [];
-          return (
-            <div key={t.teamId} className="rounded-md bg-white dark:bg-slate-800/70 px-2 py-1.5 text-xs flex gap-2 items-start">
-              <span
-                className="inline-block w-2.5 h-2.5 rounded-full mt-1 shrink-0"
-                style={{ background: bibAccent(t.bibColour) }}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold truncate text-sm">{t.teamName}</div>
-                {form ? (
-                  <div className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
-                    {riders.length === 0 ? (
-                      <span className="text-slate-400 italic">No active riders listed</span>
-                    ) : (
-                      riders.map((r, i) => (
-                        <span key={r.id}>
-                          {i > 0 && ', '}
-                          <span className={r.isCaptain ? 'font-semibold' : ''}>{r.fullName}</span>
-                          {r.horseName && <span className="text-slate-400"> · {r.horseName}</span>}
-                        </span>
-                      ))
-                    )}
-                    {reserves.length > 0 && (
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        Reserve: {reserves.map((r) => r.fullName).join(', ')}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-[11px] text-amber-700 dark:text-amber-300 italic inline-flex items-center gap-1">
-                    <ClipboardList className="w-3 h-3" /> Dec form not yet submitted
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </motion.div>
   );
 }
 

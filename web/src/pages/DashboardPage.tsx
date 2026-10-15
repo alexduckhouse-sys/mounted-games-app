@@ -22,7 +22,7 @@ const globalCards: GlobalCard[] = [
 type SectionCard = { sub: string; label: string; icon: typeof Trophy; accent: string };
 const competitionSections: SectionCard[] = [
   { sub: '', label: 'Timetable', icon: Timer, accent: 'from-emerald-400 to-emerald-600' },
-  { sub: 'scoring', label: 'Section', icon: Flag, accent: 'from-amber-400 to-amber-600' },
+  { sub: 'scoring', label: 'Age group', icon: Flag, accent: 'from-amber-400 to-amber-600' },
   { sub: 'chat', label: 'Live Feed · Stream', icon: Radio, accent: 'from-rose-400 to-rose-600' },
   { sub: 'details', label: 'Details', icon: Info, accent: 'from-slate-400 to-slate-600' },
 ];

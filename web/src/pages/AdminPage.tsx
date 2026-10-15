@@ -50,7 +50,7 @@ export function AdminPage() {
   async function deleteComp(c: CompetitionSummary) {
     const prompt = `Delete "${c.name}" forever?\n\n` +
       `This wipes ${c.teamCount} team${c.teamCount === 1 ? '' : 's'}, ` +
-      `${c.sectionCount} section${c.sectionCount === 1 ? '' : 's'}, ` +
+      `${c.sectionCount} age group${c.sectionCount === 1 ? '' : 's'}, ` +
       `${c.sessionCount} session${c.sessionCount === 1 ? '' : 's'}, ` +
       `every heat, race, result, dec form and chat message.\n\n` +
       `There is no undo. Type the comp name to confirm.`;

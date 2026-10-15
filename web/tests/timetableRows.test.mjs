@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { timetableRows, timetableStatus } from '../src/lib/timetableRows.ts';
+import { groupRowsBySession, sessionOrdinals, timetableRows, timetableStatus } from '../src/lib/timetableRows.ts';
 
 const scheduled = new Date('2026-06-01T09:00:00Z');
 const delayed = new Date('2026-06-01T09:12:00Z');
@@ -39,4 +39,17 @@ test('keeps breaks and sessions awaiting heats in the timetable', () => {
   const rows = timetableRows([session([], { kind: 1, name: 'Example break' }), session([], { id: 2, orderIndex: 2 })], new Map(), false);
   assert.equal(rows.length, 2);
   assert.ok(rows.every((row) => row.heat === null));
+});
+
+test('numbers sessions within each age group and groups rows by session in time order', () => {
+  const sessions = [
+    session([heat(1), heat(2)], { id: 1, orderIndex: 1, competitionSectionId: 10, sectionName: 'Seniors' }),
+    session([heat(3)], { id: 2, orderIndex: 2, competitionSectionId: 20, sectionName: 'Juniors' }),
+    session([], { id: 3, orderIndex: 3, kind: 1, name: 'Lunch' }),
+    session([heat(4)], { id: 4, orderIndex: 4, competitionSectionId: 10, sectionName: 'Seniors' }),
+  ];
+  const ordinals = sessionOrdinals(sessions);
+  assert.deepEqual([1, 2, 3, 4].map((id) => ordinals.get(id)), [1, 1, undefined, 2]);
+  const groups = groupRowsBySession(timetableRows(sessions, new Map(), false));
+  assert.deepEqual(groups.map((group) => [group.session.id, group.race, group.rows.length]), [[1, true, 2], [2, true, 1], [3, false, 1], [4, true, 1]]);
 });

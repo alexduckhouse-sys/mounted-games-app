@@ -68,7 +68,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
         <label className="min-w-0 flex-1 basis-48 text-sm font-semibold">
           Section
           <select className="input mt-1 min-h-12 w-full" value={sectionId ?? ''} onChange={(e) => setSectionId(Number(e.target.value))} disabled={competition.sections.length === 0}>
-            {competition.sections.length === 0 && <option value="">No sections yet</option>}
+            {competition.sections.length === 0 && <option value="">No age groups yet</option>}
             {competition.sections.map((sec) => <option key={sec.id} value={sec.id}>{sec.displayName}</option>)}
           </select>
         </label>

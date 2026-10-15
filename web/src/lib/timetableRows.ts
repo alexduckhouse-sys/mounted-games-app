@@ -1,4 +1,5 @@
 import type { Heat, Session } from '../types';
+import { displaySectionName } from './section.ts';
 import type { HeatTiming, SessionTiming } from './time';
 
 export type TimetableStatus = 'on-time' | 'late' | 'live' | 'finished';
@@ -42,4 +43,38 @@ export function timetableRows(sessions: Session[], timings: Map<number, SessionT
     });
   }
   return rows.sort((a, b) => (a.effective?.getTime() ?? Infinity) - (b.effective?.getTime() ?? Infinity) || a.session.orderIndex - b.session.orderIndex || a.heatIndex - b.heatIndex);
+}
+
+const isRace = (session: Session) => (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
+
+/** 1-based position of each race session among the sessions of its age group, in running order. */
+export function sessionOrdinals(sessions: Session[]): Map<number, number> {
+  const counts = new Map<string, number>();
+  const ordinals = new Map<number, number>();
+  for (const session of [...sessions].sort((a, b) => a.orderIndex - b.orderIndex)) {
+    if (!isRace(session)) continue;
+    const key = session.competitionSectionId != null ? `id-${session.competitionSectionId}` : `name-${session.sectionName ?? session.name}`;
+    const next = (counts.get(key) ?? 0) + 1;
+    counts.set(key, next);
+    ordinals.set(session.id, next);
+  }
+  return ordinals;
+}
+
+export interface TimetableGroup { key: string; session: Session; race: boolean; rows: TimetableRow[] }
+
+/** Splits time-ordered rows into runs of the same session, so each session gets one heading. */
+export function groupRowsBySession(rows: TimetableRow[]): TimetableGroup[] {
+  const groups: TimetableGroup[] = [];
+  for (const row of rows) {
+    const last = groups[groups.length - 1];
+    if (last && last.session.id === row.session.id) last.rows.push(row);
+    else groups.push({ key: `${row.session.id}-${groups.length}`, session: row.session, race: isRace(row.session), rows: [row] });
+  }
+  return groups;
+}
+
+/** "Seniors Session 1": the age group (without "Teams") plus its session number. */
+export function sessionTitle(session: Session, ordinals: Map<number, number>): string {
+  return `${displaySectionName(session.sectionName || session.name)} Session ${ordinals.get(session.id) ?? 1}`;
 }
