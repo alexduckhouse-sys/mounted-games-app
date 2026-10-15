@@ -7,6 +7,7 @@ import { CompetitionPickerDialog } from '../competition/CompetitionPicker';
 import { RememberCompetitionDialog } from '../competition/RememberCompetitionDialog';
 import { PageLoadBoundary } from './PageLoadBoundary';
 import { NavigationDrawer } from './NavigationDrawer';
+import { TopBarTicker } from './TopBarTicker';
 
 export function AppShell() {
   const { hasRole, editorMode, setEditorMode } = useAuth();
@@ -20,9 +21,10 @@ export function AppShell() {
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-30 border-b border-slate-200/60 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
         <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-2 sm:gap-3">
-          <span className="mr-auto flex shrink-0 items-center gap-1.5 text-lg font-bold text-brand-700 dark:text-brand-300">
+          <span className="flex shrink-0 items-center gap-1.5 text-lg font-bold text-brand-700 dark:text-brand-300">
             <span className="h-7 w-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-700" />MG
           </span>
+          <TopBarTicker />
           {hasRole('Admin') && (
             <button onClick={() => setEditorMode(!editorMode)} className={`btn-ghost min-h-11 min-w-11 shrink-0 ${editorMode ? 'navigation-selected' : ''}`} aria-label={editorMode ? 'Switch to view mode' : 'Switch to edit mode'} aria-pressed={editorMode}>
               {editorMode ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, Outlet } from 'react-router-dom';
 import { api } from '../api';
-import type { CompetitionDetail, Session, Heat } from '../types';
+import type { ChatMessage, CompetitionDetail, Session, Heat } from '../types';
+import { tickerItems } from '../lib/ticker';
+import { useTicker } from '../components/TickerContext';
 import { useLiveHub } from '../live/useLiveHub';
 import { CompetitionContext } from './competition/context';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
@@ -51,8 +53,28 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     return () => clear();
   }, [competitionId, setExtras, clear]);
 
+  const { setItems } = useTicker();
+  const [announcements, setAnnouncements] = useState<ChatMessage[]>([]);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    api.get<ChatMessage[]>(`/competitions/${competitionId}/chat`, { signal: controller.signal })
+      .then((r) => setAnnouncements(r.data.filter((m) => m.type === 2)))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [competitionId, attempt]);
+  useEffect(() => {
+    setItems(data ? tickerItems(data.sessions, announcements, now) : []);
+    return () => setItems([]);
+  }, [data, announcements, now, setItems]);
+
   const { connected } = useLiveHub(competitionId, {
     onReady: load,
+    onAnnouncement: (m) => setAnnouncements((cur) => [...cur.filter((x) => x.id !== (m as ChatMessage).id), m as ChatMessage]),
     onSessionUpdated: (s) => {
       const updated = s as Session;
       setData((cur) => {

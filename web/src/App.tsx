@@ -5,6 +5,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
 import { CurrentCompetitionProvider } from './competition/CurrentCompetitionContext';
 import { NavExtrasProvider } from './components/NavExtrasContext';
+import { TickerProvider } from './components/TickerContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppShell } from './components/AppShell';
 import { StartPage } from './pages/StartPage';
@@ -37,6 +38,7 @@ export default function App() {
       <AuthProvider>
         <CurrentCompetitionProvider>
         <NavExtrasProvider>
+        <TickerProvider>
         <BrowserRouter>
           <PageLoadBoundary page="app">
           <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
@@ -90,6 +92,7 @@ export default function App() {
           </Suspense>
           </PageLoadBoundary>
         </BrowserRouter>
+        </TickerProvider>
         </NavExtrasProvider>
         </CurrentCompetitionProvider>
       </AuthProvider>
