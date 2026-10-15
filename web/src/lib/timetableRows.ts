@@ -1,5 +1,5 @@
 import type { Heat, Session } from '../types';
-import { displaySectionName } from './section';
+import { displaySectionName } from './section.ts';
 import type { HeatTiming, SessionTiming } from './time';
 
 export type TimetableStatus = 'on-time' | 'late' | 'live' | 'finished';
