@@ -5,6 +5,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
 import { CurrentCompetitionProvider } from './competition/CurrentCompetitionContext';
 import { NavExtrasProvider } from './components/NavExtrasContext';
+import { AgeGroupsProvider } from './components/AgeGroupsContext';
 import { TickerProvider } from './components/TickerContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppShell } from './components/AppShell';
@@ -38,6 +39,7 @@ export default function App() {
       <AuthProvider>
         <CurrentCompetitionProvider>
         <NavExtrasProvider>
+        <AgeGroupsProvider>
         <TickerProvider>
         <BrowserRouter>
           <PageLoadBoundary page="app">
@@ -93,6 +95,7 @@ export default function App() {
           </PageLoadBoundary>
         </BrowserRouter>
         </TickerProvider>
+        </AgeGroupsProvider>
         </NavExtrasProvider>
         </CurrentCompetitionProvider>
       </AuthProvider>
