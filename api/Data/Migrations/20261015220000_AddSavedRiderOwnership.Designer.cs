@@ -408,6 +408,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<int?>("FinalistCount")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Format")
                         .HasColumnType("integer");
 

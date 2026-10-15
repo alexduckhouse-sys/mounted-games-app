@@ -66,3 +66,11 @@ test('keeps only the most recent finished group visible', () => {
   assert.equal(hiddenFinishedKeys([groups[0]]).size, 0);
   assert.equal(hiddenFinishedKeys([]).size, 0);
 });
+
+test('status pills say what is happening in a few words', async () => {
+  const { statusLabel } = await import('../src/lib/timetableRows.ts');
+  assert.equal(statusLabel('live', 0), 'On now');
+  assert.equal(statusLabel('late', 8), '+8 min');
+  assert.equal(statusLabel('on-time', 0), 'On time');
+  assert.equal(statusLabel('finished', 12), 'Finished');
+});

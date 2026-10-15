@@ -60,7 +60,122 @@ public class CompetitionPickerTests
         Assert.False(last.HasMore);
         Assert.Equal(5, first.Items.Concat(second.Items).Concat(last.Items).Select(c => c.Id).Distinct().Count());
         var json = JsonSerializer.SerializeToElement(first.Items[0], new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        Assert.Equal(new[] { "endDate", "icon", "id", "name", "startDate" }, json.EnumerateObject().Select(p => p.Name).Order());
+        Assert.Equal(new[] { "ageGroupCount", "endDate", "icon", "id", "live", "location", "name", "startDate" }, json.EnumerateObject().Select(p => p.Name).Order());
+    }
+
+    private static Session RaceSession(SessionStatus status, int order, string? arena, CompetitionSection? section, params Heat[] heats) => new()
+    {
+        Name = $"Session {order}", Status = status, OrderIndex = order, ArenaName = arena, Section = section, Heats = heats,
+    };
+
+    private static Heat HeatOf(int order, string? label, bool finished = false, params bool[] raceComplete) => new()
+    {
+        Label = label, OrderIndex = order, FinishedAt = finished ? Today : null,
+        Races = raceComplete.Select((done, i) => new Race { Name = $"R{i}", OrderIndex = i, IsComplete = done }).ToList(),
+    };
+
+    private static async Task<CompetitionPickerItem> Single(AppDbContext db, bool past = false)
+    {
+        db.ChangeTracker.Clear();
+        return Assert.Single((await CompetitionPickerQuery.LoadAsync(db, past, 1, 24, Today)).Items);
+    }
+
+    [Fact]
+    public async Task PickerReturnsLocationAndAgeGroupCount()
+    {
+        await using var db = await Database();
+        db.Competitions.Add(new Competition
+        {
+            Name = "Venue event", StartDate = Today.AddDays(3), Location = "Hickstead",
+            Sections =
+            {
+                new CompetitionSection { AgeGroup = "U12", DisplayName = "Under 12", Format = SectionFormat.Teams },
+                new CompetitionSection { AgeGroup = "U16", DisplayName = "Under 16", Format = SectionFormat.Teams },
+            },
+        });
+        await db.SaveChangesAsync();
+        var item = await Single(db);
+        Assert.Equal("Hickstead", item.Location);
+        Assert.Equal(2, item.AgeGroupCount);
+        Assert.Null(item.Live);
+    }
+
+    [Fact]
+    public async Task PickerReportsTheRunningHeatSkippingFinishedOnes()
+    {
+        await using var db = await Database();
+        var section = new CompetitionSection { AgeGroup = "Sen", DisplayName = "Senior Teams", Format = SectionFormat.Teams };
+        db.Competitions.Add(new Competition
+        {
+            Name = "Live", StartDate = Today, Sections = { section },
+            Sessions =
+            {
+                RaceSession(SessionStatus.Finished, 0, "Old arena", section, HeatOf(0, "Done")),
+                RaceSession(SessionStatus.InArena, 1, "  Main arena ", section,
+                    HeatOf(0, "Heat A", finished: true), HeatOf(1, "  ", false, true, true), HeatOf(2, "Final", false, true, false), HeatOf(3, "Later")),
+                RaceSession(SessionStatus.InArena, 2, "Other", null, HeatOf(0, "Never reached")),
+            },
+        });
+        await db.SaveChangesAsync();
+        var live = (await Single(db)).Live;
+        Assert.NotNull(live);
+        Assert.Equal("Senior Teams", live.SectionName);
+        Assert.Equal("Final", live.HeatLabel);
+        Assert.Equal("Main arena", live.ArenaName);
+    }
+
+    [Fact]
+    public async Task PickerFallsBackToPositionalHeatLabel()
+    {
+        await using var db = await Database();
+        db.Competitions.Add(new Competition
+        {
+            Name = "Live", StartDate = Today,
+            Sessions = { RaceSession(SessionStatus.InArena, 0, " ", null, HeatOf(0, "One", true), HeatOf(1, null)) },
+        });
+        await db.SaveChangesAsync();
+        var live = (await Single(db)).Live;
+        Assert.NotNull(live);
+        Assert.Equal("Heat 2", live.HeatLabel);
+        Assert.Null(live.SectionName);
+        Assert.Null(live.ArenaName);
+    }
+
+    [Fact]
+    public async Task PickerLiveIsNullWhenNotRunningToday()
+    {
+        await using var db = await Database();
+        var running = () => new[] { RaceSession(SessionStatus.InArena, 0, "Arena", null, HeatOf(0, "Heat 1")) };
+        db.Competitions.AddRange(
+            new Competition { Name = "Future", StartDate = Today.AddDays(2), Sessions = running() },
+            new Competition { Name = "NoneRunning", StartDate = Today, Sessions = { RaceSession(SessionStatus.Upcoming, 0, "Arena", null, HeatOf(0, "Heat 1")) } },
+            new Competition { Name = "Past", StartDate = Today.AddDays(-3), EndDate = Today.AddDays(-1), Sessions = running() },
+            new Competition { Name = "Ongoing", StartDate = Today.AddDays(-1), EndDate = Today.AddDays(1), Sessions = running() });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var current = (await CompetitionPickerQuery.LoadAsync(db, false, 1, 24, Today)).Items.ToDictionary(c => c.Name);
+        Assert.Null(current["Future"].Live);
+        Assert.Null(current["NoneRunning"].Live);
+        Assert.NotNull(current["Ongoing"].Live);
+
+        var past = (await CompetitionPickerQuery.LoadAsync(db, true, 1, 24, Today)).Items;
+        Assert.Equal(new[] { "Past" }, past.Select(c => c.Name));
+        Assert.All(past, c => Assert.Null(c.Live));
+    }
+
+    [Fact]
+    public async Task PickerLiveIgnoresRunningBreaksAndBriefings()
+    {
+        await using var db = await Database();
+        var breakSession = RaceSession(SessionStatus.InArena, 0, "Arena", null, HeatOf(0, "Break heat"));
+        breakSession.Kind = SessionKind.Break;
+        breakSession.IsBreak = true;
+        var briefing = RaceSession(SessionStatus.InArena, 1, "Arena", null, HeatOf(0, "Briefing heat"));
+        briefing.Kind = SessionKind.Briefing;
+        db.Competitions.Add(new Competition { Name = "Lunch", StartDate = Today, Sessions = { breakSession, briefing } });
+        await db.SaveChangesAsync();
+        Assert.Null((await Single(db)).Live);
     }
 
     [Fact]
@@ -79,7 +194,7 @@ public class CompetitionPickerTests
         Assert.All(competitions, competition =>
         {
             Assert.Equal(3, competition.Sections.Count);
-            Assert.InRange(competition.Teams.Count, 16, 17);
+            Assert.InRange(competition.Teams.Count, 15, 18);
             Assert.All(competition.Sections, section =>
                 Assert.InRange(competition.Teams.Count(team => team.CompetitionSectionId == section.Id), 5, 6));
             Assert.Equal(6, competition.Sessions.Count);

@@ -6,6 +6,7 @@ import {
   X, RotateCcw, Ban,
 } from 'lucide-react';
 import { useCompetition } from './context';
+import { competitionDateText } from '../../lib/competitionDates';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
@@ -68,39 +69,39 @@ export function DetailsTab() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="card p-4 space-y-3">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+      <div className="mg-band py-3">
+        <h1 className="mg-h1 mg-h1-sm">Details &amp; entries</h1>
+      </div>
+      <div className="card p-4 space-y-4">
         <div>
-          <h2 className="text-base sm:text-lg font-bold">{competition.name}</h2>
+          <h2 className="mg-h2 !text-2xl">{competition.name}</h2>
           {competition.organiserName && (
-            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+            <p className="mg-meta mt-1">
               Organised by <span className="font-semibold">{competition.organiserName}</span>
             </p>
           )}
           {competition.description && (
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 whitespace-pre-wrap">
+            <p className="mg-lede mt-2 whitespace-pre-wrap">
               {competition.description}
             </p>
           )}
         </div>
 
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs sm:text-sm">
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-[15px] sm:grid-cols-2">
           <div className="flex items-start gap-2">
-            <CalendarDays className="w-4 h-4 text-brand-600 mt-0.5 shrink-0" />
+            <CalendarDays className="w-4 h-4 text-[rgb(var(--mg-heading))] mt-0.5 shrink-0" aria-hidden="true" />
             <div>
-              <dt className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">Dates</dt>
-              <dd>
-                {new Date(competition.startDate).toLocaleDateString()}
-                {competition.endDate && ` → ${new Date(competition.endDate).toLocaleDateString()}`}
-              </dd>
+              <dt className="text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Dates</dt>
+              <dd>{competitionDateText(competition.startDate, competition.endDate, true)}</dd>
             </div>
           </div>
 
           {competition.location && (
             <div className="flex items-start gap-2">
-              <MapPin className="w-4 h-4 text-brand-600 mt-0.5 shrink-0" />
+              <MapPin className="w-4 h-4 text-[rgb(var(--mg-heading))] mt-0.5 shrink-0" aria-hidden="true" />
               <div>
-                <dt className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">Location</dt>
+                <dt className="text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Location</dt>
                 <dd className="break-words">{competition.location}</dd>
               </div>
             </div>
@@ -108,9 +109,9 @@ export function DetailsTab() {
 
           {competition.what3Words && (
             <div className="flex items-start gap-2">
-              <Info className="w-4 h-4 text-brand-600 mt-0.5 shrink-0" />
+              <Info className="w-4 h-4 text-[rgb(var(--mg-heading))] mt-0.5 shrink-0" aria-hidden="true" />
               <div>
-                <dt className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">what3words</dt>
+                <dt className="text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">what3words</dt>
                 <dd>
                   <a
                     href={`https://what3words.com/${competition.what3Words.replace(/^\/\/\//, '')}`}
@@ -126,9 +127,9 @@ export function DetailsTab() {
 
           {competition.appleMapsUrl && (
             <div className="flex items-start gap-2">
-              <MapPinned className="w-4 h-4 text-brand-600 mt-0.5 shrink-0" />
+              <MapPinned className="w-4 h-4 text-[rgb(var(--mg-heading))] mt-0.5 shrink-0" aria-hidden="true" />
               <div>
-                <dt className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">Map pin</dt>
+                <dt className="text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Map pin</dt>
                 <dd>
                   <a
                     href={competition.appleMapsUrl}
@@ -143,17 +144,17 @@ export function DetailsTab() {
           )}
 
           <div className="flex items-start gap-2">
-            <Layers className="w-4 h-4 text-brand-600 mt-0.5 shrink-0" />
+            <Layers className="w-4 h-4 text-[rgb(var(--mg-heading))] mt-0.5 shrink-0" aria-hidden="true" />
             <div>
-              <dt className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">Age groups</dt>
+              <dt className="text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Age groups</dt>
               <dd>{competition.sections.length || '—'}</dd>
             </div>
           </div>
 
           <div className="flex items-start gap-2">
-            <Users className="w-4 h-4 text-brand-600 mt-0.5 shrink-0" />
+            <Users className="w-4 h-4 text-[rgb(var(--mg-heading))] mt-0.5 shrink-0" aria-hidden="true" />
             <div>
-              <dt className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">Teams</dt>
+              <dt className="text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Teams</dt>
               <dd>{competition.teams.length}</dd>
             </div>
           </div>
@@ -207,9 +208,9 @@ export function DetailsTab() {
       {/* Signup-by-section */}
       {competition.sections.length > 0 && (
         <div className="card p-4 space-y-3">
-          <h3 className="font-semibold text-sm flex items-center gap-2">
-            <Banknote className="w-4 h-4 text-brand-600" /> Enter the competition
-          </h3>
+          <h2 className="mg-h2 flex items-center gap-2">
+            <Banknote aria-hidden="true" className="h-5 w-5" /> Enter the competition
+          </h2>
           {competition.paymentDestination && (
             <p className="text-[11px] text-slate-500 dark:text-slate-300">
               Pay to: <span className="font-mono">{competition.paymentDestination}</span>

@@ -9,6 +9,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { DeclarationForm, Heat, HeatEntry, Race, Session } from '../../types';
 import { SessionEndTransition } from './SessionEndTransition';
+import { HeatScores } from './HeatScores';
 import { bibAccent } from '../../lib/bib';
 import { retryOnNetworkError } from '../../lib/liveUpdates';
 import { describePlacings, enqueue, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
@@ -190,9 +191,9 @@ export function SessionPage() {
 
   if (!session) {
     return (
-      <div className="card p-3">
-        <Link to=".." className="btn-ghost !py-1.5 !px-2.5 text-xs"><ChevronLeft className="w-3.5 h-3.5" /> Back</Link>
-        <p className="mt-3 text-sm">Session not found.</p>
+      <div className="mx-auto flex w-full max-w-xl flex-col items-start gap-3 pt-4">
+        <Link to=".." className="mg-btn mg-btn-secondary !min-h-11"><ChevronLeft className="h-4 w-4" /> Timetable</Link>
+        <p className="mg-card w-full p-4">Session not found.</p>
       </div>
     );
   }
@@ -200,11 +201,11 @@ export function SessionPage() {
   const kind = session.kind ?? (session.isBreak ? 1 : 0);
   if (kind !== 0) {
     return (
-      <div className="space-y-3">
-        <Link to=".." className="btn-ghost !py-1.5 !px-2.5 text-xs"><ChevronLeft className="w-3.5 h-3.5" /> Back</Link>
-        <div className="card p-6 text-center">
-          <Coffee className="w-12 h-12 mx-auto text-amber-500 mb-3" />
-          <h2 className="text-xl font-bold">{session.name}</h2>
+      <div className="mx-auto flex w-full max-w-xl flex-col items-start gap-3 pt-4">
+        <Link to=".." className="mg-btn mg-btn-secondary !min-h-11"><ChevronLeft className="h-4 w-4" /> Timetable</Link>
+        <div className="mg-card w-full p-6 text-center">
+          <Coffee className="mx-auto mb-3 h-12 w-12 text-[rgb(var(--mg-late-time))]" />
+          <h1 className="mg-h1 mg-h1-sm">{session.name}</h1>
           {session.durationMinutes && (
             <p className="mt-2 text-slate-600 dark:text-slate-300">{session.durationMinutes} minute{kind === 1 ? ' break' : ''}</p>
           )}
@@ -269,7 +270,7 @@ export function SessionPage() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      {canEdit() && <div className="flex items-center justify-between gap-2 pt-4">
         <Link to=".." className="btn-ghost !py-1.5 !px-2.5 text-xs">
           <ChevronLeft className="w-3.5 h-3.5" /> Sessions
         </Link>
@@ -280,7 +281,7 @@ export function SessionPage() {
             </button>
           </div>
         )}
-      </div>
+      </div>}
 
       {canEdit() ? (
         <>
@@ -315,7 +316,7 @@ export function SessionPage() {
           )}
         </>
       ) : (
-        <PublicResultsView heats={orderedHeats} activeHeatId={activeHeatId} />
+        <HeatScores session={session} heats={orderedHeats} activeHeatId={activeHeatId} />
       )}
 
       <AnimatePresence>
@@ -940,116 +941,6 @@ function ScoreTile({
         )}
       </AnimatePresence>
     </motion.div>
-  );
-}
-
-function PublicResultsView({ heats, activeHeatId }: { heats: Heat[]; activeHeatId: number | null }) {
-  const index = Math.max(0, heats.findIndex((heat) => heat.id === activeHeatId));
-  const heat = heats[index];
-  if (!heat) {
-    return <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>;
-  }
-  return (
-    <div className="space-y-3">
-      <h1 className="flex items-center gap-2 text-2xl font-bold">
-        <Trophy className="h-6 w-6 shrink-0 text-brand-600" />{heat.label ?? `Heat ${index + 1}`} scores
-      </h1>
-      <SessionScoresTable heats={[heat]} />
-    </div>
-  );
-}
-
-/**
- * One combined public scores table for the whole session. Teams as rows,
- * distinct race names as columns, points summed across all heats that share
- * the same race name. For race-finals sections this collapses Q1+Q2+Final
- * into a single column per race, so the public never sees the qualifier
- * breakdown unless they expand it.
- */
-function SessionScoresTable({ heats }: { heats: Heat[] }) {
-  const grid = useMemo(() => {
-    const raceNames: string[] = [];
-    const raceSet = new Set<string>();
-    const teamsById = new Map<number, { id: number; name: string; bib?: string | null }>();
-    const cells = new Map<string, { points: number; elim: boolean }>();
-    for (const heat of heats) {
-      for (const e of heat.entries) {
-        if (!teamsById.has(e.teamId)) {
-          teamsById.set(e.teamId, { id: e.teamId, name: e.teamName, bib: e.bibColour });
-        }
-      }
-      const races = heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-      for (const race of races) {
-        if (!raceSet.has(race.name)) { raceSet.add(race.name); raceNames.push(race.name); }
-        for (const r of race.results) {
-          if (!teamsById.has(r.teamId)) {
-            teamsById.set(r.teamId, { id: r.teamId, name: r.teamName, bib: null });
-          }
-          const k = `${r.teamId}|${race.name}`;
-          const cur = cells.get(k) ?? { points: 0, elim: false };
-          cur.points += r.points;
-          if (r.eliminated && r.points === 0) cur.elim = true;
-          cells.set(k, cur);
-        }
-      }
-    }
-    const teams = Array.from(teamsById.values()).map((t) => ({
-      ...t,
-      total: raceNames.reduce((s, n) => s + (cells.get(`${t.id}|${n}`)?.points ?? 0), 0),
-    })).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
-    return { raceNames, teams, cells };
-  }, [heats]);
-
-  if (grid.raceNames.length === 0 || grid.teams.length === 0) {
-    return (
-      <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">
-        No results yet.
-      </div>
-    );
-  }
-
-  return (
-    <div className="card overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-base sm:text-lg border-collapse">
-          <thead>
-            <tr className="text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
-              <th className="text-left font-semibold px-3 py-2 sticky left-0 bg-white dark:bg-slate-800 z-10 min-w-[130px]">Team</th>
-              {grid.raceNames.map((n) => (
-                <th key={n} className="text-center font-semibold px-2 py-2 max-w-[90px] truncate" title={n}>
-                  {n}
-                </th>
-              ))}
-              <th className="text-right font-bold px-3 py-2 text-brand-700 dark:text-brand-200">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {grid.teams.map((t) => (
-              <tr key={t.id} className="border-t border-slate-100 dark:border-slate-700/60">
-                <td className="px-3 py-3 font-semibold sticky left-0 bg-white dark:bg-slate-800">
-                  {t.name}
-                </td>
-                {grid.raceNames.map((n) => {
-                  const cell = grid.cells.get(`${t.id}|${n}`);
-                  return (
-                    <td key={n} className="px-2 py-3 text-center font-mono tabular-nums">
-                      {cell == null
-                        ? <span className="text-slate-300">—</span>
-                        : cell.elim && cell.points === 0
-                          ? <span className="text-rose-500">0</span>
-                          : <span className="font-semibold">{cell.points}</span>}
-                    </td>
-                  );
-                })}
-                <td className="px-3 py-3 text-right font-mono text-xl font-bold text-brand-700 dark:text-brand-200 tabular-nums">
-                  {t.total}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
   );
 }
 

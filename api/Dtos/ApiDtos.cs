@@ -11,7 +11,10 @@ public record CompetitionSummary(
     int Id, string Name, string? Location, DateTime StartDate, DateTime? EndDate,
     bool IsActive, bool IsArchived, int SectionCount, int TeamCount, int SessionCount);
 
-public record CompetitionPickerItem(int Id, string Name, DateTime StartDate, DateTime? EndDate, string Icon);
+public record PickerLiveHeat(string? SectionName, string HeatLabel, string? ArenaName);
+public record CompetitionPickerItem(
+    int Id, string Name, DateTime StartDate, DateTime? EndDate, string Icon,
+    string? Location, int AgeGroupCount, PickerLiveHeat? Live);
 public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore);
 
 public static class CompetitionIcons
@@ -97,12 +100,12 @@ public record UpsertRaceTemplateRequest(
 public record CompetitionSectionDto(
     int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName,
     string? RunoffRaceName, bool UsesRaceFinals, int PriceMinor,
-    int? MaxParticipants = null);
+    int? MaxParticipants = null, int? FinalistCount = null);
 public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName,
     string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0,
-    int? MaxParticipants = null);
+    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null);
 public record UpdateSectionRequest(string? RunoffRaceName, bool? UsesRaceFinals = null, int? PriceMinor = null,
-    int? MaxParticipants = null);
+    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null);
 
 public record SectionSignupDto(
     int Id, int CompetitionSectionId, string SectionName,

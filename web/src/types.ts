@@ -72,6 +72,9 @@ export interface CompetitionPickerItem {
   startDate: string;
   endDate: string | null;
   icon: string;
+  location?: string | null;
+  ageGroupCount?: number;
+  live?: { sectionName?: string | null; heatLabel: string; arenaName?: string | null } | null;
 }
 
 export interface CompetitionPickerPage {
@@ -86,6 +89,8 @@ export interface CompetitionSection {
   ageGroup: string;
   displayName: string;
   runoffRaceName?: string | null;
+  /** How many teams go through to the final, set by the organiser; null when not set. */
+  finalistCount?: number | null;
   usesRaceFinals?: boolean;
   priceMinor?: number;
   /** Cap on active signups (null/undefined = unlimited). */

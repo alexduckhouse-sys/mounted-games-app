@@ -7,6 +7,7 @@ import { CurrentCompetitionProvider } from './competition/CurrentCompetitionCont
 import { NavExtrasProvider } from './components/NavExtrasContext';
 import { AgeGroupsProvider } from './components/AgeGroupsContext';
 import { TickerProvider } from './components/TickerContext';
+import { CompetitionMetaProvider } from './components/CompetitionMetaContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppShell } from './components/AppShell';
 import { StartPage } from './pages/StartPage';
@@ -41,6 +42,7 @@ export default function App() {
         <NavExtrasProvider>
         <AgeGroupsProvider>
         <TickerProvider>
+        <CompetitionMetaProvider>
         <BrowserRouter>
           <PageLoadBoundary page="app">
           <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
@@ -94,6 +96,7 @@ export default function App() {
           </Suspense>
           </PageLoadBoundary>
         </BrowserRouter>
+        </CompetitionMetaProvider>
         </TickerProvider>
         </AgeGroupsProvider>
         </NavExtrasProvider>

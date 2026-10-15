@@ -126,6 +126,8 @@ interface SectionDraft {
   priceGbp: string;
   /** Cap on active signups. Empty string = unlimited. */
   maxParticipants?: string;
+  /** How many teams go through to the final. Empty string = not set. */
+  finalistCount?: string;
 }
 
 interface TeamDraft {
@@ -225,6 +227,13 @@ function parseMaxParticipants(input: string | undefined): number | null {
   if (!input || !input.trim()) return null;
   const n = parseInt(input, 10);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Teams through to the final: whole number 1-50, anything else means "not set". */
+function parseFinalistCount(input: string | undefined): number | null {
+  if (!input || !input.trim()) return null;
+  const n = parseInt(input, 10);
+  return Number.isFinite(n) && n >= 1 && n <= 50 ? n : null;
 }
 
 function sectionDisplayName(s: SectionDraft): string {
@@ -410,6 +419,7 @@ export function CompetitionEditor() {
           usesRaceFinals: false,
           priceMinor: priceGbpToMinor(s.priceGbp),
           maxParticipants: parseMaxParticipants(s.maxParticipants),
+          finalistCount: parseFinalistCount(s.finalistCount),
         });
       }
 
@@ -475,6 +485,7 @@ export function CompetitionEditor() {
             usesRaceFinals: s.usesRaceFinals ?? false,
             priceMinor: priceGbpToMinor(s.priceGbp),
             maxParticipants: parseMaxParticipants(s.maxParticipants),
+            finalistCount: parseFinalistCount(s.finalistCount),
           }).catch(() => {});
         } else {
           await api.post(`/competitions/${editingId}/sections`, {
@@ -485,6 +496,7 @@ export function CompetitionEditor() {
             usesRaceFinals: false,
             priceMinor: priceGbpToMinor(s.priceGbp),
             maxParticipants: parseMaxParticipants(s.maxParticipants),
+            finalistCount: parseFinalistCount(s.finalistCount),
           });
         }
       }
@@ -667,6 +679,7 @@ function existingToDraft(s: CompetitionSection, c: CompetitionDetail): SectionDr
     runoffRaceName: s.runoffRaceName ?? ZONE_RUNOFF,
     usesRaceFinals: s.usesRaceFinals ?? false,
     priceGbp: s.priceMinor ? (s.priceMinor / 100).toFixed(2) : '',
+    finalistCount: s.finalistCount ? String(s.finalistCount) : '',
   };
 }
 
@@ -893,7 +906,7 @@ function SectionsStep({
         {sections.map((s, i) => (
           <div key={i} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-              <label className="sm:col-span-4">
+              <label className="sm:col-span-3">
                 <span className="text-xs text-slate-500">Format</span>
                 <select
                   className="input mt-1 text-sm"
@@ -905,7 +918,7 @@ function SectionsStep({
                   ))}
                 </select>
               </label>
-              <label className="sm:col-span-4">
+              <label className="sm:col-span-3">
                 <span className="text-xs text-slate-500">Age group</span>
                 <select
                   className="input mt-1 text-sm"
@@ -933,6 +946,16 @@ function SectionsStep({
                   placeholder="â€”"
                   value={s.maxParticipants ?? ''}
                   onChange={(e) => onUpdate(i, { maxParticipants: e.target.value })}
+                />
+              </label>
+              <label className="sm:col-span-2">
+                <span className="text-xs text-slate-500" title="How many teams go through to the final. Leave empty if you don't know yet.">Teams in the final</span>
+                <input
+                  type="number" min={1} max={50}
+                  className="input mt-1 text-sm"
+                  placeholder="—"
+                  value={s.finalistCount ?? ''}
+                  onChange={(e) => onUpdate(i, { finalistCount: e.target.value })}
                 />
               </label>
             </div>
