@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Timer, Flag, Trophy, LogIn, LogOut, Radio, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, Palette, Pin } from 'lucide-react';
+import { Timer, Flag, Trophy, LogIn, LogOut, Radio, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES, useTheme } from '../theme/ThemeContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useNavExtras } from './NavExtrasContext';
 import { WeatherBadge } from './WeatherBadge';
+
+const WEATHER_KEY = 'mg.showWeather';
 
 export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: () => void; onChangeCompetition: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -14,7 +16,13 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
   const { extras } = useNavExtras();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showWeather, setShowWeather] = useState(() => { try { return localStorage.getItem(WEATHER_KEY) === '1'; } catch { return false; } });
+  function toggleWeather() {
+    const next = !showWeather;
+    setShowWeather(next);
+    try { if (next) localStorage.setItem(WEATHER_KEY, '1'); else localStorage.removeItem(WEATHER_KEY); } catch { /* storage blocked */ }
+  }
   useEffect(() => {
     const dialog = ref.current;
     const overflow = document.body.style.overflow;
@@ -28,7 +36,6 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
     { to: current ? `${base}/scoring` : '/competitions', label: 'Age group', icon: Flag, end: true },
     { to: current ? `${base}/toplists` : '/competitions', label: 'Toplists', icon: Trophy, end: true },
     { to: current ? `${base}/chat` : '/chat', label: 'Live feed / stream', icon: Radio, end: true },
-    { to: current ? `${base}/details` : '/competitions', label: 'Details', icon: Info, end: true },
   ];
   const accountLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: !!user },
@@ -45,25 +52,34 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
           <div className="min-w-0 flex-1">
             <h2 id="navigation-title" className="text-xl font-bold">Menu</h2>
             {current && <p className="mt-1 break-words text-sm font-medium text-slate-600 dark:text-slate-200">{current.name}</p>}
-            {current && <div className="mt-2"><WeatherBadge /></div>}
           </div>
-          <button onClick={() => setPaletteOpen((v) => !v)} className={`btn-ghost min-h-11 min-w-11 ${paletteOpen ? 'navigation-selected' : ''}`} aria-label="Choose colour theme" aria-expanded={paletteOpen}><Palette className="h-5 w-5" /></button>
+          <button onClick={() => setSettingsOpen((v) => !v)} className={`btn-ghost min-h-11 min-w-11 ${settingsOpen ? 'navigation-selected' : ''}`} aria-label="Settings" aria-expanded={settingsOpen}><SlidersHorizontal className="h-5 w-5" /></button>
           <button autoFocus onClick={onClose} className="btn-ghost min-h-11 min-w-11" aria-label="Close menu"><X className="h-5 w-5" /></button>
         </div>
-        {paletteOpen && (
-          <div role="group" aria-label="Colour theme" className="mb-4 space-y-1 border-b border-slate-200 pb-3 dark:border-slate-700">
-            {THEMES.map((item) => (
-              <button key={item.id} aria-pressed={theme === item.id} onClick={() => setTheme(item.id)} className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-base ${theme === item.id ? 'navigation-selected' : 'hover:bg-brand-50 dark:hover:bg-slate-800'}`}>
-                <span className="h-5 w-5 rounded-md border" style={{ background: item.swatch }} />{item.label}
-              </button>
-            ))}
-          </div>
+        {settingsOpen && (
+          <section aria-label="Settings" className="mb-4 space-y-4 border-b border-slate-200 pb-4 dark:border-slate-700">
+            <div role="group" aria-label="Colour theme" className="space-y-1">
+              <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Colour theme</h3>
+              {THEMES.map((item) => (
+                <button key={item.id} aria-pressed={theme === item.id} onClick={() => setTheme(item.id)} className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-base ${theme === item.id ? 'navigation-selected' : 'hover:bg-brand-50 dark:hover:bg-slate-800'}`}>
+                  <span className="h-5 w-5 rounded-md border" style={{ background: item.swatch }} />{item.label}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-1">
+              <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Options</h3>
+              <SettingSwitch icon={CloudSun} label="Show weather" checked={showWeather} onChange={toggleWeather} />
+              {current && <SettingSwitch icon={Pin} label="Remember this competition on this device" checked={rememberChoice === 'remember'} onChange={() => setRememberChoice(rememberChoice === 'remember' ? 'visit' : 'remember')} />}
+              {user && <NavLink to="/teams" onClick={onClose} className={`${linkClass(false)} justify-between`}><span className="flex items-center gap-3"><Bell className="h-5 w-5 shrink-0" />Notifications</span><span className="text-sm text-slate-500 dark:text-slate-300">Set up in My teams</span></NavLink>}
+            </div>
+          </section>
         )}
+        {showWeather && <div className="mb-4 flex min-h-12 items-center gap-3 rounded-xl bg-slate-100 px-4 py-2 dark:bg-slate-800"><CloudSun className="h-5 w-5 shrink-0" /><span className="font-medium">Weather</span><span className="ml-auto"><WeatherBadge /></span></div>}
         <nav aria-label="Main navigation" className="space-y-1">
           {links.map((item) => <NavLink key={item.label} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => linkClass(isActive && (current !== null || item.to !== '/competitions'))}><item.icon className="h-5 w-5 shrink-0" />{item.label}</NavLink>)}
           <button onClick={onChangeCompetition} className={`${linkClass(false)} w-full text-left`}><ArrowLeftRight className="h-5 w-5 shrink-0" />Change competition</button>
-          {current && <button onClick={() => setRememberChoice(rememberChoice === 'remember' ? 'visit' : 'ask')} className={`${linkClass(false)} w-full text-left`}><Pin className="h-5 w-5 shrink-0" />{rememberChoice === 'remember' ? 'Stop remembering on this device' : 'Remember on this device'}</button>}
           <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => linkClass(isActive)}><History className="h-5 w-5 shrink-0" />Past competitions</NavLink>
+          <NavLink to={current ? `${base}/details` : '/competitions'} end onClick={onClose} className={({ isActive }) => linkClass(isActive && current !== null)}><Info className="h-5 w-5 shrink-0" />Details</NavLink>
         </nav>
         {(accountLinks.length > 0 || extras.length > 0) && (
           <nav aria-label="Account and management" className="mt-4 space-y-1 border-t border-slate-200 pt-4 dark:border-slate-700">
@@ -77,5 +93,15 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
         </div>
       </div>
     </dialog>
+  );
+}
+
+function SettingSwitch({ icon: Icon, label, checked, onChange }: { icon: typeof Bell; label: string; checked: boolean; onChange: () => void }) {
+  return (
+    <button role="switch" aria-checked={checked} onClick={onChange} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-2 text-left text-base font-medium text-slate-700 hover:bg-brand-50 dark:text-slate-200 dark:hover:bg-slate-800">
+      <Icon className="h-5 w-5 shrink-0" />
+      <span className="flex-1">{label}</span>
+      <span aria-hidden="true" className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-600'}`}><span className={`h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : ''}`} /></span>
+    </button>
   );
 }
