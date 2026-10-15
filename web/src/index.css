@@ -6,6 +6,33 @@
   color-scheme: light dark;
 }
 
+/* Brand palette as RGB channels (see tailwind.config.js). EGUK navy is the default. */
+:root {
+  --brand-50: 238 242 250;
+  --brand-100: 217 226 243;
+  --brand-200: 179 196 230;
+  --brand-300: 133 159 211;
+  --brand-400: 85 119 187;
+  --brand-500: 54 88 158;
+  --brand-600: 38 66 127;
+  --brand-700: 30 52 102;
+  --brand-800: 24 42 82;
+  --brand-900: 18 32 63;
+}
+/* Meadow green, kept for the existing themes. */
+[data-theme="light"], [data-theme="dark"], [data-theme="ocean"], [data-theme="sunset"] {
+  --brand-50: 241 247 244;
+  --brand-100: 220 235 226;
+  --brand-200: 185 215 198;
+  --brand-300: 143 189 165;
+  --brand-400: 94 156 128;
+  --brand-500: 63 125 98;
+  --brand-600: 47 99 77;
+  --brand-700: 38 79 62;
+  --brand-800: 31 64 50;
+  --brand-900: 23 48 36;
+}
+
 html, body, #root {
   height: 100%;
 }
@@ -18,9 +45,13 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  background: linear-gradient(180deg, #f1f7f4 0%, #e9eef5 100%);
+  background: linear-gradient(180deg, #eef2fa 0%, #dfe6f3 100%);
   color: #0b1220;
   min-height: 100vh;
+}
+
+[data-theme="light"] body {
+  background: linear-gradient(180deg, #f1f7f4 0%, #e9eef5 100%);
 }
 
 [data-theme="dark"] body {
@@ -73,7 +104,8 @@ body {
 [data-theme="dark"] .text-slate-600 { color: #e2e8f0 !important; }
 
 /* Navigation follows the palette without changing status colours in the arena. */
-:root { --navigation-colour: #2f634d; }
+:root { --navigation-colour: #1e3466; }
+[data-theme="light"] { --navigation-colour: #2f634d; }
 [data-theme="dark"] { --navigation-colour: #475569; }
 [data-theme="ocean"] { --navigation-colour: #0369a1; }
 [data-theme="sunset"] { --navigation-colour: #c2410c; }

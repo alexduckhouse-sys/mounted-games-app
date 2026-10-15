@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
-export type ThemeName = 'light' | 'dark' | 'ocean' | 'sunset';
+export type ThemeName = 'eguk' | 'light' | 'dark' | 'ocean' | 'sunset';
 
 export const THEMES: { id: ThemeName; label: string; swatch: string }[] = [
+  { id: 'eguk', label: 'EGUK Navy', swatch: 'linear-gradient(135deg, #1e3466, #5577bb)' },
   { id: 'light', label: 'Meadow', swatch: 'linear-gradient(135deg, #f1f7f4, #c4e3d4)' },
   { id: 'dark', label: 'Stable Night', swatch: 'linear-gradient(135deg, #0f172a, #1e293b)' },
   { id: 'ocean', label: 'Ocean', swatch: 'linear-gradient(135deg, #bae6fd, #38bdf8)' },
@@ -20,8 +21,8 @@ const KEY = 'mg.theme';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeName>(() => {
-    const stored = localStorage.getItem(KEY) as ThemeName | null;
-    return stored ?? 'light';
+    const stored = localStorage.getItem(KEY);
+    return THEMES.some((t) => t.id === stored) ? (stored as ThemeName) : 'eguk';
   });
 
   useEffect(() => {

@@ -272,7 +272,7 @@ function FinalsModal({ defaultSectionId, onClose, onCreated }: {
               value={sectionId ?? ''}
               onChange={(e) => setSectionId(e.target.value ? parseInt(e.target.value, 10) : null)}
             >
-              <option value="">All sections</option>
+              <option value="">All age groups</option>
               {competition.sections.map((s) => (
                 <option key={s.id} value={s.id}>{s.displayName}</option>
               ))}

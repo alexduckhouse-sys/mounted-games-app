@@ -1,8 +1,7 @@
 import { Suspense, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Trophy, Palette, MoreHorizontal, Timer, Flag, Lock, Unlock, Menu } from 'lucide-react';
+import { Trophy, MoreHorizontal, Timer, Flag, Lock, Unlock, Menu } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
-import { THEMES, useTheme } from '../theme/ThemeContext';
 import { WeatherBadge } from './WeatherBadge';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { CompetitionPickerDialog } from '../competition/CompetitionPicker';
@@ -12,12 +11,10 @@ import { NavigationDrawer } from './NavigationDrawer';
 
 export function AppShell() {
   const { hasRole, editorMode, setEditorMode } = useAuth();
-  const { theme, setTheme } = useTheme();
   const { current, rememberChoice, setRememberChoice, storageError } = useCurrentCompetition();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDetailsElement>(null);
-  const paletteRef = useRef<HTMLDetailsElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const choosingCompetition = ['/', '/competitions', '/competitions/past'].includes(location.pathname);
@@ -35,18 +32,6 @@ export function AppShell() {
               {editorMode ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
             </button>
           )}
-          <details ref={paletteRef} className="relative" onKeyDown={(e) => {
-            if (e.key === 'Escape' && paletteRef.current) { paletteRef.current.open = false; paletteRef.current.querySelector('summary')?.focus(); }
-          }} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) e.currentTarget.open = false; }}>
-            <summary className="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-xl hover:bg-brand-50 dark:hover:bg-slate-800 [&::-webkit-details-marker]:hidden" aria-label="Choose colour theme"><Palette className="h-5 w-5" /></summary>
-            <div className="card absolute right-0 z-40 mt-2 w-48 p-2 shadow-lg">
-              {THEMES.map((item) => (
-                <button key={item.id} aria-pressed={theme === item.id} onClick={() => { setTheme(item.id); if (paletteRef.current) paletteRef.current.open = false; }} className={`flex min-h-12 w-full items-center gap-2 rounded-lg px-3 text-sm ${theme === item.id ? 'navigation-selected' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
-                  <span className="h-5 w-5 rounded-md border" style={{ background: item.swatch }} />{item.label}
-                </button>
-              ))}
-            </div>
-          </details>
           <button onClick={() => setMenuOpen(true)} className="btn-ghost min-h-11 min-w-11" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-6 w-6" /></button>
 
           {current && !choosingCompetition && (
@@ -68,7 +53,7 @@ export function AppShell() {
         </div>
         {current && !choosingCompetition && (
           <nav aria-label="Competition views" className="mx-auto grid max-w-5xl grid-cols-2 gap-2 px-3 pb-2">
-            {[{ to: `/competitions/${current.id}`, label: 'Timetable', icon: Timer, end: true }, { to: `/competitions/${current.id}/scoring`, label: 'Section', icon: Flag, end: false }].map((item) => (
+            {[{ to: `/competitions/${current.id}`, label: 'Timetable', icon: Timer, end: true }, { to: `/competitions/${current.id}/scoring`, label: 'Age group', icon: Flag, end: false }].map((item) => (
               <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `flex min-h-12 items-center justify-center gap-2 rounded-xl text-sm font-semibold !no-underline hover:!no-underline ${isActive ? 'navigation-selected' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'}`}><item.icon className="h-4 w-4" />{item.label}</NavLink>
             ))}
           </nav>

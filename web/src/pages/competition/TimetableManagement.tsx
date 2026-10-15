@@ -25,7 +25,7 @@ function exportTimetableCsv(
   sessions: Session[],
   timings: Map<number, SessionTiming>,
 ): void {
-  const header = ['Date', 'Time', 'Arena', 'Section', 'Session', 'Heat', 'Status', 'Teams'];
+  const header = ['Date', 'Time', 'Arena', 'Age group', 'Session', 'Heat', 'Status', 'Teams'];
   const rows: ReadonlyArray<string>[] = [];
   for (const s of sessions) {
     const t = timings.get(s.id);
@@ -97,7 +97,7 @@ function publicHeatLabel(heat: Heat, fallback: string): string {
 
 function sessionTitle(s: Session): string {
   // Prefer the section name (e.g. "Senior Pairs"); fall back to the session's own name.
-  const raw = s.sectionName?.trim() || s.name?.trim() || 'Section';
+  const raw = s.sectionName?.trim() || s.name?.trim() || 'Age group';
   return displaySectionName(raw);
 }
 
@@ -1235,7 +1235,7 @@ function CreateFinalsModal({
               value={sectionId}
               onChange={(e) => setSectionId(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
             >
-              <option value="">All sections (overall)</option>
+              <option value="">All age groups (overall)</option>
               {sections.map((s) => (
                 <option key={s.id} value={s.id}>{s.displayName}</option>
               ))}
