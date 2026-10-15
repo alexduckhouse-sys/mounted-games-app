@@ -30,24 +30,51 @@ public class ScoringController : ControllerBase
     {
         var race = await _db.Races
             .Include(r => r.Heat).ThenInclude(h => h!.Session)
+            .Include(r => r.Heat).ThenInclude(h => h!.Entries)
+            .Include(r => r.Results)
             .FirstOrDefaultAsync(r => r.Id == raceId);
         if (race is null) return NotFound();
+
+        if (req.Expected is not null)
+        {
+            var entryTeamIds = race.Heat!.Entries.Select(e => e.TeamId).ToHashSet();
+            var current = ResultsKey(race.Results.Select(r => (r.TeamId, r.Placing ?? 0, r.Eliminated)));
+            var incoming = ResultsKey(req.Places.Where(p => entryTeamIds.Contains(p.TeamId)).Select(p => (p.TeamId, p.Place, p.Eliminated)));
+            // Already saved: a resend whose first reply was lost on the way back.
+            if (current == incoming) return await HeatDtoAsync(race.HeatId);
+            if (current != ResultsKey(req.Expected.Select(p => (p.TeamId, p.Place, p.Eliminated))))
+                return Conflict(new
+                {
+                    message = "These results were changed on another device.",
+                    sessionId = race.Heat.SessionId,
+                    heat = await HeatDtoAsync(race.HeatId),
+                });
+        }
 
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var places = req.Places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated));
         await _scoring.ApplyRaceResultsAsync(raceId, places, userId);
 
-        var heatId = race.HeatId;
-        var refreshed = await _db.Heats
-            .Include(h => h.Entries).ThenInclude(e => e.Team)
-            .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
-            .FirstAsync(h => h.Id == heatId);
-        var dto = refreshed.ToDto();
-
+        var dto = await HeatDtoAsync(race.HeatId);
         var competitionId = race.Heat!.Session!.CompetitionId;
         await _live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto });
         return dto;
     }
+
+    private async Task<HeatDto> HeatDtoAsync(int heatId)
+    {
+        var heat = await _db.Heats
+            .Include(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstAsync(h => h.Id == heatId);
+        return heat.ToDto();
+    }
+
+    /// <summary>Order-independent summary of a race's placings; eliminated teams have no place.</summary>
+    internal static string ResultsKey(IEnumerable<(int TeamId, int Place, bool Eliminated)> results)
+        => string.Join(',', results
+            .Select(r => r.Eliminated ? $"{r.TeamId}:E" : $"{r.TeamId}:{r.Place}")
+            .Order(StringComparer.Ordinal));
 
     /// <summary>
     /// Admin starts a live clock for a race. Sets `StartedAt` to the tap time

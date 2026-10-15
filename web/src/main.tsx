@@ -8,6 +8,7 @@ import '@fontsource/inter/latin-700.css'
 import './index.css'
 import App from './App.tsx'
 import { registerPwa } from './pwa'
+import { startOutboxSync } from './offline/useScoreOutbox'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -16,3 +17,4 @@ createRoot(document.getElementById('root')!).render(
 )
 
 registerPwa();
+startOutboxSync();

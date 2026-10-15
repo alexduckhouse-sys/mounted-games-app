@@ -5,6 +5,8 @@ import type { ChatMessage, CompetitionDetail, Session, Heat } from '../types';
 import { tickerItems } from '../lib/ticker';
 import { useTicker } from '../components/TickerContext';
 import { useLiveHub } from '../live/useLiveHub';
+import { HEAT_SAVED } from '../offline/useScoreOutbox';
+import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
 import { applyResultsUpdate, replaceHeat, type ResultsUpdate } from '../lib/liveUpdates';
 import { CompetitionContext } from './competition/context';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
@@ -101,6 +103,16 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     setData((cur) => (cur ? replaceHeat(cur, sessionId, heat) : cur));
   }, []);
 
+  // Results sent from this phone's outbox show straight away, live link or not.
+  useEffect(() => {
+    const onSaved = (e: Event) => {
+      const { sessionId, heat } = (e as CustomEvent<{ sessionId: number; heat: Heat }>).detail;
+      applyHeat(sessionId, heat);
+    };
+    window.addEventListener(HEAT_SAVED, onSaved);
+    return () => window.removeEventListener(HEAT_SAVED, onSaved);
+  }, [applyHeat]);
+
   useEffect(() => {
     function refresh() { if (navigator.onLine && document.visibilityState === 'visible') load(); }
     window.addEventListener('online', refresh);
@@ -127,8 +139,9 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   if (!data) return <p className="text-slate-500">Loading competition…</p>;
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, applyHeat }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load }}>
       <div className="space-y-3">
+        <ScoreOutboxPanel competitionId={data.id} />
         <Outlet />
         {(savedAt !== null || error || !connected) && (
           <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">

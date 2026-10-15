@@ -2,7 +2,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import {
-  ChevronLeft, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Coffee, Wand2, X, Clock, Columns3, ClipboardList, Users, CheckCircle2,
+  ChevronLeft, CloudOff, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Coffee, Wand2, X, Clock, Columns3, ClipboardList, Users, CheckCircle2,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -11,6 +11,8 @@ import type { DeclarationForm, Heat, HeatEntry, Race, Session } from '../../type
 import { SessionEndTransition } from './SessionEndTransition';
 import { bibAccent } from '../../lib/bib';
 import { retryOnNetworkError } from '../../lib/liveUpdates';
+import { describePlacings, enqueue, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
+import { updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 
 function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
   if (heatSize <= 0) return baseLane;
@@ -54,7 +56,7 @@ export function SessionPage() {
   const [searchParams] = useSearchParams();
   const requestedHeat = Number(searchParams.get('heat'));
   const sid = sessionId ? parseInt(sessionId, 10) : null;
-  const { competition, reload, applyHeat } = useCompetition();
+  const { competition, reload } = useCompetition();
   const { canEdit } = useAuth();
 
   const session = useMemo<Session | null>(
@@ -105,8 +107,7 @@ export function SessionPage() {
       else localStorage.setItem(scoringDraftKey, JSON.stringify(pending));
     } catch { /* quota */ }
   }, [scoringDraftKey, pending]);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const outbox = useScoreOutbox();
   const [showResults, setShowResults] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
@@ -242,28 +243,29 @@ export function SessionPage() {
 
   function resetPending() { setPending([]); }
 
-  async function submit() {
+  // Results go into this phone's outbox and send when there's signal, so the
+  // scorer can move straight on to the next race.
+  function submit() {
     if (!activeRace || !activeHeat || !session) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      // Saving replaces the race's results, so resending after a dropped
-      // connection can't double-count.
-      const { data: heat } = await retryOnNetworkError(() =>
-        api.post<Heat>(`/races/${activeRace.id}/results`, { places: pending }, { timeout: 15_000 }));
-      setPending([]);
-      applyHeat(session.id, heat);
-      const nextRace = orderedRaces.find((r) => !r.isComplete && r.id !== activeRace.id);
-      if (nextRace) {
-        setActiveRaceId(nextRace.id);
-      }
-    } catch {
-      setSaveError('Couldn’t confirm the save. Your placings are still here. Tap Save again when you have signal. It’s safe to resend.');
-    } finally {
-      setSaving(false);
+    const heatIndex = orderedHeats.findIndex((h) => h.id === activeHeat.id);
+    updateOutbox((list) => enqueue(list, {
+      raceId: activeRace.id,
+      competitionId: session.competitionId,
+      sessionId: session.id,
+      label: `${activeHeat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
+      places: pending,
+      expected: placingsOf(activeRace.results),
+      teamNames: Object.fromEntries(activeHeat.entries.map((e) => [e.teamId, e.teamName])),
+      queuedAt: new Date().toISOString(),
+      state: 'waiting',
+    }));
+    setPending([]);
+    const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
+    const nextRace = orderedRaces.find((r) => !r.isComplete && !queuedIds.has(r.id));
+    if (nextRace) {
+      setActiveRaceId(nextRace.id);
     }
   }
-
 
   return (
     <div className="space-y-3">
@@ -280,7 +282,6 @@ export function SessionPage() {
         )}
       </div>
 
-      {saveError && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{saveError}</p>}
       {canEdit() ? (
         <>
           <HeatTabs
@@ -299,7 +300,7 @@ export function SessionPage() {
               sessionBase={sessionBase}
               pending={pending}
               canScore
-              saving={saving}
+              queued={outbox}
               showResults={showResults}
               onToggleResults={() => setShowResults((s) => !s)}
               showLaneView={showLaneView}
@@ -647,7 +648,7 @@ interface ScoringProps {
   sessionBase: number;
   pending: PendingPlace[];
   canScore: boolean;
-  saving: boolean;
+  queued: QueuedScore[];
   showResults: boolean;
   onToggleResults: () => void;
   showLaneView: boolean;
@@ -659,10 +660,12 @@ interface ScoringProps {
 }
 
 function ScoringSection({
-  heat, races, activeRace, onSelectRace, sessionBase, pending, canScore, saving, showResults,
+  heat, races, activeRace, onSelectRace, sessionBase, pending, canScore, queued, showResults,
   onToggleResults, showLaneView, onToggleLaneView, onClickTeam, onToggleElim, onReset, onSubmit,
 }: ScoringProps) {
   const pendingByTeam = new Map(pending.map((p) => [p.teamId, p]));
+  const queuedByRace = new Map(queued.map((q) => [q.raceId, q]));
+  const activeQueued = activeRace ? queuedByRace.get(activeRace.id) : undefined;
   const activeRaceIdx = activeRace ? races.findIndex((r) => r.id === activeRace.id) : 0;
   const heatSize = heat.entries.length;
 
@@ -683,14 +686,18 @@ function ScoringSection({
             <button
               key={race.id}
               onClick={() => onSelectRace(race.id)}
-              className={`px-2.5 py-1 rounded-md whitespace-nowrap text-[11px] font-semibold transition ${
+              title={queuedByRace.has(race.id) ? 'Saved on this phone, not sent yet' : undefined}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md whitespace-nowrap text-[11px] font-semibold transition ${
                 race.id === activeRace?.id
                   ? 'bg-brand-600 text-white'
-                  : race.isComplete
+                  : queuedByRace.has(race.id)
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                    : race.isComplete
                     ? 'bg-arena-finished/20 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
                     : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-100'
               }`}
             >
+              {queuedByRace.has(race.id) && <CloudOff className="w-3 h-3" aria-label="Not sent yet" />}
               {i + 1}. {race.name}
             </button>
           ))}
@@ -719,6 +726,11 @@ function ScoringSection({
             </h3>
             <RaceClock key={activeRace.id} race={activeRace} />
           </div>
+          {activeQueued && (
+            <p role="status" className="mb-2 rounded-md bg-amber-50 p-2 text-[11px] text-amber-900">
+              Not sent yet: {describePlacings(activeQueued.places, activeQueued.teamNames)}. To change them, score the race again.
+            </p>
+          )}
           <p className="text-[11px] text-slate-500 dark:text-slate-300 mb-3">
             Tap a team to assign its place · swipe a tile <span className="font-semibold">downwards</span> to eliminate (0 pts).
           </p>
@@ -748,11 +760,11 @@ function ScoringSection({
               </button>
               <button
                 onClick={onSubmit}
-                disabled={saving || pending.length === 0}
+                disabled={pending.length === 0}
                 className="btn-primary !py-1.5 !px-3 text-xs ml-auto"
               >
                 <Trophy className="w-3.5 h-3.5" />
-                {saving ? 'Saving…' : `Save ${pending.length} result${pending.length === 1 ? '' : 's'}`}
+                {`Save ${pending.length} result${pending.length === 1 ? '' : 's'}`}
               </button>
             </div>
           )}
