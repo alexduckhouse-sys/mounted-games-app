@@ -197,3 +197,6 @@ static void EnsureSqliteFolderExists(string connStr)
     if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
         Directory.CreateDirectory(dir);
 }
+
+// Exposed so WebApplicationFactory<Program> can host the app in integration tests.
+public partial class Program { }

@@ -23,28 +23,36 @@ public class NotificationScheduler : BackgroundService
     // given the 5-minute firing windows are narrow.
     private readonly HashSet<string> _fired = new();
 
-    public NotificationScheduler(IServiceProvider sp, ILogger<NotificationScheduler> log)
+    private readonly TimeSpan _startupDelay;
+    private readonly TimeSpan _interval;
+
+    // The delays are parameters (with the production defaults) so tests can drive the loop without waiting.
+    public NotificationScheduler(
+        IServiceProvider sp, ILogger<NotificationScheduler> log,
+        TimeSpan? startupDelay = null, TimeSpan? interval = null)
     {
         _sp = sp;
         _log = log;
+        _startupDelay = startupDelay ?? TimeSpan.FromSeconds(8);
+        _interval = interval ?? TimeSpan.FromMinutes(1);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Small delay so the DB seed / migrations finish before we touch it.
-        try { await Task.Delay(TimeSpan.FromSeconds(8), stoppingToken); }
+        try { await Task.Delay(_startupDelay, stoppingToken); }
         catch (TaskCanceledException) { return; }
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try { await TickAsync(stoppingToken); }
             catch (Exception ex) { _log.LogError(ex, "Notification scheduler tick failed."); }
-            try { await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken); }
+            try { await Task.Delay(_interval, stoppingToken); }
             catch (TaskCanceledException) { break; }
         }
     }
 
-    private async Task TickAsync(CancellationToken ct)
+    internal async Task TickAsync(CancellationToken ct)
     {
         using var scope = _sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
