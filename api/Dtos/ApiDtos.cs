@@ -252,7 +252,12 @@ public record CreateHeatRequest(
     IReadOnlyList<int> TeamIds,
     IReadOnlyList<string> RaceNames);
 
-public record SubmitRaceResultsRequest(IReadOnlyList<FinishingPlaceDto> Places);
+/// <param name="Expected">
+/// The results the scorer saw before scoring (empty when none). When set, the
+/// save is refused with 409 if the race has since been scored differently,
+/// e.g. by another phone while this one was offline.
+/// </param>
+public record SubmitRaceResultsRequest(IReadOnlyList<FinishingPlaceDto> Places, IReadOnlyList<FinishingPlaceDto>? Expected = null);
 public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated);
 
 public record StandingRow(
