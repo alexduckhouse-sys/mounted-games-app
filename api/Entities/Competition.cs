@@ -4,6 +4,7 @@ public class Competition
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string Icon { get; set; } = "flag";
     public string? Location { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }

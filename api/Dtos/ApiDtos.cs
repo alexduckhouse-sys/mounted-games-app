@@ -1,4 +1,5 @@
 using MountedGames.Api.Entities;
+using System.ComponentModel.DataAnnotations;
 
 namespace MountedGames.Api.Dtos;
 
@@ -9,6 +10,14 @@ public record CreateClubRequest(string Name, string? Region = null, string? BibC
 public record CompetitionSummary(
     int Id, string Name, string? Location, DateTime StartDate, DateTime? EndDate,
     bool IsActive, bool IsArchived, int SectionCount, int TeamCount, int SessionCount);
+
+public record CompetitionPickerItem(int Id, string Name, DateTime StartDate, DateTime? EndDate, string Icon);
+public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore);
+
+public static class CompetitionIcons
+{
+    public const string Pattern = "^(flag|gb|ie|fr|de|nl|world|trophy)$";
+}
 
 public record CompetitionDetail(
     int Id, string Name, string? Location, string? Description,
@@ -22,7 +31,8 @@ public record CompetitionDetail(
     string? StreamUrl = null,
     string? OrganiserName = null,
     string? PaymentDestination = null,
-    bool SignupsLocked = false);
+    bool SignupsLocked = false,
+    string Icon = "flag");
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -32,7 +42,8 @@ public record CreateCompetitionRequest(
     string? Postcode = null,
     string? StreamUrl = null,
     string? OrganiserName = null,
-    string? PaymentDestination = null);
+    string? PaymentDestination = null,
+    [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -43,7 +54,8 @@ public record UpdateCompetitionRequest(
     string? Postcode = null,
     string? StreamUrl = null,
     string? OrganiserName = null,
-    string? PaymentDestination = null);
+    string? PaymentDestination = null,
+    [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 

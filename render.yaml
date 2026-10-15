@@ -1,13 +1,11 @@
-# Render Blueprint — free dev hosting for the Mounted Games scoreboard.
+# Render API hosting with persistent data in Neon PostgreSQL.
 # Deploy: push this repo to GitHub, then visit https://render.com → New → Blueprint → pick the repo.
 #
 # Free tier caveats (fine for dev, not for a live event):
 #   - The service SLEEPS after 15 minutes of inactivity; first request after wake takes ~30–60s
 #     and SignalR sockets drop. Reconnect on the client is automatic but introduces a hiccup.
-#   - There is NO persistent disk. SQLite lives in /tmp and is wiped on every restart, but
-#     DbInitializer re-seeds clubs, demo accounts and the race library every boot.
-#
-# For a real event with persistent data, switch to Fly.io (see DEPLOY.md).
+#   - Local files are ephemeral. Competition data lives in Neon, outside this container.
+# Apply the PostgreSQL migrations before deploying; see docs/neon-setup.md.
 
 services:
   - type: web
@@ -23,9 +21,16 @@ services:
         value: Production
       - key: ASPNETCORE_URLS
         value: http://+:8080
-      # SQLite on free tier: ephemeral. Seeder re-runs on boot.
-      - key: ConnectionStrings__Default
-        value: Data Source=/tmp/mg.db
+      - key: Database__Provider
+        value: postgres
+      - key: Database__SeedDemoData
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: Cors__Origins__0
+        value: https://mounted-games-app.vercel.app
+      - key: Cors__Origins__1
+        value: https://mounted-games-app-alexduckhouse-sys-projects.vercel.app
       # Render generates a strong random value once and re-uses it across deploys.
       - key: Jwt__Key
         generateValue: true

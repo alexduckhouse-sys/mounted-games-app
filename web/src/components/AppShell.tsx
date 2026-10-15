@@ -20,6 +20,7 @@ export function AppShell() {
   const paletteRef = useRef<HTMLDetailsElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const choosingCompetition = ['/', '/competitions', '/competitions/past'].includes(location.pathname);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -48,7 +49,7 @@ export function AppShell() {
           </details>
           <button onClick={() => setMenuOpen(true)} className="btn-ghost min-h-11 min-w-11" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-6 w-6" /></button>
 
-          {current ? (
+          {current && !choosingCompetition && (
             <div className="flex w-full min-w-0 items-center rounded-xl bg-brand-100 text-brand-800 dark:bg-brand-900 dark:text-brand-100">
               <button onClick={() => navigate(`/competitions/${current.id}`)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 pl-3 text-left text-sm font-semibold" title={current.name}>
                 <Trophy className="h-4 w-4 shrink-0" /><span className="truncate">{current.name}</span>
@@ -63,9 +64,9 @@ export function AppShell() {
                 </div>
               </details>
             </div>
-          ) : <button className="btn-ghost min-h-11 w-full justify-start text-sm" onClick={() => setPickerOpen(true)}>Select competition</button>}
+          )}
         </div>
-        {current && (
+        {current && !choosingCompetition && (
           <nav aria-label="Competition views" className="mx-auto grid max-w-5xl grid-cols-2 gap-2 px-3 pb-2">
             {[{ to: `/competitions/${current.id}`, label: 'Timetable', icon: Timer, end: true }, { to: `/competitions/${current.id}/scoring`, label: 'Section', icon: Flag, end: false }].map((item) => (
               <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `flex min-h-12 items-center justify-center gap-2 rounded-xl text-sm font-semibold !no-underline hover:!no-underline ${isActive ? 'navigation-selected' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'}`}><item.icon className="h-4 w-4" />{item.label}</NavLink>
@@ -81,7 +82,7 @@ export function AppShell() {
       </main>
       {menuOpen && <NavigationDrawer onClose={() => setMenuOpen(false)} onChangeCompetition={() => { setMenuOpen(false); setPickerOpen(true); }} />}
       {pickerOpen && <CompetitionPickerDialog onClose={() => setPickerOpen(false)} />}
-      {current && rememberChoice === 'ask' && !pickerOpen && !menuOpen && <RememberCompetitionDialog />}
+      {current && !choosingCompetition && rememberChoice === 'ask' && !pickerOpen && !menuOpen && <RememberCompetitionDialog />}
     </div>
   );
 }

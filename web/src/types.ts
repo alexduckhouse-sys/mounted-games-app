@@ -66,6 +66,19 @@ export interface CompetitionSummary {
   sessionCount: number;
 }
 
+export interface CompetitionPickerItem {
+  id: number;
+  name: string;
+  startDate: string;
+  endDate: string | null;
+  icon: string;
+}
+
+export interface CompetitionPickerPage {
+  items: CompetitionPickerItem[];
+  hasMore: boolean;
+}
+
 export interface CompetitionSection {
   id: number;
   competitionId: number;
@@ -182,6 +195,7 @@ export interface Session {
 
 export interface CompetitionDetail {
   id: number;
+  icon?: string;
   name: string;
   location?: string | null;
   description?: string | null;

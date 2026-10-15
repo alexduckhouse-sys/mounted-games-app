@@ -1,7 +1,7 @@
 /** Only responses with the same public representation for every viewer. */
 export function canCachePublicApi(pathname: string, method = 'GET'): boolean {
   if (method !== 'GET') return false;
-  return /^\/api\/competitions(?:\/[1-9]\d*(?:\/standings)?)?\/?$/.test(pathname)
+  return /^\/api\/competitions(?:\/picker|\/[1-9]\d*(?:\/standings)?)?\/?$/.test(pathname)
     || /^\/api\/(?:race-templates|weather\/(?:at|current))\/?$/.test(pathname);
 }
 

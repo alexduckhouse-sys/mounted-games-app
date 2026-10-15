@@ -35,6 +35,21 @@ public class AppDbContext : IdentityDbContext<AppUser>
     {
         base.OnModelCreating(b);
 
+        if (Database.IsNpgsql())
+        {
+            // Existing API timestamps without an offset are interpreted as UTC.
+            // Browsers already submit scheduled times with an explicit UTC offset.
+            foreach (var property in b.Model.GetEntityTypes().SelectMany(e => e.GetProperties()))
+            {
+                if ((Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType) == typeof(DateTime))
+                    property.SetValueConverter(new UtcDateTimeConverter());
+            }
+            b.Entity<SavedRider>().Property(r => r.DateOfBirth)
+                .HasColumnType("timestamp without time zone").HasConversion(new CalendarDateTimeConverter());
+            b.Entity<RiderEntry>().Property(r => r.DateOfBirth)
+                .HasColumnType("timestamp without time zone").HasConversion(new CalendarDateTimeConverter());
+        }
+
         b.Entity<AppUser>(e =>
         {
             e.Property(u => u.FullName).HasMaxLength(200).IsRequired();
@@ -62,6 +77,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
         b.Entity<Competition>(e =>
         {
             e.Property(c => c.Name).HasMaxLength(200).IsRequired();
+            e.Property(c => c.Icon).HasMaxLength(24).HasDefaultValue("flag").IsRequired();
             e.HasOne(c => c.CreatedBy)
                 .WithMany()
                 .HasForeignKey(c => c.CreatedByUserId)

@@ -1,10 +1,11 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ChevronLeft, ChevronRight, Check, Trophy, MapPin, CalendarDays, Layers,
   Trash2, Sparkles, Clock,
 } from 'lucide-react';
 import { api } from '../../api';
+import { COMPETITION_ICONS } from '../../competition/icons';
 import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionDetail, CompetitionSection } from '../../types';
 
@@ -145,6 +146,7 @@ const STEPS = ['Basics', 'Sections', 'Review'] as const;
 type Step = typeof STEPS[number];
 
 interface PersistedDraft {
+  icon?: string;
   step: Step;
   name: string;
   location: string;
@@ -250,6 +252,7 @@ export function CompetitionEditor() {
 
   // Basics
   const [name, setName] = useState(persisted?.name ?? '');
+  const [icon, setIcon] = useState(persisted?.icon ?? 'flag');
   const [location, setLocation] = useState(persisted?.location ?? '');
   const [startDate, setStartDate] = useState(
     persisted?.startDate ?? (() => new Date().toISOString().slice(0, 10))()
@@ -279,7 +282,7 @@ export function CompetitionEditor() {
   useEffect(() => {
     const draft: PersistedDraft = {
       step,
-      name, location,
+      name, location, icon,
       startDate, startTime, endDate, endTime,
       what3Words, postcode, appleMapsUrl, lat, lon,
       description,
@@ -288,7 +291,7 @@ export function CompetitionEditor() {
       teams: [],
     };
     try { window.localStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* quota */ }
-  }, [storageKey, step, name, location, startDate, startTime, endDate, endTime,
+  }, [storageKey, step, name, location, icon, startDate, startTime, endDate, endTime,
       what3Words, postcode, appleMapsUrl, lat, lon, description,
       organiserName, paymentDestination, sections]);
 
@@ -300,6 +303,7 @@ export function CompetitionEditor() {
       .then((r) => {
         const c = r.data;
         setName(c.name);
+        setIcon(c.icon ?? 'flag');
         setLocation(c.location ?? '');
         const start = new Date(c.startDate);
         setStartDate(start.toISOString().slice(0, 10));
@@ -493,6 +497,7 @@ export function CompetitionEditor() {
   function basicsPayload() {
     return {
       name: name.trim(),
+      icon,
       location: location.trim() || null,
       description: description.trim() || null,
       latitude: lat ? parseFloat(lat) : null,
@@ -546,6 +551,7 @@ export function CompetitionEditor() {
         {step === 'Basics' && (
           <BasicsStep
             name={name} setName={setName}
+            icon={icon} setIcon={setIcon}
             location={location} setLocation={setLocation}
             startDate={startDate} setStartDate={setStartDate}
             startTime={startTime} setStartTime={setStartTime}
@@ -691,6 +697,7 @@ function StepStrip({ current, onJump }: { current: number; onJump?: (i: number) 
 }
 
 interface BasicsProps {
+  icon: string; setIcon: (s: string) => void;
   name: string; setName: (s: string) => void;
   location: string; setLocation: (s: string) => void;
   startDate: string; setStartDate: (s: string) => void;
@@ -734,6 +741,12 @@ function BasicsStep(p: BasicsProps) {
       <label className="block">
         <span className="text-sm font-semibold flex items-center gap-1"><Trophy className="w-4 h-4" /> Name</span>
         <input className="input mt-1" placeholder="Spring Open 2026" value={p.name} onChange={(e) => p.setName(e.target.value)} required />
+      </label>
+      <label className="block">
+        <span className="text-sm font-semibold">Competition icon</span>
+        <select className="input mt-1 min-h-12" value={p.icon} onChange={(e) => p.setIcon(e.target.value)}>
+          {COMPETITION_ICONS.map((option) => <option key={option.id} value={option.id}>{option.symbol} {option.label}</option>)}
+        </select>
       </label>
       <label className="block">
         <span className="text-sm font-semibold flex items-center gap-1"><MapPin className="w-4 h-4" /> Venue / location</span>

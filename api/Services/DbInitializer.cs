@@ -15,6 +15,47 @@ public static class DbInitializer
         var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
         var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
+        if (db.Database.IsNpgsql())
+        {
+            if ((await db.Database.GetPendingMigrationsAsync()).Any())
+                throw new InvalidOperationException("Apply PostgreSQL migrations with npm run db:migrate before starting the API.");
+        }
+        else
+        {
+            await EnsureSqliteSchemaAsync(db);
+        }
+
+        await SeedReferenceDataAsync(db, roles);
+        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        if (!(configuration.GetValue<bool?>("Database:SeedDemoData") ?? db.Database.IsSqlite()))
+        {
+            if (!string.IsNullOrWhiteSpace(configuration["Admin:Key"]))
+                await EnsureSharedAdminAsync(users);
+            return;
+        }
+        await SeedDemoDataAsync(db, users);
+    }
+
+    private static async Task EnsureSharedAdminAsync(UserManager<AppUser> users)
+    {
+        var admin = await users.FindByEmailAsync("admin@mg.local");
+        if (admin is null)
+        {
+            admin = new AppUser
+            {
+                UserName = "admin@mg.local", Email = "admin@mg.local",
+                FullName = "Organiser", EmailConfirmed = true,
+            };
+            // The shared organiser signs in with Admin:Key; no default password is created.
+            if (!(await users.CreateAsync(admin)).Succeeded)
+                throw new InvalidOperationException("Could not create the shared organiser account.");
+            if (!(await users.AddToRoleAsync(admin, Roles.Admin)).Succeeded)
+                throw new InvalidOperationException("Could not assign the organiser role.");
+        }
+    }
+
+    private static async Task EnsureSqliteSchemaAsync(AppDbContext db)
+    {
         await db.Database.EnsureCreatedAsync();
 
         // For new tables added after the DB was first created, EnsureCreated is a no-op.
@@ -35,6 +76,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Teams", "IsHorsConcours", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "ChatMessages", "IpAddress", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "StreamUrl", "TEXT NULL");
+        await EnsureColumnAsync(db, "Competitions", "Icon", "TEXT NOT NULL DEFAULT 'flag'");
         await EnsureColumnAsync(db, "Heats", "ScheduledStart", "TEXT NULL");
         await EnsureColumnAsync(db, "Heats", "RaceRoundId", "INTEGER NULL");
         await EnsureColumnAsync(db, "Heats", "RaceRoundStage", "INTEGER NOT NULL DEFAULT 0");
@@ -144,6 +186,10 @@ public static class DbInitializer
             );
         ");
 
+    }
+
+    private static async Task SeedReferenceDataAsync(AppDbContext db, RoleManager<IdentityRole> roles)
+    {
         foreach (var r in Roles.All)
         {
             if (!await roles.RoleExistsAsync(r))
@@ -246,6 +292,10 @@ public static class DbInitializer
             await db.SaveChangesAsync();
         }
 
+    }
+
+    private static async Task SeedDemoDataAsync(AppDbContext db, UserManager<AppUser> users)
+    {
         var admin = await users.FindByEmailAsync("admin@mg.local");
         if (admin is null)
         {

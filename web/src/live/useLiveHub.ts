@@ -14,13 +14,13 @@ export interface LiveHandlers {
 
 export function useLiveHub(competitionId: number | null, handlers: LiveHandlers) {
   const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
+  useEffect(() => { handlersRef.current = handlers; }, [handlers]);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     if (competitionId == null) return;
     const conn: HubConnection = new HubConnectionBuilder()
-      .withUrl('/hubs/live', { accessTokenFactory: () => readToken() ?? '' })
+      .withUrl(import.meta.env.VITE_LIVE_HUB_URL || '/hubs/live', { accessTokenFactory: () => readToken() ?? '' })
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
       .build();

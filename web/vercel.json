@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "VITE_LIVE_HUB_URL=https://mounted-games-scoreboard.onrender.com/hubs/live npm run build",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://mounted-games-scoreboard.onrender.com/api/:path*" },
+    { "source": "/((?!api/|assets/|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }
+  ]
+}
