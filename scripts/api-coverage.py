@@ -16,7 +16,7 @@ lines = defaultdict(dict)  # file -> {line: hits}
 for cls in ET.parse(path).getroot().iter("class"):
     for ln in cls.iter("line"):
         f = cls.get("filename")
-        if f.startswith("obj/") or "/obj/" in f:
+        if f.startswith("obj/") or "/obj/" in f or "Migrations/" in f:
             continue
         n = int(ln.get("number"))
         lines[f][n] = max(lines[f].get(n, 0), int(ln.get("hits")))

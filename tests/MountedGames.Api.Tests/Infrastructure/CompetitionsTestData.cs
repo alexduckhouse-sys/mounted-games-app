@@ -7,15 +7,6 @@ namespace MountedGames.Api.Tests.Infrastructure;
 /// <summary>Direct-to-database arrange/assert helpers for the competitions, teams and equipment tests.</summary>
 public static class CompetitionsTestData
 {
-    public static async Task<T> WithDbAsync<T>(this ApiFactory f, Func<AppDbContext, Task<T>> work)
-    {
-        using var scope = f.Services.CreateScope();
-        return await work(scope.ServiceProvider.GetRequiredService<AppDbContext>());
-    }
-
-    public static Task WithDbAsync(this ApiFactory f, Func<AppDbContext, Task> work)
-        => f.WithDbAsync<int>(async db => { await work(db); return 0; });
-
     public static Task<int> SeedCompetitionAsync(this ApiFactory f, string? name = null, DateTime? start = null,
         DateTime? end = null, bool archived = false)
         => f.WithDbAsync(async db =>

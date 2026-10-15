@@ -7,14 +7,9 @@ namespace MountedGames.Api.Tests.Infrastructure;
 /// <summary>Direct database access for arranging and asserting state around HTTP calls.</summary>
 public static class DbArrange
 {
-    public static async Task<T> InDbAsync<T>(this ApiFactory f, Func<AppDbContext, Task<T>> work)
-    {
-        using var scope = f.Services.CreateScope();
-        return await work(scope.ServiceProvider.GetRequiredService<AppDbContext>());
-    }
+    public static Task<T> InDbAsync<T>(this ApiFactory f, Func<AppDbContext, Task<T>> work) => f.WithDbAsync(work);
 
-    public static Task InDbAsync(this ApiFactory f, Func<AppDbContext, Task> work)
-        => f.InDbAsync<int>(async db => { await work(db); return 0; });
+    public static Task InDbAsync(this ApiFactory f, Func<AppDbContext, Task> work) => f.WithDbAsync(work);
 
     /// <summary>Creates a fresh competition with one section, isolated from the seeded data.</summary>
     public static Task<CompetitionSection> NewSectionAsync(
