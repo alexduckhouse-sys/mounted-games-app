@@ -14,7 +14,7 @@ This review uses WhiteLabelApp's `app/src/lib/security-headers.ts`, `app/next.co
 
 ## Before deployment
 
-1. Apply `20261015220000_AddSavedRiderOwnership` to PostgreSQL before starting the updated API. It adds one nullable column and does not delete existing records. SQLite's existing startup upgrade path adds the same column.
+1. Apply `api/Data/Migrations/Scripts/20261015220000_AddSavedRiderOwnership.sql` to PostgreSQL before starting the updated API. This is the EF-generated idempotent script for `20261015220000_AddSavedRiderOwnership`. It adds one nullable column and does not delete existing records. SQLite's existing startup upgrade path adds the same column.
 2. Supply `Jwt__Key` (at least 32 random bytes) and, if shared admin login is used, `Admin__Key` (at least 20 random bytes) through deployment secrets. Set `Database__SeedDemoData=false` outside Development. Repository defaults are deliberately rejected. No credentials were inspected, rotated or changed in this review.
 3. Review any previously deployed demo accounts and rotate any secrets that ever matched repository defaults. Turning off seeding does not remove existing accounts or revoke previously issued tokens.
 4. If the API sits behind a proxy, configure `Security__KnownProxies__0` and further indexed entries with the trusted immediate proxy IP addresses. Only one forwarding hop is accepted. Without an explicit list, forwarded headers are ignored: anonymous clients may share the proxy's rate-limit partition. Never trust arbitrary client-supplied `X-Forwarded-For` values.
@@ -22,18 +22,18 @@ This review uses WhiteLabelApp's `app/src/lib/security-headers.ts`, `app/next.co
 
 ## Verification and remaining limits
 
-The security suite exercises HTTP refusal paths, private-field redaction, draft access, cross-competition and child-resource checks, saved-rider references, separate rate-limit partitions, matching API/Vercel headers, exception responses and legacy migration data preservation. Test data is fictional. PostgreSQL model/migration parity is checked without connecting to a real database. The new column operation is also exercised against a synthetic SQLite legacy table.
+The security suite exercises HTTP refusal paths, private-field redaction, draft access, cross-competition and child-resource checks, saved-rider references, separate rate-limit partitions, matching API/Vercel headers, exception responses and legacy migration data preservation. Test data is fictional. PostgreSQL model/migration parity is checked in the test suite. The column addition and migration history entry were also applied and verified on an isolated Neon branch copied from production; the idempotency guard was rerun successfully. No application records were read. The new column operation is also exercised against a synthetic SQLite legacy table.
 
 The review found and corrected a stale demo-seed test: the seeder already creates 5–6 teams per age group, while the test still expected four. No seeder behaviour was changed.
 
 Runtime dependency advisories were addressed with same-major updates and patched .NET dependency pins. Tailwind 3 still brings build-time dependency advisories; npm proposes Tailwind 4, a breaking migration that needs its own stylesheet and browser regression pass. These findings are not suppressed.
 
-This remains a shared-key admin system with bearer tokens stored in browser localStorage, a default one-day token lifetime, and no server-side token revocation. Rate limits are per process and reset on restart; multiple instances need a shared or edge limiter. The review did not verify production configuration, existing data, secret rotation, backups or monitoring. No deployment or database migration was performed. A browser connection and local PostgreSQL were unavailable, so browser enforcement and a PostgreSQL migration rehearsal remain outstanding.
+This remains a shared-key admin system with bearer tokens stored in browser localStorage, a default one-day token lifetime, and no server-side token revocation. Rate limits are per process and reset on restart; multiple instances need a shared or edge limiter. The review did not verify production configuration, existing data, secret rotation, backups or monitoring. No production deployment or production database migration was performed. A browser connection was unavailable, so browser enforcement remains outstanding. The temporary Neon migration is ready for approval before the production change; production is still missing the column.
 
 ### Recorded check results
 
-- API: release publish passed; 56 tests passed, including 34 security cases. One existing EF1002 warning remains in the SQLite schema helper, whose interpolated identifiers come from fixed internal calls.
-- Frontend: production build and all 99 tests passed. Fresh-install lint reports 45 errors and six warnings; unchanged `HEAD` reports 46 errors and seven warnings with the same installed tools. No new file/rule findings were introduced. No lint rule was disabled.
+- API: release publish passed; 71 tests passed, including 34 security cases. One existing EF1002 warning remains in the SQLite schema helper, whose interpolated identifiers come from fixed internal calls.
+- Frontend: production build and all 115 tests passed. Fresh-install lint reports 45 errors and six warnings; unchanged `origin/main` reports 46 errors and seven warnings with the same installed tools. No new file/rule findings were introduced. No lint rule was disabled.
 - Dependency audit: no runtime npm advisories and no NuGet advisories. The full npm audit still reports seven Tailwind build-tool advisories (five high, two moderate).
 - Release HTTP smoke test: pages, fingerprinted assets and API responses carry the security headers; private endpoints return 401 and `no-store` without authentication.
 - Independent review: the reviewer identified the shared anonymous/organiser rate-limit partition; it was corrected and covered by a regression test.
