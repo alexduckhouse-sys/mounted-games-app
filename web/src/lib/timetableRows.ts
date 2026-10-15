@@ -10,6 +10,13 @@ export function timetableStatus(finished: boolean, live: boolean, scheduled: Dat
   return { status: finished ? 'finished' : live ? 'live' : delayMinutes > 0 ? 'late' : 'on-time', delayMinutes };
 }
 
+/** The words on a row's status pill: "On now", "+8 min", "On time" or "Finished". */
+export function statusLabel(status: TimetableStatus, delayMinutes: number): string {
+  if (status === 'finished') return 'Finished';
+  if (status === 'live') return 'On now';
+  return status === 'late' ? `+${delayMinutes} min` : 'On time';
+}
+
 export interface TimetableRow {
   key: string;
   session: Session;

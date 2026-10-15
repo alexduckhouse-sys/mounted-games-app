@@ -1,20 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Timer, Flag, Trophy, LogIn, LogOut, Radio, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin } from 'lucide-react';
+import { Clock, Trophy, LogOut, MessageSquare, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES, useTheme } from '../theme/ThemeContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
+import { competitionDateText } from '../lib/competitionDates';
 import { useNavExtras } from './NavExtrasContext';
 import { WeatherBadge } from './WeatherBadge';
 import { useAgeGroups } from './AgeGroupsContext';
+import { useCompetitionMeta } from './competitionMeta';
 
 const WEATHER_KEY = 'mg.showWeather';
+const itemClass = (active: boolean) => `flex min-h-12 w-full items-center gap-3 rounded-[10px] px-3 text-left text-base !no-underline hover:!no-underline ${active
+  ? 'bg-[rgb(var(--mg-tint))] font-semibold text-[rgb(var(--mg-heading))]'
+  : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`;
+const iconClass = (active: boolean) => `h-5 w-5 shrink-0 ${active ? '' : 'text-[rgb(var(--mg-muted))]'}`;
 
 export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: () => void; onChangeCompetition: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const { current, rememberChoice, setRememberChoice } = useCurrentCompetition();
   const { user, hasRole, logout } = useAuth();
   const { extras } = useNavExtras();
+  const { meta } = useCompetitionMeta();
   const navigate = useNavigate();
   const ageGroups = useAgeGroups();
   const location = useLocation();
@@ -34,10 +41,13 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
     return () => { dialog?.close(); document.body.style.overflow = overflow; };
   }, []);
   const base = current ? `/competitions/${current.id}` : '/competitions';
+  const shown = meta && current && meta.id === current.id ? meta : null;
+  const subtitle = shown ? [competitionDateText(shown.startDate, shown.endDate), shown.location?.trim()].filter(Boolean).join(' · ') : '';
   const links = [
-    { to: base, label: 'Timetable', icon: Timer, end: true },
-    { to: current ? `${base}/toplists` : '/competitions', label: 'Toplists', icon: Trophy, end: true },
-    { to: current ? `${base}/chat` : '/chat', label: 'Live feed / stream', icon: Radio, end: true },
+    { to: base, label: 'Timetable', icon: Clock, end: true, badge: false },
+    { to: current ? `${base}/toplists` : '/competitions', label: 'Toplists', icon: Trophy, end: true, badge: false },
+    { to: current ? `${base}/chat` : '/chat', label: 'Live feed & stream', icon: MessageSquare, end: true, badge: !!shown?.live },
+    { to: current ? `${base}/details` : '/competitions', label: 'Details & entries', icon: Info, end: true, badge: false },
   ];
   const accountLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: !!user },
@@ -46,62 +56,90 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
     { to: '/me/signups', label: 'My signups', icon: CreditCard, show: !!user && !hasRole('Admin') },
     { to: '/admin', label: 'Admin', icon: Settings, show: hasRole('Admin') },
   ].filter((item) => item.show);
-  const linkClass = (active: boolean) => `flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-base font-medium !no-underline hover:!no-underline ${active ? 'navigation-selected' : 'text-slate-700 hover:bg-brand-50 dark:text-slate-200 dark:hover:bg-slate-800'}`;
+  const selectedSection = location.pathname === `${base}/scoring` ? new URLSearchParams(location.search).get('section') : null;
   return (
-    <dialog ref={ref} onCancel={onClose} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} aria-labelledby="navigation-title" className="fixed inset-y-0 left-auto right-0 m-0 h-dvh max-h-none w-[min(88vw,22rem)] max-w-none bg-white p-0 text-slate-900 shadow-xl backdrop:bg-black/50 dark:bg-slate-900 dark:text-slate-100">
-      <div className="flex min-h-full flex-col p-4" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-4 flex items-center gap-3 border-b border-slate-200 pb-3 dark:border-slate-700">
-          <div className="min-w-0 flex-1">
-            <h2 id="navigation-title" className="text-xl font-bold">Menu</h2>
-            {current && <p className="mt-1 break-words text-sm font-medium text-slate-600 dark:text-slate-200">{current.name}</p>}
+    <dialog ref={ref} onCancel={onClose} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} aria-labelledby="navigation-title" className="mg-font fixed inset-y-0 left-auto right-0 m-0 h-dvh max-h-none w-[min(88vw,20rem)] max-w-none bg-[rgb(var(--mg-surface))] p-0 text-[rgb(var(--mg-ink))] shadow-xl backdrop:bg-[rgb(var(--mg-overlay)/0.55)]">
+      <div className="flex min-h-full flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="mg-header flex items-start gap-2.5 p-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            {current ? <>
+              <span className="mg-header-sub text-xs font-semibold uppercase tracking-[0.08em]">Following</span>
+              <h2 id="navigation-title" className="mg-display break-words text-xl font-bold leading-tight">{current.name}</h2>
+              {subtitle && <span className="mg-header-sub text-[13px] leading-tight">{subtitle}</span>}
+            </> : <h2 id="navigation-title" className="mg-display text-xl font-bold leading-tight">Menu</h2>}
           </div>
-          <button onClick={() => setSettingsOpen((v) => !v)} className={`btn-ghost min-h-11 min-w-11 ${settingsOpen ? 'navigation-selected' : ''}`} aria-label="Settings" aria-expanded={settingsOpen}><SlidersHorizontal className="h-5 w-5" /></button>
-          <button autoFocus onClick={onClose} className="btn-ghost min-h-11 min-w-11" aria-label="Close menu"><X className="h-5 w-5" /></button>
+          <button autoFocus onClick={onClose} className="mg-nav-btn !px-0" aria-label="Close menu"><X className="h-5 w-5" /></button>
         </div>
-        {settingsOpen && (
-          <section aria-label="Settings" className="mb-4 space-y-4 border-b border-slate-200 pb-4 dark:border-slate-700">
-            <div role="group" aria-label="Colour theme" className="space-y-1">
-              <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Colour theme</h3>
-              {THEMES.map((item) => (
-                <button key={item.id} aria-pressed={theme === item.id} onClick={() => setTheme(item.id)} className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-base ${theme === item.id ? 'navigation-selected' : 'hover:bg-brand-50 dark:hover:bg-slate-800'}`}>
-                  <span className="h-5 w-5 rounded-md border" style={{ background: item.swatch }} />{item.label}
-                </button>
-              ))}
-            </div>
-            <div className="space-y-1">
-              <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Options</h3>
-              <SettingSwitch icon={CloudSun} label="Show weather" checked={showWeather} onChange={toggleWeather} />
-              {current && <SettingSwitch icon={Pin} label="Remember this competition on this device" checked={rememberChoice === 'remember'} onChange={() => setRememberChoice(rememberChoice === 'remember' ? 'visit' : 'remember')} />}
-              {user && <NavLink to="/teams" onClick={onClose} className={`${linkClass(false)} justify-between`}><span className="flex items-center gap-3"><Bell className="h-5 w-5 shrink-0" />Notifications</span><span className="text-sm text-slate-500 dark:text-slate-300">Set up in My teams</span></NavLink>}
-            </div>
-          </section>
-        )}
-        {showWeather && <div className="mb-4 flex min-h-12 items-center gap-3 rounded-xl bg-slate-100 px-4 py-2 dark:bg-slate-800"><CloudSun className="h-5 w-5 shrink-0" /><span className="font-medium">Weather</span><span className="ml-auto"><WeatherBadge /></span></div>}
-        {current && ageGroups.competitionId === current.id && ageGroups.groups.length > 0 && (
-          <nav aria-label="Age groups" className="mb-4 rounded-2xl border-2 border-brand-200 bg-brand-50 p-3 dark:border-brand-700 dark:bg-brand-900/40">
-            <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-brand-700 dark:text-brand-200"><Flag className="h-4 w-4" />Age groups</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {ageGroups.groups.map((group) => (
-                <NavLink key={group.id} to={`${base}/scoring?section=${group.id}`} onClick={onClose} className={() => `flex min-h-12 items-center justify-center rounded-xl border-2 px-3 py-2 text-center text-base font-bold !no-underline hover:!no-underline ${location.pathname === `${base}/scoring` && (new URLSearchParams(location.search).get('section') === String(group.id) || (!location.search && group.id === ageGroups.groups[0].id)) ? 'navigation-selected border-transparent' : 'border-brand-300 bg-white text-brand-800 hover:bg-brand-100 dark:border-brand-600 dark:bg-slate-900 dark:text-brand-100 dark:hover:bg-slate-800'}`}>{group.name}</NavLink>
-              ))}
-            </div>
+
+        <div className="flex flex-1 flex-col gap-5 p-4">
+          {showWeather && <div className="flex min-h-12 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2"><CloudSun className="h-5 w-5 shrink-0 text-[rgb(var(--mg-muted))]" /><span className="font-medium">Weather</span><span className="ml-auto"><WeatherBadge /></span></div>}
+
+          {current && ageGroups.competitionId === current.id && ageGroups.groups.length > 0 && (
+            <nav aria-label="Age groups" className="flex flex-col gap-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Age groups</h3>
+              <div className="grid grid-cols-3 gap-2">
+                {ageGroups.groups.map((group) => {
+                  const active = selectedSection === String(group.id) || (location.pathname === `${base}/scoring` && !location.search && group.id === ageGroups.groups[0].id);
+                  return <NavLink key={group.id} to={`${base}/scoring?section=${group.id}`} onClick={onClose} aria-current={active ? 'page' : undefined} className="mg-chip !min-h-11 !px-2 text-center !text-sm !whitespace-normal">{group.name}</NavLink>;
+                })}
+              </div>
+            </nav>
+          )}
+
+          <nav aria-label="Main navigation" className="flex flex-col">
+            {links.map((item) => (
+              <NavLink key={item.label} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => itemClass(isActive && current !== null)}>
+                {({ isActive }) => <>
+                  <item.icon className={iconClass(isActive && current !== null)} />{item.label}
+                  {item.badge && <span className="mg-badge mg-badge-live ml-auto !h-5">Live</span>}
+                </>}
+              </NavLink>
+            ))}
           </nav>
-        )}
-        <nav aria-label="Main navigation" className="space-y-1">
-          {links.map((item) => <NavLink key={item.label} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => linkClass(isActive && (current !== null || item.to !== '/competitions'))}><item.icon className="h-5 w-5 shrink-0" />{item.label}</NavLink>)}
-          <button onClick={onChangeCompetition} className={`${linkClass(false)} w-full text-left`}><ArrowLeftRight className="h-5 w-5 shrink-0" />Change competition</button>
-          <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => linkClass(isActive)}><History className="h-5 w-5 shrink-0" />Past competitions</NavLink>
-          <NavLink to={current ? `${base}/details` : '/competitions'} end onClick={onClose} className={({ isActive }) => linkClass(isActive && current !== null)}><Info className="h-5 w-5 shrink-0" />Details</NavLink>
-        </nav>
-        {(accountLinks.length > 0 || extras.length > 0) && (
-          <nav aria-label="Account and management" className="mt-4 space-y-1 border-t border-slate-200 pt-4 dark:border-slate-700">
-            {accountLinks.map((item) => <NavLink key={item.to} to={item.to} onClick={onClose} className={({ isActive }) => linkClass(isActive)}><item.icon className="h-5 w-5 shrink-0" />{item.label}</NavLink>)}
-            {extras.map((item) => <NavLink key={item.to} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => linkClass(isActive)}><item.icon className="h-5 w-5 shrink-0" />{item.label}</NavLink>)}
-          </nav>
-        )}
-        <div className="mt-auto pt-4">
-        {!user && <NavLink to="/login" onClick={onClose} className={({ isActive }) => linkClass(isActive)}><LogIn className="h-5 w-5 shrink-0" />Sign in</NavLink>}
-        {user && <button className={`${linkClass(false)} w-full text-left`} onClick={() => { logout(); onClose(); navigate('/'); }}><LogOut className="h-5 w-5 shrink-0" />Sign out</button>}
+
+          <div className="h-px bg-[rgb(var(--mg-rule-soft))]" />
+
+          <div className="flex flex-col">
+            <button onClick={onChangeCompetition} className={itemClass(false)}><ArrowLeftRight className={iconClass(false)} />Change competition</button>
+            <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
+            {user && <NavLink to="/teams" onClick={onClose} className={`${itemClass(false)} justify-between`}><span className="flex items-center gap-3"><Bell className={iconClass(false)} />Notifications</span><span className="text-sm text-[rgb(var(--mg-muted))]">In My teams</span></NavLink>}
+            <button onClick={() => setSettingsOpen((v) => !v)} className={itemClass(settingsOpen)} aria-expanded={settingsOpen}><SlidersHorizontal className={iconClass(settingsOpen)} />Settings</button>
+            {settingsOpen && (
+              <section aria-label="Settings" className="mt-2 flex flex-col gap-4 rounded-xl border border-[rgb(var(--mg-rule))] p-3">
+                <div role="group" aria-label="Colour theme" className="flex flex-col gap-1">
+                  <h3 className="px-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Colour theme</h3>
+                  {THEMES.map((item) => (
+                    <button key={item.id} aria-pressed={theme === item.id} onClick={() => setTheme(item.id)} className={itemClass(theme === item.id)}>
+                      <span className="h-5 w-5 rounded-md border border-[rgb(var(--mg-control))]" style={{ background: item.swatch }} />{item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <h3 className="px-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Options</h3>
+                  <SettingSwitch icon={CloudSun} label="Show weather" checked={showWeather} onChange={toggleWeather} />
+                  {current && <SettingSwitch icon={Pin} label="Remember this competition on this device" checked={rememberChoice === 'remember'} onChange={() => setRememberChoice(rememberChoice === 'remember' ? 'visit' : 'remember')} />}
+                </div>
+              </section>
+            )}
+          </div>
+
+          {(accountLinks.length > 0 || extras.length > 0) && (
+            <nav aria-label="Account and management" className="flex flex-col border-t border-[rgb(var(--mg-rule-soft))] pt-4">
+              {accountLinks.map((item) => <NavLink key={item.to} to={item.to} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}</NavLink>)}
+              {extras.map((item) => <NavLink key={item.to} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}</NavLink>)}
+            </nav>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 border-t border-[rgb(var(--mg-rule-soft))] p-4">
+          {!user && <>
+            <NavLink to="/login" onClick={onClose} className="mg-btn mg-btn-primary">Sign in</NavLink>
+            <p className="text-center text-[13px] text-[rgb(var(--mg-muted))]">For trainers, organisers and stewards</p>
+          </>}
+          {user && <>
+            <p className="truncate text-center text-[13px] text-[rgb(var(--mg-muted))]">Signed in as {user.fullName || user.email}</p>
+            <button className="mg-btn mg-btn-secondary" onClick={() => { logout(); onClose(); navigate('/'); }}><LogOut className="h-5 w-5" />Sign out</button>
+          </>}
         </div>
       </div>
     </dialog>
@@ -110,10 +148,10 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
 
 function SettingSwitch({ icon: Icon, label, checked, onChange }: { icon: typeof Bell; label: string; checked: boolean; onChange: () => void }) {
   return (
-    <button role="switch" aria-checked={checked} onClick={onChange} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-2 text-left text-base font-medium text-slate-700 hover:bg-brand-50 dark:text-slate-200 dark:hover:bg-slate-800">
-      <Icon className="h-5 w-5 shrink-0" />
+    <button role="switch" aria-checked={checked} onClick={onChange} className={itemClass(false)}>
+      <Icon className={iconClass(false)} />
       <span className="flex-1">{label}</span>
-      <span aria-hidden="true" className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-600'}`}><span className={`h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : ''}`} /></span>
+      <span aria-hidden="true" className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-[rgb(var(--mg-button))]' : 'bg-[rgb(var(--mg-control))]'}`}><span className={`h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : ''}`} /></span>
     </button>
   );
 }

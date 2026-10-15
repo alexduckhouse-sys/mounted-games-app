@@ -1,18 +1,28 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, RotateCw } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { computeTimings, formatTime } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
-import { TIMETABLE_COLOURS, groupRowsBySession, hiddenFinishedKeys, sessionOrdinals, sessionTitle, timetableRows, type TimetableRow } from '../../lib/timetableRows';
+import { groupRowsBySession, hiddenFinishedKeys, sessionOrdinals, statusLabel, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
 import './timetable.css';
 
-const statusLabels = { 'on-time': 'On time', late: 'Late', live: 'On now', finished: 'Finished' };
+const PILL_CLASS: Record<TimetableStatus, string> = { 'on-time': 'mg-pill-ontime', late: 'mg-pill-late', live: 'mg-pill-live', finished: 'mg-pill-done' };
 
-export function TimetableBoard({ sectionId = null, hideTitle = false }: { sectionId?: number | null; hideTitle?: boolean } = {}) {
-  const { competition } = useCompetition();
+/**
+ * The public timetable: a white band with the title, last update and day/arena choices, then one card per
+ * session and per age group's finals. `bandExtra`, `lead` and `footer` let a page add its own controls.
+ */
+export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtra, lead, footer }: {
+  sectionId?: number | null;
+  title?: string;
+  bandExtra?: ReactNode;
+  lead?: ReactNode;
+  footer?: ReactNode;
+} = {}) {
+  const { competition, reload, updatedAt } = useCompetition();
   const { canOrganise } = useAuth();
   const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
   const showQualifiers = canOrganise();
@@ -47,51 +57,64 @@ export function TimetableBoard({ sectionId = null, hideTitle = false }: { sectio
   const selectedArena = arenas.includes(arena) ? arena : '';
   const visibleRows = dayRows.filter((row) => !selectedArena || row.session.arenaName?.trim() === selectedArena || !row.session.arenaName?.trim());
 
-  const sessionGroups = groupRowsBySession(visibleRows.filter((row) => row.group === 'Heats'));
-  const finalGroups = finalsByAgeGroup(visibleRows);
-  const hiddenKeys = showAll ? new Set<string>() : hiddenFinishedKeys([...sessionGroups, ...finalGroups]);
-  const hasCompleted = hiddenFinishedKeys([...sessionGroups, ...finalGroups]).size > 0;
-  const groupDone = (rows: TimetableRow[]) => rows.every((row) => row.status === 'finished');
+  const sessionGroups = groupRowsBySession(visibleRows.filter((row) => row.group === 'Heats')).map((group) => ({
+    key: group.key,
+    title: group.race ? `${displaySectionName(group.session.sectionName || group.session.name)} · Session ${ordinals.get(group.session.id) ?? 1}` : null,
+    noun: ['heat', 'heats'] as const,
+    rows: group.rows,
+  }));
+  const finalGroups = finalsByAgeGroup(visibleRows).map((group) => ({ ...group, noun: ['final', 'finals'] as const }));
+  const groups = [...sessionGroups, ...finalGroups];
+  const hiddenKeys = showAll ? new Set<string>() : hiddenFinishedKeys(groups);
+  const hasCompleted = hiddenFinishedKeys(groups).size > 0;
+  const updated = updatedAt ? updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
 
   return (
     <div className="timetable-board">
-      <header>
-        <div className="timetable-head">
-        {!hideTitle && <h1>Timetable</h1>}
-        <div className="timetable-days" role="group" aria-label="Choose day">
-          {days.map((day, index) => <button key={day} type="button" aria-pressed={selectedDay === day} aria-label={`Day ${index + 1}, ${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${day === today ? ', today' : ''}`} onClick={() => setPickedDay(day)}>
-            Day {index + 1}
-          </button>)}
+      <div className={`tt-head ${arenas.length > 1 ? 'tt-band-joined' : 'mg-band'}`}>
+        <div className="flex items-center gap-3">
+          <h1 className="mg-h1 mg-h1-sm min-w-0 flex-1">{title}</h1>
+          {updated && <span className="mg-meta shrink-0 font-medium">Updated {updated}</span>}
+          <button type="button" className="mg-icon-btn" aria-label="Refresh timetable" onClick={reload}><RotateCw className="h-[18px] w-[18px]" /></button>
         </div>
-        </div>
-      </header>
+        {bandExtra}
+        {days.length > 1 && (
+          <div className="mg-chips" role="group" aria-label="Choose day">
+            {days.map((day, index) => <button key={day} type="button" className="mg-chip" aria-pressed={selectedDay === day} aria-label={`Day ${index + 1}, ${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${day === today ? ', today' : ''}`} onClick={() => setPickedDay(day)}>
+              {new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })} · Day {index + 1}
+            </button>)}
+          </div>
+        )}
+      </div>
       {arenas.length > 1 && (
-        <div className="timetable-arenas" role="group" aria-label="Choose arena">
+        <div className="tt-arenas mg-band mg-chips" role="group" aria-label="Choose arena">
           {['', ...arenas].map((name) => {
             const live = !!name && dayRows.some((row) => row.status === 'live' && row.session.arenaName?.trim() === name);
-            return <button key={name || 'all'} type="button" aria-pressed={selectedArena === name} onClick={(e) => { chooseArena(name); e.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest' }); }}>
+            return <button key={name || 'all'} type="button" className="mg-chip" aria-pressed={selectedArena === name} onClick={(e) => { chooseArena(name); e.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest' }); }}>
               {name || 'All arenas'}
-              {live && <><span className="timetable-live-dot" style={{ backgroundColor: TIMETABLE_COLOURS.live }} aria-hidden="true" /><span className="sr-only">, on now</span></>}
+              {live && <><span className="tt-live-dot" aria-hidden="true" /><span className="sr-only">, on now</span></>}
             </button>;
           })}
         </div>
       )}
-      {sessionGroups.filter((group) => !hiddenKeys.has(group.key)).map((group) => {
-        const title = group.race ? sessionTitle(group.session, ordinals) : null;
-        return <section key={group.key} aria-label={title ?? group.session.name} className={groupDone(group.rows) ? 'timetable-group-done' : undefined}>
-          {title && <div className="timetable-section-head"><h2>{title}</h2><span>{group.rows.length} {group.rows.length === 1 ? 'heat' : 'heats'}</span></div>}
-          {group.rows.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena} />)}
-        </section>;
-      })}
-      {finalGroups.filter((group) => !hiddenKeys.has(group.key)).map(({ key, title, rows: finals }) => <section key={key} aria-label={title} className={groupDone(finals) ? 'timetable-group-done' : undefined}>
-        <div className="timetable-section-head"><h2>{title}</h2><span>{finals.length} {finals.length === 1 ? 'final' : 'finals'}</span></div>
-        {finals.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena} />)}
-      </section>)}
-      {(hasCompleted || showAll) && <button type="button" className="btn-ghost min-h-11 w-full" aria-pressed={showAll} onClick={() => setShowAll((v) => !v)}>{showAll ? 'Hide completed sessions' : 'View complete timetable'}</button>}
-      {visibleRows.length === 0 && <p className="timetable-empty">Nothing scheduled for this day.</p>}
-      <ul className="timetable-legend" aria-label="Status colours">
-        {Object.entries(statusLabels).map(([status, label]) => <li key={status}><span style={{ backgroundColor: TIMETABLE_COLOURS[status as keyof typeof TIMETABLE_COLOURS] }} aria-hidden="true" />{label}</li>)}
-      </ul>
+      <div className="tt-body">
+        {lead}
+        {groups.filter((group) => !hiddenKeys.has(group.key)).map((group) => {
+          const done = group.rows.every((row) => row.status === 'finished');
+          const groupArenas = [...new Set(group.rows.map((row) => row.session.arenaName?.trim() ?? ''))];
+          const sharedArena = groupArenas.length === 1 ? groupArenas[0] : '';
+          const count = `${group.rows.length} ${group.rows.length === 1 ? group.noun[0] : group.noun[1]}`;
+          return <section key={group.key} aria-label={group.title ?? group.rows[0]?.session.name} className={`tt-group ${done ? 'tt-group-done' : ''}`}>
+            {group.title && <div className="mg-section-head"><h2>{group.title}</h2><span>{[sharedArena, count].filter(Boolean).join(' · ')}</span></div>}
+            <div className="mg-card mg-list">
+              {group.rows.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena && !sharedArena} />)}
+            </div>
+          </section>;
+        })}
+        {(hasCompleted || showAll) && <button type="button" className="mg-btn mg-btn-secondary w-full" aria-pressed={showAll} onClick={() => setShowAll((v) => !v)}>{showAll ? 'Hide completed sessions' : 'View complete timetable'}</button>}
+        {visibleRows.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">Nothing scheduled for this day.</p>}
+        {footer}
+      </div>
     </div>
   );
 }
@@ -101,27 +124,30 @@ function finalsByAgeGroup(rows: TimetableRow[]) {
   const groups = new Map<string, { key: string; title: string; rows: TimetableRow[] }>();
   for (const row of rows.filter((item) => item.group === 'Finals')) {
     const key = row.session.competitionSectionId != null ? `id-${row.session.competitionSectionId}` : `name-${row.session.sectionName ?? row.session.name}`;
-    const group = groups.get(key) ?? { key, title: `${displaySectionName(row.session.sectionName || row.session.name)} Finals`, rows: [] };
+    const group = groups.get(key) ?? { key, title: `${displaySectionName(row.session.sectionName || row.session.name)} · Finals`, rows: [] };
     group.rows.push(row);
     groups.set(key, group);
   }
   return [...groups.values()];
 }
 
-function TimetableEvent({ row, competitionId, showArena }: { row: TimetableRow; competitionId: number; showArena: boolean }) {
+/** One timetable line: time (with the planned time struck through when late), name, status pill. */
+export function TimetableEvent({ row, competitionId, showArena, detail }: { row: TimetableRow; competitionId: number; showArena: boolean; detail?: string }) {
   const { session, heat, status, delayMinutes } = row;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
   const name = race ? heatName : session.name;
   const label = race ? '' : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
+  const sub = [detail, label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
   const content = <>
-    <span className="timetable-time">{formatTime(row.effective)}{delayMinutes > 0 && row.scheduled && <s>{formatTime(row.scheduled)}</s>}</span>
-    <span className="timetable-event"><strong>{name}</strong>{label && <span>{label}</span>}{showArena && session.arenaName && <small>{session.arenaName}</small>}</span>
-    {delayMinutes > 0 && <span className="timetable-delay">+{delayMinutes} min</span>}
-    <span className="timetable-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
-    <span className="sr-only">{statusLabels[status]}</span>
-    {race && <ChevronRight className="timetable-chevron" size={20} aria-hidden="true" />}
+    <span className="tt-time">
+      {delayMinutes > 0 && row.scheduled && <s><span className="sr-only">Planned </span>{formatTime(row.scheduled)}</s>}
+      <span>{delayMinutes > 0 && row.scheduled && <span className="sr-only">, now </span>}{formatTime(row.effective)}</span>
+    </span>
+    <span className="tt-event"><strong>{name}</strong>{sub && <span>{sub}</span>}</span>
+    <span className={`mg-pill ${PILL_CLASS[status]}`}>{statusLabel(status, delayMinutes)}</span>
+    {race ? <ChevronRight className="tt-chevron" size={16} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
   </>;
-  const className = `timetable-row timetable-${status}`;
+  const className = `tt-row tt-${status}`;
   return race ? <Link className={className} to={`/competitions/${competitionId}/session/${session.id}${heat ? `?heat=${heat.id}` : ''}`}>{content}</Link> : <div className={className}>{content}</div>;
 }

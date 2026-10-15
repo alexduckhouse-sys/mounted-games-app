@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Link } from 'react-router-dom';
-import { CircleCheck, Clock, Coffee, Hourglass, Info, Medal, Megaphone, Trophy, type LucideIcon } from 'lucide-react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { ChevronDown } from 'lucide-react';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { tickerFocusAfterChange, type TickerItem, type TickerKind } from '../lib/ticker';
 import { useTicker } from './TickerContext';
@@ -8,21 +8,25 @@ import { useTicker } from './TickerContext';
 const ROTATE_MS = 4500;
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 
-/**
- * One colour family per kind: dark text on a pale chip in light themes, pale text on a deep chip in the dark theme.
- * Every pair is 900-on-100 or 100-on-950 (or the slate equivalents), comfortably above WCAG AA for small text.
- */
-const KIND_STYLES: Record<TickerKind, { chip: string; icon: string; Icon: LucideIcon | null; srLabel?: string }> = {
-  live: { chip: 'border-blue-200 bg-blue-100 text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100', icon: '', Icon: null },
-  next: { chip: 'border-brand-200 bg-brand-100 text-brand-900 dark:border-brand-700 dark:bg-brand-900 dark:text-brand-100', icon: '', Icon: Clock },
-  late: { chip: 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100', icon: '', Icon: Hourglass },
-  ontime: { chip: 'border-green-200 bg-green-100 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100', icon: '', Icon: CircleCheck },
-  break: { chip: 'border-slate-300 bg-slate-200 text-slate-800 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100', icon: '', Icon: Coffee },
-  finals: { chip: 'border-violet-200 bg-violet-100 text-violet-900 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-100', icon: 'text-amber-700 dark:text-amber-300', Icon: Trophy },
-  result: { chip: 'border-teal-200 bg-teal-100 text-teal-900 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-100', icon: '', Icon: Medal, srLabel: 'Result' },
-  announcement: { chip: 'border-rose-200 bg-rose-100 text-rose-900 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-100', icon: '', Icon: Megaphone, srLabel: 'Announcement' },
-  info: { chip: 'border-slate-200 bg-white/70 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100', icon: '', Icon: Info },
+/** The badge in front of each line; the dark strip keeps every badge readable in every theme. */
+const KIND_BADGES: Record<TickerKind, { label: string; className: string; srLabel?: string } | null> = {
+  live: { label: 'Live', className: 'mg-badge-live' },
+  next: { label: 'Next', className: 'mg-badge-soft' },
+  late: { label: 'Late', className: 'mg-badge-late' },
+  ontime: { label: 'On time', className: 'mg-badge-soft' },
+  break: { label: 'Break', className: 'mg-badge-soft' },
+  finals: { label: 'Finals', className: 'mg-badge-soft' },
+  result: { label: 'Result', className: 'mg-badge-soft', srLabel: 'Result' },
+  announcement: { label: 'Notice', className: 'mg-badge-notice', srLabel: 'Announcement' },
+  info: null,
 };
+
+/** A final that is on now gets the live badge; the "Now:" prefix is dropped because the badge says it. */
+function badgeFor(item: TickerItem) {
+  const now = item.text.startsWith('Now: ');
+  const badge = item.kind === 'finals' && now ? KIND_BADGES.live : KIND_BADGES[item.kind];
+  return { badge, text: now && badge?.className === 'mg-badge-live' ? item.text.slice(5) : item.text };
+}
 
 function subscribeReducedMotion(onChange: () => void) {
   const query = window.matchMedia?.(REDUCED_MOTION);
@@ -31,24 +35,11 @@ function subscribeReducedMotion(onChange: () => void) {
 }
 const prefersReducedMotion = () => window.matchMedia?.(REDUCED_MOTION).matches ?? false;
 
-function LiveDot() {
-  return (
-    <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
-      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-75 motion-reduce:animate-none" />
-      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-blue-600 dark:bg-blue-400" />
-    </span>
-  );
-}
-
 /** One line that rolls through what is on now, delays, what is next and organiser announcements. Tap for the live feed. */
 export function TopBarTicker() {
   const { current } = useCurrentCompetition();
-  const { items: published } = useTicker();
-  const name = current?.name;
-  const items = useMemo<TickerItem[]>(
-    () => (published.length > 0 ? published : name ? [{ key: 'info', kind: 'info', text: name }] : []),
-    [published, name],
-  );
+  // The header already shows the competition name, so the strip only appears when there is news.
+  const { items } = useTicker();
   const reduceMotion = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
 
   // Follow the list as it changes: keep the current line, or jump to an announcement that has just arrived.
@@ -58,40 +49,77 @@ export function TopBarTicker() {
     activeKey = tickerFocusAfterChange(view.items, items, view.activeKey);
     setView({ items, activeKey });
   }
-  // With reduced motion there is no rotation: the most important line stays put.
-  const index = reduceMotion ? 0 : Math.max(0, items.findIndex((item) => item.key === activeKey));
+  // With reduced motion nothing rotates by itself; the full list is one tap away.
+  const index = Math.max(0, items.findIndex((item) => item.key === activeKey));
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const barRef = useRef<HTMLDivElement>(null);
+  const { pathname } = useLocation();
+  const [openedAt, setOpenedAt] = useState(pathname);
+  if (open && openedAt !== pathname) setOpen(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onPointer = (e: PointerEvent) => { if (!barRef.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer);
+    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('pointerdown', onPointer); };
+  }, [open]);
 
   useEffect(() => {
-    if (reduceMotion || items.length < 2) return;
+    if (reduceMotion || open || items.length < 2) return;
     const timer = setTimeout(() => {
       setView((cur) => (cur.items === items ? { items, activeKey: items[(index + 1) % items.length].key } : cur));
     }, ROTATE_MS);
     return () => clearTimeout(timer);
-  }, [items, index, reduceMotion]);
+  }, [items, index, reduceMotion, open]);
 
   const active = items[index];
-  if (!current || !active) return <span className="flex-1" />;
-  const style = KIND_STYLES[active.kind];
-  const Icon = style.Icon;
+  if (!current || !active) return null;
+  const { badge, text } = badgeFor(active);
   return (
-    <div className="relative flex min-w-0 flex-1">
+    <div ref={barRef} className="relative">
       <ul className="sr-only" aria-label="Event updates">
         {items.map((item) => {
-          const label = KIND_STYLES[item.kind].srLabel;
+          const label = KIND_BADGES[item.kind]?.srLabel;
           return <li key={item.key}>{label ? `${label}: ${item.text}` : item.text}</li>;
         })}
       </ul>
-      <Link
-        to={`/competitions/${current.id}/chat`}
-        aria-label="Open the live feed"
-        title="Open the live feed"
-        className={`flex min-h-11 min-w-0 flex-1 items-center rounded-xl border px-2.5 text-sm font-semibold !no-underline transition-colors duration-300 motion-reduce:transition-none ${style.chip}`}
-      >
-        <span key={active.key} aria-hidden="true" className="ticker-line flex min-w-0 items-center gap-1.5">
-          {Icon ? <Icon className={`h-4 w-4 shrink-0 ${style.icon}`} strokeWidth={2.25} /> : <LiveDot />}
-          <span className="truncate">{active.text}</span>
-        </span>
-      </Link>
+      <div className="mg-strip-bar">
+        <div className="mx-auto flex w-full max-w-5xl items-stretch">
+          <Link to={`/competitions/${current.id}/chat`} aria-label="Open the live feed" title="Open the live feed" className="mg-strip min-w-0 flex-1">
+            <span key={active.key} aria-hidden="true" className="ticker-line flex w-full min-w-0 items-center gap-2.5 pl-4 pr-1">
+              {badge && <span className={`mg-badge ${badge.className}`}>{badge.label}</span>}
+              <span className="min-w-0 flex-1 truncate">{text}</span>
+            </span>
+          </Link>
+          {items.length > 1 && (
+            <button type="button" className="mg-strip-next" aria-expanded={open} aria-controls={panelId} aria-label={`All updates (${items.length})`} onClick={() => { setOpen((v) => !v); setOpenedAt(pathname); }}>
+              <ChevronDown aria-hidden="true" className={`h-[18px] w-[18px] transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} strokeWidth={2.2} />
+            </button>
+          )}
+        </div>
+      </div>
+      {open && (
+        <div id={panelId} className="mg-strip-panel">
+          <ul className="mx-auto flex max-w-5xl flex-col">
+            {items.map((item) => {
+              const line = badgeFor(item);
+              return (
+                <li key={item.key}>
+                  <Link to={`/competitions/${current.id}/chat`} className="mg-strip-item" onClick={() => setOpen(false)}>
+                    {line.badge ? <span className={`mg-badge ${line.badge.className}`}>{line.badge.label}</span> : <span className="mg-badge mg-badge-soft">Info</span>}
+                    <span className="min-w-0 flex-1">{line.text}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mx-auto max-w-5xl px-4 pb-3 pt-1">
+            <Link to={`/competitions/${current.id}/chat`} className="mg-btn mg-btn-secondary w-full !min-h-11" onClick={() => setOpen(false)}>Open the live feed</Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

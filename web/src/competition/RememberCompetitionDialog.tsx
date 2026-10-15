@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
+import { Bookmark } from 'lucide-react';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
 
+/** Bottom sheet asking whether to keep this competition for next time (a cookie) or just for this visit. */
 export function RememberCompetitionDialog() {
   const { current, setRememberChoice } = useCurrentCompetition();
   const ref = useRef<HTMLDialogElement>(null);
@@ -10,13 +12,18 @@ export function RememberCompetitionDialog() {
     return () => dialog?.close();
   }, []);
   return (
-    <dialog ref={ref} aria-labelledby="remember-competition-title" onCancel={() => setRememberChoice('visit')} className="m-auto w-[calc(100%-1.5rem)] max-w-md rounded-2xl bg-white p-6 text-slate-900 shadow-xl backdrop:bg-black/50 dark:bg-slate-900 dark:text-slate-100">
-      <h2 id="remember-competition-title" className="text-xl font-bold">Remember this competition?</h2>
-      <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">Allow a cookie to remember {current?.name} on this device for six months. Next time you open the site, we’ll take you to its timetable.</p>
-      <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">You can change this using the three dots beside the competition name.</p>
-      <div className="mt-5 flex flex-col gap-2">
-        <button autoFocus className="btn-primary min-h-12 justify-center" onClick={() => setRememberChoice('remember')}>Allow and remember</button>
-        <button className="btn-ghost min-h-12 justify-center" onClick={() => setRememberChoice('visit')}>Just for this visit</button>
+    <dialog ref={ref} aria-labelledby="remember-competition-title" aria-describedby="remember-competition-detail" onCancel={() => setRememberChoice('visit')} className="mg-font mx-auto mb-0 mt-auto w-full max-w-xl rounded-t-[20px] bg-[rgb(var(--mg-surface))] px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-2.5 text-[rgb(var(--mg-ink))] shadow-xl backdrop:bg-[rgb(var(--mg-overlay)/0.45)]">
+      <div className="flex flex-col gap-4">
+        <span aria-hidden="true" className="mx-auto h-1 w-10 rounded-full bg-[rgb(var(--mg-control))]" />
+        <div className="flex items-center gap-3">
+          <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]"><Bookmark className="h-[22px] w-[22px]" /></span>
+          <h2 id="remember-competition-title" className="mg-display text-2xl font-bold leading-tight text-[rgb(var(--mg-heading))]">Remember this competition?</h2>
+        </div>
+        <p id="remember-competition-detail" className="mg-meta !text-sm">We'll save a cookie on this device for six months, so {current?.name ?? 'it'} opens straight away next time. You can change this in Settings.</p>
+        <div className="grid grid-cols-2 gap-2.5">
+          <button className="mg-btn mg-btn-secondary !border-[rgb(var(--mg-heading))]" onClick={() => setRememberChoice('visit')}>No thanks</button>
+          <button autoFocus className="mg-btn mg-btn-primary" onClick={() => setRememberChoice('remember')}>Remember</button>
+        </div>
       </div>
     </dialog>
   );
