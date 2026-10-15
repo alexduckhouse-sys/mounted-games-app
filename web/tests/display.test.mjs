@@ -20,8 +20,9 @@ test('bib labels preserve meaningful text and explain missing values', () => {
   for (const value of [undefined, null, '', '  ']) assert.equal(bibLabel(value), 'No bib set');
 });
 
-test('section names remove only the Teams prefix', () => {
+test('section names drop the word Teams wherever it sits', () => {
   assert.equal(displaySectionName('Teams Under 12'), 'Under 12');
+  assert.equal(displaySectionName('Senior Teams'), 'Senior');
   assert.equal(displaySectionName('TEAMS Seniors'), 'Seniors');
   assert.equal(displaySectionName('Pairs Under 12'), 'Pairs Under 12');
   assert.equal(displaySectionName('Individual Under 12'), 'Individual Under 12');
