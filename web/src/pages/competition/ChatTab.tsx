@@ -1,34 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Megaphone, Activity, Users, Radio, Save, ExternalLink, X, Trash2, Shield, MessagesSquare, AlertTriangle, Lock } from 'lucide-react';
+import { Send, Megaphone, Activity, Users, Radio, Save, X, Trash2, Shield, MessagesSquare, AlertTriangle, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import { useLiveHub } from '../../live/useLiveHub';
+import { LiveVideo } from '../../components/stream/LiveVideo';
 import type { ChatMessage } from '../../types';
-
-function toEmbedUrl(raw: string): string | null {
-  try {
-    const u = new URL(raw);
-    const host = u.hostname.replace(/^www\./, '');
-    if (host === 'youtube.com' || host === 'm.youtube.com') {
-      const v = u.searchParams.get('v');
-      if (v) return `https://www.youtube.com/embed/${v}`;
-    }
-    if (host === 'youtu.be') {
-      const id = u.pathname.replace(/^\//, '');
-      if (id) return `https://www.youtube.com/embed/${id}`;
-    }
-    if (host === 'twitch.tv') {
-      const channel = u.pathname.split('/').filter(Boolean)[0];
-      if (channel) return `https://player.twitch.tv/?channel=${channel}&parent=${window.location.hostname}`;
-    }
-    return raw;
-  } catch {
-    return null;
-  }
-}
 
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
 
@@ -51,8 +30,8 @@ function saveLastChatComp(v: LastChatComp) {
 }
 
 export function ChatTab() {
-  const { competition, reload } = useCompetition();
-  const { user, canEdit, hasRole } = useAuth();
+  const { competition, reload, streams, streamingEnabled, invoke, ready, streamMessages } = useCompetition();
+  const { user, canEdit, hasRole, canOrganise } = useAuth();
   // Only admins and trainers post; a trainer's messages go to the admins only.
   const isAdmin = hasRole('Admin');
   const canPost = isAdmin || hasRole('Trainer');
@@ -62,7 +41,6 @@ export function ChatTab() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const compStreamUrl = competition.streamUrl ?? null;
-  const compStreamEmbed = compStreamUrl ? toEmbedUrl(compStreamUrl) : null;
 
   const [lastChatComp, setLastChatComp] = useState<LastChatComp | null>(() => loadLastChatComp());
   const [dismissedCompWarning, setDismissedCompWarning] = useState(false);
@@ -150,11 +128,9 @@ export function ChatTab() {
       {liveNow && <span className="mg-badge mg-badge-live">Live</span>}
     </div>
     <div className="grid lg:grid-cols-3 gap-4">
-      {compStreamUrl && (
-        <div className="lg:col-span-3">
-          <CompStreamCard streamUrl={compStreamUrl} embed={compStreamEmbed} compName={competition.name} />
-        </div>
-      )}
+      <div className="lg:col-span-3">
+        <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={streamingEnabled && canOrganise(competition)} fallback={compStreamUrl} competitionName={competition.name} />
+      </div>
       <div className="lg:col-span-2 card p-0 overflow-hidden flex flex-col" style={{ minHeight: '70vh' }}>
         <div className="flex items-center gap-2.5 border-b border-[rgb(var(--mg-rule))] px-4 py-3">
           <MessagesSquare aria-hidden="true" className="h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))]" />
@@ -330,47 +306,10 @@ function MessageBubble({
   );
 }
 
-function CompStreamCard({
-  streamUrl, embed, compName,
-}: {
-  streamUrl: string;
-  embed: string | null;
-  compName: string;
-}) {
-  return (
-    <div className="card overflow-hidden">
-      <div className="flex items-center gap-2.5 px-4 py-3">
-        <span className="mg-badge mg-badge-live">Live</span>
-        <h2 className="mg-h2 min-w-0 flex-1 truncate">Stream</h2>
-        <a href={streamUrl} target="_blank" rel="noreferrer" className="mg-icon-btn" aria-label="Open the stream in a new tab" title="Open in new tab">
-          <ExternalLink className="h-4 w-4" />
-        </a>
-      </div>
-      {embed ? (
-        <div className="relative w-full aspect-video bg-black">
-          <iframe
-            src={embed}
-            title={compName}
-            className="absolute inset-0 w-full h-full"
-            frameBorder={0}
-            allow="autoplay; encrypted-media; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      ) : (
-        <div className="p-3 text-xs text-slate-500 dark:text-slate-300 break-all">{streamUrl}</div>
-      )}
-    </div>
-  );
-}
-
 function CompStreamEditor({
   competition, onSaved,
 }: {
-  competition: { id: number; name: string; streamUrl?: string | null; location?: string | null;
-    description?: string | null; latitude?: number | null; longitude?: number | null;
-    what3Words?: string | null; appleMapsUrl?: string | null; startDate: string; endDate?: string | null;
-    isActive: boolean; isArchived: boolean };
+  competition: { id: number; streamUrl?: string | null };
   onSaved: () => void;
 }) {
   const [url, setUrl] = useState(competition.streamUrl ?? '');
@@ -379,20 +318,7 @@ function CompStreamEditor({
   async function save(next: string | null) {
     setBusy(true);
     try {
-      await api.put(`/competitions/${competition.id}`, {
-        name: competition.name,
-        location: competition.location,
-        description: competition.description,
-        latitude: competition.latitude,
-        longitude: competition.longitude,
-        what3Words: competition.what3Words,
-        appleMapsUrl: competition.appleMapsUrl,
-        startDate: competition.startDate,
-        endDate: competition.endDate,
-        isActive: competition.isActive,
-        isArchived: competition.isArchived,
-        streamUrl: next,
-      });
+      await api.put(`/competitions/${competition.id}/stream-url`, { streamUrl: next });
       onSaved();
     } finally {
       setBusy(false);
@@ -405,7 +331,7 @@ function CompStreamEditor({
         <Radio className="w-5 h-5 text-rose-500" /> Competition stream
       </h3>
       <p className="text-xs text-slate-600 dark:text-slate-200">
-        One YouTube or Twitch URL for the whole event. Embeds above the chat for everyone.
+        A link for the whole event, shown above the feed when no camera is live.
       </p>
       <div className="flex gap-1.5">
         <input

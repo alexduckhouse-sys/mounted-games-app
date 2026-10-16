@@ -20,7 +20,7 @@ export default defineConfig({
         theme_color: '#17385F',
         background_color: '#F7F7F7',
         display: 'standalone',
-        orientation: 'portrait',
+        orientation: 'any',
         scope: '/',
         start_url: '/',
         icons: [
@@ -30,7 +30,7 @@ export default defineConfig({
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         // Admin tools need a connection; don't download them for every spectator.
-        globIgnores: ['**/CompetitionEditor-*.js', '**/FormatPage-*.js', '**/RulesPage-*.js', '**/AdminPage-*.js'],
+        globIgnores: ['**/BroadcastPage-*.js', '**/CompetitionEditor-*.js', '**/FormatPage-*.js', '**/RulesPage-*.js', '**/AdminPage-*.js'],
       },
       devOptions: {
         enabled: true,
