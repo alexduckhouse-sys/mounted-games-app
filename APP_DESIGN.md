@@ -207,10 +207,10 @@ Lifecycle the app supports today:
 
 1. **Comp creation (organiser)**: name, dates, venue, organiser name,
    payment destination, sections + their prices.
-2. **Public signup**: anyone can sign up to a section via the comp's
-   public page. They see a `Pay £X` button that opens a "Online payment
-   coming soon — pay the organiser directly" modal and confirms a Pending
-   signup. Free sections skip the modal and auto-mark Paid.
+2. **Competition entry**: signed-in entrants can join a section from the
+   competition’s Details page. Priced entries remain Pending until payment
+   is confirmed. Free entries are marked Paid immediately. Demo events
+   offer a labelled test checkout; normal events use manual payments.
 3. **Payment confirmation**: organiser sees a list of pending vs paid
    signups on the Details tab and ticks them paid as money lands. Refund
    and cancel also live on the same row.
@@ -231,8 +231,8 @@ Lifecycle the app supports today:
 - **`CompetitionSection.PriceMinor`** column (pence) + wizard input per
   section ("Signup price per team").
 - **`SectionSignup` entity** + endpoints:
-  - `POST /api/competitions/:cid/sections/:sid/signups` (public; rejects when locked),
-  - `GET /api/competitions/:cid/signups` (public),
+  - `POST /api/competitions/:cid/sections/:sid/signups` (authenticated; rejects when locked),
+  - `GET /api/competitions/:cid/signups` (organiser only),
   - `PUT /api/signups/:id/status` (admin/trainer — Pending / Paid / Refunded / Cancelled),
   - `DELETE /api/signups/:id`,
   - `GET /api/me/signups` (authenticated — powers `/me/signups` page),
@@ -252,20 +252,16 @@ next to `Edit` for jumping straight into the post-signups flow.
 ### Public surfaces
 - **`/me/signups`** lists every signup the logged-in user has made, with
   pay status, comp date, linked team (once formed), and amount.
-- Per-section signup card on the comp's Details tab now shows a Pay button
-  that opens a payment-placeholder modal showing the comp's
-  `PaymentDestination` so the entrant knows where to send funds.
+- The Details page shows entry prices and the organiser’s payment details.
+  After entering, users can check payment status under My signups.
 
 ### Organiser CSV exports
 - `signupsToCsv` in `web/src/lib/csv.ts`; comp-level button on the Details
   tab (organiser tools strip) and per-section in the Manage panel.
 
 ### Deferred (next turns)
-- **Stripe Connect integration** — each organiser links a Stripe account;
-  signups pay them direct; platform takes a fee. The placeholder modal in
-  `DetailsTab.tsx` is sized so the Stripe Checkout button drops straight in
-  — replace the `onConfirm` handler with a Checkout session redirect, and
-  let a webhook flip `SignupPaymentStatus` to Paid.
+- **Real online payments**: choose a provider and add payment confirmation,
+  reconciliation and refunds. The current fake provider is for demo events only.
 - **Drag-to-reorder team formation** — current `form-teams` endpoint bins
   by pony club deterministically; add a "Preview → drag to merge / swap
   riders → commit" pass before creating Team rows. Useful when families
@@ -283,8 +279,10 @@ next to `Edit` for jumping straight into the post-signups flow.
   `/api/competitions/:id/signups` endpoint; format as anonymised counts
   per club rather than a name list to avoid PII concerns.
 
-## Shop / marketplace
-Public peer-to-peer marketplace on `/shop`.
+## Legacy marketplace
+The older peer-to-peer marketplace endpoints remain in the API. Its former
+`/shop` page is not routed; that path opens competition selection. The event
+shop described below is the current buying and selling flow.
 
 - **Entities**: `ShopPost { Title, Body, PriceMinor?, ContactInfo?,
   AuthorName, PonyClubName?, ImageBase64?, IsDeleted, DeletedAt,
@@ -302,7 +300,7 @@ Public peer-to-peer marketplace on `/shop`.
   max-side JPEG @ 0.82 quality, capped at ≈500 KB before upload.
 - **Anti-abuse**: IP-block check on post + report endpoints (reuses the
   existing chat `IpBlocks` table).
-- **UI**: `/shop` page lists posts in a card grid, lets logged-in users
+- **Older UI (not routed)**: lists posts in a card grid, lets logged-in users
   compose posts with images, public/private comment threads per post,
   Report button for anyone, Delete for admins + post owner.
 - **Admin** can soft-delete posts and comments. Reported posts surface
@@ -342,3 +340,10 @@ An event’s Details page links to Readiness & draw. Organisers can preview a se
 Rulebooks are ordinary text attached to a competition, with a title, edition and optional source link. Everyone can read them; the organiser can edit them.
 
 The scoring screen keeps a revision history. Corrections need a reason, including changes waiting offline and decisions to replace another phone’s result. Completed results can be signed off; reopening them also needs a reason. Shared placings retain the existing points for that place; no points-sharing rule is introduced.
+
+
+### Event shop and demo checkout
+
+Signed-in sellers can keep a catalogue of items and submit them to selected competitions. Each event’s organiser approves listings before they appear in its shop. Changing an approved listing’s content or price requires another review. Tickets, camping, merchandise and other items are collected at the event. Orders retain the agreed item names and prices; finite stock is reserved when an order is placed and released on cancellation or refund.
+
+Real-event payments are confirmed manually by the organiser. An event can be marked as a demo before it has orders or test payments. Demo checkout offers test success, decline, cancellation and refunds, and every test receipt states that no money was taken. The app does not collect payment-card details. Paid entries require sign-in and stay pending until payment is confirmed.

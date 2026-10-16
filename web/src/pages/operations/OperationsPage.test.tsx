@@ -66,7 +66,7 @@ describe('OperationsPage', () => {
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
 
     expect(await screen.findByText(/Switch on Edit mode/)).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: /4 × Pole/i })).toBeDisabled();
+    expect(await screen.findByRole('checkbox', { name: /4 × Pole/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save checklist' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
     expect(await screen.findByRole('button', { name: 'Apply draw' })).toBeDisabled();

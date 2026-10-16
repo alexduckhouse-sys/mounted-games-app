@@ -306,6 +306,349 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("Clubs");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.CatalogueItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Category")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("GBP");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PriceMinor")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SellerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<int?>("StockQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SellerUserId", "IsActive");
+
+                    b.ToTable("CatalogueItem");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.CompetitionListing", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CatalogueItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("SellerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CatalogueItemId");
+
+                    b.HasIndex("CompetitionId", "CatalogueItemId")
+                        .IsUnique();
+
+                    b.HasIndex("SellerUserId", "Status");
+
+                    b.ToTable("CompetitionListing");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.EventCommerceSettings", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDemo")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("CompetitionId");
+
+                    b.ToTable("EventCommerceSettings");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.EventOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BuyerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("GBP");
+
+                    b.Property<bool>("HasStockReservation")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsTestOrder")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RefundedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalMinor")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BuyerUserId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("CompetitionId", "CreatedAt");
+
+                    b.ToTable("EventOrder");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.EventOrderLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CatalogueItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompetitionListingId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EventOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LineTotalMinor")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReservedStockQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("SellerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("TitleSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("UnitPriceMinorSnapshot")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventOrderId");
+
+                    b.HasIndex("SellerUserId", "EventOrderId");
+
+                    b.ToTable("EventOrderLine");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.TestPaymentRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AmountMinor")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("GBP");
+
+                    b.Property<int?>("EventOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsTest")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Operation")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OwnerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("fake");
+
+                    b.Property<string>("ReceiptLabel")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ReceiptReference")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int?>("RelatedPaymentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RequestedOutcome")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Target")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TargetId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventOrderId");
+
+                    b.HasIndex("OwnerUserId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("CompetitionId", "Target", "TargetId");
+
+                    b.ToTable("TestPaymentRecord");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Competition", b =>
                 {
                     b.Property<int>("Id")
@@ -1434,6 +1777,87 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.CatalogueItem", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.AppUser", "Seller")
+                        .WithMany()
+                        .HasForeignKey("SellerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Seller");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.CompetitionListing", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Commerce.CatalogueItem", "CatalogueItem")
+                        .WithMany()
+                        .HasForeignKey("CatalogueItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CatalogueItem");
+
+                    b.Navigation("Competition");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.EventCommerceSettings", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Competition");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.EventOrder", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.AppUser", "Buyer")
+                        .WithMany()
+                        .HasForeignKey("BuyerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Buyer");
+
+                    b.Navigation("Competition");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.EventOrderLine", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Commerce.EventOrder", "Order")
+                        .WithMany("Lines")
+                        .HasForeignKey("EventOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.TestPaymentRecord", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Commerce.EventOrder", "EventOrder")
+                        .WithMany("TestPayments")
+                        .HasForeignKey("EventOrderId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("EventOrder");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Competition", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.AppUser", "CreatedBy")
@@ -1775,6 +2199,13 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("SavedRiders");
 
                     b.Navigation("Teams");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.EventOrder", b =>
+                {
+                    b.Navigation("Lines");
+
+                    b.Navigation("TestPayments");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Competition", b =>

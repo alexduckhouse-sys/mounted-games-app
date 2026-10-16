@@ -191,6 +191,8 @@ public static class DbInitializer
 
         await Operations.OperationsSqliteSchema.EnsureAsync(db);
 
+        await Commerce.CommerceSqliteSchema.EnsureAsync(db);
+
     }
 
     private static async Task SeedReferenceDataAsync(AppDbContext db, RoleManager<IdentityRole> roles)
