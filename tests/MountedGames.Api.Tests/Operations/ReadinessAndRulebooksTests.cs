@@ -156,7 +156,10 @@ public class ReadinessAndRulebooksTests : IClassFixture<ApiFactory>
             (await _f.CreateClient().GetAsync(ReadinessUrl(arena.CompetitionId))).StatusCode);
         Assert.Equal(HttpStatusCode.OK,
             (await (await _f.TrainerAsync()).GetAsync(ReadinessUrl(arena.CompetitionId))).StatusCode);
-        var (other, _) = await _f.SignupAsync("Trainer");
+        var (pendingTrainer, _) = await _f.SignupAsync("Trainer");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await pendingTrainer.GetAsync(ReadinessUrl(arena.CompetitionId))).StatusCode);
+        var (other, _) = await _f.ApprovedTrainerAsync();
         Assert.Equal(HttpStatusCode.NotFound,
             (await other.GetAsync(ReadinessUrl(arena.CompetitionId))).StatusCode);
     }
@@ -174,10 +177,13 @@ public class ReadinessAndRulebooksTests : IClassFixture<ApiFactory>
         var publicResponse = await _f.CreateClient().GetAsync($"{RulebooksUrl(competitionId)}/{created.Id}");
         Assert.Equal(HttpStatusCode.OK, publicResponse.StatusCode);
         Assert.Equal("Plain text rules.", (await publicResponse.ReadAsync<RulebookDto>()).Text);
-        var (other, _) = await _f.SignupAsync("Trainer");
+        var update = new UpsertRulebookRequest("Changed", "1", null, "No");
+        var (pendingTrainer, _) = await _f.SignupAsync("Trainer");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await pendingTrainer.PutAsJsonAsync($"{RulebooksUrl(competitionId)}/{created.Id}", update)).StatusCode);
+        var (other, _) = await _f.ApprovedTrainerAsync();
         Assert.Equal(HttpStatusCode.NotFound,
-            (await other.PutAsJsonAsync($"{RulebooksUrl(competitionId)}/{created.Id}",
-                new UpsertRulebookRequest("Changed", "1", null, "No"))).StatusCode);
+            (await other.PutAsJsonAsync($"{RulebooksUrl(competitionId)}/{created.Id}", update)).StatusCode);
         Assert.Equal(HttpStatusCode.OK,
             (await (await _f.AdminAsync()).PutAsJsonAsync($"{RulebooksUrl(competitionId)}/{created.Id}",
                 new UpsertRulebookRequest("Event handbook", "Winter 2030", null, "Updated text."))).StatusCode);
