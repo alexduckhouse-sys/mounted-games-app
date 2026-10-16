@@ -3,7 +3,8 @@
 // than to everyone arriving from Vercel. Set MG_PROXY_KEY here and Security__ProxyKey on Render to
 // the same random value; without it nothing is added and the API behaves as before.
 import { ipAddress, next } from '@vercel/functions';
-import { proxyRequestHeaders } from './src/lib/proxyHeaders';
+// Vercel runs this as Node ES modules without bundling, so relative imports need the .js extension.
+import { proxyRequestHeaders } from './src/lib/proxyHeaders.js';
 
 export const config = { matcher: '/api/:path*' };
 
