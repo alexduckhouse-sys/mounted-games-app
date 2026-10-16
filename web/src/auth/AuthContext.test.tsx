@@ -152,10 +152,21 @@ describe('roles and permissions', () => {
   });
 
   it.each([
-    [['Admin'], true], [['Trainer'], true], [['Manager'], true], [['Member'], false], [[], false],
+    [['Admin'], true], [['Trainer'], true], [['Manager'], false], [['Member'], false], [[], false],
   ])('lets %j organise: %s', (roles, expected) => {
     signIn(roles);
     expect(mount().result.current.canOrganise()).toBe(expected);
+  });
+
+  it('lets a trainer organise only the competitions they created; admins organise any', () => {
+    signIn(['Trainer']);
+    const trainer = mount().result.current;
+    const ownId = trainer.user!.id;
+    expect(trainer.canOrganise({ createdByUserId: ownId })).toBe(true);
+    expect(trainer.canOrganise({ createdByUserId: 'someone-else' })).toBe(false);
+    expect(trainer.canOrganise({ createdByUserId: null })).toBe(false);
+    signIn(['Admin']);
+    expect(mount().result.current.canOrganise({ createdByUserId: 'someone-else' })).toBe(true);
   });
 
   it('never lets a signed-out visitor organise', () => {

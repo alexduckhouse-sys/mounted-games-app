@@ -193,9 +193,10 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     {
         var a = await _f.CreateArenaAsync(1);
         var clubId = await _f.WithDbAsync(db => db.Teams.Where(t => t.Id == a.TeamIds[0]).Select(t => t.ClubId).SingleAsync());
+        var trainerId = await _f.TrainerIdAsync();
         var linkedId = await _f.WithDbAsync(async db =>
         {
-            var existing = new SavedRider { ClubId = clubId, FullName = "Linked Rider" };
+            var existing = new SavedRider { ClubId = clubId, FullName = "Linked Rider", CreatedByUserId = trainerId };
             db.SavedRiders.Add(existing);
             await db.SaveChangesAsync();
             return existing.Id;
@@ -224,10 +225,11 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     {
         var a = await _f.CreateArenaAsync(1);
         var clubId = await _f.WithDbAsync(db => db.Teams.Where(t => t.Id == a.TeamIds[0]).Select(t => t.ClubId).SingleAsync());
+        var trainerId = await _f.TrainerIdAsync();
         await _f.WithDbAsync(async db =>
         {
-            db.SavedRiders.Add(new SavedRider { ClubId = clubId, FullName = "Needs DOB", HorseName = "Keep Me" });
-            db.SavedRiders.Add(new SavedRider { ClubId = clubId, FullName = "Needs Horse", DateOfBirth = new DateTime(2010, 1, 1, 0, 0, 0, DateTimeKind.Utc) });
+            db.SavedRiders.Add(new SavedRider { ClubId = clubId, FullName = "Needs DOB", HorseName = "Keep Me", CreatedByUserId = trainerId });
+            db.SavedRiders.Add(new SavedRider { ClubId = clubId, CreatedByUserId = trainerId, FullName = "Needs Horse", DateOfBirth = new DateTime(2010, 1, 1, 0, 0, 0, DateTimeKind.Utc) });
             await db.SaveChangesAsync();
         });
         var trainer = await _f.TrainerAsync();

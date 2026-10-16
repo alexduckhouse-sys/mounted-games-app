@@ -79,7 +79,7 @@ public class LiveHubTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task AdminOnlyChat_ReachesAdminsAndTheAuthor_NotThePublic()
     {
-        var adminAuth = await _f.LoginAsync(TestClients.AdminEmail, TestClients.AdminPassword);
+        var adminAuth = await _f.AdminLoginAsync();
         var trainerAuth = await _f.LoginAsync(TestClients.TrainerEmail, TestClients.TrainerPassword);
         await using var admin = await ConnectAsync(adminAuth.Token);
         await using var author = await ConnectAsync(trainerAuth.Token);
@@ -104,7 +104,7 @@ public class LiveHubTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task LeaveCompetition_StopsAdminOnlyDelivery()
     {
-        var adminAuth = await _f.LoginAsync(TestClients.AdminEmail, TestClients.AdminPassword);
+        var adminAuth = await _f.AdminLoginAsync();
         await using var left = await ConnectAsync(adminAuth.Token);
         await using var witness = await ConnectAsync(adminAuth.Token);
         await left.InvokeAsync("JoinCompetition", 13);
@@ -123,7 +123,7 @@ public class LiveHubTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Connection_AcceptsJwtFromAccessTokenQuery()
     {
-        var auth = await _f.LoginAsync(TestClients.AdminEmail, TestClients.AdminPassword);
+        var auth = await _f.AdminLoginAsync();
 
         await using var conn = await ConnectAsync(auth.Token);
 

@@ -19,9 +19,17 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     // ---- login ----
 
     [Fact]
-    public async Task Login_ReturnsToken_ForSeededAdmin()
+    public async Task Login_RefusesSeededAdminPassword_OutsideDevelopment()
     {
-        var auth = await _f.LoginAsync(TestClients.AdminEmail, TestClients.AdminPassword);
+        var r = await Anon.PostAsJsonAsync("/api/auth/login", new LoginRequest(TestClients.AdminEmail, TestClients.AdminPassword));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminKey_ReturnsAdminToken()
+    {
+        var auth = await _f.AdminLoginAsync();
 
         Assert.Contains(Roles.Admin, auth.User.Roles);
     }

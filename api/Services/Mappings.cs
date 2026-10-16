@@ -119,14 +119,16 @@ public static class Mappings
         r.Id, r.SavedRiderId, r.FullName, r.DateOfBirth, r.HorseName, r.BibColour,
         r.IsCaptain, r.IsReserve, r.OrderIndex);
 
-    public static DeclarationFormDto ToDto(this DeclarationForm d) => new(
+    public static DeclarationFormDto ToDto(this DeclarationForm d, bool includePrivate = false) => new(
         d.Id, d.TeamId,
         d.Team?.DisplayName ?? string.Empty,
         d.Team?.CompetitionId ?? 0,
         d.Team?.Competition?.Name ?? string.Empty,
-        d.SubmittedByUserId, d.SubmittedBy?.FullName, d.SubmittedBy?.PhoneNumber,
-        d.SubmittedAt, d.Notes, d.IsLocked,
-        d.Riders.OrderBy(r => r.OrderIndex).Select(r => r.ToDto()).ToList());
+        includePrivate ? d.SubmittedByUserId : null, d.SubmittedBy?.FullName,
+        includePrivate ? d.SubmittedBy?.PhoneNumber : null,
+        d.SubmittedAt, includePrivate ? d.Notes : null, d.IsLocked,
+        d.Riders.OrderBy(r => r.OrderIndex).Select(r => includePrivate ? r.ToDto()
+            : r.ToDto() with { DateOfBirth = null, SavedRiderId = null }).ToList());
 
     public static SavedRiderDto ToDto(this SavedRider r) =>
         new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes);

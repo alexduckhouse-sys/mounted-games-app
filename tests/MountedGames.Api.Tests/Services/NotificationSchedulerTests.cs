@@ -20,7 +20,7 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
     /// <summary>A competition with one team whose trainer is subscribed to a fake push service.</summary>
     private async Task<Scenario> ArrangeAsync(HttpStatusCode pushStatus = HttpStatusCode.Created, bool withSection = true)
     {
-        var push = new FakePushService(pushStatus);
+        var push = new FakePushService(_f.Http, pushStatus);
         var (client, auth) = await _f.SignupAsync();
         await client.PostAsJsonAsync("/api/push/subscribe", FakePushService.Subscription(push.Endpoint));
         var section = await _f.NewSectionAsync();
@@ -161,8 +161,8 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
     public async Task Tick_NotifiesAcceptedSupporters_ButNotPendingOnes()
     {
         using var s = await ArrangeAsync();
-        using var accepted = new FakePushService(HttpStatusCode.Created);
-        using var pending = new FakePushService(HttpStatusCode.Created);
+        using var accepted = new FakePushService(_f.Http, HttpStatusCode.Created);
+        using var pending = new FakePushService(_f.Http, HttpStatusCode.Created);
         foreach (var (svc, status) in new[] { (accepted, TeamSupporterStatus.Accepted), (pending, TeamSupporterStatus.Pending) })
         {
             var (client, auth) = await _f.SignupAsync();

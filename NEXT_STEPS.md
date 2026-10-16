@@ -27,15 +27,16 @@ Pulled together from every chat in this project and a survey of all branches and
    - Check that Render has `Jwt__Key` (at least 32 bytes), `Admin__Key` (at least 20 bytes, if shared admin login is used) and `Database__SeedDemoData=false`.
 
    Then merge and check `/api/competitions` on the live site.
-2. **Official EGUK navy hex.** `#1e3466` is a guess.
-3. **Decisions left open in chats:**
+2. **PR #26 deploy gate (staff-only live feed).** Before merging, apply `api/Data/Migrations/Scripts/20261016162534_AddChatAdminOnly.sql` to Neon (one boolean column, default false); the API refuses to start with a pending migration.
+3. **Official EGUK navy hex.** `#1e3466` is a guess.
+4. **Decisions left open in chats:**
    - Remove the race clock? You said "there is no race clock", but it's still in the app.
    - Stream embeds: switch to "Tap to load the stream" with YouTube's no-cookie player, so no third-party cookies are set before consent?
    - Keep the colour key under the timetable dots?
    - Ticker: should a fresh announcement keep replacing the live heat for up to 15 minutes, or should "Now" stay on top?
    - Reseed the existing demo competitions with the 5–6 teams and 7–8 races layout?
    - Toplist before any scoring: show a dash instead of every team as joint 1st?
-4. **Always-on host.** Render's free plan sleeps after 15 minutes, so the first visit takes about 50 seconds and live updates drop. The chats call this the biggest real-world delay.
+5. **Always-on host.** Render's free plan sleeps after 15 minutes, so the first visit takes about 50 seconds and live updates drop. The chats call this the biggest real-world delay.
 
 ## Features
 

@@ -31,12 +31,14 @@ export function FormatPage() {
 
   async function reload() {
     if (!editingId) return;
-    const [c, s] = await Promise.all([
-      api.get<CompetitionDetail>(`/competitions/${editingId}`).then((r) => r.data),
-      api.get<SectionSignup[]>(`/competitions/${editingId}/signups`).then((r) => r.data),
-    ]);
-    setComp(c);
-    setSignups(s);
+    try {
+      const { data: c } = await api.get<CompetitionDetail>(`/competitions/${editingId}`);
+      setComp(c);
+      if (canOrganise(c)) {
+        const { data } = await api.get<SectionSignup[]>(`/competitions/${editingId}/signups`);
+        setSignups(data);
+      } else setSignups([]);
+    } catch { setError('Could not load organiser details. Please try again.'); }
   }
 
   useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [editingId]);
@@ -52,9 +54,9 @@ export function FormatPage() {
     }
   }
 
-  if (!comp) return <div className="card p-4 text-sm text-slate-500">Loading…</div>;
+  if (!comp) return <div className="card p-4 text-sm text-slate-500">{error ?? 'Loading…'}</div>;
 
-  if (!canOrganise()) {
+  if (!canOrganise(comp)) {
     return (
       <div className="card p-4 text-sm">
         Organiser tools are restricted to admins and trainers who created the competition.

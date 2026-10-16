@@ -248,6 +248,16 @@ export function CompetitionEditor() {
   const { id } = useParams<{ id: string }>();
   const editingId = id ? parseInt(id, 10) : null;
   const isEdit = editingId != null;
+  const [ownership, setOwnership] = useState<{ id: number; owner: string | null } | null>(null);
+  useEffect(() => {
+    if (!editingId) return;
+    let cancelled = false;
+    api.get<CompetitionDetail>(`/competitions/${editingId}`)
+      .then(({ data }) => { if (!cancelled) setOwnership({ id: editingId, owner: data.createdByUserId ?? null }); })
+      .catch(() => { if (!cancelled) setOwnership({ id: editingId, owner: null }); });
+    return () => { cancelled = true; };
+  }, [editingId]);
+  const mayOrganise = canOrganise(isEdit ? { createdByUserId: ownership?.id === editingId ? ownership.owner : null } : undefined);
   const storageKey = `competitionEditor:${isEdit ? `edit:${editingId}` : 'new'}`;
 
   // Pull any persisted draft once so initial useState calls can use it.
@@ -607,7 +617,7 @@ export function CompetitionEditor() {
           </button>
         )}
         <div className="ml-auto" />
-        {isEdit && step === 'Basics' && canOrganise() && (
+        {isEdit && step === 'Basics' && mayOrganise && (
           <button onClick={submitEditBasics} disabled={busy} className="btn-primary !py-1.5 !px-3 text-sm">
             <Check className="w-4 h-4" /> {busy ? 'Saving…' : 'Save basics'}
           </button>
@@ -617,16 +627,16 @@ export function CompetitionEditor() {
             Next <ChevronRight className="w-4 h-4" />
           </button>
         ) : isEdit ? (
-          canOrganise() ? (
+          mayOrganise ? (
             <button onClick={submitEditAll} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
               <Check className="w-4 h-4" /> {busy ? (progress ?? 'Saving…') : 'Save all changes'}
             </button>
           ) : (
             <span className="text-xs text-slate-500 italic">
-              View only — flip to <span className="font-semibold">Edit mode</span> in the header to save changes.
+              Only admins and the trainer who created this competition can save changes.
             </span>
           )
-        ) : canOrganise() ? (
+        ) : mayOrganise ? (
           <button onClick={submitCreate} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
             <Check className="w-4 h-4" /> {busy ? (progress ?? 'Creating…') : 'Create competition'}
           </button>

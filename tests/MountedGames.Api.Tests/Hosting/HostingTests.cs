@@ -12,7 +12,8 @@ public class HostingTests : IClassFixture<ApiFactory>
     private readonly ApiFactory _f;
     public HostingTests(ApiFactory f) => _f = f;
 
-    private const string Cacheable = "/api/shop/posts"; // anonymous JSON GET under /api
+    // Anonymous JSON GET on SecurityHeadersMiddleware's public-cacheable list; other /api paths are no-store.
+    private const string Cacheable = "/api/competitions";
 
     [Fact]
     public async Task Healthz_ReportsOk()
@@ -102,14 +103,21 @@ public class HostingTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task ApiGet_Etag_ChangesWhenContentChanges()
     {
-        var (me, _) = await _f.SignupAsync();
         var c = _f.CreateClient();
         var before = (await c.GetAsync(Cacheable)).Headers.ETag!.Tag;
-        await me.PostAsJsonAsync("/api/shop/posts", new MountedGames.Api.Dtos.CreateShopPostRequest("t", "b", null, null, "n", null, null));
+        await _f.SeedCompetitionAsync();
 
         var after = (await c.GetAsync(Cacheable)).Headers.ETag!.Tag;
 
         Assert.NotEqual(before, after);
+    }
+
+    [Fact]
+    public async Task ApiGet_PrivatePath_IsNoStore_WithoutEtag()
+    {
+        var r = await _f.CreateClient().GetAsync("/api/shop/posts");
+
+        Assert.Equal((HttpStatusCode.OK, "no-store", null), (r.StatusCode, r.Headers.CacheControl!.ToString(), r.Headers.ETag));
     }
 
     [Fact]
@@ -123,7 +131,7 @@ public class HostingTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task ApiPost_IsNotGivenAnEtag()
     {
-        var r = await _f.CreateClient().PostAsJsonAsync("/api/auth/login", new LoginRequest(TestClients.AdminEmail, TestClients.AdminPassword));
+        var r = await _f.CreateClient().PostAsJsonAsync("/api/auth/login", new LoginRequest(TestClients.TrainerEmail, TestClients.TrainerPassword));
 
         Assert.Null(r.Headers.ETag);
     }
@@ -144,7 +152,7 @@ public class HostingTests : IClassFixture<ApiFactory>
     {
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
         {
-            Content = JsonContent.Create(new LoginRequest(TestClients.AdminEmail, TestClients.AdminPassword)),
+            Content = JsonContent.Create(new LoginRequest(TestClients.TrainerEmail, TestClients.TrainerPassword)),
         };
         req.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
 

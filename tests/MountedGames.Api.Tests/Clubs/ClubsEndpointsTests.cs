@@ -39,30 +39,58 @@ public class ClubsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal("Green", dto.BibColour);
     }
 
-    [Fact]
-    public async Task SavedRiders_ReturnsClubRidersSortedByName()
+    private async Task<int> SeedRidersAsync()
     {
         var club = await _f.SeedClubAsync();
         var other = await _f.SeedClubAsync();
+        var trainerId = await _f.TrainerIdAsync();
         await _f.WithDbAsync(async db =>
         {
             db.SavedRiders.AddRange(
-                new Api.Entities.SavedRider { ClubId = club, FullName = "Zoe", HorseName = "Z-horse" },
-                new Api.Entities.SavedRider { ClubId = club, FullName = "Abi", HorseName = "A-horse" },
-                new Api.Entities.SavedRider { ClubId = other, FullName = "Not mine" });
+                new Api.Entities.SavedRider { ClubId = club, FullName = "Zoe", HorseName = "Z-horse", CreatedByUserId = trainerId },
+                new Api.Entities.SavedRider { ClubId = club, FullName = "Abi", HorseName = "A-horse", CreatedByUserId = trainerId },
+                new Api.Entities.SavedRider { ClubId = club, FullName = "Legacy" },
+                new Api.Entities.SavedRider { ClubId = other, FullName = "Not mine", CreatedByUserId = trainerId });
             await db.SaveChangesAsync();
         });
+        return club;
+    }
 
-        var riders = await (await _f.CreateClient().GetAsync($"/api/clubs/{club}/saved-riders")).ReadAsync<List<SavedRiderDto>>();
+    [Fact]
+    public async Task SavedRiders_ReturnsOnlyTheCallersRidersInThatClub_SortedByName()
+    {
+        var club = await SeedRidersAsync();
+        var trainer = await _f.TrainerAsync();
+
+        var riders = await (await trainer.GetAsync($"/api/clubs/{club}/saved-riders")).ReadAsync<List<SavedRiderDto>>();
 
         Assert.Equal(new[] { "Abi", "Zoe" }, riders.Select(r => r.FullName));
         Assert.Equal("A-horse", riders[0].HorseName);
     }
 
     [Fact]
+    public async Task SavedRiders_AdminSeesEveryRiderInTheClub_IncludingUnownedLegacyOnes()
+    {
+        var club = await SeedRidersAsync();
+        var admin = await _f.AdminAsync();
+
+        var riders = await (await admin.GetAsync($"/api/clubs/{club}/saved-riders")).ReadAsync<List<SavedRiderDto>>();
+
+        Assert.Equal(new[] { "Abi", "Legacy", "Zoe" }, riders.Select(r => r.FullName));
+    }
+
+    [Fact]
+    public async Task SavedRiders_Returns401_WhenAnonymous()
+    {
+        var r = await _f.CreateClient().GetAsync($"/api/clubs/{await SeedRidersAsync()}/saved-riders");
+        Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
+    }
+
+    [Fact]
     public async Task SavedRiders_ReturnsEmpty_ForUnknownClub()
     {
-        var riders = await (await _f.CreateClient().GetAsync("/api/clubs/999999/saved-riders")).ReadAsync<List<SavedRiderDto>>();
+        var trainer = await _f.TrainerAsync();
+        var riders = await (await trainer.GetAsync("/api/clubs/999999/saved-riders")).ReadAsync<List<SavedRiderDto>>();
         Assert.Empty(riders);
     }
 

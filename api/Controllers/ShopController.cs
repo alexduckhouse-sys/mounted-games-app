@@ -101,7 +101,7 @@ public class ShopController : ControllerBase
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var isAdmin = User.IsInRole(Roles.Admin);
         var post = await _db.ShopPosts.FindAsync(id);
-        if (post is null) return Array.Empty<ShopCommentDto>();
+        if (post is null || (post.IsDeleted && !isAdmin)) return Array.Empty<ShopCommentDto>();
         var rows = await _db.ShopComments
             .Where(c => c.PostId == id && !c.IsDeleted)
             .OrderBy(c => c.CreatedAt)
@@ -110,9 +110,9 @@ public class ShopController : ControllerBase
         // the post author, and admins.
         return rows.Where(c => !c.IsPrivate
                 || isAdmin
-                || c.AuthorUserId == userId
+                || (!string.IsNullOrEmpty(userId) && (c.AuthorUserId == userId
                 || c.ToUserId == userId
-                || post.AuthorUserId == userId)
+                || post.AuthorUserId == userId)))
             .Select(c => c.ToDto());
     }
 

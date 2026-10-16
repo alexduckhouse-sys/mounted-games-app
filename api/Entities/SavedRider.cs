@@ -4,6 +4,7 @@ public class SavedRider
 {
     public int Id { get; set; }
     public int ClubId { get; set; }
+    public string? CreatedByUserId { get; set; }
     public Club? Club { get; set; }
 
     public string FullName { get; set; } = string.Empty;

@@ -222,7 +222,7 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Update_AppliesAllFields_AndKeepsIconWhenOmitted()
     {
-        var comp = await _f.SeedCompetitionAsync();
+        var comp = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
         await _f.WithDbAsync(async db =>
         {
             var c = await db.Competitions.SingleAsync(x => x.Id == comp);
@@ -348,9 +348,22 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task SignupsLocked_TogglesFlag()
+    public async Task OrganiserWrites_Return404_ForTrainerWhoDidNotCreateTheCompetition()
     {
         var comp = await _f.SeedCompetitionAsync();
+        var trainer = await _f.TrainerAsync();
+
+        var locked = await trainer.PostAsJsonAsync($"/api/competitions/{comp}/signups-locked", new { locked = true });
+        var section = await trainer.PostAsJsonAsync($"/api/competitions/{comp}/sections", new { format = 2, ageGroup = "U9" });
+
+        Assert.Equal((HttpStatusCode.NotFound, HttpStatusCode.NotFound), (locked.StatusCode, section.StatusCode));
+        Assert.False((await LoadAsync(comp)).SignupsLocked);
+    }
+
+    [Fact]
+    public async Task SignupsLocked_TogglesFlag()
+    {
+        var comp = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
         var trainer = await _f.TrainerAsync();
 
         var locked = await trainer.PostAsJsonAsync($"/api/competitions/{comp}/signups-locked", new { locked = true });
@@ -408,7 +421,7 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task AddSection_PersistsSuppliedOptions()
     {
-        var comp = await _f.SeedCompetitionAsync();
+        var comp = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
         var trainer = await _f.TrainerAsync();
 
         var r = await trainer.PostAsJsonAsync($"/api/competitions/{comp}/sections", new

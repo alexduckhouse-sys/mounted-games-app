@@ -200,6 +200,7 @@ export interface Session {
 
 export interface CompetitionDetail {
   id: number;
+  createdByUserId?: string | null;
   icon?: string;
   name: string;
   location?: string | null;
