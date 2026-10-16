@@ -117,7 +117,7 @@ describe('publisher recovery', () => {
     await vi.advanceTimersByTimeAsync(3000); expect(p.getSnapshot().signal).toBe('poor');
     await vi.advanceTimersByTimeAsync(9000); expect(FakePeer.instances).toHaveLength(2); p.dispose();
   });
-  it('starts a replacement with takeover after a republish conflict and restores pause, mute and caption', async () => {
+  it('starts a fresh stream without taking over after a republish conflict and restores pause, mute and caption', async () => {
     const { publisher: p, start, request } = setup(); await start();
     await p.pause(true); await p.mute(true); await p.caption('Lunch');
     const normal = request.getMockImplementation()!;
@@ -127,7 +127,8 @@ describe('publisher recovery', () => {
       return normal(method, path);
     });
     FakePeer.instances[0].change('failed'); await flush();
-    expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: true, arenaName: 'Main Arena', angleName: 'Main camera' }));
+    expect(request).toHaveBeenLastCalledWith('PATCH', '/competitions/1/streams/2', expect.any(Object));
+    expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: false, arenaName: 'Main Arena', angleName: 'Main camera' }));
     expect(request).toHaveBeenCalledWith('PATCH', '/competitions/1/streams/2', { status: 1, audioMuted: true, caption: 'Lunch' });
     expect(p.getSnapshot().state).toBe('paused'); p.dispose();
   });
@@ -138,7 +139,41 @@ describe('publisher recovery', () => {
     await vi.advanceTimersByTimeAsync(15000);
     expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams/1/heartbeat');
     expect(request).toHaveBeenLastCalledWith('PATCH', '/competitions/1/streams/1', expect.any(Object));
-    expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: true })); p.dispose();
+    expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: false })); p.dispose();
+  });
+  it('stops instead of taking the angle back when another camera has taken over', async () => {
+    const { publisher: p, start, request } = setup(); await start();
+    const normal = request.getMockImplementation()!;
+    request.mockImplementation(async (method, path, body) => {
+      if (path.endsWith('heartbeat')) throw statusError(409);
+      if (method === 'POST' && path.endsWith('streams')) throw statusError(409);
+      return normal(method, path, body);
+    });
+    await vi.advanceTimersByTimeAsync(15000); await flush();
+    expect(request).not.toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: true }));
+    expect(p.getSnapshot()).toMatchObject({ state: 'error', streamId: null, error: 'Another camera is now live on Main Arena · Main camera. Your stream has stopped.' });
+    const calls = request.mock.calls.length; await vi.advanceTimersByTimeAsync(60000); expect(request.mock.calls.length).toBe(calls);
+    p.dispose();
+  });
+  it('starts afresh when the expired starting row has gone, and a new Go live never reuses the old id', async () => {
+    const { publisher: p, start, request } = setup(); await start();
+    const normal = request.getMockImplementation()!;
+    request.mockImplementation(async (method, path, body) => { if (path.endsWith('heartbeat')) throw statusError(404); return normal(method, path, body); });
+    await vi.advanceTimersByTimeAsync(15000); await flush();
+    expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: false }));
+    expect(p.getSnapshot().state).toBe('live');
+    p.dispose();
+  });
+  it('shows the API reason when the first start is refused', async () => {
+    const { publisher: p, request } = setup();
+    const normal = request.getMockImplementation()!;
+    request.mockImplementation(async (method, path, body) => {
+      if (method === 'POST' && path.endsWith('streams')) throw Object.assign(statusError(409), { response: { status: 409, data: { title: 'This competition has reached its stream limit.' } } });
+      return normal(method, path, body);
+    });
+    await p.capture(); await p.start('Main Arena', 'Main camera'); await flush();
+    expect(p.getSnapshot()).toMatchObject({ state: 'error', error: 'This competition has reached its stream limit.' });
+    p.dispose();
   });
   it('ignores temporary heartbeat errors and reacquires ended tracks after a long background', async () => {
     const { publisher: p, start, d, hide, getUserMedia, request } = setup(); await start();

@@ -1,5 +1,5 @@
 import type { IceServer, LiveStream, PublishRequest, PublishResponse, UpdateStreamRequest } from '../types';
-import { responseStatus, streamClock, streamRequest, type StreamClock } from './streamRuntime';
+import { responseStatus, responseTitle, streamClock, streamRequest, type StreamClock } from './streamRuntime';
 
 export type PublisherState = 'idle' | 'starting' | 'live' | 'paused' | 'reconnecting' | 'ended' | 'error';
 export interface PublisherSnapshot {
@@ -123,7 +123,8 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     cancelHeartbeat = d.schedule(() => {
       if (!running || owner !== heartbeatEpoch) return;
       void d.request('POST', `${base}/${id}/heartbeat`).catch((error: unknown) => {
-        if (running && owner === heartbeatEpoch && snapshot.streamId === id && responseStatus(error) === 409) {
+        const status = responseStatus(error);
+        if (running && owner === heartbeatEpoch && snapshot.streamId === id && (status === 409 || status === 404)) {
           update({ streamId: null }); recover();
         }
       }).finally(() => { if (running && owner === heartbeatEpoch) heartbeat(); });
@@ -188,14 +189,19 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       await peer.setLocalDescription(await peer.createOffer());
       if (!current()) return;
       const body: PublishRequest = { sdpOffer: peer.localDescription!.sdp, videoMid: video.mid!, audioMid: audio?.mid };
+      // Only the operator's explicit choice takes over another camera. Recovery never does, or two
+      // open studios on the same arena and angle would keep ending each other's stream.
+      const create = () => d.request<PublishResponse>('POST', base, { ...body, arenaName, angleName, takeOver: !hadStream && takeOverFirst });
       let result: PublishResponse;
       try {
-        result = snapshot.streamId === null
-          ? await d.request<PublishResponse>('POST', base, { ...body, arenaName, angleName, takeOver: hadStream || takeOverFirst })
+        result = snapshot.streamId === null ? await create()
           : await d.request<PublishResponse>('POST', `${base}/${snapshot.streamId}/republish`, body);
       } catch (error) {
-        if (responseStatus(error) !== 409 || snapshot.streamId === null) throw error;
-        result = await d.request<PublishResponse>('POST', base, { ...body, arenaName, angleName, takeOver: true });
+        // 409: our stream was ended (the sweeper, an admin or another camera). 404: its starting row expired.
+        const status = responseStatus(error);
+        if ((status !== 409 && status !== 404) || snapshot.streamId === null) throw error;
+        update({ streamId: null });
+        result = await create();
       }
       if (!current()) { void d.request('POST', `${base}/${result.streamId}/end`).catch(() => {}); return; }
       hadStream = true;
@@ -231,9 +237,16 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       if (current()) {
         closePeer();
         const status = responseStatus(error);
-        if (status === 401 || status === 403 || status === 404 || status === 400 || status === 503 || (status === 409 && !hadStream)) {
+        if (status === 409) {
+          // The angle is taken (or the event is at its stream limit). Stop rather than fight for it;
+          // the setup screen offers to take over.
           running = false;
-          update({ state: 'error', error: 'Could not start the stream. Check access and try again.' });
+          update({ state: 'error', streamId: null, error: hadStream
+            ? `Another camera is now live on ${arenaName} · ${angleName}. Your stream has stopped.`
+            : responseTitle(error) ?? 'Could not start the stream.' });
+        } else if (status === 401 || status === 403 || status === 404 || status === 400 || status === 503) {
+          running = false;
+          update({ state: 'error', streamId: null, error: 'Could not start the stream. Check access and try again.' });
         } else retry();
       }
     } finally {
@@ -264,7 +277,9 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     /** takeOver replaces a stream already live on the same arena and camera position. */
     async start(arena: string, angle: string, takeOver = false) {
       if (running || busy || !alive) return;
-      arenaName = arena.trim(); angleName = angle.trim(); takeOverFirst = takeOver; running = true; epoch++;
+      arenaName = arena.trim(); angleName = angle.trim(); takeOverFirst = takeOver;
+      hadStream = false; failures = 0; update({ streamId: null, error: null });
+      running = true; epoch++;
       await publish();
     },
     async switchCamera(id?: string) {
