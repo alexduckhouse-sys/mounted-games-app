@@ -342,3 +342,8 @@ An event’s Details page links to Readiness & draw. Organisers can preview a se
 Rulebooks are ordinary text attached to a competition, with a title, edition and optional source link. Everyone can read them; the organiser can edit them.
 
 The scoring screen keeps a revision history. Corrections need a reason, including changes waiting offline and decisions to replace another phone’s result. Completed results can be signed off; reopening them also needs a reason. Shared placings retain the existing points for that place; no points-sharing rule is introduced.
+
+
+### Event organiser page refinement
+
+Event checks separates readiness, equipment and draw work into focused views. Readiness groups long issue lists by task. Rulebooks open as readable text, with a separate editor. The Claude Design reference is `docs/designs/event-platform-refinement.html`; implementation preserves the existing API, permission and payment behaviour where static mock-ups simplify those details.
