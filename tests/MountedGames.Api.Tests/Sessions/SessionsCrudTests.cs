@@ -97,6 +97,20 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Create_Returns400_WhenSectionNotInCompetition()
+    {
+        var a = await _f.CreateArenaAsync();
+        var other = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+
+        var missing = await admin.PostAsJsonAsync(Url(a), NewSession(999999));
+        var foreign = await admin.PostAsJsonAsync(Url(a), NewSession(other.SectionId));
+
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, foreign.StatusCode);
+    }
+
+    [Fact]
     public async Task Create_DefaultsKindToBreak_WhenIsBreakAndNoKind()
     {
         var a = await _f.CreateArenaAsync();
