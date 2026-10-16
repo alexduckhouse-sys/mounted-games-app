@@ -24,7 +24,9 @@ python3 scripts/api-coverage.py /tmp/cov/*/coverage.cobertura.xml --files --miss
 
 - `NotificationScheduler`: start-up delay and interval are optional constructor parameters (defaults unchanged); `TickAsync` is `internal`, with `InternalsVisibleTo` for the test project.
 
-## Suspected bugs (found while testing, none fixed)
+## Suspected bugs (found while testing)
+
+Status as of 16 October 2026: 1, 2 and 5 fixed in #23; 3 matches `APP_DESIGN.md` and is left as is; 4 is handled by #20. The web Vitest work is in #24, which also fixes the age-group menu highlight.
 
 1. **`GenerateRaceFinals` returns 500.** `SessionsController` (around line 130): `s.Heats.Max(h => h.RaceRoundId ?? 0)` throws on an empty sequence when `ReplaceExisting=false` and the session has no heats. Reproduced. Fix: `.DefaultIfEmpty(0).Max()`.
 2. **Equipment templates can be missed.** `EquipmentCalculator` looks up templates with a case-sensitive SQL `IN` but builds a case-insensitive dictionary from the result, so a race named "bending" won't find the template "Bending" and its equipment is silently left out. Found by reading the code, not reproduced.
