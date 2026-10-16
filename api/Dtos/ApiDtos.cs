@@ -19,7 +19,7 @@ public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, 
 
 public static class CompetitionIcons
 {
-    public const string Pattern = "^(flag|gb|ie|fr|de|nl|world|trophy)$";
+    public const string Pattern = "^(flag|world|trophy|gb|gb-eng|gb-sct|gb-wls|gb-nir|ie|fr|de|nl|be|es|pt|it|ch|at|se|no|dk|fi|pl|cz|us|ca|au|nz|za)\\z";
 }
 
 public record CompetitionDetail(
@@ -185,7 +185,6 @@ public record CreateSessionRequest(
 
 public record UpdateSessionStatusRequest(SessionStatus Status);
 
-public record UpdateSessionStreamRequest(string? StreamUrl);
 public record UpdateSessionLanesRequest(int? LanesPerHeat);
 public record GenerateHeatsRequest(
     IReadOnlyList<int> TeamIds,

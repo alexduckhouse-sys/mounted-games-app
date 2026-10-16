@@ -26,16 +26,3 @@ export function isOnToday(start: string, end: string | null | undefined, now: Da
   const key = (d: Date) => d.getFullYear() * 10_000 + d.getMonth() * 100 + d.getDate();
   return key(from) <= key(now) && key(now) <= key(to);
 }
-
-/** Short country tag for the competition's flag icon, or null for the non-country icons. */
-export function countryTag(icon: string | null | undefined): string | null {
-  switch (icon) {
-    case 'gb': return 'GB';
-    case 'ie': return 'IE';
-    case 'fr': return 'FR';
-    case 'de': return 'DE';
-    case 'nl': return 'NL';
-    case 'world': return 'INTL';
-    default: return null;
-  }
-}
