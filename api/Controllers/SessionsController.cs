@@ -317,21 +317,6 @@ public class SessionsController : ControllerBase
         return heat.ToDto();
     }
 
-    [HttpPut("{id:int}/stream")]
-    [Authorize(Roles = Roles.Admin)]
-    public async Task<ActionResult<SessionDto>> SetStream(int competitionId, int id, UpdateSessionStreamRequest req)
-    {
-        var s = await SessionsWithDetail()
-            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
-        if (s is null) return NotFound();
-
-        s.StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim();
-        await _db.SaveChangesAsync();
-        var dto = s.ToDto();
-        await _live.SessionUpdated(competitionId, dto);
-        return dto;
-    }
-
     [HttpPut("{id:int}/heat-assignments")]
     [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<SessionDto>> UpdateHeatAssignments(int competitionId, int id, UpdateHeatAssignmentsRequest req)
