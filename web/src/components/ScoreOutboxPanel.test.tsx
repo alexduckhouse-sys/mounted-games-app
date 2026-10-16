@@ -78,11 +78,13 @@ describe('ScoreOutboxPanel', () => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
-    it('lets the scorer use theirs-over-mine, which sends the local results again', async () => {
+    it('requires a reason before replacing the other phone’s results', async () => {
       conflict();
       render(<ScoreOutboxPanel competitionId={1} />);
+      expect(screen.getByRole('button', { name: 'Use mine' })).toBeDisabled();
+      await userEvent.type(screen.getByRole('textbox', { name: 'Reason for replacing these results' }), 'Judge checked the finish');
       await userEvent.click(screen.getByRole('button', { name: 'Use mine' }));
-      await waitFor(() => expect(post).toHaveBeenCalledWith('/races/1/results', { places: mine, expected: theirs }, expect.anything()));
+      await waitFor(() => expect(post).toHaveBeenCalledWith('/races/1/results', { places: mine, expected: theirs, reason: 'Judge checked the finish' }, expect.anything()));
     });
 
     it('shows an empty "theirs" when the other results are unknown', () => {

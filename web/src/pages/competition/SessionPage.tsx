@@ -8,6 +8,7 @@ import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { DeclarationForm, Heat, HeatEntry, Race, Session } from '../../types';
+import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
 import { bibAccent } from '../../lib/bib';
@@ -83,6 +84,7 @@ export function SessionPage() {
 
   const [activeHeatId, setActiveHeatId] = useState<number | null>(() => orderedHeats.find((heat) => heat.id === requestedHeat)?.id ?? firstIncompleteHeatId);
   const [activeRaceId, setActiveRaceId] = useState<number | null>(null);
+  const [correctionReasons, setCorrectionReasons] = useState<Record<number, string>>({});
   const [pending, setPending] = useState<PendingPlace[]>([]);
 
   // Auto-save the admin's in-progress placings per (heat, race) so a reload
@@ -249,9 +251,15 @@ export function SessionPage() {
   // scorer can move straight on to the next race.
   function submit() {
     if (!activeRace || !activeHeat || !session) return;
+    const reason = correctionReasons[activeRace.id]?.trim();
+    if ((activeRace.results.length > 0 || outbox.some((item) => item.raceId === activeRace.id)) && !reason) {
+      setSaveError('Add a reason for this correction before saving.');
+      return;
+    }
     const heatIndex = orderedHeats.findIndex((h) => h.id === activeHeat.id);
     const stored = updateOutbox((list) => enqueue(list, {
       saveId: crypto.randomUUID(),
+      reason,
       raceId: activeRace.id,
       competitionId: session.competitionId,
       sessionId: session.id,
@@ -315,6 +323,8 @@ export function SessionPage() {
               onToggleElim={toggleElim}
               onReset={resetPending}
               onSubmit={submit}
+              correctionReason={activeRace ? correctionReasons[activeRace.id] ?? '' : ''}
+              onCorrectionReason={(reason) => { if (activeRace) setCorrectionReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
             />
           ) : (
             <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>
@@ -324,6 +334,9 @@ export function SessionPage() {
         <HeatScores session={session} heats={orderedHeats} activeHeatId={activeHeatId} />
       )}
 
+      {canEdit() && activeRace && !outbox.some((item) => item.raceId === activeRace.id) && (
+        <ScoreAuditPanel raceId={activeRace.id} onChanged={reload} />
+      )}
       <AnimatePresence>
         {heatEndOverlay && (
           <HeatEndOverlay
@@ -663,11 +676,13 @@ interface ScoringProps {
   onToggleElim: (teamId: number) => void;
   onReset: () => void;
   onSubmit: () => void;
+  correctionReason: string;
+  onCorrectionReason: (reason: string) => void;
 }
 
 function ScoringSection({
   heat, races, activeRace, onSelectRace, sessionBase, pending, canScore, queued, showResults,
-  onToggleResults, showLaneView, onToggleLaneView, onClickTeam, onToggleElim, onReset, onSubmit,
+  onToggleResults, showLaneView, onToggleLaneView, onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason,
 }: ScoringProps) {
   const pendingByTeam = new Map(pending.map((p) => [p.teamId, p]));
   const queuedByRace = new Map(queued.map((q) => [q.raceId, q]));
@@ -759,6 +774,12 @@ function ScoringSection({
               );
             })}
           </div>
+          {canScore && (activeRace.results.length > 0 || activeQueued) && (
+            <label className="mt-3 flex flex-col gap-1 text-sm font-semibold">
+              Reason for correction
+              <textarea className="input min-h-20" maxLength={1000} value={correctionReason} onChange={(event) => onCorrectionReason(event.target.value)} placeholder="What changed, and why?" />
+            </label>
+          )}
           {canScore && (
             <div className="mt-3 flex gap-2">
               <button onClick={onReset} className="btn-ghost !py-1.5 !px-2.5 text-xs">

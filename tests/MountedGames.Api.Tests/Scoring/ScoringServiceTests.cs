@@ -96,7 +96,8 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
             await Service(scope).ApplyRaceResultsAsync(races[0], new[] { new FinishingPlace(a.TeamIds[0], 1, false) }, null);
 
         using (var scope = _f.Services.CreateScope())
-            await Service(scope).ApplyRaceResultsAsync(races[0], Array.Empty<FinishingPlace>(), null);
+            await Service(scope).ApplyRaceResultsAsync(
+                races[0], Array.Empty<FinishingPlace>(), null, "Results withdrawn after review");
 
         Assert.Empty(await _f.WithDbAsync(db => db.Results.Where(r => r.RaceId == races[0]).ToListAsync()));
         Assert.True((await _f.WithDbAsync(db => db.Races.SingleAsync(r => r.Id == races[0]))).IsComplete);

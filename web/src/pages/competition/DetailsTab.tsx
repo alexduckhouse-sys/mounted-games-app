@@ -73,6 +73,10 @@ export function DetailsTab() {
       <div className="mg-band py-3">
         <h1 className="mg-h1 mg-h1-sm">Details &amp; entries</h1>
       </div>
+      <div className="flex flex-wrap gap-2">
+        <Link className="mg-btn mg-btn-secondary" to="../rulebooks">Rulebooks</Link>
+        {mayOrganise && <Link className="mg-btn mg-btn-secondary" to="../operations">Readiness &amp; draw</Link>}
+      </div>
       <div className="card p-4 space-y-4">
         <div>
           <h2 className="mg-h2 !text-2xl">{competition.name}</h2>

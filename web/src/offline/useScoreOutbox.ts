@@ -38,7 +38,7 @@ export function updateOutbox(change: (list: QueuedScore[]) => QueuedScore[]): bo
 async function send(item: QueuedScore): Promise<SendOutcome> {
   try {
     const { data } = await api.post<Heat>(`/races/${item.raceId}/results`,
-      { places: item.places, expected: item.expected }, { timeout: 15_000 });
+      { places: item.places, expected: item.expected, ...(item.reason ? { reason: item.reason } : {}) }, { timeout: 15_000 });
     return { kind: 'saved', sessionId: item.sessionId, heat: data };
   } catch (err) {
     return outcomeOfError(err);
