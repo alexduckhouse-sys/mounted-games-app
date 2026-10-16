@@ -66,8 +66,10 @@ describe('OperationsPage', () => {
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
 
     expect(await screen.findByText(/Switch on Edit mode/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Equipment' }));
     expect(await screen.findByRole('checkbox', { name: /4 × Pole/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save checklist' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
     expect(await screen.findByRole('button', { name: 'Apply draw' })).toBeDisabled();
   });
@@ -77,6 +79,8 @@ describe('OperationsPage', () => {
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
 
     expect(await screen.findByText('Oak A needs a declaration')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Equipment' }));
     await user.click(screen.getByRole('checkbox', { name: /4 × Pole/i }));
     await user.click(screen.getByRole('button', { name: 'Save checklist' }));
 
@@ -91,6 +95,7 @@ describe('OperationsPage', () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
 
+    await user.click(screen.getByRole('button', { name: 'Equipment' }));
     const checkbox = await screen.findByRole('checkbox', { name: /4 × Pole/i });
     await user.click(checkbox);
     await user.click(screen.getByRole('button', { name: 'Save checklist' }));
@@ -102,8 +107,9 @@ describe('OperationsPage', () => {
   it('previews and applies a deterministic draw', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await screen.findByText('Competition readiness');
+    await screen.findByText('Event checks');
 
+    await user.click(screen.getByRole('button', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
     expect(await screen.findByText('Morning')).toBeInTheDocument();
     expect(screen.getByText('Oak A')).toBeInTheDocument();

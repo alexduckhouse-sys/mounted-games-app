@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardCheck, RefreshCw, Shuffle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
@@ -6,12 +6,13 @@ import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
 import type { CompetitionReadiness, DrawPreview } from './types';
 import { apiMessage } from './types';
+import './operations.css';
 
 export function OperationsPage() {
   const { competition } = useCompetition();
   const { user, canOrganise, canEdit, hasRole } = useAuth();
   if (!user || !canOrganise(competition)) {
-    return <main className="mx-auto w-full max-w-4xl py-4 mg-font"><p role="alert" className="mg-card p-4">You don’t have access to competition operations.</p></main>;
+    return <div className="mx-auto w-full max-w-4xl py-4 mg-font"><p role="alert" className="mg-card p-4">You don’t have access to competition operations.</p></div>;
   }
   const canWrite = hasRole('Admin') ? canEdit() : true;
   return <OperationsPageContent key={`${competition.id}:${user.id}`} canWrite={canWrite} />;
@@ -19,6 +20,7 @@ export function OperationsPage() {
 
 function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
   const { competition, reload: reloadCompetition } = useCompetition();
+  const [view, setView] = useState<'checks' | 'equipment' | 'draw'>('checks');
   const [readiness, setReadiness] = useState<CompetitionReadiness | null>(null);
   const [readinessError, setReadinessError] = useState<string | null>(null);
   const [loadingReadiness, setLoadingReadiness] = useState(true);
@@ -55,14 +57,6 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
     return () => window.clearTimeout(timer);
   }, [loadReadiness]);
 
-  const summary = useMemo(() => readiness ? [
-    { label: 'Missing declarations', count: readiness.missingDeclarations.length },
-    { label: 'Unpaid entries', count: readiness.unpaidSignups.length },
-    { label: 'Incomplete teams', count: readiness.incompleteTeams.length },
-    { label: 'Arena overlaps', count: readiness.sessionOverlaps.length },
-    { label: 'Equipment left', count: readiness.equipmentChecklist.filter((item) => !item.acknowledged).length + readiness.equipmentIssues.length },
-  ] : [], [readiness]);
-
   async function saveChecklist() {
     if (!readiness || savingChecklist || !canWrite) return;
     setSavingChecklist(true);
@@ -92,7 +86,7 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
   async function previewDraw() {
     const parsedSeed = Number(seed);
     if (sectionId == null || !Number.isSafeInteger(parsedSeed)) {
-      setDrawError('Choose a section and enter a whole-number seed.');
+      setDrawError('Choose a section and enter a whole draw number.');
       return;
     }
     setPreviewing(true);
@@ -136,53 +130,32 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 py-4 mg-font">
-      <section className="flex flex-col gap-3" aria-labelledby="readiness-heading">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <h1 id="readiness-heading" className="mg-h1">Competition readiness</h1>
-            <p className="mg-meta mt-1">Check the entries, timetable and arena kit before the first heat.</p>
-          </div>
-          <button type="button" className="mg-btn mg-btn-secondary" onClick={() => void loadReadiness()} disabled={loadingReadiness}>
-            <RefreshCw aria-hidden="true" className={`h-4 w-4 ${loadingReadiness ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+    <div className="ops-page">
+      <header className="ops-header">
+        <div><p className="mg-kicker">{competition.name}</p><h1 className="mg-h1 mg-h1-sm">Event checks</h1></div>
+        <button type="button" className="mg-icon-btn" aria-label="Refresh checks" onClick={() => void loadReadiness()} disabled={loadingReadiness}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${loadingReadiness ? 'animate-spin motion-reduce:animate-none' : ''}`} /></button>
+      </header>
+      <nav className="ops-tabs" aria-label="Event tools">
+        {(['checks', 'equipment', 'draw'] as const).map((item) => <button key={item} type="button" aria-pressed={view === item} onClick={() => setView(item)}>{item === 'checks' ? 'Checks' : item === 'equipment' ? 'Equipment' : 'Draw'}</button>)}
+      </nav>
+      {readinessError && <p role="alert" className="mg-notice">{readinessError} <button className="mg-text-link" onClick={() => void loadReadiness()}>Try again</button></p>}
+      {!canWrite && <p className="mg-meta">Switch on Edit mode to save checklist changes or apply a draw.</p>}
+      {loadingReadiness && !readiness && <p role="status" className="mg-meta">Checking competition details…</p>}
+      {view === 'checks' && readiness && <section className="ops-checks" aria-label="Readiness checks">
+        <div className={`ops-status ${readiness.isReady ? 'ops-status-ready' : ''}`}>
+          {readiness.isReady ? <CheckCircle2 aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}
+          <div><h2 className="mg-h2">{readiness.isReady ? 'Ready to run' : 'Before the first heat'}</h2><p className="mg-meta">{readiness.isReady ? 'All checks are clear.' : 'Resolve the open jobs and check your arena equipment.'}</p></div>
         </div>
-
-        {readinessError && <p role="alert" className="mg-card border-amber-300 p-4 text-amber-900">{readinessError}</p>}
-        {!canWrite && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">Switch on Edit mode to save checklist changes or apply a draw.</p>}
-        {loadingReadiness && !readiness && <p role="status" className="mg-card p-4 text-[rgb(var(--mg-muted))]">Checking competition details…</p>}
-        {readiness && (
-          <>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Readiness summary">
-              {summary.map((item) => (
-                <div key={item.label} className="mg-card bg-[rgb(var(--mg-subtle))] p-3">
-                  <strong className="block text-2xl text-[rgb(var(--mg-heading))]">{item.count}</strong>
-                  <span className="mg-meta">{item.label}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className={`mg-card flex items-start gap-3 p-4 ${readiness.isReady ? 'border-emerald-300' : 'border-amber-300'}`}>
-              {readiness.isReady
-                ? <CheckCircle2 aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
-                : <AlertTriangle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />}
-              <div>
-                <h2 className="mg-h2">{readiness.isReady ? 'Ready to run' : 'A few jobs are still open'}</h2>
-                <p className="mg-meta mt-1">{readiness.isReady
-                  ? 'All current readiness checks are clear.'
-                  : 'Work through the items below, then refresh this page.'}</p>
-              </div>
-            </div>
-
-            <ReadinessIssues readiness={readiness} competitionId={competition.id} />
-
-            <section className="mg-card overflow-hidden" aria-labelledby="equipment-heading">
+        <ReadinessIssues readiness={readiness} competitionId={competition.id} />
+        <button type="button" className="ops-equipment-link" onClick={() => setView('equipment')}><ClipboardCheck aria-hidden="true" /><span><strong>Check the arena equipment</strong><span className="mg-meta">{readiness.equipmentChecklist.filter((item) => item.acknowledged).length} of {readiness.equipmentChecklist.length} items ready</span></span><span aria-hidden="true">›</span></button>
+      </section>}
+      {view === 'equipment' && readiness && (
+            <section className="ops-equipment" aria-labelledby="equipment-heading">
               <div className="flex items-center gap-3 border-b border-[rgb(var(--mg-rule))] p-4">
                 <ClipboardCheck aria-hidden="true" className="h-5 w-5 text-[rgb(var(--mg-heading))]" />
                 <div className="flex-1">
                   <h2 id="equipment-heading" className="mg-h2">Equipment checklist</h2>
-                  <p className="mg-meta mt-1">Tick each item once it’s ready at the arena.</p>
+                  <p className="mg-meta mt-1">{checkedEquipment.size} of {readiness.equipmentChecklist.length} items checked</p>
                 </div>
               </div>
               {readiness.equipmentChecklist.length === 0
@@ -209,23 +182,21 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
                       </label>
                     ))}
                   </div>}
-              <div className="flex flex-wrap items-center gap-3 border-t border-[rgb(var(--mg-rule))] p-4">
+              <div className="ops-save-bar">
                 <button type="button" className="mg-btn mg-btn-primary" onClick={() => void saveChecklist()} disabled={savingChecklist || !canWrite}>
                   {savingChecklist ? 'Saving…' : 'Save checklist'}
                 </button>
-                {checklistSaved && <span role="status" className="mg-meta text-emerald-700">Checklist saved.</span>}
+                {checklistSaved && <span role="status" className="mg-meta">Checklist saved.</span>}
               </div>
             </section>
-          </>
-        )}
-      </section>
-
+      )}
+      {view === 'draw' && (
       <section className="flex flex-col gap-3" aria-labelledby="draw-heading">
         <div>
-          <h2 id="draw-heading" className="mg-h1 mg-h1-sm">Section draw</h2>
+          <h2 id="draw-heading" className="mg-h2">Section draw</h2>
           <p className="mg-meta mt-1">Preview the lanes first. Applying a draw changes assignments across the section’s unscored sessions.</p>
         </div>
-        <div className="mg-card grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-end">
+        <div className="ops-draw-controls">
           <label className="flex flex-col gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))]">
             Section
             <span className="mg-field">
@@ -235,42 +206,53 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
             </span>
           </label>
           <label className="flex flex-col gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))]">
-            Seed
+            Draw number
             <span className="mg-field"><input type="number" step="1" value={seed} onChange={(event) => { setSeed(event.target.value); setPreview(null); setDrawMessage(null); }} /></span>
           </label>
+          <p className="mg-meta ops-draw-help">The same number gives the same draw. Change it to try a different arrangement.</p>
           <button type="button" className="mg-btn mg-btn-primary" onClick={() => void previewDraw()} disabled={previewing || sectionId == null}>
             <Shuffle aria-hidden="true" className="h-4 w-4" />
             {previewing ? 'Preparing…' : 'Preview draw'}
           </button>
         </div>
         {competition.sections.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">Add a section before preparing a draw.</p>}
-        {drawError && <p role="alert" className="mg-card border-amber-300 p-4 text-amber-900">{drawError}</p>}
-        {drawMessage && <p role="status" className="mg-card border-emerald-300 p-4 text-emerald-800">{drawMessage}</p>}
+        {drawError && <p role="alert" className="mg-notice">{drawError}</p>}
+        {drawMessage && <p role="status" className="mg-notice">{drawMessage}</p>}
         {preview && <DrawPreviewPanel preview={preview} applying={applying} canApply={canWrite} onApply={() => void applyDraw()} />}
       </section>
-    </main>
+      )}
+    </div>
   );
 }
 
 function ReadinessIssues({ readiness, competitionId }: { readiness: CompetitionReadiness; competitionId: number }) {
-  const issues = [
+  const groups = [
+    { title: 'Missing declarations', items: [
     ...readiness.missingDeclarations.map((item) => ({ key: `d-${item.teamId}`, title: `${item.teamName} needs a declaration`, detail: item.sectionName, to: `/competitions/${competitionId}/declarations` })),
-    ...readiness.unpaidSignups.map((item) => ({ key: `u-${item.signupId}`, title: `Payment pending in ${item.sectionName}`, detail: `${(item.amountMinor / 100).toLocaleString('en-GB', { style: 'currency', currency: 'GBP' })} due`, to: `/competitions/${competitionId}` })),
+    ] }, { title: 'Unpaid entries', items: [
+    ...readiness.unpaidSignups.map((item) => ({ key: `u-${item.signupId}`, title: `Payment pending in ${item.sectionName}`, detail: `${(item.amountMinor / 100).toLocaleString('en-GB', { style: 'currency', currency: 'GBP' })} due`, to: `/competitions/${competitionId}/details` })),
+    ] }, { title: 'Incomplete teams', items: [
     ...readiness.incompleteTeams.map((item) => ({ key: `i-${item.teamId}`, title: `${item.teamName} has ${item.declaredRiders} of ${item.minimumRiders} riders`, detail: item.sectionName, to: `/competitions/${competitionId}/teams` })),
+    ] }, { title: 'Arena overlaps', items: [
     ...readiness.sessionOverlaps.map((item) => ({ key: `o-${item.firstSessionId}-${item.secondSessionId}`, title: `${item.firstSessionName} overlaps ${item.secondSessionName}`, detail: item.arena, to: `/competitions/${competitionId}` })),
+    ] }, { title: 'Equipment details', items: [
     ...readiness.equipmentIssues.map((item) => ({ key: `e-${item.raceName}`, title: `${item.raceName} needs equipment details`, detail: item.message, to: `/competitions/${competitionId}` })),
-  ];
-  if (issues.length === 0) return null;
+    ] },
+  ].filter((group) => group.items.length > 0);
+  const issueCount = groups.reduce((count, group) => count + group.items.length, 0);
+  if (!issueCount) return null;
   return (
     <section aria-labelledby="issues-heading">
-      <div className="mg-section-head"><h2 id="issues-heading">Open jobs</h2><span>{issues.length}</span></div>
-      <div className="mg-card mg-list mt-2">
-        {issues.map((issue) => (
+      <div className="mg-section-head"><h2 id="issues-heading">Open jobs</h2><span>{issueCount}</span></div>
+      <div className="ops-jobs">
+        {groups.map((group) => <details key={group.title} open={group.items.length <= 3}>
+          <summary><span>{group.title}</span><strong>{group.items.length}</strong></summary>
+          <div className="mg-list">{group.items.map((issue) => (
           <Link key={issue.key} to={issue.to} className="mg-row">
             <span className="min-w-0 flex-1"><strong className="block text-[rgb(var(--mg-heading))]">{issue.title}</strong><span className="mg-meta">{issue.detail}</span></span>
             <span aria-hidden="true" className="text-[rgb(var(--mg-heading))]">›</span>
           </Link>
-        ))}
+        ))}</div></details>)}
       </div>
     </section>
   );
@@ -280,20 +262,20 @@ function DrawPreviewPanel({ preview, applying, canApply, onApply }: { preview: D
   const fairness = preview.fairness;
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="ops-fairness">
         <Diagnostic label="Heat size spread" value={fairness.heatSizeSpread} />
         <Diagnostic label="Most opponent meetings" value={fairness.maximumOpponentMeetings} />
         <Diagnostic label="Repeated pairings" value={fairness.repeatedOpponentPairs} />
         <Diagnostic label="Lane-use spread" value={fairness.maximumLaneUseSpread} />
       </div>
-      {!fairness.everyTeamAppearsOncePerSession && <p role="alert" className="mg-card border-red-300 p-4 text-red-800">This preview doesn’t cover every team once per session. Don’t apply it.</p>}
+      {!fairness.everyTeamAppearsOncePerSession && <p role="alert" className="mg-notice">This preview doesn’t cover every team once per session. Don’t apply it.</p>}
       {fairness.warnings.length > 0 && <div className="mg-card p-4"><h3 className="font-semibold text-[rgb(var(--mg-heading))]">Fairness notes</h3><ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{fairness.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
       {preview.sessions.map((session) => (
-        <section key={session.sessionId} className="mg-card overflow-hidden" aria-labelledby={`draw-session-${session.sessionId}`}>
+        <section key={session.sessionId} className="ops-draw-session" aria-labelledby={`draw-session-${session.sessionId}`}>
           <h3 id={`draw-session-${session.sessionId}`} className="mg-h2 border-b border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-4">{session.name}</h3>
           <div className="grid gap-3 p-3 md:grid-cols-2">
             {session.heats.map((heat) => (
-              <div key={heat.heatId} className="overflow-hidden rounded-lg border border-[rgb(var(--mg-rule))]">
+              <div key={heat.heatId} className="overflow-hidden border-b border-[rgb(var(--mg-rule))]">
                 <h4 className="bg-[rgb(var(--mg-subtle))] px-3 py-2 font-semibold text-[rgb(var(--mg-heading))]">{heat.label || `Heat ${heat.orderIndex}`}</h4>
                 <table className="w-full text-left text-sm">
                   <thead className="sr-only"><tr><th>Lane</th><th>Team</th></tr></thead>
@@ -304,7 +286,7 @@ function DrawPreviewPanel({ preview, applying, canApply, onApply }: { preview: D
           </div>
         </section>
       ))}
-      <div className="mg-card flex flex-wrap items-center gap-3 p-4">
+      <div className="ops-save-bar">
         <p className="mg-meta min-w-0 flex-1">Applying this preview replaces lane assignments only. Heat and race details stay in place.</p>
         <button type="button" className="mg-btn mg-btn-primary" onClick={onApply} disabled={applying || !canApply || !fairness.everyTeamAppearsOncePerSession}>
           {applying ? 'Applying…' : 'Apply draw'}
@@ -315,5 +297,5 @@ function DrawPreviewPanel({ preview, applying, canApply, onApply }: { preview: D
 }
 
 function Diagnostic({ label, value }: { label: string; value: number }) {
-  return <div className="mg-card p-3"><strong className="block text-xl text-[rgb(var(--mg-heading))]">{value}</strong><span className="mg-meta">{label}</span></div>;
+  return <div className="ops-diagnostic"><strong className="block text-xl text-[rgb(var(--mg-heading))]">{value}</strong><span className="mg-meta">{label}</span></div>;
 }
