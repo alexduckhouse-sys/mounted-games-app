@@ -15,6 +15,8 @@ Admins can manage every competition. Trainers can create competitions and use or
 
 Signup contact/payment records are private to the organiser. Public declarations show the competition line-up without dates of birth, phone numbers or private notes. Saved rider records belong to the account that saved them; legacy records with no recorded owner remain admin-only. See `docs/security-review.md` for deployment requirements and verification limits.
 
+Trainer signup needs admin approval. Applicants get Member access while their request is pending. Admins review requests in Admin → Trainer requests, with edit mode enabled. Approval grants Trainer access; decline keeps the account as a Member. Existing trainers and admin-created accounts are unchanged. Approved applicants must sign in again before organising; the app shows a notice when it detects approval on load.
+
 ## Core domain model
 - **Club** — pony club (reference data).
 - **Team** = Club + suffix (e.g. "Stockport A"). Grouped by **Section**.
