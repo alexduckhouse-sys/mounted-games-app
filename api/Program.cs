@@ -92,6 +92,8 @@ builder.Services.AddHttpClient("weather", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(8);
 });
+builder.Services.AddHttpClient(PushNotifier.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient("geocoding", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(6);
@@ -116,7 +118,7 @@ builder.Services.AddResponseCompression(o =>
 builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 
-builder.Services.AddRequestLimits();
+builder.Services.AddRequestLimits(builder.Configuration);
 builder.Services.AddTrustedProxies(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddControllers();
@@ -216,3 +218,6 @@ static void EnsureSqliteFolderExists(string connStr)
     if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
         Directory.CreateDirectory(dir);
 }
+
+// Exposed so WebApplicationFactory<Program> can host the app in integration tests.
+public partial class Program { }

@@ -1,0 +1,74 @@
+// @vitest-environment node
+// These helpers run in the service worker, which has native fetch types (jsdom's Blob does not mix with them).
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { canCachePublicApi, markSavedResponse, stampPublicResponse } from './cachePolicy';
+
+describe('canCachePublicApi', () => {
+  it.each([
+    '/api/competitions',
+    '/api/competitions/',
+    '/api/competitions/picker',
+    '/api/competitions/12',
+    '/api/competitions/12/standings',
+    '/api/race-templates',
+    '/api/weather/at',
+    '/api/weather/current/',
+  ])('allows public GET %s', (path) => {
+    expect(canCachePublicApi(path)).toBe(true);
+  });
+
+  it.each([
+    '/api/competitions/0',
+    '/api/competitions/012x',
+    '/api/competitions/12/teams',
+    '/api/competitions/12/standings/extra',
+    '/api/auth/me',
+    '/api/weather/forecast',
+    '/api/trainer/my-teams',
+  ])('refuses %s because it may differ per viewer', (path) => {
+    expect(canCachePublicApi(path)).toBe(false);
+  });
+
+  it('refuses anything other than GET', () => {
+    expect(canCachePublicApi('/api/competitions', 'POST')).toBe(false);
+    expect(canCachePublicApi('/api/competitions', 'get')).toBe(false);
+  });
+});
+
+describe('stampPublicResponse', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('copies a JSON 200 with the time it was saved', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-01T10:00:00Z'));
+    const original = new Response('{"a":1}', { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'x-keep': 'yes' } });
+    const stamped = await stampPublicResponse(original);
+    expect(stamped).not.toBeNull();
+    expect(stamped!.headers.get('X-MG-Saved-At')).toBe('2026-06-01T10:00:00.000Z');
+    expect(stamped!.headers.get('x-keep')).toBe('yes');
+    expect(await stamped!.json()).toEqual({ a: 1 });
+    // The original stays readable for the page.
+    expect(await original.json()).toEqual({ a: 1 });
+  });
+
+  it('does not store errors or non-JSON responses', async () => {
+    expect(await stampPublicResponse(new Response('{}', { status: 500, headers: { 'content-type': 'application/json' } }))).toBeNull();
+    expect(await stampPublicResponse(new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } }))).toBeNull();
+    expect(await stampPublicResponse(new Response('x', { status: 200 }))).toBeNull();
+  });
+});
+
+describe('markSavedResponse', () => {
+  it('flags a saved copy and keeps its status, body and headers', async () => {
+    const saved = new Response('{"a":2}', { status: 200, headers: { 'content-type': 'application/json', 'X-MG-Saved-At': 'then' } });
+    const marked = markSavedResponse(saved)!;
+    expect(marked.headers.get('X-MG-Saved-Copy')).toBe('1');
+    expect(marked.headers.get('X-MG-Saved-At')).toBe('then');
+    expect(marked.status).toBe(200);
+    expect(await marked.json()).toEqual({ a: 2 });
+  });
+
+  it('returns undefined when nothing was saved', () => {
+    expect(markSavedResponse(undefined)).toBeUndefined();
+  });
+});

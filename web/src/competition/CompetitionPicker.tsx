@@ -7,6 +7,8 @@ import { useCurrentCompetition } from './CurrentCompetitionContext';
 import { competitionIcon } from './icons';
 import { competitionDateText, countryTag, isOnToday } from '../lib/competitionDates';
 import { displaySectionName } from '../lib/section';
+import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
+import { CompetitionListSkeleton } from '../components/Skeletons';
 
 export function CompetitionPicker({ onClose, past = false }: { onClose?: () => void; past?: boolean }) {
   const [attempt, setAttempt] = useState(0);
@@ -25,24 +27,34 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
   const { current, setCurrent } = useCurrentCompetition();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
-  const [state, setState] = useState({ items: [] as CompetitionPickerItem[], page: 0, hasMore: false, error: false, savedCopy: false });
+  // The first page this phone saw last time shows while the list refreshes.
+  const [saved] = useState(() => readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(past)));
+  const [state, setState] = useState({ items: saved?.data.items ?? [] as CompetitionPickerItem[], page: 0, hasMore: false, error: false, savedCopy: !!saved });
   const loading = state.page !== page;
   useEffect(() => {
     const controller = new AbortController();
     api.get<CompetitionPickerPage>('/competitions/picker', { params: { past, page }, signal: controller.signal })
       .then(({ data, headers }) => {
         if (controller.signal.aborted) return;
-        setState((previous) => ({
-          items: [...previous.items, ...data.items.filter((item) => !previous.items.some((existing) => existing.id === item.id))],
-          page, hasMore: data.hasMore, error: false,
-          savedCopy: previous.savedCopy || headers['x-mg-saved-copy'] === '1',
-        }));
+        const fallback = serviceWorkerSavedAt(headers);
+        if (page === 1 && fallback === null) writeSavedCopy(savedCopyKeys.picker(past), data);
+        const keepSaved = page === 1 && fallback !== null && saved != null && (fallback === 'unknown' || Date.parse(saved.savedAt) >= fallback.getTime());
+        const fresh = keepSaved ? saved.data : data;
+        setState((previous) => {
+          // Page 1 replaces the saved list, which may still hold competitions that have since gone.
+          const kept = page === 1 ? [] : previous.items;
+          return {
+            items: [...kept, ...fresh.items.filter((item) => !kept.some((existing) => existing.id === item.id))],
+            page, hasMore: fresh.hasMore, error: false,
+            savedCopy: (page > 1 && previous.savedCopy) || fallback !== null,
+          };
+        });
       })
       .catch(() => {
         if (!controller.signal.aborted) setState((previous) => ({ ...previous, page, error: true }));
       });
     return () => controller.abort();
-  }, [past, page]);
+  }, [past, page, saved]);
 
   const [query, setQuery] = useState('');
   const search = query.trim().toLowerCase();
@@ -85,7 +97,7 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
             </div>
           </section>
         )}
-        {loading && <p role="status" className="mg-meta py-6 text-center">Loading competitions…</p>}
+        {loading && (state.items.length === 0 ? <CompetitionListSkeleton /> : <p role="status" className="mg-meta py-3 text-center">Checking for changes…</p>)}
         {!loading && state.error && <div className="mg-card flex flex-col items-start gap-3 p-4" role="alert"><p>Couldn’t load competitions. Check your connection and try again.</p><button className="mg-btn mg-btn-primary" onClick={onRetry}>Try again</button></div>}
         {!loading && !state.error && state.items.length === 0 && <p className="mg-card p-4">{past ? 'No past competitions yet.' : 'No competitions available yet.'}</p>}
         {!loading && !state.error && state.items.length > 0 && matches.length === 0 && <p className="mg-card p-4">No competitions match “{query.trim()}”{state.hasMore ? '. Load more to search further.' : '.'}</p>}

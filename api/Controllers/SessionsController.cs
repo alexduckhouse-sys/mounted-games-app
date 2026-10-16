@@ -51,6 +51,9 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult<SessionDto>> Create(int competitionId, CreateSessionRequest req)
     {
         if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
+        if (req.CompetitionSectionId.HasValue &&
+            !await _db.CompetitionSections.AnyAsync(cs => cs.Id == req.CompetitionSectionId.Value && cs.CompetitionId == competitionId))
+            return BadRequest(new { message = "Section not found in this competition." });
         var kind = req.Kind ?? (req.IsBreak ? SessionKind.Break : SessionKind.Race);
         var s = new Session
         {
@@ -183,7 +186,7 @@ public class SessionsController : ControllerBase
         // split the teams randomly; the Final stays empty until admin populates.
         var rng = new Random();
         var heatOrder = req.ReplaceExisting ? 1 : s.Heats.Count + 1;
-        var roundSeed = req.ReplaceExisting ? 1 : (s.Heats.Max(h => h.RaceRoundId ?? 0) + 1);
+        var roundSeed = req.ReplaceExisting ? 1 : (s.Heats.Select(h => h.RaceRoundId ?? 0).DefaultIfEmpty(0).Max() + 1);
 
         foreach (var raceName in raceNames)
         {

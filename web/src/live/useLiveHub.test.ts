@@ -1,0 +1,192 @@
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { writeStoredAuth } from '../api';
+import { useLiveHub, type LiveHandlers } from './useLiveHub';
+
+class FakeConnection {
+  state = 'Disconnected';
+  handlers = new Map<string, (payload: unknown) => void>();
+  reconnecting?: () => void;
+  start = vi.fn(async () => { this.state = 'Connected'; });
+  stop = vi.fn(async () => { this.state = 'Disconnected'; });
+  invoke = vi.fn(async () => undefined);
+  on(event: string, handler: (payload: unknown) => void) { this.handlers.set(event, handler); }
+  onreconnecting(fn: () => void) { this.reconnecting = fn; }
+  onreconnected() {}
+  onclose() {}
+  emit(event: string, payload: unknown) { this.handlers.get(event)?.(payload); }
+}
+
+const hub = vi.hoisted(() => ({
+  connections: [] as unknown[],
+  url: undefined as unknown,
+  options: undefined as unknown,
+  reconnect: false,
+}));
+
+vi.mock('@microsoft/signalr', () => ({
+  LogLevel: { Warning: 3 },
+  HubConnectionBuilder: class {
+    withUrl(url: string, options: unknown) { hub.url = url; hub.options = options; return this; }
+    withAutomaticReconnect() { hub.reconnect = true; return this; }
+    configureLogging() { return this; }
+    build() { return hub.connections.at(-1); }
+  },
+}));
+
+const next = () => { const connection = new FakeConnection(); hub.connections.push(connection); return connection; };
+/** Lets the start/join promise chain finish. */
+const flush = () => act(async () => { for (let n = 0; n < 12; n++) await Promise.resolve(); });
+
+beforeEach(() => {
+  hub.connections.length = 0;
+  hub.reconnect = false;
+  hub.url = undefined;
+});
+
+describe('useLiveHub', () => {
+  it('does not connect without a competition', () => {
+    const { result } = renderHook(() => useLiveHub(null, {}));
+    expect(hub.connections).toHaveLength(0);
+    expect(result.current.connected).toBe(false);
+  });
+
+  it('connects to the live hub, joins the competition and reports it is ready', async () => {
+    const connection = next();
+    const onReady = vi.fn();
+    const { result } = renderHook(() => useLiveHub(12, { onReady }));
+    await flush();
+    expect(hub.url).toBe('/hubs/live');
+    expect(hub.reconnect).toBe(true);
+    expect(connection.start).toHaveBeenCalledTimes(1);
+    expect(connection.invoke).toHaveBeenCalledWith('JoinCompetition', 12);
+    expect(result.current.connected).toBe(true);
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows as disconnected while the connection is reconnecting', async () => {
+    const connection = next();
+    const { result } = renderHook(() => useLiveHub(12, {}));
+    await flush();
+    act(() => connection.reconnecting!());
+    expect(result.current.connected).toBe(false);
+  });
+
+  it('sends the signed-in token with the connection, or an empty one when signed out', async () => {
+    next();
+    renderHook(() => useLiveHub(1, {}));
+    const factory = (hub.options as { accessTokenFactory: () => string }).accessTokenFactory;
+    expect(factory()).toBe('');
+    writeStoredAuth({ token: 'abc', expiresAt: new Date(Date.now() + 60_000).toISOString(), user: { id: '1', email: 'a@b.c', fullName: 'A', clubId: null, clubName: null, roles: [] } });
+    expect(factory()).toBe('abc');
+  });
+
+  it('can be pointed at another hub with a build-time setting', () => {
+    vi.stubEnv('VITE_LIVE_HUB_URL', 'https://live.example.com/hubs/live');
+    next();
+    renderHook(() => useLiveHub(1, {}));
+    expect(hub.url).toBe('https://live.example.com/hubs/live');
+  });
+
+  it('passes each event to the matching handler', async () => {
+    const connection = next();
+    const handlers: Required<LiveHandlers> = {
+      onReady: vi.fn(), onChatMessage: vi.fn(), onChatMessageDeleted: vi.fn(),
+      onSessionUpdated: vi.fn(), onResultsUpdated: vi.fn(), onAnnouncement: vi.fn(),
+    };
+    renderHook(() => useLiveHub(1, handlers));
+    await flush();
+    connection.emit('chatMessage', { id: 1 });
+    connection.emit('chatMessageDeleted', { id: 2 });
+    connection.emit('sessionUpdated', { id: 3 });
+    connection.emit('resultsUpdated', { id: 4 });
+    connection.emit('announcement', { id: 5 });
+    expect(handlers.onChatMessage).toHaveBeenCalledWith({ id: 1 });
+    expect(handlers.onChatMessageDeleted).toHaveBeenCalledWith({ id: 2 });
+    expect(handlers.onSessionUpdated).toHaveBeenCalledWith({ id: 3 });
+    expect(handlers.onResultsUpdated).toHaveBeenCalledWith({ id: 4 });
+    expect(handlers.onAnnouncement).toHaveBeenCalledWith({ id: 5 });
+  });
+
+  it('ignores events the page has no handler for', async () => {
+    const connection = next();
+    renderHook(() => useLiveHub(1, {}));
+    await flush();
+    for (const event of ['chatMessage', 'chatMessageDeleted', 'sessionUpdated', 'resultsUpdated', 'announcement']) {
+      expect(() => connection.emit(event, {})).not.toThrow();
+    }
+  });
+
+  it('uses the latest handlers without reconnecting', async () => {
+    const connection = next();
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = renderHook(({ handlers }) => useLiveHub(1, handlers), { initialProps: { handlers: { onChatMessage: first } as LiveHandlers } });
+    await flush();
+    rerender({ handlers: { onChatMessage: second } });
+    connection.emit('chatMessage', 'hello');
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledWith('hello');
+    expect(connection.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the old connection and opens a new one when the competition changes', async () => {
+    const first = next();
+    const { rerender } = renderHook(({ id }) => useLiveHub(id, {}), { initialProps: { id: 1 } });
+    await flush();
+    const second = next();
+    rerender({ id: 2 });
+    await flush();
+    expect(first.stop).toHaveBeenCalled();
+    expect(second.invoke).toHaveBeenCalledWith('JoinCompetition', 2);
+  });
+
+  it('retries as soon as the phone comes back online, and stops listening on unmount', async () => {
+    const connection = next();
+    connection.start.mockRejectedValueOnce(new Error('no signal'));
+    const { result, unmount } = renderHook(() => useLiveHub(1, {}));
+    await flush();
+    expect(result.current.connected).toBe(false);
+    act(() => { window.dispatchEvent(new Event('online')); });
+    await flush();
+    expect(connection.start).toHaveBeenCalledTimes(2);
+    expect(result.current.connected).toBe(true);
+
+    unmount();
+    connection.state = 'Disconnected';
+    window.dispatchEvent(new Event('online'));
+    await flush();
+    expect(connection.start).toHaveBeenCalledTimes(2);
+    expect(connection.stop).toHaveBeenCalled();
+  });
+
+  it('waits to retry with a timer when the first attempt fails and the phone is offline', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+      const connection = next();
+      renderHook(() => useLiveHub(1, {}));
+      expect(connection.start).not.toHaveBeenCalled();
+      vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+      expect(connection.start).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels the pending retry on unmount', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+      const connection = next();
+      const { unmount } = renderHook(() => useLiveHub(1, {}));
+      unmount();
+      vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(connection.start).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

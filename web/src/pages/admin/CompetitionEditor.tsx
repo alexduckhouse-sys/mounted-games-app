@@ -53,7 +53,7 @@ const ZONE_PAIRS = [
   '5 Flag', '5 Flag',
 ];
 
-// Area 2026 race lists â€” sponsored names + dedicated junior variants. Spare
+// Area 2026 race lists — sponsored names + dedicated junior variants. Spare
 // race for ties / run-offs at area level is also "2 Flag".
 const AREA_SENIORS = [
   'Bending',
@@ -90,7 +90,7 @@ export type SectionScope = 'Zone' | 'Area';
 
 /**
  * Pick a default race list for a section based on (scope, format, ageGroup).
- * Pairs â†’ *_PAIRS; Teams+Juniors/Novices â†’ *_JUNIORS; Teams+Seniors/Open/etc â†’ *_SENIORS.
+ * Pairs → *_PAIRS; Teams+Juniors/Novices → *_JUNIORS; Teams+Seniors/Open/etc → *_SENIORS.
  */
 function defaultRacesFor(scope: SectionScope, format: Format, ageGroup: string): string {
   const isJunior = ageGroup.toLowerCase().includes('junior') || ageGroup.toLowerCase().includes('novice');
@@ -137,7 +137,7 @@ interface TeamDraft {
   sectionIndex: number;
   clubId: number;
   suffix: string;
-  /** Hors Concours â€” team competes but is excluded from scoring + standings. */
+  /** Hors Concours — team competes but is excluded from scoring + standings. */
   isHorsConcours?: boolean;
 }
 
@@ -185,7 +185,7 @@ function readPersistedDraft(key: string): PersistedDraft | null {
       const legacyScope = (sec.scope === 'Area' ? 'Area' : 'Zone') as SectionScope;
       const legacyCount = typeof sec.sessionCount === 'number' ? sec.sessionCount : 1;
       const sessions: SessionConfig[] = Array.from({ length: Math.max(1, legacyCount) }, (_, idx) => ({
-        name: idx === 0 ? legacyName : `${legacyName} Â· Session ${idx + 1}`,
+        name: idx === 0 ? legacyName : `${legacyName} · Session ${idx + 1}`,
         races: legacyRaces,
         scope: legacyScope,
       }));
@@ -214,7 +214,7 @@ function defaultSection(): SectionDraft {
   };
 }
 
-/** Parse "12.50" / "12" / "" â†’ integer pennies. Negative values clamp to zero. */
+/** Parse "12.50" / "12" / "" → integer pennies. Negative values clamp to zero. */
 function priceGbpToMinor(input: string): number {
   if (!input || !input.trim()) return 0;
   const n = parseFloat(input);
@@ -222,7 +222,7 @@ function priceGbpToMinor(input: string): number {
   return Math.round(n * 100);
 }
 
-/** "" / "0" â†’ null (unlimited); positive int otherwise. */
+/** "" / "0" → null (unlimited); positive int otherwise. */
 function parseMaxParticipants(input: string | undefined): number | null {
   if (!input || !input.trim()) return null;
   const n = parseInt(input, 10);
@@ -237,7 +237,7 @@ function parseFinalistCount(input: string | undefined): number | null {
 }
 
 function sectionDisplayName(s: SectionDraft): string {
-  // "Teams Under 12" reads awkwardly â€” drop the format word for the Teams format.
+  // "Teams Under 12" reads awkwardly — drop the format word for the Teams format.
   const prefix = s.format === 2 ? '' : FORMAT_LABEL[s.format];
   return `${prefix} ${s.ageGroup}`.trim();
 }
@@ -315,7 +315,7 @@ export function CompetitionEditor() {
       organiserName, paymentDestination, sections]);
 
   useEffect(() => {
-    // Skip the server fetch on edit if we already have a local draft â€” the user
+    // Skip the server fetch on edit if we already have a local draft — the user
     // hasn't finished editing yet and we don't want to clobber their changes.
     if (!isEdit || !editingId || persisted) return;
     api.get<CompetitionDetail>(`/competitions/${editingId}`)
@@ -404,12 +404,12 @@ export function CompetitionEditor() {
     try {
       // Slim creation: comp + sections (with price + max participants). Teams,
       // sessions, heats and race lists are all configured later via Format /
-      // Finalise â€” keeps the public comp page open for entries quickly.
-      setProgress('Creating competitionâ€¦');
+      // Finalise — keeps the public comp page open for entries quickly.
+      setProgress('Creating competition…');
       const created = await api.post<{ id: number }>('/competitions', basicsPayload());
       const compId = created.data.id;
 
-      setProgress('Adding sectionsâ€¦');
+      setProgress('Adding sections…');
       for (const s of sections) {
         await api.post(`/competitions/${compId}/sections`, {
           format: s.format,
@@ -456,14 +456,14 @@ export function CompetitionEditor() {
   /**
    * Edit-mode submit: PUTs basics, applies section adds/deletes, syncs
    * price + maxParticipants on existing sections. Races + sessions + heats
-   * are owned by the Finalise/Format page now â€” we don't touch them here.
+   * are owned by the Finalise/Format page now — we don't touch them here.
    */
   async function submitEditAll() {
     if (!editingId) return;
     setBusy(true);
     setError(null);
     try {
-      setProgress('Saving basicsâ€¦');
+      setProgress('Saving basics…');
       await api.put(`/competitions/${editingId}`, {
         ...basicsPayload(),
         isActive: true,
@@ -471,13 +471,13 @@ export function CompetitionEditor() {
       });
 
       if (removedSectionIds.length > 0) {
-        setProgress(`Removing ${removedSectionIds.length} section${removedSectionIds.length === 1 ? '' : 's'}â€¦`);
+        setProgress(`Removing ${removedSectionIds.length} section${removedSectionIds.length === 1 ? '' : 's'}…`);
         for (const id of removedSectionIds) {
           await api.delete(`/competitions/${editingId}/sections/${id}`).catch(() => {});
         }
       }
 
-      setProgress('Saving sectionsâ€¦');
+      setProgress('Saving sections…');
       for (const s of sections) {
         if (s.existingId) {
           await api.put(`/competitions/${editingId}/sections/${s.existingId}`, {
@@ -537,7 +537,7 @@ export function CompetitionEditor() {
   }
 
   if (loading) {
-    return <div className="p-6 text-sm text-slate-500">Loadingâ€¦</div>;
+    return <div className="p-6 text-sm text-slate-500">Loading…</div>;
   }
 
   return (
@@ -551,7 +551,7 @@ export function CompetitionEditor() {
           {isEdit ? 'Edit competition' : 'Create competition'}
         </h1>
         <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
-          <span className="hidden sm:inline">Draft auto-saved Â· survives reload</span>
+          <span className="hidden sm:inline">Draft auto-saved · survives reload</span>
           <button
             type="button"
             onClick={() => {
@@ -619,7 +619,7 @@ export function CompetitionEditor() {
         <div className="ml-auto" />
         {isEdit && step === 'Basics' && mayOrganise && (
           <button onClick={submitEditBasics} disabled={busy} className="btn-primary !py-1.5 !px-3 text-sm">
-            <Check className="w-4 h-4" /> {busy ? 'Savingâ€¦' : 'Save basics'}
+            <Check className="w-4 h-4" /> {busy ? 'Saving…' : 'Save basics'}
           </button>
         )}
         {step !== 'Review' ? (
@@ -629,7 +629,7 @@ export function CompetitionEditor() {
         ) : isEdit ? (
           mayOrganise ? (
             <button onClick={submitEditAll} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
-              <Check className="w-4 h-4" /> {busy ? (progress ?? 'Savingâ€¦') : 'Save all changes'}
+              <Check className="w-4 h-4" /> {busy ? (progress ?? 'Saving…') : 'Save all changes'}
             </button>
           ) : (
             <span className="text-xs text-slate-500 italic">
@@ -638,11 +638,11 @@ export function CompetitionEditor() {
           )
         ) : mayOrganise ? (
           <button onClick={submitCreate} disabled={busy} className="btn-primary !py-2 !px-4 text-sm">
-            <Check className="w-4 h-4" /> {busy ? (progress ?? 'Creatingâ€¦') : 'Create competition'}
+            <Check className="w-4 h-4" /> {busy ? (progress ?? 'Creating…') : 'Create competition'}
           </button>
         ) : (
           <span className="text-xs text-slate-500 italic">
-            View only â€” flip to <span className="font-semibold">Edit mode</span> in the header to create.
+            View only — flip to <span className="font-semibold">Edit mode</span> in the header to create.
           </span>
         )}
       </div>
@@ -790,7 +790,7 @@ function BasicsStep(p: BasicsProps) {
           <span className="text-sm font-semibold">Payment destination (optional)</span>
           <input
             className="input mt-1"
-            placeholder="PayPal: me@example.com  â€¢  Bank: 12-34-56 1234 5678"
+            placeholder="PayPal: me@example.com  •  Bank: 12-34-56 1234 5678"
             value={p.paymentDestination}
             onChange={(e) => p.setPaymentDestination(e.target.value)}
           />
@@ -821,7 +821,7 @@ function BasicsStep(p: BasicsProps) {
       <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 space-y-2">
         <div className="text-sm font-semibold flex items-center gap-1">
           <MapPin className="w-4 h-4" /> Find on the map
-          <span className="text-[11px] font-normal text-slate-500 ml-1">â€” postcode or what3words auto-fills coords for weather + map</span>
+          <span className="text-[11px] font-normal text-slate-500 ml-1">— postcode or what3words auto-fills coords for weather + map</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <label className="block">
@@ -850,7 +850,7 @@ function BasicsStep(p: BasicsProps) {
             disabled={lookup.busy || (!p.postcode.trim() && !p.what3Words.trim())}
             className="btn-ghost !py-1 !px-2 text-xs"
           >
-            <MapPin className="w-3.5 h-3.5" /> {lookup.busy ? 'Looking upâ€¦' : 'Look up coordinates'}
+            <MapPin className="w-3.5 h-3.5" /> {lookup.busy ? 'Looking up…' : 'Look up coordinates'}
           </button>
           {lookup.msg && (
             <span className={`text-xs ${lookup.ok ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'}`}>
@@ -898,7 +898,7 @@ function SectionsStep({
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        Add the sections you'll offer. Just the basics now â€” format, age group, signup price and an optional cap.
+        Add the sections you'll offer. Just the basics now — format, age group, signup price and an optional cap.
         Races, sessions and heat timings come later in the <span className="font-semibold">Finalise</span> step,
         once you've seen who's signed up.
       </p>
@@ -929,7 +929,7 @@ function SectionsStep({
                 </select>
               </label>
               <label className="sm:col-span-2">
-                <span className="text-xs text-slate-500">Price (Â£)</span>
+                <span className="text-xs text-slate-500">Price (£)</span>
                 <input
                   type="number" min={0} step={0.5}
                   className="input mt-1 text-sm"
@@ -943,7 +943,7 @@ function SectionsStep({
                 <input
                   type="number" min={0}
                   className="input mt-1 text-sm"
-                  placeholder="â€”"
+                  placeholder="—"
                   value={s.maxParticipants ?? ''}
                   onChange={(e) => onUpdate(i, { maxParticipants: e.target.value })}
                 />
@@ -961,8 +961,8 @@ function SectionsStep({
             </div>
             <div className="flex items-center gap-2 text-xs">
               <span className="text-slate-500 flex-1">
-                {sectionDisplayName(s)} Â· {priceGbpToMinor(s.priceGbp) === 0 ? 'Free' : `Â£${(priceGbpToMinor(s.priceGbp) / 100).toFixed(2)}`}
-                {s.maxParticipants && ` Â· max ${parseMaxParticipants(s.maxParticipants)}`}
+                {sectionDisplayName(s)} · {priceGbpToMinor(s.priceGbp) === 0 ? 'Free' : `£${(priceGbpToMinor(s.priceGbp) / 100).toFixed(2)}`}
+                {s.maxParticipants && ` · max ${parseMaxParticipants(s.maxParticipants)}`}
               </span>
               {sections.length > 1 && (
                 <button type="button" onClick={() => onRemove(i)} className="text-rose-500 text-xs hover:underline">

@@ -297,7 +297,7 @@ public static class DbInitializer
 
     }
 
-    private static async Task SeedDemoDataAsync(AppDbContext db, UserManager<AppUser> users)
+    internal static async Task SeedDemoDataAsync(AppDbContext db, UserManager<AppUser> users)
     {
         var admin = await users.FindByEmailAsync("admin@mg.local");
         if (admin is null)

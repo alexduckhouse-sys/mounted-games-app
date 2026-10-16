@@ -12,6 +12,7 @@ import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';
 import { BottomTabs } from './BottomTabs';
 import { useCompetitionMeta } from './competitionMeta';
+import { PageSkeleton } from './Skeletons';
 
 export function AppShell() {
   const { user, hasRole, editorMode, setEditorMode } = useAuth();
@@ -71,7 +72,7 @@ export function AppShell() {
         : 'mx-auto w-full max-w-5xl flex-1 px-3 py-3 sm:px-4 sm:py-5'}>
         {storageError && <p role="status" className={publicPage ? 'mg-notice mt-4' : 'mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900'}>{storageError}</p>}
         <PageLoadBoundary page={location.pathname}>
-          <Suspense fallback={<p role="status" className="py-4 text-sm">Opening page…</p>}><Outlet /></Suspense>
+          <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
         </PageLoadBoundary>
       </main>
       {competitionId != null && <BottomTabs competitionId={competitionId} />}

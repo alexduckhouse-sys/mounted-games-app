@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams, Outlet } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useParams, Outlet } from 'react-router-dom';
 import { api } from '../api';
 import type { ChatMessage, CompetitionDetail, Session, Heat } from '../types';
 import { tickerItems } from '../lib/ticker';
@@ -14,6 +14,8 @@ import { useNavExtras } from '../components/NavExtrasContext';
 import { useAgeGroups } from '../components/AgeGroupsContext';
 import { useCompetitionMeta } from '../components/competitionMeta';
 import { displaySectionName } from '../lib/section';
+import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
+import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
 
 export function CompetitionPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,29 +27,60 @@ export function CompetitionPage() {
 }
 
 function CompetitionContent({ competitionId }: { competitionId: number }) {
+  const savedKey = savedCopyKeys.competition(competitionId);
+  // Open straight away on the copy this phone saw last, then refresh it from the server.
+  const [initial] = useState(() => readSavedCopy<CompetitionDetail>(savedKey));
   const [error, setError] = useState(false);
-  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(initial?.savedAt ?? null);
   const [attempt, setAttempt] = useState(0);
-  const [data, setData] = useState<CompetitionDetail | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [data, setData] = useState<CompetitionDetail | null>(initial?.data ?? null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(initial ? new Date(initial.savedAt) : null);
+  // Which load has finished and which has run past two seconds; the current one is `attempt`.
+  const [settledAttempt, setSettledAttempt] = useState(-1);
+  const [slowAttempt, setSlowAttempt] = useState(-1);
+  /** How current `data` is, so a staler service-worker fallback never replaces it. */
+  const dataAt = useRef(initial ? Date.parse(initial.savedAt) : 0);
   const { setCurrent, setVenue } = useCurrentCompetition();
+  const { pathname } = useLocation();
 
   const load = useCallback(() => setAttempt((n) => n + 1), []);
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
     setError(false);
+    const slowTimer = setTimeout(() => setSlowAttempt(attempt), 2_000);
     api.get<CompetitionDetail>(`/competitions/${competitionId}`, { signal: controller.signal })
       .then((r) => {
         if (cancelled) return;
+        const fallback = serviceWorkerSavedAt(r.headers);
+        if (fallback === null) {
+          dataAt.current = Date.now();
+          setData(r.data);
+          setSavedAt(null);
+          setUpdatedAt(new Date());
+          return;
+        }
+        const fallbackAt = fallback === 'unknown' ? 0 : fallback.getTime();
+        if (dataAt.current > 0 && dataAt.current >= fallbackAt) return; // ours is newer: keep showing it
+        dataAt.current = fallbackAt;
         setData(r.data);
-        const saved = r.headers['x-mg-saved-copy'] === '1' ? String(r.headers['x-mg-saved-at'] ?? '') : null;
-        setSavedAt(saved);
-        setUpdatedAt(saved && !Number.isNaN(Date.parse(saved)) ? new Date(saved) : saved !== null ? null : new Date());
+        setSavedAt(fallback === 'unknown' ? '' : fallback.toISOString());
+        setUpdatedAt(fallback === 'unknown' ? null : fallback);
       })
-      .catch(() => { if (!cancelled) setError(true); });
-    return () => { cancelled = true; controller.abort(); };
+      .catch(() => { if (!cancelled) setError(true); })
+      .finally(() => {
+        clearTimeout(slowTimer);
+        if (!cancelled) setSettledAttempt(attempt);
+      });
+    return () => { cancelled = true; clearTimeout(slowTimer); controller.abort(); };
   }, [competitionId, attempt]);
+
+  // Keep the saved copy in step with every change, live results included, so it is never older than the screen.
+  useEffect(() => {
+    if (!data || data === initial?.data) return;
+    const timer = setTimeout(() => writeSavedCopy(savedKey, data, new Date(dataAt.current || Date.now())), 500);
+    return () => clearTimeout(timer);
+  }, [data, initial, savedKey]);
 
   useEffect(() => {
     if (data) {
@@ -104,16 +137,19 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         const sessions = cur.sessions.map((x) => (x.id === updated.id ? updated : x));
         return { ...cur, sessions };
       });
+      dataAt.current = Date.now();
       setUpdatedAt(new Date());
     },
     onResultsUpdated: (p) => {
       setData((cur) => (cur ? applyResultsUpdate(cur, p as ResultsUpdate) : cur));
+      dataAt.current = Date.now();
       setUpdatedAt(new Date());
     },
   });
 
   const applyHeat = useCallback((sessionId: number, heat: Heat) => {
     setData((cur) => (cur ? replaceHeat(cur, sessionId, heat) : cur));
+    dataAt.current = Date.now();
   }, []);
 
   // Results sent from this phone's outbox show straight away, live link or not.
@@ -149,17 +185,23 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       </div>
     </div>
   );
-  if (!data) return <p role="status" className="mg-meta py-6 text-center">Loading competition…</p>;
+  if (!data) {
+    if (/\/(?:toplists|scoring)\/?$/.test(pathname)) return <ToplistSkeleton />;
+    return /\/competitions\/\d+\/?$/.test(pathname) ? <TimetableSkeleton /> : <PageSkeleton />;
+  }
+  // A saved copy only needs a notice once the refresh is slow or has failed; a quick refresh just replaces it.
+  const refreshing = settledAttempt !== attempt;
+  const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing);
 
   return (
     <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt }}>
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />
-        {(savedAt !== null || error || !connected) && (
+        {(showSavedNotice || error || !connected) && (
           <div role="status" className="mg-notice mx-auto flex w-full max-w-xl flex-wrap items-center gap-2">
             <p className="flex-1">
-              {savedAt !== null ? `Last updated ${savedAt && !Number.isNaN(Date.parse(savedAt)) ? new Date(savedAt).toLocaleString('en-GB') : 'earlier'}.` : error ? 'Couldn’t refresh. Showing the last timetable received.' : 'Connecting to live updates. The timetable refreshes periodically while this page is open.'}
+              {showSavedNotice ? `Last updated ${savedAt && !Number.isNaN(Date.parse(savedAt)) ? new Date(savedAt).toLocaleString('en-GB') : 'earlier'}.${refreshing ? ' Checking for changes…' : ''}` : error ? 'Couldn’t refresh. Showing the last timetable received.' : 'Connecting to live updates. The timetable refreshes periodically while this page is open.'}
             </p>
             <button className="mg-btn mg-btn-secondary !min-h-11" onClick={load}>Refresh</button>
           </div>

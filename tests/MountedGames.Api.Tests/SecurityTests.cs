@@ -342,7 +342,7 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
         builder.Services.AddSignalR();
         builder.Services.AddSingleton<ILiveBroadcaster, LiveBroadcaster>();
         builder.Services.AddControllers().AddApplicationPart(typeof(SignupController).Assembly);
-        builder.Services.AddRequestLimits();
+        builder.Services.AddRequestLimits(builder.Configuration);
         builder.Services.AddTrustedProxies(builder.Configuration);
         builder.Services.AddProblemDetails();
         var app = builder.Build();

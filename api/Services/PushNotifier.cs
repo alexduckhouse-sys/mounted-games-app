@@ -19,9 +19,14 @@ public class PushNotifier
     private readonly AppDbContext _db;
     private readonly VapidKeyService _vapid;
     private readonly ILogger<PushNotifier> _log;
+    private readonly IHttpClientFactory _http;
 
-    public PushNotifier(AppDbContext db, VapidKeyService vapid, ILogger<PushNotifier> log)
+    /// <summary>Named HttpClient for push services: no redirects, short timeout (see Program.cs).</summary>
+    public const string HttpClientName = "push";
+
+    public PushNotifier(AppDbContext db, VapidKeyService vapid, ILogger<PushNotifier> log, IHttpClientFactory http)
     {
+        _http = http;
         _db = db;
         _vapid = vapid;
         _log = log;
@@ -44,8 +49,7 @@ public class PushNotifier
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         });
-        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(10) };
-        using var client = new WebPushClient(http);
+        using var client = new WebPushClient(_http.CreateClient(HttpClientName));
         var vapid = _vapid.Details();
         var stale = new List<int>();
         foreach (var s in subs)
