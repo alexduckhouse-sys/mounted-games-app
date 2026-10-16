@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { Trophy } from 'lucide-react';
 import type { CompetitionSummary } from '../types';
+import { CountryFlag } from '../components/CountryFlag';
 
 export function CompetitionsPage() {
   const [comps, setComps] = useState<CompetitionSummary[]>([]);
@@ -36,7 +37,7 @@ export function CompetitionsPage() {
               </span>
               <span className="text-[11px] text-slate-500 dark:text-slate-400">{new Date(c.startDate).toLocaleDateString()}</span>
             </div>
-            <h2 className="font-semibold mt-1.5 text-sm truncate">{c.name}</h2>
+            <h2 className="font-semibold mt-1.5 text-sm truncate flex items-center gap-1.5"><CountryFlag code={c.country} />{c.name}</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{c.location}</p>
             <div className="mt-1.5 flex gap-2.5 text-[11px] text-slate-500 dark:text-slate-400">
               <span>{c.sectionCount} sec</span>

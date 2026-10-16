@@ -5,6 +5,8 @@ import {
   Trash2, Sparkles, Clock,
 } from 'lucide-react';
 import { api } from '../../api';
+import { CountryFlag } from '../../components/CountryFlag';
+import { COUNTRIES } from '../../lib/countries';
 import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionDetail, CompetitionSection } from '../../types';
 
@@ -148,6 +150,7 @@ interface PersistedDraft {
   step: Step;
   name: string;
   location: string;
+  country?: string;
   startDate: string;
   startTime: string;
   endDate: string;
@@ -251,6 +254,7 @@ export function CompetitionEditor() {
   // Basics
   const [name, setName] = useState(persisted?.name ?? '');
   const [location, setLocation] = useState(persisted?.location ?? '');
+  const [country, setCountry] = useState(persisted?.country ?? '');
   const [startDate, setStartDate] = useState(
     persisted?.startDate ?? (() => new Date().toISOString().slice(0, 10))()
   );
@@ -279,7 +283,7 @@ export function CompetitionEditor() {
   useEffect(() => {
     const draft: PersistedDraft = {
       step,
-      name, location,
+      name, location, country,
       startDate, startTime, endDate, endTime,
       what3Words, postcode, appleMapsUrl, lat, lon,
       description,
@@ -288,7 +292,7 @@ export function CompetitionEditor() {
       teams: [],
     };
     try { window.localStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* quota */ }
-  }, [storageKey, step, name, location, startDate, startTime, endDate, endTime,
+  }, [storageKey, step, name, location, country, startDate, startTime, endDate, endTime,
       what3Words, postcode, appleMapsUrl, lat, lon, description,
       organiserName, paymentDestination, sections]);
 
@@ -301,6 +305,7 @@ export function CompetitionEditor() {
         const c = r.data;
         setName(c.name);
         setLocation(c.location ?? '');
+        setCountry(c.country ?? '');
         const start = new Date(c.startDate);
         setStartDate(start.toISOString().slice(0, 10));
         setStartTime(start.toTimeString().slice(0, 5));
@@ -494,6 +499,7 @@ export function CompetitionEditor() {
     return {
       name: name.trim(),
       location: location.trim() || null,
+      country: country || null,
       description: description.trim() || null,
       latitude: lat ? parseFloat(lat) : null,
       longitude: lon ? parseFloat(lon) : null,
@@ -547,6 +553,7 @@ export function CompetitionEditor() {
           <BasicsStep
             name={name} setName={setName}
             location={location} setLocation={setLocation}
+            country={country} setCountry={setCountry}
             startDate={startDate} setStartDate={setStartDate}
             startTime={startTime} setStartTime={setStartTime}
             endDate={endDate} setEndDate={setEndDate}
@@ -693,6 +700,7 @@ function StepStrip({ current, onJump }: { current: number; onJump?: (i: number) 
 interface BasicsProps {
   name: string; setName: (s: string) => void;
   location: string; setLocation: (s: string) => void;
+  country: string; setCountry: (s: string) => void;
   startDate: string; setStartDate: (s: string) => void;
   startTime: string; setStartTime: (s: string) => void;
   endDate: string; setEndDate: (s: string) => void;
@@ -738,6 +746,14 @@ function BasicsStep(p: BasicsProps) {
       <label className="block">
         <span className="text-sm font-semibold flex items-center gap-1"><MapPin className="w-4 h-4" /> Venue / location</span>
         <input className="input mt-1" placeholder="Stoneleigh Park, Warwickshire" value={p.location} onChange={(e) => p.setLocation(e.target.value)} />
+      </label>
+      <label className="block">
+        <span className="text-sm font-semibold flex items-center gap-1.5">Country <CountryFlag code={p.country} /></span>
+        <select className="input mt-1" value={p.country} onChange={(e) => p.setCountry(e.target.value)}>
+          <option value="">No flag</option>
+          {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+        </select>
+        <span className="text-[10px] text-slate-500">Shown as a flag next to the competition name in lists.</span>
       </label>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className="block">

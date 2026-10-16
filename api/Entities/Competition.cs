@@ -5,6 +5,8 @@ public class Competition
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Location { get; set; }
+    /// <summary>Lower-case flag code, e.g. "gb-eng", "ie", "fr". Null = no flag shown.</summary>
+    public string? Country { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public DateTime StartDate { get; set; }

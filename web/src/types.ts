@@ -57,6 +57,7 @@ export interface CompetitionSummary {
   id: number;
   name: string;
   location?: string | null;
+  country?: string | null;
   startDate: string;
   endDate?: string | null;
   isActive: boolean;
@@ -184,6 +185,7 @@ export interface CompetitionDetail {
   id: number;
   name: string;
   location?: string | null;
+  country?: string | null;
   description?: string | null;
   latitude?: number | null;
   longitude?: number | null;

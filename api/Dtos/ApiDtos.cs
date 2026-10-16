@@ -8,7 +8,8 @@ public record CreateClubRequest(string Name, string? Region = null, string? BibC
 
 public record CompetitionSummary(
     int Id, string Name, string? Location, DateTime StartDate, DateTime? EndDate,
-    bool IsActive, bool IsArchived, int SectionCount, int TeamCount, int SessionCount);
+    bool IsActive, bool IsArchived, int SectionCount, int TeamCount, int SessionCount,
+    string? Country = null);
 
 public record CompetitionDetail(
     int Id, string Name, string? Location, string? Description,
@@ -22,7 +23,8 @@ public record CompetitionDetail(
     string? StreamUrl = null,
     string? OrganiserName = null,
     string? PaymentDestination = null,
-    bool SignupsLocked = false);
+    bool SignupsLocked = false,
+    string? Country = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -32,7 +34,8 @@ public record CreateCompetitionRequest(
     string? Postcode = null,
     string? StreamUrl = null,
     string? OrganiserName = null,
-    string? PaymentDestination = null);
+    string? PaymentDestination = null,
+    string? Country = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -43,7 +46,8 @@ public record UpdateCompetitionRequest(
     string? Postcode = null,
     string? StreamUrl = null,
     string? OrganiserName = null,
-    string? PaymentDestination = null);
+    string? PaymentDestination = null,
+    string? Country = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 

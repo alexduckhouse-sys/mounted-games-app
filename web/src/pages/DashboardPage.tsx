@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { CountryFlag } from '../components/CountryFlag';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import type { CompetitionSummary, CompetitionDetail } from '../types';
 
@@ -138,6 +139,7 @@ export function DashboardPage() {
                 <span className={`pill !py-0.5 !px-1.5 text-[10px] ${c.isActive && !c.isArchived ? 'bg-arena-live text-yellow-900' : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-100'}`}>
                   {c.isActive && !c.isArchived ? 'Live' : c.isArchived ? 'Archived' : 'Past'}
                 </span>
+                <CountryFlag code={c.country} />
                 <h3 className="font-semibold text-xs sm:text-sm truncate flex-1">{c.name}</h3>
                 <span className="text-[10px] text-slate-400 shrink-0">
                   {new Date(c.startDate).toLocaleDateString()}

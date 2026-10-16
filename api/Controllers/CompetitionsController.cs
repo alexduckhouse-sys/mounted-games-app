@@ -111,7 +111,7 @@ public class CompetitionsController : ControllerBase
             c.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
-            c.SignupsLocked);
+            c.SignupsLocked, c.Country);
     }
 
     /// <summary>
@@ -152,6 +152,7 @@ public class CompetitionsController : ControllerBase
         {
             Name = req.Name,
             Location = req.Location,
+            Country = string.IsNullOrWhiteSpace(req.Country) ? null : req.Country.Trim().ToLowerInvariant(),
             Description = req.Description,
             Latitude = lat,
             Longitude = lon,
@@ -179,6 +180,7 @@ public class CompetitionsController : ControllerBase
         if (c is null) return NotFound();
         c.Name = req.Name;
         c.Location = req.Location;
+        c.Country = string.IsNullOrWhiteSpace(req.Country) ? null : req.Country.Trim().ToLowerInvariant();
         c.Description = req.Description;
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();
         var newLat = req.Latitude;
@@ -743,6 +745,8 @@ public class CompetitionsController : ControllerBase
             refreshed.IsActive, refreshed.IsArchived,
             refreshed.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
             refreshed.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
-            refreshed.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList());
+            refreshed.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
+            refreshed.StreamUrl, refreshed.OrganiserName, refreshed.PaymentDestination,
+            refreshed.SignupsLocked, refreshed.Country);
     }
 }

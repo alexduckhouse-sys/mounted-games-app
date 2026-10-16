@@ -85,6 +85,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Competitions", "OrganiserName", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "PaymentDestination", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "SignupsLocked", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "Competitions", "Country", "TEXT NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "PriceMinor", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "MaxParticipants", "INTEGER NULL");
         await db.Database.ExecuteSqlRawAsync(@"

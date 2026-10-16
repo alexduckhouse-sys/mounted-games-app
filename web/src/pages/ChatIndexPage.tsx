@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { MessagesSquare } from 'lucide-react';
 import { api } from '../api';
 import type { CompetitionSummary } from '../types';
+import { CountryFlag } from '../components/CountryFlag';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 
 export function ChatIndexPage() {
@@ -26,7 +27,7 @@ export function ChatIndexPage() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {comps.map((c) => (
           <Link key={c.id} to={`/competitions/${c.id}/chat`} className="card p-5 hover:shadow-lg">
-            <h2 className="font-semibold">{c.name}</h2>
+            <h2 className="font-semibold flex items-center gap-2"><CountryFlag code={c.country} />{c.name}</h2>
             <p className="text-xs text-slate-500">{c.location}</p>
             <p className="text-xs text-slate-500 mt-1">
               {c.isActive && !c.isArchived ? 'Live now' : 'View history'}

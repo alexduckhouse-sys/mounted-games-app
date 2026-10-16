@@ -12,7 +12,8 @@ public static class Mappings
         c.IsActive, c.IsArchived,
         c.Sections?.Count ?? 0,
         c.Teams?.Count ?? 0,
-        c.Sessions?.Count ?? 0);
+        c.Sessions?.Count ?? 0,
+        c.Country);
 
     public static CompetitionSectionDto ToDto(this CompetitionSection s) =>
         new(s.Id, s.CompetitionId, s.Format, s.AgeGroup, s.DisplayName,

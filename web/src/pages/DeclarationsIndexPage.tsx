@@ -4,6 +4,7 @@ import { ClipboardList, Plus, Trophy, History, ChevronDown, ChevronUp, Users } f
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import type { CompetitionSummary, DeclarationForm } from '../types';
+import { CountryFlag } from '../components/CountryFlag';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 
 type View = 'current' | 'all';
@@ -125,6 +126,7 @@ export function DeclarationsIndexPage() {
                     to={`/competitions/${c.id}/declarations`}
                     className="flex items-center gap-2 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/60 px-1 rounded"
                   >
+                    <CountryFlag code={c.country} />
                     <span className="font-semibold flex-1 truncate text-sm">{c.name}</span>
                     <span className="text-[10px] text-slate-400">{new Date(c.startDate).toLocaleDateString()}</span>
                   </Link>

@@ -4,6 +4,7 @@ import { Settings, Trophy, Users2, Sparkles, Shield, Plus, Trash2, Pencil, BookO
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import type { Club, CompetitionSummary } from '../types';
+import { CountryFlag } from '../components/CountryFlag';
 import { bibAccent, bibLabel } from '../lib/bib';
 
 interface IpBlock { id: number; ipAddress: string; reason?: string | null; createdAt: string }
@@ -110,7 +111,7 @@ export function AdminPage() {
             {comps.map((c) => (
               <li key={c.id} className="py-2 flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{c.name}</p>
+                  <p className="font-medium truncate flex items-center gap-1.5"><CountryFlag code={c.country} />{c.name}</p>
                   <p className="text-xs text-slate-500 truncate">{new Date(c.startDate).toLocaleDateString()} · {c.location}</p>
                 </div>
                 <span className="pill bg-slate-100 text-slate-700 shrink-0">{c.teamCount} teams</span>
