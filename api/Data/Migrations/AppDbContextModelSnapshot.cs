@@ -565,6 +565,97 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("IpBlocks");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.LiveStream", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AngleName")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("ArenaName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<bool>("AudioMuted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Generation")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("HasAudio")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("LastHeartbeatAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("PendingAttempt")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("PendingHasAudio")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PendingSfuSessionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("PendingSimulcast")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("PendingSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PendingTrackMids")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SfuSessionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SfuTrackMids")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Simulcast")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StartedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TakeOverStreamId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId", "Status");
+
+                    b.ToTable("LiveStreams");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.PushSubscription", b =>
                 {
                     b.Property<int>("Id")
@@ -775,11 +866,11 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("ClubId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("CreatedByUserId")
-                        .HasColumnType("text");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("DateOfBirth")
                         .HasColumnType("timestamp without time zone");
@@ -1339,6 +1430,17 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Heat");
 
                     b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.LiveStream", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Competition");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.PushSubscription", b =>

@@ -38,3 +38,13 @@ services:
       # Any non-empty string works — it's the shared admin key for the Organiser sign-in.
       - key: Admin__Key
         sync: false
+      # Set both Cloudflare Realtime values in Render to enable camera streaming.
+      - key: Streaming__Cloudflare__AppId
+        sync: false
+      - key: Streaming__Cloudflare__AppToken
+        sync: false
+      # Optional: a Cloudflare TURN key relays video for networks that block it.
+      - key: Streaming__Cloudflare__TurnKeyId
+        sync: false
+      - key: Streaming__Cloudflare__TurnKeyApiToken
+        sync: false

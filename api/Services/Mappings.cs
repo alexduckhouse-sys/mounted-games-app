@@ -5,6 +5,10 @@ namespace MountedGames.Api.Services;
 
 public static class Mappings
 {
+    public static LiveStreamDto ToDto(this LiveStream s, int viewerCount) => new(
+        s.Id, s.CompetitionId, s.ArenaName, s.AngleName, s.Status, s.Caption,
+        s.AudioMuted, s.HasAudio, DateTime.SpecifyKind(s.StartedAt, DateTimeKind.Utc), viewerCount, s.Generation);
+
     public static ClubDto ToDto(this Club c) => new(c.Id, c.Name, c.Region, c.BibColour);
 
     public static CompetitionSummary ToSummary(this Competition c) => new(

@@ -1,10 +1,26 @@
 using Microsoft.AspNetCore.SignalR;
 using MountedGames.Api.Auth;
+using MountedGames.Api.Dtos;
+using MountedGames.Api.Services.Streaming;
 
 namespace MountedGames.Api.Hubs;
 
-public class LiveHub : Hub
+public class LiveHub(ViewerRegistry viewers) : Hub
 {
+    public Task<WatchStreamResponse> WatchStream(int competitionId, int streamId) =>
+        viewers.WatchAsync(Context.ConnectionId, competitionId, streamId, Context.ConnectionAborted);
+
+    public Task AnswerStream(string watchId, string sdpAnswer) =>
+        viewers.AnswerAsync(Context.ConnectionId, watchId, sdpAnswer, Context.ConnectionAborted);
+
+    public Task StopWatching(int streamId) => viewers.StopAsync(Context.ConnectionId, streamId);
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        await viewers.DisconnectAsync(Context.ConnectionId);
+        await base.OnDisconnectedAsync(exception);
+    }
+
     public async Task JoinCompetition(int competitionId)
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(competitionId));
@@ -32,10 +48,18 @@ public interface ILiveBroadcaster
     Task SessionUpdated(int competitionId, object session);
     Task ResultsUpdated(int competitionId, object payload);
     Task Announcement(int competitionId, object announcement);
+    Task StreamUpdated(int competitionId, LiveStreamDto stream);
+    Task StreamViewers(int competitionId, int streamId, int count);
 }
 
 public class LiveBroadcaster : ILiveBroadcaster
 {
+    public Task StreamUpdated(int competitionId, LiveStreamDto stream)
+        => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("streamUpdated", stream);
+
+    public Task StreamViewers(int competitionId, int streamId, int count)
+        => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("streamViewers", new { streamId, count });
+
     private readonly IHubContext<LiveHub> _hub;
     public LiveBroadcaster(IHubContext<LiveHub> hub) => _hub = hub;
 
