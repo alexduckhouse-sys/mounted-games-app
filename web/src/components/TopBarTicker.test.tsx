@@ -12,8 +12,9 @@ const next: TickerItem = { key: 'next-2', kind: 'next', text: 'Next 10:30: Senio
 const info: TickerItem = { key: 'info', kind: 'info', text: 'Spring Games' };
 const notice: TickerItem = { key: 'announcement-7', kind: 'announcement', text: 'Lunch moved to 1pm' };
 
-function Publish({ items }: { items: TickerItem[] }) {
-  const { setItems } = useTicker();
+function Publish({ items, watch = null }: { items: TickerItem[]; watch?: number | null }) {
+  const { setItems, setWatchCompetitionId } = useTicker();
+  useEffect(() => { setWatchCompetitionId(watch); }, [watch, setWatchCompetitionId]);
   useEffect(() => { setItems(items); }, [items, setItems]);
   return null;
 }
@@ -21,12 +22,12 @@ function Go({ to }: { to: string }) {
   const navigate = useNavigate();
   return <button onClick={() => navigate(to)}>Go {to}</button>;
 }
-function Page({ items }: { items: TickerItem[] }) {
+function Page({ items, watch = null }: { items: TickerItem[]; watch?: number | null }) {
   return (
     <MemoryRouter initialEntries={['/competitions/1']}>
       <CurrentCompetitionProvider>
         <TickerProvider>
-          <Publish items={items} />
+          <Publish items={items} watch={watch} />
           <TopBarTicker />
           <Go to="/competitions/1/chat" />
           <button>Outside</button>
@@ -233,4 +234,18 @@ describe('TopBarTicker: the full list', () => {
     fireEvent.click(within(panel).getByRole('link', { name: 'Open the live feed' }));
     expect(toggle()).toHaveAttribute('aria-expanded', 'false');
   });
+});
+
+it('keeps a red Watch shortcut between the rotating text and arrow, including with no ticker items', async () => {
+  const { rerender } = render(<Page items={[live, next]} watch={1} />);
+  const watch = screen.getByRole('link', { name: 'Watch the live video' });
+  expect(watch).toHaveAttribute('href', '/competitions/1/chat');
+  expect(watch).toHaveClass('mg-badge-live');
+  expect(watch.previousElementSibling).toHaveAttribute('aria-label', 'Open the live feed');
+  expect(watch.nextElementSibling).toHaveAttribute('aria-label', 'All updates (2)');
+  await tick(4500); expect(screen.getByRole('link', { name: 'Watch the live video' })).toBeVisible();
+  rerender(<Page items={[]} watch={1} />); expect(strip()).toBe('Live video');
+  expect(screen.getByRole('link', { name: 'Watch the live video' })).toBeVisible();
+  rerender(<Page items={[info]} watch={2} />); expect(screen.queryByRole('link', { name: 'Watch the live video' })).toBeNull();
+  rerender(<Page items={[]} watch={null} />); expect(document.querySelector('.mg-strip-bar')).toBeNull();
 });

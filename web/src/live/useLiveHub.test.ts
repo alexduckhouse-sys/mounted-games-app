@@ -91,6 +91,7 @@ describe('useLiveHub', () => {
   it('passes each event to the matching handler', async () => {
     const connection = next();
     const handlers: Required<LiveHandlers> = {
+      onStreamUpdated: vi.fn(), onStreamViewers: vi.fn(),
       onReady: vi.fn(), onChatMessage: vi.fn(), onChatMessageDeleted: vi.fn(),
       onSessionUpdated: vi.fn(), onResultsUpdated: vi.fn(), onAnnouncement: vi.fn(),
     };
@@ -101,6 +102,10 @@ describe('useLiveHub', () => {
     connection.emit('sessionUpdated', { id: 3 });
     connection.emit('resultsUpdated', { id: 4 });
     connection.emit('announcement', { id: 5 });
+    connection.emit('streamUpdated', { id: 6 });
+    connection.emit('streamViewers', { streamId: 6, count: 12 });
+    expect(handlers.onStreamUpdated).toHaveBeenCalledWith({ id: 6 });
+    expect(handlers.onStreamViewers).toHaveBeenCalledWith({ streamId: 6, count: 12 });
     expect(handlers.onChatMessage).toHaveBeenCalledWith({ id: 1 });
     expect(handlers.onChatMessageDeleted).toHaveBeenCalledWith({ id: 2 });
     expect(handlers.onSessionUpdated).toHaveBeenCalledWith({ id: 3 });
@@ -112,7 +117,7 @@ describe('useLiveHub', () => {
     const connection = next();
     renderHook(() => useLiveHub(1, {}));
     await flush();
-    for (const event of ['chatMessage', 'chatMessageDeleted', 'sessionUpdated', 'resultsUpdated', 'announcement']) {
+    for (const event of ['chatMessage', 'chatMessageDeleted', 'sessionUpdated', 'resultsUpdated', 'announcement', 'streamUpdated', 'streamViewers']) {
       expect(() => connection.emit(event, {})).not.toThrow();
     }
   });
@@ -189,4 +194,19 @@ describe('useLiveHub', () => {
       vi.useRealTimers();
     }
   });
+});
+
+it('invokes on the joined connection and rejects before joining, during recovery and after disposal', async () => {
+  const connection = next();
+  const { result, unmount } = renderHook(() => useLiveHub(1, {}));
+  await expect(result.current.invoke('WatchStream', 1, 2)).rejects.toThrow('not ready');
+  await flush();
+  await result.current.invoke('WatchStream', 1, 2);
+  expect(connection.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
+  connection.state = 'Reconnecting';
+  await expect(result.current.invoke('WatchStream', 1, 2)).rejects.toThrow('not ready');
+  act(() => connection.reconnecting!());
+  await expect(result.current.invoke('WatchStream', 1, 2)).rejects.toThrow('not ready');
+  unmount();
+  await expect(result.current.invoke('WatchStream', 1, 2)).rejects.toThrow('not ready');
 });

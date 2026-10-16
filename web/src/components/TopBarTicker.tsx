@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Video } from 'lucide-react';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { tickerFocusAfterChange, type TickerItem, type TickerKind } from '../lib/ticker';
 import { useTicker } from './TickerContext';
@@ -39,7 +39,7 @@ const prefersReducedMotion = () => window.matchMedia?.(REDUCED_MOTION).matches ?
 export function TopBarTicker() {
   const { current } = useCurrentCompetition();
   // The header already shows the competition name, so the strip only appears when there is news.
-  const { items } = useTicker();
+  const { items, watchCompetitionId } = useTicker();
   const reduceMotion = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
 
   // Follow the list as it changes: keep the current line, or jump to an announcement that has just arrived.
@@ -74,7 +74,7 @@ export function TopBarTicker() {
     return () => clearTimeout(timer);
   }, [items, index, reduceMotion, open]);
 
-  const active = items[index];
+  const active = items[index] ?? (watchCompetitionId ? { key: 'stream', kind: 'info' as const, text: 'Live video' } : undefined);
   if (!current || !active) return null;
   const { badge, text } = badgeFor(active);
   return (
@@ -93,6 +93,11 @@ export function TopBarTicker() {
               <span className="min-w-0 flex-1 truncate">{text}</span>
             </span>
           </Link>
+          {watchCompetitionId === current.id && (
+            <Link to={`/competitions/${current.id}/chat`} aria-label="Watch the live video" className="mg-strip-watch mg-badge-live">
+              <Video aria-hidden="true" className="h-4 w-4" /> Watch
+            </Link>
+          )}
           {items.length > 1 && (
             <button type="button" className="mg-strip-next" aria-expanded={open} aria-controls={panelId} aria-label={`All updates (${items.length})`} onClick={() => { setOpen((v) => !v); setOpenedAt(pathname); }}>
               <ChevronDown aria-hidden="true" className={`h-[18px] w-[18px] transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} strokeWidth={2.2} />
