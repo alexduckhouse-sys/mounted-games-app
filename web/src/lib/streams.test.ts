@@ -11,18 +11,21 @@ it('adds, sorts, updates and removes streams, ignoring older generations', () =>
   expect(updateStreams([a, b], { ...a, status: 2 })).toEqual([b]);
   expect(updateStreams([a], liveStream({ id: 3, angleName: 'Finish' }))[0].id).toBe(3);
 });
-it('uses the live heat and race for the stream arena, falling back to the arena', () => {
+it('uses the live heat and race for the stream arena, or null when nothing is racing there', () => {
   const sessions = [session(1, { status: 1, arenaName: ' Main Arena ', heats: [heat(1, { races: [race(2, { isComplete: true }), race(3)] })] })];
   expect(streamHeatLabel(sessions, 'Main Arena')).toBe('Seniors Session 1 · Heat 1 · Race 3');
-  expect(streamHeatLabel(sessions, 'Second')).toBe('Second');
+  expect(streamHeatLabel(sessions, 'Second')).toBeNull();
   expect(streamHeatLabel([session(1, { status: 1, arenaName: 'A' })], 'A')).toBe('Seniors Session 1');
   expect(streamHeatLabel([session(1, { status: 1, arenaName: 'A', heats: [heat(1, { label: 'Final A' })] })], 'A')).toBe('Seniors Session 1 · Final A');
-  expect(streamHeatLabel([session(1, { status: 1 })], 'A')).toBe('A');
+  expect(streamHeatLabel([session(1, { status: 1 })], 'A')).toBeNull();
 });
 it.each(['https://youtube.com/watch?v=abc_123-xy', 'https://www.youtube.com/embed/abc_123-xy', 'https://m.youtube.com/live/abc_123-xy', 'https://youtu.be/abc_123-xy', 'https://youtube-nocookie.com/shorts/abc_123-xy'])('allows only a no-cookie YouTube embed for %s', (raw) => {
   expect(streamLink(raw)?.embed).toBe('https://www.youtube-nocookie.com/embed/abc_123-xy');
 });
-it.each(['https://youtube.com/', 'https://youtube.com/watch?v=bad/id', 'https://twitch.tv/example', 'https://example.test/video', 'http://example.test'])('keeps other safe URLs as links: %s', (raw) => { expect(streamLink(raw)).toEqual({ href: new URL(raw).href, embed: null }); });
+it.each(['https://youtube.com/', 'https://youtube.com/watch?v=bad/id', 'https://twitch.tv/', 'https://twitch.tv/a', 'https://example.test/video', 'http://example.test'])('keeps other safe URLs as links: %s', (raw) => { expect(streamLink(raw)).toEqual({ href: new URL(raw).href, embed: null }); });
+it.each(['https://twitch.tv/example_channel', 'https://m.twitch.tv/example_channel/videos'])('embeds the Twitch player for %s', (raw) => {
+  expect(streamLink(raw)?.embed).toBe(`https://player.twitch.tv/?channel=example_channel&parent=${window.location.hostname}`);
+});
 it.each(['javascript:alert(1)', 'data:text/html,test', 'not a url'])('rejects unsafe or invalid URLs: %s', (raw) => { expect(streamLink(raw)).toBeNull(); });
 
 it('keeps the latest announcement visible while the latest three chat messages change', () => {

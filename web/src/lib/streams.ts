@@ -8,10 +8,11 @@ export function updateStreams(streams: LiveStream[], next: LiveStream): LiveStre
   return [...streams.filter((stream) => stream.id !== next.id), ...(next.status === 2 ? [] : [next])]
     .sort((a, b) => a.arenaName.localeCompare(b.arenaName) || a.angleName.localeCompare(b.angleName));
 }
-export function streamHeatLabel(sessions: Session[], arena: string): string {
+/** The heat running in this arena, or null when nothing is racing there. */
+export function streamHeatLabel(sessions: Session[], arena: string): string | null {
   const row = timetableRows(sessions, computeTimings(sessions), true)
     .find((row) => row.session.arenaName?.trim() === arena.trim() && row.status === 'live' && row.session.kind === 0);
-  if (!row) return arena;
+  if (!row) return null;
   const parts = [sessionTitle(row.session, sessionOrdinals(sessions))];
   if (row.heat) {
     parts.push(row.heat.label || `Heat ${row.heatIndex + 1}`);
@@ -29,6 +30,11 @@ export function streamLink(raw: string): { href: string; embed: string | null } 
     if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
       id = url.searchParams.get('v') || url.pathname.match(/^\/(?:embed|live|shorts)\/([\w-]+)\/?$/)?.[1] || null;
     } else if (host === 'youtu.be') id = url.pathname.slice(1);
+    if (host === 'twitch.tv' || host === 'm.twitch.tv') {
+      const channel = url.pathname.split('/').filter(Boolean)[0] ?? '';
+      const embed = /^\w{3,25}$/.test(channel) ? `https://player.twitch.tv/?channel=${channel}&parent=${window.location.hostname}` : null;
+      return { href: url.href, embed };
+    }
     const embed = id && /^[\w-]+$/.test(id) ? `https://www.youtube-nocookie.com/embed/${id}` : null;
     return { href: url.href, embed };
   } catch { return null; }

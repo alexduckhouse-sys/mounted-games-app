@@ -7,21 +7,21 @@ import { setBroadcasting } from '../../pwa';
 import { competition, session } from '../../test/factories';
 import { asMedia, deferred, FakeMediaStream, fakePeerConstructor, FakeTrack, flush } from '../../test/streamFakes';
 
-const state = vi.hoisted(() => ({ organiser: true, enabled: true, snapshot: {} as PublisherSnapshot, listener: () => {} }));
+const state = vi.hoisted(() => ({ organiser: true, enabled: true, snapshot: {} as PublisherSnapshot, listener: () => {}, streams: [] as unknown[] }));
 const publisher = vi.hoisted(() => ({
   getSnapshot: () => state.snapshot,
   subscribe: (listener: () => void) => { state.listener = listener; return () => {}; },
   capture: vi.fn(), devices: vi.fn(), switchCamera: vi.fn(), start: vi.fn(), stop: vi.fn(), dispose: vi.fn(), mute: vi.fn(), pause: vi.fn(), caption: vi.fn(), viewers: vi.fn(),
 }));
 vi.mock('../../live/streamPublisher', () => ({ browserPublisherDependencies: () => ({}), createStreamPublisher: () => publisher }));
-vi.mock('./context', () => ({ useCompetition: () => ({ competition: competition({ sessions: [session(1, { arenaName: 'Main Arena' }), session(2, { arenaName: 'Second Arena' })] }), streamingEnabled: state.enabled, streams: [], streamMessages: [] }) }));
+vi.mock('./context', () => ({ useCompetition: () => ({ competition: competition({ sessions: [session(1, { arenaName: 'Main Arena' }), session(2, { arenaName: 'Second Arena' })] }), streamingEnabled: state.enabled, streams: state.streams, streamMessages: [] }) }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => state.organiser }) }));
 vi.mock('../../pwa', () => ({ setBroadcasting: vi.fn() }));
 const update = (patch: Partial<PublisherSnapshot>) => { state.snapshot = { ...state.snapshot, ...patch }; state.listener(); };
 const show = () => render(<MemoryRouter initialEntries={['/competitions/1/broadcast']}><BroadcastPage /></MemoryRouter>);
 const settle = () => act(flush);
 beforeEach(() => {
-  state.organiser = true; state.enabled = true;
+  state.organiser = true; state.enabled = true; state.streams = [];
   state.snapshot = { state: 'idle', media: null, streamId: null, viewerCount: 0, signal: 'good', audioMuted: false, hasAudio: false, error: null };
   vi.stubGlobal('RTCPeerConnection', fakePeerConstructor);
   Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {} });
@@ -50,7 +50,7 @@ it('captures from a tap, lists capture inputs, supports named arenas and angles 
   fireEvent.change(screen.getByRole('textbox', { name: 'Arena name' }), { target: { value: 'Practice' } });
   fireEvent.click(screen.getAllByRole('button', { name: 'Other…' })[1]);
   fireEvent.change(screen.getByRole('textbox', { name: 'Camera position' }), { target: { value: 'Gate' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Go live' })); await settle(); expect(publisher.start).toHaveBeenCalledWith('Practice', 'Gate');
+  fireEvent.click(screen.getByRole('button', { name: 'Go live' })); await settle(); expect(publisher.start).toHaveBeenCalledWith('Practice', 'Gate', false);
   expect(setBroadcasting).toHaveBeenCalledWith(true);
   const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); expect(event.defaultPrevented).toBe(true);
 });
@@ -74,4 +74,14 @@ it('offers mute, pause/resume and a caption that can be cleared', async () => {
   fireEvent.click(screen.getByRole('button', { name: /Viewers see/ }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Viewers see' }), { target: { value: '' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' })); await settle(); expect(publisher.caption).toHaveBeenLastCalledWith('');
+});
+it('offers to take over when the same arena and camera position is already live', async () => {
+  state.streams = [{ id: 7, competitionId: 1, arenaName: 'main arena ', angleName: 'Main camera', status: 0 }, { id: 8, competitionId: 1, arenaName: 'Main Arena', angleName: 'Wide', status: 2 }];
+  show(); fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle();
+  expect(screen.getByText(/Someone is already streaming Main Arena · Main camera/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Wide' }));
+  expect(screen.queryByText(/already streaming/)).toBeNull(); expect(screen.getByRole('button', { name: 'Go live' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Main camera' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Take over and go live' })); await settle();
+  expect(publisher.start).toHaveBeenCalledWith('Main Arena', 'Main camera', true);
 });

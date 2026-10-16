@@ -41,7 +41,9 @@ function BroadcastStudio() {
   const live = ['starting', 'live', 'paused', 'reconnecting'].includes(snapshot.state);
   const canControl = snapshot.state === 'live' || snapshot.state === 'paused';
   const currentStream = streams.find((stream) => stream.id === snapshot.streamId);
-  const label = caption || streamHeatLabel(competition.sessions, arena);
+  const label = caption || streamHeatLabel(competition.sessions, arena) || `${arena} · ${angle}`;
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const occupied = !live && streams.some((stream) => stream.status !== 2 && same(stream.arenaName, arena) && same(stream.angleName, angle));
   useEffect(() => {
     const next = createStreamPublisher(competition.id, browserPublisherDependencies());
     publisher.current = next;
@@ -113,8 +115,9 @@ function BroadcastStudio() {
       <fieldset><legend className="mb-2 font-semibold">Arena</legend><div className="flex flex-wrap gap-2">{arenas.map((name) => <button className="mg-stream-chip" aria-pressed={!otherArena && name === arena} key={name} onClick={() => { setArena(name); setOtherArena(false); }}>{name}</button>)}<button className="mg-stream-chip" aria-pressed={otherArena} onClick={() => { setOtherArena(true); setArena(''); }}>Other…</button></div>{otherArena && <input aria-label="Arena name" className="input mt-2" maxLength={80} value={arena} onChange={(event) => setArena(event.target.value)} />}</fieldset>
       <fieldset><legend className="mb-2 font-semibold">Camera position</legend><div className="flex flex-wrap gap-2">{['Main camera', 'Finish line', 'Start line', 'Wide'].map((name) => <button key={name} className="mg-stream-chip" aria-pressed={!otherAngle && name === angle} onClick={() => { setAngle(name); setOtherAngle(false); }}>{name}</button>)}<button className="mg-stream-chip" aria-pressed={otherAngle} onClick={() => { setOtherAngle(true); setAngle(''); }}>Other…</button></div>{otherAngle && <input aria-label="Camera position" className="input mt-2" maxLength={60} value={angle} onChange={(event) => setAngle(event.target.value)} />}</fieldset>
       <label className="flex flex-col gap-2 font-semibold">Camera<select className="input" disabled={busy} defaultValue="" onChange={(event) => run(() => publisher.current!.switchCamera(event.target.value))}><option value="" disabled>Choose camera</option>{devices.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Camera ${index + 1}`}</option>)}</select></label>
+      {occupied && <p role="status" className="mg-notice">Someone is already streaming {arena} · {angle}. Going live takes over from them.</p>}
       <p className="mg-notice">Anyone can watch. Check families know the event is being filmed. Keep this screen on: locking the phone pauses the stream.</p>
-      <button disabled={busy || !arena.trim() || !angle.trim()} className="mg-btn mg-btn-primary !min-h-[52px] !bg-[rgb(var(--mg-red))] !text-white" onClick={() => run(async () => { setStartedAt(Date.now()); await publisher.current!.start(arena, angle); })}><VideoIcon />Go live</button>
+      <button disabled={busy || !arena.trim() || !angle.trim()} className="mg-btn mg-btn-primary !min-h-[52px] !bg-[rgb(var(--mg-red))] !text-white" onClick={() => run(async () => { setStartedAt(Date.now()); await publisher.current!.start(arena, angle, occupied); })}><VideoIcon />{occupied ? 'Take over and go live' : 'Go live'}</button>
     </>}
   </div>;
 }

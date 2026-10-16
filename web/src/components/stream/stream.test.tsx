@@ -51,6 +51,22 @@ it('shows live count, racing caption, sound affordance and extensible overlays',
   rerender(<StreamOverlays stream={liveStream()} label="Final" reconnecting muted={false} onSound={onSound} />);
   expect(screen.getByText('Reconnecting…')).toBeVisible(); expect(screen.queryByRole('button', { name: 'Tap for sound' })).toBeNull();
 });
+it('labels the strip by what is known: a caption, the racing heat, or just the camera', () => {
+  const { rerender } = render(<StreamOverlays stream={liveStream({ arenaName: 'Main Arena', angleName: 'Finish line' })} label={null} reconnecting={false} muted={false} onSound={vi.fn()} />);
+  expect(screen.getByText('Live from')).toBeVisible(); expect(screen.getByText('Main Arena · Finish line')).toBeVisible();
+  rerender(<StreamOverlays stream={liveStream()} label="Seniors · Heat 2" reconnecting={false} muted={false} onSound={vi.fn()} />);
+  expect(screen.getByText('Now racing')).toBeVisible();
+  rerender(<StreamOverlays stream={liveStream({ caption: 'Lunch break' })} label="Lunch break" reconnecting={false} muted={false} onSound={vi.fn()} />);
+  expect(screen.getByText('Now')).toBeVisible(); expect(screen.getByText('Lunch break')).toBeVisible();
+});
+it('unmutes inside the tap and restarts a video the browser had paused', async () => {
+  const { unmount } = render(<StreamPlayer media={asMedia(new FakeMediaStream())} stream={liveStream()} label="Heat 1" />); await settle();
+  const video = document.querySelector('video')!;
+  play.mockClear(); vi.spyOn(video, 'paused', 'get').mockReturnValue(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Tap for sound' }));
+  expect(video.muted).toBe(false); expect(play).toHaveBeenCalledTimes(1);
+  play.mockRejectedValueOnce(new Error('gesture required')); await settle(); unmount();
+});
 it('shows announcements for eight seconds and staff messages for ten, without reviving old messages', async () => {
   const announcement = { message: chat(1, { body: 'Lunch at one' }), receivedAt: Date.now() };
   const { unmount } = render(<StreamOverlays stream={liveStream()} label="Final" reconnecting={false} muted onSound={vi.fn()} announcement={announcement} />);
@@ -125,8 +141,11 @@ it('keeps YouTube behind a tap, and other safe URLs as external links', () => {
   const { rerender } = render(<CompStreamCard streamUrl="https://youtu.be/abc" compName="Spring Games" />);
   expect(document.querySelector('iframe')).toBeNull(); fireEvent.click(screen.getByRole('button', { name: 'Tap to load the stream' }));
   expect(screen.getByTitle('Spring Games')).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/abc');
-  rerender(<CompStreamCard streamUrl="https://twitch.tv/arena" compName="Spring Games" />);
-  expect(document.querySelector('iframe')).toBeNull(); expect(screen.getByRole('link', { name: 'Open stream' })).toHaveAttribute('href', 'https://twitch.tv/arena');
+  rerender(<CompStreamCard key="twitch" streamUrl="https://twitch.tv/arena" compName="Spring Games" />);
+  expect(document.querySelector('iframe')).toBeNull(); fireEvent.click(screen.getByRole('button', { name: 'Tap to load the stream' }));
+  expect(document.querySelector('iframe')).toHaveAttribute('src', `https://player.twitch.tv/?channel=arena&parent=${window.location.hostname}`);
+  rerender(<CompStreamCard key="other" streamUrl="https://example.test/arena" compName="Spring Games" />);
+  expect(document.querySelector('iframe')).toBeNull(); expect(screen.getByRole('link', { name: 'Open stream' })).toHaveAttribute('href', 'https://example.test/arena');
   rerender(<CompStreamCard streamUrl="javascript:bad()" compName="Spring Games" />); expect(screen.queryByRole('link')).toBeNull();
 });
 const props = () => ({ competitionId: 1, streams: [liveStream()], sessions: [session(1)], ready: 1, invoke: vi.fn(async (method: string) => method === 'WatchStream' ? { watchId: 'w', generation: 1, sdpOffer: 'offer', iceServers: [] } : undefined) as StreamInvoke, messages: [], canBroadcast: true, fallback: 'https://youtu.be/abc', competitionName: 'Spring Games' });
@@ -147,7 +166,7 @@ it('wires the viewer, changes cameras, passes announcements and uses captions or
   act(() => FakePeer.instances[0].track()); await tick(2000); expect(screen.queryByText('Connecting…')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Finish line' })); await settle();
   expect(p.invoke).toHaveBeenCalledWith('StopWatching', 1); expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
-  expect(screen.getByText('Main Arena')).toBeVisible();
+  expect(screen.getByText('Live from')).toBeVisible();
   rerender(<MemoryRouter><LiveVideo {...p} ready={2} streams={list.map((s) => ({ ...s, generation: 2 }))} /></MemoryRouter>); await settle();
   FakePeer.instances.at(-1)!.getStats.mockResolvedValue(new Map()); await tick(10000); expect(screen.getByText('Reconnecting…')).toBeVisible();
   unmount(); expect(p.invoke).toHaveBeenCalledWith('StopWatching', 2);

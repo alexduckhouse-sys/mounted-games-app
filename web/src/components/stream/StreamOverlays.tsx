@@ -19,7 +19,7 @@ export function StreamNotice({ message, receivedAt, duration = 8000 }: { message
   </div>;
 }
 export function StreamOverlays({ stream, label, reconnecting, muted, onSound, announcement, children }: {
-  stream: LiveStream; label: string; reconnecting: boolean; muted: boolean; onSound: () => void;
+  stream: LiveStream; label: string | null; reconnecting: boolean; muted: boolean; onSound: () => void;
   announcement?: { message: ChatMessage; receivedAt: number }; children?: ReactNode;
 }) {
   return <OverlayLayer>
@@ -28,7 +28,7 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
       <span className="mg-stream-glass flex items-center gap-1 px-2 py-1"><Eye aria-hidden="true" className="h-4 w-4" />{stream.viewerCount} watching</span>
     </div>
     <div className="absolute bottom-0 left-0 right-0 flex items-center gap-2 bg-[rgb(var(--mg-header-deep))] px-3 py-2 text-xs sm:text-sm">
-      <div className="min-w-0 flex-1 truncate"><span className="block text-[10px] uppercase tracking-wider text-[rgb(var(--mg-header-sub))]">Now racing</span>{label}</div>
+      <div className="min-w-0 flex-1 truncate"><span className="block text-[10px] uppercase tracking-wider text-[rgb(var(--mg-header-sub))]">{stream.caption ? 'Now' : label ? 'Now racing' : 'Live from'}</span>{label ?? `${stream.arenaName} · ${stream.angleName}`}</div>
       {stream.hasAudio && !stream.audioMuted && stream.status !== 1 && muted && <button className="mg-stream-glass pointer-events-auto flex min-h-11 shrink-0 items-center gap-1 px-2" onClick={onSound}><VolumeX aria-hidden="true" className="h-4 w-4" />Tap for sound</button>}
     </div>
     {announcement && <div className="absolute left-3 right-3 top-14 flex justify-center"><StreamNotice key={`${announcement.message.id}-${announcement.receivedAt}`} {...announcement} /></div>}

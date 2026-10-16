@@ -238,3 +238,10 @@ it('releases microphone permission arriving after a stop', async () => {
   const audio = new FakeMediaStream([new FakeTrack('audio')]); response.resolve(asMedia(audio)); await muting;
   expect(audio.tracks[0].readyState).toBe('ended'); p.dispose();
 });
+
+it('asks to take over on the first publish when the operator chose to replace a live camera', async () => {
+  const { publisher: p, request } = setup();
+  await p.capture(); await p.start('Main Arena', 'Main camera', true); await flush();
+  expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: true, arenaName: 'Main Arena', angleName: 'Main camera' }));
+  p.dispose();
+});

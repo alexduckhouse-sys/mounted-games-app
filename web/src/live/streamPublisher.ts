@@ -57,6 +57,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
   let captureEpoch = 0;
   let failures = 0;
   let hadStream = false;
+  let takeOverFirst = false;
   let arenaName = '';
   let angleName = '';
   let paused = false;
@@ -190,7 +191,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       let result: PublishResponse;
       try {
         result = snapshot.streamId === null
-          ? await d.request<PublishResponse>('POST', base, { ...body, arenaName, angleName, takeOver: hadStream })
+          ? await d.request<PublishResponse>('POST', base, { ...body, arenaName, angleName, takeOver: hadStream || takeOverFirst })
           : await d.request<PublishResponse>('POST', `${base}/${snapshot.streamId}/republish`, body);
       } catch (error) {
         if (responseStatus(error) !== 409 || snapshot.streamId === null) throw error;
@@ -260,9 +261,10 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; },
     capture,
     devices: async () => (await d.enumerateDevices()).filter((device) => device.kind === 'videoinput'),
-    async start(arena: string, angle: string) {
+    /** takeOver replaces a stream already live on the same arena and camera position. */
+    async start(arena: string, angle: string, takeOver = false) {
       if (running || busy || !alive) return;
-      arenaName = arena.trim(); angleName = angle.trim(); running = true; epoch++;
+      arenaName = arena.trim(); angleName = angle.trim(); takeOverFirst = takeOver; running = true; epoch++;
       await publish();
     },
     async switchCamera(id?: string) {

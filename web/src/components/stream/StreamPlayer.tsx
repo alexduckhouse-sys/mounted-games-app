@@ -5,7 +5,7 @@ import type { ChatMessage, LiveStream } from '../../types';
 import { StreamOverlays } from './StreamOverlays';
 
 export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement }: {
-  media: MediaStream | null; stream: LiveStream; label: string; reconnecting?: boolean; message?: string | null;
+  media: MediaStream | null; stream: LiveStream; label: string | null; reconnecting?: boolean; message?: string | null;
   announcement?: { message: ChatMessage; receivedAt: number };
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -20,11 +20,20 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     const video = videoRef.current!;
     let cancelled = false;
     // Safari needs these properties before srcObject, even when JSX supplied the attributes.
-    video.muted = soundOff; video.playsInline = true; video.autoplay = true;
+    // Attach muted so autoplay is allowed; the effect below applies the viewer's sound choice.
+    video.muted = true; video.playsInline = true; video.autoplay = true;
     video.srcObject = media;
     if (media) void video.play().then(() => { if (!cancelled) setNeedsPlay(false); }).catch(() => { if (!cancelled) setNeedsPlay(true); });
     return () => { cancelled = true; video.srcObject = null; };
-  }, [media, full, soundOff]);
+  }, [media, full]);
+  useEffect(() => { videoRef.current!.muted = soundOff; }, [soundOff, media, full]);
+  // Unmute inside the tap itself: iPhone Safari pauses a video unmuted outside a user gesture.
+  function unmute() {
+    const video = videoRef.current!;
+    video.muted = false;
+    if (video.paused) void video.play().catch(() => setNeedsPlay(true));
+    setMuted(false);
+  }
   const leave = useCallback(() => {
     if (!openRef.current) return;
     openRef.current = false; setFull(false);
@@ -68,7 +77,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
   }
   const player = <div ref={containerRef} className={`mg-font overflow-hidden bg-[rgb(var(--mg-header-deep))] text-white ${full ? 'fixed inset-0 z-[100]' : 'relative aspect-video rounded-2xl'}`} role={full ? 'dialog' : undefined} aria-modal={full || undefined} aria-label={full ? 'Live video' : undefined}>
     <video ref={videoRef} muted={soundOff} playsInline autoPlay className="h-full w-full object-contain" onClick={open} aria-label={`${stream.arenaName}, ${stream.angleName}`} />
-    <StreamOverlays stream={stream} label={label} reconnecting={reconnecting} muted={muted} onSound={() => setMuted(false)} announcement={announcement}>
+    <StreamOverlays stream={stream} label={label} reconnecting={reconnecting} muted={muted} onSound={unmute} announcement={announcement}>
       <button className="mg-stream-control pointer-events-auto absolute right-3 top-3" aria-label={full ? 'Close full screen' : 'Open full screen'} onClick={full ? close : open}>{full ? <X /> : <Maximize />}</button>
       {needsPlay && <button className="mg-stream-control pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 !rounded-xl px-4" onClick={() => { void videoRef.current!.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true)); }}><Play /> Play</button>}
       {message && <p role="status" className="mg-stream-glass absolute left-3 right-3 top-1/2 p-3 text-center">{message}</p>}
