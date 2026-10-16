@@ -6,7 +6,7 @@
 A live scoring, timetable and team-management tool for Mounted Games competitions. It must work well on phones for trainers and the public at the show, and be quick for admins to set up beforehand.
 
 ## Audiences
-- **Public** (default — no login). Sees timetable, current heat, results, standings, chat (read).
+- **Public** (default — no login). Sees timetable, current heat, results, standings and the live feed (read-only). Can't enter a competition or see the equipment list.
 - **Trainer** (username + password, self-service signup at `/login` → Sign up tab). Submits dec forms for any team in the comp that isn't already claimed by another trainer. Manages their team's saved riders. Passwords hashed by ASP.NET Identity (PBKDF2).
 - **Admin** (shared key, no individual accounts). Sets up competitions, edits timetable, controls heat status, creates finals.
 
@@ -113,9 +113,13 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 - Admins click any chat message to reveal Delete and **Block IP** buttons. Block IP uses the IP captured when the message was posted (`ChatMessage.IpAddress`) and adds it to `IpBlocks`. System messages and old messages without a recorded IP can't be blocked.
 - Deletion broadcasts via the SignalR `chatMessageDeleted` event so other clients drop the message live.
 
+## Who can post
+- Only Admin and Trainer accounts post in the live feed (`POST /chat` is role-gated). Managers, Members, riders and the public read only.
+- Admin messages are public. Trainer messages are stored with `ChatMessage.AdminOnly = true`: `GET /chat` returns them only to admins and to the trainer who wrote them, and SignalR sends them to the `comp:{id}:admins` group (admins join it in `JoinCompetition`) plus the author's own connections, never the public `comp:{id}` group.
+- The author name always comes from the signed-in account; the client can't set it.
+
 ## Chat UX (per-competition isolation)
 - Chat is bound to a single competition. Each `ChatTab` shows the current comp name in its own header so users can tell which feed they're posting on.
-- The team-affiliation picker in chat sources from `/clubs` (Pony Club branches + admin-added customs), not just the comp's entered teams — supporters from any club can self-identify.
 - When a user opens a different comp's chat than the one they last posted to, a yellow banner warns them and offers a one-click switch back. The last-posted comp is persisted to `mg.lastChatComp` in `localStorage`.
 
 ## Supporter join-by-key (team profile sharing)
@@ -196,8 +200,9 @@ Lifecycle the app supports today:
 
 1. **Comp creation (organiser)**: name, dates, venue, organiser name,
    payment destination, sections + their prices.
-2. **Public signup**: anyone can sign up to a section via the comp's
-   public page. They see a `Pay £X` button that opens a "Online payment
+2. **Signup**: any signed-in user except admins can sign up to a section
+   from the comp's Details tab (signed-out visitors don't see the form and
+   the API returns 401). They see a `Pay £X` button that opens a "Online payment
    coming soon — pay the organiser directly" modal and confirms a Pending
    signup. Free sections skip the modal and auto-mark Paid.
 3. **Payment confirmation**: organiser sees a list of pending vs paid
@@ -220,7 +225,7 @@ Lifecycle the app supports today:
 - **`CompetitionSection.PriceMinor`** column (pence) + wizard input per
   section ("Signup price per team").
 - **`SectionSignup` entity** + endpoints:
-  - `POST /api/competitions/:cid/sections/:sid/signups` (public; rejects when locked),
+  - `POST /api/competitions/:cid/sections/:sid/signups` (signed-in, not admin; rejects when locked),
   - `GET /api/competitions/:cid/signups` (public),
   - `PUT /api/signups/:id/status` (admin/trainer — Pending / Paid / Refunded / Cancelled),
   - `DELETE /api/signups/:id`,

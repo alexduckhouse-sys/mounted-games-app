@@ -18,16 +18,27 @@ public class SignupTests : IClassFixture<ApiFactory>
         => new(name, club, "rider@example.com", code);
 
     [Fact]
-    public async Task Create_RecordsPaidSignupAtSectionPrice_ForAnonymousEntrant()
+    public async Task Create_RecordsPaidSignupAtSectionPrice()
     {
         var section = await _f.NewSectionAsync(priceMinor: 1500);
 
-        var resp = await _f.CreateClient().PostAsJsonAsync(Url(section), Entry("  Alice  "));
+        var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry("  Alice  "));
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var dto = await resp.ReadAsync<SectionSignupDto>();
         Assert.Equal(("Alice", 1500, SignupPaymentStatus.Paid), (dto.FullName, dto.AmountMinor, dto.Status));
         Assert.NotNull(dto.PaidAt);
+    }
+
+    [Fact]
+    public async Task Create_Returns401_WhenAnonymous()
+    {
+        var section = await _f.NewSectionAsync();
+
+        var resp = await _f.CreateClient().PostAsJsonAsync(Url(section), Entry());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+        Assert.False(await _f.InDbAsync(db => db.SectionSignups.AnyAsync(s => s.CompetitionSectionId == section.Id)));
     }
 
     [Fact]
@@ -48,7 +59,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     {
         var section = await _f.NewSectionAsync();
 
-        var resp = await _f.CreateClient().PostAsJsonAsync(Url(section), Entry(new string('x', 300)));
+        var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry(new string('x', 300)));
 
         Assert.Equal(200, (await resp.ReadAsync<SectionSignupDto>()).FullName.Length);
     }
@@ -69,7 +80,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     {
         var section = await _f.NewSectionAsync();
 
-        var resp = await _f.CreateClient().PostAsJsonAsync(
+        var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(
             $"/api/competitions/{section.CompetitionId + 999}/sections/{section.Id}/signups", Entry());
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
@@ -80,7 +91,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     {
         var section = await _f.NewSectionAsync(locked: true);
 
-        var resp = await _f.CreateClient().PostAsJsonAsync(Url(section), Entry());
+        var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry());
 
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
@@ -92,7 +103,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     {
         var section = await _f.NewSectionAsync();
 
-        var resp = await _f.CreateClient().PostAsJsonAsync(Url(section), Entry(name));
+        var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry(name));
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
@@ -101,7 +112,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     public async Task Create_Returns403_WhenSectionFull()
     {
         var section = await _f.NewSectionAsync(max: 1);
-        var client = _f.CreateClient();
+        var client = await _f.TrainerAsync();
         await client.PostAsJsonAsync(Url(section), Entry("First"));
 
         var resp = await client.PostAsJsonAsync(Url(section), Entry("Second"));
@@ -113,7 +124,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     public async Task Create_AllowsEntry_WhenCancelledSignupsFreeTheCap()
     {
         var section = await _f.NewSectionAsync(max: 1);
-        var client = _f.CreateClient();
+        var client = await _f.TrainerAsync();
         var first = await (await client.PostAsJsonAsync(Url(section), Entry("First"))).ReadAsync<SectionSignupDto>();
         var admin = await _f.AdminAsync();
         await admin.PutAsJsonAsync($"/api/signups/{first.Id}/status", new UpdateSignupStatusRequest(SignupPaymentStatus.Cancelled));
@@ -132,7 +143,7 @@ public class SignupTests : IClassFixture<ApiFactory>
             db.IpBlocks.Add(new IpBlock { IpAddress = "10.9.9.9" });
             await db.SaveChangesAsync();
         });
-        var client = _f.CreateClient();
+        var client = await _f.TrainerAsync();
         client.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "10.9.9.9");
 
         var resp = await client.PostAsJsonAsync(Url(section), Entry());
@@ -146,7 +157,7 @@ public class SignupTests : IClassFixture<ApiFactory>
         var section = await _f.NewSectionAsync();
         var teamId = await ArrangeTeamAsync(section, "JoinMe-1");
 
-        var resp = await _f.CreateClient().PostAsJsonAsync(Url(section), Entry(code: " joinme-1 "));
+        var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry(code: " joinme-1 "));
 
         Assert.Equal(teamId, (await resp.ReadAsync<SectionSignupDto>()).TeamId);
     }
@@ -156,7 +167,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     {
         var section = await _f.NewSectionAsync();
 
-        var resp = await _f.CreateClient().PostAsJsonAsync(Url(section), Entry(code: "nope"));
+        var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry(code: "nope"));
 
         Assert.Null((await resp.ReadAsync<SectionSignupDto>()).TeamId);
     }
@@ -166,7 +177,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     {
         var a = await _f.NewSectionAsync();
         var b = await _f.NewSectionAsync();
-        var client = _f.CreateClient();
+        var client = await _f.TrainerAsync();
         await client.PostAsJsonAsync(Url(a), Entry("A-first"));
         await client.PostAsJsonAsync(Url(a), Entry("A-second"));
         await client.PostAsJsonAsync(Url(b), Entry("B-only"));
@@ -181,7 +192,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     public async Task UpdateStatus_SetsPaidAt_OnlyWhenPaid()
     {
         var section = await _f.NewSectionAsync();
-        var created = await (await _f.CreateClient().PostAsJsonAsync(Url(section), Entry())).ReadAsync<SectionSignupDto>();
+        var created = await (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry())).ReadAsync<SectionSignupDto>();
         var admin = await _f.AdminAsync();
 
         var refunded = await (await admin.PutAsJsonAsync($"/api/signups/{created.Id}/status",
@@ -194,7 +205,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     public async Task UpdateStatus_StampsPaidAt_WhenMarkedPaid()
     {
         var section = await _f.NewSectionAsync();
-        var created = await (await _f.CreateClient().PostAsJsonAsync(Url(section), Entry())).ReadAsync<SectionSignupDto>();
+        var created = await (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry())).ReadAsync<SectionSignupDto>();
         var admin = await _f.AdminAsync();
         await admin.PutAsJsonAsync($"/api/signups/{created.Id}/status", new UpdateSignupStatusRequest(SignupPaymentStatus.Pending));
 
@@ -236,7 +247,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     public async Task Delete_RemovesSignup()
     {
         var section = await _f.NewSectionAsync();
-        var created = await (await _f.CreateClient().PostAsJsonAsync(Url(section), Entry())).ReadAsync<SectionSignupDto>();
+        var created = await (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry())).ReadAsync<SectionSignupDto>();
         var admin = await _f.AdminAsync();
 
         var resp = await admin.DeleteAsync($"/api/signups/{created.Id}");
@@ -296,7 +307,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     private string FormUrl(CompetitionSection s) => $"/api/competitions/{s.CompetitionId}/sections/{s.Id}/form-teams";
 
     private async Task SignUpAsync(CompetitionSection s, string name, string? club)
-        => (await _f.CreateClient().PostAsJsonAsync(Url(s), Entry(name, club))).EnsureSuccessStatusCode();
+        => (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(s), Entry(name, club))).EnsureSuccessStatusCode();
 
     [Fact]
     public async Task FormTeams_Returns403_ForRider()
