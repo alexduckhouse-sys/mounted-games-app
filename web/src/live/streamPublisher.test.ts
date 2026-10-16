@@ -144,10 +144,10 @@ describe('publisher recovery', () => {
   it('stops instead of taking the angle back when another camera has taken over', async () => {
     const { publisher: p, start, request } = setup(); await start();
     const normal = request.getMockImplementation()!;
-    request.mockImplementation(async (method, path, body) => {
+    request.mockImplementation(async (method: string, path: string) => {
       if (path.endsWith('heartbeat')) throw statusError(409);
       if (method === 'POST' && path.endsWith('streams')) throw statusError(409);
-      return normal(method, path, body);
+      return normal(method, path);
     });
     await vi.advanceTimersByTimeAsync(15000); await flush();
     expect(request).not.toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: true }));
@@ -158,7 +158,7 @@ describe('publisher recovery', () => {
   it('starts afresh when the expired starting row has gone, and a new Go live never reuses the old id', async () => {
     const { publisher: p, start, request } = setup(); await start();
     const normal = request.getMockImplementation()!;
-    request.mockImplementation(async (method, path, body) => { if (path.endsWith('heartbeat')) throw statusError(404); return normal(method, path, body); });
+    request.mockImplementation(async (method: string, path: string) => { if (path.endsWith('heartbeat')) throw statusError(404); return normal(method, path); });
     await vi.advanceTimersByTimeAsync(15000); await flush();
     expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: false }));
     expect(p.getSnapshot().state).toBe('live');
@@ -167,9 +167,9 @@ describe('publisher recovery', () => {
   it('shows the API reason when the first start is refused', async () => {
     const { publisher: p, request } = setup();
     const normal = request.getMockImplementation()!;
-    request.mockImplementation(async (method, path, body) => {
+    request.mockImplementation(async (method: string, path: string) => {
       if (method === 'POST' && path.endsWith('streams')) throw Object.assign(statusError(409), { response: { status: 409, data: { title: 'This competition has reached its stream limit.' } } });
-      return normal(method, path, body);
+      return normal(method, path);
     });
     await p.capture(); await p.start('Main Arena', 'Main camera'); await flush();
     expect(p.getSnapshot()).toMatchObject({ state: 'error', error: 'This competition has reached its stream limit.' });
