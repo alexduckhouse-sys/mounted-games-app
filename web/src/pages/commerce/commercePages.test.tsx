@@ -68,16 +68,25 @@ describe('EventShopPage', () => {
     } } as never);
 
     render(<MemoryRouter><EventShopPage /></MemoryRouter>);
-    expect(await screen.findByText('Weekend camping')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Tickets' }));
+    expect(await screen.findByRole('heading', { name: 'Weekend camping' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Event shop' })).toBeInTheDocument();
+    expect(screen.getByText('Listings approved by the organiser. Collect at the event.')).toBeInTheDocument();
+    const detailsButton = screen.getByRole('button', { name: 'Weekend camping' });
+    expect(detailsButton).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(detailsButton);
+    expect(detailsButton).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(screen.getByRole('tab', { name: 'Tickets' }));
     expect(screen.getByText('There’s nothing in this category yet.')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Camping' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add one Weekend camping' }));
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('tab', { name: 'Camping' })).toHaveAttribute('aria-selected', 'true');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Weekend camping' }));
+    expect(screen.getByRole('complementary', { name: 'Basket summary' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /View basket/ }));
     expect(screen.getByText('Your total is confirmed when you place the order. Collect everything at the event.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
 
     expect(await screen.findByRole('heading', { name: 'Order #33' })).toBeInTheDocument();
-    expect(screen.getByText('£25.00', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.getAllByText('£25.00', { selector: 'strong' })).toHaveLength(2);
     expect(post).toHaveBeenCalledWith('/commerce/competitions/5/orders', expect.objectContaining({
       items: [{ listingId: 10, quantity: 1 }],
     }));
@@ -95,7 +104,8 @@ describe('EventShopPage', () => {
     };
     post.mockRejectedValueOnce(new Error('response lost')).mockResolvedValueOnce({ data: responseOrder } as never);
     render(<MemoryRouter><EventShopPage /></MemoryRouter>);
-    await userEvent.click(await screen.findByRole('button', { name: 'Add one Weekend camping' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Weekend camping' }));
+    await userEvent.click(screen.getByRole('button', { name: /View basket/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
     await screen.findByText(/Couldn’t place your order/);
     await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
@@ -104,6 +114,37 @@ describe('EventShopPage', () => {
     const firstBody = post.mock.calls[0][1] as { idempotencyKey: string };
     const retryBody = post.mock.calls[1][1] as { idempotencyKey: string };
     expect(retryBody.idempotencyKey).toBe(firstBody.idempotencyKey);
+  });
+
+  it('locks the visible basket while the order request is pending', async () => {
+    get.mockImplementation(async (url) => String(url).endsWith('/listings')
+      ? { data: [listing] } as never
+      : { data: { competitionId: 5, isDemo: false, isLocked: false, updatedAt: null } } as never);
+    const pendingOrder = deferred<{ data: EventOrder }>();
+    post.mockReturnValue(pendingOrder.promise as never);
+    render(<MemoryRouter><EventShopPage /></MemoryRouter>);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Weekend camping' }));
+    await userEvent.click(screen.getByRole('button', { name: /View basket/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
+
+    expect(screen.getByRole('button', { name: 'Back to shop' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remove one Weekend camping' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add one Weekend camping' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Placing order…' })).toBeDisabled();
+    expect(post).toHaveBeenCalledWith('/commerce/competitions/5/orders', expect.objectContaining({
+      items: [{ listingId: 10, quantity: 1 }],
+    }));
+
+    await act(async () => {
+      pendingOrder.resolve({ data: {
+        id: 36, competitionId: 5, buyerUserId: 'buyer', status: 0, totalMinor: 2500, currency: 'GBP',
+        isTestOrder: false, hasStockReservation: true, paidAt: null, cancelledAt: null, refundedAt: null,
+        lines: [], testPayments: [], createdAt: '', updatedAt: '',
+      } });
+      await pendingOrder.promise;
+    });
+    expect(await screen.findByRole('heading', { name: 'Order #36' })).toBeInTheDocument();
   });
 
   it('shows test controls only when the event is marked demo', async () => {
@@ -116,7 +157,8 @@ describe('EventShopPage', () => {
       lines: [], testPayments: [], createdAt: '', updatedAt: '',
     } } as never);
     render(<MemoryRouter><EventShopPage /></MemoryRouter>);
-    await userEvent.click(await screen.findByRole('button', { name: 'Add one Weekend camping' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add Weekend camping' }));
+    await userEvent.click(screen.getByRole('button', { name: /View basket/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Create demo order' }));
     expect(await screen.findByText('DEMO — no money is taken')).toBeInTheDocument();
     expect(screen.queryByLabelText(/card/i)).not.toBeInTheDocument();
@@ -143,7 +185,7 @@ describe('EventShopPage', () => {
 
     activeCompetition = { id: 6, name: 'New Games', createdByUserId: 'organiser' };
     view.rerender(<MemoryRouter><EventShopPage /></MemoryRouter>);
-    expect(await screen.findByText('New event camping')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'New event camping' })).toBeInTheDocument();
     await act(async () => {
       oldListings.resolve({ data: [listing] });
       oldSettings.resolve({ data: { competitionId: 5, isDemo: false, isLocked: false, updatedAt: null } });
@@ -151,7 +193,8 @@ describe('EventShopPage', () => {
     });
 
     expect(screen.queryByText('Weekend camping')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Add one New event camping' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add New event camping' }));
+    await userEvent.click(screen.getByRole('button', { name: /View basket/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/competitions/6/orders',
       expect.objectContaining({ items: [{ listingId: 60, quantity: 1 }] })));
@@ -199,19 +242,55 @@ describe('SellerCataloguePage', () => {
       expect.objectContaining({ stockQuantity: 12, expectedVersion: 7 })));
   });
 
-  it('loads every upcoming competition picker page', async () => {
-    get.mockImplementation(async (url, config) => {
+  it('keeps the item form open while its save request is pending', async () => {
+    get.mockImplementation(async (url) => {
       if (url === '/commerce/catalogue' || url === '/commerce/listings/mine') return { data: [] } as never;
+      return { data: { items: [], hasMore: false } } as never;
+    });
+    const pendingSave = deferred<{ data: Record<string, never> }>();
+    post.mockReturnValue(pendingSave.promise as never);
+    render(<MemoryRouter><SellerCataloguePage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: /Add item/ }));
+    await userEvent.type(screen.getByLabelText('Title'), 'Event mug');
+    await userEvent.type(screen.getByLabelText('Description'), 'Collect at the event.');
+    await userEvent.type(screen.getByLabelText('Price in GBP'), '8.50');
+    await userEvent.click(screen.getByRole('button', { name: 'Add to catalogue' }));
+
+    expect(screen.getByRole('button', { name: 'Back to catalogue' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+
+    await act(async () => {
+      pendingSave.resolve({ data: {} });
+      await pendingSave.promise;
+    });
+    expect(await screen.findByText(/Your catalogue is empty/)).toBeInTheDocument();
+  });
+
+  it('loads every upcoming competition picker page', async () => {
+    const item = {
+      id: 20, title: 'Event mug', description: 'Collect at the event.', priceMinor: 850, currency: 'GBP' as const,
+      stockQuantity: 10, category: 0 as const, imageUrl: null, isActive: true, version: 7,
+      createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
+    };
+    get.mockImplementation(async (url, config) => {
+      if (url === '/commerce/catalogue') return { data: [item] } as never;
+      if (url === '/commerce/listings/mine') return { data: [] } as never;
       const page = (config as { params: { page: number } }).params.page;
       return page === 1
         ? { data: { items: [{ id: 5, name: 'First event', startDate: '2026-10-20' }], hasMore: true } } as never
         : { data: { items: [{ id: 6, name: 'Later event', startDate: '2026-11-20' }], hasMore: false } } as never;
     });
+    post.mockResolvedValue({ data: {} } as never);
     render(<MemoryRouter><SellerCataloguePage /></MemoryRouter>);
 
-    expect(await screen.findByRole('option', { name: 'Later event' })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Events' }));
+    expect(screen.getByRole('heading', { name: 'First event' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Later event' })).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith('/competitions/picker', { params: { past: false, page: 1, pageSize: 50 } });
     expect(get).toHaveBeenCalledWith('/competitions/picker', { params: { past: false, page: 2, pageSize: 50 } });
+    await userEvent.click(screen.getAllByRole('button', { name: 'Request' })[1]);
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/competitions/6/listings', { catalogueItemId: 20 }));
   });
 });
 
@@ -246,6 +325,7 @@ describe('ownership and demo states', () => {
 
     expect(await screen.findByRole('button', { name: 'Approve' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Reject' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(screen.getByRole('button', { name: 'Manual' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Demo' })).toBeDisabled();
     expect(screen.getByText(/Admin view only is on/)).toBeInTheDocument();
@@ -267,6 +347,10 @@ describe('ownership and demo states', () => {
       : { data: [] } as never);
     render(<MemoryRouter><CommerceOrdersPage /></MemoryRouter>);
     expect(await screen.findByText('Demo · Test payment declined')).toBeInTheDocument();
+    expect(screen.queryByText('DEMO — no money is taken')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry demo payment' }));
+    expect(screen.getByText('DEMO — no money is taken')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to orders' }));
     await userEvent.click(screen.getByRole('button', { name: 'Sales' }));
     expect(screen.getByText(/don’t have any event sales/)).toBeInTheDocument();
   });

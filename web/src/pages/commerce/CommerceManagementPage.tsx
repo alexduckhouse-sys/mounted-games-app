@@ -3,9 +3,12 @@ import { Check, X } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
-import { LoadError, PageHeader, StatusPill } from './commerceUi';
+import { LoadError, StatusPill } from './commerceUi';
 import { CATEGORY_LABEL, LISTING_LABEL, ORDER_LABEL, errorMessage, pounds } from './commerceFormat';
 import type { CompetitionListing, EventCommerceSettings, EventOrder } from './types';
+import './commerce.css';
+
+type ManagementView = 'listings' | 'orders' | 'settings';
 
 export function CommerceManagementPage() {
   const { competition } = useCompetition();
@@ -19,6 +22,7 @@ function CommerceManagementContent() {
   const [listings, setListings] = useState<CompetitionListing[] | null>(null);
   const [orders, setOrders] = useState<EventOrder[] | null>(null);
   const [settings, setSettings] = useState<EventCommerceSettings | null>(null);
+  const [view, setView] = useState<ManagementView>('listings');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canMutate = !hasRole('Admin') || canEdit();
@@ -91,15 +95,20 @@ function CommerceManagementContent() {
   const reviewed = listings?.filter((listing) => listing.status !== 0) ?? [];
 
   return (
-    <div className="skin mx-auto flex w-full max-w-3xl flex-col gap-5 pb-6">
-      <PageHeader title="Manage event shop">Approve seller items and keep the event’s orders up to date.</PageHeader>
+    <div className="skin commerce-page mx-auto w-full max-w-3xl pb-6">
+      <header className="commerce-title-block"><p className="mg-eyebrow">{competition.name}</p><h1 className="mg-h1">Manage shop</h1><p className="mg-lede">Approve listings, check orders and choose how this event records payments.</p></header>
+      <div className="mg-seg w-full" aria-label="Shop management view">
+        <button type="button" aria-pressed={view === 'listings'} onClick={() => setView('listings')}>Listings{pending.length > 0 ? ` (${pending.length})` : ''}</button>
+        <button type="button" aria-pressed={view === 'orders'} onClick={() => setView('orders')}>Orders{orders?.length ? ` (${orders.length})` : ''}</button>
+        <button type="button" aria-pressed={view === 'settings'} onClick={() => setView('settings')}>Settings</button>
+      </div>
       {!canMutate && <p className="mg-notice">Admin view only is on. Switch to edit mode to change shop settings or orders.</p>}
       {error && <LoadError message={error} onRetry={() => void load()} />}
 
-      <section className="mg-card flex flex-col gap-4 border-2 !border-[rgb(var(--mg-heading))] p-4" aria-labelledby="payment-mode-title">
+      {view === 'settings' && <section className="flex flex-col gap-4" aria-labelledby="payment-mode-title">
         <div>
           <h2 id="payment-mode-title" className="mg-h2">Payment mode</h2>
-          <p className="mg-meta mt-1">Normal events use payments made directly to the organiser. Demo mode is for testing and never takes money.</p>
+          <p className="mg-meta mt-1">Manual records payments made to the organiser. Demo is for testing and never takes money.</p>
         </div>
         {settings == null ? <p role="status">Loading payment mode…</p> : (
           <div className="flex flex-wrap items-center gap-3">
@@ -111,14 +120,14 @@ function CommerceManagementContent() {
             {settings.isLocked && <p className="mg-meta">Locked because an order or test payment exists.</p>}
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="flex flex-col gap-3" aria-labelledby="approval-title">
+      {view === 'listings' && <section className="flex flex-col gap-3" aria-labelledby="approval-title">
         <div className="mg-section-head"><h2 id="approval-title">Approval queue</h2><span>{pending.length}</span></div>
         {listings == null && <p role="status" className="mg-card p-4">Loading listings…</p>}
         {listings && pending.length === 0 && <p className="mg-card p-5">There are no seller items waiting for approval.</p>}
-        {pending.map((listing) => (
-          <article key={listing.id} className="mg-card flex flex-col gap-3 p-4">
+        {pending.length > 0 && <div className="commerce-rows">{pending.map((listing) => (
+          <article key={listing.id} className="commerce-order-row">
             <div className="flex flex-wrap items-start gap-3">
               <div className="min-w-0 flex-1">
                 <h3 className="mg-h2">{listing.item.title}</h3>
@@ -131,16 +140,16 @@ function CommerceManagementContent() {
               </div>
             </div>
           </article>
-        ))}
-        {reviewed.length > 0 && <details className="mg-card p-4"><summary className="cursor-pointer font-bold text-[rgb(var(--mg-heading))]">Reviewed listings ({reviewed.length})</summary><ul className="mt-3 flex flex-col gap-2">{reviewed.map((listing) => <li key={listing.id} className="flex flex-wrap items-center gap-2 border-t border-[rgb(var(--mg-rule-soft))] pt-2"><span className="flex-1">{listing.item.title}</span><StatusPill tone={listing.status === 1 ? 'good' : 'neutral'}>{LISTING_LABEL[listing.status]}</StatusPill></li>)}</ul></details>}
-      </section>
+        ))}</div>}
+        {reviewed.length > 0 && <details className="commerce-rows px-4"><summary className="cursor-pointer py-3 font-bold text-[rgb(var(--mg-heading))]">Reviewed listings ({reviewed.length})</summary><ul className="flex flex-col gap-2 pb-3">{reviewed.map((listing) => <li key={listing.id} className="flex flex-wrap items-center gap-2 border-t border-[rgb(var(--mg-rule-soft))] pt-2"><span className="flex-1">{listing.item.title}</span><StatusPill tone={listing.status === 1 ? 'good' : 'neutral'}>{LISTING_LABEL[listing.status]}</StatusPill></li>)}</ul></details>}
+      </section>}
 
-      <section className="flex flex-col gap-3" aria-labelledby="orders-title">
+      {view === 'orders' && <section className="flex flex-col gap-3" aria-labelledby="orders-title">
         <div className="mg-section-head"><h2 id="orders-title">Event orders</h2><span>{orders?.length ?? 0}</span></div>
         {orders == null && <p role="status" className="mg-card p-4">Loading orders…</p>}
         {orders?.length === 0 && <p className="mg-card p-5">No one has ordered from this event shop yet.</p>}
-        {orders?.map((order) => (
-          <article key={order.id} className="mg-card flex flex-col gap-3 p-4">
+        {orders && orders.length > 0 && <div className="commerce-rows">{orders.map((order) => (
+          <article key={order.id} className="commerce-order-row">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="mg-h2">Order #{order.id}</h3>
               <StatusPill tone={order.isTestOrder ? 'test' : order.status === 2 ? 'good' : 'neutral'}>{order.isTestOrder ? `Demo · ${ORDER_LABEL[order.status]}` : ORDER_LABEL[order.status]}</StatusPill>
@@ -150,8 +159,8 @@ function CommerceManagementContent() {
             {!order.isTestOrder && order.status === 0 && <button type="button" className="mg-btn mg-btn-primary self-start" disabled={busy || !canMutate} onClick={() => void manualAction(order, 'manual-payment')}>Mark external payment received</button>}
             {!order.isTestOrder && order.status === 2 && <button type="button" className="mg-btn mg-btn-secondary self-start" disabled={busy || !canMutate} onClick={() => void manualAction(order, 'manual-refund')}>Mark external refund sent</button>}
           </article>
-        ))}
-      </section>
+        ))}</div>}
+      </section>}
     </div>
   );
 }
