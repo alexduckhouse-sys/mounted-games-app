@@ -1,0 +1,271 @@
+using System.Text;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using MountedGames.Api.Data;
+using MountedGames.Api.Dtos;
+using MountedGames.Api.Entities;
+using MountedGames.Api.Hubs;
+
+namespace MountedGames.Api.Services.Streaming;
+
+/// <summary>One API instance owns reservations, viewer signalling and trailing count notifications.</summary>
+public sealed class ViewerRegistry : IDisposable
+{
+    private sealed class Connection
+    {
+        public Queue<DateTimeOffset> Calls { get; } = new();
+        public Dictionary<int, Watch> Streams { get; } = new();
+    }
+
+    private sealed class Watch(string connectionId, int competitionId, int streamId)
+    {
+        public string Id { get; } = Guid.NewGuid().ToString();
+        public string ConnectionId { get; } = connectionId;
+        public int CompetitionId { get; } = competitionId;
+        public int StreamId { get; } = streamId;
+        public DateTimeOffset Deadline { get; set; } = DateTimeOffset.MaxValue;
+        public SfuSession? Session { get; set; }
+        public bool Answered { get; set; }
+        public bool Answering { get; set; }
+        public SemaphoreSlim Operation { get; } = new(1, 1);
+    }
+
+    private sealed class CountChange(int competitionId, DateTimeOffset due)
+    {
+        public int CompetitionId { get; } = competitionId;
+        public DateTimeOffset Due { get; set; } = due;
+        public int Sent { get; set; }
+        public bool Pending { get; set; } = true;
+    }
+
+    private readonly object _gate = new();
+    private readonly Dictionary<string, Connection> _connections = new();
+    private readonly Dictionary<string, Watch> _watches = new();
+    private readonly Dictionary<int, CountChange> _counts = new();
+    private readonly IServiceScopeFactory _scopes;
+    private readonly ISfuClient _sfu;
+    private readonly ILiveBroadcaster _live;
+    private readonly StreamingOptions _options;
+    private readonly TimeProvider _time;
+    private readonly ILogger<ViewerRegistry> _log;
+    private readonly ITimer _timer;
+    private readonly SemaphoreSlim _tick = new(1, 1);
+    private double _tokens = 40;
+    private DateTimeOffset _refilled;
+
+    public ViewerRegistry(IServiceScopeFactory scopes, ISfuClient sfu, ILiveBroadcaster live,
+        IOptions<StreamingOptions> options, TimeProvider time, ILogger<ViewerRegistry> log)
+    {
+        _scopes = scopes; _sfu = sfu; _live = live; _options = options.Value; _time = time; _log = log;
+        _refilled = time.GetUtcNow();
+        _timer = time.CreateTimer(_ => _ = TickSafelyAsync(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    public int Count(int streamId)
+    {
+        lock (_gate) return CountLocked(streamId);
+    }
+
+    private int CountLocked(int streamId) => _watches.Values.Count(w => w.StreamId == streamId && w.Answered);
+
+    public async Task<WatchStreamResponse> WatchAsync(string connectionId, int competitionId, int streamId, CancellationToken ct = default)
+    {
+        using var scope = _scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var stream = await db.LiveStreams.AsNoTracking().SingleOrDefaultAsync(s => s.Id == streamId && s.CompetitionId == competitionId
+            && (s.Status == LiveStreamStatus.Live || s.Status == LiveStreamStatus.Paused) && s.Generation >= 1, ct);
+        if (stream?.SfuSessionId is null) throw Error("STREAM_NOT_FOUND", "This stream is no longer available.");
+        if (!_options.Enabled) throw Error("UPSTREAM_UNAVAILABLE", "Streaming is unavailable.");
+
+        Watch watch;
+        Watch? replaced;
+        lock (_gate)
+        {
+            ct.ThrowIfCancellationRequested();
+            var now = _time.GetUtcNow();
+            if (!_connections.TryGetValue(connectionId, out var connection))
+                _connections[connectionId] = connection = new Connection();
+            while (connection.Calls.TryPeek(out var call) && now - call >= TimeSpan.FromMinutes(1)) connection.Calls.Dequeue();
+            if (connection.Calls.Count >= 10) throw Error("RATE_LIMITED", "Please wait before watching again.");
+            connection.Calls.Enqueue(now);
+            _tokens = Math.Min(40, _tokens + Math.Max(0, (now - _refilled).TotalSeconds) * _options.ViewerSessionsPerSecond);
+            _refilled = now;
+            if (_tokens < 1) throw Error("RATE_LIMITED", "Please wait before watching again.");
+            connection.Streams.TryGetValue(streamId, out replaced);
+            if (_watches.Count - (replaced is null ? 0 : 1) >= _options.MaxViewerSessions)
+                throw Error("STREAM_FULL", "The stream is full. Please try again shortly.");
+            _tokens--;
+            if (replaced is not null) RemoveLocked(replaced);
+            watch = new Watch(connectionId, competitionId, streamId);
+            _watches.Add(watch.Id, watch);
+            connection.Streams[streamId] = watch;
+        }
+        using var setupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30), _time);
+        using var setupCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct, setupTimeout.Token);
+        var setupToken = setupCancellation.Token;
+        try
+        {
+            if (replaced is not null) await CloseAsync(replaced);
+            var session = await _sfu.WatchAsync(stream.SfuSessionId, stream.HasAudio, stream.Simulcast, setupToken);
+            bool active;
+            lock (_gate)
+            {
+                active = _watches.ContainsKey(watch.Id);
+                if (active) watch.Session = session;
+            }
+            if (!active)
+            {
+                await _sfu.CloseAsync(session.SessionId, session.Mids);
+                throw Error("WATCH_EXPIRED", "Please reconnect to the stream.");
+            }
+            var ice = await _sfu.IceServersAsync(setupToken);
+            // A publisher may have ended or republished while the SFU call was in flight.
+            var stillLive = await db.LiveStreams.AnyAsync(s => s.Id == streamId && s.Generation == stream.Generation
+                && (s.Status == LiveStreamStatus.Live || s.Status == LiveStreamStatus.Paused), setupToken);
+            if (!stillLive) throw Error("STREAM_NOT_FOUND", "This stream has changed. Please reconnect.");
+            lock (_gate)
+            {
+                if (!_watches.ContainsKey(watch.Id))
+                    throw Error("WATCH_EXPIRED", "Please reconnect to the stream.");
+                // The browser gets the full answer window after an offer is available.
+                watch.Deadline = _time.GetUtcNow().AddSeconds(20);
+            }
+            return new WatchStreamResponse(watch.Id, session.Sdp, stream.Generation, ice);
+        }
+        catch (Exception ex)
+        {
+            lock (_gate) RemoveLocked(watch);
+            await CloseAsync(watch);
+            if (ex is SfuException || ex is OperationCanceledException && !ct.IsCancellationRequested)
+                throw Error("UPSTREAM_UNAVAILABLE", "The stream could not connect. Please try again.");
+            throw;
+        }
+    }
+
+    public async Task AnswerAsync(string connectionId, string watchId, string sdp, CancellationToken ct = default)
+    {
+        if (!Guid.TryParse(watchId, out _)) throw Error("WATCH_EXPIRED", "Please reconnect to the stream.");
+        if (string.IsNullOrWhiteSpace(sdp) || Encoding.UTF8.GetByteCount(sdp) > 20 * 1024)
+            throw Error("INVALID_REQUEST", "The stream answer is invalid.");
+        Watch watch;
+        lock (_gate)
+        {
+            if (!_watches.TryGetValue(watchId, out var found) || found.ConnectionId != connectionId)
+                throw Error("WATCH_EXPIRED", "Please reconnect to the stream.");
+            watch = found;
+        }
+        await watch.Operation.WaitAsync(ct);
+        try
+        {
+            lock (_gate)
+            {
+                if (!_watches.ContainsKey(watch.Id) || (!watch.Answered && _time.GetUtcNow() >= watch.Deadline))
+                    throw Error("WATCH_EXPIRED", "Please reconnect to the stream.");
+                if (watch.Answered) return;
+                watch.Answering = true;
+            }
+            if (watch.Session is null) throw Error("INVALID_REQUEST", "The stream offer is not ready.");
+            await _sfu.AnswerAsync(watch.Session.SessionId, sdp, ct);
+            lock (_gate)
+            {
+                if (!_watches.ContainsKey(watch.Id))
+                    throw Error("WATCH_EXPIRED", "Please reconnect to the stream.");
+                watch.Answered = true;
+                ChangedLocked(watch);
+            }
+        }
+        catch (Exception ex)
+        {
+            lock (_gate) RemoveLocked(watch);
+            if (watch.Session is not null) await _sfu.CloseAsync(watch.Session.SessionId, watch.Session.Mids);
+            if (ex is SfuException) throw Error("UPSTREAM_UNAVAILABLE", "The stream could not connect. Please try again.");
+            throw;
+        }
+        finally { watch.Operation.Release(); }
+    }
+
+    public Task StopAsync(string connectionId, int streamId) => RemoveWhereAsync(w => w.ConnectionId == connectionId && w.StreamId == streamId);
+
+    public async Task DisconnectAsync(string connectionId)
+    {
+        await RemoveWhereAsync(w => w.ConnectionId == connectionId);
+        lock (_gate) _connections.Remove(connectionId);
+    }
+
+    public Task EndStreamAsync(int streamId) => RemoveWhereAsync(w => w.StreamId == streamId);
+
+    private async Task RemoveWhereAsync(Func<Watch, bool> predicate)
+    {
+        Watch[] removed;
+        lock (_gate)
+        {
+            removed = _watches.Values.Where(predicate).ToArray();
+            foreach (var watch in removed) RemoveLocked(watch);
+        }
+        await Task.WhenAll(removed.Select(CloseAsync));
+    }
+
+    private void RemoveLocked(Watch watch)
+    {
+        if (!_watches.Remove(watch.Id)) return;
+        if (_connections.TryGetValue(watch.ConnectionId, out var connection)) connection.Streams.Remove(watch.StreamId);
+        if (watch.Answered) ChangedLocked(watch);
+    }
+
+    private void ChangedLocked(Watch watch)
+    {
+        if (!_counts.TryGetValue(watch.StreamId, out var change))
+            _counts[watch.StreamId] = new CountChange(watch.CompetitionId, _time.GetUtcNow().AddSeconds(5));
+        else if (!change.Pending)
+        {
+            change.Pending = true;
+            change.Due = _time.GetUtcNow().AddSeconds(5);
+        }
+    }
+
+    private async Task CloseAsync(Watch watch)
+    {
+        await watch.Operation.WaitAsync();
+        try
+        {
+            if (watch.Session is not null) await _sfu.CloseAsync(watch.Session.SessionId, watch.Session.Mids);
+        }
+        finally { watch.Operation.Release(); }
+    }
+
+    public async Task TickAsync()
+    {
+        await _tick.WaitAsync();
+        try
+        {
+            await RemoveWhereAsync(w => !w.Answered && !w.Answering && _time.GetUtcNow() >= w.Deadline);
+            List<(int CompetitionId, int StreamId, int Count)> updates = new();
+            lock (_gate)
+            {
+                foreach (var (streamId, change) in _counts.ToArray())
+                {
+                    if (!change.Pending || _time.GetUtcNow() < change.Due) continue;
+                    change.Pending = false;
+                    var count = CountLocked(streamId);
+                    if (count == 0) _counts.Remove(streamId);
+                    if (count == change.Sent) continue;
+                    change.Sent = count;
+                    updates.Add((change.CompetitionId, streamId, count));
+                }
+            }
+            foreach (var (competitionId, streamId, count) in updates)
+                await _live.StreamViewers(competitionId, streamId, count);
+        }
+        finally { _tick.Release(); }
+    }
+
+    private async Task TickSafelyAsync()
+    {
+        try { await TickAsync(); }
+        catch (Exception) { _log.LogWarning("Viewer cleanup could not complete."); }
+    }
+
+    private static HubException Error(string code, string message) => new($"{code}: {message}");
+    public void Dispose() => _timer.Dispose();
+}

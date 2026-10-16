@@ -21,6 +21,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<DeclarationForm> DeclarationForms => Set<DeclarationForm>();
     public DbSet<RiderEntry> RiderEntries => Set<RiderEntry>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<LiveStream> LiveStreams => Set<LiveStream>();
     public DbSet<TrainerNote> TrainerNotes => Set<TrainerNote>();
     public DbSet<IpBlock> IpBlocks => Set<IpBlock>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
@@ -34,6 +35,19 @@ public class AppDbContext : IdentityDbContext<AppUser>
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
+
+        b.Entity<LiveStream>(e =>
+        {
+            e.Property(s => s.ArenaName).HasMaxLength(80).IsRequired();
+            e.Property(s => s.AngleName).HasMaxLength(60).IsRequired();
+            e.Property(s => s.Caption).HasMaxLength(80);
+            e.Property(s => s.SfuSessionId).HasMaxLength(100);
+            e.Property(s => s.PendingSfuSessionId).HasMaxLength(100);
+            e.Property(s => s.StartedByUserId).IsRequired();
+            e.HasIndex(s => new { s.CompetitionId, s.Status });
+            e.HasOne(s => s.Competition).WithMany().HasForeignKey(s => s.CompetitionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         if (Database.IsNpgsql())
         {
