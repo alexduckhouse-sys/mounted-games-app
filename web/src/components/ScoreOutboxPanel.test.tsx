@@ -122,6 +122,20 @@ describe('ScoreOutboxPanel', () => {
     });
   });
 
+  it('keeps the saved results and explains a failed storage update', async () => {
+    seed(item(1, { state: 'failed' }));
+    const block = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('full'); });
+    render(<ScoreOutboxPanel competitionId={1} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(screen.getByText(/couldn’t be saved on this phone/)).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+    expect(stored()[0].state).toBe('failed');
+    block.mockRestore();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/couldn’t be saved on this phone/)).not.toBeInTheDocument();
+  });
+
   it('shows each kind of problem separately', () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
     seed(item(1, { state: 'conflict', theirs }), item(2, { state: 'failed', error: 'x' }), item(3));

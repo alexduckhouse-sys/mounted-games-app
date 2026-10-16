@@ -15,6 +15,12 @@ Admins can manage every competition. Trainers can create competitions and use or
 
 Signup contact/payment records are private to the organiser. Public declarations show the competition line-up without dates of birth, phone numbers or private notes. Saved rider records belong to the account that saved them; legacy records with no recorded owner remain admin-only. See `docs/security-review.md` for deployment requirements and verification limits.
 
+## Public following and score recovery (16 October 2026)
+
+Anyone can star teams from a competition's Teams or Following page. Stars are saved on that device and contain only competition and team IDs. They do not grant access to declarations, contacts or supporter tools. `/following` lists saved events; `/competitions/:id/following` shows those teams' upcoming heats and received heat totals, using the same timing calculation as the timetable. When the Following page is using saved data or is disconnected, it shows a timestamp and does not label a heat as live.
+
+Submitting scores moves the scorer to the next race only after the outbox has saved their placings on the phone. If storage is unavailable, the entered placings stay on screen with an error. Each new save has its own identifier, so a reply to an earlier save cannot discard a later edit. An edit made while an earlier save is being sent compares against the accepted result when it retries.
+
 ## Core domain model
 - **Club** — pony club (reference data).
 - **Team** = Club + suffix (e.g. "Stockport A"). Grouped by **Section**.

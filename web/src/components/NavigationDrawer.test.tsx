@@ -92,7 +92,7 @@ describe('NavigationDrawer: when no competition is followed', () => {
   it('sends the competition links to the picker or the general feed', () => {
     mount();
     expect(links('Main navigation')).toEqual([
-      ['Timetable', '/competitions'], ['Toplists', '/competitions'], ['Live feed & stream', '/chat'], ['Details & entries', '/competitions'],
+      ['Following', '/following'], ['Timetable', '/competitions'], ['Toplists', '/competitions'], ['Live feed & stream', '/chat'], ['Details & entries', '/competitions'],
     ]);
   });
 
@@ -131,7 +131,7 @@ describe('NavigationDrawer: following a competition', () => {
   it('shows which competition is being followed, with its dates and venue', () => {
     mount({ competition: true, meta: { endDate: '2026-10-18T17:00:00', location: ' Ashdown ' } });
     expect(screen.getByRole('heading', { name: 'Spring Games' })).toBeInTheDocument();
-    expect(screen.getByText('Following')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Following' })).toBeInTheDocument();
     expect(screen.getByText('Sat 17 – Sun 18 Oct · Ashdown')).toBeInTheDocument();
   });
 
@@ -144,7 +144,7 @@ describe('NavigationDrawer: following a competition', () => {
   it('links to the competition’s own pages', () => {
     mount({ competition: true });
     expect(links('Main navigation')).toEqual([
-      ['Timetable', '/competitions/4'], ['Toplists', '/competitions/4/toplists'],
+      ['Following', '/competitions/4/following'], ['Timetable', '/competitions/4'], ['Toplists', '/competitions/4/toplists'],
       ['Live feed & stream', '/competitions/4/chat'], ['Details & entries', '/competitions/4/details'],
     ]);
   });
