@@ -10,6 +10,7 @@ import { TickerProvider } from './components/TickerContext';
 import { CompetitionMetaProvider } from './components/CompetitionMetaContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppShell } from './components/AppShell';
+import { CompactPageBarProvider } from './components/CompactPageBarContext';
 import { StartPage } from './pages/StartPage';
 import { CompetitionPage } from './pages/CompetitionPage';
 import { SessionsTab } from './pages/competition/SessionsTab';
@@ -44,6 +45,7 @@ export default function App() {
         <AgeGroupsProvider>
         <TickerProvider>
         <CompetitionMetaProvider>
+        <CompactPageBarProvider>
         <BrowserRouter>
           <PageLoadBoundary page="app">
           <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
@@ -98,6 +100,7 @@ export default function App() {
           </Suspense>
           </PageLoadBoundary>
         </BrowserRouter>
+        </CompactPageBarProvider>
         </CompetitionMetaProvider>
         </TickerProvider>
         </AgeGroupsProvider>

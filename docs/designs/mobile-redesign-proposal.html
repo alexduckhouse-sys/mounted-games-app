@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MG App — Mobile redesign (picked)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ground: #E9ECF1; --ink: #212121; --navy: #17385F; --muted: #5A6270; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: 'Barlow', sans-serif; }
+  a { color: #17385F; } a:hover { color: #E12A39; }
+  button, input { font-family: 'Barlow', system-ui, sans-serif; }
+  .intro { max-width: 1760px; margin: 0 auto; padding: 40px 16px 8px; }
+  .intro p { margin: 0 0 6px; font: 600 13px/1 'Barlow', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .intro h1 { margin: 0; font: 700 44px/1.05 'Barlow Condensed', sans-serif; color: var(--navy); }
+  .intro .sub { margin-top: 8px; font: 400 16px/1.4 'Barlow', sans-serif; color: #4A505A; max-width: 760px; text-transform: none; letter-spacing: 0; }
+  .group-title { max-width: 1760px; margin: 0 auto; padding: 32px 16px 0; font: 700 28px/1.1 'Barlow Condensed', sans-serif; color: var(--navy); }
+  .boards { max-width: 1760px; margin: 0 auto; padding: 20px 16px 24px; display: flex; flex-wrap: wrap; gap: 40px; }
+  .board { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; }
+  .board-label { margin: 0; font: 700 18px/1.1 'Barlow Condensed', sans-serif; color: var(--navy); }
+  .board-note { margin: -6px 0 0; max-width: 390px; font: 400 14px/1.35 'Barlow', sans-serif; color: #4A505A; }
+  .phone { width: 390px; max-width: 100%; overflow-x: auto; border-radius: 28px; box-shadow: 0 1px 2px rgba(15,42,74,.12), 0 12px 32px rgba(15,42,74,.12); background: #fff; }
+  .screen { position: relative; width: 390px; height: 844px; overflow: hidden; border-radius: 28px; background: #F7F7F7; font-family: 'Barlow', system-ui, sans-serif; color: #212121; display: flex; flex-direction: column; }
+
+  /* Shell */
+  .cond { font-family: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
+  .hdr { background: #17385F; color: #fff; display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; }
+  .hdr.compact { padding: 8px 12px; }
+  .logo { width: 32px; height: 32px; border-radius: 6px; background: #E12A39; display: flex; align-items: center; justify-content: center; font: 700 15px/1 'Barlow Condensed', sans-serif; flex: none; }
+  .hstack { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .hname { font: 700 18px/1.1 'Barlow Condensed', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hsub { font-size: 13px; color: #C9D4E3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hb { flex: none; width: 44px; height: 44px; border-radius: 10px; border: 1px solid #3B5577; background: transparent; color: #fff; display: flex; align-items: center; justify-content: center; text-decoration: none; }
+  .ticker { background: #0F2A4A; color: #fff; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 0 0 16px; font-size: 14px; font-weight: 500; }
+  .ticker .txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ticker .nx { flex: none; width: 48px; align-self: stretch; border: 0; border-left: 1px solid rgba(255,255,255,.14); background: transparent; color: #fff; display: flex; align-items: center; justify-content: center; }
+  .tabs { background: #fff; border-top: 1px solid #DADADA; padding: 6px 4px 18px; display: flex; margin-top: auto; }
+  .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: #5A6270; font: 500 12px/1 'Barlow', sans-serif; flex: 1; }
+  .tab.cur { color: #17385F; font-weight: 700; }
+
+  /* Badges, sections, cards */
+  .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 4px; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
+  .badge-live { background: #E12A39; color: #fff; }
+  .badge-live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+  .badge-done { background: #E3E7EC; color: #17385F; }
+  .badge-out { border: 1px solid #C4C9D1; color: #4A505A; }
+  .badge-staff { background: #E3E7EC; color: #17385F; }
+  .badge-notice { background: #fff; color: #17385F; }
+  .band { background: #fff; border-bottom: 1px solid #DADADA; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .h1 { margin: 0; flex: 1; font: 700 26px/1 'Barlow Condensed', sans-serif; color: #17385F; }
+  .ibtn { width: 44px; height: 44px; border-radius: 10px; border: 1px solid #C4C9D1; background: #fff; color: #17385F; display: flex; align-items: center; justify-content: center; flex: none; }
+  .sh { display: flex; align-items: baseline; gap: 10px; padding-bottom: 6px; border-bottom: 2px solid #17385F; }
+  .sh h2 { flex: 1; margin: 0; font: 700 18px/1.1 'Barlow Condensed', sans-serif; letter-spacing: .04em; text-transform: uppercase; color: #17385F; }
+  .sh span { font: 500 13px/1 'Barlow', sans-serif; color: #5A6270; }
+  .sh a { font: 600 14px/1 'Barlow', sans-serif; text-decoration: none; }
+  .card { background: #fff; border: 1px solid #DADADA; border-radius: 12px; overflow: hidden; }
+  .body { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* Timetable rows */
+  .row { display: grid; grid-template-columns: 66px minmax(0,1fr) 10px 16px; align-items: center; column-gap: 14px; min-height: 64px; padding: 10px 14px 10px 16px; background: #fff; color: #212121; text-decoration: none; }
+  .row + .row { border-top: 1px solid #EBEBEB; }
+  .t { display: flex; flex-direction: column; gap: 2px; font-family: 'Barlow Condensed', sans-serif; }
+  .t b { font-size: 26px; font-weight: 700; line-height: 1; color: #17385F; }
+  .t s { font-size: 13px; font-weight: 500; line-height: 1; color: #6E7480; }
+  .ev strong { font-size: 16px; font-weight: 600; line-height: 1.2; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .st-live { background: #FDF1F2; }
+  .st-late .t b { color: #8A5A00; }
+  .st-finished .t b { color: #6E7480; }
+  .st-finished .ev strong { color: #4A505A; }
+  .picker { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 12px 6px 14px; border-radius: 10px; border: 1.5px solid #C4C9D1; background: #fff; text-align: left; }
+  .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #5A6270; }
+
+  /* Sheet */
+  .overlay { position: absolute; inset: 0; background: rgba(15,42,74,.55); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 20px 20px 0 0; padding: 10px 12px 28px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 -12px 24px rgba(0,0,0,.25); }
+  .handle { width: 40px; height: 5px; border-radius: 3px; background: #C4C9D1; align-self: center; margin-bottom: 6px; }
+  .opt { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; border: 0; border-radius: 10px; background: transparent; padding: 8px 12px; text-align: left; color: #212121; }
+  .opt.on { background: #E3E7EC; }
+  .radio { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #A3A9B3; flex: none; background: #fff; }
+  .opt.on .radio { border: 7px solid #17385F; }
+  .on-name { font-size: 17px; font-weight: 700; }
+  .on-sub { font-size: 13px; color: #5A6270; }
+
+  /* Live */
+  .ann { display: flex; gap: 12px; padding: 10px 14px; align-items: flex-start; }
+  .ann + .ann { border-top: 1px solid #EBEBEB; }
+  .ann time { flex: none; width: 40px; font: 700 15px/1.3 'Barlow Condensed', sans-serif; color: #5A6270; }
+  .ann p { margin: 0; flex: 1; min-width: 0; font-size: 15px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ann.one { padding: 6px 4px 6px 14px; align-items: center; gap: 10px; }
+  .ann.one p { white-space: nowrap; text-overflow: ellipsis; display: block; }
+  .del { flex: none; width: 44px; height: 44px; border: 0; background: transparent; color: #6E7480; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+  .seg { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: #E3E7EC; }
+  .seg button { min-height: 40px; border: 0; border-radius: 7px; background: transparent; color: #4A505A; font-size: 15px; font-weight: 500; }
+  .seg button[aria-pressed="true"] { background: #fff; color: #17385F; font-weight: 600; box-shadow: 0 1px 2px rgba(15,42,74,.18); }
+
+  /* Heat grid */
+  .g { width: 100%; table-layout: fixed; border-collapse: collapse; color: #212121; }
+  .g th, .g td { padding: 0; }
+  .g thead th { position: relative; height: 104px; vertical-align: bottom; border-bottom: 1px solid #212121; font: 700 12px/1 'Barlow Condensed', sans-serif; letter-spacing: .03em; text-transform: uppercase; color: #5A6270; text-align: left; }
+  .g thead th.tc { padding: 10px 4px 8px 12px; }
+  .g .rk { width: 30px; padding-left: 12px; padding-bottom: 8px; }
+  .g .rk + .tc { padding-left: 0; }
+  .g .rc { width: 23px; }
+  .g .pc { width: 44px; padding-right: 12px; text-align: right; padding-bottom: 8px; color: #17385F; }
+  .ttl { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; text-transform: none; letter-spacing: 0; }
+  .ttl .eb { font: 700 12px/1 'Barlow', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #5A6270; }
+  .ttl .hn { font: 700 28px/1 'Barlow Condensed', sans-serif; color: #17385F; }
+  .ttl .mt { font: 500 13px/1.2 'Barlow', sans-serif; color: #5A6270; }
+  .ttl .mt.live { color: #C8202F; font-weight: 600; }
+  .rn { position: absolute; left: 17px; bottom: 1px; max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transform-origin: 0 100%; transform: rotate(-55deg); color: #212121; }
+  .rn.run { color: #E12A39; }
+  .sep { position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg); }
+  .g tbody th, .g tbody td { height: 52px; border-bottom: 1px solid #212121; }
+  .g tbody tr:last-child th, .g tbody tr:last-child td { border-bottom: 0; }
+  .rkc { padding-left: 12px !important; font: 700 17px/1 'Barlow Condensed', sans-serif; color: #5A6270; }
+  .tm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px 0 12px !important; text-align: left; font: 600 14px/1.2 'Barlow', sans-serif; }
+  .rkc + .tm { padding-left: 0 !important; }
+  .c { text-align: center; font: 600 16px/1 'Barlow Condensed', sans-serif; border-left: 1px solid #212121; }
+  .c.first { border-left: 0; }
+  .c.dash { color: #A3A9B3; } .c.elim { color: #C8202F; }
+  .tot { text-align: right; padding-right: 12px !important; border-left: 1px solid #212121; font: 700 21px/1 'Barlow Condensed', sans-serif; color: #17385F; }
+  .btn { display: flex; align-items: center; justify-content: center; min-height: 50px; border-radius: 10px; font: 600 16px/1.1 'Barlow', sans-serif; text-decoration: none; flex: 1; }
+  .btn-p { background: #17385F; color: #fff !important; }
+  .btn-s { background: #fff; border: 1.5px solid #C4C9D1; color: #17385F; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></g></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></g></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></symbol>
+  <symbol id="i-mega" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1Z"/><path d="M16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></g></symbol>
+  <symbol id="i-bin" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="t-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g></symbol>
+  <symbol id="t-trophy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0Z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></g></symbol>
+  <symbol id="t-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="t-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></g></symbol>
+</svg>
+
+<header class="intro">
+  <p>MG App · EGUK colours · Picked 16 Oct 2026</p>
+  <h1>Mobile redesign: timetable, live &amp; stream, heat scores</h1>
+  <div class="sub">The screens we picked, drawn at phone size with the theme tokens from <code>web/src/theme/skin.css</code>. Measurements, behaviour and open questions are in <a href="mobile-redesign-handoff.md">mobile-redesign-handoff.md</a>. Names, venues and scores are placeholders.</div>
+</header>
+
+<!-- ============ 1. TIMETABLE ============ -->
+<h2 class="group-title">1 · Timetable: arena picker</h2>
+<main class="boards">
+
+<section class="board" id="TimetablePicker">
+<h3 class="board-label">Arena picker (closed)</h3>
+<p class="board-note">One sticky button replaces the scrolling arena chips. It shows the chosen arena and a Live badge.</p>
+<div class="phone"><div class="screen">
+  <header class="hdr">
+    <span class="logo">MG</span>
+    <span class="hstack"><span class="hname">[COMPETITION NAME]</span><span class="hsub">Sat 18 Oct · [VENUE]</span></span>
+    <button class="hb" aria-label="Open menu"><svg width="20" height="20"><use href="#i-menu"/></svg></button>
+  </header>
+  <div class="ticker"><span class="badge badge-live">Live</span><span class="txt">Arena 1 · U12 Heat 2 under way</span><button class="nx" aria-label="Next update"><svg width="18" height="18"><use href="#i-next"/></svg></button></div>
+  <div class="band">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <h1 class="h1">Timetable</h1>
+      <span style="font-size: 13px; color: #5A6270; font-weight: 500">Updated 09:32</span>
+      <button class="ibtn" aria-label="Refresh timetable"><svg width="18" height="18"><use href="#i-refresh"/></svg></button>
+    </div>
+    <button class="picker" aria-haspopup="dialog" aria-expanded="false">
+      <svg width="20" height="20" style="color: #17385F"><use href="#i-pin"/></svg>
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span class="eyebrow">Arena</span><span style="font-size: 17px; font-weight: 700; color: #17385F">Arena 1</span></span>
+      <span class="badge badge-live">Live</span>
+      <svg width="20" height="20" style="color: #5A6270"><use href="#i-down"/></svg>
+    </button>
+  </div>
+  <div class="body" style="padding: 16px 16px 0; gap: 18px">
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <div class="sh"><h2>U12 · Session 1</h2><span>4 heats</span></div>
+      <div class="card">
+        <a href="#" class="row st-finished"><span class="t"><b>09:00</b></span><span class="ev"><strong>Heat 1</strong></span><span class="dot" style="background: #A3A39B"></span><svg width="16" height="16" style="color: #6E7480"><use href="#i-next"/></svg></a>
+        <a href="#" class="row st-live"><span class="t"><b>09:20</b></span><span class="ev"><strong>Heat 2</strong></span><span class="dot" style="background: #2563EB"></span><svg width="16" height="16" style="color: #6E7480"><use href="#i-next"/></svg></a>
+        <a href="#" class="row"><span class="t"><b>09:40</b></span><span class="ev"><strong>Heat 3</strong></span><span class="dot" style="background: #2E8B4F"></span><svg width="16" height="16" style="color: #6E7480"><use href="#i-next"/></svg></a>
+        <a href="#" class="row"><span class="t"><b>10:00</b></span><span class="ev"><strong>Heat 4</strong></span><span class="dot" style="background: #2E8B4F"></span><svg width="16" height="16" style="color: #6E7480"><use href="#i-next"/></svg></a>
+      </div>
+    </section>
+  </div>
+  <nav class="tabs" aria-label="Competition">
+    <span class="tab cur"><svg width="22" height="22"><use href="#t-clock"/></svg>Timetable</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-trophy"/></svg>Toplists</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-chat"/></svg>Live &amp; stream</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-info"/></svg>Details</span>
+  </nav>
+</div></div>
+</section>
+
+<section class="board" id="TimetableSheet">
+<h3 class="board-label">Choose arena (sheet open)</h3>
+<p class="board-note">Each arena shows what's on now or what's next. The choice is remembered on the phone.</p>
+<div class="phone"><div class="screen">
+  <header class="hdr">
+    <span class="logo">MG</span>
+    <span class="hstack"><span class="hname">[COMPETITION NAME]</span><span class="hsub">Sat 18 Oct · [VENUE]</span></span>
+    <button class="hb" aria-label="Open menu"><svg width="20" height="20"><use href="#i-menu"/></svg></button>
+  </header>
+  <div class="ticker"><span class="badge badge-live">Live</span><span class="txt">Arena 1 · U12 Heat 2 under way</span><button class="nx" aria-label="Next update"><svg width="18" height="18"><use href="#i-next"/></svg></button></div>
+  <div class="band">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <h1 class="h1">Timetable</h1>
+      <span style="font-size: 13px; color: #5A6270; font-weight: 500">Updated 09:32</span>
+      <button class="ibtn" aria-label="Refresh timetable"><svg width="18" height="18"><use href="#i-refresh"/></svg></button>
+    </div>
+    <button class="picker" aria-haspopup="dialog" aria-expanded="true">
+      <svg width="20" height="20" style="color: #17385F"><use href="#i-pin"/></svg>
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span class="eyebrow">Arena</span><span style="font-size: 17px; font-weight: 700; color: #17385F">Arena 1</span></span>
+      <span class="badge badge-live">Live</span>
+      <svg width="20" height="20" style="color: #5A6270"><use href="#i-down"/></svg>
+    </button>
+  </div>
+  <div class="body" style="padding: 16px 16px 0">
+    <div class="sh"><h2>U12 · Session 1</h2><span>4 heats</span></div>
+  </div>
+  <div class="overlay"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-label="Choose arena">
+    <div class="handle"></div>
+    <div style="display: flex; align-items: center; padding: 0 4px 8px 12px">
+      <h2 class="cond" style="margin: 0; flex: 1; font-size: 22px; font-weight: 700; color: #17385F">Choose arena</h2>
+      <button aria-label="Close" style="width: 44px; height: 44px; border: 0; background: transparent; color: #5A6270; display: flex; align-items: center; justify-content: center"><svg width="20" height="20"><use href="#i-x"/></svg></button>
+    </div>
+    <button class="opt" aria-pressed="false"><span class="radio"></span><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span class="on-name">All arenas</span><span class="on-sub">Everything, in running order</span></span></button>
+    <button class="opt on" aria-pressed="true"><span class="radio"></span><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span class="on-name">Arena 1</span><span class="on-sub">On now: U12 Heat 2</span></span><span class="badge badge-live">Live</span></button>
+    <button class="opt" aria-pressed="false"><span class="radio"></span><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span class="on-name">Arena 2</span><span class="on-sub">On now: Open Heat 2 · running 5 min late</span></span><span class="badge badge-live">Live</span></button>
+    <button class="opt" aria-pressed="false"><span class="radio"></span><span style="flex: 1; display: flex; flex-direction: column; gap: 3px"><span class="on-name">Arena 3</span><span class="on-sub">Starts 09:30 · Pairs Heat 1</span></span><span class="badge badge-out">Later</span></button>
+    <div style="font-size: 13px; color: #5A6270; padding: 8px 12px 0">We'll remember your arena on this phone.</div>
+  </div>
+</div></div>
+</section>
+</main>
+
+<!-- ============ 2. LIVE & STREAM ============ -->
+<h2 class="group-title">2 · Live &amp; stream: fits one screen</h2>
+<main class="boards">
+
+<section class="board" id="LivePublic">
+<h3 class="board-label">Everyone else (read-only)</h3>
+<p class="board-note">Stream, one pinned banner and the latest three announcements. No chat and no composer.</p>
+<div class="phone"><div class="screen">
+  <header class="hdr">
+    <span class="logo">MG</span>
+    <span class="hstack"><span class="hname">[COMPETITION NAME]</span><span class="hsub">Sat 18 Oct · [VENUE]</span></span>
+    <button class="hb" aria-label="Open menu"><svg width="20" height="20"><use href="#i-menu"/></svg></button>
+  </header>
+  <div class="ticker"><span class="badge badge-live">Live</span><span class="txt">Arena 1 · U12 Heat 2 under way</span><button class="nx" aria-label="Next update"><svg width="18" height="18"><use href="#i-next"/></svg></button></div>
+  <div class="band" style="flex-direction: row; align-items: center; gap: 12px">
+    <h1 class="h1">Live &amp; stream</h1><span class="badge badge-live">Live</span>
+  </div>
+  <div class="body" style="gap: 12px; padding: 12px 16px">
+    <div style="position: relative; flex: none; height: 201px; border-radius: 12px; overflow: hidden; background: #0F2A4A; display: flex; align-items: center; justify-content: center">
+      <button aria-label="Play stream" style="width: 64px; height: 64px; border-radius: 50%; border: 0; background: #E12A39; color: #fff; display: flex; align-items: center; justify-content: center"><svg width="26" height="26"><use href="#i-play"/></svg></button>
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(15,42,74,.85); color: #fff">
+        <span class="badge badge-live">Live</span>
+        <span style="flex: 1; min-width: 0; font-size: 14px; font-weight: 600">Arena 1 camera</span>
+        <a href="#" style="color: #fff; font-size: 13px; font-weight: 600; text-decoration: none">Full screen</a>
+      </div>
+    </div>
+    <div role="status" style="flex: none; display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: #FBEED0">
+      <svg width="22" height="22" style="color: #8A5A00; flex: none; margin-top: 1px"><use href="#i-mega"/></svg>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 3px">
+        <span style="font-size: 16px; font-weight: 700; line-height: 1.25; color: #3D2A00">Arena 2 is running 5 minutes late</span>
+        <span style="font-size: 13px; color: #7A5300">Pinned by organisers · 09:31</span>
+      </div>
+    </div>
+    <section style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px">
+      <div class="sh"><h2>Announcements</h2><a href="#">All 12</a></div>
+      <div class="card" style="flex: 1; min-height: 0">
+        <div class="ann"><time>09:28</time><p>Lunch break moved to 12:30. Collecting ring opens at 13:15.</p></div>
+        <div class="ann"><time>09:10</time><p>Burger van is now open by the lorry park.</p></div>
+        <div class="ann"><time>08:45</time><p>Team managers: declarations close at 09:00 for afternoon pairs.</p></div>
+      </div>
+    </section>
+  </div>
+  <nav class="tabs" aria-label="Competition" style="margin-top: 0">
+    <span class="tab"><svg width="22" height="22"><use href="#t-clock"/></svg>Timetable</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-trophy"/></svg>Toplists</span>
+    <span class="tab cur"><svg width="22" height="22"><use href="#t-chat"/></svg>Live &amp; stream</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-info"/></svg>Details</span>
+  </nav>
+</div></div>
+</section>
+
+<section class="board" id="LiveStaff">
+<h3 class="board-label">Admin / trainer</h3>
+<p class="board-note">The stream shrinks to one row. Staff can unpin the banner, delete announcements, and post either an announcement or a banner (which replaces the pinned one).</p>
+<div class="phone"><div class="screen">
+  <header class="hdr">
+    <span class="logo">MG</span>
+    <span class="hstack"><span class="hname">[COMPETITION NAME]</span><span class="hsub">Sat 18 Oct · [VENUE]</span></span>
+    <button class="hb" aria-label="Open menu"><svg width="20" height="20"><use href="#i-menu"/></svg></button>
+  </header>
+  <div class="ticker"><span class="badge badge-live">Live</span><span class="txt">Arena 1 · U12 Heat 2 under way</span><button class="nx" aria-label="Next update"><svg width="18" height="18"><use href="#i-next"/></svg></button></div>
+  <div class="band" style="flex-direction: row; align-items: center; gap: 12px">
+    <h1 class="h1">Live &amp; stream</h1><span class="badge badge-staff">Organiser</span>
+  </div>
+  <div class="body" style="gap: 12px; padding: 12px 16px">
+    <div class="card" style="flex: none; display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 12px">
+      <span style="width: 56px; height: 36px; border-radius: 6px; background: #0F2A4A; color: #fff; display: flex; align-items: center; justify-content: center; flex: none"><svg width="16" height="16"><use href="#i-play"/></svg></span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">Stream is on</span><span style="font-size: 13px; color: #5A6270">Arena 1 camera · YouTube</span></span>
+      <button style="min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid #C4C9D1; background: #fff; color: #17385F; font-size: 14px; font-weight: 600">Change</button>
+    </div>
+    <div role="status" style="flex: none; display: flex; gap: 10px; align-items: center; padding: 6px 4px 6px 14px; border-radius: 12px; background: #FBEED0">
+      <svg width="22" height="22" style="color: #8A5A00; flex: none"><use href="#i-mega"/></svg>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 15px; font-weight: 700; line-height: 1.25; color: #3D2A00">Arena 2 is running 5 minutes late</span>
+        <span style="font-size: 13px; color: #7A5300">Pinned banner · everyone sees this</span>
+      </div>
+      <button style="flex: none; min-height: 44px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: #7A5300; font-size: 14px; font-weight: 600">Unpin</button>
+    </div>
+    <section style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px">
+      <div class="sh"><h2>Announcements</h2><a href="#">All 12</a></div>
+      <div class="card" style="flex: 1; min-height: 0">
+        <div class="ann one"><time>09:28</time><p>Lunch break moved to 12:30. Collecting ring opens at 13:15.</p><button class="del" aria-label="Delete announcement"><svg width="18" height="18"><use href="#i-bin"/></svg></button></div>
+        <div class="ann one"><time>09:10</time><p>Burger van is now open by the lorry park.</p><button class="del" aria-label="Delete announcement"><svg width="18" height="18"><use href="#i-bin"/></svg></button></div>
+        <div class="ann one"><time>08:45</time><p>Team managers: declarations close at 09:00 for afternoon pairs.</p><button class="del" aria-label="Delete announcement"><svg width="18" height="18"><use href="#i-bin"/></svg></button></div>
+      </div>
+    </section>
+    <div style="flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; background: #fff; border: 1.5px solid #17385F">
+      <div class="seg" role="group" aria-label="Post as"><button aria-pressed="true">Announcement</button><button aria-pressed="false">Pin as banner</button></div>
+      <div style="display: flex; gap: 8px; align-items: center">
+        <label for="post" class="sr">Message</label>
+        <input id="post" placeholder="Write an announcement…" style="flex: 1; min-width: 0; min-height: 48px; padding: 0 12px; border-radius: 10px; border: 1.5px solid #C4C9D1; font-size: 16px">
+        <button aria-label="Send" style="flex: none; width: 48px; height: 48px; border-radius: 10px; border: 0; background: #17385F; color: #fff; display: flex; align-items: center; justify-content: center"><svg width="20" height="20"><use href="#i-send"/></svg></button>
+      </div>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="Competition" style="margin-top: 0">
+    <span class="tab"><svg width="22" height="22"><use href="#t-clock"/></svg>Timetable</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-trophy"/></svg>Toplists</span>
+    <span class="tab cur"><svg width="22" height="22"><use href="#t-chat"/></svg>Live &amp; stream</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-info"/></svg>Details</span>
+  </nav>
+</div></div>
+</section>
+</main>
+
+<!-- ============ 3. HEAT SCORES ============ -->
+<h2 class="group-title">3 · Heat scores: slimmer top</h2>
+<main class="boards">
+
+<section class="board" id="HeatLive">
+<h3 class="board-label">Heat on now</h3>
+<p class="board-note">A compact bar replaces the header and the white band, the ticker stays, and the heat title sits in the empty corner above Team. There is no heat switcher.</p>
+<div class="phone"><div class="screen">
+  <header class="hdr compact">
+    <a href="#" class="hb" aria-label="Back to timetable"><svg width="20" height="20"><use href="#i-back"/></svg></a>
+    <span class="hstack" style="gap: 3px"><span class="hname">[COMPETITION NAME]</span><span class="hsub">U12 heats · Arena 1</span></span>
+    <span class="badge badge-live">On now</span>
+    <button class="hb" aria-label="Open menu"><svg width="20" height="20"><use href="#i-menu"/></svg></button>
+  </header>
+  <div class="ticker"><span class="badge badge-notice">Notice</span><span class="txt">Lunch break moved to 12:30</span><button class="nx" aria-label="Next update"><svg width="18" height="18"><use href="#i-next"/></svg></button></div>
+  <h1 class="sr">U12 Heat 2 scores</h1>
+  <div class="body" style="padding: 12px 16px 0; gap: 16px">
+    <section aria-label="Scores" class="card" style="flex: none">
+      <table class="g">
+        <thead><tr>
+          <th scope="col" class="tc"><div class="ttl"><span class="eb">U12</span><span class="hn">Heat 2</span><span class="mt live">Race 3 of 5 · Mug</span></div>Team</th>
+          <th scope="col" class="rc"><span class="rn">Bottle</span></th>
+          <th scope="col" class="rc"><span class="sep"></span><span class="rn">Flag</span></th>
+          <th scope="col" class="rc"><span class="sep"></span><span class="rn run">Mug</span></th>
+          <th scope="col" class="rc"><span class="sep"></span><span class="rn">Ball &amp; cone</span></th>
+          <th scope="col" class="rc"><span class="sep"></span><span class="rn">Litter lifter</span></th>
+          <th scope="col" class="pc"><span class="sep"></span>Pts</th>
+        </tr></thead>
+        <tbody>
+          <tr><th scope="row" class="tm">Ashby</th><td class="c first">6</td><td class="c">5</td><td class="c dash">–</td><td class="c dash">–</td><td class="c dash">–</td><td class="tot">11</td></tr>
+          <tr><th scope="row" class="tm">Brook Vale</th><td class="c first">5</td><td class="c">6</td><td class="c dash">–</td><td class="c dash">–</td><td class="c dash">–</td><td class="tot">11</td></tr>
+          <tr><th scope="row" class="tm">Castle Hill</th><td class="c first">4</td><td class="c">3</td><td class="c dash">–</td><td class="c dash">–</td><td class="c dash">–</td><td class="tot">7</td></tr>
+          <tr><th scope="row" class="tm">Downs</th><td class="c first">3</td><td class="c">4</td><td class="c dash">–</td><td class="c dash">–</td><td class="c dash">–</td><td class="tot">7</td></tr>
+          <tr><th scope="row" class="tm">Elmwood</th><td class="c first">2</td><td class="c elim">0</td><td class="c dash">–</td><td class="c dash">–</td><td class="c dash">–</td><td class="tot">2</td></tr>
+          <tr><th scope="row" class="tm">Fernleigh</th><td class="c first">1</td><td class="c">2</td><td class="c dash">–</td><td class="c dash">–</td><td class="c dash">–</td><td class="tot">3</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <div style="display: flex; gap: 10px"><a href="#" class="btn btn-p">Watch stream</a><a href="#" class="btn btn-s">U12 toplist</a></div>
+  </div>
+  <nav class="tabs" aria-label="Competition" style="margin-top: 0">
+    <span class="tab cur"><svg width="22" height="22"><use href="#t-clock"/></svg>Timetable</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-trophy"/></svg>Toplists</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-chat"/></svg>Live &amp; stream</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-info"/></svg>Details</span>
+  </nav>
+</div></div>
+</section>
+
+<section class="board" id="HeatFinished">
+<h3 class="board-label">Heat finished</h3>
+<p class="board-note">Same layout with positions added. The meta line reads "Final result" and the badge reads Finished.</p>
+<div class="phone"><div class="screen">
+  <header class="hdr compact">
+    <a href="#" class="hb" aria-label="Back to timetable"><svg width="20" height="20"><use href="#i-back"/></svg></a>
+    <span class="hstack" style="gap: 3px"><span class="hname">[COMPETITION NAME]</span><span class="hsub">U12 heats · Arena 1</span></span>
+    <span class="badge badge-done">Finished</span>
+    <button class="hb" aria-label="Open menu"><svg width="20" height="20"><use href="#i-menu"/></svg></button>
+  </header>
+  <div class="ticker"><span class="badge badge-live">Live</span><span class="txt">Arena 1 · U12 Heat 2 under way</span><button class="nx" aria-label="Next update"><svg width="18" height="18"><use href="#i-next"/></svg></button></div>
+  <h1 class="sr">U12 Heat 1 scores</h1>
+  <div class="body" style="padding: 12px 16px 0; gap: 16px">
+    <section aria-label="Scores" class="card" style="flex: none">
+      <table class="g">
+        <thead><tr>
+          <th scope="col" class="rk">#</th>
+          <th scope="col" class="tc"><div class="ttl"><span class="eb">U12</span><span class="hn">Heat 1</span><span class="mt">09:00 · Final result</span></div>Team</th>
+          <th scope="col" class="rc"><span class="rn">Bottle</span></th>
+          <th scope="col" class="rc"><span class="sep"></span><span class="rn">Flag</span></th>
+          <th scope="col" class="rc"><span class="sep"></span><span class="rn">Mug</span></th>
+          <th scope="col" class="rc"><span class="sep"></span><span class="rn">Ball &amp; cone</span></th>
+          <th scope="col" class="rc"><span class="sep"></span><span class="rn">Litter lifter</span></th>
+          <th scope="col" class="pc"><span class="sep"></span>Pts</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="rkc">1</td><th scope="row" class="tm">Garston</th><td class="c first">6</td><td class="c">5</td><td class="c">6</td><td class="c">4</td><td class="c">6</td><td class="tot">27</td></tr>
+          <tr><td class="rkc">2</td><th scope="row" class="tm">Hollins</th><td class="c first">5</td><td class="c">6</td><td class="c">4</td><td class="c">6</td><td class="c">5</td><td class="tot">26</td></tr>
+          <tr><td class="rkc">3</td><th scope="row" class="tm">Ivybridge</th><td class="c first">4</td><td class="c">4</td><td class="c">5</td><td class="c">5</td><td class="c">3</td><td class="tot">21</td></tr>
+          <tr><td class="rkc">4</td><th scope="row" class="tm">Juniper</th><td class="c first">3</td><td class="c">2</td><td class="c">3</td><td class="c elim">0</td><td class="c">4</td><td class="tot">12</td></tr>
+          <tr><td class="rkc">5</td><th scope="row" class="tm">Kingsley</th><td class="c first">2</td><td class="c">3</td><td class="c">1</td><td class="c">3</td><td class="c">2</td><td class="tot">11</td></tr>
+          <tr><td class="rkc">6</td><th scope="row" class="tm">Larkhill</th><td class="c first">1</td><td class="c">1</td><td class="c">2</td><td class="c">2</td><td class="c">1</td><td class="tot">7</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <div style="display: flex; gap: 10px"><a href="#" class="btn btn-p">Toplist</a><a href="#" class="btn btn-s">Heat 2 ›</a></div>
+  </div>
+  <nav class="tabs" aria-label="Competition" style="margin-top: 0">
+    <span class="tab cur"><svg width="22" height="22"><use href="#t-clock"/></svg>Timetable</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-trophy"/></svg>Toplists</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-chat"/></svg>Live &amp; stream</span>
+    <span class="tab"><svg width="22" height="22"><use href="#t-info"/></svg>Details</span>
+  </nav>
+</div></div>
+</section>
+</main>
+</body>
+</html>

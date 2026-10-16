@@ -1,363 +1,437 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Megaphone, Activity, Users, Radio, Save, X, Trash2, Shield, MessagesSquare, AlertTriangle, Lock } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AlertTriangle, Lock, Megaphone, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import { useLiveHub } from '../../live/useLiveHub';
 import { LiveVideo } from '../../components/stream/LiveVideo';
-import type { ChatMessage } from '../../types';
+import type { ChatMessage, LiveStream } from '../../types';
+import './chat.css';
 
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
+const BANNER_TAG = 'banner';
 
-interface LastChatComp {
-  id: number;
-  name: string;
-}
+interface LastChatComp { id: number; name: string }
+type ComposerMode = 'announcement' | 'banner';
 
 function loadLastChatComp(): LastChatComp | null {
   try {
     const raw = localStorage.getItem(LAST_CHAT_COMP_KEY);
     if (!raw) return null;
-    const v = JSON.parse(raw) as LastChatComp;
-    return typeof v.id === 'number' && typeof v.name === 'string' ? v : null;
+    const value = JSON.parse(raw) as LastChatComp;
+    return typeof value.id === 'number' && typeof value.name === 'string' ? value : null;
   } catch { return null; }
 }
 
-function saveLastChatComp(v: LastChatComp) {
-  try { localStorage.setItem(LAST_CHAT_COMP_KEY, JSON.stringify(v)); } catch { /* quota */ }
+function saveLastChatComp(value: LastChatComp) {
+  try { localStorage.setItem(LAST_CHAT_COMP_KEY, JSON.stringify(value)); } catch { /* storage blocked */ }
 }
+
+const messageTime = (message: ChatMessage) => new Date(message.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 export function ChatTab() {
   const { competition, reload, streams, streamingEnabled, invoke, ready, streamMessages } = useCompetition();
-  const { user, canEdit, hasRole, canOrganise } = useAuth();
-  // Only admins and trainers post; a trainer's messages go to the admins only.
+  const { canEdit, hasRole, canOrganise } = useAuth();
   const isAdmin = hasRole('Admin');
-  const canPost = isAdmin || hasRole('Trainer');
+  const isTrainer = hasRole('Trainer');
+  const canPost = isAdmin || isTrainer;
+  const canModerate = canEdit();
+  const canManageStream = isAdmin ? canModerate : isTrainer && canOrganise(competition);
+  const canBroadcast = streamingEnabled && canManageStream;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(true);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
   const [body, setBody] = useState('');
-  const [announcement, setAnnouncement] = useState('');
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const compStreamUrl = competition.streamUrl ?? null;
-
+  const [mode, setMode] = useState<ComposerMode>('announcement');
+  const [sending, setSending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [allOpen, setAllOpen] = useState(false);
   const [lastChatComp, setLastChatComp] = useState<LastChatComp | null>(() => loadLastChatComp());
   const [dismissedCompWarning, setDismissedCompWarning] = useState(false);
+  const loadController = useRef<AbortController | null>(null);
+  const sendingRef = useRef(false);
+  const announcementsTriggerRef = useRef<HTMLButtonElement>(null);
 
-  // Fetch on open and again whenever live updates reconnect, so messages and
-  // announcements sent during a signal drop aren't missed.
-  const loadMessages = useCallback(() => {
-    api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`)
-      .then((r) => setMessages(r.data))
-      .catch(() => { /* keep what's on screen; the next reconnect retries */ });
+  const requestMessages = useCallback((controller: AbortController) => {
+    void api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`, { signal: controller.signal })
+      .then((response) => { if (!controller.signal.aborted) setMessages(response.data); })
+      .catch(() => { if (!controller.signal.aborted) setMessagesError('Couldn’t load the announcements. Check your connection and try again.'); })
+      .finally(() => { if (!controller.signal.aborted) setMessagesLoading(false); });
   }, [competition.id]);
-  useEffect(loadMessages, [loadMessages]);
+  const loadMessages = useCallback(() => {
+    loadController.current?.abort();
+    const controller = new AbortController();
+    loadController.current = controller;
+    setMessagesLoading(true);
+    setMessagesError(null);
+    requestMessages(controller);
+  }, [requestMessages]);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadController.current = controller;
+    requestMessages(controller);
+    return () => {
+      loadController.current?.abort();
+      loadController.current = null;
+    };
+  }, [requestMessages]);
 
   useLiveHub(competition.id, {
     onReady: loadMessages,
-    onChatMessage: (m) => {
-      const msg = m as ChatMessage;
-      // A trainer's own private messages reach every connection they have open, so check the competition.
-      if (msg.competitionId !== competition.id) return;
-      setMessages((cur) => cur.some((c) => c.id === msg.id) ? cur : [...cur, msg]);
+    onChatMessage: (value) => {
+      const message = value as ChatMessage;
+      if (message.competitionId !== competition.id) return;
+      setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
     },
-    onChatMessageDeleted: ({ id }) => {
-      setMessages((cur) => cur.filter((m) => m.id !== id));
+    onAnnouncement: (value) => {
+      const message = value as ChatMessage;
+      if (message.competitionId !== competition.id) return;
+      setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
     },
+    onChatMessageDeleted: ({ id }) => setMessages((current) => current.filter((message) => message.id !== id)),
   });
 
-  async function deleteMessage(id: number) {
-    if (!canEdit()) return;
-    if (!confirm('Delete this message?')) return;
-    await api.delete(`/competitions/${competition.id}/chat/${id}`);
-    setMessages((cur) => cur.filter((m) => m.id !== id));
+  const banners = messages.filter((message) => message.type === 2 && message.tag === BANNER_TAG);
+  const banner = banners.at(-1) ?? null;
+  const visibleMessages = messages.filter((message) => message.type !== 1 && message.tag !== BANNER_TAG && (canPost || !message.adminOnly));
+  const latest = visibleMessages.slice(-3).reverse();
+  const activeStreams = streams.filter((stream) => stream.status !== 2);
+  const liveNow = competition.sessions.some((session) => session.status === 1) || activeStreams.length > 0;
+  const effectiveMode = canModerate ? mode : 'announcement';
+  const canCompose = canModerate || isTrainer;
+  const closeAnnouncements = useCallback(() => setAllOpen(false), []);
+  const dismissActionError = useCallback(() => setActionError(null), []);
+
+  async function removeMessage(id: number, confirmFirst = true) {
+    if (!canModerate) return;
+    if (confirmFirst && !confirm('Delete this announcement?')) return;
+    setActionError(null);
+    try {
+      await api.delete(`/competitions/${competition.id}/chat/${id}`);
+      setMessages((current) => current.filter((message) => message.id !== id));
+    } catch {
+      setActionError('Couldn’t delete that announcement. Check your connection and try again.');
+    } finally {
+      reload();
+    }
   }
 
   async function blockMessageAuthor(id: number) {
-    if (!canEdit()) return;
-    if (!confirm("Block this message author's IP from posting in chat?")) return;
+    if (!canModerate || !confirm("Block this sender's IP from posting?")) return;
     try {
-      const { data } = await api.post<{ alreadyBlocked: boolean; ipAddress: string }>(
-        `/competitions/${competition.id}/chat/${id}/block-author`, {}
-      );
-      alert(data.alreadyBlocked
-        ? `IP ${data.ipAddress} was already blocked.`
-        : `Blocked IP ${data.ipAddress}.`);
-    } catch (e) {
-      const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message
-        ?? 'Could not block — message may be too old to have an IP recorded.';
-      alert(msg);
+      const { data } = await api.post<{ alreadyBlocked: boolean; ipAddress: string }>(`/competitions/${competition.id}/chat/${id}/block-author`, {});
+      alert(data.alreadyBlocked ? `IP ${data.ipAddress} was already blocked.` : `Blocked IP ${data.ipAddress}.`);
+    } catch (error) {
+      const message = (error as { response?: { data?: { message?: string } } }).response?.data?.message
+        ?? 'Could not block this sender. The post may be too old to have an IP recorded.';
+      alert(message);
     }
   }
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length]);
+  async function deleteBanners() {
+    if (!canModerate || banners.length === 0) return;
+    await Promise.all(banners.map((message) => api.delete(`/competitions/${competition.id}/chat/${message.id}`)));
+    const ids = new Set(banners.map((message) => message.id));
+    setMessages((current) => current.filter((message) => !ids.has(message.id)));
+  }
+
+  async function unpinBanners() {
+    setActionError(null);
+    try { await deleteBanners(); }
+    catch {
+      setActionError('Couldn’t unpin the banner. Check your connection and try again.');
+      loadMessages();
+    } finally {
+      reload();
+    }
+  }
 
   async function send() {
-    if (!body.trim() || !canPost) return;
+    const text = body.trim();
+    if (!text || !canCompose || sendingRef.current) return;
+    sendingRef.current = true;
+    setActionError(null);
+    setSending(true);
     try {
-      await api.post(`/competitions/${competition.id}/chat`, { body });
-      setBody('');
-      // Remember which comp this user most recently posted to — used to warn
-      // when they open a different comp's chat next time.
-      const record: LastChatComp = { id: competition.id, name: competition.name };
+      let posted: ChatMessage | undefined;
+      if (isAdmin && canModerate) {
+        const response = await api.post<ChatMessage>(`/competitions/${competition.id}/chat/announcement`, { body: text, tag: effectiveMode === 'banner' ? BANNER_TAG : 'general' });
+        posted = response.data;
+        if (posted) setMessages((current) => current.some((item) => item.id === posted!.id) ? current : [...current, posted!]);
+        if (effectiveMode === 'banner') {
+          try { await deleteBanners(); }
+          catch {
+            setActionError('The new banner was pinned, but the old one could not be cleared. Check your connection and try again.');
+            loadMessages();
+          }
+        }
+      } else {
+        const response = await api.post<ChatMessage>(`/competitions/${competition.id}/chat`, { body: text });
+        posted = response.data;
+        if (posted) setMessages((current) => current.some((item) => item.id === posted!.id) ? current : [...current, posted!]);
+      }
+      if (isAdmin && canModerate) reload();
+      setBody((current) => current.trim() === text ? '' : current);
+      const record = { id: competition.id, name: competition.name };
       saveLastChatComp(record);
       setLastChatComp(record);
       setDismissedCompWarning(true);
-    } catch (e) {
-      const status = (e as { response?: { status?: number } }).response?.status;
-      if (status === 403) alert('Posting is blocked from this network. Contact an organiser.');
+    } catch (error) {
+      setActionError((error as { response?: { status?: number } }).response?.status === 403
+        ? 'Posting is blocked from this network. Contact an organiser.'
+        : 'Couldn’t send that post. Check your connection and try again.');
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
   }
 
-  async function announce() {
-    if (!announcement.trim()) return;
-    await api.post(`/competitions/${competition.id}/chat/announcement`, { body: announcement, tag: 'general' });
-    setAnnouncement('');
-  }
-
-  const canSend = canPost && body.trim().length > 0;
-
-  const liveNow = competition.sessions.some((session) => session.status === 1);
   return (
-    <div className="flex flex-col gap-4">
-    <div className="mg-band flex items-center gap-3 py-3">
-      <h1 className="mg-h1 mg-h1-sm min-w-0 flex-1">Live feed &amp; stream</h1>
-      {liveNow && <span className="mg-badge mg-badge-live">Live</span>}
-    </div>
-    <div className="grid lg:grid-cols-3 gap-4">
-      <div className="lg:col-span-3">
-        <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={streamingEnabled && canOrganise(competition)} fallback={compStreamUrl} competitionName={competition.name} />
-      </div>
-      <div className="lg:col-span-2 card p-0 overflow-hidden flex flex-col" style={{ minHeight: '70vh' }}>
-        <div className="flex items-center gap-2.5 border-b border-[rgb(var(--mg-rule))] px-4 py-3">
-          <MessagesSquare aria-hidden="true" className="h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))]" />
-          <h2 className="mg-h2 min-w-0 flex-1">Chat</h2>
-          <span className="mg-meta">
-            {messages.length} message{messages.length === 1 ? '' : 's'}
-          </span>
-        </div>
-        {lastChatComp && lastChatComp.id !== competition.id && !dismissedCompWarning && (
-          <div className="px-3 py-2 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 flex items-start gap-2 text-xs">
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              Your last post was on a different competition.{' '}
-              <Link
-                to={`/competitions/${lastChatComp.id}/chat`}
-                className="font-semibold underline hover:text-amber-700 dark:hover:text-amber-200"
-              >
-                Switch back to "{lastChatComp.name}"
-              </Link>{' '}
-              or post here.
-            </div>
-            <button
-              onClick={() => setDismissedCompWarning(true)}
-              className="shrink-0 text-amber-700 hover:text-amber-900 dark:text-amber-200"
-              title="Dismiss"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
-          <AnimatePresence initial={false}>
-            {messages.map((m) => (
-              <MessageBubble
-                key={m.id}
-                m={m}
-                isAdmin={canEdit()}
-                showPrivate={canPost}
-                onDelete={() => deleteMessage(m.id)}
-                onBlock={() => blockMessageAuthor(m.id)}
-              />
-            ))}
-          </AnimatePresence>
-          {messages.length === 0 && <p className="text-slate-500 text-sm">Nothing posted yet.</p>}
-        </div>
-        <footer className="p-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-          {!canPost ? (
-            <p className="text-[11px] text-slate-500 dark:text-slate-300 flex items-center gap-1">
-              <Lock className="w-3 h-3" /> Only organisers and trainers can post here.
-            </p>
-          ) : (
-            <>
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-300">
-                <Users className="w-3 h-3" /> posting as <span className="font-semibold">{user?.fullName}</span>
-                {!isAdmin && <span className="ml-auto flex items-center gap-1"><Lock className="w-3 h-3" /> Only organisers see your messages</span>}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  className="input flex-1"
-                  placeholder={isAdmin ? 'Post to everyone…' : 'Message the organisers…'}
-                  value={body} onChange={(e) => setBody(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && canSend && send()}
-                />
-                <button className="btn-primary" onClick={send} disabled={!canSend} aria-label="Send">
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
-            </>
-          )}
-        </footer>
+    <div className={`live-page ${canPost ? 'live-page-staff' : 'live-page-public'}`}>
+      <div className="live-page-band mg-band">
+        <h1 className="mg-h1 mg-h1-sm">Live &amp; stream</h1>
+        {canPost ? <span className="live-role-badge">Organiser</span> : liveNow && <span className="mg-badge mg-badge-live">Live</span>}
       </div>
 
-      <aside className="space-y-4">
-        {canEdit() && (
-          <div className="card p-4">
-            <h3 className="font-semibold flex items-center gap-2 mb-2">
-              <Megaphone className="w-5 h-5 text-amber-600" /> Announce
-            </h3>
-            <textarea
-              className="input" rows={3} placeholder="Important update to broadcast…"
-              value={announcement} onChange={(e) => setAnnouncement(e.target.value)}
-            />
-            <button className="btn-primary w-full mt-2" onClick={announce}>
-              <Megaphone className="w-4 h-4" /> Send to everyone
-            </button>
-          </div>
-        )}
-        {canEdit() && (
-          <CompStreamEditor competition={competition} onSaved={reload} />
-        )}
-        <div className="card p-4">
-          <h3 className="mg-h2 mb-2 flex items-center gap-2">
-            <Activity aria-hidden="true" className="h-5 w-5" /> System feed
-          </h3>
-          <p className="mg-lede !text-sm">
-            Session and score updates appear here automatically. Announcements from organisers show too.
-          </p>
-        </div>
-      </aside>
-    </div>
-    </div>
-  );
-}
+      {actionError && !allOpen && <div className="live-action-error" role="alert"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError(null)}><X aria-hidden="true" /></button></div>}
 
-function MessageBubble({
-  m, isAdmin, showPrivate, onDelete, onBlock,
-}: {
-  m: ChatMessage;
-  isAdmin: boolean;
-  showPrivate: boolean;
-  onDelete: () => void;
-  onBlock: () => void;
-}) {
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const isSystem = m.type === 1;
-  const isAnnouncement = m.type === 2;
-  // System messages don't make sense to block (no IP / no human author).
-  const canModerate = isAdmin && !isSystem;
-  return (
-    <motion.div
-      initial={{ y: 8, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onClick={() => canModerate && setActionsOpen((v) => !v)}
-      className={`px-3 py-2 rounded-xl text-sm transition ${
-        canModerate ? 'cursor-pointer hover:ring-2 hover:ring-brand-400/40' : ''
-      } ${
-        isAnnouncement
-          ? 'bg-amber-100 dark:bg-amber-900/30 border-l-4 border-amber-500'
-          : isSystem
-            ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 italic'
-            : 'bg-brand-50 dark:bg-brand-900/30'
-      }`}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="font-semibold text-xs">
-          {isAnnouncement && '📣 '}
-          {m.authorName}
-          {showPrivate && m.adminOnly && (
-            <span className="ml-1.5 inline-flex items-center gap-0.5 font-normal text-[10px] text-slate-500 dark:text-slate-300">
-              <Lock className="w-2.5 h-2.5" /> organisers only
-            </span>
-          )}
-        </span>
-        <span className="text-[10px] text-slate-500">
-          {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
-      </div>
-      <p className="whitespace-pre-wrap">{m.body}</p>
-      {canModerate && actionsOpen && (
-        <div className="mt-2 flex flex-wrap gap-1.5 border-t border-current/10 pt-2" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={() => { setActionsOpen(false); onDelete(); }}
-            className="btn-ghost !py-1 !px-2 text-[11px] text-rose-700 dark:text-rose-300"
-          >
-            <Trash2 className="w-3.5 h-3.5" /> Delete
-          </button>
-          <button
-            onClick={() => { setActionsOpen(false); onBlock(); }}
-            className="btn-ghost !py-1 !px-2 text-[11px] text-amber-700 dark:text-amber-300"
-          >
-            <Shield className="w-3.5 h-3.5" /> Block IP
-          </button>
-          <button
-            onClick={() => setActionsOpen(false)}
-            className="btn-ghost !py-1 !px-2 text-[11px] ml-auto"
-          >
-            <X className="w-3.5 h-3.5" /> Cancel
-          </button>
+      {canPost ? (
+        <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} onSaved={reload} />
+      ) : (
+        <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
+      )}
+
+      {banner && (
+        <div className="live-banner" role="status">
+          <Megaphone aria-hidden="true" />
+          <div><strong>{banner.body}</strong><span>{canPost ? 'Pinned banner · everyone sees this' : `Pinned by organisers · ${messageTime(banner)}`}</span></div>
+          {canModerate && <button type="button" onClick={() => void unpinBanners()}>Unpin</button>}
         </div>
       )}
-    </motion.div>
+
+      <section className="live-announcements" aria-labelledby="announcements-title">
+        <div className="mg-section-head">
+          <h2 id="announcements-title">Announcements</h2>
+          {visibleMessages.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>All {visibleMessages.length}</button>}
+        </div>
+        {lastChatComp && lastChatComp.id !== competition.id && !dismissedCompWarning && canCompose && (
+          <div className="live-comp-warning" role="status">
+            <AlertTriangle aria-hidden="true" />
+            <span>Your last post was for another competition. <Link to={`/competitions/${lastChatComp.id}/chat`}>Switch back to {lastChatComp.name}</Link>, or post here.</span>
+            <button type="button" aria-label="Dismiss competition warning" onClick={() => setDismissedCompWarning(true)}><X aria-hidden="true" /></button>
+          </div>
+        )}
+        {messagesError && <div className="live-feed-error" role="alert"><span>{messagesError}</span><button type="button" onClick={loadMessages}>Try again</button></div>}
+        {messagesLoading && messages.length === 0
+          ? <div className="live-feed-state mg-card" role="status">Loading announcements…</div>
+          : messagesError && messages.length === 0
+            ? null
+            : <AnnouncementList messages={latest} staff={canPost} canModerate={canModerate} onDelete={removeMessage} onBlock={blockMessageAuthor} />}
+      </section>
+
+      {canCompose && (
+        <div className="live-composer">
+          {canModerate ? (
+            <div className="mg-seg" role="group" aria-label="Post type">
+              <button type="button" aria-pressed={effectiveMode === 'announcement'} onClick={() => setMode('announcement')}>Announcement</button>
+              <button type="button" aria-pressed={effectiveMode === 'banner'} onClick={() => setMode('banner')}>Pin as banner</button>
+            </div>
+          ) : (
+            <div className="live-composer-label">{isTrainer ? <><Lock aria-hidden="true" /> Message organisers</> : 'Announcement'}</div>
+          )}
+          <div className="live-compose-row">
+            <label className="mg-field">
+              <span className="sr-only">{effectiveMode === 'banner' ? 'Banner text' : isTrainer ? 'Message organisers' : 'Announcement'}</span>
+              <input value={body} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && body.trim()) void send(); }} placeholder={effectiveMode === 'banner' ? 'Banner text, replaces the pinned one' : isTrainer ? 'Message the organisers…' : 'Write an announcement…'} />
+            </label>
+            <button type="button" className="live-send" aria-label="Send" disabled={!body.trim() || sending} onClick={send}><Send aria-hidden="true" /></button>
+          </div>
+        </div>
+      )}
+      {isAdmin && !canModerate && (
+        <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Turn Edit mode on to post an announcement or pin a banner.</div>
+      )}
+
+      {allOpen && <AnnouncementsOverlay messages={visibleMessages.slice().reverse()} staff={canPost} canModerate={canModerate} error={actionError} onDelete={removeMessage} onBlock={blockMessageAuthor} onDismissError={dismissActionError} onClose={closeAnnouncements} returnFocusRef={announcementsTriggerRef} />}
+    </div>
   );
 }
 
-function CompStreamEditor({
-  competition, onSaved,
-}: {
-  competition: { id: number; streamUrl?: string | null };
+function AnnouncementList({ messages, staff, canModerate, onDelete, onBlock, full = false }: {
+  messages: ChatMessage[];
+  staff: boolean;
+  canModerate: boolean;
+  onDelete: (id: number) => Promise<void>;
+  onBlock: (id: number) => Promise<void>;
+  full?: boolean;
+}) {
+  const reduceMotion = useReducedMotion();
+  return <div className={`live-announcement-list mg-card mg-list ${full ? 'live-announcement-list-full' : ''}`}>
+    <AnimatePresence initial={false}>
+      {messages.map((message) => <AnnouncementRow key={message.id} message={message} staff={staff} canModerate={canModerate} onDelete={onDelete} onBlock={onBlock} reduceMotion={!!reduceMotion} />)}
+    </AnimatePresence>
+    {messages.length === 0 && <p className="live-empty">Nothing posted yet.</p>}
+  </div>;
+}
+
+function AnnouncementRow({ message, staff, canModerate, onDelete, onBlock, reduceMotion }: {
+  message: ChatMessage;
+  staff: boolean;
+  canModerate: boolean;
+  onDelete: (id: number) => Promise<void>;
+  onBlock: (id: number) => Promise<void>;
+  reduceMotion: boolean;
+}) {
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const canBlock = canModerate && message.type === 0;
+  return <motion.div className={`live-announcement-row ${staff ? 'live-announcement-row-staff' : ''}`} initial={reduceMotion ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -4 }} transition={{ duration: reduceMotion ? 0 : 0.2 }}>
+    <time dateTime={message.createdAt}>{messageTime(message)}</time>
+    {canBlock ? <button type="button" className="live-announcement-copy" aria-expanded={actionsOpen} onClick={(event) => { event.stopPropagation(); setActionsOpen((open) => !open); }}><span>{message.body}</span>{staff && message.adminOnly && <small><Lock aria-hidden="true" /> Organisers only</small>}</button>
+      : <div className="live-announcement-copy"><span>{message.body}</span>{staff && message.adminOnly && <small><Lock aria-hidden="true" /> Organisers only</small>}</div>}
+    {canModerate && <button type="button" className="live-delete" aria-label={`Delete: ${message.body}`} onClick={(event) => { event.stopPropagation(); void onDelete(message.id); }}><Trash2 aria-hidden="true" /></button>}
+    {actionsOpen && canBlock && <button type="button" className="live-block" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); void onBlock(message.id); }}><Shield aria-hidden="true" /> Block this sender</button>}
+  </motion.div>;
+}
+
+function AnnouncementsOverlay({ messages, staff, canModerate, error, onDelete, onBlock, onDismissError, onClose, returnFocusRef }: {
+  messages: ChatMessage[];
+  staff: boolean;
+  canModerate: boolean;
+  error: string | null;
+  onDelete: (id: number) => Promise<void>;
+  onBlock: (id: number) => Promise<void>;
+  onDismissError: () => void;
+  onClose: () => void;
+  returnFocusRef: RefObject<HTMLElement | null>;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, '[aria-label="Close announcements"]', returnFocusRef);
+  return <div className="live-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={dialogRef} className="live-all-dialog" role="dialog" aria-modal="true" aria-label="All announcements">
+      <div className="live-all-head"><h2>All announcements</h2><button type="button" className="mg-icon-btn" aria-label="Close announcements" onClick={onClose}><X aria-hidden="true" /></button></div>
+      {error && <div className="live-action-error" role="alert"><span>{error}</span><button type="button" aria-label="Dismiss error" onClick={onDismissError}><X aria-hidden="true" /></button></div>}
+      <AnnouncementList messages={messages} staff={staff} canModerate={canModerate} onDelete={onDelete} onBlock={onBlock} full />
+    </div>
+  </div>;
+}
+
+function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEditStream, onSaved }: {
+  active: LiveStream | null;
+  fallback: string | null;
+  competitionId: number;
+  canBroadcast: boolean;
+  canEditStream: boolean;
   onSaved: () => void;
 }) {
-  const [url, setUrl] = useState(competition.streamUrl ?? '');
-  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const closeSettings = useCallback(() => setEditing(false), []);
+  const changeRef = useRef<HTMLButtonElement>(null);
+  const streamName = active ? active.caption || `${active.arenaName} · ${active.angleName}` : fallback ? 'Competition stream' : 'No stream is set';
+  return <div className="staff-stream-wrap">
+    <div className="staff-stream mg-card">
+      <span className="staff-stream-thumb"><Video aria-hidden="true" /></span>
+      <span className="staff-stream-copy"><strong>{active ? 'Stream is on' : fallback ? 'Stream link is set' : 'Stream hasn’t started'}</strong><span>{streamName}</span></span>
+      {canEditStream ? <button ref={changeRef} type="button" className="staff-stream-change" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>Change</button>
+        : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>Change</Link> : null}
+    </div>
+    {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
+  </div>;
+}
 
+function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditStream, onSaved, onClose, returnFocusRef }: {
+  competitionId: number;
+  fallback: string | null;
+  canBroadcast: boolean;
+  canEditStream: boolean;
+  onSaved: () => void;
+  onClose: () => void;
+  returnFocusRef: RefObject<HTMLElement | null>;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, '[aria-label="Close stream settings"]', returnFocusRef);
+  return <div className="live-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={dialogRef} className="staff-stream-dialog" role="dialog" aria-modal="true" aria-label="Stream settings">
+      <div className="live-all-head"><h2>Stream settings</h2><button type="button" className="mg-icon-btn" aria-label="Close stream settings" onClick={onClose}><X aria-hidden="true" /></button></div>
+      {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary"><Video aria-hidden="true" />Change camera</Link>}
+      <CompStreamEditor competition={{ id: competitionId, streamUrl: fallback }} canEditStream={canEditStream} onSaved={onSaved} />
+    </div>
+  </div>;
+}
+
+function CompStreamEditor({ competition, canEditStream, onSaved }: { competition: { id: number; streamUrl?: string | null }; canEditStream: boolean; onSaved: () => void }) {
+  const [url, setUrl] = useState(competition.streamUrl ?? '');
+  const [savedUrl, setSavedUrl] = useState(competition.streamUrl ?? '');
+  const savedUrlRef = useRef(savedUrl);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const next = competition.streamUrl ?? '';
+    setUrl((current) => current === savedUrlRef.current ? next : current);
+    savedUrlRef.current = next;
+    setSavedUrl(next);
+  }, [competition.streamUrl]);
   async function save(next: string | null) {
+    if (!canEditStream) return;
     setBusy(true);
+    setError(null);
     try {
       await api.put(`/competitions/${competition.id}/stream-url`, { streamUrl: next });
+      const value = next ?? '';
+      savedUrlRef.current = value;
+      setSavedUrl(value);
+      setUrl(value);
       onSaved();
-    } finally {
-      setBusy(false);
+    } catch {
+      setError('Couldn’t save the stream link. Check your connection and try again.');
     }
+    finally { setBusy(false); }
   }
-
-  return (
-    <div className="card p-4 space-y-2">
-      <h3 className="font-semibold flex items-center gap-2">
-        <Radio className="w-5 h-5 text-rose-500" /> Competition stream
-      </h3>
-      <p className="text-xs text-slate-600 dark:text-slate-200">
-        A link for the whole event, shown above the feed when no camera is live.
-      </p>
-      <div className="flex gap-1.5">
-        <input
-          className="input !py-1.5 text-xs flex-1 min-w-0"
-          placeholder="https://youtu.be/… or https://twitch.tv/channel"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-        />
-        <button
-          onClick={() => save(url.trim() ? url.trim() : null)}
-          disabled={busy || url === (competition.streamUrl ?? '')}
-          className="btn-primary !py-1.5 !px-2 text-[11px]"
-        >
-          <Save className="w-3 h-3" /> {busy ? '…' : 'Save'}
-        </button>
-        {competition.streamUrl && (
-          <button
-            onClick={() => { setUrl(''); save(null); }}
-            disabled={busy}
-            className="btn-ghost !py-1.5 !px-1.5 text-[11px]"
-            title="Clear stream"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        )}
-      </div>
+  return <div className="staff-stream-editor-wrap">
+    <div className="staff-stream-editor">
+      <label className="mg-field"><Radio aria-hidden="true" /><span className="sr-only">Competition stream URL</span><input placeholder="https://youtu.be/… or https://twitch.tv/channel" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
+      <button type="button" className="mg-btn mg-btn-secondary" onClick={() => void save(url.trim() || null)} disabled={!canEditStream || busy || url.trim() === savedUrl}><Save aria-hidden="true" />Save</button>
+      {savedUrl && <button type="button" className="mg-icon-btn" title="Clear stream" onClick={() => void save(null)} disabled={!canEditStream || busy}><X aria-hidden="true" /></button>}
     </div>
-  );
+    {error && <p className="staff-stream-error" role="alert">{error}</p>}
+  </div>;
+}
+
+function useDialogFocus(dialogRef: RefObject<HTMLDivElement | null>, onClose: () => void, initialFocus: string, returnFocusRef?: RefObject<HTMLElement | null>) {
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const restoreTo = returnFocusRef?.current ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.querySelector<HTMLElement>(initialFocus)?.focus();
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', key);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', key);
+      if (restoreTo?.isConnected) restoreTo.focus();
+    };
+  }, [dialogRef, initialFocus, returnFocusRef]);
 }
