@@ -40,10 +40,13 @@ public sealed class StreamLifecycle(AppDbContext db, ISfuClient sfu, ViewerRegis
 
     public static IReadOnlyList<string> Mids(string json) => JsonSerializer.Deserialize<string[]>(json) ?? [];
 
+    /// <summary>
+    /// Drops the pending session but keeps <see cref="LiveStream.PendingAttempt"/> as the last attempt
+    /// number issued, so a new attempt never reuses it and a late /ready for it is rejected.
+    /// </summary>
     public static void ClearPending(LiveStream stream)
     {
         stream.PendingSfuSessionId = null;
-        stream.PendingAttempt = null;
         stream.PendingSince = null;
         stream.PendingHasAudio = false;
         stream.PendingSimulcast = false;

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +51,25 @@ public class StreamSweeperTests
     }
 
     [Fact]
+    public async Task AttemptNumbersNeverRepeat_SoALateReadyForAnExpiredAttemptIsRejected()
+    {
+        using var f = new StreamingApiFactory();
+        using var admin = await f.AdminAsync();
+        var competition = await f.SeedCompetitionAsync();
+        var visible = await f.StartAsync(admin, competition, "Visible");
+        await f.ReadyAsync(admin, competition, visible);
+        var republish = Path(competition, visible.StreamId, "/republish");
+        var expired = await (await admin.PostAsJsonAsync(republish, new PublishRequest(VideoOffer, "0"))).ReadAsync<PublishResponse>();
+        f.Clock.Advance(TimeSpan.FromSeconds(30));
+        await f.Sweeper.SweepAsync(f.Clock.GetUtcNow().UtcDateTime);
+        var next = await (await admin.PostAsJsonAsync(republish, new PublishRequest(VideoOffer, "0"))).ReadAsync<PublishResponse>();
+        Assert.True(next.Attempt > expired.Attempt);
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await admin.PostAsJsonAsync(Path(competition, visible.StreamId, "/ready"), new ReadyRequest(expired.Attempt))).StatusCode);
+        Assert.Equal(next.Attempt, (await f.ReadyAsync(admin, competition, next)).Generation);
+    }
+
+    [Fact]
     public async Task ExpiredStartingRowsAreDeleted_VisiblePendingAttemptsAreCleared_EvenDuringGrace()
     {
         using var f = new StreamingApiFactory();
@@ -69,7 +89,7 @@ public class StreamSweeperTests
         await sweeper.SweepAsync(f.Clock.GetUtcNow().UtcDateTime);
         Assert.False(await f.WithDbAsync(db => db.LiveStreams.AnyAsync(s => s.Id == starting.StreamId)));
         var current = await f.StreamAsync(visible.StreamId);
-        Assert.Null(current.PendingAttempt);
+        Assert.Equal(pending.Attempt, current.PendingAttempt);
         Assert.Null(current.PendingSince);
         Assert.Null(current.PendingSfuSessionId);
         Assert.Equal("[]", current.PendingTrackMids);

@@ -58,7 +58,10 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
         var arena = request.ArenaName.Trim();
         var angle = request.AngleName.Trim();
         var active = db.LiveStreams.Where(s => s.CompetitionId == competitionId && s.Status != LiveStreamStatus.Ended);
-        var duplicate = await active.Where(s => s.ArenaName == arena && s.AngleName == angle).OrderByDescending(s => s.Id).FirstOrDefaultAsync(ct);
+        var arenaKey = arena.ToLower();
+        var angleKey = angle.ToLower();
+        var duplicate = await active.Where(s => s.ArenaName.ToLower() == arenaKey && s.AngleName.ToLower() == angleKey)
+            .OrderByDescending(s => s.Id).FirstOrDefaultAsync(ct);
         if (duplicate is not null && !request.TakeOver) return ConflictProblem("This arena and angle are already broadcasting.");
         if (await active.CountAsync(ct) >= _options.MaxLivePerCompetition) return ConflictProblem("This competition has reached its stream limit.");
         SfuSession session;

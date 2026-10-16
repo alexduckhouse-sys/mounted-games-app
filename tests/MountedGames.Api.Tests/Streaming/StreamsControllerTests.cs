@@ -158,6 +158,7 @@ public class StreamsControllerTests : IClassFixture<StreamingApiFactory>
         var competition = await _f.SeedCompetitionAsync();
         var first = await _f.StartAsync(admin, competition);
         Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync(Path(competition), new StartStreamRequest("Arena", "Main", VideoOffer, "0"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync(Path(competition), new StartStreamRequest(" arena ", "MAIN", VideoOffer, "0"))).StatusCode);
         await _f.ReadyAsync(admin, competition, first);
         var replacement = await _f.StartAsync(admin, competition, takeover: true);
         Assert.Equal(LiveStreamStatus.Live, (await _f.StreamAsync(first.StreamId)).Status);

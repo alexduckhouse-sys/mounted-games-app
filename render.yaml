@@ -43,3 +43,8 @@ services:
         sync: false
       - key: Streaming__Cloudflare__AppToken
         sync: false
+      # Optional: a Cloudflare TURN key relays video for networks that block it.
+      - key: Streaming__Cloudflare__TurnKeyId
+        sync: false
+      - key: Streaming__Cloudflare__TurnKeyApiToken
+        sync: false
