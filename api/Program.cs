@@ -152,6 +152,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseForwardedHeaders();
+// Before anything reads the client IP (rate limits, IP blocks, chat and shop records).
+app.UseMiddleware<ProxyClientIpMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseExceptionHandler();
 app.UseRouting();
