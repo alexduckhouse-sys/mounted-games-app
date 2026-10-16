@@ -185,7 +185,6 @@ public record CreateSessionRequest(
 
 public record UpdateSessionStatusRequest(SessionStatus Status);
 
-public record UpdateSessionStreamRequest(string? StreamUrl);
 public record UpdateSessionLanesRequest(int? LanesPerHeat);
 public record GenerateHeatsRequest(
     IReadOnlyList<int> TeamIds,

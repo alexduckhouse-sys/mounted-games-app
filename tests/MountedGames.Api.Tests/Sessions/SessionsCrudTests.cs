@@ -313,30 +313,7 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
-    // ---- Stream / settings / lanes ----
-
-    [Fact]
-    public async Task SetStream_TrimsUrl_AndBlankClearsIt()
-    {
-        var a = await _f.CreateArenaAsync();
-        var admin = await _f.AdminAsync();
-        var url = Url(a, $"/{a.SessionId}/stream");
-
-        var set = await (await admin.PutAsJsonAsync(url, new UpdateSessionStreamRequest("  https://youtu.be/abc  "))).ReadAsync<SessionDto>();
-        Assert.Equal("https://youtu.be/abc", set.StreamUrl);
-
-        var cleared = await (await admin.PutAsJsonAsync(url, new UpdateSessionStreamRequest("   "))).ReadAsync<SessionDto>();
-        Assert.Null(cleared.StreamUrl);
-    }
-
-    [Fact]
-    public async Task SetStream_Returns404_WhenSessionMissing()
-    {
-        var a = await _f.CreateArenaAsync();
-        var admin = await _f.AdminAsync();
-        var r = await admin.PutAsJsonAsync(Url(a, "/999999/stream"), new UpdateSessionStreamRequest("x"));
-        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
-    }
+    // ---- Settings / lanes ----
 
     [Fact]
     public async Task SetSettings_AppliesMinutesAndAlternating_AndLeavesAlternatingWhenOmitted()
