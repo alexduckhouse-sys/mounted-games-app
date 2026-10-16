@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Clock, Trophy, LogOut, MessageSquare, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES, useTheme } from '../theme/ThemeContext';
@@ -80,7 +80,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
               <div className="grid grid-cols-3 gap-2">
                 {ageGroups.groups.map((group) => {
                   const active = selectedSection === String(group.id) || (location.pathname === `${base}/scoring` && !location.search && group.id === ageGroups.groups[0].id);
-                  return <NavLink key={group.id} to={`${base}/scoring?section=${group.id}`} onClick={onClose} aria-current={active ? 'page' : undefined} className="mg-chip !min-h-11 !px-2 text-center !text-sm !whitespace-normal">{group.name}</NavLink>;
+                  return <Link key={group.id} to={`${base}/scoring?section=${group.id}`} onClick={onClose} aria-current={active ? 'page' : undefined} className="mg-chip !min-h-11 !px-2 text-center !text-sm !whitespace-normal">{group.name}</Link>;
                 })}
               </div>
             </nav>

@@ -1,0 +1,132 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../api';
+import type { Placing, QueuedScore } from '../offline/scoreOutbox';
+import { heat } from '../test/factories';
+import { ScoreOutboxPanel } from './ScoreOutboxPanel';
+
+vi.mock('../api', () => ({ api: { post: vi.fn() } }));
+const post = vi.mocked(api.post);
+
+const KEY = 'mg.outbox.scores';
+const mine: Placing[] = [{ teamId: 1, place: 1, eliminated: false }, { teamId: 2, place: 2, eliminated: false }];
+const theirs: Placing[] = [{ teamId: 2, place: 1, eliminated: false }, { teamId: 1, place: 2, eliminated: false }];
+const item = (raceId: number, extra: Partial<QueuedScore> = {}): QueuedScore => ({
+  raceId, competitionId: 1, sessionId: 1, label: `Heat ${raceId} · Barrel Race`, places: mine, expected: [],
+  teamNames: { 1: 'Red Rum', 2: 'Shergar' }, queuedAt: `2026-06-01T10:0${raceId}:00Z`, state: 'waiting', ...extra,
+});
+const seed = (...items: QueuedScore[]) => localStorage.setItem(KEY, JSON.stringify(items));
+const stored = () => JSON.parse(localStorage.getItem(KEY) ?? '[]') as QueuedScore[];
+
+beforeEach(() => {
+  post.mockResolvedValue({ data: heat(1) } as never);
+});
+
+describe('ScoreOutboxPanel', () => {
+  it('shows nothing when there is nothing waiting for this competition', () => {
+    seed(item(1, { competitionId: 2 }));
+    const { container } = render(<ScoreOutboxPanel competitionId={1} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('shows nothing at all with an empty outbox', () => {
+    const { container } = render(<ScoreOutboxPanel competitionId={1} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('tells the scorer a single saved race will send when there is signal', () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    seed(item(1));
+    render(<ScoreOutboxPanel competitionId={1} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Heat 1 · Barrel Race is saved on this phone and will send when you have signal.');
+  });
+
+  it('counts several saved races', () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    seed(item(1), item(2));
+    render(<ScoreOutboxPanel competitionId={1} />);
+    expect(screen.getByRole('status')).toHaveTextContent('2 races are saved on this phone');
+  });
+
+  it('sends waiting results on request', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    seed(item(1));
+    render(<ScoreOutboxPanel competitionId={1} />);
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+    await userEvent.click(screen.getByRole('button', { name: 'Send now' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/races/1/results', expect.anything(), expect.anything()));
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+  });
+
+  describe('when another phone scored the race differently', () => {
+    const conflict = () => seed(item(1, { state: 'conflict', theirs }));
+
+    it('shows both sets of results side by side', () => {
+      conflict();
+      render(<ScoreOutboxPanel competitionId={1} />);
+      expect(screen.getByRole('alert')).toHaveTextContent('Heat 1 · Barrel Race: scored differently on another phone');
+      expect(screen.getByText('Theirs').nextSibling).toHaveTextContent('1st Shergar · 2nd Red Rum');
+      expect(screen.getByText('Yours').nextSibling).toHaveTextContent('1st Red Rum · 2nd Shergar');
+    });
+
+    it('lets the scorer keep theirs, which drops the local copy', async () => {
+      conflict();
+      render(<ScoreOutboxPanel competitionId={1} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Keep theirs' }));
+      expect(stored()).toEqual([]);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('lets the scorer use theirs-over-mine, which sends the local results again', async () => {
+      conflict();
+      render(<ScoreOutboxPanel competitionId={1} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Use mine' }));
+      await waitFor(() => expect(post).toHaveBeenCalledWith('/races/1/results', { places: mine, expected: theirs }, expect.anything()));
+    });
+
+    it('shows an empty "theirs" when the other results are unknown', () => {
+      seed(item(1, { state: 'conflict' }));
+      render(<ScoreOutboxPanel competitionId={1} />);
+      expect(screen.getByText('Theirs').nextSibling).toHaveTextContent('No results');
+    });
+  });
+
+  describe('when a save was rejected', () => {
+    const failed = () => seed(item(1, { state: 'failed', error: 'These results were rejected.' }));
+
+    it('explains what went wrong along with the results', () => {
+      failed();
+      render(<ScoreOutboxPanel competitionId={1} />);
+      expect(screen.getByRole('alert')).toHaveTextContent('Heat 1 · Barrel Race wasn’t saved');
+      expect(screen.getByRole('alert')).toHaveTextContent('These results were rejected. (1st Red Rum · 2nd Shergar)');
+    });
+
+    it('queues it again on "Try again"', async () => {
+      failed();
+      render(<ScoreOutboxPanel competitionId={1} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    });
+
+    it('deletes the results only after the scorer confirms', async () => {
+      failed();
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      render(<ScoreOutboxPanel competitionId={1} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete mine' }));
+      expect(confirm).toHaveBeenCalledWith('Delete your results for Heat 1 · Barrel Race?');
+      expect(stored()).toHaveLength(1);
+      confirm.mockReturnValue(true);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete mine' }));
+      expect(stored()).toEqual([]);
+    });
+  });
+
+  it('shows each kind of problem separately', () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    seed(item(1, { state: 'conflict', theirs }), item(2, { state: 'failed', error: 'x' }), item(3));
+    render(<ScoreOutboxPanel competitionId={1} />);
+    expect(screen.getAllByRole('alert')).toHaveLength(2);
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+});
