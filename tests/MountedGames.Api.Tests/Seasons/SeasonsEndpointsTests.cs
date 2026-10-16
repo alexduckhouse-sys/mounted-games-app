@@ -26,6 +26,9 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
         var (member, _) = await _f.SignupAsync("Member");
         Assert.Equal(HttpStatusCode.Forbidden,
             (await member.PostAsJsonAsync("/api/seasons", SeasonBody())).StatusCode);
+        var (pendingTrainer, _) = await _f.SignupAsync();
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await pendingTrainer.PostAsJsonAsync("/api/seasons", SeasonBody())).StatusCode);
     }
 
     [Fact]
@@ -68,7 +71,7 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
         var updated = await (await trainer.PutAsJsonAsync($"/api/seasons/{created.Id}", update)).ReadAsync<SeasonDto>();
         Assert.Equal("Updated league", updated.Title);
         Assert.Equal(12, updated.PlacePoints[0].Points);
-        var (other, _) = await _f.SignupAsync("Trainer");
+        var (other, _) = await _f.ApprovedTrainerAsync();
         Assert.Equal(HttpStatusCode.NotFound, (await other.PutAsJsonAsync($"/api/seasons/{created.Id}", update)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await trainer.GetAsync($"/api/seasons/{Guid.NewGuid()}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await _f.CreateClient().GetAsync($"/api/seasons/{Guid.NewGuid()}/standings")).StatusCode);
@@ -131,13 +134,13 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Conflict,
             (await owner.PostAsJsonAsync($"/api/competitions/{competitionId}/team-profile-links",
                 new LinkEventTeamRequest(unrelated.Id, teamId))).StatusCode);
-        var (other, _) = await _f.SignupAsync("Trainer");
+        var (other, _) = await _f.ApprovedTrainerAsync();
 
         Assert.Equal(HttpStatusCode.NotFound,
             (await other.PostAsJsonAsync($"/api/competitions/{competitionId}/team-profile-links",
                 new LinkEventTeamRequest(profile.Id, teamId))).StatusCode);
 
-        var otherCompetition = await _f.SeedCompetitionAsync(ownerUserId: (await _f.SignupAsync("Trainer")).Auth.User.Id);
+        var otherCompetition = await _f.SeedCompetitionAsync(ownerUserId: (await _f.ApprovedTrainerAsync()).Auth.User.Id);
         var otherSection = await _f.SeedSectionAsync(otherCompetition);
         var otherTeam = await _f.SeedTeamAsync(otherCompetition, otherSection, clubId);
         Assert.Equal(HttpStatusCode.NotFound,

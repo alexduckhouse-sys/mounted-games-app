@@ -24,7 +24,10 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
         var (member, _) = await _f.SignupAsync("Member");
         Assert.Equal(HttpStatusCode.Forbidden,
             (await member.PostAsJsonAsync($"/api/event-tools/competitions/{competitionId}/team-import/preview", request)).StatusCode);
-        var (otherTrainer, _) = await _f.SignupAsync("Trainer");
+        var (pendingTrainer, _) = await _f.SignupAsync();
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await pendingTrainer.PostAsJsonAsync($"/api/event-tools/competitions/{competitionId}/team-import/preview", request)).StatusCode);
+        var (otherTrainer, _) = await _f.ApprovedTrainerAsync();
         Assert.Equal(HttpStatusCode.NotFound,
             (await otherTrainer.PostAsJsonAsync($"/api/event-tools/competitions/{competitionId}/team-import/preview", request)).StatusCode);
     }
