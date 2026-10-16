@@ -178,7 +178,7 @@ public class CommerceEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task CompetitionOwnerItemIsApprovedImmediately()
     {
-        var (organiser, auth) = await _f.SignupAsync();
+        var (organiser, auth) = await _f.ApprovedTrainerAsync();
         var competitionId = await CompetitionAsync(ownerUserId: auth.User.Id);
         var item = await CreateItemAsync(organiser);
 
