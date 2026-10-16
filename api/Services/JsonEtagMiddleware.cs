@@ -29,6 +29,7 @@ public sealed class JsonEtagMiddleware(RequestDelegate next)
         buffer.Position = 0;
         if (response.StatusCode == StatusCodes.Status200OK
             && response.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) == true
+            && !response.Headers.CacheControl.ToString().Contains("no-store", StringComparison.OrdinalIgnoreCase)
             && !response.Headers.ContainsKey(HeaderNames.ETag))
         {
             // Weak: compression further out changes the bytes but not the content.

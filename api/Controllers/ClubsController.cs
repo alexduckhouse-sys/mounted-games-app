@@ -28,9 +28,15 @@ public class ClubsController : ControllerBase
     }
 
     [HttpGet("{id:int}/saved-riders")]
-    public async Task<IEnumerable<SavedRiderDto>> SavedRiders(int id) =>
-        (await _db.SavedRiders.Where(r => r.ClubId == id).OrderBy(r => r.FullName).ToListAsync())
-            .Select(r => r.ToDto());
+    [Authorize(Roles = Roles.TeamWork)]
+    public async Task<IEnumerable<SavedRiderDto>> SavedRiders(int id)
+    {
+        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var isAdmin = User.IsInRole(Roles.Admin);
+        return (await _db.SavedRiders
+            .Where(r => r.ClubId == id && (isAdmin || (uid != null && r.CreatedByUserId == uid)))
+            .OrderBy(r => r.FullName).ToListAsync()).Select(r => r.ToDto());
+    }
 
     [HttpPost]
     [Authorize(Roles = Roles.Admin)]

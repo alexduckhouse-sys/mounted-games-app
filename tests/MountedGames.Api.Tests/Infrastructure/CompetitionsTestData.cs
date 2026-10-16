@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
@@ -7,8 +8,13 @@ namespace MountedGames.Api.Tests.Infrastructure;
 /// <summary>Direct-to-database arrange/assert helpers for the competitions, teams and equipment tests.</summary>
 public static class CompetitionsTestData
 {
+    /// <summary>The seeded trainer account's user id.</summary>
+    public static Task<string> TrainerIdAsync(this ApiFactory f)
+        => f.WithDbAsync(db => db.Users.Where(u => u.Email == TestClients.TrainerEmail).Select(u => u.Id).SingleAsync());
+
+    /// <param name="ownerUserId">Creator; trainers may only organise competitions they created.</param>
     public static Task<int> SeedCompetitionAsync(this ApiFactory f, string? name = null, DateTime? start = null,
-        DateTime? end = null, bool archived = false)
+        DateTime? end = null, bool archived = false, string? ownerUserId = null)
         => f.WithDbAsync(async db =>
         {
             var c = new Competition
@@ -17,6 +23,7 @@ public static class CompetitionsTestData
                 StartDate = start ?? DateTime.UtcNow.Date.AddDays(30),
                 EndDate = end,
                 IsArchived = archived,
+                CreatedByUserId = ownerUserId,
             };
             db.Competitions.Add(c);
             await db.SaveChangesAsync();

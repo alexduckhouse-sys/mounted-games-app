@@ -79,7 +79,7 @@ public class LiveHubTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Connection_AcceptsJwtFromAccessTokenQuery()
     {
-        var auth = await _f.LoginAsync(TestClients.AdminEmail, TestClients.AdminPassword);
+        var auth = await _f.AdminLoginAsync();
 
         await using var conn = await ConnectAsync(auth.Token);
 

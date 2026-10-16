@@ -772,6 +772,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("ClubId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 

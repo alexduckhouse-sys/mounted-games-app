@@ -4,6 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http;
+using Microsoft.AspNetCore.Identity;
+using MountedGames.Api.Data;
+using MountedGames.Api.Entities;
 using MountedGames.Api.Services;
 
 namespace MountedGames.Api.Tests.Infrastructure;
@@ -15,7 +18,7 @@ namespace MountedGames.Api.Tests.Infrastructure;
 /// </summary>
 public class ApiFactory : WebApplicationFactory<Program>
 {
-    public const string AdminKey = "test-admin-key";
+    public const string AdminKey = "test-admin-key-0123456789";
 
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"mg-test-{Guid.NewGuid():N}.db");
 
@@ -27,7 +30,13 @@ public class ApiFactory : WebApplicationFactory<Program>
         // UseSetting (not ConfigureAppConfiguration): Program.cs reads the connection string while
         // building, before late configuration callbacks are applied.
         builder.UseSetting("ConnectionStrings:Default", $"Data Source={_dbPath}");
+        // Outside Development, SecurityConfiguration rejects secrets that are short or come from
+        // appsettings.json, so the test host supplies both the way a deployment would.
+        builder.UseSetting("Jwt:Key", "test-jwt-key-0123456789-0123456789-0123456789");
         builder.UseSetting("Admin:Key", AdminKey);
+        // Tests sign in far more often than the production limits allow.
+        builder.UseSetting("RateLimits:AuthPerMinute", "100000");
+        builder.UseSetting("RateLimits:WritesPerMinute", "100000");
         builder.ConfigureServices(services =>
         {
             var scheduler = services.Single(d => d.ImplementationType == typeof(NotificationScheduler));
@@ -38,6 +47,20 @@ public class ApiFactory : WebApplicationFactory<Program>
             services.ConfigureAll<HttpClientFactoryOptions>(o =>
                 o.HttpMessageHandlerBuilderActions.Add(b => b.PrimaryHandler = Http));
         });
+    }
+
+    /// <summary>
+    /// Demo data (the seeded admin and trainer accounts, clubs and competitions) is only seeded in
+    /// Development, so the "Testing" host seeds it here once the app has started.
+    /// </summary>
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+        using var scope = host.Services.CreateScope();
+        DbInitializer.SeedDemoDataAsync(
+            scope.ServiceProvider.GetRequiredService<AppDbContext>(),
+            scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>()).GetAwaiter().GetResult();
+        return host;
     }
 
     protected override void Dispose(bool disposing)

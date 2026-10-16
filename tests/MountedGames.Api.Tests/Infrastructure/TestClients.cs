@@ -9,7 +9,7 @@ public static class TestClients
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    /// <summary>Seeded accounts from DbInitializer.</summary>
+    /// <summary>Seeded accounts from DbInitializer. The admin password only works in Development.</summary>
     public const string AdminEmail = "admin@mg.local";
     public const string AdminPassword = "Admin!234";
     public const string TrainerEmail = "trainer@mg.local";
@@ -22,8 +22,19 @@ public static class TestClients
         return (await resp.Content.ReadFromJsonAsync<AuthResponse>(Json))!;
     }
 
+    /// <summary>
+    /// Signs in as the shared admin through the admin key. Outside Development the seeded admin's
+    /// password login is refused, and the test host runs as "Testing".
+    /// </summary>
+    public static async Task<AuthResponse> AdminLoginAsync(this ApiFactory f)
+    {
+        var resp = await f.CreateClient().PostAsJsonAsync("/api/auth/admin-key", new AdminKeyRequest(ApiFactory.AdminKey));
+        resp.EnsureSuccessStatusCode();
+        return (await resp.Content.ReadFromJsonAsync<AuthResponse>(Json))!;
+    }
+
     public static async Task<HttpClient> AdminAsync(this ApiFactory f)
-        => f.WithToken((await f.LoginAsync(AdminEmail, AdminPassword)).Token);
+        => f.WithToken((await f.AdminLoginAsync()).Token);
 
     public static async Task<HttpClient> TrainerAsync(this ApiFactory f)
         => f.WithToken((await f.LoginAsync(TrainerEmail, TrainerPassword)).Token);

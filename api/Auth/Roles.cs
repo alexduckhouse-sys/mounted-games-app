@@ -18,8 +18,8 @@ public static class Roles
     /// </summary>
     public const string TeamMember = Trainer + "," + Manager + "," + Member;
 
-    /// <summary>Anyone authorised to organise / edit a competition (admin + trainer + manager).</summary>
-    public const string Organiser = Admin + "," + Trainer + "," + Manager;
+    /// <summary>Anyone authorised to organise / edit a competition (admin + competition-owning trainer).</summary>
+    public const string Organiser = Admin + "," + Trainer;
 
     /// <summary>Admin OR any team-level role — gates dec-form submit + similar shared-team work.</summary>
     public const string TeamWork = Admin + "," + Trainer + "," + Manager + "," + Member;

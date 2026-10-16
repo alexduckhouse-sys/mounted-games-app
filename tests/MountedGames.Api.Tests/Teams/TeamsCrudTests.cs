@@ -13,7 +13,8 @@ public class TeamsCrudTests : IClassFixture<ApiFactory>
 
     private async Task<(int Comp, int Section, int Club)> ArrangeAsync(string? clubBib = null, string clubName = "Arrange Club")
     {
-        var comp = await _f.SeedCompetitionAsync();
+        // Owned by the seeded trainer, who may only organise competitions they created.
+        var comp = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
         var section = await _f.SeedSectionAsync(comp);
         var club = await _f.SeedClubAsync($"{clubName} {Guid.NewGuid():N}"[..24], clubBib);
         return (comp, section, club);

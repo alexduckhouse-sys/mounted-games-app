@@ -26,18 +26,30 @@ const STATUS_PILL: Record<SignupPaymentStatus, { label: string; cls: string }> =
 
 export function DetailsTab() {
   const { competition, reload } = useCompetition();
-  const { canEdit, canOrganise, hasRole } = useAuth();
-  const [allSignups, setAllSignups] = useState<SectionSignup[]>([]);
+  const { canEdit, canOrganise, hasRole, user } = useAuth();
+  const [signupResult, setSignupResult] = useState<{ key: string; items: SectionSignup[] } | null>(null);
+  const signupKey = `${competition.id}:${user?.id ?? ''}`;
+  const mayOrganise = canOrganise(competition);
+  const allSignups = mayOrganise && signupResult?.key === signupKey ? signupResult.items : [];
   const [lockBusy, setLockBusy] = useState(false);
 
   async function refreshSignups() {
+    if (!canOrganise(competition)) return;
     try {
       const r = await api.get<SectionSignup[]>(`/competitions/${competition.id}/signups`);
-      setAllSignups(r.data);
-    } catch { /* noop */ }
+      setSignupResult({ key: signupKey, items: r.data });
+    } catch { setSignupResult({ key: signupKey, items: [] }); }
   }
 
-  useEffect(() => { refreshSignups(); }, [competition.id]);
+  useEffect(() => {
+    let cancelled = false;
+    if (mayOrganise) {
+      api.get<SectionSignup[]>(`/competitions/${competition.id}/signups`)
+        .then(({ data }) => { if (!cancelled) setSignupResult({ key: signupKey, items: data }); })
+        .catch(() => { if (!cancelled) setSignupResult({ key: signupKey, items: [] }); });
+    }
+    return () => { cancelled = true; };
+  }, [competition.id, mayOrganise, signupKey]);
 
   async function toggleLock() {
     if (lockBusy) return;
@@ -150,7 +162,7 @@ export function DetailsTab() {
       </div>
 
       {/* Organiser controls — lock signups, jump to format wizard, CSV export. */}
-      {(canOrganise() || hasRole('Admin')) && competition.sections.length > 0 && (
+      {(canOrganise(competition) || hasRole('Admin')) && competition.sections.length > 0 && (
         <div className="card p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] uppercase tracking-wide font-bold text-slate-500">Organiser tools</span>
@@ -215,7 +227,7 @@ export function DetailsTab() {
                 paymentDestination={competition.paymentDestination ?? null}
                 competitionName={competition.name}
                 onChanged={() => { refreshSignups(); reload(); }}
-                canManage={canEdit() || canOrganise()}
+                canManage={canEdit() || canOrganise(competition)}
                 hideJoin={hasRole('Admin')}
               />
             ))}

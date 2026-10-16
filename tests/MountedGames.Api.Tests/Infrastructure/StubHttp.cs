@@ -3,7 +3,7 @@ using System.Text;
 
 namespace MountedGames.Api.Tests.Infrastructure;
 
-/// <summary>Replaces the network for named HttpClients (weather, geocoding): tests queue canned responses by URL fragment.</summary>
+/// <summary>Replaces the network for named HttpClients (weather, geocoding, push): tests queue canned responses by URL fragment.</summary>
 public class StubHttp : HttpMessageHandler
 {
     private readonly List<(string Fragment, Func<HttpRequestMessage, HttpResponseMessage> Respond)> _routes = new();
@@ -25,11 +25,21 @@ public class StubHttp : HttpMessageHandler
     public void Throw(string urlFragment)
         => _routes.Add((urlFragment, _ => throw new HttpRequestException("stubbed network failure")));
 
+    public void Respond(string urlFragment, Func<HttpRequestMessage, HttpResponseMessage> respond)
+    {
+        lock (_routes) _routes.Add((urlFragment, respond));
+    }
+
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         var url = request.RequestUri!.ToString();
-        Requests.Add(url);
-        foreach (var (fragment, respond) in _routes)
+        (string Fragment, Func<HttpRequestMessage, HttpResponseMessage> Respond)[] routes;
+        lock (_routes)
+        {
+            Requests.Add(url);
+            routes = _routes.ToArray();
+        }
+        foreach (var (fragment, respond) in routes)
             if (url.Contains(fragment, StringComparison.OrdinalIgnoreCase))
                 return Task.FromResult(respond(request));
         return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));

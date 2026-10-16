@@ -26,7 +26,7 @@ interface AuthContextValue {
    * Trainers regardless of editorMode (no view/edit toggle for trainers).
    * Use for organiser-only surfaces like the comp creator wizard's Save.
    */
-  canOrganise: () => boolean;
+  canOrganise: (competition?: { createdByUserId?: string | null }) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -129,10 +129,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const canEdit = useCallback(() => editorMode && hasRole('Admin'), [editorMode, hasRole]);
-  // Manager is treated as an organiser (same as Trainer); Member is intentionally NOT.
+  // Ownership is also enforced by the API; this hides controls the viewer cannot use.
   const canOrganise = useCallback(
-    () => hasRole('Admin') || hasRole('Trainer') || hasRole('Manager'),
-    [hasRole]);
+    (competition?: { createdByUserId?: string | null }) => hasRole('Admin')
+      || (hasRole('Trainer') && (!competition || competition.createdByUserId === user?.id)),
+    [hasRole, user?.id]);
 
   const value: AuthContextValue = {
     user,

@@ -171,10 +171,24 @@ public class SignupTests : IClassFixture<ApiFactory>
         await client.PostAsJsonAsync(Url(a), Entry("A-second"));
         await client.PostAsJsonAsync(Url(b), Entry("B-only"));
 
-        var rows = await (await client.GetAsync($"/api/competitions/{a.CompetitionId}/signups"))
+        var admin = await _f.AdminAsync();
+
+        var rows = await (await admin.GetAsync($"/api/competitions/{a.CompetitionId}/signups"))
             .ReadAsync<List<SectionSignupDto>>();
 
         Assert.Equal(new[] { "A-second", "A-first" }, rows.Select(r => r.FullName));
+    }
+
+    [Fact]
+    public async Task List_IsRestrictedToOrganisers_WhoOwnTheCompetition()
+    {
+        var a = await _f.NewSectionAsync();
+        var trainer = await _f.TrainerAsync();
+
+        var anonymous = await _f.CreateClient().GetAsync($"/api/competitions/{a.CompetitionId}/signups");
+        var notOwner = await trainer.GetAsync($"/api/competitions/{a.CompetitionId}/signups");
+
+        Assert.Equal((HttpStatusCode.Unauthorized, HttpStatusCode.NotFound), (anonymous.StatusCode, notOwner.StatusCode));
     }
 
     [Fact]
@@ -396,7 +410,7 @@ public class SignupTests : IClassFixture<ApiFactory>
         await SignUpAsync(section, "Paid", null);
         await SignUpAsync(section, "Refunded", null);
         var admin = await _f.AdminAsync();
-        var list = await (await _f.CreateClient().GetAsync($"/api/competitions/{section.CompetitionId}/signups")).ReadAsync<List<SectionSignupDto>>();
+        var list = await (await admin.GetAsync($"/api/competitions/{section.CompetitionId}/signups")).ReadAsync<List<SectionSignupDto>>();
         await admin.PutAsJsonAsync($"/api/signups/{list.Single(s => s.FullName == "Refunded").Id}/status",
             new UpdateSignupStatusRequest(SignupPaymentStatus.Refunded));
 

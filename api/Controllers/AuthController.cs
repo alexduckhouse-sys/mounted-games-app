@@ -1,4 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -30,15 +33,19 @@ public class AuthController : ControllerBase
         _db = db;
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest req)
     {
         var user = await _users.FindByEmailAsync(req.Email);
-        if (user is null)
+        // The shared organiser account uses the admin key. Old demo databases
+        // must not retain a second, well-known password login in production.
+        if (user is null || (user.Email == "admin@mg.local"
+            && !HttpContext.RequestServices.GetRequiredService<IHostEnvironment>().IsDevelopment()))
             return Unauthorized(new { message = "Invalid email or password." });
 
-        var check = await _signIn.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: false);
+        var check = await _signIn.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: true);
         if (!check.Succeeded)
             return Unauthorized(new { message = "Invalid email or password." });
 
@@ -48,12 +55,14 @@ public class AuthController : ControllerBase
             new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList()));
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("admin-key")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> AdminKey([FromServices] IConfiguration config, AdminKeyRequest req)
     {
         var expected = config["Admin:Key"];
-        if (string.IsNullOrWhiteSpace(expected) || req.Key != expected)
+        if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrEmpty(req.Key) || !CryptographicOperations.FixedTimeEquals(
+                SHA256.HashData(Encoding.UTF8.GetBytes(req.Key)), SHA256.HashData(Encoding.UTF8.GetBytes(expected))))
             return Unauthorized(new { message = "Invalid admin key." });
 
         var user = await _users.FindByEmailAsync("admin@mg.local");
@@ -64,6 +73,7 @@ public class AuthController : ControllerBase
             new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, null, roles.ToList()));
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("signup-trainer")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> SignupTrainer(SignupTrainerRequest req)
@@ -126,6 +136,7 @@ public class AuthController : ControllerBase
         return cleaned.Length == 0 ? "user" : cleaned;
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("register")]
     [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req)

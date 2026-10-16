@@ -16,6 +16,9 @@ public class PushTests : IClassFixture<ApiFactory>
     private readonly ApiFactory _f;
     public PushTests(ApiFactory f) => _f = f;
 
+    /// <summary>An endpoint on a push host the API accepts.</summary>
+    public static string AllowedEndpoint(string? id = null) => $"https://fcm.googleapis.com/fcm/send/{id ?? Guid.NewGuid().ToString("N")}";
+
     [Fact]
     public async Task VapidPublicKey_IsPublic_AndStableAcrossCalls()
     {
@@ -46,27 +49,50 @@ public class PushTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Subscribe_AddsSubscription_ThenUpsertsKeysAndOwnerForSameEndpoint()
+    public async Task Subscribe_AddsSubscription_ThenUpdatesKeysForSameOwner()
     {
-        var endpoint = $"https://push.example/{Guid.NewGuid():N}";
-        var (first, _) = await _f.SignupAsync();
-        var (second, secondAuth) = await _f.SignupAsync();
+        var endpoint = AllowedEndpoint();
+        var (me, auth) = await _f.SignupAsync();
+        await me.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(endpoint, "old", "old"));
+
+        var r = await me.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(endpoint, "new-key", "new-auth"));
+
+        var rows = await _f.InDbAsync(db => db.PushSubscriptions.Where(s => s.Endpoint == endpoint).ToListAsync());
+        Assert.Equal(
+            (HttpStatusCode.NoContent, 1, auth.User.Id, "new-key"),
+            (r.StatusCode, rows.Count, rows[0].UserId, rows[0].P256dh));
+    }
+
+    [Fact]
+    public async Task Subscribe_Returns409_WhenAnotherUserClaimsTheEndpoint()
+    {
+        var endpoint = AllowedEndpoint();
+        var (first, firstAuth) = await _f.SignupAsync();
+        var (second, _) = await _f.SignupAsync();
         await first.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(endpoint, "old", "old"));
 
         var r = await second.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(endpoint, "new-key", "new-auth"));
 
-        var rows = await _f.InDbAsync(db => db.PushSubscriptions.Where(s => s.Endpoint == endpoint).ToListAsync());
-        Assert.Equal(
-            (HttpStatusCode.NoContent, 1, secondAuth.User.Id, "new-key"),
-            (r.StatusCode, rows.Count, rows[0].UserId, rows[0].P256dh));
+        var row = await _f.InDbAsync(db => db.PushSubscriptions.SingleAsync(s => s.Endpoint == endpoint));
+        Assert.Equal((HttpStatusCode.Conflict, firstAuth.User.Id, "old"), (r.StatusCode, row.UserId, row.P256dh));
+    }
+
+    [Fact]
+    public async Task Subscribe_Returns400_ForEndpointOutsideKnownPushServices()
+    {
+        var (me, _) = await _f.SignupAsync();
+
+        var r = await me.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest("https://push.example/abc", "p", "a"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
     [Fact]
     public async Task Unsubscribe_WithEndpoint_RemovesOnlyThatOwnSubscription()
     {
         var (me, auth) = await _f.SignupAsync();
-        var keep = $"https://push.example/{Guid.NewGuid():N}";
-        var drop = $"https://push.example/{Guid.NewGuid():N}";
+        var keep = AllowedEndpoint();
+        var drop = AllowedEndpoint();
         await me.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(keep, "p", "a"));
         await me.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(drop, "p", "a"));
 
@@ -91,9 +117,9 @@ public class PushTests : IClassFixture<ApiFactory>
     {
         var (me, myAuth) = await _f.SignupAsync();
         var (other, otherAuth) = await _f.SignupAsync();
-        await me.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest($"https://p.example/{Guid.NewGuid():N}", "p", "a"));
-        await me.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest($"https://p.example/{Guid.NewGuid():N}", "p", "a"));
-        await other.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest($"https://p.example/{Guid.NewGuid():N}", "p", "a"));
+        await me.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(AllowedEndpoint(), "p", "a"));
+        await me.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(AllowedEndpoint(), "p", "a"));
+        await other.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(AllowedEndpoint(), "p", "a"));
 
         await me.DeleteAsync("/api/push/subscribe");
 
@@ -140,7 +166,7 @@ public class PushTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Test_DeliversPayloadToSubscribedEndpoint()
     {
-        using var push = new FakePushService(HttpStatusCode.Created);
+        using var push = new FakePushService(_f.Http, HttpStatusCode.Created);
         var (me, _) = await _f.SignupAsync();
         await me.PostAsJsonAsync("/api/push/subscribe", FakePushService.Subscription(push.Endpoint));
 
@@ -152,7 +178,7 @@ public class PushTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Test_RemovesSubscription_WhenPushServiceSaysGone()
     {
-        using var push = new FakePushService(HttpStatusCode.Gone);
+        using var push = new FakePushService(_f.Http, HttpStatusCode.Gone);
         var (me, auth) = await _f.SignupAsync();
         await me.PostAsJsonAsync("/api/push/subscribe", FakePushService.Subscription(push.Endpoint));
 
@@ -164,7 +190,7 @@ public class PushTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Test_KeepsSubscription_WhenPushServiceFailsTransiently()
     {
-        using var push = new FakePushService(HttpStatusCode.InternalServerError);
+        using var push = new FakePushService(_f.Http, HttpStatusCode.InternalServerError);
         var (me, auth) = await _f.SignupAsync();
         await me.PostAsJsonAsync("/api/push/subscribe", FakePushService.Subscription(push.Endpoint));
 
@@ -239,9 +265,12 @@ public class PushTests : IClassFixture<ApiFactory>
 }
 
 /// <summary>A loopback HTTP listener standing in for a browser vendor's push service.</summary>
+/// <summary>
+/// A push service reached through the test host's <see cref="StubHttp"/>. Its endpoint is on an
+/// allowed push host (see PushEndpointPolicy) and unique, so each instance counts only its own sends.
+/// </summary>
 public sealed class FakePushService : IDisposable
 {
-    private readonly HttpListener _listener = new();
     private readonly HttpStatusCode _status;
     private int _received;
     private readonly SemaphoreSlim _arrived = new(0);
@@ -249,14 +278,17 @@ public sealed class FakePushService : IDisposable
     public string Endpoint { get; }
     public int Received => Volatile.Read(ref _received);
 
-    public FakePushService(HttpStatusCode status)
+    public FakePushService(StubHttp http, HttpStatusCode status)
     {
         _status = status;
-        var port = FreePort();
-        Endpoint = $"http://127.0.0.1:{port}/push/{Guid.NewGuid():N}";
-        _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-        _listener.Start();
-        _ = Task.Run(Loop);
+        var id = Guid.NewGuid().ToString("N");
+        Endpoint = PushTests.AllowedEndpoint(id);
+        http.Respond(id, _ =>
+        {
+            Interlocked.Increment(ref _received);
+            _arrived.Release();
+            return new HttpResponseMessage(_status);
+        });
     }
 
     /// <summary>A valid-looking subscription (real P-256 public key + 16-byte auth secret) pointing at this listener.</summary>
@@ -273,33 +305,6 @@ public sealed class FakePushService : IDisposable
 
     private static string B64Url(byte[] b) => Convert.ToBase64String(b).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    private static int FreePort()
-    {
-        var l = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-        l.Start();
-        var port = ((IPEndPoint)l.LocalEndpoint).Port;
-        l.Stop();
-        return port;
-    }
-
-    private async Task Loop()
-    {
-        while (_listener.IsListening)
-        {
-            try
-            {
-                var ctx = await _listener.GetContextAsync();
-                Interlocked.Increment(ref _received);
-                ctx.Response.StatusCode = (int)_status;
-                ctx.Response.Close();
-                _arrived.Release();
-            }
-            catch (Exception) when (!_listener.IsListening) { }
-            catch (HttpListenerException) { }
-            catch (ObjectDisposedException) { }
-        }
-    }
-
     /// <summary>Waits (bounded) until <paramref name="count"/> requests have arrived.</summary>
     public async Task WaitForAsync(int count)
     {
@@ -308,5 +313,5 @@ public sealed class FakePushService : IDisposable
                 throw new TimeoutException($"Expected {count} push request(s); only {i} arrived.");
     }
 
-    public void Dispose() => _listener.Close();
+    public void Dispose() => _arrived.Dispose();
 }
