@@ -248,6 +248,7 @@ StopWatching(streamId: number): Promise<void>
 - **iPhone broadcaster:** Safari stops the camera when the phone locks or the app goes to the background. We republish on return, and the setup screen tells the operator to keep the screen on.
 - **iPhone viewer:** there's no element full screen on iPhone, so full screen there is an in-app overlay with no orientation lock.
 - **Cost:** 200 viewers × 6 hours at 720p is about 650 GB, most of the 1 TB free monthly allowance. Simulcast lowers this for phones on weak signal. `MaxViewerSessions` (300) caps abuse at roughly 160 GB an hour. Without a trusted client IP there's no per-IP limit, so set a Cloudflare billing alert.
+- **Shared TURN credentials:** viewers receive the same short-lived TURN credentials (cached for an hour, valid for six). Someone could reuse them to relay their own traffic through the account until they expire. The billing alert covers this; if it happens, revoke the TURN key in the Cloudflare dashboard (streaming keeps working over STUN).
 - **Safeguarding:** streams are public. The broadcaster sees a reminder; club policy is the organiser's responsibility.
 - **Single API instance:** viewer sessions, counts, locks and the token bucket live in memory.
 
