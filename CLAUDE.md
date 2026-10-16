@@ -59,14 +59,14 @@ Vite proxies `/api` and `/hubs` (with WebSockets) to `http://localhost:5050`. Ax
 - **Production:** the web is on Vercel (`web/vercel.json`), which rewrites `/api/*` to the API on Render (`render.yaml`, free plan, sleeps after 15 minutes idle); data is in Neon Postgres. The browser connects to the SignalR hub on Render directly. `fly.toml` and `DEPLOY.md`'s Fly path are not in use.
 - **Security headers** are defined twice, in `api/Security/SecurityHeadersMiddleware.cs` and `web/vercel.json`; `SecurityTests` fails if they differ, and bans `*` and `unsafe-eval` in the CSP.
 - **Required production settings:** `Jwt__Key` (at least 32 bytes), `Admin__Key` (at least 20 bytes), `Database__Provider=postgres`, `DATABASE_URL`, `Database__SeedDemoData=false`. `SecurityConfiguration` refuses to start outside Development with weak keys or keys taken from `appsettings.json`.
-- Optional: `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpiryMinutes`, `Cors__Origins__N`, `Security__KnownProxies__N`, `RateLimits__AuthPerMinute`, `RateLimits__WritesPerMinute`, `What3Words__ApiKey`, `Push__Subject`; frontend build: `VITE_API_BASE`, `VITE_LIVE_HUB_URL`.
+- Optional: `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpiryMinutes`, `Cors__Origins__N`, `Security__KnownProxies__N`, `Security__ProxyKey`, `RateLimits__AuthPerMinute`, `RateLimits__WritesPerMinute`, `What3Words__ApiKey`, `Push__Subject`; frontend build: `VITE_API_BASE`, `VITE_LIVE_HUB_URL`; Vercel runtime: `MG_PROXY_KEY` (read by `web/middleware.ts`).
 - Environment variables use `__` for nested keys. There's no user-secrets setup.
 - `VapidKeyService` generates `vapid-keys.json` in the API content root (gitignored); replacing the container regenerates it and invalidates push subscriptions.
 
 ## Gotchas to flag, not silently fix
 
 - `api/appsettings.json` still holds development JWT/admin key values. Never copy key values into docs or logs.
-- Without `Security__KnownProxies`, forwarded headers are ignored, so behind Vercel and Render every visitor shares one rate-limit partition (see `docs/security-review.md`).
+- **Visitor IPs:** behind Vercel, the API learns a visitor's IP only from `web/middleware.ts`, which sends it with a shared key (`MG_PROXY_KEY` on Vercel, the same value as `Security__ProxyKey` on Render; at least 32 bytes). Without the key every visitor shares one rate-limit partition. The live hub connects to Render directly and isn't covered (see `docs/security-review.md`).
 - Anyone can self-register as a Trainer (`POST /api/auth/signup-trainer`), and Trainers can create competitions.
 - `api/MountedGames.Api.http` is a stale template (port 5140, `/weatherforecast/`).
 - Render's free plan sleeps: the first request after idle takes about 50 seconds and SignalR connections drop.
