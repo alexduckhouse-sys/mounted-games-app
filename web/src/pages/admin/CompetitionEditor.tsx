@@ -5,7 +5,8 @@ import {
   Trash2, Sparkles, Clock,
 } from 'lucide-react';
 import { api } from '../../api';
-import { COMPETITION_ICONS } from '../../competition/icons';
+import { CompetitionIcon } from '../../competition/CompetitionIcon';
+import { EMOJI_COMPETITION_ICONS, FLAG_COMPETITION_ICONS } from '../../competition/icons';
 import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionDetail, CompetitionSection } from '../../types';
 
@@ -767,9 +768,15 @@ function BasicsStep(p: BasicsProps) {
       </label>
       <label className="block">
         <span className="text-sm font-semibold">Competition icon</span>
-        <select className="input mt-1 min-h-12" value={p.icon} onChange={(e) => p.setIcon(e.target.value)}>
-          {COMPETITION_ICONS.map((option) => <option key={option.id} value={option.id}>{option.symbol} {option.label}</option>)}
-        </select>
+        <span className="mt-1 flex items-center gap-3">
+          <select className="input min-h-12 flex-1" value={p.icon} onChange={(e) => p.setIcon(e.target.value)}>
+            {EMOJI_COMPETITION_ICONS.map((option) => <option key={option.id} value={option.id}>{option.symbol} {option.label}</option>)}
+            <optgroup label="Flags">
+              {FLAG_COMPETITION_ICONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </optgroup>
+          </select>
+          <span className="text-2xl" data-testid="competition-icon-preview"><CompetitionIcon id={p.icon} labelled /></span>
+        </span>
       </label>
       <label className="block">
         <span className="text-sm font-semibold flex items-center gap-1"><MapPin className="w-4 h-4" /> Venue / location</span>
