@@ -149,7 +149,10 @@ public class DrawOperationsTests : IClassFixture<ApiFactory>
             (await _f.CreateClient().PostAsJsonAsync(PreviewUrl(arena), new DrawRequest(1))).StatusCode);
         Assert.Equal(HttpStatusCode.OK,
             (await (await _f.TrainerAsync()).PostAsJsonAsync(PreviewUrl(arena), new DrawRequest(1))).StatusCode);
-        var (other, _) = await _f.SignupAsync("Trainer");
+        var (pendingTrainer, _) = await _f.SignupAsync("Trainer");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await pendingTrainer.PostAsJsonAsync(PreviewUrl(arena), new DrawRequest(1))).StatusCode);
+        var (other, _) = await _f.ApprovedTrainerAsync();
         Assert.Equal(HttpStatusCode.NotFound,
             (await other.PostAsJsonAsync(PreviewUrl(arena), new DrawRequest(1))).StatusCode);
     }
