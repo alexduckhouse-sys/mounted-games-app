@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,17 @@ public class CloudflareClientTests
     [InlineData("m=video 9 UDP/TLS/RTP/SAVPF 96\na=simulcast:send f;h;q\n", true)]
     public void SimulcastMustBeSendInAVideoMediaSection(string sdp, bool expected) =>
         Assert.Equal(expected, StreamsController.HasVideoSimulcast(sdp));
+
+    [Fact]
+    public async Task NewSessionsAreCreatedWithoutABody()
+    {
+        using var f = new StreamingApiFactory();
+        using var admin = await f.AdminAsync();
+        var competition = await f.SeedCompetitionAsync();
+        await f.StartAsync(admin, competition);
+        var created = Assert.Single(f.SfuRequests, r => r.Url.EndsWith("/sessions/new"));
+        Assert.Equal(JsonValueKind.Undefined, created.Body.ValueKind);
+    }
 
     [Theory]
     [InlineData("/sessions/new", "{}")]

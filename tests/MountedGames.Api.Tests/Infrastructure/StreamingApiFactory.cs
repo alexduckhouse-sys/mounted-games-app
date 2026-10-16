@@ -30,7 +30,11 @@ public sealed class StreamingApiFactory : ApiFactory
         Http.Respond("https://sfu.test/", request =>
         {
             var url = request.RequestUri!.AbsolutePath;
-            var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult()).RootElement.Clone();
+            // Like Cloudflare, sessions/new must have no body: even "{}" is rejected with 400.
+            if (url.EndsWith("/sessions/new") && request.Content is not null)
+                return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("{\"errorCode\":\"decoding_error\"}", System.Text.Encoding.UTF8, "application/json") };
+            var body = request.Content is null ? default
+                : JsonDocument.Parse(request.Content.ReadAsStringAsync().GetAwaiter().GetResult()).RootElement.Clone();
             SfuRequests.Enqueue((url, request.Method.Method, body, request.Headers.Authorization?.Parameter));
             OnRequest?.Invoke(url);
             if (FailPath is not null && url.Contains(FailPath))

@@ -50,7 +50,8 @@ public sealed class CloudflareSfuClient(IHttpClientFactory clients, IOptions<Str
 
     private async Task<SfuSession> CreateAsync(object body, IReadOnlyList<string> mids, string expectedType, CancellationToken ct)
     {
-        var created = await SendAsync(HttpMethod.Post, $"{AppUrl}/sessions/new", new { }, _config.AppToken, ct);
+        // sessions/new takes no body: Cloudflare rejects even an empty JSON object.
+        var created = await SendAsync(HttpMethod.Post, $"{AppUrl}/sessions/new", null, _config.AppToken, ct);
         CheckErrors(created);
         var sid = String(created, "sessionId");
         if (string.IsNullOrWhiteSpace(sid) || sid.Length > 100) throw new SfuException();
@@ -128,12 +129,12 @@ public sealed class CloudflareSfuClient(IHttpClientFactory clients, IOptions<Str
         finally { _iceLock.Release(); }
     }
 
-    private async Task<JsonElement> SendAsync(HttpMethod method, string url, object body, string token, CancellationToken ct)
+    private async Task<JsonElement> SendAsync(HttpMethod method, string url, object? body, string token, CancellationToken ct)
     {
         try
         {
             using var client = clients.CreateClient(HttpClientName);
-            using var request = new HttpRequestMessage(method, url) { Content = JsonContent.Create(body) };
+            using var request = new HttpRequestMessage(method, url) { Content = body is null ? null : JsonContent.Create(body) };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var response = await client.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode) throw new SfuException();
