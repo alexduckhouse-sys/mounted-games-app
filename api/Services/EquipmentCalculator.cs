@@ -37,9 +37,19 @@ public class EquipmentCalculator
             .Select(r => r.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var templates = await _db.RaceTemplates
-            .Where(t => raceNames.Contains(t.Name))
-            .ToDictionaryAsync(t => t.Name, t => t, StringComparer.OrdinalIgnoreCase);
+        // Race names are free text, so match templates case-insensitively. The
+        // unique index on RaceTemplate.Name is case-sensitive, so "Bending" and
+        // "bending" can both exist; prefer an exact-case match, then the oldest.
+        var loweredNames = raceNames.Select(n => n.ToLower()).ToList();
+        var candidates = await _db.RaceTemplates
+            .Where(t => loweredNames.Contains(t.Name.ToLower()))
+            .OrderBy(t => t.Id)
+            .ToListAsync();
+        var templates = raceNames
+            .Select(n => (Name: n, Template: candidates.FirstOrDefault(t => t.Name == n)
+                ?? candidates.FirstOrDefault(t => string.Equals(t.Name, n, StringComparison.OrdinalIgnoreCase))))
+            .Where(x => x.Template is not null)
+            .ToDictionary(x => x.Name, x => x.Template!, StringComparer.OrdinalIgnoreCase);
 
         // Per session, accumulate per-kind+bucket counts.
         var perSession = new List<Dictionary<(string Kind, string Bucket), int>>();
@@ -51,7 +61,7 @@ public class EquipmentCalculator
             // the busiest run of the session.
             var largest = session.Heats.Select(h => h.Entries.Count).DefaultIfEmpty(0).Max();
             if (largest == 0) continue;
-            foreach (var race in session.Heats.SelectMany(h => h.Races).GroupBy(r => r.Name).Select(g => g.First()))
+            foreach (var race in session.Heats.SelectMany(h => h.Races).GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.First()))
             {
                 if (!templates.TryGetValue(race.Name, out var template)) continue;
                 racesCounted++;

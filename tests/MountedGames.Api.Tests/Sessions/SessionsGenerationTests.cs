@@ -214,6 +214,21 @@ public class SessionsGenerationTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task GenerateRaceFinals_AppendingToSessionWithNoHeats_StartsAtRoundOne()
+    {
+        var a = await _f.CreateArenaAsync(4, raceFinals: true);
+        var admin = await _f.AdminAsync();
+
+        var r = await admin.PostAsJsonAsync(Url(a, "/generate-race-finals"),
+            new GenerateRaceFinalsRequest(a.TeamIds, new[] { "Race" }, null, false));
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var s = await r.ReadAsync<SessionDto>();
+        Assert.Equal(3, s.Heats.Count);
+        Assert.All(s.Heats, h => Assert.Equal(1, h.RaceRoundId));
+    }
+
+    [Fact]
     public async Task GenerateRaceFinals_ReplaceExisting_DropsOldHeatsAndRestartsRoundNumbers()
     {
         var a = await _f.CreateArenaAsync(4, raceFinals: true);

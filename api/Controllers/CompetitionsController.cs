@@ -443,6 +443,8 @@ public class CompetitionsController : ControllerBase
         var raceNames = req.RaceNames.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
         if (raceNames.Count == 0) return BadRequest("At least one race name is required.");
         if (req.TopN < 1) return BadRequest("topN must be >= 1.");
+        if (req.CompetitionSectionId.HasValue && !await SectionInCompetitionAsync(id, req.CompetitionSectionId.Value))
+            return BadRequest("Section not found in this competition.");
 
         var teamsQ = _db.Teams
             .Include(t => t.Results)
@@ -519,6 +521,9 @@ public class CompetitionsController : ControllerBase
         return dto;
     }
 
+    private Task<bool> SectionInCompetitionAsync(int competitionId, int sectionId)
+        => _db.CompetitionSections.AnyAsync(s => s.Id == sectionId && s.CompetitionId == competitionId);
+
     private static List<List<int>> SplitIntoBalancedGroups(IReadOnlyList<int> teamIds, int maxPerGroup)
     {
         var rng = new Random();
@@ -542,6 +547,8 @@ public class CompetitionsController : ControllerBase
         if (raceNames.Count == 0) return BadRequest(new { message = "At least one race name is required." });
         if (req.NumHeats < 1) return BadRequest(new { message = "numHeats must be >= 1." });
         if (req.LanesPerHeat < 1) return BadRequest(new { message = "lanesPerHeat must be >= 1." });
+        if (req.CompetitionSectionId.HasValue && !await SectionInCompetitionAsync(id, req.CompetitionSectionId.Value))
+            return BadRequest(new { message = "Section not found in this competition." });
 
         var maxOrder = await _db.Sessions.Where(s => s.CompetitionId == id).Select(s => (int?)s.OrderIndex).MaxAsync() ?? 0;
         var sectionLabel = req.CompetitionSectionId.HasValue

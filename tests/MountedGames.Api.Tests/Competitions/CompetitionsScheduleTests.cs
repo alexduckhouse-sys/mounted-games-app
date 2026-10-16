@@ -304,6 +304,19 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
         Assert.Equal(2, (await r.ReadAsync<SessionDto>()).OrderIndex);
     }
 
+    [Fact]
+    public async Task CreateFinals_Returns400_WhenSectionBelongsToAnotherCompetition()
+    {
+        var (comp, _, _) = await CompWithTeamsAsync(2);
+        var (_, otherSection, _) = await CompWithTeamsAsync(2);
+        var admin = await _f.AdminAsync();
+
+        var r = await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals",
+            new { competitionSectionId = otherSection, topN = 2, raceNames = new[] { "R" } });
+
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
     // ---- scaffold finals ----
 
     private static object Scaffold(int heats = 2, int lanes = 4, string[]? races = null, int? sectionId = null,
@@ -323,6 +336,22 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     {
         var r = await _f.CreateClient().PostAsJsonAsync("/api/competitions/1/finals/scaffold", Scaffold());
         Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Scaffold_Returns400_WhenSectionNotInCompetition(bool otherCompetition)
+    {
+        var (comp, _, _) = await CompWithTeamsAsync(1);
+        var section = otherCompetition ? (await CompWithTeamsAsync(1)).Section : 999999;
+        var admin = await _f.AdminAsync();
+
+        var r = await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals/scaffold", Scaffold(sectionId: section));
+
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+        var s = await _f.WithDbAsync(db => db.Sessions.CountAsync(x => x.CompetitionId == comp));
+        Assert.Equal(0, s);
     }
 
     [Fact]

@@ -72,6 +72,34 @@ public class EquipmentEndpointTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Compute_MatchesTemplatesIgnoringCase_AndCountsEachRaceOnce()
+    {
+        var race = Unique("Bending");
+        await SeedTemplateAsync(race, """[{"t":"pole"}]""");
+        var comp = await _f.SeedCompetitionAsync();
+        await SeedSessionAsync(comp, new[] { 3 }, new[] { race.ToLowerInvariant(), race.ToUpperInvariant() });
+
+        var r = await GetAsync(comp);
+
+        Assert.Equal(1, r.RacesCounted);
+        Assert.Equal(3, CountOf(r, "Pole", "Lane"));
+    }
+
+    [Fact]
+    public async Task Compute_PrefersExactCaseTemplate_WhenNamesDifferOnlyByCase()
+    {
+        var race = Unique("relay");
+        await SeedTemplateAsync(race.ToUpperInvariant(), """[{"t":"pole"},{"t":"pole"}]""");
+        await SeedTemplateAsync(race, """[{"t":"pole"}]""");
+        var comp = await _f.SeedCompetitionAsync();
+        await SeedSessionAsync(comp, new[] { 2 }, new[] { race });
+
+        var r = await GetAsync(comp);
+
+        Assert.Equal(2, CountOf(r, "Pole", "Lane"));
+    }
+
+    [Fact]
     public async Task Compute_ClassifiesElementsIntoBuckets()
     {
         var race = Unique("buckets");
