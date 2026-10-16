@@ -1,0 +1,186 @@
+import { describe, expect, it } from 'vitest';
+import type { Heat, Session } from '../types';
+import { heat, race, session } from '../test/factories';
+import { computeTimings, formatTime, roundTo5Min } from './time';
+
+const base = Date.UTC(2026, 5, 1, 9, 0, 0);
+const at = (minutes: number) => new Date(base + minutes * 60_000).toISOString();
+const ms = (minutes: number) => base + minutes * 60_000;
+const timeOf = (d: Date | null) => d?.getTime() ?? null;
+
+describe('roundTo5Min', () => {
+  it('rounds to the nearest five minutes', () => {
+    expect(roundTo5Min(new Date(ms(2)))!.getTime()).toBe(ms(0));
+    expect(roundTo5Min(new Date(ms(3)))!.getTime()).toBe(ms(5));
+    expect(roundTo5Min(new Date(ms(5)))!.getTime()).toBe(ms(5));
+  });
+
+  it('passes null through', () => {
+    expect(roundTo5Min(null)).toBeNull();
+  });
+});
+
+describe('formatTime', () => {
+  it('formats hours and minutes in the viewer’s locale', () => {
+    const d = new Date(2026, 5, 1, 9, 5);
+    expect(formatTime(d)).toBe(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+  });
+
+  it('shows a dash when there is no time', () => {
+    expect(formatTime(null)).toBe('—');
+  });
+});
+
+describe('computeTimings', () => {
+  it('schedules heats back to back at 30 minutes each by default', () => {
+    const timings = computeTimings([session(1, { scheduledStart: at(0), heats: [heat(1), heat(2)] })]).get(1)!;
+    expect(timeOf(timings.scheduled)).toBe(ms(0));
+    expect(timings.heats.map((h) => timeOf(h.scheduled))).toEqual([ms(0), ms(30)]);
+    expect(timings.heats.map((h) => timeOf(h.effective))).toEqual([ms(0), ms(30)]);
+    expect(timeOf(timings.effectiveEnd)).toBe(ms(60));
+    expect(timings.shifted).toBe(false);
+    expect(timings.heats.some((h) => h.shifted)).toBe(false);
+  });
+
+  it('uses a heat’s own duration, then minutes per heat per race, then the default', () => {
+    const own = heat(1, { durationMinutes: 20 });
+    const perRace = heat(2, { races: [race(1), race(2), race(3)] });
+    const perHeat = heat(3);
+    const timings = computeTimings([session(1, { scheduledStart: at(0), minutesPerHeat: 7, heats: [own, perRace, perHeat] })]).get(1)!;
+    expect(timings.heats.map((h) => timeOf(h.scheduled))).toEqual([ms(0), ms(20), ms(41)]);
+    expect(timeOf(timings.effectiveEnd)).toBe(ms(48));
+    const fallback = computeTimings([session(1, { scheduledStart: at(0), heats: [heat(1), heat(2)] })]).get(1)!;
+    expect(timeOf(fallback.heats[1].scheduled)).toBe(ms(30));
+  });
+
+  it('counts a heat with no races as one race when using minutes per heat', () => {
+    const timings = computeTimings([session(1, { scheduledStart: at(0), minutesPerHeat: 7, heats: [heat(1), heat(2)] })]).get(1)!;
+    expect(timeOf(timings.heats[1].scheduled)).toBe(ms(7));
+  });
+
+  it('anchors on the real start of a session and carries the delay to later sessions', () => {
+    const timings = computeTimings([
+      session(1, { orderIndex: 1, scheduledStart: at(0), startedAt: at(10), heats: [heat(1)] }),
+      session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(2)] }),
+    ]);
+    expect(timings.get(1)!.shifted).toBe(true);
+    expect(timeOf(timings.get(2)!.scheduled)).toBe(ms(60));
+    expect(timeOf(timings.get(2)!.effective)).toBe(ms(70));
+    expect(timings.get(2)!.shifted).toBe(true);
+    expect(timings.get(2)!.heats[0]).toMatchObject({ shifted: true });
+  });
+
+  it('does not flag a drift under five minutes', () => {
+    const timings = computeTimings([session(1, { scheduledStart: at(0), startedAt: at(4), heats: [heat(1)] })]).get(1)!;
+    expect(timings.shifted).toBe(false);
+    expect(timings.heats[0].shifted).toBe(false);
+  });
+
+  it('flags a drift of exactly five minutes, early or late', () => {
+    expect(computeTimings([session(1, { scheduledStart: at(0), startedAt: at(5) })]).get(1)!.shifted).toBe(true);
+    expect(computeTimings([session(1, { scheduledStart: at(0), startedAt: at(-5) })]).get(1)!.shifted).toBe(true);
+  });
+
+  it('does not let an early session start before the previous one has ended', () => {
+    const timings = computeTimings([
+      session(1, { orderIndex: 1, scheduledStart: at(0), startedAt: at(-10), heats: [heat(1, { durationMinutes: 60 })] }),
+      session(2, { orderIndex: 2, scheduledStart: at(30), heats: [heat(2)] }),
+      session(3, { orderIndex: 3, scheduledStart: at(90), heats: [heat(3)] }),
+    ]);
+    // Session 1 really ends at 50; session 2 is held back from 20 to 50, and the 20 minute slip carries on.
+    expect(timeOf(timings.get(2)!.effective)).toBe(ms(50));
+    expect(timeOf(timings.get(3)!.effective)).toBe(ms(110));
+  });
+
+  it('lets an early session start early when the earlier ones are already done', () => {
+    const timings = computeTimings([
+      session(1, { orderIndex: 1, scheduledStart: at(0), startedAt: at(-10), heats: [heat(1)] }),
+      session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(2)] }),
+    ]);
+    expect(timeOf(timings.get(2)!.effective)).toBe(ms(50));
+  });
+
+  it('puts a session with no scheduled time straight after the previous one', () => {
+    const timings = computeTimings([
+      session(1, { orderIndex: 1, scheduledStart: at(0), heats: [heat(1)] }),
+      session(2, { orderIndex: 2, heats: [heat(2), heat(3)] }),
+    ]);
+    const second = timings.get(2)!;
+    expect(second.scheduled).toBeNull();
+    expect(timeOf(second.effective)).toBe(ms(30));
+    expect(second.heats.map((h) => timeOf(h.effective))).toEqual([ms(30), ms(60)]);
+    expect(second.heats.map((h) => h.scheduled)).toEqual([null, null]);
+    expect(second.shifted).toBe(false);
+  });
+
+  it('has no times at all for an unscheduled first session', () => {
+    const timings = computeTimings([session(1, { heats: [heat(1)] })]).get(1)!;
+    expect(timings).toMatchObject({ scheduled: null, effective: null, effectiveEnd: null, shifted: false });
+    expect(timings.heats[0]).toMatchObject({ scheduled: null, effective: null, shifted: false });
+  });
+
+  it('uses the real start of a session that has no scheduled time without shifting later ones', () => {
+    const timings = computeTimings([
+      session(1, { orderIndex: 1, startedAt: at(15), heats: [heat(1)] }),
+      session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(2)] }),
+    ]);
+    expect(timeOf(timings.get(1)!.effective)).toBe(ms(15));
+    expect(timeOf(timings.get(2)!.effective)).toBe(ms(60));
+  });
+
+  it('pins a heat with its own scheduled time and continues from there', () => {
+    const timings = computeTimings([session(1, {
+      scheduledStart: at(0),
+      heats: [heat(1), heat(2, { scheduledStart: at(45) }), heat(3)],
+    })]).get(1)!;
+    expect(timings.heats.map((h) => timeOf(h.scheduled))).toEqual([ms(0), ms(45), ms(75)]);
+    expect(timings.heats.map((h) => timeOf(h.effective))).toEqual([ms(0), ms(45), ms(75)]);
+  });
+
+  it('uses a heat’s real start and flags it once it is five minutes out', () => {
+    const timings = computeTimings([session(1, {
+      scheduledStart: at(0),
+      heats: [heat(1, { startedAt: at(8) }), heat(2, { startedAt: at(33) })],
+    })]).get(1)!;
+    expect(timings.heats.map((h) => timeOf(h.effective))).toEqual([ms(8), ms(33)]);
+    expect(timings.heats.map((h) => h.shifted)).toEqual([true, false]);
+  });
+
+  it('orders sessions and heats by their order index, not input order', () => {
+    const timings = computeTimings([
+      session(2, { orderIndex: 2, scheduledStart: at(30), heats: [heat(5, { orderIndex: 2 }), heat(4, { orderIndex: 1 })] }),
+      session(1, { orderIndex: 1, scheduledStart: at(0), heats: [heat(1)] }),
+    ]);
+    expect([...timings.keys()]).toEqual([1, 2]);
+    expect(timings.get(2)!.heats.map((h) => h.heatId)).toEqual([4, 5]);
+  });
+
+  describe('session length for the next session', () => {
+    const next = (first: Partial<Session>) => {
+      const timings = computeTimings([
+        session(1, { orderIndex: 1, scheduledStart: at(0), ...first }),
+        session(2, { orderIndex: 2, heats: [] }),
+      ]);
+      return timeOf(timings.get(2)!.effective);
+    };
+
+    it.each([1, 2, 3] as const)('uses the duration of a break-like session of kind %i', (kind) => {
+      expect(next({ kind, heats: [heat(1)], durationMinutes: 45 })).toBe(ms(45));
+    });
+
+    it('treats a break with no duration as instant', () => {
+      expect(next({ kind: 1, durationMinutes: null })).toBe(ms(0));
+    });
+
+    it('uses the duration of a race session with no heats yet, or nothing', () => {
+      expect(next({ heats: [], durationMinutes: 20 })).toBe(ms(20));
+      expect(next({ heats: [], durationMinutes: null })).toBe(ms(0));
+    });
+
+    it('treats missing heats as none', () => {
+      expect(next({ heats: undefined as unknown as Heat[], durationMinutes: 10 })).toBe(ms(10));
+      const timings = computeTimings([{ ...session(1, { scheduledStart: at(0) }), heats: undefined } as unknown as Session]);
+      expect(timings.get(1)!.heats).toEqual([]);
+    });
+  });
+});
