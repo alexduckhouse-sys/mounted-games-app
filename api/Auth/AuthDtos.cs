@@ -12,9 +12,8 @@ public record RegisterRequest(
     int? ClubId);
 
 /// <summary>
-/// Self-service signup. Role defaults to "Trainer" but can be "Manager" or
-/// "Member" — all three are identical capability-wise today; the difference
-/// is just self-identification on profile / display. ClubName is optional;
+/// Self-service signup. Trainer requests receive Member access until approved
+/// by an admin. Manager and Member signups are granted directly. ClubName is optional;
 /// if it matches an existing Club row (case-insensitive) we set ClubId.
 /// </summary>
 public record SignupTrainerRequest(
@@ -35,3 +34,10 @@ public record UserProfile(
     int? ClubId,
     string? ClubName,
     IReadOnlyList<string> Roles);
+
+public record TrainerRequestDto(
+    string UserId,
+    string FullName,
+    string? Email,
+    string? ClubName,
+    DateTime RequestedAt);

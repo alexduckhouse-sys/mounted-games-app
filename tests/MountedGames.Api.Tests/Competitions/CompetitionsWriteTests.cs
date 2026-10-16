@@ -86,6 +86,24 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
+    [Theory]
+    [InlineData("xx")]
+    [InlineData("../x")]
+    public async Task Create_Returns400_WhenIconUnknown(string icon)
+    {
+        var admin = await _f.AdminAsync();
+        var r = await admin.PostAsJsonAsync("/api/competitions", CreateBody(icon: icon));
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_AcceptsFlagImageIcon()
+    {
+        var admin = await _f.AdminAsync();
+        var r = await admin.PostAsJsonAsync("/api/competitions", CreateBody(icon: "gb-sct"));
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+    }
+
     [Fact]
     public async Task Create_Returns400_WhenNameMissing()
     {
@@ -309,6 +327,27 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
         var c = await LoadAsync(comp);
         Assert.Equal(53.5, c.Latitude);
         Assert.Equal(-2.5, c.Longitude);
+    }
+
+    [Fact]
+    public async Task Update_ChangesIcon_ToFlagImage()
+    {
+        var comp = await _f.SeedCompetitionAsync();
+        var admin = await _f.AdminAsync();
+        var r = await admin.PutAsJsonAsync($"/api/competitions/{comp}", UpdateBody(icon: "gb-sct"));
+        Assert.True(r.IsSuccessStatusCode);
+        Assert.Equal("gb-sct", (await LoadAsync(comp)).Icon);
+    }
+
+    [Theory]
+    [InlineData("xx")]
+    [InlineData("../x")]
+    public async Task Update_Returns400_WhenIconUnknown(string icon)
+    {
+        var comp = await _f.SeedCompetitionAsync();
+        var admin = await _f.AdminAsync();
+        var r = await admin.PutAsJsonAsync($"/api/competitions/{comp}", UpdateBody(icon: icon));
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
     [Fact]
