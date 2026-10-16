@@ -28,15 +28,20 @@ Pulled together from every chat in this project and a survey of all branches and
 
    Then merge and check `/api/competitions` on the live site.
 2. **PR #26 deploy gate (staff-only live feed).** Before merging, apply `api/Data/Migrations/Scripts/20261016162534_AddChatAdminOnly.sql` to Neon (one boolean column, default false); the API refuses to start with a pending migration.
-3. **Official EGUK navy hex.** `#1e3466` is a guess.
-4. **Decisions left open in chats:**
+3. **Live video streaming (`feat/live-stream`, stacked on #26).** Before it can be used:
+   - Create a Cloudflare Realtime SFU app, and optionally a TURN key. Set `Streaming__Cloudflare__AppId` and `Streaming__Cloudflare__AppToken` on Render, plus `Streaming__Cloudflare__TurnKeyId` and `Streaming__Cloudflare__TurnKeyApiToken` if you use TURN.
+   - Set a Cloudflare billing alert.
+   - Apply the `AddLiveStreams` script in `api/Data/Migrations/Scripts/` to Neon after #26's script and before the API deploys.
+   - Test on two real phones (Safari and Android): lock, background, flip camera, mute, pause, end.
+   - Nest camera: tell the chat which model the club uses, so phase 2 can be checked.
+4. **Official EGUK navy hex.** `#1e3466` is a guess.
+5. **Decisions left open in chats:**
    - Remove the race clock? You said "there is no race clock", but it's still in the app.
-   - Stream embeds: switch to "Tap to load the stream" with YouTube's no-cookie player, so no third-party cookies are set before consent?
    - Keep the colour key under the timetable dots?
    - Ticker: should a fresh announcement keep replacing the live heat for up to 15 minutes, or should "Now" stay on top?
    - Reseed the existing demo competitions with the 5–6 teams and 7–8 races layout?
    - Toplist before any scoring: show a dash instead of every team as joint 1st?
-5. **Always-on host.** Render's free plan sleeps after 15 minutes, so the first visit takes about 50 seconds and live updates drop. The chats call this the biggest real-world delay.
+6. **Always-on host.** Render's free plan sleeps after 15 minutes, so the first visit takes about 50 seconds and live updates drop. The chats call this the biggest real-world delay.
 
 ## Features
 
