@@ -19,7 +19,7 @@ scoring to post-event standings — on phones in a field.
    key with parents, get a notification when their team is on deck.
 3. **Supporters** — anyone with a team's join key can follow that team's
    schedule and dec forms.
-4. **Spectators** — public timetable, live scoring, chat, equipment list,
+4. **Spectators** — public timetable, live scoring, live feed (read-only),
    stream embed (YouTube / Twitch), shop / marketplace.
 
 ## v2 competition lifecycle
@@ -110,8 +110,8 @@ scoring to post-event standings — on phones in a field.
 
 ### Chat / live feed
 - One feed per comp, SignalR-backed.
-- Self-identify with a Pony Club affiliation (sourced from the canonical
-  clubs list, not just the comp's teams).
+- Only admins and trainers post. Admin posts are public; trainer posts
+  are private to the admins (and the trainer who sent them).
 - Yellow banner if you've drifted to a different comp's chat than the one
   you last posted to.
 - Admin: delete + block-IP per message.

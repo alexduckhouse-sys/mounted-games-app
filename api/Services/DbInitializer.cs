@@ -75,6 +75,7 @@ public static class DbInitializer
         ");
         await EnsureColumnAsync(db, "Teams", "IsHorsConcours", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "ChatMessages", "IpAddress", "TEXT NULL");
+        await EnsureColumnAsync(db, "ChatMessages", "AdminOnly", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Competitions", "StreamUrl", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "Icon", "TEXT NOT NULL DEFAULT 'flag'");
         await EnsureColumnAsync(db, "Heats", "ScheduledStart", "TEXT NULL");

@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Megaphone, Activity, Users, Radio, Save, ExternalLink, X, Trash2, Shield, MessagesSquare, AlertTriangle } from 'lucide-react';
+import { Send, Megaphone, Activity, Users, Radio, Save, ExternalLink, X, Trash2, Shield, MessagesSquare, AlertTriangle, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import { useLiveHub } from '../../live/useLiveHub';
-import type { ChatMessage, Club } from '../../types';
+import type { ChatMessage } from '../../types';
 
 function toEmbedUrl(raw: string): string | null {
   try {
@@ -30,7 +30,6 @@ function toEmbedUrl(raw: string): string | null {
   }
 }
 
-const IDENTITY_KEY = 'mg.chatIdentity';
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
 
 interface LastChatComp {
@@ -51,29 +50,12 @@ function saveLastChatComp(v: LastChatComp) {
   try { localStorage.setItem(LAST_CHAT_COMP_KEY, JSON.stringify(v)); } catch { /* quota */ }
 }
 
-interface ChatIdentity {
-  firstName: string;
-  team: string;
-}
-
-function loadIdentity(): ChatIdentity | null {
-  try {
-    const raw = localStorage.getItem(IDENTITY_KEY);
-    if (!raw) return null;
-    const v = JSON.parse(raw) as ChatIdentity;
-    if (!v.firstName?.trim() || !v.team?.trim()) return null;
-    return v;
-  } catch { return null; }
-}
-
-function saveIdentity(v: ChatIdentity | null) {
-  if (v) localStorage.setItem(IDENTITY_KEY, JSON.stringify(v));
-  else localStorage.removeItem(IDENTITY_KEY);
-}
-
 export function ChatTab() {
   const { competition, reload } = useCompetition();
-  const { user, canEdit } = useAuth();
+  const { user, canEdit, hasRole } = useAuth();
+  // Only admins and trainers post; a trainer's messages go to the admins only.
+  const isAdmin = hasRole('Admin');
+  const canPost = isAdmin || hasRole('Trainer');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [body, setBody] = useState('');
   const [announcement, setAnnouncement] = useState('');
@@ -82,18 +64,6 @@ export function ChatTab() {
   const compStreamUrl = competition.streamUrl ?? null;
   const compStreamEmbed = compStreamUrl ? toEmbedUrl(compStreamUrl) : null;
 
-  // The "Team" affiliation picker is sourced from the full club list (Pony
-  // Club branches + admin-added customs), not just the teams entered in this
-  // comp — so spectators from any club can identify themselves correctly.
-  const [clubs, setClubs] = useState<Club[]>([]);
-  useEffect(() => {
-    api.get<Club[]>('/clubs').then((r) => setClubs(r.data)).catch(() => {});
-  }, []);
-  const teamOptions = useMemo(() => clubs.slice().sort((a, b) => a.name.localeCompare(b.name)), [clubs]);
-
-  const [identity, setIdentity] = useState<ChatIdentity | null>(() => loadIdentity());
-  const [draftName, setDraftName] = useState('');
-  const [draftTeam, setDraftTeam] = useState('');
   const [lastChatComp, setLastChatComp] = useState<LastChatComp | null>(() => loadLastChatComp());
   const [dismissedCompWarning, setDismissedCompWarning] = useState(false);
 
@@ -110,6 +80,8 @@ export function ChatTab() {
     onReady: loadMessages,
     onChatMessage: (m) => {
       const msg = m as ChatMessage;
+      // A trainer's own private messages reach every connection they have open, so check the competition.
+      if (msg.competitionId !== competition.id) return;
       setMessages((cur) => cur.some((c) => c.id === msg.id) ? cur : [...cur, msg]);
     },
     onChatMessageDeleted: ({ id }) => {
@@ -145,32 +117,10 @@ export function ChatTab() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages.length]);
 
-  function applyIdentity() {
-    const fn = draftName.trim();
-    const tm = draftTeam.trim();
-    if (!fn || !tm) return;
-    const id = { firstName: fn, team: tm };
-    setIdentity(id);
-    saveIdentity(id);
-    setDraftName(''); setDraftTeam('');
-  }
-
-  function clearIdentity() {
-    setIdentity(null);
-    saveIdentity(null);
-  }
-
-  const authorLabel = user
-    ? user.fullName
-    : identity ? `${identity.firstName} (${identity.team})` : null;
-
   async function send() {
-    if (!body.trim() || !authorLabel) return;
+    if (!body.trim() || !canPost) return;
     try {
-      await api.post(`/competitions/${competition.id}/chat`, {
-        body,
-        authorName: authorLabel,
-      });
+      await api.post(`/competitions/${competition.id}/chat`, { body });
       setBody('');
       // Remember which comp this user most recently posted to — used to warn
       // when they open a different comp's chat next time.
@@ -190,7 +140,7 @@ export function ChatTab() {
     setAnnouncement('');
   }
 
-  const canSend = authorLabel != null && body.trim().length > 0;
+  const canSend = canPost && body.trim().length > 0;
 
   const liveNow = competition.sessions.some((session) => session.status === 1);
   return (
@@ -242,65 +192,33 @@ export function ChatTab() {
                 key={m.id}
                 m={m}
                 isAdmin={canEdit()}
+                showPrivate={canPost}
                 onDelete={() => deleteMessage(m.id)}
                 onBlock={() => blockMessageAuthor(m.id)}
               />
             ))}
           </AnimatePresence>
-          {messages.length === 0 && <p className="text-slate-500 text-sm">No messages yet. Say hello!</p>}
+          {messages.length === 0 && <p className="text-slate-500 text-sm">Nothing posted yet.</p>}
         </div>
         <footer className="p-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-          {!authorLabel ? (
-            <div className="space-y-2">
-              <p className="text-[11px] text-slate-500 dark:text-slate-300 flex items-center gap-1">
-                <Users className="w-3 h-3" /> Enter your name and team to chat
-              </p>
-              <div className="flex gap-2">
-                <input
-                  className="input flex-1"
-                  placeholder="First name"
-                  value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && applyIdentity()}
-                />
-                <input
-                  className="input flex-1"
-                  placeholder="Team"
-                  list="chat-team-options"
-                  value={draftTeam}
-                  onChange={(e) => setDraftTeam(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && applyIdentity()}
-                />
-                <datalist id="chat-team-options">
-                  {teamOptions.map((c) => <option key={c.id} value={c.name} />)}
-                </datalist>
-                <button
-                  className="btn-primary !py-1.5 !px-3 text-xs"
-                  onClick={applyIdentity}
-                  disabled={!draftName.trim() || !draftTeam.trim()}
-                >
-                  Save
-                </button>
-              </div>
-            </div>
+          {!canPost ? (
+            <p className="text-[11px] text-slate-500 dark:text-slate-300 flex items-center gap-1">
+              <Lock className="w-3 h-3" /> Only organisers and trainers can post here.
+            </p>
           ) : (
             <>
               <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-300">
-                <Users className="w-3 h-3" /> posting as <span className="font-semibold">{authorLabel}</span>
-                {!user && (
-                  <button onClick={clearIdentity} className="ml-auto btn-ghost !py-0.5 !px-1 text-[10px]" title="Change name/team">
-                    Change
-                  </button>
-                )}
+                <Users className="w-3 h-3" /> posting as <span className="font-semibold">{user?.fullName}</span>
+                {!isAdmin && <span className="ml-auto flex items-center gap-1"><Lock className="w-3 h-3" /> Only organisers see your messages</span>}
               </div>
               <div className="flex gap-2">
                 <input
                   className="input flex-1"
-                  placeholder={`Message as ${authorLabel}…`}
+                  placeholder={isAdmin ? 'Post to everyone…' : 'Message the organisers…'}
                   value={body} onChange={(e) => setBody(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && canSend && send()}
                 />
-                <button className="btn-primary" onClick={send} disabled={!canSend}>
+                <button className="btn-primary" onClick={send} disabled={!canSend} aria-label="Send">
                   <Send className="w-4 h-4" />
                 </button>
               </div>
@@ -342,10 +260,11 @@ export function ChatTab() {
 }
 
 function MessageBubble({
-  m, isAdmin, onDelete, onBlock,
+  m, isAdmin, showPrivate, onDelete, onBlock,
 }: {
   m: ChatMessage;
   isAdmin: boolean;
+  showPrivate: boolean;
   onDelete: () => void;
   onBlock: () => void;
 }) {
@@ -374,6 +293,11 @@ function MessageBubble({
         <span className="font-semibold text-xs">
           {isAnnouncement && '📣 '}
           {m.authorName}
+          {showPrivate && m.adminOnly && (
+            <span className="ml-1.5 inline-flex items-center gap-0.5 font-normal text-[10px] text-slate-500 dark:text-slate-300">
+              <Lock className="w-2.5 h-2.5" /> organisers only
+            </span>
+          )}
         </span>
         <span className="text-[10px] text-slate-500">
           {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

@@ -30,8 +30,14 @@ public class ChatController : ControllerBase
     public async Task<IEnumerable<ChatMessageDto>> Recent(int competitionId, [FromQuery] int take = 100)
     {
         take = Math.Clamp(take, 1, 500);
-        var messages = await _db.ChatMessages
-            .Where(m => m.CompetitionId == competitionId)
+        var query = _db.ChatMessages.Where(m => m.CompetitionId == competitionId);
+        // Trainer messages are private: admins see them all, a trainer sees only their own.
+        if (!User.IsInRole(Roles.Admin))
+        {
+            var userId = _users.GetUserId(User);
+            query = query.Where(m => !m.AdminOnly || (userId != null && m.UserId == userId));
+        }
+        var messages = await query
             .OrderByDescending(m => m.CreatedAt)
             .Take(take)
             .ToListAsync();
@@ -39,43 +45,48 @@ public class ChatController : ControllerBase
         return messages.Select(m => m.ToDto());
     }
 
+    /// <summary>
+    /// Only admins and trainers post. Admin messages go to the public feed;
+    /// trainer messages are seen only by admins and the trainer who sent them.
+    /// </summary>
     [HttpPost]
+    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
     public async Task<ActionResult<ChatMessageDto>> Post(int competitionId, PostChatMessageRequest req)
     {
         if (string.IsNullOrWhiteSpace(req.Body)) return BadRequest();
         if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
 
-        AppUser? user = null;
-        if (User.Identity?.IsAuthenticated == true)
-            user = await _users.GetUserAsync(User);
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        var isAdmin = User.IsInRole(Roles.Admin);
 
-        if (!User.IsInRole(Roles.Admin))
+        if (!isAdmin)
         {
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
             if (!string.IsNullOrEmpty(ip) && await _db.IpBlocks.AnyAsync(b => b.IpAddress == ip))
                 return StatusCode(403, new { message = "Posting from this network is blocked." });
         }
 
-        var authorName = !string.IsNullOrWhiteSpace(req.AuthorName)
-            ? req.AuthorName!.Trim()
-            : user?.FullName
-                ?? user?.Email
-                ?? "Guest";
+        var authorName = !string.IsNullOrWhiteSpace(user.FullName) ? user.FullName : user.Email ?? "Organiser";
         if (authorName.Length > 60) authorName = authorName[..60];
 
         var msg = new ChatMessage
         {
             CompetitionId = competitionId,
-            UserId = user?.Id,
+            UserId = user.Id,
             AuthorName = authorName,
             Body = req.Body.Trim(),
             Type = ChatMessageType.Chat,
+            AdminOnly = !isAdmin,
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
         };
         _db.ChatMessages.Add(msg);
         await _db.SaveChangesAsync();
         var dto = msg.ToDto();
-        await _live.ChatMessage(competitionId, dto);
+        if (msg.AdminOnly)
+            await _live.AdminOnlyChatMessage(competitionId, user.Id, dto);
+        else
+            await _live.ChatMessage(competitionId, dto);
         return dto;
     }
 
