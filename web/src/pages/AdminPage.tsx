@@ -5,12 +5,13 @@ import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import type { Club, CompetitionSummary } from '../types';
 import { bibAccent, bibLabel } from '../lib/bib';
+import { TrainerRequestsSection } from './admin/TrainerRequestsSection';
 
 interface IpBlock { id: number; ipAddress: string; reason?: string | null; createdAt: string }
 interface RaceSummary { id: number; name: string; category?: string | null; isBuiltIn: boolean }
 
 export function AdminPage() {
-  const { canEdit } = useAuth();
+  const { canEdit, hasRole } = useAuth();
   const [comps, setComps] = useState<CompetitionSummary[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [blocks, setBlocks] = useState<IpBlock[]>([]);
@@ -98,6 +99,7 @@ export function AdminPage() {
         </div>
       </div>
 
+      {hasRole('Admin') && <TrainerRequestsSection canReview={canEdit()} />}
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="card p-5">
           <h2 className="font-semibold mb-3 flex items-center gap-2">

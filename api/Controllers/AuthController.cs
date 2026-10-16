@@ -91,9 +91,7 @@ public class AuthController : ControllerBase
         if (await _users.FindByEmailAsync(email) is not null)
             return Conflict(new { message = "That username is already taken." });
 
-        // Pick role from the three self-service tiers; default to Trainer for
-        // backwards compat with the existing button. Manager/Member behave
-        // identically today — the choice is just a self-label.
+        // Trainer is the default request; organising access needs admin approval.
         var requested = (req.Role ?? Roles.Trainer).Trim();
         var role = requested.Equals(Roles.Manager, StringComparison.OrdinalIgnoreCase) ? Roles.Manager
                  : requested.Equals(Roles.Member, StringComparison.OrdinalIgnoreCase) ? Roles.Member
@@ -121,7 +119,12 @@ public class AuthController : ControllerBase
         if (!result.Succeeded)
             return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
 
-        await _users.AddToRoleAsync(user, role);
+        var assignedRoles = role == Roles.Trainer
+            ? new[] { Roles.Member, Roles.TrainerRequest }
+            : new[] { role };
+        var assigned = await _users.AddToRolesAsync(user, assignedRoles);
+        if (!assigned.Succeeded)
+            return BadRequest(new { errors = assigned.Errors.Select(e => e.Description) });
 
         var (token, expiresAt, rolesOut) = await _tokens.CreateTokenAsync(user);
         var clubNameOut = clubId.HasValue ? (await _db.Clubs.FindAsync(clubId.Value))?.Name : null;

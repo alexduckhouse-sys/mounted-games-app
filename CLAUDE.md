@@ -8,11 +8,12 @@ Read `APP_DESIGN.md` before changing behaviour; use `PRODUCT_DETAILS.md` for the
 
 - `api/Controllers/` — attributed REST controllers, validation and role checks.
 - `api/Services/` — scoring, seeding/schema upgrades, DTO mappings, geocoding, equipment and push scheduling.
-- `api/Data/` — `AppDbContext`, Identity integration and EF relationship configuration; no migrations directory.
+- `api/Data/` — `AppDbContext`, Identity integration, EF relationship configuration, EF migrations (`Migrations/`) and their idempotent SQL scripts (`Migrations/Scripts/`).
 - `api/Entities/` — EF domain entities, users and enums.
 - `api/Dtos/` — request/response records in `ApiDtos.cs`.
 - `api/Hubs/` — SignalR `LiveHub` and `ILiveBroadcaster`/`LiveBroadcaster`.
-- `api/Auth/` — role constants/groups, authentication DTOs and JWT `TokenService`.
+- `api/Auth/` — role constants/groups, `[CompetitionAccess]` ownership filter, authentication DTOs and JWT `TokenService`.
+- `api/Security/` — security headers, rate limits, trusted proxies and startup secret validation.
 - `api/Program.cs` — dependency injection, SQLite, authentication, middleware, endpoints and startup seeding.
 - `web/src/` — entry point, routes (`App.tsx`), Axios client (`api.ts`), shared types, styles and service worker.
 - `web/src/pages/` — routed screens; `admin/` contains editors and `competition/` contains event tabs/scoring.
@@ -22,52 +23,50 @@ Read `APP_DESIGN.md` before changing behaviour; use `PRODUCT_DETAILS.md` for the
 - `web/src/competition/` — current-competition context.
 - `web/src/live/` — SignalR connection/event hook.
 - `web/src/hooks/` — team notification hook.
-- `web/src/lib/` — timing, section, CSV, bib and push helpers.
+- `web/src/lib/` — timing, section, CSV, bib, ticker and push helpers.
+- `tests/MountedGames.Api.Tests/` — xUnit API tests (endpoints, hub, security, services).
+- `docs/` — specs, design boards, decisions, Neon setup, security review.
 
 ## Commands and local connection
 
-Run commands in the indicated directory. Sources: `README.md`, `api/MountedGames.Api.csproj`, `web/package.json` and `Dockerfile`.
+| Task | Command (directory) |
+| --- | --- |
+| Build everything | `npm run build` (repo root: web build, then `dotnet build` of the API) |
+| Run locally | `dotnet run` (`api/`, port 5050, SQLite, demo data) and `npm run dev` (`web/`, port 5173) |
+| All tests | `npm test` (repo root) |
+| API tests | `dotnet test tests/MountedGames.Api.Tests` (xUnit). CI also gates line coverage at 95%: see `.github/workflows/ci.yml` and `scripts/api-coverage.py` |
+| Web tests | `npm test` in `web/` (`node --test` suite, then Vitest); `npm run test:coverage` enforces 97% on `lib`, `live`, `hooks`, `components` and friends (`web/vitest.config.ts`; `src/pages/**` is excluded) |
+| Lint | `npm run lint` in `web/`. About 46 errors predate current work and lint isn't in CI yet; keep new files clean. No API lint or formatter is configured |
+| Prod migrations | `npm run db:migrate` (repo root) against Neon; see `docs/neon-setup.md` |
 
-| Task | API (`api/`, .NET 10 SDK) | Web (`web/`) |
-| --- | --- | --- |
-| Build/release | `dotnet publish -c Release` | `npm run build` (`tsc -b` then Vite; output `dist/`) |
-| Run locally | `dotnet run` | `npm run dev` |
-| Preview build | No separate command documented | `npm run preview` |
-| Test | No test project or command supplied | No test script or suite supplied |
-| Lint | No lint command supplied | `npm run lint` (ESLint) |
-| Format | No formatter command/configuration supplied | No format script/configuration supplied |
-
-These commands are source-verified but execution is **unverified**: this checkout has no `web/node_modules`, API restore assets or default NuGet package cache. No installs or builds were run.
-
-Vite listens on 5173 and proxies `/api` and `/hubs` (including WebSockets) to `http://localhost:5050`, matching `api/Properties/launchSettings.json`. Axios defaults to `/api`; optional build-time `VITE_API_BASE` overrides only Axios. The SignalR hook always uses same-origin `/hubs/live`. Production serves both halves from one origin.
+Vite proxies `/api` and `/hubs` (with WebSockets) to `http://localhost:5050`. Axios uses `/api`. The SignalR hook uses `VITE_LIVE_HUB_URL` when set (production points it straight at Render), otherwise same-origin `/hubs/live`.
 
 ## Observed conventions
 
 - Use `[ApiController]`, explicit routes and constructor injection; controllers return DTOs/`ActionResult`. `/healthz` is a small minimal-API exception.
-- DTO mapping is handwritten in `Services/Mappings.cs` (`ToDto`/`ToSummary`); keep API records and `web/src/types.ts` aligned.
-- EF Core uses SQLite (`UseSqlite`) and `IdentityDbContext<AppUser>`. Startup runs `EnsureCreatedAsync` plus additive SQL/`EnsureColumnAsync` in `DbInitializer`; preserve existing data when extending the schema.
-- SignalR broadcasts through `ILiveBroadcaster` to competition groups; keep event names/payloads aligned with `web/src/live/useLiveHub.ts`.
-- Authentication uses ASP.NET Identity password checks and JWT bearer tokens; shared admin-key login also issues a JWT. Use `Auth/Roles.cs` groups for authorisation; the web client stores auth in localStorage and adds a bearer header.
-- Web uses function components, React hooks/context and React Router; localStorage persists auth, themes, selected competition and drafts. Styling uses Tailwind utilities/shared CSS, `data-theme`, Framer Motion and Lucide icons.
-- `AuthContext.canEdit()` requires admin edit mode; `canOrganise()` admits Admin, Trainer and Manager. UI guards supplement server authorisation.
+- DTO mapping is handwritten in `Services/Mappings.cs` (`ToDto`/`ToSummary`); keep API records and `web/src/types.ts` aligned. Enums travel as numbers.
+- **Database:** Postgres (Neon) in production, SQLite locally and in tests. A schema change needs all of: the entity and `AppDbContext` config, an EF migration (`dotnet ef migrations add`, design time uses Npgsql), an idempotent SQL script in `api/Data/Migrations/Scripts/` (`dotnet ef migrations script <previous> <new> --idempotent`), and a SQLite guard in `DbInitializer` (`CREATE TABLE IF NOT EXISTS` / `EnsureColumnAsync`). On Postgres the API refuses to start with a pending migration, so the script must run on Neon before the API deploys.
+- SignalR broadcasts through `ILiveBroadcaster` to `comp:{id}` groups (admins also join `comp:{id}:admins`); keep event names and payloads aligned with `web/src/live/useLiveHub.ts`. Hub methods are anonymous.
+- **Authorisation:** use `Auth/Roles.cs` groups. `Organiser` = Admin + Trainer. Per-competition writes add `[CompetitionAccess("id")]`: admins reach any competition, trainers only ones they created (`CreatedByUserId`). On the web, `canOrganise(comp)` mirrors that (Admin, or the owning Trainer; not Manager), and `canEdit()` additionally needs admin edit mode. UI guards supplement server checks.
+- Authentication uses ASP.NET Identity password checks (lockout after 5 failures) and JWT bearer tokens; shared admin-key login also issues a JWT. The web client stores auth in localStorage (`mg.auth`).
+- Web uses function components, React hooks/context and React Router; localStorage persists auth, themes, selected competition and drafts. Styling uses Tailwind plus the `--mg-*` tokens in `web/src/theme/skin.css` (five themes via `data-theme`), Framer Motion and Lucide icons.
+- **Tests:** API tests run the real app through `tests/MountedGames.Api.Tests/Infrastructure/ApiFactory.cs` (environment `Testing`, throwaway SQLite, admin-key sign-in, raised rate limits, all outbound HTTP through `StubHttp`). Web tests use Vitest with jsdom; mock `@microsoft/signalr` and `../api` as the existing tests do.
 - Preserve scoring: normal first-place points equal the largest heat size in the session, decreasing by placing; elimination scores zero. Race-finals qualifiers award one per finisher; HC teams are excluded from standings/finals seeding.
+- `NEXT_STEPS.md` is the cross-chat to-do list; `docs/decisions.md` records settled decisions; feature specs live in `docs/specs/`, design boards in `docs/designs/`.
 
 ## Configuration and deployment
 
-- `render.yaml` appears to be the default dev/demo path: it leads `DEPLOY.md`. `fly.toml` is the documented production path with persistent SQLite and an always-on machine. Both remain configured; the active host cannot be established from these files alone.
-- `Dockerfile` builds both halves, copies `web/dist` into API `wwwroot`, and serves the SPA with a fallback. Container/Fly/Render use port 8080 and `/healthz`.
-- Deployment environment names: `ASPNETCORE_ENVIRONMENT`, `ASPNETCORE_URLS`, `ConnectionStrings__Default`; Fly also sets `Cors__Origins__0`.
-- Required deployment secrets: `Jwt__Key`, `Admin__Key`. Render generates the former and requires the latter manually; Fly instructions set both as secrets.
-- Optional overrides: `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpiryMinutes`, `Cors__Origins__0` (and further indexed origins), `What3Words__ApiKey`, `Push__Subject`; frontend: `VITE_API_BASE`.
-- API defaults live in `api/appsettings.json`, with development overrides in `api/appsettings.Development.json`; environment variables use `__` for nested keys. No `UserSecretsId` or explicit user-secrets registration is present; do not assume user-secrets are configured.
-- `VapidKeyService` generates `vapid-keys.json` in the API content root; it is gitignored and contains the push keypair. There are no configured VAPID key environment overrides.
+- **Production:** the web is on Vercel (`web/vercel.json`), which rewrites `/api/*` to the API on Render (`render.yaml`, free plan, sleeps after 15 minutes idle); data is in Neon Postgres. The browser connects to the SignalR hub on Render directly. `fly.toml` and `DEPLOY.md`'s Fly path are not in use.
+- **Security headers** are defined twice, in `api/Security/SecurityHeadersMiddleware.cs` and `web/vercel.json`; `SecurityTests` fails if they differ, and bans `*` and `unsafe-eval` in the CSP.
+- **Required production settings:** `Jwt__Key` (at least 32 bytes), `Admin__Key` (at least 20 bytes), `Database__Provider=postgres`, `DATABASE_URL`, `Database__SeedDemoData=false`. `SecurityConfiguration` refuses to start outside Development with weak keys or keys taken from `appsettings.json`.
+- Optional: `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpiryMinutes`, `Cors__Origins__N`, `Security__KnownProxies__N`, `Security__ProxyKey`, `RateLimits__AuthPerMinute`, `RateLimits__WritesPerMinute`, `What3Words__ApiKey`, `Push__Subject`; frontend build: `VITE_API_BASE`, `VITE_LIVE_HUB_URL`; Vercel runtime: `MG_PROXY_KEY` (read by `web/middleware.ts`).
+- Environment variables use `__` for nested keys. There's no user-secrets setup.
+- `VapidKeyService` generates `vapid-keys.json` in the API content root (gitignored); replacing the container regenerates it and invalidates push subscriptions.
 
 ## Gotchas to flag, not silently fix
 
-- Committed JWT/admin key values are in `api/appsettings.json`; `appsettings.Development.json` contains logging only. Never copy key values into docs/logs. Seeding also creates demo accounts with hard-coded passwords, without a development-only guard.
-- README migration claims are stale: there are no EF migration files, and startup uses the additive schema path above. Startup also refreshes built-in race templates.
-- `api/MountedGames.Api.http` is a stale template using port 5140 and `/weatherforecast/`; the real local API uses 5050 and controller routes under `/api`.
-- Render's configured SQLite file is ephemeral (`/tmp/mg.db`); its documented idle sleep interrupts SignalR. Fly persists `/data/mg.db`.
-- VAPID keys live in `/app/vapid-keys.json` in Docker, outside Fly's `/data` mount, despite a source comment saying “next to the DB”; replacing the container can invalidate push subscriptions.
-- Manager is accepted by organiser role helpers, but competition editor route guards in `web/src/App.tsx` admit only Admin/Trainer.
-- There are no automated test suites, no API lint command and no formatter commands. Do not invent scripts or report unrun checks as passing.
+- `api/appsettings.json` still holds development JWT/admin key values. Never copy key values into docs or logs.
+- **Visitor IPs:** behind Vercel, the API learns a visitor's IP only from `web/middleware.ts`, which sends it with a shared key (`MG_PROXY_KEY` on Vercel, the same value as `Security__ProxyKey` on Render; at least 32 bytes). Without the key every visitor shares one rate-limit partition. The live hub connects to Render directly and isn't covered (see `docs/security-review.md`).
+- Anyone can self-register as a Trainer (`POST /api/auth/signup-trainer`), and Trainers can create competitions.
+- `api/MountedGames.Api.http` is a stale template (port 5140, `/weatherforecast/`).
+- Render's free plan sleeps: the first request after idle takes about 50 seconds and SignalR connections drop.

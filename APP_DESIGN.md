@@ -15,6 +15,8 @@ Admins can manage every competition. Trainers can create competitions and use or
 
 Signup contact/payment records are private to the organiser. Public declarations show the competition line-up without dates of birth, phone numbers or private notes. Saved rider records belong to the account that saved them; legacy records with no recorded owner remain admin-only. See `docs/security-review.md` for deployment requirements and verification limits.
 
+Trainer signup needs admin approval. Applicants get Member access while their request is pending. Admins review requests in Admin → Trainer requests, with edit mode enabled. Approval grants Trainer access; decline keeps the account as a Member. Existing trainers and admin-created accounts are unchanged. Approved applicants must sign in again before organising; the app shows a notice when it detects approval on load.
+
 ## Public following and score recovery (16 October 2026)
 
 Anyone can star teams from a competition's Teams or Following page. Stars are saved on that device and contain only competition and team IDs. They do not grant access to declarations, contacts or supporter tools. `/following` lists saved events; `/competitions/:id/following` shows those teams' upcoming heats and received heat totals, using the same timing calculation as the timetable. When the Following page is using saved data or is disconnected, it shows a timestamp and does not label a heat as live.
