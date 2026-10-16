@@ -358,3 +358,7 @@ Round results are previewed before publication. They use the section’s total p
 Stable team profiles connect a team’s public results across competitions. Links are explicit. Club and suffix cannot change after a profile has been linked or published, so unrelated teams cannot inherit its history. The display name can be corrected.
 
 An event’s Details page links to CSV team import, duplicate setup and print sheets. Imports show row errors and require a fresh preview before applying. Duplicating copies public setup, without declarations, claim details, payments, scores or result-derived finals places. Draws, score sheets and results have A4 print views. Unfinished results are marked provisional.
+
+### Event organiser page refinement
+
+Event checks separates readiness, equipment and draw work into focused views. Readiness groups long issue lists by task. Rulebooks open as readable text, with a separate editor. The Claude Design reference is `docs/designs/event-platform-refinement.html`; implementation preserves the existing API, permission and payment behaviour where static mock-ups simplify those details.

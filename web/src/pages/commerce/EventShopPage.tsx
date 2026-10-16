@@ -1,15 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Minus, Plus, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Minus, Plus, ShoppingBag } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
-import { LoadError, PageHeader, StatusPill } from './commerceUi';
+import { LoadError, StatusPill } from './commerceUi';
 import { CATEGORY_LABEL, errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
 import { DemoPaymentFlow } from './DemoPaymentFlow';
 import type { CommerceItemCategory, DemoOrderPaymentResult, EventCommerceSettings, EventOrder, FakePaymentOutcome, PublicCompetitionListing, TestPayment } from './types';
+import './commerce.css';
 
 type Filter = 'all' | CommerceItemCategory;
+const SHOP_FILTERS: Array<{ value: Filter; label: string }> = [
+  { value: 'all', label: 'All' },
+  ...([1, 2, 0, 3] as CommerceItemCategory[]).map((category) => ({ value: category, label: CATEGORY_LABEL[category] })),
+];
 
 export function EventShopPage() {
   const { competition } = useCompetition();
@@ -27,6 +32,7 @@ function EventShopContent() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [order, setOrder] = useState<EventOrder | null>(null);
+  const [basketOpen, setBasketOpen] = useState(false);
   const orderAttempt = useRef<{ basketSignature: string; idempotencyKey: string } | null>(null);
 
   const load = useCallback(() =>
@@ -50,13 +56,15 @@ function EventShopContent() {
     .filter((listing) => (basket[listing.id] ?? 0) > 0)
     .map((listing) => ({ listing, quantity: basket[listing.id] })), [basket, listings]);
   const estimatedTotal = basketLines.reduce((total, line) => total + line.listing.priceMinor * line.quantity, 0);
+  const basketCount = basketLines.reduce((total, line) => total + line.quantity, 0);
 
   function changeQuantity(listing: PublicCompetitionListing, delta: number) {
+    if (busy) return;
     orderAttempt.current = null;
-    setBasket((current) => {
-      const next = Math.max(0, Math.min(listing.stockQuantity ?? 99, (current[listing.id] ?? 0) + delta));
-      return { ...current, [listing.id]: next };
-    });
+    const next = Math.max(0, Math.min(listing.stockQuantity ?? 99, (basket[listing.id] ?? 0) + delta));
+    const nextBasket = { ...basket, [listing.id]: next };
+    setBasket(nextBasket);
+    if (basketOpen && Object.values(nextBasket).every((quantity) => quantity === 0)) setBasketOpen(false);
   }
 
   async function checkout() {
@@ -89,88 +97,199 @@ function EventShopContent() {
     }
   }
 
-  return (
-    <div className="skin mx-auto flex w-full max-w-3xl flex-col gap-5 pb-6">
-      <PageHeader title={`${competition.name} shop`}>
-        Order event tickets, camping and merchandise here. Everything is collected at the event.
-      </PageHeader>
+  function moveFilterFocus(event: KeyboardEvent<HTMLButtonElement>) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabList = event.currentTarget.closest('[role="tablist"]');
+    if (!tabList) return;
+    const tabs = Array.from(tabList.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const current = tabs.indexOf(event.currentTarget);
+    const next = event.key === 'Home' ? 0
+      : event.key === 'End' ? tabs.length - 1
+        : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    event.preventDefault();
+    tabs[next]?.focus();
+    tabs[next]?.click();
+  }
 
-      <nav aria-label="Shop categories" className="mg-chips flex-wrap overflow-visible">
-        <button type="button" className="mg-chip" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All</button>
-        {([1, 2, 0, 3] as CommerceItemCategory[]).map((category) => (
-          <button key={category} type="button" className="mg-chip" aria-pressed={filter === category} onClick={() => setFilter(category)}>
-            {CATEGORY_LABEL[category]}
+  if (order) {
+    return (
+      <div className="skin commerce-page mx-auto w-full max-w-3xl pb-6">
+        <button type="button" className="commerce-back" onClick={() => { setOrder(null); setBasketOpen(false); }}>
+          <ArrowLeft className="h-4 w-4" /> Back to shop
+        </button>
+        <header className="commerce-title-block">
+          <p className="mg-eyebrow">Order placed</p>
+          <h1 className="mg-h1">Order #{order.id}</h1>
+          <p className="mg-lede">Your confirmed total is <strong>{pounds(order.totalMinor)}</strong>.</p>
+        </header>
+        <OrderSummary order={order} />
+        {order.isTestOrder ? (
+          <DemoOrderCheckout order={order} onChanged={setOrder} />
+        ) : (
+          <p className="mg-notice">Pay the organiser using their usual payment details. They’ll mark the order paid when it arrives.</p>
+        )}
+      </div>
+    );
+  }
+
+  if (basketOpen) {
+    return (
+      <div className="skin commerce-page mx-auto w-full max-w-3xl pb-6">
+        <button type="button" className="commerce-back" disabled={busy} onClick={() => setBasketOpen(false)}>
+          <ArrowLeft className="h-4 w-4" /> Back to shop
+        </button>
+        <header className="commerce-title-block">
+          <p className="mg-eyebrow">{competition.name}</p>
+          <h1 className="mg-h1">Your basket</h1>
+          <p className="mg-lede">Check quantities before placing your order.</p>
+        </header>
+        {error && <LoadError message={error} onRetry={() => void load()} />}
+        <section className="commerce-rows" aria-label="Basket items">
+          {basketLines.map(({ listing, quantity }) => (
+            <article key={listing.id} className="commerce-basket-line">
+              <div className="min-w-0 flex-1">
+                <h2 className="commerce-row-title">{listing.title}</h2>
+                <p className="mg-meta">{pounds(listing.priceMinor)} each</p>
+              </div>
+              <QuantityControl listing={listing} quantity={quantity} disabled={busy} onChange={changeQuantity} />
+              <strong className="w-20 text-right">{pounds(listing.priceMinor * quantity)}</strong>
+            </article>
+          ))}
+        </section>
+        <section className="commerce-total" aria-label="Order total">
+          <div><span>Total</span><strong>{pounds(estimatedTotal)}</strong></div>
+          <p>Your total is confirmed when you place the order. Collect everything at the event.</p>
+        </section>
+        {user ? (
+          <button type="button" className="mg-btn mg-btn-primary w-full" disabled={busy || basketLines.length === 0} onClick={() => void checkout()}>
+            {busy ? 'Placing order…' : settings?.isDemo ? 'Create demo order' : 'Place order'}
+          </button>
+        ) : (
+          <Link className="mg-btn mg-btn-primary w-full" to="/login">Sign in to order</Link>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`skin commerce-page mx-auto w-full max-w-3xl ${basketLines.length > 0 ? 'commerce-page--with-basket' : ''}`}>
+      <header className="commerce-title-block">
+        <p className="mg-eyebrow">{competition.name}</p>
+        <h1 className="mg-h1">Event shop</h1>
+        <p className="mg-lede">Listings approved by the organiser. Collect at the event.</p>
+      </header>
+
+      <div role="tablist" aria-label="Shop categories" className="commerce-category-tabs">
+        {SHOP_FILTERS.map(({ value, label }) => (
+          <button
+            key={value}
+            id={`shop-filter-${value}`}
+            type="button"
+            role="tab"
+            aria-controls="shop-products"
+            aria-selected={filter === value}
+            tabIndex={filter === value ? 0 : -1}
+            onClick={() => setFilter(value)}
+            onKeyDown={moveFilterFocus}
+          >
+            {label}
           </button>
         ))}
-      </nav>
+      </div>
 
-      {error && <LoadError message={error} onRetry={() => void load()} />}
-      {listings == null && !error && <p role="status" className="mg-card p-4 text-[rgb(var(--mg-muted))]">Loading the shop…</p>}
-      {listings && listings.length === 0 && <p className="mg-card p-5">There’s nothing in the event shop yet.</p>}
-      {listings && listings.length > 0 && visible.length === 0 && <p className="mg-card p-5">There’s nothing in this category yet.</p>}
+      <div id="shop-products" role="tabpanel" aria-labelledby={`shop-filter-${filter}`}>
+        {error && <LoadError message={error} onRetry={() => void load()} />}
+        {listings == null && !error && <p role="status" className="mg-card p-4 text-[rgb(var(--mg-muted))]">Loading the shop…</p>}
+        {listings && listings.length === 0 && <p className="mg-card p-5">There’s nothing in the event shop yet.</p>}
+        {listings && listings.length > 0 && visible.length === 0 && <p className="mg-card p-5">There’s nothing in this category yet.</p>}
 
-      {visible.length > 0 && (
-        <section className="mg-card mg-list" aria-label="Products">
-          {visible.map((listing) => {
-            const quantity = basket[listing.id] ?? 0;
-            const soldOut = listing.stockQuantity === 0;
-            return (
-              <article key={listing.id} className="flex min-h-28 flex-col gap-3 p-4 sm:flex-row sm:items-center">
-                {listing.imageUrl && <img src={listing.imageUrl} alt="" className="h-20 w-20 shrink-0 rounded-lg object-cover" />}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="mg-h2">{listing.title}</h2>
-                    <StatusPill tone="good">Approved by organiser</StatusPill>
+        {visible.length > 0 && (
+          <section className="commerce-rows" aria-label="Products">
+            {visible.map((listing) => {
+              const quantity = basket[listing.id] ?? 0;
+              const soldOut = listing.stockQuantity === 0;
+              return (
+                <article key={listing.id} className="commerce-product-row">
+                  {listing.imageUrl
+                    ? <img src={listing.imageUrl} alt="" className="commerce-product-image" />
+                    : <div className="commerce-product-image commerce-product-image--empty" aria-hidden="true"><ShoppingBag className="h-5 w-5" /></div>}
+                  <div className="min-w-0 flex-1">
+                    <p className="commerce-row-kicker">{CATEGORY_LABEL[listing.category]}</p>
+                    <ProductDetails listing={listing} />
                   </div>
-                  <p className="mt-1 text-sm text-[rgb(var(--mg-body))]">{listing.description}</p>
-                  <p className="mt-1 text-xs font-semibold text-[rgb(var(--mg-muted))]">{CATEGORY_LABEL[listing.category]} · Collect at the event</p>
-                </div>
-                <div className="flex shrink-0 items-center justify-between gap-3 sm:flex-col sm:items-end">
-                  <span className="text-lg font-bold text-[rgb(var(--mg-heading))]">{pounds(listing.priceMinor)}</span>
-                  {soldOut ? <StatusPill tone="warn">Sold out</StatusPill> : (
-                    <div className="flex items-center gap-1" aria-label={`Quantity for ${listing.title}`}>
-                      <button type="button" className="mg-icon-btn" aria-label={`Remove one ${listing.title}`} disabled={quantity === 0} onClick={() => changeQuantity(listing, -1)}><Minus className="h-4 w-4" /></button>
-                      <output className="w-8 text-center font-bold" aria-live="polite">{quantity}</output>
-                      <button type="button" className="mg-icon-btn" aria-label={`Add one ${listing.title}`} disabled={quantity >= (listing.stockQuantity ?? 99)} onClick={() => changeQuantity(listing, 1)}><Plus className="h-4 w-4" /></button>
-                    </div>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </section>
-      )}
+                  <div className="commerce-product-action">
+                    <strong>{pounds(listing.priceMinor)}</strong>
+                    {soldOut ? <StatusPill tone="warn">Sold out</StatusPill> : quantity === 0 ? (
+                      <button type="button" className="commerce-add" aria-label={`Add ${listing.title}`} onClick={() => changeQuantity(listing, 1)}>Add</button>
+                    ) : <QuantityControl listing={listing} quantity={quantity} onChange={changeQuantity} />}
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        )}
+      </div>
 
-      {basketLines.length > 0 && (
-        <section className="mg-card flex flex-col gap-3 border-2 !border-[rgb(var(--mg-heading))] p-4" aria-label="Basket">
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="h-5 w-5 text-[rgb(var(--mg-heading))]" />
-            <h2 className="mg-h2 flex-1">Your basket</h2>
-            <strong>{pounds(estimatedTotal)}</strong>
-          </div>
-          <p className="mg-meta">Your total is confirmed when you place the order. Collect everything at the event.</p>
-          {user ? (
-            <button type="button" className="mg-btn mg-btn-primary w-full" disabled={busy} onClick={() => void checkout()}>
-              {busy ? 'Placing order…' : settings?.isDemo ? 'Create demo order' : 'Place order'}
-            </button>
-          ) : (
-            <Link className="mg-btn mg-btn-primary w-full" to="/login">Sign in to order</Link>
-          )}
-        </section>
-      )}
-
-      {order && (
-        <section className="mg-card flex flex-col gap-3 p-4" aria-live="polite">
-          <h2 className="mg-h2">Order #{order.id}</h2>
-          <p>The confirmed total is <strong>{pounds(order.totalMinor)}</strong>.</p>
-          {order.isTestOrder ? (
-            <DemoOrderCheckout order={order} onChanged={setOrder} />
-          ) : (
-            <p className="mg-notice">Pay the organiser using their usual payment details. They’ll mark the order paid when the money arrives.</p>
-          )}
-        </section>
-      )}
+      {basketLines.length > 0 && <BasketBar count={basketCount} total={estimatedTotal} onOpen={() => setBasketOpen(true)} />}
     </div>
+  );
+}
+
+function ProductDetails({ listing }: { listing: PublicCompetitionListing }) {
+  const [expanded, setExpanded] = useState(false);
+  const descriptionId = `shop-product-description-${listing.id}`;
+  return (
+    <div>
+      <h2 className="commerce-row-title">
+        <button type="button" aria-expanded={expanded} aria-controls={descriptionId} onClick={() => setExpanded((current) => !current)}>
+          <span>{listing.title}</span>
+          <ChevronDown aria-hidden="true" className="h-4 w-4" />
+        </button>
+      </h2>
+      <p id={descriptionId} className={`commerce-row-description ${expanded ? 'commerce-row-description--expanded' : ''}`}>{listing.description}</p>
+    </div>
+  );
+}
+
+function QuantityControl({
+  listing, quantity, disabled = false, onChange,
+}: {
+  listing: PublicCompetitionListing;
+  quantity: number;
+  disabled?: boolean;
+  onChange: (listing: PublicCompetitionListing, delta: number) => void;
+}) {
+  return (
+    <div className="commerce-quantity" aria-label={`Quantity for ${listing.title}`}>
+      <button type="button" aria-label={`Remove one ${listing.title}`} disabled={disabled} onClick={() => onChange(listing, -1)}><Minus className="h-4 w-4" /></button>
+      <output aria-live="polite">{quantity}</output>
+      <button type="button" aria-label={`Add one ${listing.title}`} disabled={disabled || quantity >= (listing.stockQuantity ?? 99)} onClick={() => onChange(listing, 1)}><Plus className="h-4 w-4" /></button>
+    </div>
+  );
+}
+
+function BasketBar({ count, total, onOpen }: { count: number; total: number; onOpen: () => void }) {
+  return (
+    <aside className="commerce-basket-bar" aria-label="Basket summary">
+      <div className="min-w-0 flex-1">
+        <p>{count} {count === 1 ? 'item' : 'items'}</p>
+        <strong>{pounds(total)}</strong>
+      </div>
+      <button type="button" onClick={onOpen}>View basket <ShoppingBag className="h-4 w-4" /></button>
+    </aside>
+  );
+}
+
+function OrderSummary({ order }: { order: EventOrder }) {
+  return (
+    <section className="commerce-rows" aria-label="Order summary">
+      {order.lines.map((line) => (
+        <div key={line.id} className="commerce-basket-line">
+          <span className="flex-1">{line.title} × {line.quantity}</span>
+          <strong>{pounds(line.lineTotalMinor)}</strong>
+        </div>
+      ))}
+    </section>
   );
 }
 

@@ -134,12 +134,6 @@ export function DemoPaymentFlow({
         </div>
       </header>
 
-      <ol className="demo-pay__steps" aria-label="Demo checkout progress">
-        <li aria-current={step === 'review' ? 'step' : undefined}>1. Review</li>
-        <li aria-current={step === 'details' || step === 'processing' ? 'step' : undefined}>2. Demo details</li>
-        <li aria-current={step === 'result' ? 'step' : undefined}>3. Result</li>
-      </ol>
-
       <>
         {step === 'review' && (
           <motion.div key="review" className="demo-pay__panel" initial={reducedMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, y: -6 }} transition={transition}>
