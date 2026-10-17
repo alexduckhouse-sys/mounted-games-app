@@ -1,6 +1,7 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { ChevronRight, RotateCw } from 'lucide-react';
+import { ChevronDown, ChevronRight, MapPin, RotateCw, X } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { computeTimings, formatTime } from '../../lib/time';
@@ -87,15 +88,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
         )}
       </div>
       {arenas.length > 1 && (
-        <div className="tt-arenas mg-band mg-chips" role="group" aria-label="Choose arena">
-          {['', ...arenas].map((name) => {
-            const live = !!name && dayRows.some((row) => row.status === 'live' && row.session.arenaName?.trim() === name);
-            return <button key={name || 'all'} type="button" className="mg-chip" aria-pressed={selectedArena === name} onClick={(e) => { chooseArena(name); e.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest' }); }}>
-              {name || 'All arenas'}
-              {live && <><span className="tt-live-dot" aria-hidden="true" /><span className="sr-only">, on now</span></>}
-            </button>;
-          })}
-        </div>
+        <ArenaPicker arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />
       )}
       <div className="tt-body">
         {lead}
@@ -122,6 +115,101 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       </div>
     </div>
   );
+}
+
+function ArenaPicker({ arenas, selectedArena, dayRows, onChoose }: {
+  arenas: string[];
+  selectedArena: string;
+  dayRows: TimetableRow[];
+  onChoose: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const pickerRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const selectedRows = selectedArena ? dayRows.filter((row) => row.session.arenaName?.trim() === selectedArena) : dayRows;
+  const selectedLive = selectedRows.some((row) => row.status === 'live');
+
+  function close() {
+    setOpen(false);
+    window.setTimeout(() => pickerRef.current?.focus(), 0);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const selected = sheetRef.current?.querySelector<HTMLButtonElement>('.tt-arena-option[aria-pressed="true"]');
+    (selected ?? sheetRef.current?.querySelector<HTMLButtonElement>('button'))?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(sheetRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])') ?? [])];
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const options = ['', ...arenas];
+  return <>
+    <div className="tt-arena-picker-band mg-band">
+      <button ref={pickerRef} type="button" className="tt-arena-picker" aria-label={`Arena: ${selectedArena || 'All arenas'}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+        <MapPin aria-hidden="true" className="tt-arena-picker-icon" />
+        <span className="tt-arena-picker-copy"><span>Arena</span><strong>{selectedArena || 'All arenas'}</strong></span>
+        {selectedLive && <span className="mg-badge mg-badge-live">Live</span>}
+        <ChevronDown aria-hidden="true" className="tt-arena-picker-chevron" />
+      </button>
+    </div>
+    {open && createPortal(
+      <div className="tt-arena-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+        <div ref={sheetRef} role="dialog" aria-modal="true" aria-label="Choose arena" className="tt-arena-sheet">
+          <span className="tt-arena-handle" aria-hidden="true" />
+          <div className="tt-arena-sheet-head">
+            <h2>Choose arena</h2>
+            <button type="button" className="mg-icon-btn" aria-label="Close arena picker" onClick={close}><X aria-hidden="true" className="h-5 w-5" /></button>
+          </div>
+          <div className="tt-arena-options">
+            {options.map((name) => {
+              const optionRows = name ? dayRows.filter((row) => row.session.arenaName?.trim() === name) : dayRows;
+              const live = optionRows.some((row) => row.status === 'live');
+              const finished = !!name && optionRows.length > 0 && optionRows.every((row) => row.status === 'finished');
+              const summary = name ? arenaSummary(optionRows) : 'Everything, in running order';
+              return <button key={name || 'all'} type="button" className="tt-arena-option" aria-label={`${name || 'All arenas'}. ${summary}`} aria-pressed={selectedArena === name} onClick={() => { onChoose(name); close(); }}>
+                <span className="tt-arena-radio" aria-hidden="true" />
+                <span className="tt-arena-option-copy"><strong>{name || 'All arenas'}</strong><span>{summary}</span></span>
+                {name && !finished && <span className={`mg-badge ${live ? 'mg-badge-live' : 'mg-badge-outline'}`}>{live ? 'Live' : 'Later'}</span>}
+              </button>;
+            })}
+          </div>
+          <p className="tt-arena-note">We’ll remember your arena on this phone.</p>
+        </div>
+      </div>,
+      document.body,
+    )}
+  </>;
+}
+
+function arenaSummary(rows: TimetableRow[]) {
+  const live = rows.find((row) => row.status === 'live');
+  if (live) return `On now: ${timetableRowName(live)}${live.delayMinutes > 0 ? ` · running ${live.delayMinutes} min late` : ''}`;
+  const upcoming = rows.find((row) => row.status !== 'finished');
+  if (upcoming) return `Starts ${formatArenaTime(upcoming.effective)} · ${timetableRowName(upcoming)}`;
+  return 'Finished';
+}
+
+function timetableRowName(row: TimetableRow) {
+  return row.heat?.label || (row.heat ? `Heat ${row.heatIndex + 1}` : row.session.name);
+}
+
+function formatArenaTime(value: Date | null) {
+  return value?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) ?? '—';
 }
 
 /** Final heats, one block per age group (in running order), after all the sessions. */

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Maximize, Play, X } from 'lucide-react';
+import { Maximize, Play, VolumeX, X } from 'lucide-react';
 import type { ChatMessage, LiveStream } from '../../types';
 import { StreamOverlays } from './StreamOverlays';
 
-export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement }: {
+export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement, captionBar = false }: {
   media: MediaStream | null; stream: LiveStream; label: string | null; reconnecting?: boolean; message?: string | null;
-  announcement?: { message: ChatMessage; receivedAt: number };
+  announcement?: { message: ChatMessage; receivedAt: number }; captionBar?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -75,13 +75,14 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     window.history.pushState({ ...window.history.state, streamFullscreen: true }, '');
     openRef.current = true; setFull(true);
   }
-  const player = <div ref={containerRef} className={`mg-font overflow-hidden bg-[rgb(var(--mg-header-deep))] text-white ${full ? 'fixed inset-0 z-[100]' : 'relative aspect-video rounded-2xl'}`} role={full ? 'dialog' : undefined} aria-modal={full || undefined} aria-label={full ? 'Live video' : undefined}>
+  const player = <div ref={containerRef} className={`mg-font overflow-hidden bg-[rgb(var(--mg-header-deep))] text-white ${full ? 'fixed inset-0 z-[100]' : `relative aspect-video ${captionBar ? '' : 'rounded-xl'}`}`} role={full ? 'dialog' : undefined} aria-modal={full || undefined} aria-label={full ? 'Live video' : undefined}>
     <video ref={videoRef} muted={soundOff} playsInline autoPlay className="h-full w-full object-contain" onClick={open} aria-label={`${stream.arenaName}, ${stream.angleName}`} />
-    <StreamOverlays stream={stream} label={label} reconnecting={reconnecting} muted={muted} onSound={unmute} announcement={announcement}>
-      <button className="mg-stream-control pointer-events-auto absolute right-3 top-3" aria-label={full ? 'Close full screen' : 'Open full screen'} onClick={full ? close : open}>{full ? <X /> : <Maximize />}</button>
+    <StreamOverlays stream={stream} label={label} reconnecting={reconnecting} muted={muted} onSound={unmute} announcement={announcement} hideCaption={captionBar && !full}>
+      {(full || !captionBar) && <button className="mg-stream-control pointer-events-auto absolute right-3 top-3" aria-label={full ? 'Close full screen' : 'Open full screen'} onClick={full ? close : open}>{full ? <X /> : <Maximize />}</button>}
       {needsPlay && <button className="mg-stream-control pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 !rounded-xl px-4" onClick={() => { void videoRef.current!.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true)); }}><Play /> Play</button>}
       {message && <p role="status" className="mg-stream-glass absolute left-3 right-3 top-1/2 p-3 text-center">{message}</p>}
     </StreamOverlays>
   </div>;
-  return full ? <><div className="aspect-video rounded-2xl bg-[rgb(var(--mg-header-deep))]" />{createPortal(player, document.body)}</> : player;
+  const showSound = stream.hasAudio && !stream.audioMuted && stream.status !== 1 && muted;
+  return full ? <><div className="aspect-video rounded-xl bg-[rgb(var(--mg-header-deep))]" />{createPortal(player, document.body)}</> : captionBar ? <div className="live-stream-frame mg-card overflow-hidden">{player}<div className="live-stream-caption"><span className="mg-badge mg-badge-live">Live</span><strong>{label || `${stream.arenaName} · ${stream.angleName}`}</strong>{showSound && <button type="button" className="live-caption-sound" aria-label="Tap for sound" onClick={unmute}><VolumeX aria-hidden="true" /></button>}<button type="button" onClick={open}>Full screen</button></div></div> : player;
 }

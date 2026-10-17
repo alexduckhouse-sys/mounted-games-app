@@ -67,6 +67,12 @@ it('unmutes inside the tap and restarts a video the browser had paused', async (
   expect(video.muted).toBe(false); expect(play).toHaveBeenCalledTimes(1);
   play.mockRejectedValueOnce(new Error('gesture required')); await settle(); unmount();
 });
+it('keeps the sound and full-screen controls in the compact public caption', async () => {
+  render(<StreamPlayer media={asMedia(new FakeMediaStream())} stream={liveStream()} label="Heat 1" captionBar />); await settle();
+  expect(screen.getByRole('button', { name: 'Full screen' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Tap for sound' }));
+  expect(document.querySelector('video')!.muted).toBe(false);
+});
 it('shows announcements for eight seconds and staff messages for ten, without reviving old messages', async () => {
   const announcement = { message: chat(1, { body: 'Lunch at one' }), receivedAt: Date.now() };
   const { unmount } = render(<StreamOverlays stream={liveStream()} label="Final" reconnecting={false} muted onSound={vi.fn()} announcement={announcement} />);

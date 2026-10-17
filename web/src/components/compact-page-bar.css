@@ -1,0 +1,37 @@
+.mg-compact-bar {
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.mg-compact-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.mg-compact-title {
+  overflow: hidden;
+  color: #fff;
+  font: 700 18px/1.05 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mg-compact-subtitle {
+  overflow: hidden;
+  color: rgb(var(--mg-header-sub));
+  font: 500 13px/1.1 'Barlow', sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mg-compact-finished {
+  background: rgb(var(--mg-tint));
+  color: rgb(var(--mg-heading));
+}

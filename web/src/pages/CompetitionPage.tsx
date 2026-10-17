@@ -19,6 +19,21 @@ import { displaySectionName } from '../lib/section';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
 
+const BANNER_TAG = 'banner';
+
+function currentAnnouncements(messages: ChatMessage[]) {
+  const announcements = messages.filter((message) => message.type === 2);
+  const activeBanner = announcements.filter((message) => message.tag === BANNER_TAG).at(-1);
+  return [...announcements.filter((message) => message.tag !== BANNER_TAG), ...(activeBanner ? [activeBanner] : [])];
+}
+
+function addAnnouncement(current: ChatMessage[], message: ChatMessage) {
+  const withoutSame = current.filter((item) => item.id !== message.id);
+  return message.tag === BANNER_TAG
+    ? [...withoutSame.filter((item) => item.tag !== BANNER_TAG), message]
+    : [...withoutSame, message];
+}
+
 export function CompetitionPage() {
   const { id } = useParams<{ id: string }>();
   const competitionId = id ? Number(id) : null;
@@ -132,13 +147,17 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   useEffect(() => {
     const controller = new AbortController();
     api.get<ChatMessage[]>(`/competitions/${competitionId}/chat`, { signal: controller.signal })
-      .then((r) => setAnnouncements(r.data.filter((m) => m.type === 2)))
+      .then((r) => setAnnouncements(currentAnnouncements(r.data)))
       .catch(() => {});
     return () => controller.abort();
   }, [competitionId, attempt]);
   useEffect(() => {
     // No name fallback: the header already shows it, so the strip stays hidden when there is no news.
-    setItems(data ? tickerItems(data.sessions, announcements, now) : []);
+    const activeBanner = announcements.filter((message) => message.tag === BANNER_TAG).at(-1);
+    const tickerAnnouncements = activeBanner
+      ? announcements.map((message) => message.id === activeBanner.id ? { ...message, createdAt: now.toISOString() } : message)
+      : announcements;
+    setItems(data ? tickerItems(data.sessions, tickerAnnouncements, now) : []);
     return () => setItems([]);
   }, [data, announcements, now, setItems]);
 
@@ -148,8 +167,13 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     onStreamViewers: streamState.onStreamViewers,
     onChatMessage: addStreamMessage,
     onAnnouncement: (m) => {
-      addStreamMessage(m);
-      setAnnouncements((cur) => [...cur.filter((x) => x.id !== (m as ChatMessage).id), m as ChatMessage]);
+      const message = m as ChatMessage;
+      addStreamMessage(message);
+      if (message.competitionId === competitionId) setAnnouncements((current) => addAnnouncement(current, message));
+    },
+    onChatMessageDeleted: ({ id }) => {
+      setAnnouncements((current) => current.filter((message) => message.id !== id));
+      setStreamMessages((current) => current.filter((item) => item.message.id !== id));
     },
     onSessionUpdated: (s) => {
       const updated = s as Session;
