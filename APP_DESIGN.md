@@ -335,3 +335,17 @@ MAX per (kind, bucket), and returns a flat list.
 - `RaceLibraryUpdates.ByName` is a per-race override map (`Summary`, `Rules`, `DiagramJson`, `Category` — any field set to null keeps the existing DB value). On every API startup, `SeedRaceTemplatesAsync` walks this map and PUTs the override values into any matching built-in `RaceTemplate` row.
 - This lets us push canonical rule text or diagram refinements to existing DBs without manual admin work. Admin-edited customs (`IsBuiltIn=false`) are not touched.
 - Source: `docs/pc-mounted-games-race-rules-2026.md` (Pony Club Mounted Games Race Rules 2026). Currently covers ~15 of the highest-traffic races; the remaining ~40 are filled in incrementally as needed.
+
+
+### Organiser readiness and score records
+
+An event’s Details page links to Readiness & draw. Organisers can preview a seeded section draw, inspect repeated opponents and lane counts, then apply it while the source data is unchanged. Started or scored races cannot be redrawn. Readiness brings declarations, unpaid entries, timetable overlaps and the equipment checklist together.
+
+Rulebooks are ordinary text attached to a competition, with a title, edition and optional source link. Everyone can read them; the organiser can edit them.
+
+The scoring screen keeps a revision history. Corrections need a reason, including changes waiting offline and decisions to replace another phone’s result. Completed results can be signed off; reopening them also needs a reason. Shared placings retain the existing points for that place; no points-sharing rule is introduced.
+
+
+### Event organiser page refinement
+
+Event checks separates readiness, equipment and draw work into focused views. Readiness groups long issue lists by task. Rulebooks open as readable text, with a separate editor. The Claude Design reference is `docs/designs/event-platform-refinement.html`; implementation preserves the existing API, permission and payment behaviour where static mock-ups simplify those details.

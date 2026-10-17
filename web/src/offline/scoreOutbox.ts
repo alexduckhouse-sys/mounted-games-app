@@ -23,6 +23,7 @@ export interface QueuedScore {
   expected: Placing[];
   teamNames: Record<number, string>;
   queuedAt: string;
+  reason?: string;
   state: 'waiting' | 'conflict' | 'failed';
   /** What the server holds, when it refused the save as a conflict. */
   theirs?: Placing[];
@@ -81,14 +82,14 @@ function samePlacings(a: Placing[], b: Placing[]): boolean {
 }
 
 /** Send mine anyway: it now replaces the results the other device saved. */
-export function overrule(list: QueuedScore[], raceId: number): QueuedScore[] {
+export function overrule(list: QueuedScore[], raceId: number, reason?: string): QueuedScore[] {
   return list.map((q) => q.raceId === raceId && q.state === 'conflict'
-    ? { ...q, state: 'waiting', expected: q.theirs ?? [], theirs: undefined }
+    ? { ...q, state: 'waiting', expected: q.theirs ?? [], theirs: undefined, ...(reason === undefined ? {} : { reason }) }
     : q);
 }
 
-export function retry(list: QueuedScore[], raceId: number): QueuedScore[] {
-  return list.map((q) => q.raceId === raceId && q.state === 'failed' ? { ...q, state: 'waiting', error: undefined } : q);
+export function retry(list: QueuedScore[], raceId: number, reason?: string): QueuedScore[] {
+  return list.map((q) => q.raceId === raceId && q.state === 'failed' ? { ...q, state: 'waiting', error: undefined, ...(reason === undefined ? {} : { reason }) } : q);
 }
 
 export function discard(list: QueuedScore[], raceId: number): QueuedScore[] {

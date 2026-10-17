@@ -34,6 +34,8 @@ const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').t
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
 const RulesPage = lazy(() => import('./pages/admin/RulesPage').then((module) => ({ default: module.RulesPage })));
 const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
+const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').then((module) => ({ default: module.OperationsPage })));
+const RulebooksPage = lazy(() => import('./pages/operations/RulebooksPage').then((module) => ({ default: module.RulebooksPage })));
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 
 export default function App() {
@@ -64,6 +66,8 @@ export default function App() {
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="teams" element={<TeamsTab />} />
                 <Route path="following" element={<FollowingTab />} />
+                <Route path="rulebooks" element={<RulebooksPage />} />
+                <Route path="operations" element={<ProtectedRoute roles={['Admin', 'Trainer']}><OperationsPage /></ProtectedRoute>} />
                 <Route path="declarations" element={<DeclarationsTab />} />
                 <Route path="chat" element={<ChatTab />} />
                 <Route path="details" element={<DetailsTab />} />

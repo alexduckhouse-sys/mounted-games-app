@@ -260,7 +260,10 @@ public record CreateHeatRequest(
 /// save is refused with 409 if the race has since been scored differently,
 /// e.g. by another phone while this one was offline.
 /// </param>
-public record SubmitRaceResultsRequest(IReadOnlyList<FinishingPlaceDto> Places, IReadOnlyList<FinishingPlaceDto>? Expected = null);
+public record SubmitRaceResultsRequest(
+    IReadOnlyList<FinishingPlaceDto> Places,
+    IReadOnlyList<FinishingPlaceDto>? Expected = null,
+    string? Reason = null);
 public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated);
 
 public record StandingRow(

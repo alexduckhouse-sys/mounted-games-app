@@ -40,6 +40,13 @@ describe('readOutbox', () => {
 });
 
 describe('flushOutbox', () => {
+  it('sends the saved correction reason unchanged, including Unicode', async () => {
+    seed(queued(1, { reason: 'Steward’s decision — équipe two' }));
+    post.mockResolvedValue(saved());
+    await flushOutbox();
+    expect(post).toHaveBeenCalledWith('/races/1/results', expect.objectContaining({ reason: 'Steward’s decision — équipe two' }), { timeout: 15_000 });
+  });
+
   it('sends waiting results oldest first, posting what the scorer saw, and clears them', async () => {
     seed(queued(1, { expected: [{ teamId: 1, place: 2, eliminated: false }] }), queued(2));
     post.mockResolvedValue(saved());

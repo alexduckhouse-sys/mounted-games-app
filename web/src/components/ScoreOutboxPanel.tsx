@@ -6,6 +6,7 @@ import { flushOutbox, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from 
 /** Results saved on this phone that haven't reached the server yet, and any that need a decision. */
 export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
   const queued = useScoreOutbox().filter((q) => q.competitionId === competitionId);
+  const [reasons, setReasons] = useState<Record<number, string>>({});
   const [storageError, setStorageError] = useState(false);
   const update = (change: (list: QueuedScore[]) => QueuedScore[]) => setStorageError(!updateOutbox(change));
   if (queued.length === 0 && !storageError) return null;
@@ -22,13 +23,16 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
           <p className="text-slate-600 dark:text-slate-300">
             Another phone saved this race while yours were waiting to send. Choose which results to keep.
           </p>
-          <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
             <dt className="font-medium">Theirs</dt><dd>{describePlacings(q.theirs ?? [], q.teamNames)}</dd>
             <dt className="font-medium">Yours</dt><dd>{describePlacings(q.places, q.teamNames)}</dd>
           </dl>
+          <label className="flex flex-col gap-1 font-semibold">Reason for replacing these results
+            <textarea className="input" maxLength={1000} value={reasons[q.raceId] ?? q.reason ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [q.raceId]: event.target.value }))} />
+          </label>
           <div className="flex flex-wrap gap-2">
             <button className="btn-ghost min-h-11" onClick={() => update((l) => discard(l, q.raceId))}>Keep theirs</button>
-            <button className="btn-primary min-h-11" onClick={() => update((l) => overrule(l, q.raceId))}>Use mine</button>
+            <button className="btn-primary min-h-11" disabled={!(reasons[q.raceId] ?? q.reason ?? '').trim()} onClick={() => update((l) => overrule(l, q.raceId, (reasons[q.raceId] ?? q.reason ?? '').trim()))}>Use mine</button>
           </div>
         </div>
       ))}
@@ -38,9 +42,12 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
             <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" /> {q.label} wasn’t saved
           </p>
           <p className="text-slate-600 dark:text-slate-300">{q.error} ({describePlacings(q.places, q.teamNames)})</p>
+          <label className="flex flex-col gap-1 font-semibold">Reason for correction (if needed)
+            <textarea className="input" maxLength={1000} value={reasons[q.raceId] ?? q.reason ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [q.raceId]: event.target.value }))} />
+          </label>
           <div className="flex flex-wrap gap-2">
             <button className="btn-ghost min-h-11" onClick={() => { if (confirm(`Delete your results for ${q.label}?`)) update((l) => discard(l, q.raceId)); }}>Delete mine</button>
-            <button className="btn-primary min-h-11" onClick={() => update((l) => retry(l, q.raceId))}>Try again</button>
+            <button className="btn-primary min-h-11" onClick={() => update((l) => retry(l, q.raceId, (reasons[q.raceId] ?? q.reason ?? '').trim() || undefined))}>Try again</button>
           </div>
         </div>
       ))}
