@@ -280,3 +280,56 @@ it('asks to take over on the first publish when the operator chose to replace a 
   expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: true, arenaName: 'Main Arena', angleName: 'Main camera' }));
   p.dispose();
 });
+
+describe('publisher camera switching and early controls', () => {
+  it('ignores stream controls before a stream exists', async () => {
+    const { publisher: p, request } = setup();
+    await p.capture(); await p.caption('Lunch'); await p.mute(true);
+    expect(request.mock.calls.some(([method]) => method === 'PATCH')).toBe(false);
+    p.dispose();
+  });
+  it('keeps only the newest camera when two switches overlap', async () => {
+    const { publisher: p, start, getUserMedia } = setup(); await start();
+    const slow = deferred<MediaStream>();
+    getUserMedia.mockImplementationOnce(() => slow.promise);
+    const first = p.switchCamera('front');
+    await p.switchCamera('usb');
+    const stale = new FakeTrack();
+    slow.resolve(asMedia(new FakeMediaStream([stale]))); await first;
+    expect(stale.stop).toHaveBeenCalled();
+    expect(p.getSnapshot().media!.getVideoTracks()).not.toContain(stale);
+    p.dispose();
+  });
+  it('releases the new camera and reports the error when the browser refuses the swap', async () => {
+    const { publisher: p, start, getUserMedia } = setup(); await start();
+    const refused = new FakeTrack();
+    getUserMedia.mockImplementationOnce(async () => asMedia(new FakeMediaStream([refused])));
+    FakePeer.instances[0].transceivers[0].sender.replaceTrack.mockRejectedValueOnce(new Error('refused'));
+    await expect(p.switchCamera('usb')).rejects.toThrow('refused');
+    expect(refused.stop).toHaveBeenCalled();
+    p.dispose();
+  });
+  it('runs a recovery asked for mid-publish once that publish finishes', async () => {
+    const { publisher: p, request, hide } = setup();
+    const ice = deferred<unknown>();
+    const normal = request.getMockImplementation()!;
+    request.mockImplementation(async (method: string, path: string) => (path.endsWith('ice-servers') && !request.mock.calls.some(([, other]) => other.endsWith('ready')) ? ice.promise : normal(method, path)));
+    await p.capture();
+    const starting = p.start('Main Arena', 'Main camera'); await flush();
+    hide(true); await vi.advanceTimersByTimeAsync(21_000); hide(false);
+    ice.resolve({ iceServers: [] }); await starting; await flush(); await flush();
+    expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams/1/republish', expect.any(Object));
+    p.dispose();
+  });
+  it('drops a camera that arrives after a newer switch began while the swap was in flight', async () => {
+    const { publisher: p, start } = setup(); await start();
+    const swap = deferred<void>();
+    FakePeer.instances[0].transceivers[0].sender.replaceTrack.mockImplementationOnce(() => swap.promise);
+    const first = p.switchCamera('front');
+    await flush();
+    const second = p.switchCamera('usb');
+    swap.resolve(); await first; await second;
+    expect(p.getSnapshot().media!.getVideoTracks()).toHaveLength(1);
+    p.dispose();
+  });
+});
