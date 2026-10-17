@@ -77,6 +77,50 @@ public class LiveHubTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task AdminOnlyChat_ReachesAdminsAndTheAuthor_NotThePublic()
+    {
+        var adminAuth = await _f.AdminLoginAsync();
+        var trainerAuth = await _f.LoginAsync(TestClients.TrainerEmail, TestClients.TrainerPassword);
+        await using var admin = await ConnectAsync(adminAuth.Token);
+        await using var author = await ConnectAsync(trainerAuth.Token);
+        await using var publicViewer = await ConnectAsync();
+        foreach (var c in new[] { admin, author, publicViewer }) await c.InvokeAsync("JoinCompetition", 12);
+        var adminGot = Next<System.Text.Json.JsonElement>(admin, "chatMessage");
+        var authorGot = Next<System.Text.Json.JsonElement>(author, "chatMessage");
+        var leaked = false;
+        publicViewer.On<System.Text.Json.JsonElement>("chatMessage", _ => leaked = true);
+
+        await Broadcaster.AdminOnlyChatMessage(12, trainerAuth.User.Id, new { text = "psst" });
+
+        Assert.Equal("psst", (await adminGot).GetProperty("text").GetString());
+        Assert.Equal("psst", (await authorGot).GetProperty("text").GetString());
+        // A public broadcast sent afterwards proves the public client was listening and saw nothing before it.
+        var publicGot = Next<System.Text.Json.JsonElement>(publicViewer, "announcement");
+        await Broadcaster.Announcement(12, new { text = "after" });
+        await publicGot;
+        Assert.False(leaked);
+    }
+
+    [Fact]
+    public async Task LeaveCompetition_StopsAdminOnlyDelivery()
+    {
+        var adminAuth = await _f.AdminLoginAsync();
+        await using var left = await ConnectAsync(adminAuth.Token);
+        await using var witness = await ConnectAsync(adminAuth.Token);
+        await left.InvokeAsync("JoinCompetition", 13);
+        await witness.InvokeAsync("JoinCompetition", 13);
+        await left.InvokeAsync("LeaveCompetition", 13);
+        var got = false;
+        left.On<System.Text.Json.JsonElement>("chatMessage", _ => got = true);
+        var witnessGot = Next<System.Text.Json.JsonElement>(witness, "chatMessage");
+
+        await Broadcaster.AdminOnlyChatMessage(13, null, new { text = "x" });
+        await witnessGot;
+
+        Assert.False(got);
+    }
+
+    [Fact]
     public async Task Connection_AcceptsJwtFromAccessTokenQuery()
     {
         var auth = await _f.AdminLoginAsync();

@@ -22,14 +22,22 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
         return c;
     }
 
-    private Task<int> SeedMessageAsync(Arena a, string body, DateTime createdAt, string? ip = null, string author = "Someone")
+    private Task<int> SeedMessageAsync(Arena a, string body, DateTime createdAt, string? ip = null, string author = "Someone",
+        bool adminOnly = false, string? userId = null)
         => _f.WithDbAsync(async db =>
         {
-            var m = new ChatMessage { CompetitionId = a.CompetitionId, AuthorName = author, Body = body, CreatedAt = createdAt, IpAddress = ip };
+            var m = new ChatMessage
+            {
+                CompetitionId = a.CompetitionId, AuthorName = author, Body = body, CreatedAt = createdAt, IpAddress = ip,
+                AdminOnly = adminOnly, UserId = userId,
+            };
             db.ChatMessages.Add(m);
             await db.SaveChangesAsync();
             return m.Id;
         });
+
+    private Task<string> UserIdAsync(string email)
+        => _f.WithDbAsync(db => db.Users.Where(u => u.Email == email).Select(u => u.Id).SingleAsync());
 
     // ---- Recent ----
 
@@ -83,62 +91,109 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal("m504", list[^1].Body);
     }
 
+    [Fact]
+    public async Task Recent_HidesTrainerMessages_FromThePublic()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var now = DateTime.UtcNow;
+        await SeedMessageAsync(a, "public", now.AddMinutes(-2));
+        await SeedMessageAsync(a, "private", now.AddMinutes(-1), adminOnly: true, userId: await UserIdAsync(TestClients.TrainerEmail));
+
+        var list = await (await _f.CreateClient().GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+
+        Assert.Equal(new[] { "public" }, list.Select(m => m.Body));
+    }
+
+    [Fact]
+    public async Task Recent_ShowsATrainerOnlyTheirOwnPrivateMessages()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var (_, other) = await _f.SignupAsync("Trainer");
+        var now = DateTime.UtcNow;
+        await SeedMessageAsync(a, "public", now.AddMinutes(-3));
+        await SeedMessageAsync(a, "mine", now.AddMinutes(-2), adminOnly: true, userId: await UserIdAsync(TestClients.TrainerEmail));
+        await SeedMessageAsync(a, "theirs", now.AddMinutes(-1), adminOnly: true, userId: other.User.Id);
+
+        var list = await (await (await _f.TrainerAsync()).GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+
+        Assert.Equal(new[] { "public", "mine" }, list.Select(m => m.Body));
+    }
+
+    [Fact]
+    public async Task Recent_ShowsAdminsEveryTrainerMessage()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var (_, other) = await _f.SignupAsync("Trainer");
+        var now = DateTime.UtcNow;
+        await SeedMessageAsync(a, "public", now.AddMinutes(-3));
+        await SeedMessageAsync(a, "one", now.AddMinutes(-2), adminOnly: true, userId: await UserIdAsync(TestClients.TrainerEmail));
+        await SeedMessageAsync(a, "two", now.AddMinutes(-1), adminOnly: true, userId: other.User.Id);
+
+        var list = await (await (await _f.AdminAsync()).GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+
+        Assert.Equal(new[] { "public", "one", "two" }, list.Select(m => m.Body));
+        Assert.Equal(new[] { false, true, true }, list.Select(m => m.AdminOnly));
+    }
+
     // ---- Post ----
 
     [Fact]
-    public async Task Post_Anonymous_AuthorsAsGuest_AndStoresTrimmedBodyAndIp()
+    public async Task Post_Admin_IsPublic_LinkedToAccount_AndStoresTrimmedBodyAndIp()
     {
         var a = await _f.CreateArenaAsync(1);
-        var client = WithIp(_f.CreateClient(), "10.1.2.3");
+        var admin = WithIp(await _f.AdminAsync(), "10.1.2.3");
 
-        var r = await client.PostAsJsonAsync(Url(a), new PostChatMessageRequest("  hello  ", null));
+        var r = await admin.PostAsJsonAsync(Url(a), new PostChatMessageRequest("  hello  "));
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var dto = await r.ReadAsync<ChatMessageDto>();
-        Assert.Equal("Guest", dto.AuthorName);
+        var user = await _f.WithDbAsync(db => db.Users.SingleAsync(u => u.Email == TestClients.AdminEmail));
+        Assert.Equal(user.Id, dto.UserId);
+        Assert.Equal(user.FullName, dto.AuthorName);
         Assert.Equal("hello", dto.Body);
         Assert.Equal(ChatMessageType.Chat, dto.Type);
-        Assert.Null(dto.UserId);
+        Assert.False(dto.AdminOnly);
         var stored = await _f.WithDbAsync(db => db.ChatMessages.SingleAsync(m => m.Id == dto.Id));
         Assert.Equal("10.1.2.3", stored.IpAddress);
     }
 
     [Fact]
-    public async Task Post_WithoutKnownIp_StillSucceeds()
-    {
-        var a = await _f.CreateArenaAsync(1);
-
-        var r = await _f.CreateClient().PostAsJsonAsync(Url(a), new PostChatMessageRequest("hi", null));
-
-        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
-        var id = (await r.ReadAsync<ChatMessageDto>()).Id;
-        Assert.Null((await _f.WithDbAsync(db => db.ChatMessages.SingleAsync(m => m.Id == id))).IpAddress);
-    }
-
-    [Fact]
-    public async Task Post_UsesSuppliedAuthorName_TrimmedAndCappedAt60()
-    {
-        var a = await _f.CreateArenaAsync(1);
-        var client = _f.CreateClient();
-
-        var named = await (await client.PostAsJsonAsync(Url(a), new PostChatMessageRequest("hi", "  Pat  "))).ReadAsync<ChatMessageDto>();
-        var longName = await (await client.PostAsJsonAsync(Url(a), new PostChatMessageRequest("hi", new string('n', 80)))).ReadAsync<ChatMessageDto>();
-
-        Assert.Equal("Pat", named.AuthorName);
-        Assert.Equal(60, longName.AuthorName.Length);
-    }
-
-    [Fact]
-    public async Task Post_SignedInUser_IsLinkedToAccount_AndUsesTheirName()
+    public async Task Post_Trainer_IsAdminOnly_AndUsesTheirAccountName()
     {
         var a = await _f.CreateArenaAsync(1);
         var trainer = await _f.TrainerAsync();
 
-        var dto = await (await trainer.PostAsJsonAsync(Url(a), new PostChatMessageRequest("from coach", " "))).ReadAsync<ChatMessageDto>();
+        var dto = await (await trainer.PostAsJsonAsync(Url(a), new PostChatMessageRequest("from coach"))).ReadAsync<ChatMessageDto>();
 
         var user = await _f.WithDbAsync(db => db.Users.SingleAsync(u => u.Email == TestClients.TrainerEmail));
         Assert.Equal(user.Id, dto.UserId);
         Assert.Equal(user.FullName, dto.AuthorName);
+        Assert.True(dto.AdminOnly);
+        Assert.True((await _f.WithDbAsync(db => db.ChatMessages.SingleAsync(m => m.Id == dto.Id))).AdminOnly);
+    }
+
+    [Fact]
+    public async Task Post_Returns401_WhenAnonymous()
+    {
+        var a = await _f.CreateArenaAsync(1);
+
+        var r = await _f.CreateClient().PostAsJsonAsync(Url(a), new PostChatMessageRequest("hi"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
+        Assert.False(await _f.WithDbAsync(db => db.ChatMessages.AnyAsync(m => m.CompetitionId == a.CompetitionId)));
+    }
+
+    [Theory]
+    [InlineData("Manager")]
+    [InlineData("Member")]
+    public async Task Post_Returns403_ForOtherTeamRoles(string role)
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var (client, _) = await _f.SignupAsync(role);
+
+        var r = await client.PostAsJsonAsync(Url(a), new PostChatMessageRequest("hi"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
     }
 
     [Theory]
@@ -147,24 +202,24 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
     public async Task Post_Returns400_WhenBodyBlank(string body)
     {
         var a = await _f.CreateArenaAsync(1);
-        var r = await _f.CreateClient().PostAsJsonAsync(Url(a), new PostChatMessageRequest(body, null));
+        var r = await (await _f.AdminAsync()).PostAsJsonAsync(Url(a), new PostChatMessageRequest(body));
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
     [Fact]
     public async Task Post_Returns404_WhenCompetitionMissing()
     {
-        var r = await _f.CreateClient().PostAsJsonAsync("/api/competitions/999999/chat", new PostChatMessageRequest("hi", null));
+        var r = await (await _f.AdminAsync()).PostAsJsonAsync("/api/competitions/999999/chat", new PostChatMessageRequest("hi"));
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
     [Fact]
-    public async Task Post_Returns403_WhenIpIsBlocked()
+    public async Task Post_Returns403_WhenTrainerIpIsBlocked()
     {
         var a = await _f.CreateArenaAsync(1);
         await _f.WithDbAsync(async db => { db.IpBlocks.Add(new IpBlock { IpAddress = "10.9.9.9" }); await db.SaveChangesAsync(); });
 
-        var r = await WithIp(_f.CreateClient(), "10.9.9.9").PostAsJsonAsync(Url(a), new PostChatMessageRequest("spam", null));
+        var r = await WithIp(await _f.TrainerAsync(), "10.9.9.9").PostAsJsonAsync(Url(a), new PostChatMessageRequest("spam"));
 
         Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
         using var doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
@@ -178,7 +233,7 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
         var a = await _f.CreateArenaAsync(1);
         await _f.WithDbAsync(async db => { db.IpBlocks.Add(new IpBlock { IpAddress = "10.8.8.8" }); await db.SaveChangesAsync(); });
 
-        var r = await WithIp(_f.CreateClient(), "10.8.8.9").PostAsJsonAsync(Url(a), new PostChatMessageRequest("fine", null));
+        var r = await WithIp(await _f.TrainerAsync(), "10.8.8.9").PostAsJsonAsync(Url(a), new PostChatMessageRequest("fine"));
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
     }
@@ -190,7 +245,7 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
         await _f.WithDbAsync(async db => { db.IpBlocks.Add(new IpBlock { IpAddress = "10.7.7.7" }); await db.SaveChangesAsync(); });
         var admin = WithIp(await _f.AdminAsync(), "10.7.7.7");
 
-        var r = await admin.PostAsJsonAsync(Url(a), new PostChatMessageRequest("admin here", null));
+        var r = await admin.PostAsJsonAsync(Url(a), new PostChatMessageRequest("admin here"));
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
     }
@@ -253,7 +308,7 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal($"Blocked via chat message #{id} from Troll", block.Reason);
         Assert.NotNull(block.CreatedByUserId);
 
-        var after = await WithIp(_f.CreateClient(), "10.5.5.5").PostAsJsonAsync(Url(a), new PostChatMessageRequest("again", null));
+        var after = await WithIp(await _f.TrainerAsync(), "10.5.5.5").PostAsJsonAsync(Url(a), new PostChatMessageRequest("again"));
         Assert.Equal(HttpStatusCode.Forbidden, after.StatusCode);
     }
 

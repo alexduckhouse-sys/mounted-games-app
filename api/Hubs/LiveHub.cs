@@ -1,21 +1,33 @@
 using Microsoft.AspNetCore.SignalR;
+using MountedGames.Api.Auth;
 
 namespace MountedGames.Api.Hubs;
 
 public class LiveHub : Hub
 {
-    public Task JoinCompetition(int competitionId)
-        => Groups.AddToGroupAsync(Context.ConnectionId, GroupName(competitionId));
+    public async Task JoinCompetition(int competitionId)
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(competitionId));
+        // Admins also get trainers' private messages for this competition.
+        if (Context.User?.IsInRole(Roles.Admin) == true)
+            await Groups.AddToGroupAsync(Context.ConnectionId, AdminGroupName(competitionId));
+    }
 
-    public Task LeaveCompetition(int competitionId)
-        => Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(competitionId));
+    public async Task LeaveCompetition(int competitionId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(competitionId));
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, AdminGroupName(competitionId));
+    }
 
     public static string GroupName(int competitionId) => $"comp:{competitionId}";
+    public static string AdminGroupName(int competitionId) => $"comp:{competitionId}:admins";
 }
 
 public interface ILiveBroadcaster
 {
     Task ChatMessage(int competitionId, object message);
+    /// <summary>Sends an admin-only message to the competition's admins and to its author.</summary>
+    Task AdminOnlyChatMessage(int competitionId, string? authorUserId, object message);
     Task ChatMessageDeleted(int competitionId, int messageId);
     Task SessionUpdated(int competitionId, object session);
     Task ResultsUpdated(int competitionId, object payload);
@@ -29,6 +41,13 @@ public class LiveBroadcaster : ILiveBroadcaster
 
     public Task ChatMessage(int competitionId, object message)
         => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("chatMessage", message);
+
+    public async Task AdminOnlyChatMessage(int competitionId, string? authorUserId, object message)
+    {
+        await _hub.Clients.Group(LiveHub.AdminGroupName(competitionId)).SendAsync("chatMessage", message);
+        if (authorUserId is not null)
+            await _hub.Clients.User(authorUserId).SendAsync("chatMessage", message);
+    }
 
     public Task ChatMessageDeleted(int competitionId, int messageId)
         => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("chatMessageDeleted", new { id = messageId });

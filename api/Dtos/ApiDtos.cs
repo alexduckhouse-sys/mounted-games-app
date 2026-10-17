@@ -294,9 +294,9 @@ public record SavedRiderDto(
 
 public record ChatMessageDto(
     int Id, int CompetitionId, string? UserId, string AuthorName,
-    string Body, ChatMessageType Type, string? Tag, DateTime CreatedAt);
+    string Body, ChatMessageType Type, string? Tag, DateTime CreatedAt, bool AdminOnly);
 
-public record PostChatMessageRequest(string Body, string? AuthorName);
+public record PostChatMessageRequest(string Body);
 
 public record AnnouncementRequest(string Body, string? Tag);
 

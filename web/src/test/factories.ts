@@ -28,7 +28,7 @@ export const standing = (teamId: number, totalPoints: number): StandingRow => ({
 });
 
 export const chat = (id: number, extra: Partial<ChatMessage> = {}): ChatMessage => ({
-  id, competitionId: 1, authorName: 'Organiser', body: 'Hello', type: 2, createdAt: new Date().toISOString(), ...extra,
+  id, competitionId: 1, authorName: 'Organiser', body: 'Hello', type: 2, createdAt: new Date().toISOString(), adminOnly: false, ...extra,
 });
 
 export const competition = (extra: Partial<CompetitionDetail> = {}): CompetitionDetail => ({

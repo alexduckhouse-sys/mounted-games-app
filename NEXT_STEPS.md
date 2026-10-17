@@ -61,15 +61,16 @@ The status below records earlier work and deployment follow-ups; verify its host
    - set `MG_PROXY_KEY` to it in Vercel (Project → Settings → Environment Variables, Production and Preview), and redeploy;
    - set `Security__ProxyKey` to the same value on Render.
    - Check: after 10 failed sign-ins from one network, sign-in from a phone on mobile data still works.
-3. **Official EGUK navy hex.** `#1e3466` is a guess.
-4. **Decisions left open in chats:**
+3. **PR #26 deploy gate (staff-only live feed).** Before merging, apply `api/Data/Migrations/Scripts/20261016162534_AddChatAdminOnly.sql` to Neon (one boolean column, default false); the API refuses to start with a pending migration.
+4. **Official EGUK navy hex.** `#1e3466` is a guess.
+5. **Decisions left open in chats:**
    - Remove the race clock? You said "there is no race clock", but it's still in the app.
    - Stream embeds: switch to "Tap to load the stream" with YouTube's no-cookie player, so no third-party cookies are set before consent?
    - Keep the colour key under the timetable dots?
    - Ticker: should a fresh announcement keep replacing the live heat for up to 15 minutes, or should "Now" stay on top?
    - Reseed the existing demo competitions with the 5–6 teams and 7–8 races layout?
    - Toplist before any scoring: show a dash instead of every team as joint 1st?
-5. **Always-on host.** Render's free plan sleeps after 15 minutes, so the first visit takes about 50 seconds and live updates drop. The chats call this the biggest real-world delay.
+6. **Always-on host.** Render's free plan sleeps after 15 minutes, so the first visit takes about 50 seconds and live updates drop. The chats call this the biggest real-world delay.
 
 ## Features
 

@@ -215,8 +215,8 @@ export function DetailsTab() {
         </div>
       )}
 
-      {/* Signup-by-section */}
-      {competition.sections.length > 0 && (
+      {/* Signup-by-section — signed-in users only; the public can't enter. */}
+      {user && competition.sections.length > 0 && (
         <div className="card p-4 space-y-3">
           <h2 className="mg-h2 flex items-center gap-2">
             <Banknote aria-hidden="true" className="h-5 w-5" /> Enter the competition
@@ -245,7 +245,7 @@ export function DetailsTab() {
         </div>
       )}
 
-      <EquipmentBlock competitionId={competition.id} />
+      {user && <EquipmentBlock competitionId={competition.id} />}
     </div>
   );
 }

@@ -334,6 +334,8 @@ export interface ChatMessage {
   type: ChatMessageType;
   tag?: string | null;
   createdAt: string;
+  /** Trainer message: only admins and its author see it. */
+  adminOnly: boolean;
 }
 
 export interface RiderEntry {

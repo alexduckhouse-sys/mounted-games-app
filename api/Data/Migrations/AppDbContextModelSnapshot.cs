@@ -239,6 +239,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AdminOnly")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("AuthorName")
                         .IsRequired()
                         .HasMaxLength(150)
