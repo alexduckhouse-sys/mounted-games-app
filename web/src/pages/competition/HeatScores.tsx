@@ -12,7 +12,8 @@ interface Cell { points: number; eliminated: boolean }
 
 /** The public heat page: who is racing, the score for every race so far and the running total. */
 export function HeatScores({ session, heats, activeHeatId }: { session: Session; heats: Heat[]; activeHeatId: number | null }) {
-  const { competition } = useCompetition();
+  const { competition, streams } = useCompetition();
+  const canWatch = !!competition.streamUrl || streams.some((stream) => stream.status !== 2);
   // The page can be reached with ?heat=<id> while already mounted (next-heat link), so the URL wins over the parent's initial pick.
   const [searchParams] = useSearchParams();
   const requestedHeat = Number(searchParams.get('heat'));
@@ -132,8 +133,8 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
         </div>
       ) : (
         <div className="flex gap-2.5">
-          {competition.streamUrl && <Link to={`/competitions/${competition.id}/chat`} className="mg-btn mg-btn-primary flex-1">Watch stream</Link>}
-          {session.competitionSectionId != null && <Link to={`/competitions/${competition.id}/toplists?section=${session.competitionSectionId}`} className={`mg-btn flex-1 ${competition.streamUrl ? 'mg-btn-secondary' : 'mg-btn-primary'}`}>{section ? `${section} toplist` : 'Toplist'}</Link>}
+          {canWatch && <Link to={`/competitions/${competition.id}/chat`} className="mg-btn mg-btn-primary flex-1">Watch stream</Link>}
+          {session.competitionSectionId != null && <Link to={`/competitions/${competition.id}/toplists?section=${session.competitionSectionId}`} className={`mg-btn flex-1 ${canWatch ? 'mg-btn-secondary' : 'mg-btn-primary'}`}>{section ? `${section} toplist` : 'Toplist'}</Link>}
         </div>
       )}
     </div>

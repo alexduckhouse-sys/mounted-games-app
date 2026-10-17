@@ -319,3 +319,26 @@ public record SetTeamCodeRequest(string Code);
 public record VapidPublicKeyResponse(string PublicKey);
 public record PushSubscribeRequest(string Endpoint, string P256dh, string Auth);
 public record SendTestPushRequest(string? Title, string? Body);
+
+public record LiveStreamDto(
+    int Id, int CompetitionId, string ArenaName, string AngleName, LiveStreamStatus Status,
+    string? Caption, bool AudioMuted, bool HasAudio, DateTime StartedAt, int ViewerCount, int Generation);
+public record LiveStreamsResponse(bool Enabled, IReadOnlyList<LiveStreamDto> Streams);
+public record PublishRequest(string SdpOffer, string VideoMid, string? AudioMid = null);
+public record StartStreamRequest(string ArenaName, string AngleName, string SdpOffer, string VideoMid,
+    string? AudioMid = null, bool TakeOver = false) : PublishRequest(SdpOffer, VideoMid, AudioMid);
+public record PublishResponse(int StreamId, int Attempt, string SdpAnswer);
+public record ReadyRequest(int Attempt);
+// JsonElement distinguishes an omitted caption (Undefined) from an explicit null.
+public record UpdateStreamRequest
+{
+    public LiveStreamStatus? Status { get; init; }
+    public bool? AudioMuted { get; init; }
+    public System.Text.Json.JsonElement Caption { get; init; }
+}
+public record StreamUrlRequest(string? StreamUrl);
+public record IceServer(object Urls,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Username = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Credential = null);
+public record IceServersResponse(IReadOnlyList<IceServer> IceServers);
+public record WatchStreamResponse(string WatchId, string SdpOffer, int Generation, IReadOnlyList<IceServer> IceServers);

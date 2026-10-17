@@ -4,7 +4,7 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
 {
     // The Vite build uses external scripts and self-hosted fonts. Keep this in
     // step with web/vercel.json; the parity test covers both deployment paths.
-    public const string ContentSecurityPolicy = "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; style-src-elem 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://mounted-games-scoreboard.onrender.com wss://mounted-games-scoreboard.onrender.com; frame-src https://www.youtube.com https://player.twitch.tv; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; media-src 'self'; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests";
+    public const string ContentSecurityPolicy = "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; style-src-elem 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://mounted-games-scoreboard.onrender.com wss://mounted-games-scoreboard.onrender.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; media-src 'self'; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests";
 
     public static readonly IReadOnlyDictionary<string, string> Headers = new Dictionary<string, string>
     {
@@ -17,7 +17,7 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
         ["Origin-Agent-Cluster"] = "?1",
         ["X-Permitted-Cross-Domain-Policies"] = "none",
         ["X-DNS-Prefetch-Control"] = "off",
-        ["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), browsing-topics=()",
+        ["Permissions-Policy"] = "camera=(self), microphone=(self), geolocation=(), payment=(), browsing-topics=()",
         // No preload/includeSubDomains: ownership of every subdomain isn't established.
         ["Strict-Transport-Security"] = "max-age=63072000",
     };

@@ -460,3 +460,25 @@ export const DIAGRAM_TOOLS: DiagramTool[] = [
   { t: 'item', kind: 'penny', label: 'Penny' },
   { t: 'item', kind: 'box', label: 'Box' },
 ];
+
+export type LiveStreamStatus = 0 | 1 | 2;
+export interface LiveStream {
+  id: number;
+  competitionId: number;
+  arenaName: string;
+  angleName: string;
+  status: LiveStreamStatus;
+  caption: string | null;
+  audioMuted: boolean;
+  hasAudio: boolean;
+  startedAt: string;
+  viewerCount: number;
+  generation: number;
+}
+export interface IceServer { urls: string | string[]; username?: string; credential?: string }
+export interface LiveStreamsResponse { enabled: boolean; streams: LiveStream[] }
+export interface PublishRequest { sdpOffer: string; videoMid: string; audioMid?: string | null }
+export interface StartStreamRequest extends PublishRequest { arenaName: string; angleName: string; takeOver?: boolean }
+export interface PublishResponse { streamId: number; attempt: number; sdpAnswer: string }
+export interface ReadyRequest { attempt: number }
+export interface UpdateStreamRequest { status?: 0 | 1; audioMuted?: boolean; caption?: string | null }

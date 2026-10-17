@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams, Outlet } from 'react-router-dom';
 import { api } from '../api';
 import type { ChatMessage, CompetitionDetail, Session, Heat } from '../types';
+import { useCompetitionStreams } from '../hooks/useCompetitionStreams';
+import { appendStreamMessage } from '../lib/streams';
 import { tickerItems } from '../lib/ticker';
 import { useTicker } from '../components/TickerContext';
 import { useLiveHub } from '../live/useLiveHub';
@@ -30,9 +32,10 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const savedKey = savedCopyKeys.competition(competitionId);
   // Open straight away on the copy this phone saw last, then refresh it from the server.
   const [initial] = useState(() => readSavedCopy<CompetitionDetail>(savedKey));
-  const [error, setError] = useState(false);
+  const [failedAttempt, setFailedAttempt] = useState<number | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(initial?.savedAt ?? null);
   const [attempt, setAttempt] = useState(0);
+  const error = failedAttempt === attempt;
   const [data, setData] = useState<CompetitionDetail | null>(initial?.data ?? null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(initial ? new Date(initial.savedAt) : null);
   // Which load has finished and which has run past two seconds; the current one is `attempt`.
@@ -47,7 +50,6 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
-    setError(false);
     const slowTimer = setTimeout(() => setSlowAttempt(attempt), 2_000);
     api.get<CompetitionDetail>(`/competitions/${competitionId}`, { signal: controller.signal })
       .then((r) => {
@@ -67,7 +69,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         setSavedAt(fallback === 'unknown' ? '' : fallback.toISOString());
         setUpdatedAt(fallback === 'unknown' ? null : fallback);
       })
-      .catch(() => { if (!cancelled) setError(true); })
+      .catch(() => { if (!cancelled) setFailedAttempt(attempt); })
       .finally(() => {
         clearTimeout(slowTimer);
         if (!cancelled) setSettledAttempt(attempt);
@@ -107,7 +109,20 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     return () => clear();
   }, [competitionId, setExtras, clear]);
 
-  const { setItems } = useTicker();
+  const { setItems, setWatchCompetitionId } = useTicker();
+  const [ready, setReady] = useState(0);
+  const streamState = useCompetitionStreams(competitionId, ready);
+  const [streamMessages, setStreamMessages] = useState<{ message: ChatMessage; receivedAt: number }[]>([]);
+  const addStreamMessage = (value: unknown) => {
+    const message = value as ChatMessage;
+    if (message.competitionId !== competitionId) return;
+    setStreamMessages((current) => appendStreamMessage(current, { message, receivedAt: Date.now() }));
+  };
+  const hasStreams = streamState.streams.length > 0;
+  useEffect(() => {
+    setWatchCompetitionId(hasStreams ? competitionId : null);
+    return () => setWatchCompetitionId(null);
+  }, [hasStreams, competitionId, setWatchCompetitionId]);
   const [announcements, setAnnouncements] = useState<ChatMessage[]>([]);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -127,9 +142,15 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     return () => setItems([]);
   }, [data, announcements, now, setItems]);
 
-  const { connected } = useLiveHub(competitionId, {
-    onReady: load,
-    onAnnouncement: (m) => setAnnouncements((cur) => [...cur.filter((x) => x.id !== (m as ChatMessage).id), m as ChatMessage]),
+  const { connected, invoke } = useLiveHub(competitionId, {
+    onReady: () => { load(); setReady((value) => value + 1); },
+    onStreamUpdated: streamState.onStreamUpdated,
+    onStreamViewers: streamState.onStreamViewers,
+    onChatMessage: addStreamMessage,
+    onAnnouncement: (m) => {
+      addStreamMessage(m);
+      setAnnouncements((cur) => [...cur.filter((x) => x.id !== (m as ChatMessage).id), m as ChatMessage]);
+    },
     onSessionUpdated: (s) => {
       const updated = s as Session;
       setData((cur) => {
@@ -194,7 +215,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing);
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages }}>
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />

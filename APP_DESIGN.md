@@ -119,8 +119,14 @@ Submitting scores moves the scorer to the next race only after the outbox has sa
 - Public-facing arena setup view at `/competitions/:id/arena` shows the live heat's race with a Next-race walkthrough. Set-up rules are shown expanded by default below the diagram.
 
 ## Live streaming
-- **One stream per competition** (`Competition.StreamUrl`). YouTube and Twitch are auto-embedded; other URLs link out.
-- Admins set/clear the stream from the chat tab's sidebar; viewers see it embedded above the chat.
+Full spec: `docs/specs/live-stream.md`. Design: `docs/designs/live-stream-proposal.html`.
+
+- **Camera streams (16 October 2026).** An admin, or the trainer who created the competition, broadcasts from a phone or laptop camera at `/competitions/:id/broadcast`. Each broadcast has an arena and an angle (for example, Main Arena · Finish line). Several can run at once, typically 1–3 arenas with 1–3 angles each.
+- **Relay.** Cloudflare Realtime SFU, driven only by the API (`Streaming:Cloudflare:*`), so the token never reaches a browser. Viewers negotiate through the SignalR hub (`WatchStream`/`AnswerStream`); broadcasters use `api/competitions/{id}/streams`. The feature is hidden while it isn't configured.
+- **Spectators.** Anyone can watch, with no account. A red Watch button in the ticker strip opens the Live & stream tab, where the player sits above the live feed. Tap it for full screen. The now-racing strip, announcements, viewer count and "Back soon" are drawn over the video by the app, never burned into it. Later overlays (score card after each race, admin banners, replays) go in the same layer.
+- **Quality and cost.** Up to 720p with simulcast. Viewer sessions are capped (`Streaming:MaxViewerSessions`), because each one uses paid Cloudflare bandwidth.
+- **Not yet:** recording or replays, Nest or RTMP cameras, a player that floats across pages.
+- **Fallback link.** One YouTube or Twitch link per competition (`Competition.StreamUrl`) still shows when no camera is live. It loads only after a tap, using YouTube's no-cookie player; other URLs open as a plain link. Organisers set it from the chat tab's sidebar (`PUT /api/competitions/{id}/stream-url`).
 
 ## Chat moderation
 - Admins click any chat message to reveal Delete and **Block IP** buttons. Block IP uses the IP captured when the message was posted (`ChatMessage.IpAddress`) and adds it to `IpBlocks`. System messages and old messages without a recorded IP can't be blocked.

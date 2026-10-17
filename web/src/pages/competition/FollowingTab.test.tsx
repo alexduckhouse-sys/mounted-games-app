@@ -13,7 +13,7 @@ const data = competition({ teams: [team(1, { displayName: 'Example Blue' }), tea
   ] })] }),
 ] });
 function mount(extra: Partial<CompetitionCtx> = {}) {
-  return render(<MemoryRouter initialEntries={['/competitions/1/following']}><CompetitionContext.Provider value={{ competition: data, reload: vi.fn(), updatedAt: new Date('2026-07-01T10:00:00Z'), ...extra }}><Routes><Route path="/competitions/:id"><Route path="following" element={<FollowingTab />} /></Route></Routes></CompetitionContext.Provider></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={['/competitions/1/following']}><CompetitionContext.Provider value={{ competition: data, reload: vi.fn(), updatedAt: new Date('2026-07-01T10:00:00Z'), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [], ...extra }}><Routes><Route path="/competitions/:id"><Route path="following" element={<FollowingTab />} /></Route></Routes></CompetitionContext.Provider></MemoryRouter>);
 }
 describe('FollowingTab', () => {
   it('lets a signed-out visitor search, star and unstar a team', async () => {

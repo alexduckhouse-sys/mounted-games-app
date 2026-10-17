@@ -1,7 +1,7 @@
 import type { AxiosAdapter, InternalAxiosRequestConfig } from 'axios';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, readStoredAuth, readToken, writeStoredAuth, type StoredAuth } from './api';
+import { api, readStoredAuth, readToken, rejectHtmlPage, writeStoredAuth, type StoredAuth } from './api';
 
 const KEY = 'mg.auth';
 const auth = (extra: Partial<StoredAuth> = {}): StoredAuth => ({
@@ -115,6 +115,13 @@ describe('api client', () => {
     expect((await api.get('/x')).data).toEqual([1]);
     api.defaults.adapter = async (config) => ({ data: 'x', status: 200, statusText: 'OK', headers: new AxiosHeaders({ 'Content-Type': 'text/html' }), config });
     await expect(api.get('/x')).rejects.toMatchObject({ response: { status: 404 } });
+  });
+
+  it('passes responses through when they carry no content type at all', () => {
+    const bare = { data: null, status: 204, statusText: 'No Content', config: {} } as never;
+    expect(rejectHtmlPage(bare)).toBe(bare);
+    const untyped = { data: {}, status: 200, statusText: 'OK', headers: {}, config: {} } as never;
+    expect(rejectHtmlPage(untyped)).toBe(untyped);
   });
 
   it('passes successful responses through unchanged', async () => {
