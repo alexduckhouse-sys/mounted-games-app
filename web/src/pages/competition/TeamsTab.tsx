@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Users, Plus, Save, ClipboardList, Ban } from 'lucide-react';
+import { Users, Plus, Save, ClipboardList, Ban, Star } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useFavourites } from '../../hooks/useFavourites';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
@@ -8,6 +10,8 @@ import { displaySectionName } from '../../lib/section';
 
 export function TeamsTab() {
   const { competition, reload } = useCompetition();
+  const { favourites, error: favouriteError, toggle } = useFavourites();
+  const followed = new Set(favourites.filter((item) => item.competitionId === competition.id).map((item) => item.teamId));
   const { user, hasRole, canEdit } = useAuth();
   const [sectionId, setSectionId] = useState<number | 'all'>('all');
   const [clubs, setClubs] = useState<Club[]>([]);
@@ -85,6 +89,8 @@ export function TeamsTab() {
 
   return (
     <div className="space-y-4">
+      <Link className="mg-btn mg-btn-secondary" to="../following"><Star className="h-4 w-4" />View followed teams</Link>
+      {favouriteError && <p role="alert" className="mg-notice">{favouriteError}</p>}
       <div className="card p-3 flex flex-wrap gap-2 items-center">
         <button
           onClick={() => setSectionId('all')}
@@ -186,6 +192,9 @@ export function TeamsTab() {
                       {t.trainerName ?? 'No trainer assigned'}
                     </div>
                   </div>
+                  <button className="btn-ghost min-h-11 min-w-11 !px-2" aria-pressed={followed.has(t.id)} aria-label={`${followed.has(t.id) ? 'Unfollow' : 'Follow'} ${t.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: t.id })}>
+                    <Star aria-hidden="true" className={`h-5 w-5 ${followed.has(t.id) ? 'fill-current' : ''}`} />
+                  </button>
                   {canEdit() && (
                     <button
                       onClick={async () => {

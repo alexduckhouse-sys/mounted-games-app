@@ -17,7 +17,7 @@ public class TrainerNotesEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Create_StoresNoteForCaller()
     {
-        var (client, auth) = await _f.SignupAsync();
+        var (client, auth) = await _f.ApprovedTrainerAsync();
 
         var r = await client.PostAsJsonAsync(Url, new SaveTrainerNoteRequest("Plan", "Practise bending"));
 
@@ -33,7 +33,7 @@ public class TrainerNotesEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Create_AllowsNullTitle()
     {
-        var (client, _) = await _f.SignupAsync();
+        var (client, _) = await _f.ApprovedTrainerAsync();
         var dto = await (await client.PostAsJsonAsync(Url, new SaveTrainerNoteRequest(null, "body only"))).ReadAsync<TrainerNoteDto>();
         Assert.Null(dto.Title);
     }
@@ -41,8 +41,8 @@ public class TrainerNotesEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task List_ReturnsOnlyOwnNotes_MostRecentlyTouchedFirst()
     {
-        var (client, auth) = await _f.SignupAsync();
-        var (other, _) = await _f.SignupAsync();
+        var (client, auth) = await _f.ApprovedTrainerAsync();
+        var (other, _) = await _f.ApprovedTrainerAsync();
         await other.PostAsJsonAsync(Url, new SaveTrainerNoteRequest("theirs", "x"));
         await _f.WithDbAsync(async db =>
         {
@@ -61,7 +61,7 @@ public class TrainerNotesEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Update_ChangesNote_AndStampsUpdatedAt()
     {
-        var (client, _) = await _f.SignupAsync();
+        var (client, _) = await _f.ApprovedTrainerAsync();
         var created = await (await client.PostAsJsonAsync(Url, new SaveTrainerNoteRequest("a", "b"))).ReadAsync<TrainerNoteDto>();
 
         var r = await client.PutAsJsonAsync($"{Url}/{created.Id}", new SaveTrainerNoteRequest("a2", "b2"));
@@ -76,8 +76,8 @@ public class TrainerNotesEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Update_Returns404_ForSomeoneElsesNote_AndLeavesItUnchanged()
     {
-        var (owner, _) = await _f.SignupAsync();
-        var (intruder, _) = await _f.SignupAsync();
+        var (owner, _) = await _f.ApprovedTrainerAsync();
+        var (intruder, _) = await _f.ApprovedTrainerAsync();
         var note = await (await owner.PostAsJsonAsync(Url, new SaveTrainerNoteRequest("mine", "secret"))).ReadAsync<TrainerNoteDto>();
 
         var r = await intruder.PutAsJsonAsync($"{Url}/{note.Id}", new SaveTrainerNoteRequest("hacked", "x"));
@@ -89,7 +89,7 @@ public class TrainerNotesEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Update_Returns404_WhenMissing()
     {
-        var (client, _) = await _f.SignupAsync();
+        var (client, _) = await _f.ApprovedTrainerAsync();
         var r = await client.PutAsJsonAsync($"{Url}/999999", new SaveTrainerNoteRequest("a", "b"));
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
@@ -97,7 +97,7 @@ public class TrainerNotesEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Delete_RemovesOwnNote()
     {
-        var (client, _) = await _f.SignupAsync();
+        var (client, _) = await _f.ApprovedTrainerAsync();
         var note = await (await client.PostAsJsonAsync(Url, new SaveTrainerNoteRequest("a", "b"))).ReadAsync<TrainerNoteDto>();
 
         var r = await client.DeleteAsync($"{Url}/{note.Id}");
@@ -109,8 +109,8 @@ public class TrainerNotesEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Delete_Returns404_ForSomeoneElsesNote()
     {
-        var (owner, _) = await _f.SignupAsync();
-        var (intruder, _) = await _f.SignupAsync();
+        var (owner, _) = await _f.ApprovedTrainerAsync();
+        var (intruder, _) = await _f.ApprovedTrainerAsync();
         var note = await (await owner.PostAsJsonAsync(Url, new SaveTrainerNoteRequest("a", "b"))).ReadAsync<TrainerNoteDto>();
 
         var r = await intruder.DeleteAsync($"{Url}/{note.Id}");
@@ -122,7 +122,7 @@ public class TrainerNotesEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Delete_Returns404_WhenMissing()
     {
-        var (client, _) = await _f.SignupAsync();
+        var (client, _) = await _f.ApprovedTrainerAsync();
         Assert.Equal(HttpStatusCode.NotFound, (await client.DeleteAsync($"{Url}/999999")).StatusCode);
     }
 
@@ -140,6 +140,7 @@ public class TrainerNotesEndpointsTests : IClassFixture<ApiFactory>
     [Theory]
     [InlineData("Manager")]
     [InlineData("Member")]
+    [InlineData("Trainer")]
     public async Task Returns403_ForNonTrainerRoles(string role)
     {
         var (client, _) = await _f.SignupAsync(role);

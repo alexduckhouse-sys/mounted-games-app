@@ -15,6 +15,14 @@ Admins can manage every competition. Trainers can create competitions and use or
 
 Signup contact/payment records are private to the organiser. Public declarations show the competition line-up without dates of birth, phone numbers or private notes. Saved rider records belong to the account that saved them; legacy records with no recorded owner remain admin-only. See `docs/security-review.md` for deployment requirements and verification limits.
 
+Trainer signup needs admin approval. Applicants get Member access while their request is pending. Admins review requests in Admin → Trainer requests, with edit mode enabled. Approval grants Trainer access; decline keeps the account as a Member. Existing trainers and admin-created accounts are unchanged. Approved applicants must sign in again before organising; the app shows a notice when it detects approval on load.
+
+## Public following and score recovery (16 October 2026)
+
+Anyone can star teams from a competition's Teams or Following page. Stars are saved on that device and contain only competition and team IDs. They do not grant access to declarations, contacts or supporter tools. `/following` lists saved events; `/competitions/:id/following` shows those teams' upcoming heats and received heat totals, using the same timing calculation as the timetable. When the Following page is using saved data or is disconnected, it shows a timestamp and does not label a heat as live.
+
+Submitting scores moves the scorer to the next race only after the outbox has saved their placings on the phone. If storage is unavailable, the entered placings stay on screen with an error. Each new save has its own identifier, so a reply to an earlier save cannot discard a later edit. An edit made while an earlier save is being sent compares against the accepted result when it retries.
+
 ## Core domain model
 - **Club** — pony club (reference data).
 - **Team** = Club + suffix (e.g. "Stockport A"). Grouped by **Section**.
@@ -205,11 +213,10 @@ Lifecycle the app supports today:
 
 1. **Comp creation (organiser)**: name, dates, venue, organiser name,
    payment destination, sections + their prices.
-2. **Signup**: any signed-in user except admins can sign up to a section
-   from the comp's Details tab (signed-out visitors don't see the form and
-   the API returns 401). They see a `Pay £X` button that opens a "Online payment
-   coming soon — pay the organiser directly" modal and confirms a Pending
-   signup. Free sections skip the modal and auto-mark Paid.
+2. **Competition entry**: signed-in entrants, excluding admins, can join a
+   section from the competition's Details page. Priced entries remain Pending
+   until payment is confirmed. Free entries are marked Paid immediately. Demo
+   events offer a labelled test checkout; normal events use manual payments.
 3. **Payment confirmation**: organiser sees a list of pending vs paid
    signups on the Details tab and ticks them paid as money lands. Refund
    and cancel also live on the same row.
@@ -231,7 +238,7 @@ Lifecycle the app supports today:
   section ("Signup price per team").
 - **`SectionSignup` entity** + endpoints:
   - `POST /api/competitions/:cid/sections/:sid/signups` (signed-in, not admin; rejects when locked),
-  - `GET /api/competitions/:cid/signups` (public),
+  - `GET /api/competitions/:cid/signups` (organiser only),
   - `PUT /api/signups/:id/status` (admin/trainer — Pending / Paid / Refunded / Cancelled),
   - `DELETE /api/signups/:id`,
   - `GET /api/me/signups` (authenticated — powers `/me/signups` page),
@@ -251,20 +258,16 @@ next to `Edit` for jumping straight into the post-signups flow.
 ### Public surfaces
 - **`/me/signups`** lists every signup the logged-in user has made, with
   pay status, comp date, linked team (once formed), and amount.
-- Per-section signup card on the comp's Details tab now shows a Pay button
-  that opens a payment-placeholder modal showing the comp's
-  `PaymentDestination` so the entrant knows where to send funds.
+- The Details page shows entry prices and the organiser’s payment details.
+  After entering, users can check payment status under My signups.
 
 ### Organiser CSV exports
 - `signupsToCsv` in `web/src/lib/csv.ts`; comp-level button on the Details
   tab (organiser tools strip) and per-section in the Manage panel.
 
 ### Deferred (next turns)
-- **Stripe Connect integration** — each organiser links a Stripe account;
-  signups pay them direct; platform takes a fee. The placeholder modal in
-  `DetailsTab.tsx` is sized so the Stripe Checkout button drops straight in
-  — replace the `onConfirm` handler with a Checkout session redirect, and
-  let a webhook flip `SignupPaymentStatus` to Paid.
+- **Real online payments**: choose a provider and add payment confirmation,
+  reconciliation and refunds. The current fake provider is for demo events only.
 - **Drag-to-reorder team formation** — current `form-teams` endpoint bins
   by pony club deterministically; add a "Preview → drag to merge / swap
   riders → commit" pass before creating Team rows. Useful when families
@@ -282,8 +285,10 @@ next to `Edit` for jumping straight into the post-signups flow.
   `/api/competitions/:id/signups` endpoint; format as anonymised counts
   per club rather than a name list to avoid PII concerns.
 
-## Shop / marketplace
-Public peer-to-peer marketplace on `/shop`.
+## Legacy marketplace
+The older peer-to-peer marketplace endpoints remain in the API. Its former
+`/shop` page is not routed; that path opens competition selection. The event
+shop described below is the current buying and selling flow.
 
 - **Entities**: `ShopPost { Title, Body, PriceMinor?, ContactInfo?,
   AuthorName, PonyClubName?, ImageBase64?, IsDeleted, DeletedAt,
@@ -301,7 +306,7 @@ Public peer-to-peer marketplace on `/shop`.
   max-side JPEG @ 0.82 quality, capped at ≈500 KB before upload.
 - **Anti-abuse**: IP-block check on post + report endpoints (reuses the
   existing chat `IpBlocks` table).
-- **UI**: `/shop` page lists posts in a card grid, lets logged-in users
+- **Older UI (not routed)**: lists posts in a card grid, lets logged-in users
   compose posts with images, public/private comment threads per post,
   Report button for anyone, Delete for admins + post owner.
 - **Admin** can soft-delete posts and comments. Reported posts surface
@@ -332,3 +337,34 @@ MAX per (kind, bucket), and returns a flat list.
 - `RaceLibraryUpdates.ByName` is a per-race override map (`Summary`, `Rules`, `DiagramJson`, `Category` — any field set to null keeps the existing DB value). On every API startup, `SeedRaceTemplatesAsync` walks this map and PUTs the override values into any matching built-in `RaceTemplate` row.
 - This lets us push canonical rule text or diagram refinements to existing DBs without manual admin work. Admin-edited customs (`IsBuiltIn=false`) are not touched.
 - Source: `docs/pc-mounted-games-race-rules-2026.md` (Pony Club Mounted Games Race Rules 2026). Currently covers ~15 of the highest-traffic races; the remaining ~40 are filled in incrementally as needed.
+
+
+### Organiser readiness and score records
+
+An event’s Details page links to Readiness & draw. Organisers can preview a seeded section draw, inspect repeated opponents and lane counts, then apply it while the source data is unchanged. Started or scored races cannot be redrawn. Readiness brings declarations, unpaid entries, timetable overlaps and the equipment checklist together.
+
+Rulebooks are ordinary text attached to a competition, with a title, edition and optional source link. Everyone can read them; the organiser can edit them.
+
+The scoring screen keeps a revision history. Corrections need a reason, including changes waiting offline and decisions to replace another phone’s result. Completed results can be signed off; reopening them also needs a reason. Shared placings retain the existing points for that place; no points-sharing rule is introduced.
+
+
+### Event shop and demo checkout
+
+Signed-in sellers can keep a catalogue of items and submit them to selected competitions. Each event’s organiser approves listings before they appear in its shop. Changing an approved listing’s content or price requires another review. Tickets, camping, merchandise and other items are collected at the event. Orders retain the agreed item names and prices; finite stock is reserved when an order is placed and released on cancellation or refund.
+
+Real-event payments are confirmed manually by the organiser. An event can be marked as a demo before it has orders or test payments. Demo checkout offers test success, decline, cancellation and refunds, and every test receipt states that no money was taken. The app does not collect payment-card details. Paid entries require sign-in and stay pending until payment is confirmed.
+
+
+### Seasons, team history and reusable event setup
+
+Organisers can create seasons for a year, format and age group. They set points by place and choose whether every round or the best N results count. Ties share a place and its points. Each round is a matching competition section managed by the season organiser.
+
+Round results are previewed before publication. They use the section’s total points across all completed races, including qualifiers and finals; HC teams are excluded. Publishing saves a version with team names and points. Later corrections do not change the published table until the organiser publishes again. Earlier versions remain available.
+
+Stable team profiles connect a team’s public results across competitions. Links are explicit. Club and suffix cannot change after a profile has been linked or published, so unrelated teams cannot inherit its history. The display name can be corrected.
+
+An event’s Details page links to CSV team import, duplicate setup and print sheets. Imports show row errors and require a fresh preview before applying. Duplicating copies public setup, without declarations, claim details, payments, scores or result-derived finals places. Draws, score sheets and results have A4 print views. Unfinished results are marked provisional.
+
+### Event organiser page refinement
+
+Event checks separates readiness, equipment and draw work into focused views. Readiness groups long issue lists by task. Rulebooks open as readable text, with a separate editor. The Claude Design reference is `docs/designs/event-platform-refinement.html`; implementation preserves the existing API, permission and payment behaviour where static mock-ups simplify those details.

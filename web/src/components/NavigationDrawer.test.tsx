@@ -92,7 +92,7 @@ describe('NavigationDrawer: when no competition is followed', () => {
   it('sends the competition links to the picker or the general feed', () => {
     mount();
     expect(links('Main navigation')).toEqual([
-      ['Timetable', '/competitions'], ['Toplists', '/competitions'], ['Live feed & stream', '/chat'], ['Details & entries', '/competitions'],
+      ['Following', '/following'], ['Timetable', '/competitions'], ['Toplists', '/competitions'], ['Live feed & stream', '/chat'], ['Event shop', '/competitions'], ['Rulebooks', '/competitions'], ['Details & entries', '/competitions'],
     ]);
   });
 
@@ -131,7 +131,7 @@ describe('NavigationDrawer: following a competition', () => {
   it('shows which competition is being followed, with its dates and venue', () => {
     mount({ competition: true, meta: { endDate: '2026-10-18T17:00:00', location: ' Ashdown ' } });
     expect(screen.getByRole('heading', { name: 'Spring Games' })).toBeInTheDocument();
-    expect(screen.getByText('Following')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Following' })).toBeInTheDocument();
     expect(screen.getByText('Sat 17 – Sun 18 Oct · Ashdown')).toBeInTheDocument();
   });
 
@@ -144,8 +144,8 @@ describe('NavigationDrawer: following a competition', () => {
   it('links to the competition’s own pages', () => {
     mount({ competition: true });
     expect(links('Main navigation')).toEqual([
-      ['Timetable', '/competitions/4'], ['Toplists', '/competitions/4/toplists'],
-      ['Live feed & stream', '/competitions/4/chat'], ['Details & entries', '/competitions/4/details'],
+      ['Following', '/competitions/4/following'], ['Timetable', '/competitions/4'], ['Toplists', '/competitions/4/toplists'],
+      ['Live feed & stream', '/competitions/4/chat'], ['Event shop', '/competitions/4/shop'], ['Rulebooks', '/competitions/4/rulebooks'], ['Details & entries', '/competitions/4/details'],
     ]);
   });
 
@@ -216,7 +216,7 @@ describe('NavigationDrawer: signed in', () => {
   it('shows a trainer their pages and who they are signed in as', () => {
     mount({ roles: ['Trainer'] });
     expect(links('Account and management')).toEqual([
-      ['Dashboard', '/dashboard'], ['My teams', '/teams'], ['Dec forms', '/declarations'], ['My signups', '/me/signups'],
+      ['Dashboard', '/dashboard'], ['My teams', '/teams'], ['Dec forms', '/declarations'], ['My signups', '/me/signups'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders'],
     ]);
     expect(screen.getByText('Signed in as Ann Smith')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Notifications/ })).toHaveAttribute('href', '/teams');
@@ -225,12 +225,12 @@ describe('NavigationDrawer: signed in', () => {
 
   it('shows an admin the admin page and not the trainer-only pages', () => {
     mount({ roles: ['Admin', 'Trainer'] });
-    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['Dec forms', '/declarations'], ['Admin', '/admin']]);
+    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['Dec forms', '/declarations'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders'], ['Admin', '/admin']]);
   });
 
-  it('shows a member just their dashboard and signups', () => {
+  it('shows a member their dashboard, signups and shop', () => {
     mount({ roles: ['Member'], fullName: '' });
-    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['My signups', '/me/signups']]);
+    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['My signups', '/me/signups'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders']]);
     expect(screen.getByText('Signed in as ann@example.com')).toBeInTheDocument();
   });
 

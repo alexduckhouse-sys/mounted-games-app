@@ -4,39 +4,73 @@ Pulled together from every chat in this project and a survey of all branches and
 
 ## Where things stand
 
-- **Merged and live:** PRs #1–#19, #21 and #22:
+### Prepared feature PRs (16 October, evening)
+
+These changes are implemented and remain unmerged:
+
+- [#28](https://github.com/alexduckhouse-sys/mounted-games-app/pull/28): public team following and safer offline score recovery.
+- [#29](https://github.com/alexduckhouse-sys/mounted-games-app/pull/29): event checks, equipment, draw previews, plain-text rulebooks and score sign-off.
+- [#34](https://github.com/alexduckhouse-sys/mounted-games-app/pull/34): reusable seller catalogues, event approval and a complete fake payment flow. Real payments stay manual.
+- [#36](https://github.com/alexduckhouse-sys/mounted-games-app/pull/36): configurable seasons, published round versions, team history, CSV import, duplicate setup and print views.
+- [#37](https://github.com/alexduckhouse-sys/mounted-games-app/pull/37): the latest Timetable, Heat scores and Live & stream design handoff. Based on the separate streaming PR #30; Toplists is unchanged.
+
+The first four form a dependent sequence, in the order above. Review and deploy their schema changes in that order. The UI rework puts lists and standings first, with separate editing views and compact checkout and receipt screens.
+
+Before an official league adopts these features:
+
+- Agree the season ranking rules with its organisers. The current implementation ranks a section using all completed races, including qualifiers and finals, then applies the configured season points. Check this against the intended finals and tie rules.
+- Rehearse an event on two real phones with poor signal: disconnect, submit competing edits, reconnect and inspect the score record.
+- Provide an always-on API host, tested backups and a restore procedure. Event-day reliability needs a live rehearsal as well as automated tests.
+- Replace the fake provider when taking online payments is required, including payment confirmation, refunds and reconciliation. The demo never takes money.
+- Test setup and scoring with organisers who have not seen the app before, then prepare their onboarding and support notes.
+
+The status below records earlier work and deployment follow-ups; verify its hosting items against the current live configuration before acting.
+
+- **Merged:** PRs #1–#24. The web on Vercel is live with #20; the Render API is waiting on item 1 under "Needs you".
   - EGUK redesign
   - ticker, settings and age-group menu
   - timetable grouping and status dots
   - skeleton loading and saved copies
   - low-signal fixes and the offline score outbox
   - Neon move and the 8 demo competitions
-  - API tests at 98.7% with a 95% CI gate
-- **Open, ready once CI is green:**
-  - #23: race-finals 500, equipment template case, section validation, garbled characters in the competition editor.
-  - #24: web Vitest suite at 99.9% lines with a 97% CI gate, and the age-group menu highlight fix.
-- **Open, blocked on you:** #20, the security hardening (see below).
-- **Nothing else is unmerged.** All other branches are already in `main`, apart from:
-  - the untracked design file `docs/designs/public-pages-proposal.html` in the main checkout;
-  - a stale, superseded test attempt in the `aictl-3e053904` worktree.
+  - API tests (743, 98.9%) with a 95% CI gate; web Vitest (747, 99.9%) with a 97% gate
+  - #20 security hardening:
+    - headers and CSP on Render and Vercel
+    - competition ownership for trainers
+    - redacted signups and declarations
+    - saved-rider ownership
+    - login lockout and rate limits
+    - push endpoint allowlist
+  - #23 handoff bug fixes and #24 the web test suite
+- **Migration:** `AddSavedRiderOwnership` was applied to live Neon on 16 October, before #20 merged. A Neon branch, `backup-pre-saved-rider-ownership-2026-10-16`, holds the pre-migration state; delete it once you're happy.
+- **Housekeeping done:** merged branches and worktrees removed, and local `main` fast-forwarded.
+  - Kept: `aictl-d0609171`, which holds the Neon `.env.local` used for migrations.
+  - The superseded `aictl-3e053904` work is backed up in `~/dev/mounted-games-app-backups/`.
+  - The design file `docs/designs/public-pages-proposal.html` stays untracked in the main checkout on purpose (it's still being edited).
 
 ## Needs you
 
-1. **PR #20 deploy gate.** The code is reviewed and CI is green, but merging deploys an API that won't start until both of these are done:
-   - Apply `api/Data/Migrations/Scripts/20261015220000_AddSavedRiderOwnership.sql` to the live Neon database. It adds one nullable column.
-   - Check that Render has `Jwt__Key` (at least 32 bytes), `Admin__Key` (at least 20 bytes, if shared admin login is used) and `Database__SeedDemoData=false`.
-
-   Then merge and check `/api/competitions` on the live site.
-2. **PR #26 deploy gate (staff-only live feed).** Before merging, apply `api/Data/Migrations/Scripts/20261016162534_AddChatAdminOnly.sql` to Neon (one boolean column, default false); the API refuses to start with a pending migration.
-3. **Official EGUK navy hex.** `#1e3466` is a guess.
-4. **Decisions left open in chats:**
+1. **Render: set a longer `Admin__Key` (blocks the #20 API deploy).** Render's deploy of `7cd3c52` failed and it is still serving the previous API. Nothing is down, and the live database already has the new column.
+   - The cause is reproduced locally with the same Docker image: the new startup check refuses an `Admin__Key` shorter than 20 bytes. An unset key falls back to the 17-byte demo key in `appsettings.json` and fails the same way. A 32-byte key passes.
+   - Fix: in the Render dashboard (Environment tab), set `Admin__Key` to a random value of at least 20 bytes, e.g. `openssl rand -base64 24`. Saving triggers a redeploy.
+   - Organisers then sign in with the new key.
+   - Check the deploy by confirming `x-content-type-options: nosniff` on `https://mounted-games-scoreboard.onrender.com/api/competitions`.
+   - `Jwt__Key` (generated by Render) and `Database__SeedDemoData=false` are already fine.
+   - Rotate any other secret that ever matched the repo defaults (see `docs/security-review.md`).
+2. **Per-visitor rate limits (after the Render deploy works again).** Generate one value with `openssl rand -base64 32`, then:
+   - set `MG_PROXY_KEY` to it in Vercel (Project → Settings → Environment Variables, Production and Preview), and redeploy;
+   - set `Security__ProxyKey` to the same value on Render.
+   - Check: after 10 failed sign-ins from one network, sign-in from a phone on mobile data still works.
+3. **PR #26 deploy gate (staff-only live feed).** Before merging, apply `api/Data/Migrations/Scripts/20261016162534_AddChatAdminOnly.sql` to Neon (one boolean column, default false); the API refuses to start with a pending migration.
+4. **Official EGUK navy hex.** `#1e3466` is a guess.
+5. **Decisions left open in chats:**
    - Remove the race clock? You said "there is no race clock", but it's still in the app.
    - Stream embeds: switch to "Tap to load the stream" with YouTube's no-cookie player, so no third-party cookies are set before consent?
    - Keep the colour key under the timetable dots?
    - Ticker: should a fresh announcement keep replacing the live heat for up to 15 minutes, or should "Now" stay on top?
    - Reseed the existing demo competitions with the 5–6 teams and 7–8 races layout?
    - Toplist before any scoring: show a dash instead of every team as joint 1st?
-5. **Always-on host.** Render's free plan sleeps after 15 minutes, so the first visit takes about 50 seconds and live updates drop. The chats call this the biggest real-world delay.
+6. **Always-on host.** Render's free plan sleeps after 15 minutes, so the first visit takes about 50 seconds and live updates drop. The chats call this the biggest real-world delay.
 
 ## Features
 
@@ -67,12 +101,11 @@ Pulled together from every chat in this project and a survey of all branches and
 
 ## Security and dependencies
 
-- After #20: browser checks of the CSP and headers on the live site, and the items still open in `docs/security-review.md`.
+- Click through the live site (timetable, scoring, Live tab embeds, shop images, sign-in) to confirm the new CSP blocks nothing. Vercel's headers are confirmed served, and the page has no inline scripts.
+- The items still open in `docs/security-review.md`.
 - Seven Tailwind 3 build-tool advisories. The fix is a breaking Tailwind 4 migration, so plan it as its own PR.
-- NuGet warnings for `Microsoft.OpenApi` 2.0.0 and `SQLitePCLRaw.lib.e_sqlite3` 2.1.11 on `main`. #20 says it patches runtime dependencies, so recheck after it merges.
+- #20 pinned patched `Microsoft.OpenApi` and `SQLitePCLRaw`, and runtime npm audit is clean.
 
 ## Housekeeping
 
-- Remove merged branches and worktrees. Every `aictl/*` except `f5c941a6`, the `worktree-agent-*` and `agent-*` worktrees, `aictl/verify`, and the merged `feat/*`, `docs/*` and `test/coverage` branches, local and on origin.
-- Fast-forward the main checkout's local `main`, which is 64 commits behind. Commit or move `docs/designs/public-pages-proposal.html` first.
 - `docs/test-coverage.md` predates both test suites. Fold it into `docs/test-coverage-handoff.md`, or replace it.

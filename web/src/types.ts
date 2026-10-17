@@ -1,6 +1,6 @@
-export type Role = 'Admin' | 'Trainer' | 'Manager' | 'Member' | 'Rider';
+export type Role = 'Admin' | 'Trainer' | 'TrainerRequest' | 'Manager' | 'Member' | 'Rider';
 
-/** Self-service signup tiers — three identical-capability labels users pick on the signup form. */
+/** Self-service signup choices. Trainer accounts need admin approval. */
 export const SIGNUP_ROLES: { value: 'Trainer' | 'Manager' | 'Member'; label: string; description: string }[] = [
   { value: 'Trainer', label: 'Trainer', description: 'Coach your pony club\'s teams; submit dec forms.' },
   { value: 'Manager', label: 'Team manager', description: 'Run the team\'s admin side: dec forms, contact, signups.' },
@@ -20,6 +20,14 @@ export interface AuthResponse {
   token: string;
   expiresAt: string;
   user: UserProfile;
+}
+
+export interface TrainerRequest {
+  userId: string;
+  fullName: string;
+  email: string | null;
+  clubName: string | null;
+  requestedAt: string;
 }
 
 export interface Club {

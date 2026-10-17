@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { competitionDateText, countryTag, isOnToday } from './competitionDates';
+import { competitionDateText, isOnToday } from './competitionDates';
 
 // Dates without a zone are local time, which is what the helpers format in.
 describe('competitionDateText', () => {
@@ -60,15 +60,5 @@ describe('isOnToday', () => {
 
   it('is false when the start is unreadable', () => {
     expect(isOnToday('soon', '2026-10-18T00:00:00', now)).toBe(false);
-  });
-});
-
-describe('countryTag', () => {
-  it.each([['gb', 'GB'], ['ie', 'IE'], ['fr', 'FR'], ['de', 'DE'], ['nl', 'NL'], ['world', 'INTL']])('tags %s as %s', (icon, tag) => {
-    expect(countryTag(icon)).toBe(tag);
-  });
-
-  it.each(['flag', 'trophy', '', null, undefined])('has no tag for %s', (icon) => {
-    expect(countryTag(icon)).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import { axiosError, heat } from '../test/factories';
+import { axiosError, heat, race, result } from '../test/factories';
 import type { QueuedScore } from './scoreOutbox';
 import { flushOutbox, HEAT_SAVED, readOutbox, updateOutbox, useScoreOutbox } from './useScoreOutbox';
 
@@ -40,6 +40,13 @@ describe('readOutbox', () => {
 });
 
 describe('flushOutbox', () => {
+  it('sends the saved correction reason unchanged, including Unicode', async () => {
+    seed(queued(1, { reason: 'Steward’s decision — équipe two' }));
+    post.mockResolvedValue(saved());
+    await flushOutbox();
+    expect(post).toHaveBeenCalledWith('/races/1/results', expect.objectContaining({ reason: 'Steward’s decision — équipe two' }), { timeout: 15_000 });
+  });
+
   it('sends waiting results oldest first, posting what the scorer saw, and clears them', async () => {
     seed(queued(1, { expected: [{ teamId: 1, place: 2, eliminated: false }] }), queued(2));
     post.mockResolvedValue(saved());
@@ -109,6 +116,21 @@ describe('flushOutbox', () => {
     expect(post).toHaveBeenCalledTimes(1);
   });
 
+  it('sends a newer edit queued in the same millisecond against the accepted first save', async () => {
+    const first = queued(1, { saveId: 'first-save' });
+    const correction = queued(1, { saveId: 'second-save', places: [{ teamId: 1, place: 0, eliminated: true }] });
+    seed(first);
+    post.mockImplementationOnce(async () => {
+      seed(correction);
+      return saved(heat(5, { races: [race(1, { results: [result(1, 1)] })] }));
+    }).mockResolvedValueOnce(saved());
+    await flushOutbox();
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenLastCalledWith('/races/1/results',
+      { places: correction.places, expected: first.places }, { timeout: 15_000 });
+    expect(readOutbox()).toEqual([]);
+  });
+
   it('can flush again once the previous flush has finished', async () => {
     seed(queued(1));
     post.mockResolvedValue(saved());
@@ -165,13 +187,15 @@ describe('updateOutbox', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('still updates listeners when storage is full', () => {
+  it('reports failure without claiming the queue changed when storage is full', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('full'); });
     const listener = vi.fn();
     window.addEventListener('mg:outbox', listener);
-    expect(() => updateOutbox(() => [queued(1, { state: 'failed' })])).not.toThrow();
+    expect(updateOutbox(() => [queued(1)])).toBe(false);
+    expect(post).not.toHaveBeenCalled();
+    expect(readOutbox()).toEqual([]);
     window.removeEventListener('mg:outbox', listener);
-    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 

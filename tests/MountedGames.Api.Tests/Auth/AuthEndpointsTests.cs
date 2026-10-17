@@ -86,14 +86,15 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     // ---- self-service signup ----
 
     [Fact]
-    public async Task SignupTrainer_CreatesTrainer_WithSynthesisedEmail_ByDefault()
+    public async Task SignupTrainer_CreatesPendingMember_WithSynthesisedEmail_ByDefault()
     {
         var name = Unique();
 
         var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(name, "Passw0rd!x"));
 
         var user = (await r.ReadAsync<AuthResponse>()).User;
-        Assert.Equal(($"{name}@trainer.mg.local", name, Roles.Trainer), (user.Email, user.FullName, user.Roles.Single()));
+        Assert.Equal(($"{name}@trainer.mg.local", name), (user.Email, user.FullName));
+        Assert.Equal(new[] { Roles.Member, Roles.TrainerRequest }, user.Roles.Order());
     }
 
     [Fact]
@@ -130,16 +131,18 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Theory]
-    [InlineData("Manager", Roles.Manager)]
-    [InlineData("member", Roles.Member)]
-    [InlineData("Trainer", Roles.Trainer)]
-    [InlineData("Admin", Roles.Trainer)]
-    [InlineData("gibberish", Roles.Trainer)]
-    public async Task SignupTrainer_MapsRequestedRole_NeverGrantingAdmin(string requested, string expected)
+    [InlineData("Manager", new[] { Roles.Manager })]
+    [InlineData("member", new[] { Roles.Member })]
+    [InlineData("Trainer", new[] { Roles.Member, Roles.TrainerRequest })]
+    [InlineData(" trainer ", new[] { Roles.Member, Roles.TrainerRequest })]
+    [InlineData("Admin", new[] { Roles.Member, Roles.TrainerRequest })]
+    [InlineData("gibberish", new[] { Roles.Member, Roles.TrainerRequest })]
+    [InlineData("TrainerRequest", new[] { Roles.Member, Roles.TrainerRequest })]
+    public async Task SignupTrainer_MapsRequestedRole_NeverGrantingAdmin(string requested, string[] expected)
     {
         var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(Unique(), "Passw0rd!x", requested));
 
-        Assert.Equal(expected, (await r.ReadAsync<AuthResponse>()).User.Roles.Single());
+        Assert.Equal(expected, (await r.ReadAsync<AuthResponse>()).User.Roles.Order());
     }
 
     [Fact]

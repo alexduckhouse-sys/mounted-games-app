@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -5,8 +6,10 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
+using MountedGames.Api.Entities;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using Npgsql;
 
 namespace MountedGames.Api.Controllers;
 
@@ -26,39 +29,96 @@ public class ScoringController : ControllerBase
     }
 
     [HttpPost("api/races/{raceId:int}/results")]
-    public async Task<ActionResult<HeatDto>> SubmitRaceResults(int raceId, SubmitRaceResultsRequest req)
+    public async Task<ActionResult<HeatDto>> SubmitRaceResults(
+        int raceId, SubmitRaceResultsRequest req, CancellationToken cancellationToken)
     {
         var race = await _db.Races
             .Include(r => r.Heat).ThenInclude(h => h!.Session)
-            .Include(r => r.Heat).ThenInclude(h => h!.Entries)
-            .Include(r => r.Results)
-            .FirstOrDefaultAsync(r => r.Id == raceId);
+            .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken);
         if (race is null) return NotFound();
-
-        if (req.Expected is not null)
+        var correctionReason = req.Reason ?? Request.Headers["X-Score-Reason"].FirstOrDefault();
+        if (correctionReason?.Length > 1000)
+            return BadRequest(new { message = "Correction reason must be 1000 characters or fewer." });
+        try
         {
-            var entryTeamIds = race.Heat!.Entries.Select(e => e.TeamId).ToHashSet();
-            var current = ResultsKey(race.Results.Select(r => (r.TeamId, r.Placing ?? 0, r.Eliminated)));
-            var incoming = ResultsKey(req.Places.Where(p => entryTeamIds.Contains(p.TeamId)).Select(p => (p.TeamId, p.Place, p.Eliminated)));
-            // Already saved: a resend whose first reply was lost on the way back.
-            if (current == incoming) return await HeatDtoAsync(race.HeatId);
-            if (current != ResultsKey(req.Expected.Select(p => (p.TeamId, p.Place, p.Eliminated))))
-                return Conflict(new
-                {
-                    message = "These results were changed on another device.",
-                    sessionId = race.Heat.SessionId,
-                    heat = await HeatDtoAsync(race.HeatId),
-                });
+            await _scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected,
+                User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
+                correctionReason, cancellationToken);
         }
-
-        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        var places = req.Places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated));
-        await _scoring.ApplyRaceResultsAsync(raceId, places, userId);
+        catch (ScoreConflictException ex) { return await ScoreConflict(race, ex.Message); }
+        catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+        catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (Exception ex) when (IsScoringConcurrency(ex))
+        { return await ScoreConflict(race, "These results were changed on another device."); }
 
         var dto = await HeatDtoAsync(race.HeatId);
         var competitionId = race.Heat!.Session!.CompetitionId;
         await _live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto });
         return dto;
+    }
+
+    [HttpGet("api/races/{raceId:int}/score")]
+    public async Task<ActionResult<RaceScoreDto>> GetRaceScore(int raceId, CancellationToken cancellationToken)
+    {
+        try { return await _scoring.GetAsync(raceId, cancellationToken); }
+        catch (KeyNotFoundException) { return NotFound(); }
+    }
+
+    [HttpPut("api/races/{raceId:int}/score")]
+    public async Task<ActionResult<RaceScoreDto>> UpdateRaceScore(
+        int raceId, UpdateRaceScoreRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var score = await _scoring.ApplyVersionedAsync(raceId, request,
+                User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, cancellationToken);
+            await BroadcastScore(raceId);
+            return score;
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (InvalidOperationException ex) when (ex.Message == "Race not found") { return NotFound(); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
+        catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+        catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (Exception ex) when (IsScoringConcurrency(ex))
+        { return Conflict(new { message = "These results were changed on another device." }); }
+    }
+
+    [HttpGet("api/races/{raceId:int}/score/history")]
+    public async Task<ActionResult<IReadOnlyList<RaceScoreHistoryDto>>> ScoreHistory(
+        int raceId, CancellationToken cancellationToken)
+    {
+        try { return Ok(await _scoring.HistoryAsync(raceId, cancellationToken)); }
+        catch (KeyNotFoundException) { return NotFound(); }
+    }
+
+    [HttpPost("api/races/{raceId:int}/score/sign-off")]
+    public Task<ActionResult<RaceScoreDto>> SignOff(
+        int raceId, ScoreActionRequest request, CancellationToken cancellationToken)
+        => ScoreAction(raceId, request, true, cancellationToken);
+
+    [HttpPost("api/races/{raceId:int}/score/reopen")]
+    public Task<ActionResult<RaceScoreDto>> Reopen(
+        int raceId, ScoreActionRequest request, CancellationToken cancellationToken)
+        => ScoreAction(raceId, request, false, cancellationToken);
+
+    private async Task<ActionResult<RaceScoreDto>> ScoreAction(
+        int raceId, ScoreActionRequest request, bool signOff, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var actor = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var score = signOff
+                ? await _scoring.SignOffAsync(raceId, request, actor, cancellationToken)
+                : await _scoring.ReopenAsync(raceId, request, actor, cancellationToken);
+            await BroadcastScore(raceId);
+            return score;
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
+        catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (Exception ex) when (IsScoringConcurrency(ex))
+        { return Conflict(new { message = "These results were changed on another device." }); }
     }
 
     private async Task<HeatDto> HeatDtoAsync(int heatId)
@@ -68,6 +128,28 @@ public class ScoringController : ControllerBase
             .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstAsync(h => h.Id == heatId);
         return heat.ToDto();
+    }
+
+    private async Task<ActionResult<HeatDto>> ScoreConflict(Race race, string message)
+    {
+        // The failed transaction can leave losing results tracked. Always build
+        // the conflict snapshot from the committed database winner.
+        _db.ChangeTracker.Clear();
+        return Conflict(new
+        {
+            message,
+            sessionId = race.Heat!.SessionId,
+            heat = await HeatDtoAsync(race.HeatId),
+        });
+    }
+
+    private async Task BroadcastScore(int raceId)
+    {
+        var race = await _db.Races.Include(r => r.Heat).ThenInclude(h => h!.Session)
+            .FirstAsync(r => r.Id == raceId);
+        var heat = await HeatDtoAsync(race.HeatId);
+        await _live.ResultsUpdated(race.Heat!.Session!.CompetitionId,
+            new { sessionId = race.Heat.SessionId, heat });
     }
 
     /// <summary>Order-independent summary of a race's placings; eliminated teams have no place.</summary>
@@ -83,20 +165,20 @@ public class ScoringController : ControllerBase
     /// </summary>
     [HttpPost("api/races/{raceId:int}/start")]
     public async Task<ActionResult<RaceDto>> StartRace(int raceId,
-        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null)
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null,
+        CancellationToken cancellationToken = default)
     {
-        var race = await _db.Races
-            .Include(r => r.Heat).ThenInclude(h => h!.Session)
-            .Include(r => r.Results).ThenInclude(rs => rs.Team)
-            .FirstOrDefaultAsync(r => r.Id == raceId);
-        if (race is null) return NotFound();
         var tappedAt = ClockTime(req?.At, DateTime.UtcNow);
-        // A retried Start can arrive after the Stop that followed it: keep the finish.
-        if (req?.At is not null && race.FinishedAt is not null && race.FinishedAt >= tappedAt)
-            return race.ToDto();
-        if (race.StartedAt is null) race.StartedAt = tappedAt;
-        race.FinishedAt = null;
-        await _db.SaveChangesAsync();
+        Race race;
+        try
+        {
+            race = await _scoring.UpdateRaceClockAsync(
+                raceId, true, tappedAt, req?.At is not null, cancellationToken);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+        catch (Exception ex) when (IsScoringConcurrency(ex))
+        { return Conflict(new { message = "These results were changed on another device." }); }
         var dto = race.ToDto();
         await _live.ResultsUpdated(race.Heat!.Session!.CompetitionId,
             new { sessionId = race.Heat.SessionId, raceId, started = race.StartedAt });
@@ -106,18 +188,21 @@ public class ScoringController : ControllerBase
     /// <summary>Admin stops the live clock — sets `FinishedAt` to the tap time.</summary>
     [HttpPost("api/races/{raceId:int}/stop")]
     public async Task<ActionResult<RaceDto>> StopRace(int raceId,
-        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null)
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null,
+        CancellationToken cancellationToken = default)
     {
-        var race = await _db.Races
-            .Include(r => r.Heat).ThenInclude(h => h!.Session)
-            .Include(r => r.Results).ThenInclude(rs => rs.Team)
-            .FirstOrDefaultAsync(r => r.Id == raceId);
-        if (race is null) return NotFound();
         var now = DateTime.UtcNow;
         var finishedAt = ClockTime(req?.At, now);
-        if (race.StartedAt is null || race.StartedAt > finishedAt) race.StartedAt = finishedAt.AddSeconds(-1);
-        race.FinishedAt = finishedAt;
-        await _db.SaveChangesAsync();
+        Race race;
+        try
+        {
+            race = await _scoring.UpdateRaceClockAsync(
+                raceId, false, finishedAt, req?.At is not null, cancellationToken);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+        catch (Exception ex) when (IsScoringConcurrency(ex))
+        { return Conflict(new { message = "These results were changed on another device." }); }
         var dto = race.ToDto();
         await _live.ResultsUpdated(race.Heat!.Session!.CompetitionId,
             new { sessionId = race.Heat.SessionId, raceId, finished = race.FinishedAt });
@@ -154,5 +239,21 @@ public class ScoringController : ControllerBase
             ? DateTime.SpecifyKind(at.Value, DateTimeKind.Utc)
             : at.Value.ToUniversalTime();
         return tapped > utcNow || tapped < utcNow.AddMinutes(-10) ? utcNow : tapped;
+    }
+
+    private static bool IsScoringConcurrency(Exception exception)
+    {
+        if (exception is DbUpdateConcurrencyException) return true;
+        if (exception is PostgresException postgres)
+            return postgres.SqlState is "40001" or "40P01"
+                || postgres.SqlState == "23505"
+                && (postgres.ConstraintName?.Contains("RaceScoreState", StringComparison.OrdinalIgnoreCase) == true
+                    || postgres.ConstraintName?.Contains("RaceScoreEvent", StringComparison.OrdinalIgnoreCase) == true);
+        if (exception is SqliteException sqlite)
+            return sqlite.SqliteErrorCode is 5 or 6
+                || sqlite.SqliteExtendedErrorCode == 2067
+                && (sqlite.Message.Contains("RaceScoreState", StringComparison.OrdinalIgnoreCase)
+                    || sqlite.Message.Contains("RaceScoreEvent", StringComparison.OrdinalIgnoreCase));
+        return exception.InnerException is not null && IsScoringConcurrency(exception.InnerException);
     }
 }

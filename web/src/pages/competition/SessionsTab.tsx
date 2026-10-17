@@ -1,5 +1,6 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
-import { Download } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Download, Star } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 import { computeTimings } from '../../lib/time';
 import { exportTimetableCsv } from '../../lib/timetableCsv';
@@ -14,6 +15,7 @@ export function SessionsTab() {
   const [manage, setManage] = useState(false);
   const ordered = useMemo(() => competition.sessions.slice().sort((a, b) => a.orderIndex - b.orderIndex), [competition.sessions]);
   const footer = <>
+    <Link className="mg-btn mg-btn-secondary" to="following"><Star className="h-4 w-4" />Follow teams</Link>
     {ordered.length > 0 && (
       <button type="button" className="mg-btn mg-btn-secondary" onClick={() => exportTimetableCsv(competition.name, ordered, computeTimings(competition.sessions))}>
         <Download aria-hidden="true" className="h-[18px] w-[18px]" />Download timetable

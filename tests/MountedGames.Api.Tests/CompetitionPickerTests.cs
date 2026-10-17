@@ -210,7 +210,12 @@ public class CompetitionPickerTests
     [Theory]
     [InlineData("flag", true)]
     [InlineData("gb", true)]
+    [InlineData("gb-sct", true)]
+    [InlineData("za", true)]
     [InlineData(null, true)]
+    [InlineData("xx", false)]
+    [InlineData("../x", false)]
+    [InlineData("gb-sct\n", false)]
     [InlineData("javascript:alert(1)", false)]
     [InlineData("unrecognised", false)]
     public void IconValidationAllowsOnlySupportedChoices(string? icon, bool valid)

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { competitionDateText } from '../../lib/competitionDates';
+import { DemoEntryPayment } from '../commerce/DemoEntryPayment';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
@@ -72,6 +73,15 @@ export function DetailsTab() {
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
       <div className="mg-band py-3">
         <h1 className="mg-h1 mg-h1-sm">Details &amp; entries</h1>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Link className="mg-btn mg-btn-secondary" to="../shop">Event shop</Link>
+        <Link className="mg-btn mg-btn-secondary" to="../rulebooks">Rulebooks</Link>
+        <Link className="mg-btn mg-btn-secondary" to={`/event-tools/${competition.id}/print/draw`}>Print draw</Link>
+        <Link className="mg-btn mg-btn-secondary" to={`/event-tools/${competition.id}/print/results`}>Print results</Link>
+        {mayOrganise && <Link className="mg-btn mg-btn-secondary" to={`/event-tools/${competition.id}`}>Import, duplicate &amp; print</Link>}
+        {mayOrganise && <Link className="mg-btn mg-btn-secondary" to="../shop/manage">Manage event shop</Link>}
+        {mayOrganise && <Link className="mg-btn mg-btn-secondary" to="../operations">Readiness &amp; draw</Link>}
       </div>
       <div className="card p-4 space-y-4">
         <div>
@@ -256,6 +266,8 @@ function SectionSignupCard({
   /** True when the viewer is an admin — hide the Join CTA + form, keep manage list. */
   hideJoin: boolean;
 }) {
+  const { user } = useAuth();
+  const [createdSignup, setCreatedSignup] = useState<SectionSignup | null>(null);
   const [open, setOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [ponyClub, setPonyClub] = useState('');
@@ -276,17 +288,15 @@ function SectionSignupCard({
     setBusy(true);
     setErr(null);
     try {
-      await api.post(`/competitions/${competitionId}/sections/${section.id}/signups`, {
+      const { data: signup } = await api.post<SectionSignup>(`/competitions/${competitionId}/sections/${section.id}/signups`, {
         fullName: fullName.trim(),
         ponyClubName: ponyClub.trim() || null,
         contactInfo: contact.trim() || null,
         teamCode: teamCode.trim() || null,
       });
       setFullName(''); setPonyClub(''); setContact(''); setTeamCode('');
-      setDone(teamCode.trim()
-        ? `You're in — linked to team ${teamCode.trim().toUpperCase()} if it exists.`
-        : 'You\'re in!');
-      setTimeout(() => setDone(null), 6000);
+      setCreatedSignup(signup);
+      setDone(signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.');
       onChanged();
       setOpen(false);
     } catch (e) {
@@ -327,6 +337,8 @@ function SectionSignupCard({
         <p className="text-[11px] text-rose-700 dark:text-rose-200 italic">
           Section is full.
         </p>
+      ) : !user ? (
+        <Link to="/login" className="mg-btn mg-btn-primary w-full">Sign in to enter</Link>
       ) : !open ? (
         <button onClick={() => setOpen(true)} className="btn-primary !py-1 !px-2 text-[11px] w-full">
           <Trophy className="w-3 h-3" /> Join {section.priceMinor ? `(${priceLabel(section.priceMinor)})` : ''}
@@ -353,7 +365,7 @@ function SectionSignupCard({
             <button onClick={() => setOpen(false)} className="btn-ghost !py-1 !px-2 text-xs">Cancel</button>
           </div>
           <p className="text-[10px] text-slate-500 italic">
-            Online payment isn't live yet — for now anyone can join for free. The organiser will reconcile money on the day.
+            Paid entries stay pending until the organiser confirms payment. Demo events offer a test checkout after entry.
           </p>
         </div>
       )}
@@ -362,6 +374,15 @@ function SectionSignupCard({
         <p className="text-[11px] text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
           <Check className="w-3 h-3" /> {done}
         </p>
+      )}
+      {createdSignup && (
+        <DemoEntryPayment
+          key={createdSignup.id}
+          signupId={createdSignup.id}
+          amountMinor={createdSignup.amountMinor}
+          signupStatus={createdSignup.status}
+          onChanged={onChanged}
+        />
       )}
       {canManage && signups.length > 0 && (
         <details className="text-[11px]">

@@ -18,7 +18,6 @@ public class SessionsAuthTests : IClassFixture<ApiFactory>
         new object[] { "POST", "/api/competitions/1/sessions/1/generate-race-finals" },
         new object[] { "POST", "/api/competitions/1/sessions/1/heats/1/populate-race-final" },
         new object[] { "PUT", "/api/competitions/1/sessions/1/heats/1/scheduled-start" },
-        new object[] { "PUT", "/api/competitions/1/sessions/1/stream" },
         new object[] { "PUT", "/api/competitions/1/sessions/1/heat-assignments" },
         new object[] { "PUT", "/api/competitions/1/sessions/1/settings" },
         new object[] { "PUT", "/api/competitions/1/sessions/1/lanes" },
