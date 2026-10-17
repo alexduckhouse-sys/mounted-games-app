@@ -13,7 +13,7 @@ import { HeatScores } from './HeatScores';
 import { bibAccent } from '../../lib/bib';
 import { retryOnNetworkError } from '../../lib/liveUpdates';
 import { describePlacings, enqueue, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
-import { updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
+import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 
 function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
   if (heatSize <= 0) return baseLane;
@@ -59,6 +59,7 @@ export function SessionPage() {
   const sid = sessionId ? parseInt(sessionId, 10) : null;
   const { competition, reload } = useCompetition();
   const { canEdit } = useAuth();
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const session = useMemo<Session | null>(
     () => competition.sessions.find((s) => s.id === sid) ?? null,
@@ -249,7 +250,8 @@ export function SessionPage() {
   function submit() {
     if (!activeRace || !activeHeat || !session) return;
     const heatIndex = orderedHeats.findIndex((h) => h.id === activeHeat.id);
-    updateOutbox((list) => enqueue(list, {
+    const stored = updateOutbox((list) => enqueue(list, {
+      saveId: crypto.randomUUID(),
       raceId: activeRace.id,
       competitionId: session.competitionId,
       sessionId: session.id,
@@ -260,6 +262,8 @@ export function SessionPage() {
       queuedAt: new Date().toISOString(),
       state: 'waiting',
     }));
+    if (!stored) { setSaveError(OUTBOX_STORAGE_ERROR); return; }
+    setSaveError(null);
     setPending([]);
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
     const nextRace = orderedRaces.find((r) => !r.isComplete && !queuedIds.has(r.id));
@@ -270,6 +274,7 @@ export function SessionPage() {
 
   return (
     <div className="space-y-3">
+      {saveError && <p role="alert" className="mg-notice">{saveError}</p>}
       {canEdit() && <div className="flex items-center justify-between gap-2 pt-4">
         <Link to=".." className="btn-ghost !py-1.5 !px-2.5 text-xs">
           <ChevronLeft className="w-3.5 h-3.5" /> Sessions

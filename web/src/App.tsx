@@ -24,6 +24,8 @@ const TeamsTab = lazy(() => import('./pages/competition/TeamsTab').then((module)
 const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab').then((module) => ({ default: module.DeclarationsTab })));
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
 const DetailsTab = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.DetailsTab })));
+const FollowingPage = lazy(() => import('./pages/FollowingPage').then((module) => ({ default: module.FollowingPage })));
+const FollowingTab = lazy(() => import('./pages/competition/FollowingTab').then((module) => ({ default: module.FollowingTab })));
 const MyTeamsPage = lazy(() => import('./pages/MyTeamsPage').then((module) => ({ default: module.MyTeamsPage })));
 const DeclarationsIndexPage = lazy(() => import('./pages/DeclarationsIndexPage').then((module) => ({ default: module.DeclarationsIndexPage })));
 const ChatIndexPage = lazy(() => import('./pages/ChatIndexPage').then((module) => ({ default: module.ChatIndexPage })));
@@ -61,6 +63,7 @@ export default function App() {
                 <Route path="arena" element={<ArenaPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="teams" element={<TeamsTab />} />
+                <Route path="following" element={<FollowingTab />} />
                 <Route path="declarations" element={<DeclarationsTab />} />
                 <Route path="chat" element={<ChatTab />} />
                 <Route path="details" element={<DetailsTab />} />
@@ -69,6 +72,7 @@ export default function App() {
               <Route path="teams" element={
                 <ProtectedRoute><MyTeamsPage /></ProtectedRoute>
               } />
+              <Route path="following" element={<FollowingPage />} />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
               <Route path="chat" element={<ChatIndexPage />} />
               <Route path="shop" element={<Navigate to="/" replace />} />

@@ -1,15 +1,19 @@
+import { useState } from 'react';
 import { CloudOff, AlertTriangle } from 'lucide-react';
-import { describePlacings, discard, overrule, retry } from '../offline/scoreOutbox';
-import { flushOutbox, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
+import { describePlacings, discard, overrule, retry, type QueuedScore } from '../offline/scoreOutbox';
+import { flushOutbox, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 
 /** Results saved on this phone that haven't reached the server yet, and any that need a decision. */
 export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
   const queued = useScoreOutbox().filter((q) => q.competitionId === competitionId);
-  if (queued.length === 0) return null;
+  const [storageError, setStorageError] = useState(false);
+  const update = (change: (list: QueuedScore[]) => QueuedScore[]) => setStorageError(!updateOutbox(change));
+  if (queued.length === 0 && !storageError) return null;
   const waiting = queued.filter((q) => q.state === 'waiting');
 
   return (
     <div className="space-y-2">
+      {storageError && <p role="alert" className="mg-notice">{OUTBOX_STORAGE_ERROR}</p>}
       {queued.filter((q) => q.state === 'conflict').map((q) => (
         <div key={q.raceId} role="alert" className="card space-y-2 border-amber-300 p-3 text-sm">
           <p className="flex items-center gap-1.5 font-semibold">
@@ -23,8 +27,8 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
             <dt className="font-medium">Yours</dt><dd>{describePlacings(q.places, q.teamNames)}</dd>
           </dl>
           <div className="flex flex-wrap gap-2">
-            <button className="btn-ghost min-h-11" onClick={() => updateOutbox((l) => discard(l, q.raceId))}>Keep theirs</button>
-            <button className="btn-primary min-h-11" onClick={() => updateOutbox((l) => overrule(l, q.raceId))}>Use mine</button>
+            <button className="btn-ghost min-h-11" onClick={() => update((l) => discard(l, q.raceId))}>Keep theirs</button>
+            <button className="btn-primary min-h-11" onClick={() => update((l) => overrule(l, q.raceId))}>Use mine</button>
           </div>
         </div>
       ))}
@@ -35,8 +39,8 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
           </p>
           <p className="text-slate-600 dark:text-slate-300">{q.error} ({describePlacings(q.places, q.teamNames)})</p>
           <div className="flex flex-wrap gap-2">
-            <button className="btn-ghost min-h-11" onClick={() => { if (confirm(`Delete your results for ${q.label}?`)) updateOutbox((l) => discard(l, q.raceId)); }}>Delete mine</button>
-            <button className="btn-primary min-h-11" onClick={() => updateOutbox((l) => retry(l, q.raceId))}>Try again</button>
+            <button className="btn-ghost min-h-11" onClick={() => { if (confirm(`Delete your results for ${q.label}?`)) update((l) => discard(l, q.raceId)); }}>Delete mine</button>
+            <button className="btn-primary min-h-11" onClick={() => update((l) => retry(l, q.raceId))}>Try again</button>
           </div>
         </div>
       ))}

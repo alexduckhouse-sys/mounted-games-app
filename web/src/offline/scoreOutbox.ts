@@ -12,6 +12,8 @@ export interface Placing {
 }
 
 export interface QueuedScore {
+  /** Unique per save, including two edits made within the same millisecond. */
+  saveId?: string;
   raceId: number;
   competitionId: number;
   sessionId: number;
@@ -48,8 +50,17 @@ export function nextToSend(list: QueuedScore[]): QueuedScore | undefined {
 
 /** Record what happened to `sent`. A save re-queued while it was in flight is left alone. */
 export function settle(list: QueuedScore[], sent: QueuedScore, outcome: SendOutcome): QueuedScore[] {
-  const same = (q: QueuedScore) => q.raceId === sent.raceId && q.queuedAt === sent.queuedAt;
-  if (!list.some(same)) return list;
+  const same = (q: QueuedScore) => q.raceId === sent.raceId &&
+    (sent.saveId ? q.saveId === sent.saveId : q.queuedAt === sent.queuedAt);
+  if (!list.some(same)) {
+    // A scorer corrected their own queued save while it was being sent. Once
+    // that save lands, the correction must compare against it, not its old base.
+    if (outcome.kind !== 'saved') return list;
+    const accepted = outcome.heat.races.find((r) => r.id === sent.raceId);
+    if (!accepted) return list;
+    return list.map((q) => q.raceId === sent.raceId && q.state === 'waiting' && samePlacings(q.expected, sent.expected)
+      ? { ...q, expected: placingsOf(accepted.results) } : q);
+  }
   switch (outcome.kind) {
     case 'saved':
       return list.filter((q) => !same(q));
@@ -62,6 +73,11 @@ export function settle(list: QueuedScore[], sent: QueuedScore, outcome: SendOutc
     case 'failed':
       return list.map((q) => same(q) ? { ...q, state: 'failed', error: outcome.message } : q);
   }
+}
+
+function samePlacings(a: Placing[], b: Placing[]): boolean {
+  const key = (places: Placing[]) => places.map((p) => `${p.teamId}:${p.eliminated ? 'E' : p.place}`).sort().join(',');
+  return key(a) === key(b);
 }
 
 /** Send mine anyway: it now replaces the results the other device saved. */
