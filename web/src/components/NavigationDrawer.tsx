@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Clock, Trophy, LogOut, MessageSquare, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen } from 'lucide-react';
+import { Clock, Trophy, LogOut, MessageSquare, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, Package } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES, useTheme } from '../theme/ThemeContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
@@ -48,6 +48,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
     { to: base, label: 'Timetable', icon: Clock, end: true, badge: false },
     { to: current ? `${base}/toplists` : '/competitions', label: 'Toplists', icon: Trophy, end: true, badge: false },
     { to: current ? `${base}/chat` : '/chat', label: 'Live feed & stream', icon: MessageSquare, end: true, badge: !!shown?.live },
+    { to: current ? `${base}/shop` : '/competitions', label: 'Event shop', icon: ShoppingBag, end: true, badge: false },
     { to: current ? `${base}/rulebooks` : '/competitions', label: 'Rulebooks', icon: BookOpen, end: true, badge: false },
     { to: current ? `${base}/details` : '/competitions', label: 'Details & entries', icon: Info, end: true, badge: false },
   ];
@@ -56,6 +57,8 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
     { to: '/teams', label: 'My teams', icon: Users, show: hasRole('Trainer') && !hasRole('Admin') },
     { to: '/declarations', label: 'Dec forms', icon: ClipboardList, show: hasRole('Trainer') || hasRole('Admin') },
     { to: '/me/signups', label: 'My signups', icon: CreditCard, show: !!user && !hasRole('Admin') },
+    { to: '/me/catalogue', label: 'My items for sale', icon: Package, show: !!user },
+    { to: '/me/orders', label: 'Orders & sales', icon: ShoppingBag, show: !!user },
     { to: '/admin', label: 'Admin', icon: Settings, show: hasRole('Admin') },
   ].filter((item) => item.show);
   const selectedSection = location.pathname === `${base}/scoring` ? new URLSearchParams(location.search).get('section') : null;

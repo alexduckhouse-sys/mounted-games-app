@@ -36,6 +36,10 @@ const RulesPage = lazy(() => import('./pages/admin/RulesPage').then((module) => 
 const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
 const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').then((module) => ({ default: module.OperationsPage })));
 const RulebooksPage = lazy(() => import('./pages/operations/RulebooksPage').then((module) => ({ default: module.RulebooksPage })));
+const EventShopPage = lazy(() => import('./pages/commerce/EventShopPage').then((module) => ({ default: module.EventShopPage })));
+const SellerCataloguePage = lazy(() => import('./pages/commerce/SellerCataloguePage').then((module) => ({ default: module.SellerCataloguePage })));
+const CommerceOrdersPage = lazy(() => import('./pages/commerce/CommerceOrdersPage').then((module) => ({ default: module.CommerceOrdersPage })));
+const CommerceManagementPage = lazy(() => import('./pages/commerce/CommerceManagementPage').then((module) => ({ default: module.CommerceManagementPage })));
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 
 export default function App() {
@@ -66,6 +70,8 @@ export default function App() {
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="teams" element={<TeamsTab />} />
                 <Route path="following" element={<FollowingTab />} />
+                <Route path="shop" element={<EventShopPage />} />
+                <Route path="shop/manage" element={<ProtectedRoute roles={['Admin', 'Trainer']}><CommerceManagementPage /></ProtectedRoute>} />
                 <Route path="rulebooks" element={<RulebooksPage />} />
                 <Route path="operations" element={<ProtectedRoute roles={['Admin', 'Trainer']}><OperationsPage /></ProtectedRoute>} />
                 <Route path="declarations" element={<DeclarationsTab />} />
@@ -79,7 +85,9 @@ export default function App() {
               <Route path="following" element={<FollowingPage />} />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
               <Route path="chat" element={<ChatIndexPage />} />
-              <Route path="shop" element={<Navigate to="/" replace />} />
+              <Route path="shop" element={<Navigate to="/competitions" replace />} />
+              <Route path="me/catalogue" element={<ProtectedRoute><SellerCataloguePage /></ProtectedRoute>} />
+              <Route path="me/orders" element={<ProtectedRoute><CommerceOrdersPage /></ProtectedRoute>} />
               <Route path="admin" element={
                 <ProtectedRoute roles={['Admin']}><AdminPage /></ProtectedRoute>
               } />
