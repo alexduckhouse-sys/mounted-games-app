@@ -15,12 +15,22 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
 
     private static FinishingPlaceDto P(int team, int place, bool elim = false) => new(team, place, elim);
 
-    private static Task<HttpResponseMessage> Submit(HttpClient c, int raceId, FinishingPlaceDto[] places, FinishingPlaceDto[]? expected = null)
-        => c.PostAsJsonAsync($"/api/races/{raceId}/results", new SubmitRaceResultsRequest(places, expected));
+    private static async Task<HttpResponseMessage> Submit(
+        HttpClient c, int raceId, FinishingPlaceDto[] places,
+        FinishingPlaceDto[]? expected = null, string? reason = null)
+    {
+        return await c.PostAsJsonAsync($"/api/races/{raceId}/results",
+            new SubmitRaceResultsRequest(places, expected, reason));
+    }
 
     public static IEnumerable<object[]> Endpoints() => new[]
     {
         new object[] { "POST", "/api/races/1/results" },
+        new object[] { "GET", "/api/races/1/score" },
+        new object[] { "PUT", "/api/races/1/score" },
+        new object[] { "GET", "/api/races/1/score/history" },
+        new object[] { "POST", "/api/races/1/score/sign-off" },
+        new object[] { "POST", "/api/races/1/score/reopen" },
         new object[] { "POST", "/api/races/1/start" },
         new object[] { "POST", "/api/races/1/stop" },
         new object[] { "PUT", "/api/heats/1/duration" },
@@ -128,7 +138,9 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
         var admin = await _f.AdminAsync();
         await Submit(admin, races[0], new[] { P(a.TeamIds[0], 1), P(a.TeamIds[1], 2) });
 
-        var heat = await (await Submit(admin, races[0], new[] { P(a.TeamIds[1], 1), P(a.TeamIds[0], 2) })).ReadAsync<HeatDto>();
+        var heat = await (await Submit(admin, races[0],
+            new[] { P(a.TeamIds[1], 1), P(a.TeamIds[0], 2) }, reason: "Finish order corrected"))
+            .ReadAsync<HeatDto>();
 
         Assert.Equal(a.TeamIds[1], heat.Races.Single().Results[0].TeamId);
         var stored = await _f.WithDbAsync(db => db.Results.Where(x => x.RaceId == races[0]).ToListAsync());
@@ -155,7 +167,9 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
         var first = new[] { P(a.TeamIds[0], 1), P(a.TeamIds[1], 2) };
         await Submit(admin, races[0], first);
 
-        var r = await Submit(admin, races[0], new[] { P(a.TeamIds[1], 1), P(a.TeamIds[0], 2) }, expected: first);
+        var r = await Submit(admin, races[0],
+            new[] { P(a.TeamIds[1], 1), P(a.TeamIds[0], 2) }, expected: first,
+            reason: "Finish order corrected");
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Equal(a.TeamIds[1], (await r.ReadAsync<HeatDto>()).Races.Single().Results[0].TeamId);
@@ -194,6 +208,23 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task SubmitResults_ChangedExistingResults_RequiresReason()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var admin = await _f.AdminAsync();
+        var places = new[] { P(a.TeamIds[0], 1), P(a.TeamIds[1], 2) };
+        await Submit(admin, races[0], places);
+
+        var missingReason = await Submit(admin, races[0],
+            new[] { P(a.TeamIds[1], 1), P(a.TeamIds[0], 2) }, expected: places);
+        var idempotentRetry = await Submit(admin, races[0], places, expected: Array.Empty<FinishingPlaceDto>());
+
+        Assert.Equal(HttpStatusCode.BadRequest, missingReason.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, idempotentRetry.StatusCode);
+    }
+
+    [Fact]
     public async Task SubmitResults_WithStaleExpected_Returns409_AndCurrentHeat()
     {
         var a = await _f.CreateArenaAsync(2);
@@ -213,6 +244,33 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
         // Stored results are untouched: team 0 is still the winner.
         var winner = await _f.WithDbAsync(db => db.Results.SingleAsync(x => x.RaceId == races[0] && x.Placing == 1));
         Assert.Equal(a.TeamIds[0], winner.TeamId);
+        var responseWinner = doc.RootElement.GetProperty("heat").GetProperty("races")[0]
+            .GetProperty("results")[0].GetProperty("teamId").GetInt32();
+        Assert.Equal(winner.TeamId, responseWinner);
+    }
+
+    [Fact]
+    public async Task SubmitResults_ConcurrentLoserConflictBodyMatchesCommittedWinner()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var firstClient = await _f.AdminAsync();
+        var secondClient = await _f.AdminAsync();
+
+        var responses = await Task.WhenAll(
+            Submit(firstClient, races[0],
+                [P(a.TeamIds[0], 1), P(a.TeamIds[1], 2)], expected: []),
+            Submit(secondClient, races[0],
+                [P(a.TeamIds[1], 1), P(a.TeamIds[0], 2)], expected: []));
+
+        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.OK);
+        var conflict = Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Conflict);
+        var committedWinner = await _f.WithDbAsync(db => db.Results
+            .SingleAsync(result => result.RaceId == races[0] && result.Placing == 1));
+        using var document = JsonDocument.Parse(await conflict.Content.ReadAsStringAsync());
+        var responseWinner = document.RootElement.GetProperty("heat").GetProperty("races")[0]
+            .GetProperty("results")[0].GetProperty("teamId").GetInt32();
+        Assert.Equal(committedWinner.TeamId, responseWinner);
     }
 
     [Fact]
@@ -225,7 +283,8 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
 
         // Same results listed in a different order, with a meaningless place on the eliminated team.
         var expected = new[] { P(a.TeamIds[1], 7, true), P(a.TeamIds[0], 1) };
-        var r = await Submit(admin, races[0], new[] { P(a.TeamIds[2], 1) }, expected);
+        var r = await Submit(admin, races[0], new[] { P(a.TeamIds[2], 1) }, expected,
+            reason: "Eliminated team removed after review");
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var results = (await r.ReadAsync<HeatDto>()).Races.Single().Results;
@@ -301,7 +360,7 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task StartRace_KeepsFirstStart_AndClearsFinish_WhenRestarted()
+    public async Task StartRace_AfterFinishedRun_UsesNewRunStart_AndClearsFinish()
     {
         var a = await _f.CreateArenaAsync(2);
         var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
@@ -311,9 +370,11 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
         await admin.PostAsJsonAsync($"/api/races/{races[0]}/start", new RaceClockRequest(firstStart));
         await admin.PostAsJsonAsync($"/api/races/{races[0]}/stop", new RaceClockRequest(stop));
 
-        var restarted = await (await admin.PostAsJsonAsync($"/api/races/{races[0]}/start", new RaceClockRequest(DateTime.UtcNow.AddMinutes(-1)))).ReadAsync<RaceDto>();
+        var newStart = DateTime.UtcNow.AddMinutes(-1);
+        var restarted = await (await admin.PostAsJsonAsync(
+            $"/api/races/{races[0]}/start", new RaceClockRequest(newStart))).ReadAsync<RaceDto>();
 
-        Assert.True((restarted.StartedAt!.Value - firstStart).Duration() < TimeSpan.FromMilliseconds(5));
+        Assert.True((restarted.StartedAt!.Value - newStart).Duration() < TimeSpan.FromMilliseconds(5));
         Assert.Null(restarted.FinishedAt);
     }
 
@@ -386,18 +447,23 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task StopRace_WhenStartIsAfterTapTime_MovesStartBeforeFinish()
+    public async Task StopRace_DelayedStopFromEarlierRun_DoesNotFinishNewerRestart()
     {
         var a = await _f.CreateArenaAsync(2);
         var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
         var admin = await _f.AdminAsync();
-        await admin.PostAsJsonAsync($"/api/races/{races[0]}/start", new RaceClockRequest(DateTime.UtcNow.AddMinutes(-1)));
-        var stop = DateTime.UtcNow.AddMinutes(-5);
+        var firstStart = DateTime.UtcNow.AddMinutes(-6);
+        var oldStop = DateTime.UtcNow.AddMinutes(-5);
+        var newStart = DateTime.UtcNow.AddMinutes(-2);
+        await admin.PostAsJsonAsync($"/api/races/{races[0]}/start", new RaceClockRequest(firstStart));
+        await admin.PostAsJsonAsync($"/api/races/{races[0]}/stop", new RaceClockRequest(oldStop));
+        await admin.PostAsJsonAsync($"/api/races/{races[0]}/start", new RaceClockRequest(newStart));
 
-        var race = await (await admin.PostAsJsonAsync($"/api/races/{races[0]}/stop", new RaceClockRequest(stop))).ReadAsync<RaceDto>();
+        var race = await (await admin.PostAsJsonAsync(
+            $"/api/races/{races[0]}/stop", new RaceClockRequest(oldStop))).ReadAsync<RaceDto>();
 
-        Assert.True(race.StartedAt < race.FinishedAt);
-        Assert.Equal(TimeSpan.FromSeconds(1), race.FinishedAt!.Value - race.StartedAt!.Value);
+        Assert.True((race.StartedAt!.Value - newStart).Duration() < TimeSpan.FromMilliseconds(5));
+        Assert.Null(race.FinishedAt);
     }
 
     [Fact]

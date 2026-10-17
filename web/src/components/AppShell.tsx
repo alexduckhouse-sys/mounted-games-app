@@ -13,6 +13,7 @@ import { TopBarTicker } from './TopBarTicker';
 import { BottomTabs } from './BottomTabs';
 import { useCompetitionMeta } from './competitionMeta';
 import { PageSkeleton } from './Skeletons';
+import { TrainerAccountNotice } from './TrainerAccountNotice';
 
 export function AppShell() {
   const { user, hasRole, editorMode, setEditorMode } = useAuth();
@@ -24,7 +25,7 @@ export function AppShell() {
   const choosingCompetition = ['/', '/competitions', '/competitions/past'].includes(location.pathname);
   const competitionId = competitionIdFromPath(location.pathname);
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
-  const publicPage = choosingCompetition || competitionId != null || location.pathname === '/chat';
+  const publicPage = choosingCompetition || competitionId != null || location.pathname === '/chat' || location.pathname === '/following';
   const shown = meta && meta.id === competitionId ? meta : null;
   const title = shown?.name ?? (current && current.id === competitionId ? current.name : null);
   const subtitle = shown ? [competitionDateText(shown.startDate, shown.endDate), shown.location?.trim()].filter(Boolean).join(' · ') : '';
@@ -71,6 +72,7 @@ export function AppShell() {
         ? `skin mx-auto w-full max-w-5xl flex-1 px-4 ${competitionId != null ? 'pb-28' : 'pb-10'}`
         : 'mx-auto w-full max-w-5xl flex-1 px-3 py-3 sm:px-4 sm:py-5'}>
         {storageError && <p role="status" className={publicPage ? 'mg-notice mt-4' : 'mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900'}>{storageError}</p>}
+        <TrainerAccountNotice />
         <PageLoadBoundary page={location.pathname}>
           <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
         </PageLoadBoundary>

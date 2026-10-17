@@ -340,7 +340,7 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
         });
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
-        builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={Path.Combine(directory, "test.db")}"));
+        builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={Path.Combine(directory, "test.db")};Pooling=False"));
         builder.Services.AddIdentityCore<AppUser>().AddRoles<IdentityRole>().AddEntityFrameworkStores<AppDbContext>().AddSignInManager();
         builder.Services.AddScoped<TokenService>();
         builder.Services.AddAuthentication("test").AddScheme<AuthenticationSchemeOptions, TestAuthentication>("test", _ => { });
@@ -409,7 +409,6 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
         client.Dispose();
         await app.StopAsync();
         await app.DisposeAsync();
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         Directory.Delete(directory, recursive: true);
     }
 }

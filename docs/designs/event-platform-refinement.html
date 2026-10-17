@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MG App · Event platform refinement</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=Barlow+Condensed:wght@600;700&amp;display=swap">
+<style>
+body{margin:0}
+.ph{width:390px;height:844px;box-sizing:border-box;display:flex;flex-direction:column;background:#f4f6f8;color:#1b2733;font:400 15px/1.35 'Barlow',system-ui,sans-serif;overflow:hidden;position:relative;flex:none}
+.hd{background:#17385f;color:#fff;padding:0 8px 10px 4px;flex:none}
+.hd-top{display:flex;align-items:center;min-height:44px}
+.ctx{flex:1;font-size:13px;color:#c9d6e6;padding-left:12px}
+.ib{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:inherit;padding:0;text-decoration:none;cursor:pointer}
+.ib+.ctx{padding-left:0}
+.ttl{margin:0 0 0 12px;font:700 26px/1.1 'Barlow Condensed',sans-serif;display:flex;align-items:center;gap:8px}
+.tabs{display:flex;overflow-x:auto;margin:6px -8px -10px -4px;padding:0 4px}
+.tab{min-height:44px;padding:0 12px;display:flex;align-items:center;color:#c9d6e6;font-weight:600;font-size:14px;text-decoration:none;border:0;border-bottom:3px solid transparent;background:transparent;white-space:nowrap;font-family:inherit;flex:none}
+.tab[aria-current],.tab[aria-selected="true"]{color:#fff;border-bottom-color:#fff}
+.bd{flex:1;overflow-y:auto;min-height:0}
+.sec{padding:14px 16px 6px;font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#5a6878;display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:0}
+.sec span{text-transform:none;letter-spacing:0;font-weight:500}
+.list{background:#fff;border-top:1px solid #dde3ea;border-bottom:1px solid #dde3ea;margin:0;padding:0;list-style:none}
+.row{display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 16px;border-bottom:1px solid #edf0f4;box-sizing:border-box;text-decoration:none;color:inherit;background:#fff;width:100%;border-left:0;border-right:0;border-top:0;font:inherit;text-align:left}
+.row:last-child{border-bottom:0}
+.grow{flex:1;min-width:0}
+.t1{font-weight:600}
+.t2{font-size:13px;color:#5a6878}
+.num{font:700 20px/1 'Barlow Condensed',sans-serif;color:#17385f;font-variant-numeric:tabular-nums}
+.price{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.chev{color:#8a9aae;flex:none}
+.btn{min-height:44px;padding:0 16px;border-radius:6px;font:600 15px 'Barlow',sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;cursor:pointer;box-sizing:border-box;white-space:nowrap}
+.bp{background:#17385f;color:#fff;border:1px solid #17385f}
+.bs{background:#fff;color:#17385f;border:1px solid #9fb0c4}
+.bt{background:transparent;color:#17385f;border:0;padding:0 8px}
+.wide{width:100%}
+.foot{flex:none;background:#fff;border-top:1px solid #dde3ea;padding:10px 16px 16px;display:flex;gap:8px;align-items:center}
+.demo{display:inline-block;font:700 11px/1 'Barlow',sans-serif;letter-spacing:.8px;background:#ffe27a;color:#3a2a00;border-radius:3px;padding:4px 6px;vertical-align:middle}
+.ok{color:#1f6b43}.warn{color:#7a4a00}.bad{color:#a50d26}.mut{color:#5a6878}
+.st{font-size:13px;font-weight:600;white-space:nowrap}
+.note{padding:8px 16px;font-size:13px;color:#5a6878;margin:0}
+.fld{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:#3d4b5c}
+.fld input,.fld select{min-height:44px;border:1px solid #b9c5d2;border-radius:6px;padding:0 10px;font:500 16px 'Barlow',sans-serif;color:#1b2733;background:#fff;box-sizing:border-box;width:100%}
+.qty{display:inline-flex;align-items:center;border:1px solid #9fb0c4;border-radius:6px;overflow:hidden;flex:none}
+.qty button{min-width:44px;min-height:44px;border:0;background:#fff;color:#17385f;font:700 18px 'Barlow',sans-serif;cursor:pointer}
+.qty output{min-width:22px;text-align:center;font-weight:700}
+.thumb{width:44px;height:44px;border-radius:6px;background:#e8eef6;color:#17385f;display:flex;align-items:center;justify-content:center;font:700 15px 'Barlow Condensed',sans-serif;flex:none}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(15,39,66,.18);padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px}
+.grab{width:40px;height:4px;border-radius:2px;background:#c9d3de;align-self:center}
+.scrim{position:absolute;inset:0;background:rgba(15,39,66,.45)}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid #9fb0c4;border-radius:6px;overflow:hidden}
+.seg button{min-height:44px;border:0;border-right:1px solid #9fb0c4;background:#fff;color:#17385f;font:600 14px 'Barlow',sans-serif}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:#17385f;color:#fff}
+.sum{display:flex;justify-content:space-between;padding:6px 16px;font-size:14px;background:#fff}
+.sum.tot{font-weight:700;font-size:16px;border-top:1px solid #dde3ea;padding:10px 16px}
+.multi{display:flex;gap:40px;align-items:flex-start}
+.lockwrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:72px 24px 0;text-align:center}
+.lock .shackle{animation:mg-shackle 1.1s ease-in-out infinite alternate}
+.lock .ring{transform-origin:40px 40px;animation:mg-spin 1.4s linear infinite}
+@keyframes mg-shackle{from{transform:translateY(-5px)}to{transform:translateY(0)}}
+@keyframes mg-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.lock .shackle,.lock .ring{animation:none}}
+details>summary{list-style:none;cursor:pointer}
+details>summary::-webkit-details-marker{display:none}
+table.tb{border-collapse:collapse;width:100%;background:#fff;font-size:15px}
+.tb th{font-size:11px;font-weight:700;color:#5a6878;text-transform:uppercase;letter-spacing:.4px;padding:8px 6px;border-bottom:1px solid #dde3ea;text-align:left}
+.tb td{padding:0 6px;height:48px;border-bottom:1px solid #edf0f4}
+.tb th:first-child,.tb td:first-child{padding-left:16px}
+.tb th:last-child,.tb td:last-child{padding-right:16px;text-align:right}
+.tb a{color:inherit;text-decoration:none;font-weight:600;display:flex;align-items:center;min-height:44px}
+
+html{background:#e9edf2}
+.page{font:400 15px/1.4 'Barlow',system-ui,sans-serif;color:#1b2733;padding:24px 16px 64px}
+.top{max-width:1200px;margin:0 auto 8px}
+.top h1{font:700 34px/1.1 'Barlow Condensed',sans-serif;color:#17385f;margin:0}
+.top p{margin:6px 0 0;color:#3d4b5c;max-width:760px}
+.jump{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.jump a{min-height:36px;display:inline-flex;align-items:center;padding:0 12px;border:1px solid #9fb0c4;border-radius:6px;color:#17385f;font-weight:600;text-decoration:none;background:#fff}
+.grp{margin-top:36px}
+.grp>h2{font:700 26px 'Barlow Condensed',sans-serif;color:#17385f;margin:0 0 12px}
+.strip{display:flex;gap:32px;overflow-x:auto;padding-bottom:12px;align-items:flex-start}
+figure{margin:0;flex:none}
+figcaption{font-size:13px;font-weight:600;color:#3d4b5c;margin:0 0 8px}
+figure .ph{box-shadow:0 1px 0 #dde3ea,0 6px 18px rgba(15,39,66,.08);border-radius:12px}
+figure .multi .ph{border-radius:12px}
+</style></head>
+<body><div class="page">
+<header class="top"><h1>MG App · Event platform refinement</h1>
+<p>Static preview of the refined screens (390 px phone frames, plus the organiser desk). Links jump between screens. The processing padlock animates unless the device asks for reduced motion. All names are fictional; checkout is a demo.</p>
+<nav class="jump" aria-label="Sections"><a href="#g-event-shop-demo-checkout">Event shop &amp; demo checkout</a><a href="#g-sellers">Sellers</a><a href="#g-season">Season</a><a href="#g-organiser-tools">Organiser tools</a><a href="#g-desk">Organiser desk</a></nav></header>
+<section class="grp" id="g-event-shop-demo-checkout"><h2>Event shop &amp; demo checkout</h2><div class="strip"><figure id="b-shop"><figcaption>Event shop · sticky basket</figcaption><div class="ph">
+  <header class="hd">
+    <div class="hd-top">
+      <span class="ctx">Sample Summer Games · Sat 18 Jul</span>
+      <a class="ib" href="#b-orders-receipts" aria-label="Your orders">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg></a>
+    </div>
+    <h1 class="ttl">Shop</h1>
+    <nav class="tabs" role="tablist" aria-label="Categories">
+      <button class="tab" role="tab" aria-selected="true">All</button>
+      <button class="tab" role="tab" aria-selected="false">Programmes</button>
+      <button class="tab" role="tab" aria-selected="false">Clothing</button>
+      <button class="tab" role="tab" aria-selected="false">Tack &amp; kit</button>
+      <button class="tab" role="tab" aria-selected="false">Food</button>
+      <button class="tab" role="tab" aria-selected="false">Raffle</button>
+    </nav>
+  </header>
+
+  <main class="bd">
+    <p class="note">Collect at the Secretary's tent from 08:00. Food from the seller's stand.</p>
+
+    <h2 class="sec">From the organiser</h2>
+    <ul class="list">
+      <li class="row">
+        <span class="thumb" aria-hidden="true">PG</span>
+        <span class="grow"><span class="t1" style="display: block">Event programme</span><span class="price">£3.00</span></span>
+        <span class="qty"><button aria-label="Remove one event programme">−</button><output aria-live="polite">1</output><button aria-label="Add one event programme">+</button></span>
+      </li>
+      <li class="row">
+        <span class="thumb" aria-hidden="true">TS</span>
+        <span class="grow"><span class="t1" style="display: block">Event T-shirt</span><span class="price">£14.00</span></span>
+        <span class="qty"><button aria-label="Remove one event T-shirt">−</button><output aria-live="polite">1</output><button aria-label="Add one event T-shirt">+</button></span>
+      </li>
+      <li class="row">
+        <span class="thumb" aria-hidden="true">CP</span>
+        <span class="grow"><span class="t1" style="display: block">Event cap</span><span class="price">£9.00</span></span>
+        <button class="btn bs" aria-label="Add event cap">Add</button>
+      </li>
+    </ul>
+
+    <h2 class="sec">Example Tack Co. <span>Approved seller</span></h2>
+    <ul class="list">
+      <li class="row">
+        <span class="thumb" aria-hidden="true">HO</span>
+        <span class="grow"><span class="t1" style="display: block">Hoof oil 500 ml</span><span class="price">£6.50</span></span>
+        <button class="btn bs" aria-label="Add hoof oil">Add</button>
+      </li>
+      <li class="row">
+        <span class="thumb" aria-hidden="true">PC</span>
+        <span class="grow"><span class="t1" style="display: block">Bending pole caps (4)</span><span class="price">£5.00</span></span>
+        <button class="btn bs" aria-label="Add bending pole caps">Add</button>
+      </li>
+    </ul>
+
+    <h2 class="sec">Example Catering <span>Approved seller</span></h2>
+    <ul class="list">
+      <li class="row">
+        <span class="thumb" aria-hidden="true">BR</span>
+        <span class="grow"><span class="t1" style="display: block">Breakfast roll</span><span class="t2">Collect 08:00–11:00 · <span class="price" style="color: #1b2733">£4.00</span></span></span>
+        <button class="btn bs" aria-label="Add breakfast roll">Add</button>
+      </li>
+    </ul>
+    <div style="height: 16px"></div>
+  </main>
+
+  <div class="foot" role="region" aria-label="Basket">
+    <span class="grow"><span class="t1" style="display: block">2 items</span><span class="t2">Collect at event</span></span>
+    <span class="price" style="font-size: 18px">£17.00</span>
+    <a class="btn bp" href="#b-checkout-demo">Review</a>
+  </div>
+</div></figure><figure id="b-checkout-demo"><figcaption>Demo checkout · review → card → processing → outcomes</figcaption><div class="multi" style="width: 2540px; height: 844px">
+
+  <section class="ph" aria-label="1 Review">
+    <header class="hd">
+      <div class="hd-top">
+        <a class="ib" href="#b-shop" aria-label="Back to shop"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+        <span class="ctx">Sample Summer Games</span>
+      </div>
+      <h1 class="ttl">Basket <span class="demo">DEMO</span></h1>
+    </header>
+    <main class="bd">
+      <ul class="list" style="margin-top: 12px">
+        <li class="row"><span class="grow"><span class="t1" style="display: block">Event programme</span><span class="t2">Organiser</span></span>
+          <span class="qty"><button aria-label="Remove one">−</button><output>1</output><button aria-label="Add one">+</button></span><span class="price" style="width: 56px; text-align: right">£3.00</span></li>
+        <li class="row"><span class="grow"><span class="t1" style="display: block">Event T-shirt</span><span class="t2">Organiser</span></span>
+          <span class="qty"><button aria-label="Remove one">−</button><output>1</output><button aria-label="Add one">+</button></span><span class="price" style="width: 56px; text-align: right">£14.00</span></li>
+      </ul>
+      <div class="sum tot" style="margin-top: 0"><span>Total</span><span>£17.00</span></div>
+      <p class="note">Collect at the Secretary's tent, Sat 18 Jul from 08:00.</p>
+    </main>
+    <div class="foot"><a class="btn bp wide" href="#card">Continue to payment</a></div>
+  </section>
+
+  <section class="ph" id="card" aria-label="2 Demo card">
+    <header class="hd">
+      <div class="hd-top">
+        <a class="ib" href="#" aria-label="Back to basket"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+        <span class="ctx">2 items · £17.00</span>
+      </div>
+      <h1 class="ttl">Payment <span class="demo">DEMO</span></h1>
+    </header>
+    <main class="bd" style="padding: 12px 16px; display: flex; flex-direction: column; gap: 12px">
+      <p class="t2" style="margin: 0">Test card filled in for you. Nothing is sent or charged.</p>
+      <label class="fld">Card number<input type="text" value="4242 4242 4242 4242" readonly></label>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+        <label class="fld">Expiry<input type="text" value="12 / 30" readonly></label>
+        <label class="fld">CVC<input type="text" value="123" readonly></label>
+      </div>
+      <label class="fld">Name on card<input type="text" value="Demo Buyer" readonly></label>
+      <fieldset style="border: 0; padding: 0; margin: 4px 0 0">
+        <legend class="fld" style="padding: 0; margin-bottom: 4px">Demo result</legend>
+        <div class="seg"><button aria-pressed="true">Approve</button><button aria-pressed="false">Decline</button></div>
+      </fieldset>
+    </main>
+    <div class="foot" style="flex-direction: column; align-items: stretch">
+      <a class="btn bp" href="#processing">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        Pay £17.00</a>
+      <a class="btn bt" href="#cancelled">Cancel</a>
+    </div>
+  </section>
+
+  <section class="ph" id="processing" aria-label="3 Processing">
+    <header class="hd">
+      <div class="hd-top"><span class="ctx">2 items · £17.00</span></div>
+      <h1 class="ttl">Payment <span class="demo">DEMO</span></h1>
+    </header>
+    <main class="bd">
+      <div class="lockwrap" role="status" aria-live="polite">
+        <svg class="lock" width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+          <circle class="ring" cx="40" cy="40" r="36" fill="none" stroke="#17385f" stroke-width="3" stroke-dasharray="56 170" stroke-linecap="round"/>
+          <circle cx="40" cy="40" r="36" fill="none" stroke="#dde3ea" stroke-width="3" opacity=".6"/>
+          <path class="shackle" d="M31 38v-6a9 9 0 0 1 18 0v6" fill="none" stroke="#17385f" stroke-width="4" stroke-linecap="round"/>
+          <rect x="26" y="38" width="28" height="20" rx="4" fill="#17385f"/>
+          <circle cx="40" cy="48" r="3" fill="#ffffff"/>
+        </svg>
+        <div style="font: 700 22px 'Barlow Condensed', sans-serif; color: #17385f">Processing demo payment</div>
+        <div class="t2">£17.00 · a few seconds</div>
+      </div>
+    </main>
+  </section>
+
+  <section class="ph" id="success" aria-label="4 Success">
+    <header class="hd">
+      <div class="hd-top"><span class="ctx">Sample Summer Games</span></div>
+      <h1 class="ttl">Order confirmed <span class="demo">DEMO</span></h1>
+    </header>
+    <main class="bd">
+      <div style="display: flex; gap: 12px; align-items: center; padding: 16px">
+        <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="#e6f3ec"/><path d="M12 20.5l5 5L28 14.5" fill="none" stroke="#1f6b43" stroke-width="3"/></svg>
+        <div><div class="t1">DEMO-0042</div><div class="t2">Paid £17.00 · 10:31</div></div>
+      </div>
+      <ul class="list">
+        <li class="row"><span class="grow">Event programme × 1</span><span class="price">£3.00</span></li>
+        <li class="row"><span class="grow">Event T-shirt × 1</span><span class="price">£14.00</span></li>
+      </ul>
+      <p class="note">Show the reference at the Secretary's tent from 08:00.</p>
+    </main>
+    <div class="foot"><a class="btn bs" href="#b-shop">Shop</a><a class="btn bp grow" href="#b-orders-receipts">View receipt</a></div>
+  </section>
+
+  <section class="ph" id="declined" aria-label="5 Declined">
+    <header class="hd">
+      <div class="hd-top"><span class="ctx">2 items · £17.00</span></div>
+      <h1 class="ttl">Payment declined <span class="demo">DEMO</span></h1>
+    </header>
+    <main class="bd">
+      <div role="alert" style="display: flex; gap: 12px; align-items: center; padding: 16px">
+        <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="#fdecee"/><path d="M20 12v10M20 27v1" fill="none" stroke="#a50d26" stroke-width="3" stroke-linecap="round"/></svg>
+        <div><div class="t1">The demo card was declined</div><div class="t2">Nothing was charged. Basket kept.</div></div>
+      </div>
+    </main>
+    <div class="foot" style="flex-direction: column; align-items: stretch"><a class="btn bp" href="#card">Try again</a><a class="btn bt" href="#b-shop">Back to shop</a></div>
+  </section>
+
+  <section class="ph" id="cancelled" aria-label="6 Cancelled">
+    <header class="hd">
+      <div class="hd-top"><span class="ctx">2 items · £17.00</span></div>
+      <h1 class="ttl">Checkout cancelled <span class="demo">DEMO</span></h1>
+    </header>
+    <main class="bd">
+      <div role="status" style="display: flex; gap: 12px; align-items: center; padding: 16px">
+        <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19" fill="#eef1f4"/><path d="M14 14l12 12M26 14L14 26" fill="none" stroke="#3d4b5c" stroke-width="3" stroke-linecap="round"/></svg>
+        <div><div class="t1">No order placed</div><div class="t2">Your basket is saved on this device.</div></div>
+      </div>
+    </main>
+    <div class="foot"><a class="btn bp wide" href="#b-shop">Back to shop</a></div>
+  </section>
+</div></figure><figure id="b-orders-receipts"><figcaption>Orders · receipt · organiser refund</figcaption><div class="multi" style="width: 1250px; height: 844px">
+
+  <section class="ph" aria-label="Orders">
+    <header class="hd">
+      <div class="hd-top">
+        <a class="ib" href="#b-shop" aria-label="Back to shop"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+        <span class="ctx">Shop</span>
+      </div>
+      <h1 class="ttl">Your orders</h1>
+    </header>
+    <main class="bd">
+      <h2 class="sec">Demo orders <span>Test payments only</span></h2>
+      <ul class="list">
+        <li><a class="row" href="#receipt">
+          <span class="grow"><span class="t1" style="display: block">DEMO-0042</span><span class="t2">Sample Summer Games · 18 Jul</span></span>
+          <span style="text-align: right"><span class="price" style="display: block">£17.00</span><span class="st ok">Paid</span></span></a></li>
+        <li><a class="row" href="#">
+          <span class="grow"><span class="t1" style="display: block">DEMO-0039</span><span class="t2">Sample Summer Games · 18 Jul</span></span>
+          <span style="text-align: right"><span class="price" style="display: block">£6.50</span><span class="st mut">Refunded</span></span></a></li>
+        <li><a class="row" href="#">
+          <span class="grow"><span class="t1" style="display: block">DEMO-0037</span><span class="t2">Sample Summer Games · 17 Jul</span></span>
+          <span style="text-align: right"><span class="price mut" style="display: block">£4.00</span><span class="st bad">Declined</span></span></a></li>
+      </ul>
+      <p class="note">Orders are kept for this event and device.</p>
+    </main>
+  </section>
+
+  <section class="ph" id="receipt" aria-label="Receipt">
+    <header class="hd">
+      <div class="hd-top">
+        <a class="ib" href="#" aria-label="Back to orders"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+        <span class="ctx">Orders</span>
+      </div>
+      <h1 class="ttl">DEMO-0042 <span class="demo">DEMO</span></h1>
+    </header>
+    <main class="bd">
+      <div class="sum" style="padding-top: 12px; margin-top: 12px; border-top: 1px solid #dde3ea"><span class="mut">Status</span><span class="st ok">Paid</span></div>
+      <div class="sum"><span class="mut">When</span><span>Sat 18 Jul · 10:31</span></div>
+      <div class="sum" style="padding-bottom: 12px; border-bottom: 1px solid #dde3ea"><span class="mut">Card</span><span>Demo •••• 4242</span></div>
+      <h2 class="sec">Items</h2>
+      <ul class="list">
+        <li class="row" style="min-height: 48px"><span class="grow">Event programme × 1</span><span class="price">£3.00</span></li>
+        <li class="row" style="min-height: 48px"><span class="grow">Event T-shirt × 1</span><span class="price">£14.00</span></li>
+      </ul>
+      <div class="sum tot"><span>Total</span><span>£17.00</span></div>
+      <p class="note">Collect at the Secretary's tent from 08:00.</p>
+      <details style="margin: 4px 16px">
+        <summary class="btn bt" style="padding: 0">Organiser actions</summary>
+        <a class="btn bs wide" href="#refund" style="margin-top: 6px">Refund order…</a>
+      </details>
+    </main>
+  </section>
+
+  <section class="ph" id="refund" aria-label="Refund confirmation">
+    <header class="hd" aria-hidden="true">
+      <div class="hd-top"><span class="ctx">Orders</span></div>
+      <div class="ttl">DEMO-0042 <span class="demo">DEMO</span></div>
+    </header>
+    <div class="bd" aria-hidden="true">
+      <div class="sum" style="padding-top: 12px; margin-top: 12px"><span class="mut">Status</span><span class="st ok">Paid</span></div>
+      <div class="sum"><span class="mut">Total</span><span>£17.00</span></div>
+    </div>
+    <div class="scrim"></div>
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="rf-title">
+      <span class="grab" aria-hidden="true"></span>
+      <h2 id="rf-title" style="margin: 0; font: 700 22px 'Barlow Condensed', sans-serif; color: #17385f">Refund £17.00?</h2>
+      <p style="margin: 0; font-size: 14px">Refunds the whole of DEMO-0042. It's a demo, so no money moves. The order shows as Refunded for the buyer.</p>
+      <div style="display: flex; gap: 8px">
+        <a class="btn bs" href="#receipt">Keep order</a>
+        <button class="btn bp grow" style="background: #a50d26; border-color: #a50d26">Refund £17.00</button>
+      </div>
+    </section>
+  </section>
+</div></figure></div></section><section class="grp" id="g-sellers"><h2>Sellers</h2><div class="strip"><figure id="b-seller-catalogue"><figcaption>Catalogue</figcaption><div class="ph">
+  <header class="hd">
+    <div class="hd-top">
+      <span class="ctx">Seller · Example Tack Co.</span>
+      <a class="btn bs" href="#b-seller-additem" style="min-height: 40px; padding: 0 12px; font-size: 14px">+ Add item</a>
+    </div>
+    <h1 class="ttl">Catalogue</h1>
+  </header>
+
+  <main class="bd">
+    <p class="note">Items you can offer at any event. Each organiser approves them for their own event.</p>
+    <ul class="list">
+      <li><a class="row" href="#b-seller-events">
+        <span class="grow"><span class="t1" style="display: block">Hoof oil 500 ml</span><span class="t2">2 events · <span class="warn">1 pending</span></span></span>
+        <span class="price">£6.50</span>
+        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+      <li><a class="row" href="#b-seller-events">
+        <span class="grow"><span class="t1" style="display: block">Bending pole caps (4)</span><span class="t2">1 event</span></span>
+        <span class="price">£5.00</span>
+        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+      <li><a class="row" href="#b-seller-events">
+        <span class="grow"><span class="t1" style="display: block">Lead rope</span><span class="t2"><span class="bad">Declined at 1 event</span></span></span>
+        <span class="price">£8.00</span>
+        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+      <li><a class="row" href="#b-seller-events">
+        <span class="grow"><span class="t1" style="display: block">Fly spray 250 ml</span><span class="t2">Draft · not offered</span></span>
+        <span class="price mut">—</span>
+        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+    </ul>
+    <p class="note">Orders for your items appear under <a href="#b-orders-receipts" style="color: #17385f; font-weight: 600">Orders</a>.</p>
+  </main>
+</div></figure><figure id="b-seller-additem"><figcaption>Add item (sheet)</figcaption><div class="ph">
+  <header class="hd" aria-hidden="true">
+    <div class="hd-top"><span class="ctx">Seller · Example Tack Co.</span></div>
+    <div class="ttl">Catalogue</div>
+  </header>
+  <div class="bd" aria-hidden="true">
+    <p class="note">Items you can offer at any event.</p>
+    <div class="list">
+      <div class="row"><span class="grow t1">Hoof oil 500 ml</span><span class="price">£6.50</span></div>
+      <div class="row"><span class="grow t1">Bending pole caps (4)</span><span class="price">£5.00</span></div>
+      <div class="row"><span class="grow t1">Lead rope</span><span class="price">£8.00</span></div>
+    </div>
+  </div>
+  <div class="scrim"></div>
+
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="add-title">
+    <span class="grab" aria-hidden="true"></span>
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <h2 id="add-title" style="margin: 0; font: 700 22px 'Barlow Condensed', sans-serif; color: #17385f">Add item</h2>
+      <a class="ib" href="#b-seller-catalogue" aria-label="Close" style="color: #5a6878; margin-right: -10px">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+    </div>
+    <label class="fld">Name<input type="text" value="Hoof pick"></label>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <label class="fld">Price (£)<input type="text" inputmode="decimal" value="3.50"></label>
+      <label class="fld">Category<select><option>Tack &amp; kit</option><option>Clothing</option><option>Food</option><option>Other</option></select></label>
+    </div>
+    <details>
+      <summary class="btn bt" style="padding: 0; justify-content: flex-start">+ Collection note</summary>
+      <label class="fld" style="margin-top: 6px">Collection note<input type="text" placeholder="e.g. Collect at Secretary's tent"></label>
+    </details>
+    <p class="t2" style="margin: 0">You'll choose events for this item after saving.</p>
+    <div style="display: flex; gap: 8px">
+      <button class="btn bs">Save draft</button>
+      <a class="btn bp grow" href="#b-seller-events">Save and choose events</a>
+    </div>
+  </section>
+</div></figure><figure id="b-seller-events"><figcaption>Item · its events</figcaption><div class="ph">
+  <header class="hd">
+    <div class="hd-top">
+      <a class="ib" href="#b-seller-catalogue" aria-label="Back to catalogue">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <span class="ctx">Catalogue</span>
+      <button class="ib" aria-label="More actions for this item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+    </div>
+    <h1 class="ttl">Hoof oil 500 ml</h1>
+  </header>
+
+  <main class="bd">
+    <ul class="list" style="margin-top: 12px">
+      <li><a class="row" href="#edit">
+        <span class="grow"><span class="t1" style="display: block">£6.50 · Tack &amp; kit</span><span class="t2">Collect at Secretary's tent</span></span>
+        <span class="st" style="color: #17385f">Edit</span></a></li>
+    </ul>
+
+    <h2 class="sec">Events for this item</h2>
+    <ul class="list">
+      <li class="row">
+        <span class="grow"><span class="t1" style="display: block">Sample Summer Games</span><span class="t2">Sat 18 Jul</span></span>
+        <span class="st ok">Approved</span></li>
+      <li class="row">
+        <span class="grow"><span class="t1" style="display: block">Sample Autumn Classic</span><span class="t2">Sat 12 Sep · asked 3 days ago</span></span>
+        <span class="st warn">Pending</span></li>
+      <li>
+        <details>
+          <summary class="row">
+            <span class="grow"><span class="t1" style="display: block">Example Spring Qualifier</span><span class="t2">Sat 10 May</span></span>
+            <span class="st bad">Declined</span>
+            <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </summary>
+          <p class="note" style="background: #fff; padding-top: 0">Organiser: "Food sellers only at this venue."</p>
+        </details>
+      </li>
+    </ul>
+
+    <details open style="margin-top: 12px">
+      <summary class="row list" style="color: #17385f; font-weight: 600">
+        <span class="grow">Offer at another event</span>
+        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg>
+      </summary>
+      <ul class="list" style="border-top: 0">
+        <li class="row">
+          <span class="grow"><span class="t1" style="display: block">Example Winter Series · R1</span><span class="t2">Sun 8 Nov</span></span>
+          <button class="btn bs">Request</button></li>
+        <li class="row">
+          <span class="grow"><span class="t1" style="display: block">Example Winter Series · R2</span><span class="t2">Sun 6 Dec</span></span>
+          <button class="btn bs">Request</button></li>
+      </ul>
+      <p class="note">Only events accepting sellers are listed. Changing the price sends approved events back to pending.</p>
+    </details>
+  </main>
+</div></figure></div></section><section class="grp" id="g-season"><h2>Season</h2><div class="strip"><figure id="b-standings"><figcaption>Standings tab</figcaption><div class="ph">
+  <header class="hd">
+    <div class="hd-top"><span class="ctx">Season 2026</span></div>
+    <h1 class="ttl">Sample Summer League</h1>
+    <nav class="tabs" aria-label="Season">
+      <a class="tab" href="#b-standings" aria-current="page">Standings</a>
+      <a class="tab" href="#b-season-rounds">Rounds</a>
+      <a class="tab" href="#b-standings-settings">Settings</a>
+    </nav>
+  </header>
+
+  <main class="bd">
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 16px">
+      <label class="fld"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Age section</span><select><option>U12</option><option selected>U14</option><option>U17</option><option>Open</option></select></label>
+      <label class="fld"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Format</span><select><option selected>Teams</option><option>Pairs</option></select></label>
+    </div>
+    <table class="tb">
+      <thead><tr><th style="width: 36px">Pos</th><th>Team</th><th style="text-align: center">Rds</th><th>Pts</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td><a href="#">Example Navy</a></td><td class="mut" style="text-align: center">5</td><td class="num">38</td></tr>
+        <tr><td class="num">2</td><td><a href="#b-team-history">Example Blue</a></td><td class="mut" style="text-align: center">5</td><td class="num">34</td></tr>
+        <tr><td class="num">=3</td><td><a href="#">Example Gold</a></td><td class="mut" style="text-align: center">6</td><td class="num">30</td></tr>
+        <tr><td class="num">=3</td><td><a href="#">Example Teal</a></td><td class="mut" style="text-align: center">4</td><td class="num">30</td></tr>
+        <tr><td class="num">5</td><td><a href="#">Example White</a></td><td class="mut" style="text-align: center">5</td><td class="num">22</td></tr>
+        <tr><td class="num">6</td><td><a href="#">Example Orange</a></td><td class="mut" style="text-align: center">6</td><td class="num">20</td></tr>
+        <tr><td class="num">7</td><td><a href="#">Example Pink</a></td><td class="mut" style="text-align: center">3</td><td class="num">13</td></tr>
+        <tr><td class="num">8</td><td><a href="#">Example Lime</a></td><td class="mut" style="text-align: center">6</td><td class="num">8</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Best 4 of 6 rounds · = shared place · after R6, 4 Jul. Worked out from published results; not an official ranking unless the league says so.</p>
+  </main>
+</div></figure><figure id="b-season-rounds"><figcaption>Rounds tab</figcaption><div class="ph">
+  <header class="hd">
+    <div class="hd-top"><span class="ctx">Season 2026</span></div>
+    <h1 class="ttl">Sample Summer League</h1>
+    <nav class="tabs" aria-label="Season">
+      <a class="tab" href="#b-standings">Standings</a>
+      <a class="tab" href="#b-season-rounds" aria-current="page">Rounds</a>
+      <a class="tab" href="#b-standings-settings">Settings</a>
+    </nav>
+  </header>
+
+  <main class="bd">
+    <h2 class="sec">8 rounds <span>6 with results</span></h2>
+    <ol class="list">
+      <li><a class="row" href="#"><span class="num" style="width: 32px">R1</span><span class="grow"><span class="t1" style="display: block">Example Club Day</span><span class="t2">Sun 26 Apr</span></span><span class="st mut">Final</span></a></li>
+      <li><a class="row" href="#"><span class="num" style="width: 32px">R2</span><span class="grow"><span class="t1" style="display: block">Example Spring Qualifier</span><span class="t2">Sun 10 May</span></span><span class="st mut">Final</span></a></li>
+      <li><a class="row" href="#"><span class="num" style="width: 32px">R3</span><span class="grow"><span class="t1" style="display: block">Example May Cup</span><span class="t2">Sun 31 May</span></span><span class="st mut">Final</span></a></li>
+      <li><a class="row" href="#"><span class="num" style="width: 32px">R4</span><span class="grow"><span class="t1" style="display: block">Example June Open</span><span class="t2">Sun 21 Jun</span></span><span class="st mut">Final</span></a></li>
+      <li><a class="row" href="#"><span class="num" style="width: 32px">R5</span><span class="grow"><span class="t1" style="display: block">Example Midsummer Show</span><span class="t2">Sat 27 Jun</span></span><span class="st mut">Final</span></a></li>
+      <li><a class="row" href="#"><span class="num" style="width: 32px">R6</span><span class="grow"><span class="t1" style="display: block">Example July Cup</span><span class="t2">Sat 4 Jul</span></span><span class="st warn">Provisional</span></a></li>
+      <li><a class="row" href="#"><span class="num mut" style="width: 32px; color: #5a6878">R7</span><span class="grow"><span class="t1" style="display: block">Sample Summer Games</span><span class="t2">Sat 18 Jul · today</span></span><span class="st" style="color: #c8102e">LIVE</span></a></li>
+      <li><a class="row" href="#"><span class="num mut" style="width: 32px; color: #5a6878">R8</span><span class="grow"><span class="t1" style="display: block">Sample Autumn Classic</span><span class="t2">Sat 12 Sep</span></span><span class="st mut">Upcoming</span></a></li>
+    </ol>
+    <p class="note">Provisional results are included in standings and may still change.</p>
+  </main>
+</div></figure><figure id="b-standings-settings"><figcaption>Settings tab (organisers)</figcaption><div class="ph">
+  <header class="hd">
+    <div class="hd-top"><span class="ctx">Season 2026</span></div>
+    <h1 class="ttl">Sample Summer League</h1>
+    <nav class="tabs" aria-label="Season">
+      <a class="tab" href="#b-standings">Standings</a>
+      <a class="tab" href="#b-season-rounds">Rounds</a>
+      <a class="tab" href="#b-standings-settings" aria-current="page">Settings</a>
+    </nav>
+  </header>
+
+  <main class="bd">
+    <h2 class="sec">How standings are worked out <span>Organisers only</span></h2>
+    <div class="list">
+      <details>
+        <summary class="row"><span class="grow"><span class="t1" style="display: block">Sections</span><span class="t2">U12, U14, U17, Open · Teams</span></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      </details>
+      <details open>
+        <summary class="row" style="border-bottom: 0"><span class="grow"><span class="t1" style="display: block">Place points</span><span class="t2">10 · 8 · 6 · 5 · 4 · 3 · 2 · 1</span></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></summary>
+        <div style="padding: 0 16px 12px; background: #fff; border-bottom: 1px solid #edf0f4; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+          <label class="fld" style="text-align: center">1st<input type="text" inputmode="numeric" value="10" style="text-align: center"></label>
+          <label class="fld" style="text-align: center">2nd<input type="text" inputmode="numeric" value="8" style="text-align: center"></label>
+          <label class="fld" style="text-align: center">3rd<input type="text" inputmode="numeric" value="6" style="text-align: center"></label>
+          <label class="fld" style="text-align: center">4th<input type="text" inputmode="numeric" value="5" style="text-align: center"></label>
+          <label class="fld" style="text-align: center">5th<input type="text" inputmode="numeric" value="4" style="text-align: center"></label>
+          <label class="fld" style="text-align: center">6th<input type="text" inputmode="numeric" value="3" style="text-align: center"></label>
+          <label class="fld" style="text-align: center">7th<input type="text" inputmode="numeric" value="2" style="text-align: center"></label>
+          <label class="fld" style="text-align: center">8th+<input type="text" inputmode="numeric" value="1" style="text-align: center"></label>
+          <label class="fld" style="grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between">Did not finish / eliminated<input type="text" inputmode="numeric" value="0" style="text-align: center; width: 72px"></label>
+        </div>
+      </details>
+      <details>
+        <summary class="row"><span class="grow"><span class="t1" style="display: block">Results that count</span><span class="t2">Best 4 rounds per team</span></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      </details>
+      <details>
+        <summary class="row"><span class="grow"><span class="t1" style="display: block">Ties</span><span class="t2">Share the place (=3, then 5th)</span></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      </details>
+    </div>
+    <p class="note">Changes recalculate every table from published results.</p>
+  </main>
+
+  <div class="foot">
+    <span class="grow t2">1 unsaved change</span>
+    <button class="btn bt">Discard</button>
+    <button class="btn bp">Save</button>
+  </div>
+</div></figure><figure id="b-team-history"><figcaption>Team history</figcaption><div class="ph">
+  <header class="hd">
+    <div class="hd-top">
+      <a class="ib" href="#b-standings" aria-label="Back to standings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <span class="ctx">U14 Teams · 2026</span>
+      <button class="ib" aria-label="Unstar Example Blue" aria-pressed="true"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" fill="#ffffff" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
+    </div>
+    <h1 class="ttl"><span style="width: 12px; height: 12px; border-radius: 3px; background: #4d86e0"></span>Example Blue</h1>
+    <p style="margin: 4px 0 0 12px; font-size: 14px; color: #ffffff"><strong>2nd</strong> · 34 pts · best 4 of 5 rounds</p>
+  </header>
+
+  <main class="bd">
+    <table class="tb" style="margin-top: 12px">
+      <thead><tr><th>Round</th><th style="width: 52px">Place</th><th>Pts</th></tr></thead>
+      <tbody>
+        <tr><td><span class="t1" style="display: block">R6 · Example July Cup</span><span class="t2">4 Jul</span></td><td class="num">2nd</td><td class="num">8</td></tr>
+        <tr><td><span class="t1" style="display: block">R5 · Example Midsummer Show</span><span class="t2">27 Jun · did not enter</span></td><td class="mut">—</td><td class="mut">—</td></tr>
+        <tr><td><span class="t1" style="display: block">R4 · Example June Open</span><span class="t2">21 Jun</span></td><td class="num">2nd</td><td class="num">8</td></tr>
+        <tr><td><span class="t1" style="display: block">R3 · Example May Cup</span><span class="t2">31 May · dropped</span></td><td class="num" style="color: #5a6878">4th</td><td class="mut"><s>5</s></td></tr>
+        <tr><td><span class="t1" style="display: block">R2 · Example Spring Qualifier</span><span class="t2">10 May</span></td><td class="num">2nd</td><td class="num">8</td></tr>
+        <tr><td><span class="t1" style="display: block">R1 · Example Club Day</span><span class="t2">26 Apr</span></td><td class="num">1st</td><td class="num">10</td></tr>
+      </tbody>
+    </table>
+    <ul class="list" style="margin-top: 12px">
+      <li><a class="row" href="#"><span class="grow t1">Previous seasons</span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+    </ul>
+    <p class="note">Public results only. No rider names.</p>
+  </main>
+</div></figure></div></section><section class="grp" id="g-organiser-tools"><h2>Organiser tools</h2><div class="strip"><figure id="b-readiness-phone"><figcaption>Readiness</figcaption><div class="ph">
+  <header class="hd">
+    <div class="hd-top">
+      <a class="ib" href="#" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <span class="ctx">Organiser · Sample Summer Games</span>
+      <button class="ib" aria-label="More: recheck, export checklist"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+    </div>
+    <h1 class="ttl">Readiness</h1>
+    <p style="margin: 4px 0 0 12px; font-size: 14px; color: #ffffff">Not ready to publish · checked 10:28</p>
+  </header>
+
+  <main class="bd">
+    <h2 class="sec">Blocking publish</h2>
+    <ul class="list">
+      <li><a class="row" href="#"><span class="grow"><span class="t1" style="display: block">Arena clashes</span><span class="t2">Rider or pony in two heats</span></span><span class="num" style="color: #a50d26">2</span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+    </ul>
+    <h2 class="sec">Before the day</h2>
+    <ul class="list">
+      <li><a class="row" href="#"><span class="grow"><span class="t1" style="display: block">Missing declarations</span><span class="t2">3 teams</span></span><span class="num">4</span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+      <li><a class="row" href="#"><span class="grow"><span class="t1" style="display: block">Incomplete teams</span><span class="t2">Below this event's minimum</span></span><span class="num">1</span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+      <li class="row"><span class="grow"><span class="t1" style="display: block">Unpaid entries</span><span class="t2 warn">Couldn't refresh · last known 09:50</span></span><span class="num">2</span><button class="btn bt">Retry</button></li>
+      <li><a class="row" href="#"><span class="grow"><span class="t1" style="display: block">Equipment</span><span class="t2">Lane markers, tablets, printer</span></span><span class="num">9<span class="mut" style="font-size: 14px">/12</span></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+    </ul>
+    <details style="margin-top: 12px">
+      <summary class="row list"><span class="grow t1">Done</span><span class="t2">3</span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <ul class="list" style="border-top: 0">
+        <li class="row" style="min-height: 44px"><span class="grow">Sections and formats</span></li>
+        <li class="row" style="min-height: 44px"><span class="grow">Draft draw · 4 sections</span></li>
+        <li class="row" style="min-height: 44px"><span class="grow">Rules document linked</span></li>
+      </ul>
+    </details>
+  </main>
+
+  <div class="foot"><a class="btn bp wide" href="#">Fix 2 clashes</a></div>
+</div></figure><figure id="b-draw-preview"><figcaption>Draw preview</figcaption><div class="ph">
+  <header class="hd">
+    <div class="hd-top">
+      <a class="ib" href="#" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <span class="ctx">Organiser · Draw preview</span>
+      <button class="ib" aria-label="Draw settings: lanes, rounds, seeding"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+    </div>
+    <h1 class="ttl">U14 Teams</h1>
+    <p style="margin: 4px 0 0 12px; font-size: 14px; color: #c9d6e6">8 teams · 4 lanes · 3 rounds · seeded by standings</p>
+  </header>
+
+  <main class="bd">
+    <div class="list" style="margin-top: 12px">
+      <div class="row"><span class="grow"><span class="t2" style="display: block">Seed</span><span class="num" style="font-size: 24px">90577</span></span><button class="btn bs">New seed</button></div>
+      <details open>
+        <summary class="row" style="border-bottom: 0"><span class="grow"><span class="t1" style="display: block">Fairness</span><span class="t2"><span class="warn" style="font-weight: 600">1 to check</span> · 2 passed</span></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></summary>
+        <div style="padding: 0 16px 10px; font-size: 14px; display: flex; flex-direction: column; gap: 6px">
+          <div><span class="warn" style="font-weight: 600">Repeat opponents.</span> Example Gold and Example Lime meet 3 times; your limit is 2.</div>
+          <div class="mut">Seed balance and lane spread pass.</div>
+        </div>
+      </details>
+    </div>
+
+    <nav class="seg" aria-label="Round" style="margin: 12px 16px 0"><button aria-pressed="true">Round 1</button><button aria-pressed="false">Round 2</button><button aria-pressed="false">Round 3</button></nav>
+
+    <h2 class="sec">Heat 1 <span>Arena 1 · 09:30</span></h2>
+    <ol class="list">
+      <li class="row" style="min-height: 44px"><span class="num" style="width: 22px; font-size: 16px">1</span><span class="grow">Example Blue</span></li>
+      <li class="row" style="min-height: 44px"><span class="num" style="width: 22px; font-size: 16px">2</span><span class="grow">Example Orange</span></li>
+      <li class="row" style="min-height: 44px"><span class="num" style="width: 22px; font-size: 16px">3</span><span class="grow">Example Teal</span></li>
+      <li class="row" style="min-height: 44px"><span class="num" style="width: 22px; font-size: 16px">4</span><span class="grow">Example Pink</span></li>
+    </ol>
+    <h2 class="sec">Heat 2 <span>Arena 1 · 09:45</span></h2>
+    <ol class="list">
+      <li class="row" style="min-height: 44px"><span class="num" style="width: 22px; font-size: 16px">1</span><span class="grow">Example Gold</span></li>
+      <li class="row" style="min-height: 44px"><span class="num" style="width: 22px; font-size: 16px">2</span><span class="grow">Example White</span></li>
+      <li class="row" style="min-height: 44px"><span class="num" style="width: 22px; font-size: 16px">3</span><span class="grow">Example Navy</span></li>
+      <li class="row" style="min-height: 44px"><span class="num" style="width: 22px; font-size: 16px">4</span><span class="grow">Example Lime</span></li>
+    </ol>
+    <details style="margin-top: 12px">
+      <summary class="row list"><span class="grow t1">Lane spread by team</span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+    </details>
+    <div style="height: 12px"></div>
+  </main>
+
+  <div class="foot" style="flex-direction: column; align-items: stretch; gap: 6px">
+    <span class="t2">Replaces the draft heats. Publishing is a separate step.</span>
+    <div style="display: flex; gap: 8px"><button class="btn bs">Discard</button><button class="btn bp grow">Apply draw</button></div>
+  </div>
+</div></figure></div></section><section class="grp" id="g-desk"><h2>Organiser desk (desktop)</h2><iframe title="Organiser readiness desk" srcdoc="&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;link rel=&quot;stylesheet&quot; href=&quot;https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;amp;family=Barlow+Condensed:wght@600;700&amp;amp;display=swap&quot;&gt;
+&lt;style&gt;
+body{margin:0;background:#f4f6f8}
+a{color:#17385f}a:hover{color:#0f2742}
+.h{font-family:&#x27;Barlow Condensed&#x27;,sans-serif;font-weight:700;color:#17385f;margin:0}
+.card{background:#fff;border:1px solid #dde3ea;border-radius:8px}
+.btn{min-height:44px;padding:0 16px;border-radius:6px;font:600 14px &#x27;Barlow&#x27;,sans-serif;cursor:pointer}
+.btn-p{background:#17385f;color:#fff;border:1px solid #17385f}
+.btn-s{background:#fff;color:#17385f;border:1px solid #9fb0c4}
+.btn-sm{min-height:36px;padding:0 10px;font-size:13px}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;border-radius:3px;padding:2px 6px;white-space:nowrap}
+.t-block{background:#fdecee;color:#a50d26}
+.t-warn{background:#fff4e0;color:#7a4a00}
+.t-ok{background:#e6f3ec;color:#1f6b43}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font-size:12px;font-weight:600;color:#5a6878;text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid #dde3ea;background:#f8fafb}
+td{padding:8px 10px;border-bottom:1px solid #edf0f4;vertical-align:middle}
+.mut{color:#5a6878}
+.chk{display:flex;align-items:center;gap:10px;min-height:40px;font-size:14px;border-bottom:1px solid #edf0f4;padding:0 12px}
+.chk input{width:20px;height:20px;accent-color:#17385f;margin:0}
+&lt;/style&gt;
+&lt;/head&gt;&lt;body&gt;
+&lt;div style=&quot;font-family: &#x27;Barlow&#x27;, system-ui, sans-serif; color: #1b2733; font-size: 15px; background: #f4f6f8; min-height: 1000px&quot;&gt;
+
+  &lt;header style=&quot;background: #17385f; color: #ffffff&quot;&gt;
+    &lt;div style=&quot;max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; min-height: 56px&quot;&gt;
+      &lt;span style=&quot;font-family: &#x27;Barlow Condensed&#x27;, sans-serif; font-weight: 700; font-size: 20px&quot;&gt;MG App · Organiser&lt;/span&gt;
+      &lt;nav aria-label=&quot;Organiser&quot; style=&quot;display: flex; flex-wrap: wrap; gap: 2px; flex: 1&quot;&gt;
+        &lt;a href=&quot;#&quot; aria-current=&quot;page&quot; style=&quot;color: #ffffff; text-decoration: none; font-weight: 700; padding: 0 12px; min-height: 44px; display: flex; align-items: center; border-bottom: 3px solid #ffffff; box-sizing: border-box&quot;&gt;Readiness&lt;/a&gt;
+        &lt;a href=&quot;#&quot; style=&quot;color: #c9d6e6; text-decoration: none; font-weight: 600; padding: 0 12px; min-height: 44px; display: flex; align-items: center&quot;&gt;Entries&lt;/a&gt;
+        &lt;a href=&quot;#&quot; style=&quot;color: #c9d6e6; text-decoration: none; font-weight: 600; padding: 0 12px; min-height: 44px; display: flex; align-items: center&quot;&gt;Draw&lt;/a&gt;
+        &lt;a href=&quot;#&quot; style=&quot;color: #c9d6e6; text-decoration: none; font-weight: 600; padding: 0 12px; min-height: 44px; display: flex; align-items: center&quot;&gt;Timetable&lt;/a&gt;
+        &lt;a href=&quot;#&quot; style=&quot;color: #c9d6e6; text-decoration: none; font-weight: 600; padding: 0 12px; min-height: 44px; display: flex; align-items: center&quot;&gt;Shop&lt;/a&gt;
+        &lt;a href=&quot;#&quot; style=&quot;color: #c9d6e6; text-decoration: none; font-weight: 600; padding: 0 12px; min-height: 44px; display: flex; align-items: center&quot;&gt;Results&lt;/a&gt;
+        &lt;a href=&quot;#&quot; style=&quot;color: #c9d6e6; text-decoration: none; font-weight: 600; padding: 0 12px; min-height: 44px; display: flex; align-items: center&quot;&gt;Documents&lt;/a&gt;
+      &lt;/nav&gt;
+      &lt;button style=&quot;min-height: 40px; padding: 0 12px; border: 1px solid #4b6a90; background: #0f2742; color: #ffffff; border-radius: 6px; font: 600 14px &#x27;Barlow&#x27;, sans-serif&quot;&gt;Sample Summer Games · Sat 18 Jul ▾&lt;/button&gt;
+    &lt;/div&gt;
+  &lt;/header&gt;
+
+  &lt;main style=&quot;max-width: 1280px; margin: 0 auto; padding: 20px 24px 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px&quot;&gt;
+
+    &lt;div style=&quot;display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px&quot;&gt;
+      &lt;div&gt;
+        &lt;h1 class=&quot;h&quot; style=&quot;font-size: 34px&quot;&gt;Readiness&lt;/h1&gt;
+        &lt;p class=&quot;mut&quot; style=&quot;margin: 2px 0 0; font-size: 14px&quot;&gt;Event in 2 days · 26 teams entered across 4 sections · last checked 10:28 · &lt;a href=&quot;#&quot;&gt;Recheck now&lt;/a&gt;&lt;/p&gt;
+      &lt;/div&gt;
+      &lt;div style=&quot;display: flex; gap: 8px; align-items: center; flex-wrap: wrap&quot;&gt;
+        &lt;span class=&quot;mut&quot; style=&quot;font-size: 13px&quot;&gt;Publishing blocked by 2 arena clashes&lt;/span&gt;
+        &lt;button class=&quot;btn btn-s&quot;&gt;Export checklist&lt;/button&gt;
+        &lt;button class=&quot;btn btn-p&quot; disabled style=&quot;opacity: 0.55; cursor: not-allowed&quot;&gt;Publish timetable&lt;/button&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+
+    &lt;div style=&quot;display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px&quot;&gt;
+      &lt;a href=&quot;#declarations&quot; class=&quot;card&quot; style=&quot;text-decoration: none; color: inherit; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px&quot;&gt;
+        &lt;span style=&quot;display: flex; justify-content: space-between; align-items: center&quot;&gt;&lt;span class=&quot;h&quot; style=&quot;font-size: 34px; line-height: 1&quot;&gt;3&lt;/span&gt;&lt;/span&gt;
+        &lt;span style=&quot;font-weight: 600&quot;&gt;Missing declarations&lt;/span&gt;&lt;span class=&quot;mut&quot; style=&quot;font-size: 13px&quot;&gt;3 teams · 4 forms&lt;/span&gt;
+      &lt;/a&gt;
+      &lt;a href=&quot;#payments&quot; class=&quot;card&quot; style=&quot;text-decoration: none; color: inherit; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px&quot;&gt;
+        &lt;span style=&quot;display: flex; justify-content: space-between; align-items: center&quot;&gt;&lt;span class=&quot;h&quot; style=&quot;font-size: 34px; line-height: 1&quot;&gt;2&lt;/span&gt;&lt;/span&gt;
+        &lt;span style=&quot;font-weight: 600&quot;&gt;Unpaid entries&lt;/span&gt;&lt;span class=&quot;mut&quot; style=&quot;font-size: 13px&quot;&gt;Reminders sent Mon&lt;/span&gt;
+      &lt;/a&gt;
+      &lt;a href=&quot;#teams&quot; class=&quot;card&quot; style=&quot;text-decoration: none; color: inherit; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px&quot;&gt;
+        &lt;span style=&quot;display: flex; justify-content: space-between; align-items: center&quot;&gt;&lt;span class=&quot;h&quot; style=&quot;font-size: 34px; line-height: 1&quot;&gt;1&lt;/span&gt;&lt;/span&gt;
+        &lt;span style=&quot;font-weight: 600&quot;&gt;Incomplete teams&lt;/span&gt;&lt;span class=&quot;mut&quot; style=&quot;font-size: 13px&quot;&gt;Below event minimum&lt;/span&gt;
+      &lt;/a&gt;
+      &lt;a href=&quot;#clashes&quot; class=&quot;card&quot; style=&quot;text-decoration: none; color: inherit; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; border-color: #e6a3ad&quot;&gt;
+        &lt;span style=&quot;display: flex; justify-content: space-between; align-items: center&quot;&gt;&lt;span class=&quot;h&quot; style=&quot;font-size: 34px; line-height: 1; color: #a50d26&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;tag t-block&quot;&gt;Blocks publish&lt;/span&gt;&lt;/span&gt;
+        &lt;span style=&quot;font-weight: 600&quot;&gt;Arena clashes&lt;/span&gt;&lt;span class=&quot;mut&quot; style=&quot;font-size: 13px&quot;&gt;Rider / pony double-booked&lt;/span&gt;
+      &lt;/a&gt;
+      &lt;a href=&quot;#equipment&quot; class=&quot;card&quot; style=&quot;text-decoration: none; color: inherit; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px&quot;&gt;
+        &lt;span style=&quot;display: flex; justify-content: space-between; align-items: center&quot;&gt;&lt;span class=&quot;h&quot; style=&quot;font-size: 34px; line-height: 1&quot;&gt;9&lt;span style=&quot;font-size: 20px; color: #5a6878&quot;&gt;/12&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;
+        &lt;span style=&quot;font-weight: 600&quot;&gt;Equipment checklist&lt;/span&gt;
+        &lt;span style=&quot;height: 6px; background: #e3e8ee; border-radius: 3px; overflow: hidden; display: block&quot;&gt;&lt;span style=&quot;display: block; height: 6px; width: 75%; background: #17385f&quot;&gt;&lt;/span&gt;&lt;/span&gt;
+      &lt;/a&gt;
+    &lt;/div&gt;
+
+    &lt;div style=&quot;display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start&quot;&gt;
+
+      &lt;section class=&quot;card&quot; aria-label=&quot;Issues to resolve&quot; style=&quot;flex: 999 1 560px; min-width: 0&quot;&gt;
+        &lt;div style=&quot;display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 8px&quot;&gt;
+          &lt;h2 class=&quot;h&quot; style=&quot;font-size: 22px&quot;&gt;To resolve&lt;/h2&gt;
+          &lt;div role=&quot;tablist&quot; aria-label=&quot;Filter issues&quot; style=&quot;display: flex; flex-wrap: wrap; gap: 4px&quot;&gt;
+            &lt;button role=&quot;tab&quot; aria-selected=&quot;true&quot; class=&quot;btn btn-sm&quot; style=&quot;background: #17385f; color: #ffffff; border: 1px solid #17385f&quot;&gt;All 8&lt;/button&gt;
+            &lt;button role=&quot;tab&quot; aria-selected=&quot;false&quot; class=&quot;btn btn-sm btn-s&quot;&gt;Declarations 3&lt;/button&gt;
+            &lt;button role=&quot;tab&quot; aria-selected=&quot;false&quot; class=&quot;btn btn-sm btn-s&quot;&gt;Payments 2&lt;/button&gt;
+            &lt;button role=&quot;tab&quot; aria-selected=&quot;false&quot; class=&quot;btn btn-sm btn-s&quot;&gt;Teams 1&lt;/button&gt;
+            &lt;button role=&quot;tab&quot; aria-selected=&quot;false&quot; class=&quot;btn btn-sm btn-s&quot;&gt;Clashes 2&lt;/button&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div style=&quot;overflow-x: auto&quot;&gt;
+          &lt;table&gt;
+            &lt;thead&gt;&lt;tr&gt;&lt;th&gt;Team&lt;/th&gt;&lt;th&gt;Section&lt;/th&gt;&lt;th&gt;Detail&lt;/th&gt;&lt;th&gt;Needed by&lt;/th&gt;&lt;th style=&quot;text-align: right&quot;&gt;Action&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;
+            &lt;tbody&gt;
+              &lt;tr id=&quot;clashes&quot;&gt;&lt;td colspan=&quot;5&quot; style=&quot;background: #fdf3f4; color: #a50d26; font-weight: 700; font-size: 13px&quot;&gt;Arena clashes · 2 · block publishing&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr&gt;&lt;td style=&quot;font-weight: 600&quot;&gt;Example Blue&lt;/td&gt;&lt;td&gt;U14 · Pairs&lt;/td&gt;&lt;td&gt;Rider 3 in U14 Heat 3 (Arena 1, 10:52) and Pairs Heat 2 (Arena 2, 10:55)&lt;/td&gt;&lt;td&gt;Publish&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;&lt;button class=&quot;btn btn-sm btn-p&quot;&gt;Move heat&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr&gt;&lt;td style=&quot;font-weight: 600&quot;&gt;Example Gold&lt;/td&gt;&lt;td&gt;U14 · U17&lt;/td&gt;&lt;td&gt;Shared pony 2 in U14 Heat 5 (12:10) and U17 Heat 4 (12:15) · event gap setting 20 min&lt;/td&gt;&lt;td&gt;Publish&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;&lt;button class=&quot;btn btn-sm btn-p&quot;&gt;Move heat&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr id=&quot;declarations&quot;&gt;&lt;td colspan=&quot;5&quot; style=&quot;background: #f8fafb; color: #3d4b5c; font-weight: 700; font-size: 13px&quot;&gt;Missing declarations · 3&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr&gt;&lt;td style=&quot;font-weight: 600&quot;&gt;Example White&lt;/td&gt;&lt;td&gt;U14&lt;/td&gt;&lt;td&gt;1 of 5 rider declarations not returned&lt;/td&gt;&lt;td&gt;Sat 09:30&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;&lt;button class=&quot;btn btn-sm btn-s&quot;&gt;Send reminder&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr&gt;&lt;td style=&quot;font-weight: 600&quot;&gt;Example Orange&lt;/td&gt;&lt;td&gt;Open&lt;/td&gt;&lt;td&gt;2 of 5 rider declarations not returned&lt;/td&gt;&lt;td&gt;Sat 09:30&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;&lt;button class=&quot;btn btn-sm btn-s&quot;&gt;Send reminder&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr&gt;&lt;td style=&quot;font-weight: 600&quot;&gt;Example Purple&lt;/td&gt;&lt;td&gt;U17&lt;/td&gt;&lt;td&gt;Parent/guardian confirmation missing on 1 form&lt;/td&gt;&lt;td&gt;Sat 09:30&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;&lt;button class=&quot;btn btn-sm btn-s&quot;&gt;Send reminder&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr id=&quot;payments&quot;&gt;&lt;td colspan=&quot;5&quot; style=&quot;background: #f8fafb; color: #3d4b5c; font-weight: 700; font-size: 13px&quot;&gt;Unpaid entries · 2&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr&gt;&lt;td style=&quot;font-weight: 600&quot;&gt;Example Silver&lt;/td&gt;&lt;td&gt;Open&lt;/td&gt;&lt;td&gt;Entry fee not received · ref SSG-014&lt;/td&gt;&lt;td&gt;Thu 18:00&lt;/td&gt;&lt;td style=&quot;text-align: right; white-space: nowrap&quot;&gt;&lt;button class=&quot;btn btn-sm btn-s&quot;&gt;Remind&lt;/button&gt; &lt;button class=&quot;btn btn-sm btn-s&quot;&gt;Mark paid&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr&gt;&lt;td style=&quot;font-weight: 600&quot;&gt;Example Grey&lt;/td&gt;&lt;td&gt;U17&lt;/td&gt;&lt;td&gt;Balance outstanding · ref SSG-021&lt;/td&gt;&lt;td&gt;Thu 18:00&lt;/td&gt;&lt;td style=&quot;text-align: right; white-space: nowrap&quot;&gt;&lt;button class=&quot;btn btn-sm btn-s&quot;&gt;Remind&lt;/button&gt; &lt;button class=&quot;btn btn-sm btn-s&quot;&gt;Mark paid&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr id=&quot;teams&quot;&gt;&lt;td colspan=&quot;5&quot; style=&quot;background: #f8fafb; color: #3d4b5c; font-weight: 700; font-size: 13px&quot;&gt;Incomplete teams · 1&lt;/td&gt;&lt;/tr&gt;
+              &lt;tr&gt;&lt;td style=&quot;font-weight: 600&quot;&gt;Example Black&lt;/td&gt;&lt;td&gt;Open&lt;/td&gt;&lt;td&gt;3 riders entered · this event&#x27;s minimum is 4 (event setting)&lt;/td&gt;&lt;td&gt;Draw&lt;/td&gt;&lt;td style=&quot;text-align: right&quot;&gt;&lt;button class=&quot;btn btn-sm btn-s&quot;&gt;Edit team&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+            &lt;/tbody&gt;
+          &lt;/table&gt;
+        &lt;/div&gt;
+      &lt;/section&gt;
+
+      &lt;div style=&quot;flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px&quot;&gt;
+        &lt;section class=&quot;card&quot; aria-label=&quot;Arena clash timeline&quot; style=&quot;padding: 12px 14px&quot;&gt;
+          &lt;h2 class=&quot;h&quot; style=&quot;font-size: 20px&quot;&gt;Clash view · 10:30–11:15&lt;/h2&gt;
+          &lt;div style=&quot;margin-top: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px&quot;&gt;
+            &lt;div style=&quot;display: flex; align-items: center; gap: 8px&quot;&gt;
+              &lt;span style=&quot;width: 54px; font-weight: 600&quot;&gt;Arena 1&lt;/span&gt;
+              &lt;div style=&quot;flex: 1; height: 28px; position: relative; background: #f4f6f8; border-radius: 4px&quot;&gt;
+                &lt;span style=&quot;position: absolute; left: 0; width: 38%; top: 3px; bottom: 3px; background: #dbe4ef; border-radius: 3px; padding: 4px 6px; box-sizing: border-box&quot;&gt;U14 H2&lt;/span&gt;
+                &lt;span style=&quot;position: absolute; left: 49%; width: 38%; top: 3px; bottom: 3px; background: #17385f; color: #ffffff; border-radius: 3px; padding: 4px 6px; box-sizing: border-box&quot;&gt;U14 H3 · 10:52&lt;/span&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+            &lt;div style=&quot;display: flex; align-items: center; gap: 8px&quot;&gt;
+              &lt;span style=&quot;width: 54px; font-weight: 600&quot;&gt;Arena 2&lt;/span&gt;
+              &lt;div style=&quot;flex: 1; height: 28px; position: relative; background: #f4f6f8; border-radius: 4px&quot;&gt;
+                &lt;span style=&quot;position: absolute; left: 4%; width: 36%; top: 3px; bottom: 3px; background: #dbe4ef; border-radius: 3px; padding: 4px 6px; box-sizing: border-box&quot;&gt;Open H2&lt;/span&gt;
+                &lt;span style=&quot;position: absolute; left: 55%; width: 40%; top: 3px; bottom: 3px; background: #ffffff; border: 2px solid #c8102e; color: #a50d26; font-weight: 700; border-radius: 3px; padding: 3px 6px; box-sizing: border-box&quot;&gt;Pairs H2 · 10:55&lt;/span&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+            &lt;p class=&quot;mut&quot; style=&quot;margin: 4px 0 0; font-size: 13px&quot;&gt;Example Blue · Rider 3 is in both. Move Pairs Heat 2 to 11:15 or swap with Heat 3.&lt;/p&gt;
+          &lt;/div&gt;
+        &lt;/section&gt;
+
+        &lt;section id=&quot;equipment&quot; class=&quot;card&quot; aria-label=&quot;Equipment checklist&quot;&gt;
+          &lt;div style=&quot;display: flex; justify-content: space-between; align-items: baseline; padding: 12px 14px 6px&quot;&gt;
+            &lt;h2 class=&quot;h&quot; style=&quot;font-size: 20px&quot;&gt;Equipment&lt;/h2&gt;&lt;span class=&quot;mut&quot; style=&quot;font-size: 13px&quot;&gt;9 of 12 ready&lt;/span&gt;
+          &lt;/div&gt;
+          &lt;div style=&quot;font-size: 12px; font-weight: 700; color: #5a6878; text-transform: uppercase; letter-spacing: .5px; padding: 6px 12px; background: #f8fafb; border-top: 1px solid #edf0f4; border-bottom: 1px solid #edf0f4&quot;&gt;Arena 1&lt;/div&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt;Bending poles and bases&lt;/label&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt;Flags and flag cones&lt;/label&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt;Mugs and posts&lt;/label&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot;&gt;&lt;span style=&quot;flex: 1&quot;&gt;Lane markers&lt;/span&gt;&lt;span class=&quot;tag t-warn&quot;&gt;2 short&lt;/span&gt;&lt;/label&gt;
+          &lt;div style=&quot;font-size: 12px; font-weight: 700; color: #5a6878; text-transform: uppercase; letter-spacing: .5px; padding: 6px 12px; background: #f8fafb; border-bottom: 1px solid #edf0f4&quot;&gt;Arena 2&lt;/div&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt;Bending poles and bases&lt;/label&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt;Flags and flag cones&lt;/label&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt;Start and finish lines&lt;/label&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt;PA speaker&lt;/label&gt;
+          &lt;div style=&quot;font-size: 12px; font-weight: 700; color: #5a6878; text-transform: uppercase; letter-spacing: .5px; padding: 6px 12px; background: #f8fafb; border-bottom: 1px solid #edf0f4&quot;&gt;Shared&lt;/div&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt;First aid point confirmed&lt;/label&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt;Collecting ring board&lt;/label&gt;
+          &lt;label class=&quot;chk&quot;&gt;&lt;input type=&quot;checkbox&quot;&gt;Scorer tablets charged&lt;/label&gt;
+          &lt;label class=&quot;chk&quot; style=&quot;border-bottom: 0&quot;&gt;&lt;input type=&quot;checkbox&quot;&gt;Printer and paper for results&lt;/label&gt;
+          &lt;div style=&quot;padding: 8px 12px 12px&quot;&gt;&lt;button class=&quot;btn btn-s&quot; style=&quot;width: 100%&quot;&gt;+ Add checklist item&lt;/button&gt;&lt;/div&gt;
+        &lt;/section&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/main&gt;
+&lt;/div&gt;
+&lt;/body&gt;&lt;/html&gt;" style="width:1280px;max-width:100%;height:1000px;border:1px solid #dde3ea;border-radius:8px;background:#f4f6f8"></iframe></section>
+</div></body></html>

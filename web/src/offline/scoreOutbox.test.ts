@@ -77,9 +77,22 @@ describe('settle', () => {
   it('leaves a newer save for the same race, queued while this one was in flight, alone', () => {
     const newer = queued(1, { queuedAt: '2026-06-01T11:00:00Z', label: 'newer' });
     const list = [newer];
-    for (const outcome of [{ kind: 'saved', sessionId: 1, heat: outcomeHeat }, { kind: 'failed', message: 'x' }, { kind: 'conflict', sessionId: 1, heat: outcomeHeat }] as const) {
+    for (const outcome of [{ kind: 'failed', message: 'x' }, { kind: 'conflict', sessionId: 1, heat: outcomeHeat }] as const) {
       expect(settle(list, sent, outcome)).toBe(list);
     }
+  });
+
+  it('rebases an edit made while its earlier save was in flight', () => {
+    const newer = queued(1, { saveId: 'new', queuedAt: sent.queuedAt, places: theirs });
+    const old = { ...sent, saveId: 'old' };
+    const accepted = heat(5, { races: [race(1, { results: [result(1, 1), result(2, 2)] })] });
+    expect(settle([newer], old, { kind: 'saved', sessionId: 1, heat: accepted }))
+      .toEqual([{ ...newer, expected: mine }]);
+    expect(settle([newer], old, { kind: 'saved', sessionId: 1, heat: heat(5) })).toEqual([newer]);
+    const refreshed = { ...newer, expected: theirs };
+    expect(settle([refreshed], old, { kind: 'saved', sessionId: 1, heat: accepted })).toEqual([refreshed]);
+    const conflicted = { ...newer, state: 'conflict' as const };
+    expect(settle([conflicted, queued(2)], old, { kind: 'saved', sessionId: 1, heat: accepted })).toEqual([conflicted, queued(2)]);
   });
 
   it('only changes the save that was sent', () => {

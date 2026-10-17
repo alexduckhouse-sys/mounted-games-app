@@ -39,7 +39,7 @@ public static class TestClients
     public static async Task<HttpClient> TrainerAsync(this ApiFactory f)
         => f.WithToken((await f.LoginAsync(TrainerEmail, TrainerPassword)).Token);
 
-    /// <summary>Registers a fresh self-service user (Trainer/Manager/Member) and returns a client signed in as them.</summary>
+    /// <summary>Registers a fresh self-service user (pending Trainer/Manager/Member) and signs in as them.</summary>
     public static async Task<(HttpClient Client, AuthResponse Auth)> SignupAsync(
         this ApiFactory f, string? role = null, string? clubName = null)
     {
@@ -56,6 +56,17 @@ public static class TestClients
         var c = f.CreateClient();
         c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return c;
+    }
+
+    /// <summary>Creates and approves a fresh trainer, then signs in with the new role.</summary>
+    public static async Task<(HttpClient Client, AuthResponse Auth)> ApprovedTrainerAsync(this ApiFactory f)
+    {
+        var (_, pending) = await f.SignupAsync();
+        var admin = await f.AdminAsync();
+        var response = await admin.PostAsync($"/api/admin/trainer-requests/{pending.User.Id}/approve", null);
+        response.EnsureSuccessStatusCode();
+        var auth = await f.LoginAsync(pending.User.Email, "Passw0rd!x");
+        return (f.WithToken(auth.Token), auth);
     }
 
     public static async Task<T> ReadAsync<T>(this HttpResponseMessage r)

@@ -31,7 +31,7 @@ test('a saved result leaves the outbox; no signal keeps it waiting', () => {
 test('a save re-scored while in flight is not removed when the old one lands', () => {
   const sent = item(1);
   const list = enqueue([sent], item(1, { queuedAt: 'newer' }));
-  assert.equal(settle(list, sent, { kind: 'saved', sessionId: 2, heat: heatWith(1, []) }), list);
+  assert.deepEqual(settle(list, sent, { kind: 'saved', sessionId: 2, heat: heatWith(1, []) }), list);
 });
 
 test('a conflict keeps both sets of results; "use mine" resends against theirs', () => {

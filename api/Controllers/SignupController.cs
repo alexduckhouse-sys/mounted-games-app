@@ -5,6 +5,7 @@ using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Services;
 
 namespace MountedGames.Api.Controllers;
@@ -70,8 +71,10 @@ public class SignupController : ControllerBase
             if (team is not null) teamId = team.Id;
         }
 
-        // Skeleton payment flow: everything is free until Stripe lands. Status
-        // goes straight to Paid so organisers don't have to tick anything.
+        // Free entries are complete immediately. Paid entries stay Pending until
+        // the organiser confirms an external payment, or the owner uses the
+        // explicitly test-only checkout on a demo competition.
+        var isFree = section.PriceMinor == 0;
         var signup = new SectionSignup
         {
             CompetitionSectionId = sectionId,
@@ -81,8 +84,8 @@ public class SignupController : ControllerBase
             ContactInfo = req.ContactInfo?.Trim(),
             AmountMinor = section.PriceMinor,
             TeamId = teamId,
-            Status = SignupPaymentStatus.Paid,
-            PaidAt = DateTime.UtcNow,
+            Status = isFree ? SignupPaymentStatus.Paid : SignupPaymentStatus.Pending,
+            PaidAt = isFree ? DateTime.UtcNow : null,
         };
         _db.SectionSignups.Add(signup);
         await _db.SaveChangesAsync();
@@ -116,6 +119,12 @@ public class SignupController : ControllerBase
             .Include(s => s.Section)
             .FirstOrDefaultAsync(s => s.Id == id);
         if (signup is null) return NotFound();
+        var isDemo = await _db.Set<EventCommerceSettings>()
+            .AnyAsync(x => x.CompetitionId == signup.Section!.CompetitionId && x.IsDemo);
+        var hasTestPayment = await _db.Set<TestPaymentRecord>()
+            .AnyAsync(x => x.Target == TestPaymentTarget.SectionSignup && x.TargetId == id);
+        if (isDemo || hasTestPayment)
+            return Conflict(new { message = "Demo entry payments can only be changed through the labelled test checkout." });
         signup.Status = req.Status;
         signup.PaidAt = req.Status == SignupPaymentStatus.Paid ? DateTime.UtcNow : null;
         await _db.SaveChangesAsync();
@@ -129,6 +138,18 @@ public class SignupController : ControllerBase
     {
         var signup = await _db.SectionSignups.FindAsync(id);
         if (signup is null) return NotFound();
+        var hasTestPayment = await _db.Set<TestPaymentRecord>()
+            .AnyAsync(x => x.Target == TestPaymentTarget.SectionSignup && x.TargetId == id);
+        if (hasTestPayment || (signup.AmountMinor > 0 &&
+                signup.Status is SignupPaymentStatus.Paid or SignupPaymentStatus.Refunded))
+            return Conflict(new { message = "This signup has payment history and must be kept for the audit record." });
+        if (signup.AmountMinor > 0)
+        {
+            signup.Status = SignupPaymentStatus.Cancelled;
+            signup.PaidAt = null;
+            await _db.SaveChangesAsync();
+            return NoContent();
+        }
         _db.SectionSignups.Remove(signup);
         await _db.SaveChangesAsync();
         return NoContent();

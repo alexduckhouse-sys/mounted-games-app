@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Clock, Trophy, LogOut, MessageSquare, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin } from 'lucide-react';
+import { Clock, Trophy, LogOut, MessageSquare, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, Package } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES, useTheme } from '../theme/ThemeContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
@@ -44,9 +44,12 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
   const shown = meta && current && meta.id === current.id ? meta : null;
   const subtitle = shown ? [competitionDateText(shown.startDate, shown.endDate), shown.location?.trim()].filter(Boolean).join(' · ') : '';
   const links = [
+    { to: current ? `${base}/following` : '/following', label: 'Following', icon: Star, end: true, badge: false },
     { to: base, label: 'Timetable', icon: Clock, end: true, badge: false },
     { to: current ? `${base}/toplists` : '/competitions', label: 'Toplists', icon: Trophy, end: true, badge: false },
     { to: current ? `${base}/chat` : '/chat', label: 'Live feed & stream', icon: MessageSquare, end: true, badge: !!shown?.live },
+    { to: current ? `${base}/shop` : '/competitions', label: 'Event shop', icon: ShoppingBag, end: true, badge: false },
+    { to: current ? `${base}/rulebooks` : '/competitions', label: 'Rulebooks', icon: BookOpen, end: true, badge: false },
     { to: current ? `${base}/details` : '/competitions', label: 'Details & entries', icon: Info, end: true, badge: false },
   ];
   const accountLinks = [
@@ -54,6 +57,8 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
     { to: '/teams', label: 'My teams', icon: Users, show: hasRole('Trainer') && !hasRole('Admin') },
     { to: '/declarations', label: 'Dec forms', icon: ClipboardList, show: hasRole('Trainer') || hasRole('Admin') },
     { to: '/me/signups', label: 'My signups', icon: CreditCard, show: !!user && !hasRole('Admin') },
+    { to: '/me/catalogue', label: 'My items for sale', icon: Package, show: !!user },
+    { to: '/me/orders', label: 'Orders & sales', icon: ShoppingBag, show: !!user },
     { to: '/admin', label: 'Admin', icon: Settings, show: hasRole('Admin') },
   ].filter((item) => item.show);
   const selectedSection = location.pathname === `${base}/scoring` ? new URLSearchParams(location.search).get('section') : null;
@@ -101,6 +106,8 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
 
           <div className="flex flex-col">
             <button onClick={onChangeCompetition} className={itemClass(false)}><ArrowLeftRight className={iconClass(false)} />Change competition</button>
+            <NavLink to="/seasons" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>
+            <NavLink to="/team-profiles" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Users className={iconClass(isActive)} />Team history</>}</NavLink>
             <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
             {user && <NavLink to="/teams" onClick={onClose} className={`${itemClass(false)} justify-between`}><span className="flex items-center gap-3"><Bell className={iconClass(false)} />Notifications</span><span className="text-sm text-[rgb(var(--mg-muted))]">In My teams</span></NavLink>}
             <button onClick={() => setSettingsOpen((v) => !v)} className={itemClass(settingsOpen)} aria-expanded={settingsOpen}><SlidersHorizontal className={iconClass(settingsOpen)} />Settings</button>

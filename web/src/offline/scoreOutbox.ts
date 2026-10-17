@@ -12,6 +12,8 @@ export interface Placing {
 }
 
 export interface QueuedScore {
+  /** Unique per save, including two edits made within the same millisecond. */
+  saveId?: string;
   raceId: number;
   competitionId: number;
   sessionId: number;
@@ -21,6 +23,7 @@ export interface QueuedScore {
   expected: Placing[];
   teamNames: Record<number, string>;
   queuedAt: string;
+  reason?: string;
   state: 'waiting' | 'conflict' | 'failed';
   /** What the server holds, when it refused the save as a conflict. */
   theirs?: Placing[];
@@ -48,8 +51,17 @@ export function nextToSend(list: QueuedScore[]): QueuedScore | undefined {
 
 /** Record what happened to `sent`. A save re-queued while it was in flight is left alone. */
 export function settle(list: QueuedScore[], sent: QueuedScore, outcome: SendOutcome): QueuedScore[] {
-  const same = (q: QueuedScore) => q.raceId === sent.raceId && q.queuedAt === sent.queuedAt;
-  if (!list.some(same)) return list;
+  const same = (q: QueuedScore) => q.raceId === sent.raceId &&
+    (sent.saveId ? q.saveId === sent.saveId : q.queuedAt === sent.queuedAt);
+  if (!list.some(same)) {
+    // A scorer corrected their own queued save while it was being sent. Once
+    // that save lands, the correction must compare against it, not its old base.
+    if (outcome.kind !== 'saved') return list;
+    const accepted = outcome.heat.races.find((r) => r.id === sent.raceId);
+    if (!accepted) return list;
+    return list.map((q) => q.raceId === sent.raceId && q.state === 'waiting' && samePlacings(q.expected, sent.expected)
+      ? { ...q, expected: placingsOf(accepted.results) } : q);
+  }
   switch (outcome.kind) {
     case 'saved':
       return list.filter((q) => !same(q));
@@ -64,15 +76,20 @@ export function settle(list: QueuedScore[], sent: QueuedScore, outcome: SendOutc
   }
 }
 
+function samePlacings(a: Placing[], b: Placing[]): boolean {
+  const key = (places: Placing[]) => places.map((p) => `${p.teamId}:${p.eliminated ? 'E' : p.place}`).sort().join(',');
+  return key(a) === key(b);
+}
+
 /** Send mine anyway: it now replaces the results the other device saved. */
-export function overrule(list: QueuedScore[], raceId: number): QueuedScore[] {
+export function overrule(list: QueuedScore[], raceId: number, reason?: string): QueuedScore[] {
   return list.map((q) => q.raceId === raceId && q.state === 'conflict'
-    ? { ...q, state: 'waiting', expected: q.theirs ?? [], theirs: undefined }
+    ? { ...q, state: 'waiting', expected: q.theirs ?? [], theirs: undefined, ...(reason === undefined ? {} : { reason }) }
     : q);
 }
 
-export function retry(list: QueuedScore[], raceId: number): QueuedScore[] {
-  return list.map((q) => q.raceId === raceId && q.state === 'failed' ? { ...q, state: 'waiting', error: undefined } : q);
+export function retry(list: QueuedScore[], raceId: number, reason?: string): QueuedScore[] {
+  return list.map((q) => q.raceId === raceId && q.state === 'failed' ? { ...q, state: 'waiting', error: undefined, ...(reason === undefined ? {} : { reason }) } : q);
 }
 
 export function discard(list: QueuedScore[], raceId: number): QueuedScore[] {

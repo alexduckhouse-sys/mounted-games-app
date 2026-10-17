@@ -96,11 +96,14 @@ describe('CompetitionPicker: the list', () => {
     expect(await loaded('Sat 7 Nov')).toBeInTheDocument();
   });
 
-  it('tags country competitions and uses a placeholder date when the start is unreadable', async () => {
+  it('shows the flag for country competitions, nothing for the default icon, and uses a placeholder date when the start is unreadable', async () => {
     reply(page([festival, { ...autumn, startDate: 'whenever' }]));
     renderPicker();
     await loaded('Weekend Fest');
-    expect(screen.getByText('IE')).toHaveAttribute('title', 'Ireland');
+    const flag = screen.getByRole('img', { name: 'Ireland' });
+    expect(flag).toHaveAttribute('title', 'Ireland');
+    expect(flag.querySelector('img')).toHaveAttribute('src', '/flags/ie.png');
+    expect(screen.queryByRole('img', { name: 'Chequered flag' })).not.toBeInTheDocument();
     expect(screen.getByText('–')).toBeInTheDocument();
   });
 

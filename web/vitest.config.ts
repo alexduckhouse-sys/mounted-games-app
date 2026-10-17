@@ -10,6 +10,9 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Some UI tests take 6-8 s when the machine is busy (e.g. a dotnet test alongside); the 5 s
+    // default turned that into false failures.
+    testTimeout: 15_000,
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['src/test/setup.ts'],
     restoreMocks: true,
