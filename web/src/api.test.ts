@@ -1,5 +1,5 @@
 import type { AxiosAdapter, InternalAxiosRequestConfig } from 'axios';
-import { AxiosError } from 'axios';
+import { AxiosError, AxiosHeaders } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, readStoredAuth, readToken, writeStoredAuth, type StoredAuth } from './api';
 
@@ -103,6 +103,18 @@ describe('api client', () => {
     reply = async (config) => { throw new AxiosError('Network Error', 'ERR_NETWORK', config); };
     await expect(api.get('/x')).rejects.toMatchObject({ code: 'ERR_NETWORK' });
     expect(readStoredAuth()).not.toBeNull();
+  });
+
+  it.each(['text/html', 'text/html; charset=utf-8', 'TEXT/HTML'])('rejects an HTML page (%s) as a missing route', async (type) => {
+    api.defaults.adapter = async (config) => ({ data: '<!doctype html><html></html>', status: 200, statusText: 'OK', headers: { 'content-type': type }, config });
+    await expect(api.get('/admin/trainer-requests')).rejects.toMatchObject({ code: 'ERR_BAD_RESPONSE', response: { status: 404 } });
+  });
+
+  it('keeps JSON responses, and works with AxiosHeaders', async () => {
+    api.defaults.adapter = async (config) => ({ data: [1], status: 200, statusText: 'OK', headers: new AxiosHeaders({ 'Content-Type': 'application/json' }), config });
+    expect((await api.get('/x')).data).toEqual([1]);
+    api.defaults.adapter = async (config) => ({ data: 'x', status: 200, statusText: 'OK', headers: new AxiosHeaders({ 'Content-Type': 'text/html' }), config });
+    await expect(api.get('/x')).rejects.toMatchObject({ response: { status: 404 } });
   });
 
   it('passes successful responses through unchanged', async () => {
