@@ -239,7 +239,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing);
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages }}>
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />

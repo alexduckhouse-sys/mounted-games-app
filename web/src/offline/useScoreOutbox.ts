@@ -17,24 +17,28 @@ export function readOutbox(): QueuedScore[] {
   }
 }
 
-function writeOutbox(next: QueuedScore[]) {
+export const OUTBOX_STORAGE_ERROR = 'These scores couldn’t be saved on this phone. Keep this page open, free some storage, then try again.';
+
+function writeOutbox(next: QueuedScore[]): boolean {
   try {
     if (next.length === 0) localStorage.removeItem(KEY);
     else localStorage.setItem(KEY, JSON.stringify(next));
-  } catch { /* storage full: the list on screen still updates below */ }
+  } catch { return false; }
   window.dispatchEvent(new CustomEvent(CHANGED));
+  return true;
 }
 
-export function updateOutbox(change: (list: QueuedScore[]) => QueuedScore[]) {
+export function updateOutbox(change: (list: QueuedScore[]) => QueuedScore[]): boolean {
   const next = change(readOutbox());
-  writeOutbox(next);
+  if (!writeOutbox(next)) return false;
   if (nextToSend(next)) void flushOutbox();
+  return true;
 }
 
 async function send(item: QueuedScore): Promise<SendOutcome> {
   try {
     const { data } = await api.post<Heat>(`/races/${item.raceId}/results`,
-      { places: item.places, expected: item.expected }, { timeout: 15_000 });
+      { places: item.places, expected: item.expected, ...(item.reason ? { reason: item.reason } : {}) }, { timeout: 15_000 });
     return { kind: 'saved', sessionId: item.sessionId, heat: data };
   } catch (err) {
     return outcomeOfError(err);
@@ -55,14 +59,14 @@ async function sendWaiting() {
   // Each save is sent at most once per flush, even if storage can't record the result.
   const sent = new Set<string>();
   for (let item = nextToSend(readOutbox()); item && navigator.onLine; item = nextToSend(readOutbox())) {
-    const id = `${item.raceId}@${item.queuedAt}`;
+    const id = `${item.raceId}@${item.saveId ?? item.queuedAt}`;
     if (sent.has(id)) return;
     sent.add(id);
     const outcome = await send(item);
     if (outcome.kind === 'saved' || outcome.kind === 'conflict') {
       window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: { sessionId: outcome.sessionId, heat: outcome.heat } }));
     }
-    writeOutbox(settle(readOutbox(), item, outcome));
+    if (!writeOutbox(settle(readOutbox(), item, outcome))) return;
     if (outcome.kind === 'offline') return;
   }
 }

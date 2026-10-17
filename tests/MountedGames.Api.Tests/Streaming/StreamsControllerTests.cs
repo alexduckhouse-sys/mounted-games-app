@@ -27,7 +27,7 @@ public class StreamsControllerTests : IClassFixture<StreamingApiFactory>
     [MemberData(nameof(BroadcasterEndpoints))]
     public async Task EveryBroadcasterEndpointRequiresAdminOrOwningTrainer(string endpoint, string role)
     {
-        var (owner, auth) = await _f.SignupAsync(Roles.Trainer);
+        var (owner, auth) = await _f.ApprovedTrainerAsync();
         var competition = await _f.SeedCompetitionAsync(ownerUserId: auth.User.Id);
         using var admin = await _f.AdminAsync();
         var attempt = await _f.StartAsync(admin, competition);

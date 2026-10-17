@@ -1,0 +1,40 @@
+.event-print-page {
+  background: #fff;
+  color: #111827;
+  font-family: 'Barlow', system-ui, sans-serif;
+  margin: 0 auto;
+  max-width: 1100px;
+  padding: 24px;
+}
+
+.event-print-header { border-bottom: 3px solid #17385f; margin-bottom: 24px; padding-bottom: 14px; }
+.event-print-header h1 { color: #17385f; font: 700 34px/1 'Barlow Condensed', sans-serif; margin: 2px 0 7px; }
+.event-print-header p { margin: 2px 0; }
+.event-print-kicker, .event-print-kind { color: #17385f; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.event-print-kind { margin-top: 9px !important; }
+.event-print-section { margin: 0 0 26px; }
+.event-print-section h2 { background: #17385f; color: white; font: 700 20px/1.15 'Barlow Condensed', sans-serif; margin: 0; padding: 8px 10px; }
+.event-print-block { break-inside: avoid; margin: 12px 0 18px; }
+.event-print-block h3 { border-bottom: 2px solid #17385f; color: #17385f; display: flex; font-size: 16px; justify-content: space-between; margin: 0; padding: 5px 2px; }
+.event-print-table-wrap { max-width: 100%; overflow-x: auto; }
+.event-print-page table { border-collapse: collapse; font-size: 13px; min-width: 620px; width: 100%; }
+.event-print-page th, .event-print-page td { border: 1px solid #9ca3af; padding: 6px 7px; text-align: left; vertical-align: top; }
+.event-print-page th { background: #e8eef5; color: #17385f; font-weight: 700; }
+.event-print-note { font-size: 12px; margin: 5px 0; }
+.event-print-cell { width: 70px; }
+.event-print-empty { border: 1px solid #9ca3af; padding: 12px; }
+.event-print-provisional { background: #fff3cd; border: 1px solid #d7a922; font-weight: 700; margin: 0 0 18px; padding: 10px; }
+
+@page { margin: 12mm; size: A4 portrait; }
+
+@media print {
+  body:has(.event-print-page) .mg-header,
+  body:has(.event-print-page) .mg-tabs,
+  body:has(.event-print-page) .event-print-controls { display: none !important; }
+  body:has(.event-print-page) main { max-width: none !important; padding: 0 !important; }
+  .event-print-page { max-width: none; padding: 0; }
+  .event-print-table-wrap { overflow: visible; }
+  .event-print-page table { min-width: 0; }
+  .event-print-break { break-after: page; }
+  .event-print-break:last-child { break-after: auto; }
+}

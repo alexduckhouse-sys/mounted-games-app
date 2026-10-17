@@ -4,8 +4,9 @@ import { Search, X } from 'lucide-react';
 import { api } from '../api';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
+import { CompetitionIcon } from './CompetitionIcon';
 import { competitionIcon } from './icons';
-import { competitionDateText, countryTag, isOnToday } from '../lib/competitionDates';
+import { competitionDateText, isOnToday } from '../lib/competitionDates';
 import { displaySectionName } from '../lib/section';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
 import { CompetitionListSkeleton } from '../components/Skeletons';
@@ -143,7 +144,6 @@ function CompetitionRow({ competition, past, selected, onChoose }: { competition
   const multiDay = !!competition.endDate && competitionDateText(competition.startDate, competition.endDate) !== competitionDateText(competition.startDate, null);
   const venue = competition.location?.trim();
   const when = past || multiDay || !venue ? competitionDateText(competition.startDate, competition.endDate, past) : null;
-  const tag = countryTag(competition.icon);
   return (
     <button aria-pressed={selected} onClick={onChoose} className={`mg-row ${selected ? 'shadow-[inset_4px_0_0_rgb(var(--mg-heading))]' : ''}`}>
       <span aria-hidden="true" className="flex w-11 shrink-0 flex-col items-center gap-0.5 text-[rgb(var(--mg-heading))]">
@@ -154,7 +154,7 @@ function CompetitionRow({ competition, past, selected, onChoose }: { competition
         <span className="break-words text-base font-semibold leading-tight">{competition.name}</span>
         <span className="mg-meta">{[when, venue].filter(Boolean).join(' · ')}</span>
       </span>
-      {tag && <span className="mg-badge mg-badge-outline" title={competitionIcon(competition.icon).label}>{tag}</span>}
+      {competitionIcon(competition.icon).id !== 'flag' && <CompetitionIcon id={competition.icon} labelled className="text-xl" />}
       {selected && <span className="sr-only">(current competition)</span>}
     </button>
   );

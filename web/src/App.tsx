@@ -26,6 +26,8 @@ const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab')
 const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').then((module) => ({ default: module.BroadcastPage })));
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
 const DetailsTab = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.DetailsTab })));
+const FollowingPage = lazy(() => import('./pages/FollowingPage').then((module) => ({ default: module.FollowingPage })));
+const FollowingTab = lazy(() => import('./pages/competition/FollowingTab').then((module) => ({ default: module.FollowingTab })));
 const MyTeamsPage = lazy(() => import('./pages/MyTeamsPage').then((module) => ({ default: module.MyTeamsPage })));
 const DeclarationsIndexPage = lazy(() => import('./pages/DeclarationsIndexPage').then((module) => ({ default: module.DeclarationsIndexPage })));
 const ChatIndexPage = lazy(() => import('./pages/ChatIndexPage').then((module) => ({ default: module.ChatIndexPage })));
@@ -34,6 +36,17 @@ const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').t
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
 const RulesPage = lazy(() => import('./pages/admin/RulesPage').then((module) => ({ default: module.RulesPage })));
 const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
+const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').then((module) => ({ default: module.OperationsPage })));
+const RulebooksPage = lazy(() => import('./pages/operations/RulebooksPage').then((module) => ({ default: module.RulebooksPage })));
+const EventShopPage = lazy(() => import('./pages/commerce/EventShopPage').then((module) => ({ default: module.EventShopPage })));
+const SellerCataloguePage = lazy(() => import('./pages/commerce/SellerCataloguePage').then((module) => ({ default: module.SellerCataloguePage })));
+const CommerceOrdersPage = lazy(() => import('./pages/commerce/CommerceOrdersPage').then((module) => ({ default: module.CommerceOrdersPage })));
+const CommerceManagementPage = lazy(() => import('./pages/commerce/CommerceManagementPage').then((module) => ({ default: module.CommerceManagementPage })));
+const SeasonsPage = lazy(() => import('./pages/seasons/SeasonsPage').then((module) => ({ default: module.SeasonsPage })));
+const SeasonPage = lazy(() => import('./pages/seasons/SeasonPage').then((module) => ({ default: module.SeasonPage })));
+const TeamProfilePage = lazy(() => import('./pages/seasons/TeamProfilePage'));
+const EventToolsPage = lazy(() => import('./pages/eventTools/EventToolsPage'));
+const PrintEventPage = lazy(() => import('./pages/eventTools/PrintEventPage'));
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 
 export default function App() {
@@ -51,6 +64,7 @@ export default function App() {
           <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} />
             <Route element={<AppShell />}>
               <Route index element={<StartPage />} />
               <Route path="dashboard" element={<DashboardPage />} />
@@ -64,6 +78,11 @@ export default function App() {
                 <Route path="arena" element={<ArenaPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="teams" element={<TeamsTab />} />
+                <Route path="following" element={<FollowingTab />} />
+                <Route path="shop" element={<EventShopPage />} />
+                <Route path="shop/manage" element={<ProtectedRoute roles={['Admin', 'Trainer']}><CommerceManagementPage /></ProtectedRoute>} />
+                <Route path="rulebooks" element={<RulebooksPage />} />
+                <Route path="operations" element={<ProtectedRoute roles={['Admin', 'Trainer']}><OperationsPage /></ProtectedRoute>} />
                 <Route path="declarations" element={<DeclarationsTab />} />
                 <Route path="broadcast" element={<ProtectedRoute roles={['Admin', 'Trainer']}><BroadcastPage /></ProtectedRoute>} />
                 <Route path="chat" element={<ChatTab />} />
@@ -73,9 +92,17 @@ export default function App() {
               <Route path="teams" element={
                 <ProtectedRoute><MyTeamsPage /></ProtectedRoute>
               } />
+              <Route path="following" element={<FollowingPage />} />
+              <Route path="seasons" element={<SeasonsPage />} />
+              <Route path="seasons/:seasonId" element={<SeasonPage />} />
+              <Route path="team-profiles" element={<TeamProfilePage />} />
+              <Route path="team-profiles/:profileId" element={<TeamProfilePage />} />
+              <Route path="event-tools/:competitionId" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EventToolsPage /></ProtectedRoute>} />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
               <Route path="chat" element={<ChatIndexPage />} />
-              <Route path="shop" element={<Navigate to="/" replace />} />
+              <Route path="shop" element={<Navigate to="/competitions" replace />} />
+              <Route path="me/catalogue" element={<ProtectedRoute><SellerCataloguePage /></ProtectedRoute>} />
+              <Route path="me/orders" element={<ProtectedRoute><CommerceOrdersPage /></ProtectedRoute>} />
               <Route path="admin" element={
                 <ProtectedRoute roles={['Admin']}><AdminPage /></ProtectedRoute>
               } />

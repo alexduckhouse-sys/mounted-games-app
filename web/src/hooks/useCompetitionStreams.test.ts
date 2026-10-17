@@ -29,6 +29,12 @@ it('replays events that arrive during GET and discards an obsolete response', as
   await act(async () => { second.resolve({ data: { enabled: true, streams: [liveStream()] } }); await flush(); });
   expect(result.current.streams).toHaveLength(2); expect(result.current.streams[0].viewerCount).toBe(8);
 });
+it.each([['the HTML page an older API returns', '<!doctype html><html></html>'], ['an empty body', ''], ['null', null], ['an object without streams', { enabled: true }]])(
+  'treats %s as streaming off instead of crashing', async (_case, data) => {
+    vi.mocked(api.get).mockResolvedValue({ data });
+    const { result } = renderHook(() => useCompetitionStreams(1, 0)); await act(flush);
+    expect(result.current.streamingEnabled).toBe(false); expect(result.current.streams).toEqual([]);
+  });
 it('keeps the last list on fetch failure', async () => {
   const { result, rerender, unmount } = renderHook(({ ready }) => useCompetitionStreams(1, ready), { initialProps: { ready: 0 } }); await act(flush);
   vi.mocked(api.get).mockRejectedValueOnce(new Error('offline')); rerender({ ready: 1 }); await act(flush);

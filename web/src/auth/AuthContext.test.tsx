@@ -21,7 +21,7 @@ const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{childr
 const mount = () => renderHook(() => useAuth(), { wrapper });
 const unauthorised = { response: { status: 401 } };
 
-beforeEach(() => { get.mockResolvedValue({ data: {} }); });
+beforeEach(() => { get.mockResolvedValue({ data: stored().user }); });
 
 describe('useAuth', () => {
   it('must be used inside the provider', () => {
@@ -114,12 +114,23 @@ describe('signing in', () => {
     expect(result.current.loading).toBe(false);
   });
 
-  it('signs up a trainer and signs them in', async () => {
-    post.mockResolvedValue({ data: stored(['Trainer']) });
+  it('signs up a pending trainer as a member and shows the request notice', async () => {
+    post.mockResolvedValue({ data: stored(['Member', 'TrainerRequest']) });
+    get.mockResolvedValue({ data: stored(['Member', 'TrainerRequest']).user });
     const { result } = mount();
     await act(async () => { await result.current.signupTrainer('ann', 'pw', 'Trainer', 'Ashdown'); });
     expect(post).toHaveBeenCalledWith('/auth/signup-trainer', { username: 'ann', password: 'pw', role: 'Trainer', clubName: 'Ashdown' });
     expect(result.current.user?.fullName).toBe('Ann Smith');
+    expect(result.current.trainerNotice).toBe('requested');
+    expect(result.current.hasRole('Member')).toBe(true);
+    expect(result.current.canOrganise()).toBe(false);
+  });
+
+  it.each(['Manager', 'Member'])('does not show the trainer request notice for %s signup', async (role) => {
+    post.mockResolvedValue({ data: stored([role]) });
+    const { result } = mount();
+    await act(async () => { await result.current.signupTrainer('test-user', 'pw', role); });
+    expect(result.current.trainerNotice).toBeNull();
   });
 
   it('clears loading when sign-up fails', async () => {
@@ -152,7 +163,8 @@ describe('roles and permissions', () => {
   });
 
   it.each([
-    [['Admin'], true], [['Trainer'], true], [['Manager'], false], [['Member'], false], [[], false],
+    [['Admin'], true], [['Trainer'], true], [['Manager'], false], [['Member'], false],
+    [['TrainerRequest'], false], [['Member', 'TrainerRequest'], false], [[], false],
   ])('lets %j organise: %s', (roles, expected) => {
     signIn(roles);
     expect(mount().result.current.canOrganise()).toBe(expected);
@@ -171,6 +183,55 @@ describe('roles and permissions', () => {
 
   it('never lets a signed-out visitor organise', () => {
     expect(mount().result.current.canOrganise()).toBe(false);
+  });
+});
+
+describe('trainer approval notice', () => {
+  it('detects approval without changing the stored JWT roles or organiser permissions', async () => {
+    signIn(['Member', 'TrainerRequest']);
+    const { result } = mount();
+    await waitFor(() => expect(result.current.trainerNotice).toBe('approved'));
+    expect(result.current.canOrganise()).toBe(false);
+    expect(result.current.user?.roles).toEqual(['Member', 'TrainerRequest']);
+    expect(JSON.parse(localStorage.getItem('mg.auth')!).user.roles).toEqual(['Member', 'TrainerRequest']);
+    act(() => result.current.logout());
+    expect(result.current.trainerNotice).toBeNull();
+  });
+
+  it.each([['Member', 'TrainerRequest'], ['Member']])('shows no approval notice when the current roles are %j', async (...roles) => {
+    signIn(['Member', 'TrainerRequest']);
+    get.mockResolvedValue({ data: stored(roles).user });
+    const { result } = mount();
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.trainerNotice).toBeNull();
+  });
+
+  it('does not show an approval notice to an existing trainer', async () => {
+    signIn(['Trainer']);
+    const { result } = mount();
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.trainerNotice).toBeNull();
+  });
+
+  it('ignores an approval response after signing out', async () => {
+    signIn(['Member', 'TrainerRequest']);
+    let finish!: (value: { data: StoredAuth['user'] }) => void;
+    get.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const { result } = mount();
+    act(() => result.current.logout());
+    await act(async () => { finish({ data: stored().user }); });
+    expect(result.current.trainerNotice).toBeNull();
+    expect(result.current.user).toBeNull();
+  });
+
+  it('clears the notice and gains organiser permissions after a fresh sign-in', async () => {
+    signIn(['Member', 'TrainerRequest']);
+    const { result } = mount();
+    await waitFor(() => expect(result.current.trainerNotice).toBe('approved'));
+    post.mockResolvedValue({ data: { ...stored(), token: 'fresh-trainer-token' } });
+    await act(async () => { await result.current.login('test@example.com', 'pw'); });
+    expect(result.current.trainerNotice).toBeNull();
+    expect(result.current.canOrganise()).toBe(true);
   });
 });
 

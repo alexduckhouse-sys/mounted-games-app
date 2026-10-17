@@ -1,0 +1,66 @@
+.season-shell { margin-inline: auto; max-width: 1080px; width: 100%; }
+.season-shell-narrow { max-width: 760px; }
+.season-index-header { align-items: end; display: flex; gap: 20px; justify-content: space-between; margin-bottom: 24px; }
+.season-heading { border-bottom: 3px solid rgb(var(--mg-heading)); margin-bottom: 22px; padding-bottom: 18px; }
+.season-kicker { color: rgb(var(--mg-red)); font: 700 12px/1 'Barlow', sans-serif; letter-spacing: .1em; margin-bottom: 8px; text-transform: uppercase; }
+.season-loading { border-top: 1px solid rgb(var(--mg-rule)); padding: 24px 4px; }
+.season-empty { border-block: 1px solid rgb(var(--mg-rule)); padding: 30px 4px; }
+.season-empty h2 { color: rgb(var(--mg-heading)); font: 700 24px/1.1 'Barlow Condensed', sans-serif; }
+.season-empty p { color: rgb(var(--mg-muted)); margin-top: 5px; }
+.season-list { border-block: 1px solid rgb(var(--mg-rule)); }
+.season-list > li + li { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.season-list-row { align-items: center; color: rgb(var(--mg-body)); display: grid; gap: 16px; grid-template-columns: 62px minmax(0, 1fr) auto auto 22px; min-height: 78px; padding: 12px 6px; text-decoration: none; }
+.season-list-row:hover { background: rgb(var(--mg-subtle)); }
+.season-list-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.season-year { color: rgb(var(--mg-red)); font: 700 20px/1 'Barlow Condensed', sans-serif; }
+.season-list-main { min-width: 0; }
+.season-list-main strong { color: rgb(var(--mg-heading)); display: block; font: 700 22px/1.1 'Barlow Condensed', sans-serif; overflow-wrap: anywhere; }
+.season-list-main span, .season-list-count span, .season-list-rule { color: rgb(var(--mg-muted)); display: block; font-size: 13px; }
+.season-list-count { min-width: 50px; text-align: center; }
+.season-list-count strong { color: rgb(var(--mg-heading)); display: block; font: 700 22px/1 'Barlow Condensed', sans-serif; }
+.season-list-rule { min-width: 64px; text-align: right; }
+.season-tabs { border-bottom: 1px solid rgb(var(--mg-rule)); display: flex; gap: 4px; overflow-x: auto; }
+.season-tab { border-bottom: 3px solid transparent; color: rgb(var(--mg-muted)); flex: 0 0 auto; font: 700 15px/1 'Barlow', sans-serif; min-height: 48px; padding: 0 16px; }
+.season-tab:hover { color: rgb(var(--mg-heading)); }
+.season-tab[aria-pressed="true"] { border-bottom-color: rgb(var(--mg-red)); color: rgb(var(--mg-heading)); }
+.season-tab:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -3px; }
+.season-panel { padding-top: 22px; }
+.season-panel-heading { align-items: end; display: flex; gap: 18px; justify-content: space-between; margin-bottom: 14px; }
+.season-table-wrap { border-block: 1px solid rgb(var(--mg-rule)); overflow-x: auto; }
+.season-table { border-collapse: separate; border-spacing: 0; min-width: 100%; width: 100%; }
+.season-table thead { background: rgb(var(--mg-subtle)); }
+.season-table th, .season-table td { border-bottom: 1px solid rgb(var(--mg-rule-soft)); padding: 11px 12px; }
+.season-table tbody tr:last-child th, .season-table tbody tr:last-child td { border-bottom: 0; }
+.season-standings-table .season-rank-col { background: rgb(var(--mg-surface)); left: 0; position: sticky; z-index: 1; }
+.season-standings-table .season-team-col { background: rgb(var(--mg-surface)); left: 56px; position: sticky; z-index: 1; }
+.season-standings-table thead .season-rank-col, .season-standings-table thead .season-team-col { background: rgb(var(--mg-subtle)); z-index: 2; }
+.season-standings-table .season-team-col { box-shadow: 1px 0 0 rgb(var(--mg-rule-soft)); }
+.season-rounds { border-top: 1px solid rgb(var(--mg-rule)); }
+.season-round-row { border-bottom: 1px solid rgb(var(--mg-rule)); padding: 15px 4px; }
+.season-round-summary { align-items: center; display: grid; gap: 14px; grid-template-columns: 44px minmax(0, 1fr) auto auto; }
+.season-round-number { color: rgb(var(--mg-red)); font: 700 25px/1 'Barlow Condensed', sans-serif; text-align: center; }
+.season-round-title { color: rgb(var(--mg-heading)); font-weight: 700; }
+.season-round-detail { border-left: 3px solid rgb(var(--mg-heading)); margin: 16px 0 4px 58px; padding: 2px 0 2px 16px; }
+.season-status { color: rgb(var(--mg-muted)); font-size: 13px; text-align: right; }
+.season-status strong { color: rgb(var(--mg-heading)); display: block; }
+.season-form { border-top: 1px solid rgb(var(--mg-rule)); max-width: 720px; padding-top: 20px; }
+.season-form-section { border: 0; border-bottom: 1px solid rgb(var(--mg-rule)); margin: 0 0 20px; padding: 0 0 20px; }
+.season-form-legend { color: rgb(var(--mg-heading)); font: 700 22px/1 'Barlow Condensed', sans-serif; margin-bottom: 14px; width: 100%; }
+.team-profile-row { grid-template-columns: minmax(0, 1fr) auto 22px; }
+.profile-event-list { border-top: 1px solid rgb(var(--mg-rule)); }
+.profile-event-list li { align-items: center; border-bottom: 1px solid rgb(var(--mg-rule-soft)); display: flex; gap: 16px; justify-content: space-between; min-height: 58px; padding: 9px 4px; }
+.profile-event-list strong, .profile-event-list span { display: block; }
+.profile-event-list span span, .profile-event-list time { color: rgb(var(--mg-muted)); font-size: 13px; }
+
+@media (max-width: 640px) {
+  .season-index-header, .season-panel-heading { align-items: stretch; flex-direction: column; }
+  .season-index-header .mg-btn, .season-panel-heading .mg-btn { width: 100%; }
+  .season-list-row { gap: 10px; grid-template-columns: 48px minmax(0, 1fr) 20px; }
+  .season-list-count, .season-list-rule { display: none; }
+  .season-round-summary { align-items: start; grid-template-columns: 36px minmax(0, 1fr); }
+  .season-round-summary > .mg-badge, .season-round-summary > .mg-btn, .season-status { grid-column: 2; justify-self: start; text-align: left; }
+  .season-round-detail { margin-left: 0; }
+  .team-profile-row { grid-template-columns: minmax(0, 1fr) 20px; }
+  .team-profile-row .season-list-rule { display: none; }
+  .profile-event-list li { align-items: start; flex-direction: column; gap: 4px; }
+}

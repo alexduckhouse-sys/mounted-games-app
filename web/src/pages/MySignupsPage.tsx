@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarDays, CreditCard, Trophy, Check, RotateCcw, Ban, Hourglass, Users } from 'lucide-react';
 import { api } from '../api';
+import { DemoEntryPayment } from './commerce/DemoEntryPayment';
 import { useAuth } from '../auth/AuthContext';
 import type { MySignup, SignupPaymentStatus } from '../types';
 
@@ -19,15 +20,21 @@ function priceLabel(minor: number): string {
 
 export function MySignupsPage() {
   const { user } = useAuth();
+  return <SignupList key={user?.id ?? 'signed-out'} />;
+}
+
+function SignupList() {
+  const { user } = useAuth();
   const [signups, setSignups] = useState<MySignup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (!user) return;
     api.get<MySignup[]>('/me/signups')
-      .then((r) => setSignups(r.data))
+      .then((r) => { setSignups(r.data); setError(null); })
       .catch(() => setError('Could not load your signups.'));
   }, [user]);
+  useEffect(() => { reload(); }, [reload]);
 
   if (!user) {
     return (
@@ -115,6 +122,9 @@ export function MySignupsPage() {
                 </dl>
                 {s.ponyClubName && (
                   <p className="text-[11px] text-slate-500">Pony Club: {s.ponyClubName}</p>
+                )}
+                {s.amountMinor > 0 && (
+                  <DemoEntryPayment signupId={s.id} amountMinor={s.amountMinor} signupStatus={s.status} onChanged={reload} />
                 )}
               </li>
             );

@@ -25,6 +25,13 @@ describe('canCachePublicApi', () => {
     '/api/auth/me',
     '/api/weather/forecast',
     '/api/trainer/my-teams',
+    '/api/seasons',
+    '/api/seasons/synthetic-id',
+    '/api/team-profiles/synthetic-id',
+    '/api/event-tools/competitions/12/team-import/preview',
+    '/api/commerce/orders/mine',
+    '/api/commerce/catalogue',
+    '/api/commerce/competitions/12/orders',
   ])('refuses %s because it may differ per viewer', (path) => {
     expect(canCachePublicApi(path)).toBe(false);
   });

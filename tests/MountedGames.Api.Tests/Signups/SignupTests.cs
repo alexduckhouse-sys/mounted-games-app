@@ -18,7 +18,7 @@ public class SignupTests : IClassFixture<ApiFactory>
         => new(name, club, "rider@example.com", code);
 
     [Fact]
-    public async Task Create_RecordsPaidSignupAtSectionPrice()
+    public async Task Create_RecordsPendingSignupAtSectionPrice()
     {
         var section = await _f.NewSectionAsync(priceMinor: 1500);
 
@@ -26,7 +26,19 @@ public class SignupTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var dto = await resp.ReadAsync<SectionSignupDto>();
-        Assert.Equal(("Alice", 1500, SignupPaymentStatus.Paid), (dto.FullName, dto.AmountMinor, dto.Status));
+        Assert.Equal(("Alice", 1500, SignupPaymentStatus.Pending), (dto.FullName, dto.AmountMinor, dto.Status));
+        Assert.Null(dto.PaidAt);
+    }
+
+    [Fact]
+    public async Task Create_RecordsFreeSignupAsPaid()
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 0);
+
+        var dto = await (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry()))
+            .ReadAsync<SectionSignupDto>();
+
+        Assert.Equal(SignupPaymentStatus.Paid, dto.Status);
         Assert.NotNull(dto.PaidAt);
     }
 
@@ -269,6 +281,38 @@ public class SignupTests : IClassFixture<ApiFactory>
         Assert.Equal(
             (HttpStatusCode.NoContent, false),
             (resp.StatusCode, await _f.InDbAsync(db => db.SectionSignups.AnyAsync(s => s.Id == created.Id))));
+    }
+
+    [Fact]
+    public async Task Delete_PreservesManuallyPaidSignupAudit()
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 1500);
+        var created = await (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry()))
+            .ReadAsync<SectionSignupDto>();
+        var admin = await _f.AdminAsync();
+        await admin.PutAsJsonAsync($"/api/signups/{created.Id}/status",
+            new UpdateSignupStatusRequest(SignupPaymentStatus.Paid));
+
+        var response = await admin.DeleteAsync($"/api/signups/{created.Id}");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(SignupPaymentStatus.Paid, await _f.InDbAsync(db => db.SectionSignups
+            .Where(x => x.Id == created.Id).Select(x => x.Status).SingleAsync()));
+    }
+
+    [Fact]
+    public async Task Delete_CancelsAndPreservesUnpaidPricedSignup()
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 1500);
+        var created = await (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry()))
+            .ReadAsync<SectionSignupDto>();
+        var admin = await _f.AdminAsync();
+
+        var response = await admin.DeleteAsync($"/api/signups/{created.Id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(SignupPaymentStatus.Cancelled, await _f.InDbAsync(db => db.SectionSignups
+            .Where(x => x.Id == created.Id).Select(x => x.Status).SingleAsync()));
     }
 
     [Fact]

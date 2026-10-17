@@ -38,6 +38,9 @@ services:
       # Any non-empty string works — it's the shared admin key for the Organiser sign-in.
       - key: Admin__Key
         sync: false
+      # Same random value as MG_PROXY_KEY on Vercel (at least 32 bytes), so rate limits apply per visitor.
+      - key: Security__ProxyKey
+        sync: false
       # Set both Cloudflare Realtime values in Render to enable camera streaming.
       - key: Streaming__Cloudflare__AppId
         sync: false

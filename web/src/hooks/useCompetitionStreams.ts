@@ -25,8 +25,11 @@ export function useCompetitionStreams(competitionId: number, ready: number) {
     api.get<LiveStreamsResponse>(`/competitions/${competitionId}/streams`, { signal: controller.signal })
       .then(({ data }) => {
         if (controller.signal.aborted) return;
-        setEnabled(data.enabled);
-        setStreams(journal.reduce((current, change) => change(current), data.streams));
+        // An API without streaming answers unknown routes with the app's HTML page, so anything
+        // that isn't a streams response means streaming is off rather than an empty list to trust.
+        const valid = typeof data === 'object' && data !== null && Array.isArray(data.streams);
+        setEnabled(valid && data.enabled === true);
+        setStreams(journal.reduce((current, change) => change(current), valid ? data.streams : []));
       }).catch(() => { /* Keep the last confirmed list; onReady retries. */ })
       .finally(() => { if (pending.current === journal) pending.current = null; });
     return () => { controller.abort(); };

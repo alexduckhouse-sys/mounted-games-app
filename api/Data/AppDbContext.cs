@@ -35,6 +35,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
+        b.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
         b.Entity<LiveStream>(e =>
         {
