@@ -106,6 +106,8 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
 
           <div className="flex flex-col">
             <button onClick={onChangeCompetition} className={itemClass(false)}><ArrowLeftRight className={iconClass(false)} />Change competition</button>
+            <NavLink to="/seasons" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>
+            <NavLink to="/team-profiles" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Users className={iconClass(isActive)} />Team history</>}</NavLink>
             <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
             {user && <NavLink to="/teams" onClick={onClose} className={`${itemClass(false)} justify-between`}><span className="flex items-center gap-3"><Bell className={iconClass(false)} />Notifications</span><span className="text-sm text-[rgb(var(--mg-muted))]">In My teams</span></NavLink>}
             <button onClick={() => setSettingsOpen((v) => !v)} className={itemClass(settingsOpen)} aria-expanded={settingsOpen}><SlidersHorizontal className={iconClass(settingsOpen)} />Settings</button>

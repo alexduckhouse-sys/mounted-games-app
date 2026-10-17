@@ -4,6 +4,28 @@ Pulled together from every chat in this project and a survey of all branches and
 
 ## Where things stand
 
+### Prepared feature PRs (16 October, evening)
+
+These changes are implemented and remain unmerged:
+
+- [#28](https://github.com/alexduckhouse-sys/mounted-games-app/pull/28): public team following and safer offline score recovery.
+- [#29](https://github.com/alexduckhouse-sys/mounted-games-app/pull/29): event checks, equipment, draw previews, plain-text rulebooks and score sign-off.
+- [#34](https://github.com/alexduckhouse-sys/mounted-games-app/pull/34): reusable seller catalogues, event approval and a complete fake payment flow. Real payments stay manual.
+- [#36](https://github.com/alexduckhouse-sys/mounted-games-app/pull/36): configurable seasons, published round versions, team history, CSV import, duplicate setup and print views.
+- [#37](https://github.com/alexduckhouse-sys/mounted-games-app/pull/37): the latest Timetable, Heat scores and Live & stream design handoff. Based on the separate streaming PR #30; Toplists is unchanged.
+
+The first four form a dependent sequence, in the order above. Review and deploy their schema changes in that order. The UI rework puts lists and standings first, with separate editing views and compact checkout and receipt screens.
+
+Before an official league adopts these features:
+
+- Agree the season ranking rules with its organisers. The current implementation ranks a section using all completed races, including qualifiers and finals, then applies the configured season points. Check this against the intended finals and tie rules.
+- Rehearse an event on two real phones with poor signal: disconnect, submit competing edits, reconnect and inspect the score record.
+- Provide an always-on API host, tested backups and a restore procedure. Event-day reliability needs a live rehearsal as well as automated tests.
+- Replace the fake provider when taking online payments is required, including payment confirmation, refunds and reconciliation. The demo never takes money.
+- Test setup and scoring with organisers who have not seen the app before, then prepare their onboarding and support notes.
+
+The status below records earlier work and deployment follow-ups; verify its hosting items against the current live configuration before acting.
+
 - **Merged:** PRs #1–#24. The web on Vercel is live with #20; the Render API is waiting on item 1 under "Needs you".
   - EGUK redesign
   - ticker, settings and age-group menu

@@ -77,6 +77,9 @@ export function DetailsTab() {
       <div className="flex flex-wrap gap-2">
         <Link className="mg-btn mg-btn-secondary" to="../shop">Event shop</Link>
         <Link className="mg-btn mg-btn-secondary" to="../rulebooks">Rulebooks</Link>
+        <Link className="mg-btn mg-btn-secondary" to={`/event-tools/${competition.id}/print/draw`}>Print draw</Link>
+        <Link className="mg-btn mg-btn-secondary" to={`/event-tools/${competition.id}/print/results`}>Print results</Link>
+        {mayOrganise && <Link className="mg-btn mg-btn-secondary" to={`/event-tools/${competition.id}`}>Import, duplicate &amp; print</Link>}
         {mayOrganise && <Link className="mg-btn mg-btn-secondary" to="../shop/manage">Manage event shop</Link>}
         {mayOrganise && <Link className="mg-btn mg-btn-secondary" to="../operations">Readiness &amp; draw</Link>}
       </div>

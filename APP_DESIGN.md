@@ -349,6 +349,18 @@ The scoring screen keeps a revision history. Corrections need a reason, includin
 Signed-in sellers can keep a catalogue of items and submit them to selected competitions. Each event’s organiser approves listings before they appear in its shop. Changing an approved listing’s content or price requires another review. Tickets, camping, merchandise and other items are collected at the event. Orders retain the agreed item names and prices; finite stock is reserved when an order is placed and released on cancellation or refund.
 
 Real-event payments are confirmed manually by the organiser. An event can be marked as a demo before it has orders or test payments. Demo checkout offers test success, decline, cancellation and refunds, and every test receipt states that no money was taken. The app does not collect payment-card details. Paid entries require sign-in and stay pending until payment is confirmed.
+
+
+### Seasons, team history and reusable event setup
+
+Organisers can create seasons for a year, format and age group. They set points by place and choose whether every round or the best N results count. Ties share a place and its points. Each round is a matching competition section managed by the season organiser.
+
+Round results are previewed before publication. They use the section’s total points across all completed races, including qualifiers and finals; HC teams are excluded. Publishing saves a version with team names and points. Later corrections do not change the published table until the organiser publishes again. Earlier versions remain available.
+
+Stable team profiles connect a team’s public results across competitions. Links are explicit. Club and suffix cannot change after a profile has been linked or published, so unrelated teams cannot inherit its history. The display name can be corrected.
+
+An event’s Details page links to CSV team import, duplicate setup and print sheets. Imports show row errors and require a fresh preview before applying. Duplicating copies public setup, without declarations, claim details, payments, scores or result-derived finals places. Draws, score sheets and results have A4 print views. Unfinished results are marked provisional.
+
 ### Event organiser page refinement
 
 Event checks separates readiness, equipment and draw work into focused views. Readiness groups long issue lists by task. Rulebooks open as readable text, with a separate editor. The Claude Design reference is `docs/designs/event-platform-refinement.html`; implementation preserves the existing API, permission and payment behaviour where static mock-ups simplify those details.
