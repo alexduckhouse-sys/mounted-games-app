@@ -51,6 +51,12 @@ function saveLastChatComp(v: LastChatComp) {
 }
 
 export function ChatTab() {
+  const { user } = useAuth();
+  const authSession = user ? `${user.id}:${[...user.roles].sort().join(',')}` : 'signed-out';
+  return <ChatTabSession key={authSession} />;
+}
+
+function ChatTabSession() {
   const { competition, reload } = useCompetition();
   const { user, canEdit, hasRole } = useAuth();
   // Only admins and trainers post; a trainer's messages go to the admins only.
@@ -66,15 +72,27 @@ export function ChatTab() {
 
   const [lastChatComp, setLastChatComp] = useState<LastChatComp | null>(() => loadLastChatComp());
   const [dismissedCompWarning, setDismissedCompWarning] = useState(false);
+  const loadController = useRef<AbortController | null>(null);
 
   // Fetch on open and again whenever live updates reconnect, so messages and
   // announcements sent during a signal drop aren't missed.
   const loadMessages = useCallback(() => {
-    api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`)
-      .then((r) => setMessages(r.data))
+    loadController.current?.abort();
+    const controller = new AbortController();
+    loadController.current = controller;
+    api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`, { signal: controller.signal })
+      .then((r) => {
+        if (!controller.signal.aborted) setMessages(r.data);
+      })
       .catch(() => { /* keep what's on screen; the next reconnect retries */ });
   }, [competition.id]);
-  useEffect(loadMessages, [loadMessages]);
+  useEffect(() => {
+    loadMessages();
+    return () => {
+      loadController.current?.abort();
+      loadController.current = null;
+    };
+  }, [loadMessages]);
 
   useLiveHub(competition.id, {
     onReady: loadMessages,
@@ -82,10 +100,10 @@ export function ChatTab() {
       const msg = m as ChatMessage;
       // A trainer's own private messages reach every connection they have open, so check the competition.
       if (msg.competitionId !== competition.id) return;
-      setMessages((cur) => cur.some((c) => c.id === msg.id) ? cur : [...cur, msg]);
+      setMessages((current) => current.some((item) => item.id === msg.id) ? current : [...current, msg]);
     },
     onChatMessageDeleted: ({ id }) => {
-      setMessages((cur) => cur.filter((m) => m.id !== id));
+      setMessages((current) => current.filter((message) => message.id !== id));
     },
   });
 
@@ -93,7 +111,7 @@ export function ChatTab() {
     if (!canEdit()) return;
     if (!confirm('Delete this message?')) return;
     await api.delete(`/competitions/${competition.id}/chat/${id}`);
-    setMessages((cur) => cur.filter((m) => m.id !== id));
+    setMessages((current) => current.filter((message) => message.id !== id));
   }
 
   async function blockMessageAuthor(id: number) {
