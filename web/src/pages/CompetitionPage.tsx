@@ -7,6 +7,8 @@ import { appendStreamMessage } from '../lib/streams';
 import { tickerItems } from '../lib/ticker';
 import { useTicker } from '../components/TickerContext';
 import { useLiveHub } from '../live/useLiveHub';
+import { useConnectionStatus } from '../live/ConnectionStatusContext';
+import { isFocusPage, pollIntervalMs } from '../live/connectionStatus';
 import { HEAT_SAVED } from '../offline/useScoreOutbox';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
 import { applyResultsUpdate, replaceHeat, type ResultsUpdate } from '../lib/liveUpdates';
@@ -62,6 +64,9 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const { pathname } = useLocation();
 
   const load = useCallback(() => setAttempt((n) => n + 1), []);
+  /** Timetable checks that failed in a row; a service-worker copy counts as a failure. */
+  const [failures, setFailures] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -71,12 +76,14 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         if (cancelled) return;
         const fallback = serviceWorkerSavedAt(r.headers);
         if (fallback === null) {
+          setFailures(0);
           dataAt.current = Date.now();
           setData(r.data);
           setSavedAt(null);
           setUpdatedAt(new Date());
           return;
         }
+        setFailures((n) => n + 1);
         const fallbackAt = fallback === 'unknown' ? 0 : fallback.getTime();
         if (dataAt.current > 0 && dataAt.current >= fallbackAt) return; // ours is newer: keep showing it
         dataAt.current = fallbackAt;
@@ -84,10 +91,14 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         setSavedAt(fallback === 'unknown' ? '' : fallback.toISOString());
         setUpdatedAt(fallback === 'unknown' ? null : fallback);
       })
-      .catch(() => { if (!cancelled) setFailedAttempt(attempt); })
+      .catch(() => {
+        if (cancelled) return;
+        setFailedAttempt(attempt);
+        setFailures((n) => n + 1);
+      })
       .finally(() => {
         clearTimeout(slowTimer);
-        if (!cancelled) setSettledAttempt(attempt);
+        if (!cancelled) { setSettledAttempt(attempt); setRetrying(false); }
       });
     return () => { cancelled = true; clearTimeout(slowTimer); controller.abort(); };
   }, [competitionId, attempt]);
@@ -161,7 +172,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     return () => setItems([]);
   }, [data, announcements, now, setItems]);
 
-  const { connected, invoke } = useLiveHub(competitionId, {
+  const { connected, invoke, reconnect } = useLiveHub(competitionId, {
     onReady: () => { load(); setReady((value) => value + 1); },
     onStreamUpdated: streamState.onStreamUpdated,
     onStreamViewers: streamState.onStreamViewers,
@@ -207,19 +218,44 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     return () => window.removeEventListener(HEAT_SAVED, onSaved);
   }, [applyHeat]);
 
+  // Without the live link, check for changes on a timer: unchanged timetables come back as a 304, so this is cheap.
+  const intervalMs = pollIntervalMs(isFocusPage(pathname), failures);
   useEffect(() => {
     function refresh() { if (navigator.onLine && document.visibilityState === 'visible') load(); }
     window.addEventListener('online', refresh);
     navigator.serviceWorker?.addEventListener('controllerchange', refresh);
     document.addEventListener('visibilitychange', refresh);
-    const timer = !connected ? setInterval(refresh, 30_000) : undefined;
+    const timer = !connected ? setInterval(refresh, intervalMs) : undefined;
     return () => {
       window.removeEventListener('online', refresh);
       navigator.serviceWorker?.removeEventListener('controllerchange', refresh);
       document.removeEventListener('visibilitychange', refresh);
       if (timer !== undefined) clearInterval(timer);
     };
-  }, [connected, load]);
+  }, [connected, intervalMs, load]);
+
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+
+  // Tell the header's connection pill what is happening.
+  const retry = useCallback(() => { setRetrying(true); load(); reconnect(); }, [load, reconnect]);
+  const { setStatus } = useConnectionStatus();
+  const downSince = useRef<number | null>(null);
+  const everConnected = useRef(false);
+  useEffect(() => {
+    if (connected) { everConnected.current = true; downSince.current = null; }
+    else downSince.current ??= Date.now();
+    setStatus({ connected, online, failures, downSince: downSince.current, everConnected: everConnected.current, updatedAt, intervalMs, retrying, retry });
+  }, [connected, online, failures, updatedAt, intervalMs, retrying, retry, setStatus]);
+  useEffect(() => () => setStatus(null), [setStatus]);
 
   if (error && !data) return (
     <div className="mg-card mx-auto mt-6 flex max-w-xl flex-col gap-3 p-4" role="alert">
@@ -243,10 +279,11 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />
-        {(showSavedNotice || error || !connected) && (
+        {/* Connection trouble is shown by the pill in the header; this only explains a saved copy. */}
+        {showSavedNotice && (
           <div role="status" className="mg-notice mx-auto flex w-full max-w-xl flex-wrap items-center gap-2">
             <p className="flex-1">
-              {showSavedNotice ? `Last updated ${savedAt && !Number.isNaN(Date.parse(savedAt)) ? new Date(savedAt).toLocaleString('en-GB') : 'earlier'}.${refreshing ? ' Checking for changes…' : ''}` : error ? 'Couldn’t refresh. Showing the last timetable received.' : 'Connecting to live updates. The timetable refreshes periodically while this page is open.'}
+              {`Last updated ${savedAt && !Number.isNaN(Date.parse(savedAt)) ? new Date(savedAt).toLocaleString('en-GB') : 'earlier'}.${refreshing ? ' Checking for changes…' : ''}`}
             </p>
             <button className="mg-btn mg-btn-secondary !min-h-11" onClick={load}>Refresh</button>
           </div>
