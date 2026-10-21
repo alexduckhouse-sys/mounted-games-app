@@ -10,6 +10,7 @@ import { competitionIdFromPath } from '../lib/routes';
 import { PageLoadBoundary } from './PageLoadBoundary';
 import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';
+import { ConnectionPill } from './ConnectionPill';
 import { BottomTabs } from './BottomTabs';
 import { useCompetitionMeta } from './competitionMeta';
 import { PageSkeleton } from './Skeletons';
@@ -61,9 +62,11 @@ export function AppShell() {
                 <span className="mg-compact-title">{compactBar.title}</span>
                 <span className="mg-compact-subtitle">{compactBar.subtitle}</span>
               </div>
-              <span className={`mg-badge ${compactBar.badge === 'live' ? 'mg-badge-live' : compactBar.badge === 'finished' ? 'mg-compact-finished' : 'mg-badge-soft'}`}>
-                {compactBar.badge === 'live' ? 'On now' : compactBar.badge === 'finished' ? 'Finished' : 'Next'}
-              </span>
+              <ConnectionPill fallback={
+                <span className={`mg-badge ${compactBar.badge === 'live' ? 'mg-badge-live' : compactBar.badge === 'finished' ? 'mg-compact-finished' : 'mg-badge-soft'}`}>
+                  {compactBar.badge === 'live' ? 'On now' : compactBar.badge === 'finished' ? 'Finished' : 'Next'}
+                </span>
+              } />
               <LiteChip onOpen={openLiteSettings} short />
               {hasRole('Admin') && (
                 <button onClick={() => setEditorMode(!editorMode)} className="mg-nav-btn" aria-label={editorMode ? 'Switch to view mode' : 'Switch to edit mode'} aria-pressed={editorMode}>
@@ -84,6 +87,7 @@ export function AppShell() {
               ) : (
                 <span className="min-w-0 flex-1 truncate text-base font-semibold">Mounted Games</span>
               )}
+              <ConnectionPill />
               {!user && choosingCompetition && <Link to="/login" className="mg-nav-btn">Sign in</Link>}
               <LiteChip onOpen={openLiteSettings} />
               {hasRole('Admin') && (
