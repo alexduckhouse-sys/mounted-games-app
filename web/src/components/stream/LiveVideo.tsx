@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Video } from 'lucide-react';
+import { Play, Video } from 'lucide-react';
 import type { ChatMessage, LiveStream, Session } from '../../types';
 import { streamHeatLabel, streamLink } from '../../lib/streams';
 import { browserViewerDependencies, createStreamViewer, type ViewerSnapshot } from '../../live/streamViewer';
 import type { StreamInvoke } from '../../live/streamRuntime';
+import { useLiteMode } from '../../lite/LiteModeContext';
 import { StreamChips } from './StreamChips';
 import { StreamPlayer } from './StreamPlayer';
 
@@ -13,7 +14,10 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
   messages: { message: ChatMessage; receivedAt: number }[]; canBroadcast: boolean; fallback?: string | null; competitionName: string;
   publicLayout?: boolean; showPlaceholder?: boolean;
 }) {
+  const { lite } = useLiteMode();
   const [selectedId, select] = useState<number | null>(null);
+  // Once a viewer taps to watch, the other angles in this arena start without another tap.
+  const [tapped, setTapped] = useState(false);
   const active = streams.filter((stream) => stream.status !== 2);
   const selected = active.find((stream) => stream.id === selectedId) ?? active[0];
   const label = selected ? selected.caption || streamHeatLabel(sessions, selected.arenaName) : null;
@@ -23,10 +27,20 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
     </div>}
     {selected ? <>
       <div className={publicLayout && active.length > 1 ? 'pb-2' : ''}><StreamChips streams={active} selected={selected} onSelect={select} /></div>
-      {typeof RTCPeerConnection === 'undefined' ? <p role="status" className="mg-card p-4">Live video is not supported in this browser.</p> : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} />}
+      {typeof RTCPeerConnection === 'undefined' ? <p role="status" className="mg-card p-4">Live video is not supported in this browser.</p>
+        : lite && !tapped ? <TapToWatch stream={selected} captionBar={publicLayout} onTap={() => setTapped(true)} />
+        : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} />}
     </> : fallback ? <CompStreamCard key={fallback} streamUrl={fallback} compName={competitionName} publicLayout={publicLayout} />
       : showPlaceholder ? <div className="live-stream-placeholder mg-card" role="status"><Video aria-hidden="true" /><strong>Stream hasn’t started</strong></div> : null}
   </section>;
+}
+/** Lite mode: no connection is made until the viewer asks for the video. */
+function TapToWatch({ stream, captionBar, onTap }: { stream: LiveStream; captionBar: boolean; onTap: () => void }) {
+  return <button type="button" onClick={onTap} className={`mg-tap-video ${captionBar ? '' : 'rounded-xl'}`}>
+    <span className="mg-tap-video-play"><Play aria-hidden="true" /></span>
+    <b>Tap to watch</b>
+    <small>{stream.arenaName} · {stream.angleName}. Video uses a lot of data, so it only starts when you tap.</small>
+  </button>;
 }
 function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, label }: {
   stream: LiveStream; invoke: StreamInvoke; ready: number;

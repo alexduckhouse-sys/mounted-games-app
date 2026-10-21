@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { Archive, ArrowLeft, CalendarRange, Edit3, PackagePlus, RotateCcw, Send } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { LazyImage } from '../../components/LazyImage';
 import { LoadError, StatusPill } from './commerceUi';
 import { CATEGORY_LABEL, LISTING_LABEL, errorMessage, pounds } from './commerceFormat';
 import type { CatalogueItem, CommerceItemCategory, CompetitionChoice, CompetitionChoicePage, CompetitionListing } from './types';
@@ -284,7 +285,7 @@ function SellerCatalogueContent() {
             return (
               <article key={item.id} className={`commerce-catalogue-row ${item.isActive ? '' : 'opacity-60'}`}>
                 <div className="flex min-w-0 flex-1 items-start gap-3">
-                  {item.imageUrl ? <img className="commerce-catalogue-image" src={item.imageUrl} alt="" /> : <div className="commerce-catalogue-image commerce-product-image--empty" aria-hidden="true"><PackagePlus className="h-5 w-5" /></div>}
+                  {item.imageUrl ? <LazyImage className="commerce-catalogue-image" src={item.imageUrl} alt="" compact /> : <div className="commerce-catalogue-image commerce-product-image--empty" aria-hidden="true"><PackagePlus className="h-5 w-5" /></div>}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2"><h2 className="mg-h2">{item.title}</h2>{!item.isActive && <StatusPill>Archived</StatusPill>}</div>
                     <p className="commerce-row-description">{item.description}</p>

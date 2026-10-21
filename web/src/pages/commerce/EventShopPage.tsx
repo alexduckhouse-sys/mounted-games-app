@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, Minus, Plus, ShoppingBag } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { LazyImage } from '../../components/LazyImage';
 import { useCompetition } from '../competition/context';
 import { LoadError, StatusPill } from './commerceUi';
 import { CATEGORY_LABEL, errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
@@ -211,7 +212,7 @@ function EventShopContent() {
               return (
                 <article key={listing.id} className="commerce-product-row">
                   {listing.imageUrl
-                    ? <img src={listing.imageUrl} alt="" className="commerce-product-image" />
+                    ? <LazyImage src={listing.imageUrl} alt="" className="commerce-product-image" compact />
                     : <div className="commerce-product-image commerce-product-image--empty" aria-hidden="true"><ShoppingBag className="h-5 w-5" /></div>}
                   <div className="min-w-0 flex-1">
                     <p className="commerce-row-kicker">{CATEGORY_LABEL[listing.category]}</p>

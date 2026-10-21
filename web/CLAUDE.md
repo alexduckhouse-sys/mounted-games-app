@@ -4,6 +4,7 @@ React 19 + TypeScript + Vite PWA, used mostly on phones in fields with one bar o
 
 ## Where things live (beyond the root layout)
 
+- `src/lite/`: lite mode (Auto/On/Off, stored as `mg.liteMode`). `useLiteMode()` gates images (`components/LazyImage.tsx`), weather, the live video player and animation. Use `LazyImage` for any remote picture.
 - `src/offline/`: public-API cache policy, saved copies, the score outbox. `src/weather/`: weather request cache.
 - `src/live/`: SignalR hook, `recoverConnection` (backoff and rejoin) and the Cloudflare stream publisher, viewer and runtime. `src/components/stream/`: the stream UI.
 - `src/pages/{commerce,operations,seasons,eventTools}/`: feature pages, with feature types kept next to them (`*Types.ts`).
@@ -18,7 +19,7 @@ React 19 + TypeScript + Vite PWA, used mostly on phones in fields with one bar o
 | One node test | `node --test tests/csv.test.mjs` (add `--test-name-pattern=...`) |
 | One Vitest file | `npx vitest run src/live/useLiveHub.test.ts -t "name"` |
 
-Lint must be clean: CI runs it. Vitest coverage has a **97% gate** (lines, statements, branches, functions) on `api.ts`, `pwa.ts`, `lib`, `auth`, `theme`, `competition`, `live`, `hooks`, `offline`, `weather` and `components`. A new file there needs its own test. `pages/**` is excluded but should still get tests for logic.
+Lint must be clean: CI runs it. Vitest coverage has a **97% gate** (lines, statements, branches, functions) on `api.ts`, `pwa.ts`, `lib`, `auth`, `theme`, `competition`, `live`, `hooks`, `lite`, `offline`, `weather` and `components`. A new file there needs its own test. `pages/**` is excluded but should still get tests for logic.
 
 ## Recipes
 
