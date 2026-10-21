@@ -16,6 +16,7 @@ import { PageSkeleton } from './Skeletons';
 import { useCompactPageBarState } from './CompactPageBarContext';
 import './compact-page-bar.css';
 import { TrainerAccountNotice } from './TrainerAccountNotice';
+import { LiteChip } from '../lite/LiteChip';
 
 export function AppShell() {
   const { user, hasRole, editorMode, setEditorMode } = useAuth();
@@ -24,6 +25,10 @@ export function AppShell() {
   const { config: compactBar } = useCompactPageBarState();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // The Lite mode chip opens the menu with its settings showing.
+  const [menuShowsSettings, setMenuShowsSettings] = useState(false);
+  const openMenu = () => { setMenuShowsSettings(false); setMenuOpen(true); };
+  const openLiteSettings = () => { setMenuShowsSettings(true); setMenuOpen(true); };
   const location = useLocation();
   const choosingCompetition = ['/', '/competitions', '/competitions/past'].includes(location.pathname);
   const competitionId = competitionIdFromPath(location.pathname);
@@ -59,12 +64,13 @@ export function AppShell() {
               <span className={`mg-badge ${compactBar.badge === 'live' ? 'mg-badge-live' : compactBar.badge === 'finished' ? 'mg-compact-finished' : 'mg-badge-soft'}`}>
                 {compactBar.badge === 'live' ? 'On now' : compactBar.badge === 'finished' ? 'Finished' : 'Next'}
               </span>
+              <LiteChip onOpen={openLiteSettings} short />
               {hasRole('Admin') && (
                 <button onClick={() => setEditorMode(!editorMode)} className="mg-nav-btn" aria-label={editorMode ? 'Switch to view mode' : 'Switch to edit mode'} aria-pressed={editorMode}>
                   {editorMode ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                 </button>
               )}
-              <button onClick={() => setMenuOpen(true)} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
+              <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
             </div>
           ) : (
             <div className="mx-auto flex max-w-5xl items-center gap-2.5 py-3 pl-4 pr-3">
@@ -79,12 +85,13 @@ export function AppShell() {
                 <span className="min-w-0 flex-1 truncate text-base font-semibold">Mounted Games</span>
               )}
               {!user && choosingCompetition && <Link to="/login" className="mg-nav-btn">Sign in</Link>}
+              <LiteChip onOpen={openLiteSettings} />
               {hasRole('Admin') && (
                 <button onClick={() => setEditorMode(!editorMode)} className="mg-nav-btn" aria-label={editorMode ? 'Switch to view mode' : 'Switch to edit mode'} aria-pressed={editorMode}>
                   {editorMode ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                 </button>
               )}
-              <button onClick={() => setMenuOpen(true)} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
+              <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
             </div>
           )}
         </header>
@@ -100,7 +107,7 @@ export function AppShell() {
         </PageLoadBoundary>
       </main>
       {competitionId != null && <BottomTabs competitionId={competitionId} />}
-      {menuOpen && <NavigationDrawer onClose={() => setMenuOpen(false)} onChangeCompetition={() => { setMenuOpen(false); setPickerOpen(true); }} />}
+      {menuOpen && <NavigationDrawer settingsOpen={menuShowsSettings} onClose={() => setMenuOpen(false)} onChangeCompetition={() => { setMenuOpen(false); setPickerOpen(true); }} />}
       {pickerOpen && <CompetitionPickerDialog onClose={() => setPickerOpen(false)} />}
       {current && !choosingCompetition && rememberChoice === 'ask' && !pickerOpen && !menuOpen && <RememberCompetitionDialog />}
     </div>
