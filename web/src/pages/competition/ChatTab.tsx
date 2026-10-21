@@ -61,7 +61,9 @@ function ChatTabSession() {
   const { user, canEdit, hasRole } = useAuth();
   // Only admins and trainers post; a trainer's messages go to the admins only.
   const isAdmin = hasRole('Admin');
-  const canPost = isAdmin || hasRole('Trainer');
+  const isTrainer = hasRole('Trainer');
+  const trainerMessagingAvailable = competition.staffChatEnabled === true;
+  const canPost = isAdmin || (isTrainer && trainerMessagingAvailable);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [body, setBody] = useState('');
   const [announcement, setAnnouncement] = useState('');
@@ -221,7 +223,10 @@ function ChatTabSession() {
         <footer className="p-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
           {!canPost ? (
             <p className="text-[11px] text-slate-500 dark:text-slate-300 flex items-center gap-1">
-              <Lock className="w-3 h-3" /> Only organisers and trainers can post here.
+              <Lock className="w-3 h-3" />
+              {isTrainer && !trainerMessagingAvailable
+                ? 'Messaging the organisers isn’t available for this event yet.'
+                : 'Only organisers and trainers can post here.'}
             </p>
           ) : (
             <>

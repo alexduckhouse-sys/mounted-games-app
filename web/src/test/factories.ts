@@ -33,7 +33,7 @@ export const chat = (id: number, extra: Partial<ChatMessage> = {}): ChatMessage 
 
 export const competition = (extra: Partial<CompetitionDetail> = {}): CompetitionDetail => ({
   id: 1, name: 'Spring Games', startDate: '2026-06-01', isActive: true, isArchived: false,
-  sections: [], teams: [], sessions: [], ...extra,
+  sections: [], teams: [], sessions: [], staffChatEnabled: true, ...extra,
 });
 
 /** An Axios-shaped failure, as `isNetworkError` and `outcomeOfError` expect it. */

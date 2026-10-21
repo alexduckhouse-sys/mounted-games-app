@@ -1,8 +1,9 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LiveHandlers } from '../../live/useLiveHub';
-import type { Role } from '../../types';
+import type { CompetitionDetail, Role } from '../../types';
 import { chat, competition } from '../../test/factories';
 import { CompetitionContext } from './context';
 import { ChatTab } from './ChatTab';
@@ -12,6 +13,7 @@ const state = vi.hoisted(() => ({
   roles: ['Admin'] as Role[],
   handlers: null as LiveHandlers | null,
   get: vi.fn(),
+  post: vi.fn(),
 }));
 
 vi.mock('../../auth/AuthContext', () => ({
@@ -23,7 +25,7 @@ vi.mock('../../auth/AuthContext', () => ({
   }),
 }));
 vi.mock('../../api', () => ({
-  api: { get: state.get, post: vi.fn(), put: vi.fn(), delete: vi.fn() },
+  api: { get: state.get, post: state.post, put: vi.fn(), delete: vi.fn() },
 }));
 vi.mock('../../live/useLiveHub', () => ({
   useLiveHub: (_competitionId: number, handlers: LiveHandlers) => { state.handlers = handlers; return { connected: true }; },
@@ -35,8 +37,8 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function mount() {
-  const value = { competition: competition(), reload: vi.fn() };
+function mount(extra: Partial<CompetitionDetail> = {}) {
+  const value = { competition: competition(extra), reload: vi.fn() };
   return render(
     <MemoryRouter>
       <CompetitionContext.Provider value={value}>
@@ -54,6 +56,32 @@ beforeEach(() => {
 });
 
 describe('ChatTab auth sessions', () => {
+  it('does not offer private organiser messaging when the API omits the capability', async () => {
+    state.token = 'fake-trainer-token';
+    state.roles = ['Trainer'];
+    state.get.mockResolvedValue({ data: [] });
+
+    mount({ staffChatEnabled: undefined });
+
+    expect(screen.getByText('Messaging the organisers isn’t available for this event yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Only organisers see your messages')).not.toBeInTheDocument();
+    expect(state.post).not.toHaveBeenCalled();
+  });
+
+  it('lets a trainer message organisers when the API explicitly enables staff chat', async () => {
+    state.token = 'fake-trainer-token';
+    state.roles = ['Trainer'];
+    state.get.mockResolvedValue({ data: [] });
+    mount();
+
+    expect(screen.getByText('Only organisers see your messages')).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText('Message the organisers…'), 'Please call collecting ring');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(state.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'Please call collecting ring' });
+  });
+
   it('clears private messages and ignores the previous session response after sign-out', async () => {
     const privateMessage = chat(1, { body: 'Private trainer message', type: 0, adminOnly: true });
     state.get.mockResolvedValueOnce({ data: [privateMessage] });
