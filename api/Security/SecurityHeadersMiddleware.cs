@@ -39,7 +39,11 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
         await next(context);
     }
 
-    private static bool IsPublicCacheable(PathString path) =>
-        System.Text.RegularExpressions.Regex.IsMatch(path.Value ?? "", @"^/api/(competitions(/picker|/[1-9]\d*(/standings)?)?|race-templates|weather/(at|current|forecast))/?$",
-            System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+    // Built once. The timeout is generous so a busy host can't turn a match into an exception.
+    private static readonly System.Text.RegularExpressions.Regex PublicCacheablePath = new(
+        @"^/api/(competitions(/picker|/[1-9]\d*(/standings)?)?|race-templates|weather/(at|current|forecast))/?$",
+        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
+
+    private static bool IsPublicCacheable(PathString path) => PublicCacheablePath.IsMatch(path.Value ?? "");
 }

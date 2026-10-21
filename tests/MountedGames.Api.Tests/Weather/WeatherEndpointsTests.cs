@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text.Json;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Weather;
@@ -24,7 +24,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     private void Reset()
     {
         _f.Http.Reset();
-        ((MemoryCache)_f.Services.GetRequiredService<IMemoryCache>()).Clear();
+        _f.Services.GetRequiredService<WeatherCache>().Clear();
     }
 
     private async Task<(HttpStatusCode Status, JsonElement Body)> GetJsonAsync(string url)

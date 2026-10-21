@@ -102,9 +102,8 @@ builder.Services.AddHttpClient("weather", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(8);
 });
-// Bounded because weather keys come from query-string coordinates; every entry must set Size.
-builder.Services.AddMemoryCache(o => o.SizeLimit = 5_000);
-builder.Services.AddSingleton<WeatherCache>();
+// Owns its own size-limited cache (weather keys come from query-string coordinates).
+builder.Services.AddSingleton<WeatherCache>(_ => new WeatherCache());
 builder.Services.AddHttpClient(PushNotifier.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient("geocoding", c =>

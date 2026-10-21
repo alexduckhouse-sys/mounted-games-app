@@ -15,11 +15,29 @@ public sealed record WeatherOutcome(object Body, TimeSpan? Ttl);
 /// <remarks>
 /// The cache lives in memory, so it is per API instance. If several instances run, each warms
 /// its own copy; the worst case is one provider call per instance per period, which is fine.
-/// Entries are sized (1 each) because <c>AddMemoryCache</c> in Program.cs sets a SizeLimit:
-/// lat/lon come from the query string, so the number of keys must be bounded.
+/// lat/lon come from the query string, so the number of keys must be bounded: this class owns a
+/// private <see cref="MemoryCache"/> with a size limit (each entry counts as 1) instead of putting a
+/// limit on the app-wide <c>IMemoryCache</c>, where it would make unsized entries from other code throw.
 /// </remarks>
-public sealed class WeatherCache(IMemoryCache cache)
+public sealed class WeatherCache : IDisposable
 {
+    public const int MaxEntries = 5_000;
+
+    private readonly MemoryCache cache;
+
+    public WeatherCache() : this(new MemoryCacheOptions { SizeLimit = MaxEntries }) { }
+
+    /// <summary>For tests that need a different limit or clock. Entries are always sized 1.</summary>
+    public WeatherCache(MemoryCacheOptions options) => cache = new MemoryCache(options);
+
+    /// <summary>Number of stored entries.</summary>
+    public int Count => cache.Count;
+
+    /// <summary>Drops every stored entry (used by tests to start cold).</summary>
+    public void Clear() => cache.Clear();
+
+    public void Dispose() => cache.Dispose();
+
     public static readonly TimeSpan CurrentTtl = TimeSpan.FromMinutes(30);
     public static readonly TimeSpan NearForecastTtl = TimeSpan.FromMinutes(30);
     public static readonly TimeSpan FarForecastTtl = TimeSpan.FromHours(3);

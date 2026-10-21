@@ -26,7 +26,7 @@ public class WeatherCacheTests : IClassFixture<ApiFactory>
     private void Reset()
     {
         _f.Http.Reset();
-        ((MemoryCache)_f.Services.GetRequiredService<IMemoryCache>()).Clear();
+        _f.Services.GetRequiredService<WeatherCache>().Clear();
     }
 
     private int UpstreamCalls => _f.Http.Requests.Count;
@@ -233,12 +233,11 @@ public class WeatherCacheUnitTests
 {
     private static readonly DateTimeOffset Now = new(2030, 6, 1, 12, 0, 0, TimeSpan.Zero);
 
-    private static WeatherCache NewCache(out MemoryCache memory, TimeProvider? time = null)
+    private static WeatherCache NewCache(TimeProvider? time = null)
     {
 #pragma warning disable CS0618 // MemoryCacheOptions has no TimeProvider yet; ISystemClock is the only way to drive its clock.
-        memory = new MemoryCache(new MemoryCacheOptions { SizeLimit = 100, Clock = time is null ? null : new ProviderClock(time) });
+        return new WeatherCache(new MemoryCacheOptions { SizeLimit = 100, Clock = time is null ? null : new ProviderClock(time) });
 #pragma warning restore CS0618
-        return new WeatherCache(memory);
     }
 
 #pragma warning disable CS0618
@@ -288,7 +287,7 @@ public class WeatherCacheUnitTests
     [Fact]
     public async Task ConcurrentMisses_ShareOneFetch()
     {
-        var cache = NewCache(out _);
+        var cache = NewCache();
         var gate = new TaskCompletionSource();
         var fetches = 0;
         async Task<WeatherOutcome> Fetch()
@@ -312,7 +311,7 @@ public class WeatherCacheUnitTests
     [Fact]
     public async Task FailedFetch_ClearsTheSlot_SoTheNextCallerRetries()
     {
-        var cache = NewCache(out _);
+        var cache = NewCache();
         var fetches = 0;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -327,7 +326,7 @@ public class WeatherCacheUnitTests
     [Fact]
     public async Task OutcomeWithoutTtl_IsServedButNeverStored()
     {
-        var cache = NewCache(out var memory);
+        var cache = NewCache();
         var fetches = 0;
         Task<WeatherOutcome> Fetch() { fetches++; return Task.FromResult(new WeatherOutcome("fallback", null)); }
 
@@ -337,14 +336,14 @@ public class WeatherCacheUnitTests
         Assert.Equal("fallback", body);
         Assert.False(cacheable);
         Assert.Equal(2, fetches);
-        Assert.Equal(0, memory.Count);
+        Assert.Equal(0, cache.Count);
     }
 
     [Fact]
     public async Task Entries_ExpireAfterTheirTtl()
     {
         var time = new ManualTimeProvider();
-        var cache = NewCache(out _, time);
+        var cache = NewCache(time);
         var fetches = 0;
         Task<WeatherOutcome> Fetch() { fetches++; return Task.FromResult(new WeatherOutcome("sunny", TimeSpan.FromMinutes(30))); }
 
@@ -357,4 +356,19 @@ public class WeatherCacheUnitTests
         await cache.GetOrFetchAsync("k", Fetch);
         Assert.Equal(2, fetches);
     }
+
+    [Fact]
+    public async Task Cache_IsBoundedAndCanBeCleared()
+    {
+        using var cache = new WeatherCache(new MemoryCacheOptions { SizeLimit = 2 });
+        foreach (var key in new[] { "a", "b", "c" })
+            await cache.GetOrFetchAsync(key, () => Task.FromResult(new WeatherOutcome(key, TimeSpan.FromMinutes(5))));
+        Assert.Equal(2, cache.Count); // the third entry doesn't fit
+
+        cache.Clear();
+        Assert.Equal(0, cache.Count);
+    }
+
+    [Fact]
+    public void DefaultCache_HoldsUpToTheLimit() => Assert.Equal(5_000, WeatherCache.MaxEntries);
 }
