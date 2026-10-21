@@ -2,7 +2,9 @@
 
 MG App manages Mounted Games competitions on phones at events: organisers handle entries, teams and timetables; trainers submit rider declaration forms; supporters, stewards and spectators follow live scoring, standings and chat. It combines an ASP.NET Core 10 API with a React 19, TypeScript and Vite PWA, including offline caching, push notifications, weather and a marketplace. Payments are recorded for manual confirmation; online payment processing is not implemented.
 
-Read `APP_DESIGN.md` before changing behaviour; use `PRODUCT_DETAILS.md` for the lifecycle and `README.md` for setup. Check implementation where older documentation disagrees.
+Read `APP_DESIGN.md` before changing behaviour and `PRODUCT_DETAILS.md` for the lifecycle. `docs/README.md` says which docs are current. Check implementation where older documentation disagrees.
+
+Each area has its own guide, loaded when you work there: `api/CLAUDE.md` (glossary, change recipes, scoring rules), `web/CLAUDE.md` (pages, hub events, offline, tests) and `tests/CLAUDE.md` (API test helpers). Each has an `AGENTS.md` symlink for Codex.
 
 ## Layout
 
@@ -14,14 +16,15 @@ Read `APP_DESIGN.md` before changing behaviour; use `PRODUCT_DETAILS.md` for the
 - `api/Hubs/` — SignalR `LiveHub` and `ILiveBroadcaster`/`LiveBroadcaster`.
 - `api/Auth/` — role constants/groups, `[CompetitionAccess]` ownership filter, authentication DTOs and JWT `TokenService`.
 - `api/Security/` — security headers, rate limits, trusted proxies and startup secret validation.
-- `api/Program.cs` — dependency injection, SQLite, authentication, middleware, endpoints and startup seeding.
+- `api/Program.cs` — dependency injection, database provider (Postgres or SQLite), authentication, middleware, endpoints, startup seeding and the `--migrate-database` / `--seed-review-competitions` commands.
 - `web/src/` — entry point, routes (`App.tsx`), Axios client (`api.ts`), shared types, styles and service worker.
-- `web/src/pages/` — routed screens; `admin/` contains editors and `competition/` contains event tabs/scoring.
+- `web/src/pages/` — routed screens; `admin/` contains editors, `competition/` event tabs/scoring, and `commerce/`, `operations/`, `seasons/`, `eventTools/` the newer feature areas.
 - `web/src/components/` — shared shell, route guards, weather widgets and race diagrams/editors.
 - `web/src/auth/` — authentication context and admin edit-mode state.
 - `web/src/theme/` — theme context and persisted theme selection.
 - `web/src/competition/` — current-competition context.
-- `web/src/live/` — SignalR connection/event hook.
+- `web/src/live/` — SignalR hook, reconnection, and the Cloudflare stream publisher/viewer.
+- `web/src/offline/` — public-API cache policy, saved copies and the score outbox.
 - `web/src/hooks/` — team notification hook.
 - `web/src/lib/` — timing, section, CSV, bib, ticker and push helpers.
 - `tests/MountedGames.Api.Tests/` — xUnit API tests (endpoints, hub, security, services).
@@ -58,7 +61,7 @@ Vite proxies `/api` and `/hubs` (with WebSockets) to `http://localhost:5050`. Ax
 
 - **Production:** two Vercel projects. The website (`mounted-games-app`, root `web/`, `web/vercel.json`) rewrites `/api/*` to the API project `mounted-games-api` (repo root, built from `Dockerfile.vercel`, region `cle1` set in the root `vercel.json`, next to Neon in AWS us-east-2). The browser connects to the SignalR hub on the API project directly, over WebSockets with negotiation skipped. Data is in Neon Postgres. `render.yaml`, `fly.toml` and `DEPLOY.md` describe older hosts that are not in use.
 - **Security headers** are defined twice, in `api/Security/SecurityHeadersMiddleware.cs` and `web/vercel.json`; `SecurityTests` fails if they differ, and bans `*` and `unsafe-eval` in the CSP.
-- **Required production settings:** `Jwt__Key` (at least 32 bytes), `Admin__Key` (at least 20 bytes), `Database__Provider=postgres`, `DATABASE_URL`, `Database__SeedDemoData=false`. `SecurityConfiguration` refuses to start outside Development with weak keys or keys taken from `appsettings.json`.
+- **Required production settings:** `Jwt__Key` (at least 32 bytes), `Database__Provider=postgres`, `DATABASE_URL`. `Admin__Key` is optional (at least 20 bytes if set; without it there's no shared admin login). `SecurityConfiguration` refuses to start outside Development with weak keys, keys taken from `appsettings.json`, or `Database__SeedDemoData=true`.
 - Optional: `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpiryMinutes`, `Cors__Origins__N`, `Security__KnownProxies__N`, `Security__ProxyKey`, `RateLimits__AuthPerMinute`, `RateLimits__WritesPerMinute`, `What3Words__ApiKey`, `Push__Subject`; frontend build: `VITE_API_BASE`, `VITE_LIVE_HUB_URL`; Vercel runtime: `MG_PROXY_KEY` (read by `web/middleware.ts`).
 - Environment variables use `__` for nested keys. There's no user-secrets setup.
 - `VapidKeyService` generates `vapid-keys.json` in the API content root (gitignored); replacing the container regenerates it and invalidates push subscriptions.
@@ -67,6 +70,6 @@ Vite proxies `/api` and `/hubs` (with WebSockets) to `http://localhost:5050`. Ax
 
 - `api/appsettings.json` still holds development JWT/admin key values. Never copy key values into docs or logs.
 - **Visitor IPs:** behind Vercel, the API learns a visitor's IP only from `web/middleware.ts`, which sends it with a shared key (`MG_PROXY_KEY` on the website project, the same value as `Security__ProxyKey` on the API project; at least 32 bytes). Without the key every visitor shares one rate-limit partition. The live hub connects to the API project directly and isn't covered (see `docs/security-review.md`).
-- Anyone can self-register as a Trainer (`POST /api/auth/signup-trainer`), and Trainers can create competitions.
+- Anyone can sign up (`POST /api/auth/signup-trainer`). A Trainer request gets the `TrainerRequest` role until an admin approves it at `/api/admin/trainer-requests`; Manager and Member sign-ups take effect at once. Approved Trainers can create competitions.
 - `api/MountedGames.Api.http` is a stale template (port 5140, `/weatherforecast/`).
 - **Vercel runs the API as a scaling, scale-to-zero container**, but the API still assumes one long-running process: SignalR groups, viewer tracking and rate limits live in memory, `vapid-keys.json` is per instance, and `NotificationScheduler`/`StreamSweeper` only run while an instance is up. Fine for testing; fix before real events (see `NEXT_STEPS.md`).
