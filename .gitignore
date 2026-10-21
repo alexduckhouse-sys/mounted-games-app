@@ -52,3 +52,5 @@ api/vapid-keys.json
 # Test output
 TestResults/
 coverage/
+.vercel
+.env*.local

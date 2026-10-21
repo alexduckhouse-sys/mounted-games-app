@@ -36,10 +36,10 @@ Read `APP_DESIGN.md` before changing behaviour; use `PRODUCT_DETAILS.md` for the
 | All tests | `npm test` (repo root) |
 | API tests | `dotnet test tests/MountedGames.Api.Tests` (xUnit). CI also gates line coverage at 95%: see `.github/workflows/ci.yml` and `scripts/api-coverage.py` |
 | Web tests | `npm test` in `web/` (`node --test` suite, then Vitest); `npm run test:coverage` enforces 97% on `lib`, `live`, `hooks`, `components` and friends (`web/vitest.config.ts`; `src/pages/**` is excluded) |
-| Lint | `npm run lint` in `web/`. About 46 errors predate current work and lint isn't in CI yet; keep new files clean. No API lint or formatter is configured |
+| Lint | `npm run lint` in `web/`; CI fails on any error. No API lint or formatter is configured |
 | Prod migrations | `npm run db:migrate` (repo root) against Neon; see `docs/neon-setup.md` |
 
-Vite proxies `/api` and `/hubs` (with WebSockets) to `http://localhost:5050`. Axios uses `/api`. The SignalR hook uses `VITE_LIVE_HUB_URL` when set (production points it straight at Render), otherwise same-origin `/hubs/live`.
+Vite proxies `/api` and `/hubs` (with WebSockets) to `http://localhost:5050`. Axios uses `/api`. The SignalR hook uses `VITE_LIVE_HUB_URL` when set (production points it straight at the API's Vercel project), otherwise same-origin `/hubs/live`.
 
 ## Observed conventions
 
@@ -56,7 +56,7 @@ Vite proxies `/api` and `/hubs` (with WebSockets) to `http://localhost:5050`. Ax
 
 ## Configuration and deployment
 
-- **Production:** the web is on Vercel (`web/vercel.json`), which rewrites `/api/*` to the API on Render (`render.yaml`, free plan, sleeps after 15 minutes idle); data is in Neon Postgres. The browser connects to the SignalR hub on Render directly. `fly.toml` and `DEPLOY.md`'s Fly path are not in use.
+- **Production:** two Vercel projects. The website (`mounted-games-app`, root `web/`, `web/vercel.json`) rewrites `/api/*` to the API project `mounted-games-api` (repo root, built from `Dockerfile.vercel`, region `cle1` set in the root `vercel.json`, next to Neon in AWS us-east-2). The browser connects to the SignalR hub on the API project directly, over WebSockets with negotiation skipped. Data is in Neon Postgres. `render.yaml`, `fly.toml` and `DEPLOY.md` describe older hosts that are not in use.
 - **Security headers** are defined twice, in `api/Security/SecurityHeadersMiddleware.cs` and `web/vercel.json`; `SecurityTests` fails if they differ, and bans `*` and `unsafe-eval` in the CSP.
 - **Required production settings:** `Jwt__Key` (at least 32 bytes), `Admin__Key` (at least 20 bytes), `Database__Provider=postgres`, `DATABASE_URL`, `Database__SeedDemoData=false`. `SecurityConfiguration` refuses to start outside Development with weak keys or keys taken from `appsettings.json`.
 - Optional: `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpiryMinutes`, `Cors__Origins__N`, `Security__KnownProxies__N`, `Security__ProxyKey`, `RateLimits__AuthPerMinute`, `RateLimits__WritesPerMinute`, `What3Words__ApiKey`, `Push__Subject`; frontend build: `VITE_API_BASE`, `VITE_LIVE_HUB_URL`; Vercel runtime: `MG_PROXY_KEY` (read by `web/middleware.ts`).
@@ -66,7 +66,7 @@ Vite proxies `/api` and `/hubs` (with WebSockets) to `http://localhost:5050`. Ax
 ## Gotchas to flag, not silently fix
 
 - `api/appsettings.json` still holds development JWT/admin key values. Never copy key values into docs or logs.
-- **Visitor IPs:** behind Vercel, the API learns a visitor's IP only from `web/middleware.ts`, which sends it with a shared key (`MG_PROXY_KEY` on Vercel, the same value as `Security__ProxyKey` on Render; at least 32 bytes). Without the key every visitor shares one rate-limit partition. The live hub connects to Render directly and isn't covered (see `docs/security-review.md`).
+- **Visitor IPs:** behind Vercel, the API learns a visitor's IP only from `web/middleware.ts`, which sends it with a shared key (`MG_PROXY_KEY` on the website project, the same value as `Security__ProxyKey` on the API project; at least 32 bytes). Without the key every visitor shares one rate-limit partition. The live hub connects to the API project directly and isn't covered (see `docs/security-review.md`).
 - Anyone can self-register as a Trainer (`POST /api/auth/signup-trainer`), and Trainers can create competitions.
 - `api/MountedGames.Api.http` is a stale template (port 5140, `/weatherforecast/`).
-- Render's free plan sleeps: the first request after idle takes about 50 seconds and SignalR connections drop.
+- **Vercel runs the API as a scaling, scale-to-zero container**, but the API still assumes one long-running process: SignalR groups, viewer tracking and rate limits live in memory, `vapid-keys.json` is per instance, and `NotificationScheduler`/`StreamSweeper` only run while an instance is up. Fine for testing; fix before real events (see `NEXT_STEPS.md`).

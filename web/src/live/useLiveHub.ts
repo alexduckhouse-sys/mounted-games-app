@@ -1,4 +1,4 @@
-import { HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
+import { HttpTransportType, HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { recoverConnection } from './recoverConnection';
 import { useAuth } from '../auth/AuthContext';
@@ -40,6 +40,10 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
     const conn: HubConnection = new HubConnectionBuilder()
       .withUrl(import.meta.env.VITE_LIVE_HUB_URL || '/hubs/live', {
         accessTokenFactory: () => readToken() === token ? token ?? '' : '',
+        // The API can run as several instances with no sticky sessions, so connect straight over
+        // WebSockets: a separate negotiate request could reach a different instance.
+        skipNegotiation: true,
+        transport: HttpTransportType.WebSockets,
       })
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
