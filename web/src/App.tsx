@@ -3,6 +3,8 @@ import { PageLoadBoundary } from './components/PageLoadBoundary';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
+import { LiteModeProvider } from './lite/LiteModeContext';
+import { LiteMotionConfig } from './lite/LiteMotionConfig';
 import { CurrentCompetitionProvider } from './competition/CurrentCompetitionContext';
 import { NavExtrasProvider } from './components/NavExtrasContext';
 import { AgeGroupsProvider } from './components/AgeGroupsContext';
@@ -52,6 +54,8 @@ const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) =
 
 export default function App() {
   return (
+    <LiteModeProvider>
+    <LiteMotionConfig>
     <ThemeProvider>
       <AuthProvider>
         <CurrentCompetitionProvider>
@@ -138,5 +142,7 @@ export default function App() {
         </CurrentCompetitionProvider>
       </AuthProvider>
     </ThemeProvider>
+    </LiteMotionConfig>
+    </LiteModeProvider>
   );
 }

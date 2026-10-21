@@ -4,6 +4,8 @@ import { Clock, Trophy, LogOut, MessageSquare, Info, ArrowLeftRight, X, Settings
 import { useAuth } from '../auth/AuthContext';
 import { THEMES } from '../theme/themes';
 import { useTheme } from '../theme/ThemeContext';
+import { useLiteMode } from '../lite/LiteModeContext';
+import { LiteModeSetting } from '../lite/LiteModeSetting';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { competitionDateText } from '../lib/competitionDates';
 import { useNavExtras } from './NavExtrasContext';
@@ -17,7 +19,7 @@ const itemClass = (active: boolean) => `flex min-h-12 w-full items-center gap-3 
   : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`;
 const iconClass = (active: boolean) => `h-5 w-5 shrink-0 ${active ? '' : 'text-[rgb(var(--mg-muted))]'}`;
 
-export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: () => void; onChangeCompetition: () => void }) {
+export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: startWithSettings = false }: { onClose: () => void; onChangeCompetition: () => void; settingsOpen?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const { current, rememberChoice, setRememberChoice } = useCurrentCompetition();
   const { user, hasRole, logout } = useAuth();
@@ -27,7 +29,8 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
   const ageGroups = useAgeGroups();
   const location = useLocation();
   const { theme, setTheme } = useTheme();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { lite } = useLiteMode();
+  const [settingsOpen, setSettingsOpen] = useState(startWithSettings);
   const [showWeather, setShowWeather] = useState(() => { try { return localStorage.getItem(WEATHER_KEY) === '1'; } catch { return false; } });
   function toggleWeather() {
     const next = !showWeather;
@@ -78,7 +81,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
         </div>
 
         <div className="flex flex-1 flex-col gap-5 p-4">
-          {showWeather && <div className="flex min-h-12 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2"><CloudSun className="h-5 w-5 shrink-0 text-[rgb(var(--mg-muted))]" /><span className="font-medium">Weather</span><span className="ml-auto"><WeatherBadge /></span></div>}
+          {showWeather && !lite && <div className="flex min-h-12 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2"><CloudSun className="h-5 w-5 shrink-0 text-[rgb(var(--mg-muted))]" /><span className="font-medium">Weather</span><span className="ml-auto"><WeatherBadge /></span></div>}
 
           {current && ageGroups.competitionId === current.id && ageGroups.groups.length > 0 && (
             <nav aria-label="Age groups" className="flex flex-col gap-2.5">
@@ -122,6 +125,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition }: { onClose: ()
                     </button>
                   ))}
                 </div>
+                <LiteModeSetting />
                 <div className="flex flex-col gap-1">
                   <h3 className="px-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Options</h3>
                   <SettingSwitch icon={CloudSun} label="Show weather" checked={showWeather} onChange={toggleWeather} />
