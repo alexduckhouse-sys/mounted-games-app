@@ -64,6 +64,8 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const { pathname } = useLocation();
 
   const load = useCallback(() => setAttempt((n) => n + 1), []);
+  /** Showing the small first view while the full timetable is still on its way. */
+  const [partial, setPartial] = useState(false);
   /** Timetable checks that failed in a row; a service-worker copy counts as a failure. */
   const [failures, setFailures] = useState(0);
   const [retrying, setRetrying] = useState(false);
@@ -79,6 +81,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
           setFailures(0);
           dataAt.current = Date.now();
           setData(r.data);
+          setPartial(false);
           setSavedAt(null);
           setUpdatedAt(new Date());
           return;
@@ -88,6 +91,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         if (dataAt.current > 0 && dataAt.current >= fallbackAt) return; // ours is newer: keep showing it
         dataAt.current = fallbackAt;
         setData(r.data);
+        setPartial(false);
         setSavedAt(fallback === 'unknown' ? '' : fallback.toISOString());
         setUpdatedAt(fallback === 'unknown' ? null : fallback);
       })
@@ -103,12 +107,28 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     return () => { cancelled = true; clearTimeout(slowTimer); controller.abort(); };
   }, [competitionId, attempt]);
 
-  // Keep the saved copy in step with every change, live results included, so it is never older than the screen.
+  // With nothing saved on this phone, ask for the small first view too: on one bar it arrives well before the
+  // full timetable, and the full one replaces it. A saved copy already opens straight away, so skip it then.
   useEffect(() => {
-    if (!data || data === initial?.data) return;
+    if (initial) return;
+    const controller = new AbortController();
+    api.get<CompetitionDetail>(`/competitions/${competitionId}/first-view`, { signal: controller.signal })
+      .then((r) => {
+        if (dataAt.current > 0 || serviceWorkerSavedAt(r.headers) !== null) return;
+        setData(r.data);
+        setPartial(true);
+      })
+      .catch(() => { /* the full timetable is still coming */ });
+    return () => controller.abort();
+  }, [competitionId, initial]);
+
+  // Keep the saved copy in step with every change, live results included, so it is never older than the screen.
+  // The first view is only part of the timetable, so it is never saved.
+  useEffect(() => {
+    if (!data || data === initial?.data || partial) return;
     const timer = setTimeout(() => writeSavedCopy(savedKey, data, new Date(dataAt.current || Date.now())), 500);
     return () => clearTimeout(timer);
-  }, [data, initial, savedKey]);
+  }, [data, initial, partial, savedKey]);
 
   useEffect(() => {
     if (data) {
@@ -279,6 +299,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />
+        {partial && <p role="status" className="mg-notice mx-auto w-full max-w-xl">Loading the rest of the timetable…</p>}
         {/* Connection trouble is shown by the pill in the header; this only explains a saved copy. */}
         {showSavedNotice && (
           <div role="status" className="mg-notice mx-auto flex w-full max-w-xl flex-wrap items-center gap-2">

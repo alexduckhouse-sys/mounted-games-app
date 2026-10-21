@@ -1,9 +1,10 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { chat, competition } from '../test/factories';
 import { CompetitionPage } from './CompetitionPage';
+import { readSavedCopy, savedCopyKeys, writeSavedCopy } from '../offline/savedCopies';
 
 const state = vi.hoisted(() => ({
   handlers: null as null | Record<string, (...args: never[]) => void>,
@@ -91,4 +92,53 @@ it('counts a saved copy from the service worker as a failed check', async () => 
   renderAt('/competitions/1');
   expect(await screen.findByText('Competition loaded')).toBeVisible();
   await waitFor(() => expect(lastStatus()).toMatchObject({ failures: 1 }));
+});
+
+describe('first view', () => {
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => { resolve = done; });
+    return { promise, resolve };
+  }
+
+  it('shows the small first view until the full timetable arrives, and never saves it', async () => {
+    const full = deferred<{ data: unknown; headers: object }>();
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.endsWith('/chat')) return { data: [] };
+      if (url.endsWith('/first-view')) return { data: competition({ name: 'Partial view' }), headers: {} };
+      return full.promise;
+    });
+    renderAt('/competitions/1');
+
+    expect(await screen.findByText('Loading the rest of the timetable…')).toBeVisible();
+    expect(state.setCurrent).toHaveBeenCalledWith(expect.objectContaining({ name: 'Partial view' }));
+    await new Promise((done) => setTimeout(done, 600));
+    expect(readSavedCopy(savedCopyKeys.competition(1))).toBeNull();
+
+    await act(async () => { full.resolve({ data: competition({ name: 'Full timetable' }), headers: {} }); });
+    await waitFor(() => expect(screen.queryByText('Loading the rest of the timetable…')).toBeNull());
+    expect(state.setCurrent).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Full timetable' }));
+  });
+
+  it('ignores a first view that arrives after the full timetable', async () => {
+    const first = deferred<{ data: unknown; headers: object }>();
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.endsWith('/chat')) return { data: [] };
+      if (url.endsWith('/first-view')) return first.promise;
+      return { data: competition({ name: 'Full timetable' }), headers: {} };
+    });
+    renderAt('/competitions/1');
+    expect(await screen.findByText('Competition loaded')).toBeVisible();
+
+    await act(async () => { first.resolve({ data: competition({ name: 'Partial view' }), headers: {} }); });
+    expect(screen.queryByText('Loading the rest of the timetable…')).toBeNull();
+    expect(state.setCurrent).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'Partial view' }));
+  });
+
+  it('skips the first view when this phone already has a saved copy', async () => {
+    writeSavedCopy(savedCopyKeys.competition(1), competition(), new Date());
+    renderAt('/competitions/1');
+    expect(await screen.findByText('Competition loaded')).toBeVisible();
+    expect(vi.mocked(api.get).mock.calls.map(([url]) => url)).not.toContain('/competitions/1/first-view');
+  });
 });
