@@ -7,6 +7,7 @@ using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Streaming;
 
 namespace MountedGames.Api.Controllers;
 
@@ -14,6 +15,17 @@ namespace MountedGames.Api.Controllers;
 [Route("api/competitions")]
 public class CompetitionsController : ControllerBase
 {
+    [HttpPut("{id:int}/stream-url")]
+    [Authorize(Roles = Roles.Organiser)]
+    [CompetitionAccess("id")]
+    public async Task<IActionResult> SetStreamUrl(int id, StreamUrlRequest request, CancellationToken ct)
+    {
+        var competition = await _db.Competitions.SingleAsync(c => c.Id == id, ct);
+        competition.StreamUrl = request.StreamUrl;
+        await _db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
     private readonly AppDbContext _db;
     private readonly ILiveBroadcaster _live;
     private readonly GeocodingService _geocode;
@@ -229,8 +241,10 @@ public class CompetitionsController : ControllerBase
 
     [HttpDelete("{id:int}")]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(int id, [FromServices] CompetitionStreamLocks streamLocks,
+        [FromServices] StreamLifecycle streamLifecycle)
     {
+        using var streamLease = await streamLocks.AcquireAsync(id, HttpContext.RequestAborted);
         var c = await _db.Competitions
             .Include(x => x.Sections)
             .Include(x => x.Teams)
@@ -262,9 +276,12 @@ public class CompetitionsController : ControllerBase
         _db.Teams.RemoveRange(c.Teams);
         _db.ChatMessages.RemoveRange(c.ChatMessages);
         _db.CompetitionSections.RemoveRange(c.Sections);
+        var closures = (await _db.LiveStreams.Where(s => s.CompetitionId == id).ToListAsync())
+            .Select(streamLifecycle.MarkEnded).OfType<StreamLifecycle.Closure>().ToArray();
         _db.Competitions.Remove(c);
 
         await _db.SaveChangesAsync();
+        foreach (var closure in closures) await streamLifecycle.CompleteEndAsync(closure);
         return NoContent();
     }
 

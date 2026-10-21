@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance } from 'axios';
+import axios, { AxiosError, type AxiosInstance, type AxiosResponse } from 'axios';
 
 const TOKEN_KEY = 'mg.auth';
 
@@ -53,8 +53,21 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+/**
+ * An API build that doesn't know a route answers with the app's HTML page and a 200. That page is
+ * never data, so reject it as a missing route; callers' error handling then covers it, instead of
+ * a component trying to read a string as a list.
+ */
+export function rejectHtmlPage(response: AxiosResponse): AxiosResponse | Promise<never> {
+  const headers = response.headers as { get?: (name: string) => unknown; [name: string]: unknown } | undefined;
+  const type = String((typeof headers?.get === 'function' ? headers.get('content-type') : headers?.['content-type']) ?? '');
+  if (!type.toLowerCase().includes('text/html')) return response;
+  return Promise.reject(new AxiosError('The API returned a web page instead of data.', AxiosError.ERR_BAD_RESPONSE,
+    response.config, response.request, { ...response, status: 404, statusText: 'Not Found' }));
+}
+
 api.interceptors.response.use(
-  (r) => r,
+  rejectHtmlPage,
   (err) => {
     if (err?.response?.status === 401) {
       writeStoredAuth(null);

@@ -222,7 +222,7 @@ public class SecurityTests
     }
 
     [Fact]
-    public async Task HeadersCoverAssetsFallbackErrorsAndMatchVercel()
+    public async Task HeadersCoverAssetsFallbackAndErrors()
     {
         await using var server = await SecurityServer.Start();
         foreach (var path in new[] { "/asset.js", "/spa-route", "/fail", "/api/missing" })
@@ -234,6 +234,11 @@ public class SecurityTests
         using var failure = await server.Client.GetAsync("/fail");
         Assert.Equal(HttpStatusCode.InternalServerError, failure.StatusCode);
         Assert.DoesNotContain("Fake internal detail", await failure.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task HeadersMatchVercel()
+    {
         var repo = FindRepo();
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(repo, "web/vercel.json")));
         var headers = document.RootElement.GetProperty("headers").EnumerateArray()
@@ -268,6 +273,9 @@ public class SecurityTests
         Assert.Equal("frame-ancestors 'none'", directives["frame-ancestors"]);
         Assert.Equal("object-src 'none'", directives["object-src"]);
         Assert.Equal("base-uri 'none'", directives["base-uri"]);
+        Assert.Equal("frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv", directives["frame-src"]);
+        Assert.Equal("camera=(self), microphone=(self), geolocation=(), payment=(), browsing-topics=()",
+            SecurityHeadersMiddleware.Headers["Permissions-Policy"]);
         Assert.DoesNotContain("unsafe-eval", SecurityHeadersMiddleware.ContentSecurityPolicy);
         Assert.DoesNotContain("*", SecurityHeadersMiddleware.ContentSecurityPolicy);
     }

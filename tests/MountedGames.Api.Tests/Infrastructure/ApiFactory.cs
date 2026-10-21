@@ -41,6 +41,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         {
             var scheduler = services.Single(d => d.ImplementationType == typeof(NotificationScheduler));
             services.Remove(scheduler);
+            services.Remove(services.Single(d => d.ImplementationType == typeof(MountedGames.Api.Services.Streaming.StreamSweeper)));
 
             services.AddTransient<IStartupFilter, TestIpStartupFilter>();
 

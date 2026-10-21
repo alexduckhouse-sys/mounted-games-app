@@ -5,9 +5,13 @@
  */
 import { registerSW } from 'virtual:pwa-register';
 
+let broadcasting = false;
+export function setBroadcasting(value: boolean): void { broadcasting = value; }
+
 export function registerPwa(): void {
   const updateSW = registerSW({
     onNeedRefresh() {
+      if (broadcasting) return;
       // A new build is waiting in the worker. Ask once; reload on accept.
       if (window.confirm('A new version of the app is ready. Reload now?')) {
         updateSW(true);
@@ -18,7 +22,7 @@ export function registerPwa(): void {
       // wire one in later. For now this is a no-op.
       try { localStorage.setItem('mg.pwa.offlineReady', '1'); } catch { /* quota */ }
     },
-    onRegisteredSW(_swUrl, _registration) {
+    onRegisteredSW() {
       // Hook used later by background-push subscription wiring.
     },
   });

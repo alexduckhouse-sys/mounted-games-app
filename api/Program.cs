@@ -11,6 +11,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Streaming;
 
 var builder = WebApplication.CreateBuilder(args);
 SecurityConfiguration.Validate(builder.Configuration, builder.Environment);
@@ -87,6 +88,15 @@ builder.Services.AddSingleton<VapidKeyService>();
 builder.Services.AddScoped<PushNotifier>();
 builder.Services.AddScoped<EquipmentCalculator>();
 builder.Services.AddHostedService<NotificationScheduler>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.Configure<StreamingOptions>(builder.Configuration.GetSection("Streaming"));
+builder.Services.AddHttpClient(CloudflareSfuClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton<ISfuClient, CloudflareSfuClient>();
+builder.Services.AddSingleton<CompetitionStreamLocks>();
+builder.Services.AddSingleton<ViewerRegistry>();
+builder.Services.AddScoped<StreamLifecycle>();
+builder.Services.AddHostedService<StreamSweeper>();
 
 builder.Services.AddHttpClient("weather", c =>
 {

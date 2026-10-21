@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { registerPwa } from './pwa';
+import { registerPwa, setBroadcasting } from './pwa';
 
 type Options = { onNeedRefresh: () => void; onOfflineReady: () => void; onRegisteredSW: (url: string, registration?: unknown) => void };
 const registerSW = vi.hoisted(() => vi.fn());
@@ -10,6 +10,7 @@ const updateSW = vi.fn();
 
 beforeEach(() => {
   registerSW.mockImplementation((given: Options) => { options = given; return updateSW; });
+  setBroadcasting(false);
   registerPwa();
 });
 
@@ -44,4 +45,15 @@ describe('registerPwa', () => {
   it('accepts the registration callback without doing anything yet', () => {
     expect(() => options.onRegisteredSW('/sw.js', {})).not.toThrow();
   });
+});
+
+it('defers the update prompt and reload while broadcasting', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  setBroadcasting(true);
+  options.onNeedRefresh();
+  expect(confirm).not.toHaveBeenCalled();
+  expect(updateSW).not.toHaveBeenCalled();
+  setBroadcasting(false);
+  options.onNeedRefresh();
+  expect(updateSW).toHaveBeenCalledWith(true);
 });

@@ -1,18 +1,20 @@
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useCompetition } from './context';
 import type { Heat, Session } from '../../types';
-import { computeTimings, formatTime } from '../../lib/time';
+import { computeTimings } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
-import { statusLabel, timetableRows } from '../../lib/timetableRows';
+import { timetableRows } from '../../lib/timetableRows';
+import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import './heat.css';
 
 interface Cell { points: number; eliminated: boolean }
 
 /** The public heat page: who is racing, the score for every race so far and the running total. */
 export function HeatScores({ session, heats, activeHeatId }: { session: Session; heats: Heat[]; activeHeatId: number | null }) {
-  const { competition } = useCompetition();
+  const { competition, streams } = useCompetition();
+  const canWatch = !!competition.streamUrl || streams.some((stream) => stream.status !== 2);
   // The page can be reached with ?heat=<id> while already mounted (next-heat link), so the URL wins over the parent's initial pick.
   const [searchParams] = useSearchParams();
   const requestedHeat = Number(searchParams.get('heat'));
@@ -30,9 +32,20 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
   const status = row?.status ?? 'on-time';
   const finished = status === 'finished';
   const runningIndex = status === 'live' ? races.findIndex((race) => !race.isComplete) : -1;
-  const time = row?.effective ? formatTime(row.effective) : null;
-  const metaTail = status === 'live' && runningIndex >= 0 ? `Race ${runningIndex + 1} of ${races.length}` : session.arenaName?.trim();
-  const meta = [time, metaTail].filter(Boolean).join(' · ');
+  const time = row?.effective ? row.effective.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
+  const runningRace = runningIndex >= 0 ? races[runningIndex] : null;
+  const tableMeta = status === 'live' && runningRace
+    ? `Race ${runningIndex + 1} of ${races.length} · ${runningRace.name}`
+    : finished
+      ? [time, 'Final result'].filter(Boolean).join(' · ')
+      : time ? `Starts ${time}${status === 'late' && row ? ` · running ${row.delayMinutes} min late` : ''}` : 'Start time to be confirmed';
+  const compactSubtitle = [section ? `${section} heats` : 'Heats', session.arenaName?.trim()].filter(Boolean).join(' · ');
+  useCompactPageBar({
+    backTo: `/competitions/${competition.id}`,
+    title: competition.name,
+    subtitle: compactSubtitle,
+    badge: status === 'live' ? 'live' : finished ? 'finished' : 'next',
+  });
 
   const grid = useMemo(() => {
     if (!heat) return { teams: [], cells: new Map<string, Cell>() };
@@ -58,26 +71,11 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
     return { teams: ranked, cells };
   }, [heat, races, finished]);
 
-  const badgeStyle = 'inline-flex h-[26px] items-center gap-[5px] rounded-md px-2.5 text-xs font-bold leading-none tracking-[0.04em]';
-  const badge = status === 'live' ? <span className={`mg-badge mg-badge-live !h-[26px] !px-2.5 !text-xs`}>On now</span>
-    : finished ? <span className={`${badgeStyle} bg-[rgb(var(--mg-tint))] uppercase text-[rgb(var(--mg-heading))]`}>Finished</span>
-    : status === 'late' && row ? <span className="mg-badge mg-badge-late !h-[26px] !px-2.5 !text-xs">{statusLabel(status, row.delayMinutes)}</span>
-    : null;
-  const minWidth = 12 + (finished ? 18 : 0) + 96 + races.length * 23 + 44;
+  const minWidth = 12 + (finished ? 18 : 0) + 116 + races.length * 23 + 44;
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
-      <header className="mg-band flex flex-col gap-2.5 pb-3.5 pt-2.5">
-        <div className="flex items-center gap-2.5">
-          <Link to={`/competitions/${competition.id}`} className="mg-text-link -ml-1 !min-h-[44px] !justify-start !gap-1 pl-1 pr-2.5 !text-sm"><ChevronLeft aria-hidden="true" className="h-[18px] w-[18px]" />Timetable</Link>
-          <span className="flex-1" />
-          {badge}
-        </div>
-        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
-          <h1 className="mg-display min-w-0 break-words text-[28px] font-bold leading-none text-[rgb(var(--mg-heading))]">{heat ? `${section ? `${section} · ` : ''}${heatLabel}` : heatLabel}</h1>
-          {meta && <span className="min-w-0 text-[13px] font-medium leading-none text-[rgb(var(--mg-muted))]">{meta}</span>}
-        </div>
-      </header>
+      <h1 className="sr-only">{section ? `${section} ${heatLabel} scores` : `${heatLabel} scores`}</h1>
 
       {!heat ? <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No heats in this session yet.</p> : (
         <section aria-label="Scores" className="mg-card overflow-hidden">
@@ -87,7 +85,14 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
                 <thead>
                   <tr>
                     {finished && <th scope="col" className="heat-rank">#</th>}
-                    <th scope="col">Team</th>
+                    <th scope="col" className="heat-team-head">
+                      <div className="heat-title">
+                        {section && <span className="heat-title-section">{section}</span>}
+                        <span className="heat-title-name">{heatLabel}</span>
+                        <span className={`heat-title-meta ${status === 'live' ? 'heat-title-meta-live' : status === 'late' ? 'heat-title-meta-late' : ''}`}>{tableMeta}</span>
+                      </div>
+                      <span>Team</span>
+                    </th>
                     {races.map((race, i) => (
                       <th key={race.id} scope="col" className="heat-race" title={race.name}>
                         {i > 0 && <span aria-hidden="true" className="heat-sep" />}
@@ -132,8 +137,8 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
         </div>
       ) : (
         <div className="flex gap-2.5">
-          {competition.streamUrl && <Link to={`/competitions/${competition.id}/chat`} className="mg-btn mg-btn-primary flex-1">Watch stream</Link>}
-          {session.competitionSectionId != null && <Link to={`/competitions/${competition.id}/toplists?section=${session.competitionSectionId}`} className={`mg-btn flex-1 ${competition.streamUrl ? 'mg-btn-secondary' : 'mg-btn-primary'}`}>{section ? `${section} toplist` : 'Toplist'}</Link>}
+          {canWatch && <Link to={`/competitions/${competition.id}/chat`} className="mg-btn mg-btn-primary flex-1">Watch stream</Link>}
+          {session.competitionSectionId != null && <Link to={`/competitions/${competition.id}/toplists?section=${session.competitionSectionId}`} className={`mg-btn flex-1 ${canWatch ? 'mg-btn-secondary' : 'mg-btn-primary'}`}>{section ? `${section} toplist` : 'Toplist'}</Link>}
         </div>
       )}
     </div>
