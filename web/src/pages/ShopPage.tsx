@@ -37,6 +37,7 @@ export function ShopPage() {
     let cancelled = false;
     api.get<ShopPost[]>('/shop/posts')
       .then((r) => { if (!cancelled) setPosts(r.data); })
+      .catch(() => { /* leave the list as it was; the page then shows its empty state */ })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [version]);
