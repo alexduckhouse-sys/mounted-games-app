@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { BookOpen, ExternalLink, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
+import { ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
+import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
 import type { Rulebook } from './types';
 import { apiMessage } from './types';
 import './operations.css';
@@ -117,55 +118,56 @@ function EventRulebooks() {
     }
   }
 
-  return (
-    <div className="ops-page flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="mg-kicker mb-1">{competition.name}</p><h1 className="mg-h1 mg-h1-sm">Rulebooks</h1>
-          <p className="mg-meta mt-1">Rules and event notes published by the organiser.</p>
-        </div>
-        {canWrite && !draft && <button type="button" className="mg-btn mg-btn-primary" onClick={() => edit()} disabled={busy}>
-          <Plus aria-hidden="true" className="h-4 w-4" /> Add rulebook
-        </button>}
-      </div>
+  const editing = draft !== null;
+  const actions = editing
+    ? <button type="button" className="rf-ib" aria-label="Close editor" onClick={() => setDraft(null)} disabled={busy}><X className="h-5 w-5" aria-hidden="true" /></button>
+    : canWrite ? <button type="button" className="rf-btn" onClick={() => edit()} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />Add rulebook</button> : null;
 
-      {error && <p role="alert" className="mg-notice">{error} {!draft && <button className="mg-text-link" onClick={() => void load()}>Try again</button>}</p>}
-      {saved && <p role="status" className="mg-meta">Rulebook saved.</p>}
-      {loading && rulebooks.length === 0 && <p role="status" className="mg-card p-4 text-[rgb(var(--mg-muted))]">Loading rulebooks…</p>}
-      {!loading && rulebooks.length === 0 && !draft && <div className="mg-card p-6 text-center"><BookOpen aria-hidden="true" className="mx-auto mb-3 h-8 w-8 text-[rgb(var(--mg-muted))]" /><p>No rulebooks have been published for this competition.</p></div>}
+  return (
+    <RefinePage>
+      <RefineHeader
+        back={`/competitions/${competition.id}`}
+        backLabel="Back to event"
+        context={competition.name}
+        actions={actions}
+        title={draft ? (draft.id == null ? 'New rulebook' : 'Edit rulebook') : 'Rulebooks'}
+        subtitle={draft ? undefined : 'Rules and event notes published by the organiser.'}
+      />
+
+      {error && <p role="alert" className="mg-notice ops-alert">{error} {!draft && <button type="button" className="rf-btn rf-btn-text" onClick={() => void load()}>Try again</button>}</p>}
+      {saved && <p role="status" className="rf-note">Rulebook saved.</p>}
+      {loading && rulebooks.length === 0 && <p role="status" className="rf-note">Loading rulebooks…</p>}
+      {!loading && rulebooks.length === 0 && !draft && !error && <RefineNote>No rulebooks have been published for this competition.</RefineNote>}
 
       {draft && <RulebookEditor draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={() => setDraft(null)} />}
 
       {rulebooks.length > 0 && !draft && (
-        <div className="grid gap-4 md:grid-cols-[15rem_minmax(0,1fr)]">
-          <label className="md:hidden mg-field"><span className="sr-only">Choose rulebook</span><select value={selectedId ?? ''} onChange={(event) => { setSelectedId(Number(event.target.value)); setSaved(false); }}>{rulebooks.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.edition}</option>)}</select></label>
-          <nav className="hidden md:block mg-list self-start" aria-label="Rulebooks">
-            {rulebooks.map((item) => (
-              <button key={item.id} type="button" className={`mg-row ${selectedId === item.id ? 'bg-[rgb(var(--mg-subtle))]' : ''}`} aria-current={selectedId === item.id ? 'page' : undefined} onClick={() => { setSelectedId(item.id); setDraft(null); setSaved(false); }}>
-                <span className="min-w-0"><strong className="block truncate text-[rgb(var(--mg-heading))]">{item.title}</strong><span className="mg-meta block truncate">{item.edition}</span></span>
-              </button>
-            ))}
-          </nav>
+        <>
+          {rulebooks.length > 1 && <>
+            <RefineSection title="Rulebooks" />
+            <RefineList as="div">
+              {rulebooks.map((item) => (
+                <button key={item.id} type="button" className="rf-row" aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => { setSelectedId(item.id); setDraft(null); setSaved(false); }}>
+                  <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className="rf-t2">{item.edition}</span></span>
+                  {selectedId === item.id && <RefineStatus tone="ok">Showing</RefineStatus>}
+                </button>
+              ))}
+            </RefineList>
+          </>}
 
           {selected && <article className="rulebook-reader">
-            <header className="border-b border-[rgb(var(--mg-rule))] pb-4">
-              <div className="flex flex-wrap items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <h2 className="mg-h1 mg-h1-sm">{selected.title}</h2>
-                  <p className="mg-meta mt-1">{selected.edition} · Updated {new Date(selected.updatedAt).toLocaleDateString('en-GB')}</p>
-                </div>
-                {canWrite && <div className="flex gap-2">
-                  <button type="button" className="mg-icon-btn" aria-label={`Edit ${selected.title}`} onClick={() => edit(selected)} disabled={busy}><Pencil aria-hidden="true" className="h-4 w-4" /></button>
-                  <button type="button" className="mg-icon-btn text-red-700" aria-label={`Delete ${selected.title}`} onClick={() => void remove(selected)} disabled={busy}><Trash2 aria-hidden="true" className="h-4 w-4" /></button>
-                </div>}
-              </div>
-              {selected.sourceUrl && <a href={selected.sourceUrl} target="_blank" rel="noreferrer" className="mg-text-link mt-2 justify-start">Source <ExternalLink aria-hidden="true" className="h-4 w-4" /></a>}
-            </header>
-            <div className="whitespace-pre-wrap py-5 text-base leading-7 text-[rgb(var(--mg-body))]">{selected.text}</div>
+            <h2 className="ops-reader-title">{selected.title}</h2>
+            <p className="rf-note">{selected.edition} · Updated {new Date(selected.updatedAt).toLocaleDateString('en-GB')}</p>
+            {selected.sourceUrl && <RefineList as="div"><a href={selected.sourceUrl} target="_blank" rel="noreferrer" className="rf-row"><span className="rf-grow rf-t1">Source</span><ExternalLink aria-hidden="true" className="h-4 w-4 rf-chev" /></a></RefineList>}
+            {canWrite && <div className="rf-actions ops-reader-actions">
+              <button type="button" className="rf-btn" aria-label={`Edit ${selected.title}`} onClick={() => edit(selected)} disabled={busy}><Pencil aria-hidden="true" className="h-4 w-4" />Edit</button>
+              <button type="button" className="rf-btn ops-danger" aria-label={`Delete ${selected.title}`} onClick={() => void remove(selected)} disabled={busy}><Trash2 aria-hidden="true" className="h-4 w-4" />Delete</button>
+            </div>}
+            <div className="ops-reader-text">{selected.text}</div>
           </article>}
-        </div>
+        </>
       )}
-    </div>
+    </RefinePage>
   );
 }
 
@@ -177,19 +179,21 @@ function RulebookEditor({ draft, setDraft, busy, onSave, onCancel }: {
   onCancel: () => void;
 }) {
   return (
-    <form className="flex flex-col gap-4 border-t border-[rgb(var(--mg-rule))] pt-4" onSubmit={onSave}>
-      <div className="flex items-center gap-3"><h2 className="mg-h2 flex-1">{draft.id == null ? 'New rulebook' : 'Edit rulebook'}</h2><button type="button" className="mg-icon-btn" aria-label="Close editor" onClick={onCancel} disabled={busy}><X aria-hidden="true" className="h-4 w-4" /></button></div>
-      <div className="grid gap-3 sm:grid-cols-2">
+    <>
+      <form id="rulebook-form" className="ops-form" onSubmit={onSave}>
         <Field label="Title"><input autoFocus maxLength={200} required value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></Field>
         <Field label="Edition"><input maxLength={100} required value={draft.edition} onChange={(event) => setDraft({ ...draft, edition: event.target.value })} /></Field>
-      </div>
-      <Field label="Source link (optional)"><input type="url" maxLength={2000} placeholder="https://…" value={draft.sourceUrl} onChange={(event) => setDraft({ ...draft, sourceUrl: event.target.value })} /></Field>
-      <label className="flex flex-col gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))]">Rulebook text<textarea className="min-h-72 rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] p-3 text-base font-normal leading-6 text-[rgb(var(--mg-ink))] focus:border-[rgb(var(--mg-heading))] focus:outline-none" required maxLength={250000} value={draft.text} onChange={(event) => setDraft({ ...draft, text: event.target.value })} /></label>
-      <div className="ops-save-bar justify-end"><button type="button" className="mg-btn mg-btn-secondary" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="mg-btn mg-btn-primary" disabled={busy}><Save aria-hidden="true" className="h-4 w-4" />{busy ? 'Saving…' : 'Save rulebook'}</button></div>
-    </form>
+        <Field label="Source link (optional)"><input type="url" maxLength={2000} placeholder="https://…" value={draft.sourceUrl} onChange={(event) => setDraft({ ...draft, sourceUrl: event.target.value })} /></Field>
+        <Field label="Rulebook text"><textarea className="ops-textarea" required maxLength={250000} value={draft.text} onChange={(event) => setDraft({ ...draft, text: event.target.value })} /></Field>
+      </form>
+      <RefineFoot aboveTabs label="Save rulebook">
+        <button type="button" className="rf-btn" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button type="submit" form="rulebook-form" className="rf-btn rf-btn-primary rf-grow" disabled={busy}>{busy ? 'Saving…' : 'Save rulebook'}</button>
+      </RefineFoot>
+    </>
   );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="flex flex-col gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))]">{label}<span className="mg-field">{children}</span></label>;
+  return <label className="rf-fld">{label}{children}</label>;
 }

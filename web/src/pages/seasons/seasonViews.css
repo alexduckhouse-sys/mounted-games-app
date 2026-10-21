@@ -1,66 +1,50 @@
-.season-shell { margin-inline: auto; max-width: 1080px; width: 100%; }
-.season-shell-narrow { max-width: 760px; }
-.season-index-header { align-items: end; display: flex; gap: 20px; justify-content: space-between; margin-bottom: 24px; }
-.season-heading { border-bottom: 3px solid rgb(var(--mg-heading)); margin-bottom: 22px; padding-bottom: 18px; }
-.season-kicker { color: rgb(var(--mg-red)); font: 700 12px/1 'Barlow', sans-serif; letter-spacing: .1em; margin-bottom: 8px; text-transform: uppercase; }
-.season-loading { border-top: 1px solid rgb(var(--mg-rule)); padding: 24px 4px; }
-.season-empty { border-block: 1px solid rgb(var(--mg-rule)); padding: 30px 4px; }
-.season-empty h2 { color: rgb(var(--mg-heading)); font: 700 24px/1.1 'Barlow Condensed', sans-serif; }
-.season-empty p { color: rgb(var(--mg-muted)); margin-top: 5px; }
-.season-list { border-block: 1px solid rgb(var(--mg-rule)); }
-.season-list > li + li { border-top: 1px solid rgb(var(--mg-rule-soft)); }
-.season-list-row { align-items: center; color: rgb(var(--mg-body)); display: grid; gap: 16px; grid-template-columns: 62px minmax(0, 1fr) auto auto 22px; min-height: 78px; padding: 12px 6px; text-decoration: none; }
-.season-list-row:hover { background: rgb(var(--mg-subtle)); }
-.season-list-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
-.season-year { color: rgb(var(--mg-red)); font: 700 20px/1 'Barlow Condensed', sans-serif; }
-.season-list-main { min-width: 0; }
-.season-list-main strong { color: rgb(var(--mg-heading)); display: block; font: 700 22px/1.1 'Barlow Condensed', sans-serif; overflow-wrap: anywhere; }
-.season-list-main span, .season-list-count span, .season-list-rule { color: rgb(var(--mg-muted)); display: block; font-size: 13px; }
-.season-list-count { min-width: 50px; text-align: center; }
-.season-list-count strong { color: rgb(var(--mg-heading)); display: block; font: 700 22px/1 'Barlow Condensed', sans-serif; }
-.season-list-rule { min-width: 64px; text-align: right; }
-.season-tabs { border-bottom: 1px solid rgb(var(--mg-rule)); display: flex; gap: 4px; overflow-x: auto; }
-.season-tab { border-bottom: 3px solid transparent; color: rgb(var(--mg-muted)); flex: 0 0 auto; font: 700 15px/1 'Barlow', sans-serif; min-height: 48px; padding: 0 16px; }
-.season-tab:hover { color: rgb(var(--mg-heading)); }
-.season-tab[aria-pressed="true"] { border-bottom-color: rgb(var(--mg-red)); color: rgb(var(--mg-heading)); }
-.season-tab:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -3px; }
-.season-panel { padding-top: 22px; }
-.season-panel-heading { align-items: end; display: flex; gap: 18px; justify-content: space-between; margin-bottom: 14px; }
-.season-table-wrap { border-block: 1px solid rgb(var(--mg-rule)); overflow-x: auto; }
-.season-table { border-collapse: separate; border-spacing: 0; min-width: 100%; width: 100%; }
-.season-table thead { background: rgb(var(--mg-subtle)); }
-.season-table th, .season-table td { border-bottom: 1px solid rgb(var(--mg-rule-soft)); padding: 11px 12px; }
-.season-table tbody tr:last-child th, .season-table tbody tr:last-child td { border-bottom: 0; }
-.season-standings-table .season-rank-col { background: rgb(var(--mg-surface)); left: 0; position: sticky; z-index: 1; }
-.season-standings-table .season-team-col { background: rgb(var(--mg-surface)); left: 56px; position: sticky; z-index: 1; }
-.season-standings-table thead .season-rank-col, .season-standings-table thead .season-team-col { background: rgb(var(--mg-subtle)); z-index: 2; }
-.season-standings-table .season-team-col { box-shadow: 1px 0 0 rgb(var(--mg-rule-soft)); }
-.season-rounds { border-top: 1px solid rgb(var(--mg-rule)); }
-.season-round-row { border-bottom: 1px solid rgb(var(--mg-rule)); padding: 15px 4px; }
-.season-round-summary { align-items: center; display: grid; gap: 14px; grid-template-columns: 44px minmax(0, 1fr) auto auto; }
-.season-round-number { color: rgb(var(--mg-red)); font: 700 25px/1 'Barlow Condensed', sans-serif; text-align: center; }
-.season-round-title { color: rgb(var(--mg-heading)); font-weight: 700; }
-.season-round-detail { border-left: 3px solid rgb(var(--mg-heading)); margin: 16px 0 4px 58px; padding: 2px 0 2px 16px; }
-.season-status { color: rgb(var(--mg-muted)); font-size: 13px; text-align: right; }
-.season-status strong { color: rgb(var(--mg-heading)); display: block; }
-.season-form { border-top: 1px solid rgb(var(--mg-rule)); max-width: 720px; padding-top: 20px; }
-.season-form-section { border: 0; border-bottom: 1px solid rgb(var(--mg-rule)); margin: 0 0 20px; padding: 0 0 20px; }
-.season-form-legend { color: rgb(var(--mg-heading)); font: 700 22px/1 'Barlow Condensed', sans-serif; margin-bottom: 14px; width: 100%; }
-.team-profile-row { grid-template-columns: minmax(0, 1fr) auto 22px; }
-.profile-event-list { border-top: 1px solid rgb(var(--mg-rule)); }
-.profile-event-list li { align-items: center; border-bottom: 1px solid rgb(var(--mg-rule-soft)); display: flex; gap: 16px; justify-content: space-between; min-height: 58px; padding: 9px 4px; }
-.profile-event-list strong, .profile-event-list span { display: block; }
-.profile-event-list span span, .profile-event-list time { color: rgb(var(--mg-muted)); font-size: 13px; }
+/* Season, round and team-history screens. Built on the shared refinement blocks in ../refine/refine.css. */
+.sv-fieldset { border: 0; margin: 0; min-width: 0; }
+.sv-body { display: flex; flex-direction: column; gap: 12px; padding: 4px 16px 16px; background: rgb(var(--mg-surface)); }
+.sv-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.sv-flush { padding: 0; }
+.sv-points { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sv-pt { text-align: center; }
+.sv-pt input { text-align: center; padding: 0 4px; font-variant-numeric: tabular-nums; }
+.sv-pt-wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
+.sv-pt-wide input { width: 72px; text-align: center; }
+.sv-places { display: flex; flex-wrap: wrap; gap: 4px; }
+.sv-places .rf-btn-text { padding: 0 4px; }
 
-@media (max-width: 640px) {
-  .season-index-header, .season-panel-heading { align-items: stretch; flex-direction: column; }
-  .season-index-header .mg-btn, .season-panel-heading .mg-btn { width: 100%; }
-  .season-list-row { gap: 10px; grid-template-columns: 48px minmax(0, 1fr) 20px; }
-  .season-list-count, .season-list-rule { display: none; }
-  .season-round-summary { align-items: start; grid-template-columns: 36px minmax(0, 1fr); }
-  .season-round-summary > .mg-badge, .season-round-summary > .mg-btn, .season-status { grid-column: 2; justify-self: start; text-align: left; }
-  .season-round-detail { margin-left: 0; }
-  .team-profile-row { grid-template-columns: minmax(0, 1fr) 20px; }
-  .team-profile-row .season-list-rule { display: none; }
-  .profile-event-list li { align-items: start; flex-direction: column; gap: 4px; }
-}
+/* Standings and history tables */
+.sv-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 0; }
+.sv-table .sv-pos { width: 44px; }
+.sv-table .sv-mid { text-align: center; }
+.sv-table td.sv-mid { color: rgb(var(--mg-muted)); font-variant-numeric: tabular-nums; }
+.sv-table td.sv-end { text-align: right; }
+.sv-table .rf-num { font-size: 20px; }
+.sv-club { display: block; font-size: 12px; font-weight: 400; color: rgb(var(--mg-muted)); margin-top: -8px; padding-bottom: 6px; }
+.sv-struck { text-decoration: line-through; color: rgb(var(--mg-muted)); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sv-dim { color: rgb(var(--mg-muted)); }
+.rf-table.sv-hist td { padding-block: 6px; height: auto; min-height: 48px; }
+.sv-hist .rf-t1 { font-weight: 600; }
+
+/* Round rows */
+.sv-rn { min-width: 34px; }
+.sv-rn-dim { color: rgb(var(--mg-muted)); }
+.sv-round-detail { display: flex; flex-direction: column; gap: 12px; padding: 4px 16px 16px; background: rgb(var(--mg-surface)); }
+.sv-round-detail .rf-table-wrap { margin-inline: -16px; }
+.sv-round-detail a.sv-link { color: rgb(var(--mg-heading)); font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; }
+.sv-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sv-versions > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; color: rgb(var(--mg-heading)); }
+.sv-versions-form { display: flex; flex-direction: column; gap: 12px; }
+.sv-versions-pick { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.sv-versions-pick .rf-fld { width: 96px; }
+.sv-add { display: flex; flex-direction: column; gap: 12px; padding: 12px 0; }
+.sv-empty { padding: 24px 0; color: rgb(var(--mg-muted)); }
+.sv-empty h2 { margin: 0 0 4px; font: 700 20px/1.1 'Barlow Condensed', sans-serif; color: rgb(var(--mg-heading)); }
+.sv-empty p { margin: 0; }
+.sv-msg { margin: 12px 0 0; }
+.sv-star[aria-pressed="true"] svg { fill: currentColor; }
+.sv-stack { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+.rf-table th.sv-rowhead { text-align: left; font-size: 15px; font-weight: 600; text-transform: none; letter-spacing: 0; color: inherit; border-bottom: 1px solid rgb(var(--mg-rule-soft)); padding: 0 6px; }
+.sv-gap { margin-top: 12px; }
+.sv-place { width: 56px; }
+.sv-prev > .rf-row { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.sv-hist td.rf-num { font-size: 20px; }
+.sv-hist .sv-dim { font-variant-numeric: tabular-nums; }

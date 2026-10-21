@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { CheckCircle2, ChevronLeft, Copy, FileSpreadsheet, Printer, Upload } from 'lucide-react';
+import { CheckCircle2, Upload } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { Chevron, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
 import type { CloneCompetitionResult, CsvTeamImportPreview } from './eventToolsTypes';
 import './eventTools.css';
 
@@ -114,49 +115,99 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
     finally { setBusy(null); }
   }
 
-  if (loading) return <p role="status" className="skin tools-shell py-5">Loading organiser tools…</p>;
-  if (!competition) return <div role="alert" className="skin tools-shell py-5"><p className="mg-notice">{error ?? 'Competition not found.'} <button type="button" className="mg-text-link min-h-11" onClick={() => { setLoading(true); setError(null); setLoadAttempt((value) => value + 1); }}>Try again</button></p></div>;
-  if (!mayManage || !canOrganise(competition)) return <div role="alert" className="skin tools-shell py-5"><p className="mg-notice">These tools are available to this competition’s organiser.</p></div>;
+  if (loading) return <RefinePage><p role="status" className="rf-note tools-pad">Loading organiser tools…</p></RefinePage>;
+  if (!competition) return <RefinePage><div role="alert" className="tools-pad"><p className="mg-notice">{error ?? 'Competition not found.'} <button type="button" className="rf-btn rf-btn-text" onClick={() => { setLoading(true); setError(null); setLoadAttempt((value) => value + 1); }}>Try again</button></p></div></RefinePage>;
+  if (!mayManage || !canOrganise(competition)) return <RefinePage><div role="alert" className="tools-pad"><p className="mg-notice">These tools are available to this competition’s organiser.</p></div></RefinePage>;
 
   const hasErrors = preview?.rows.some((row) => row.errors.length > 0) ?? false;
-  const tabs: { id: ToolTab; label: string; icon: typeof FileSpreadsheet }[] = [
-    { id: 'import', label: 'Import teams', icon: FileSpreadsheet },
-    { id: 'duplicate', label: 'Duplicate event', icon: Copy },
-    { id: 'print', label: 'Print sheets', icon: Printer },
+  const tabs: { id: ToolTab; label: string }[] = [
+    { id: 'import', label: 'Import teams' },
+    { id: 'duplicate', label: 'Duplicate event' },
+    { id: 'print', label: 'Print sheets' },
+  ];
+  const printSheets = [
+    { to: 'draw', title: 'Draw and lanes', detail: 'Sessions, heats, lanes and race order' },
+    { to: 'score-sheets', title: 'Score sheets', detail: 'Blank placing, elimination and points columns' },
+    { to: 'results', title: 'Results', detail: 'Current section standings, marked provisional when unfinished' },
   ];
 
-  return <div className="skin tools-shell py-5">
-    <Link className="mg-text-link mb-4 inline-flex min-h-11 items-center gap-1" to={`/competitions/${competitionId}`}><ChevronLeft className="h-4 w-4" />Back to event</Link>
-    <header className="tools-heading"><p className="tools-kicker">{competition.name}</p><h1 className="mg-h1">Organiser tools</h1><p className="mg-meta mt-2">Choose the job you need. Each tool works separately.</p></header>
-    <nav className="tools-tabs" aria-label="Organiser tools">{tabs.map((item) => <button type="button" key={item.id} className="tools-tab" aria-pressed={tab === item.id} onClick={() => selectTab(item.id)}><item.icon className="h-5 w-5" />{item.label}</button>)}</nav>
-    {error && <div role="alert" className="mg-notice mt-5">{error}</div>}
-    {success && <div role="status" className="tools-success mt-5"><CheckCircle2 className="h-5 w-5" />{success}</div>}
+  return <RefinePage className="tools-page">
+    <RefineHeader
+      back={`/competitions/${competitionId}`}
+      backLabel="Back to event"
+      context={competition.name}
+      title="Organiser tools"
+      subtitle="Choose the job you need. Each tool works separately."
+      tabs={tabs.map((item) => ({ label: item.label, active: tab === item.id, onSelect: () => selectTab(item.id) }))}
+      tabsLabel="Organiser tools"
+      tabsKind="tablist"
+    />
+    {error && <div role="alert" className="mg-notice tools-msg">{error}</div>}
+    {success && <div role="status" className="tools-success"><CheckCircle2 className="h-5 w-5" aria-hidden="true" />{success}</div>}
 
-    {tab === 'import' && <section className="tools-panel" aria-labelledby="import-title">
-      <div className="tools-panel-heading"><h2 id="import-title" className="mg-h1 mg-h1-sm">Import teams from CSV</h2><p className="mg-meta mt-1">Use the columns <strong>club</strong>, <strong>suffix</strong> and <strong>section</strong>. Nothing is added until you review the preview.</p></div>
-      <div className="flex flex-wrap gap-2"><button type="button" className="mg-btn mg-btn-secondary" onClick={() => fileRef.current?.click()}><Upload className="h-4 w-4" />Choose CSV file</button><input ref={fileRef} className="sr-only" type="file" accept=".csv,text/csv" onChange={loadFile} /></div>
-      <label className="mt-5 block font-semibold">CSV text<textarea className="input mt-1 min-h-48 font-mono text-sm" value={csv} onChange={(event) => changeCsv(event.target.value)} spellCheck={false} /></label>
-      <button type="button" className="mg-btn mg-btn-primary mt-3" disabled={busy !== null || !csv.trim()} onClick={previewImport}>{busy === 'preview' ? 'Checking rows…' : 'Preview teams'}</button>
-      {preview && <div className="tools-preview">
-        <div className="tools-preview-summary"><strong>{preview.validRows} of {preview.totalRows}</strong><span>{hasErrors ? 'Fix the marked rows, then preview again.' : 'All rows are ready to add.'}</span></div>
-        <div className="tools-table-wrap"><table className="tools-table"><thead><tr><th>Row</th><th>Club</th><th>Suffix</th><th>Section</th><th>Check</th></tr></thead><tbody>{preview.rows.map((row) => <tr key={row.rowNumber}><td>{row.rowNumber}</td><td>{row.club}</td><td>{row.suffix}</td><td>{row.section}</td><td className={row.errors.length ? 'tools-error' : 'tools-ready'}>{row.errors.length ? row.errors.join(' ') : 'Ready'}</td></tr>)}</tbody></table></div>
-        <button type="button" className="mg-btn mg-btn-primary mt-4" disabled={hasErrors || busy !== null} onClick={applyImport}>{busy === 'apply' ? 'Adding teams…' : `Add ${preview.validRows} ${preview.validRows === 1 ? 'team' : 'teams'}`}</button>
-      </div>}
+    {tab === 'import' && <section aria-labelledby="import-title">
+      <RefineSection title="Import teams from CSV" />
+      <h2 id="import-title" className="sr-only">Import teams from CSV</h2>
+      <RefineNote>Use the columns <strong>club</strong>, <strong>suffix</strong> and <strong>section</strong>. Nothing is added until you review the preview.</RefineNote>
+      <RefineList as="div">
+        <button type="button" className="rf-row" onClick={() => fileRef.current?.click()}>
+          <Upload className="h-5 w-5 rf-chev" aria-hidden="true" /><span className="rf-grow rf-t1">Choose CSV file</span><Chevron />
+        </button>
+      </RefineList>
+      <input ref={fileRef} className="sr-only" type="file" accept=".csv,text/csv" onChange={loadFile} tabIndex={-1} aria-label="CSV file" />
+      <div className="tools-form">
+        <label className="rf-fld">CSV text<textarea className="tools-csv" value={csv} onChange={(event) => changeCsv(event.target.value)} spellCheck={false} /></label>
+        <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={busy !== null || !csv.trim()} onClick={previewImport}>{busy === 'preview' ? 'Checking rows…' : 'Preview teams'}</button>
+      </div>
+      {preview && <>
+        <RefineSection title="Preview" meta={hasErrors ? 'Fix the marked rows, then preview again.' : 'All rows are ready to add.'} />
+        <RefineList as="ul" label={`${preview.validRows} of ${preview.totalRows} rows ready`}>
+          {preview.rows.map((row) => <li key={row.rowNumber} className="rf-row">
+            <span className="rf-grow">
+              <span className="rf-t1"><span>{row.club}</span> <span>{row.suffix}</span></span>
+              <span className="rf-t2">Row {row.rowNumber} · {row.section}</span>
+              {row.errors.length > 0 && <span className="rf-t2 tools-error">{row.errors.join(' ')}</span>}
+            </span>
+            {row.errors.length > 0 ? <RefineStatus tone="bad">Fix</RefineStatus> : <RefineStatus tone="ok">Ready</RefineStatus>}
+          </li>)}
+        </RefineList>
+        <RefineNote>{preview.validRows} of {preview.totalRows} rows ready.</RefineNote>
+        <RefineFoot label="Add teams">
+          <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={hasErrors || busy !== null} onClick={applyImport}>{busy === 'apply' ? 'Adding teams…' : `Add ${preview.validRows} ${preview.validRows === 1 ? 'team' : 'teams'}`}</button>
+        </RefineFoot>
+      </>}
     </section>}
 
-    {tab === 'duplicate' && <section className="tools-panel" aria-labelledby="duplicate-title">
-      <div className="tools-panel-heading"><h2 id="duplicate-title" className="mg-h1 mg-h1-sm">Duplicate event setup</h2><p className="mg-meta mt-1">Sections, teams, sessions, heats and races are copied. Results, declarations, payments and team claim details stay with the original event.</p></div>
-      <form className="tools-form" onSubmit={cloneCompetition}><fieldset disabled={busy !== null} className="space-y-4"><legend className="sr-only">New event details</legend>
-        <label className="block font-semibold">New competition name<input className="input mt-1" value={cloneName} onChange={(event) => setCloneName(event.target.value)} maxLength={200} required /></label>
-        <div className="grid gap-4 sm:grid-cols-2"><label className="block font-semibold">Starts<input className="input mt-1" type="datetime-local" value={cloneStart} onChange={(event) => setCloneStart(event.target.value)} required /></label><label className="block font-semibold">Ends<input className="input mt-1" type="datetime-local" value={cloneEnd} onChange={(event) => setCloneEnd(event.target.value)} /></label></div>
-        <button className="mg-btn mg-btn-primary" disabled={busy !== null}>{busy === 'clone' ? 'Duplicating…' : 'Duplicate setup'}</button>
+    {tab === 'duplicate' && <section aria-labelledby="duplicate-title">
+      <RefineSection title="Duplicate event setup" />
+      <h2 id="duplicate-title" className="sr-only">Duplicate event setup</h2>
+      <RefineNote>Sections, teams, sessions, heats and races are copied. Results, declarations, payments and team claim details stay with the original event.</RefineNote>
+      <form className="tools-form" onSubmit={cloneCompetition}><fieldset disabled={busy !== null} className="tools-fields"><legend className="sr-only">New event details</legend>
+        <label className="rf-fld">New competition name<input value={cloneName} onChange={(event) => setCloneName(event.target.value)} maxLength={200} required /></label>
+        <label className="rf-fld">Starts<input type="datetime-local" value={cloneStart} onChange={(event) => setCloneStart(event.target.value)} required /></label>
+        <label className="rf-fld">Ends<input type="datetime-local" value={cloneEnd} onChange={(event) => setCloneEnd(event.target.value)} /></label>
+        <button className="rf-btn rf-btn-primary rf-wide">{busy === 'clone' ? 'Duplicating…' : 'Duplicate setup'}</button>
       </fieldset></form>
-      {cloneResult && <div className="tools-result"><p><strong>{cloneResult.name}</strong></p><p>{cloneResult.sections} sections, {cloneResult.teams} teams and {cloneResult.heats} heats copied.</p><Link className="mg-btn mg-btn-secondary mt-3" to={`/admin/competitions/${cloneResult.competitionId}`}>Edit the new event</Link></div>}
+      {cloneResult && <>
+        <RefineSection title="New event" />
+        <RefineList as="div">
+          <Link className="rf-row" to={`/admin/competitions/${cloneResult.competitionId}`}>
+            <span className="rf-grow"><span className="rf-t1">{cloneResult.name}</span><span className="rf-t2">{cloneResult.sections} sections, {cloneResult.teams} teams and {cloneResult.heats} heats copied.</span></span>
+            <span className="rf-st rf-ok">Edit the new event</span><Chevron />
+          </Link>
+        </RefineList>
+      </>}
     </section>}
 
-    {tab === 'print' && <section className="tools-panel" aria-labelledby="print-title">
-      <div className="tools-panel-heading"><h2 id="print-title" className="mg-h1 mg-h1-sm">Print event sheets</h2><p className="mg-meta mt-1">Each link opens a clean A4 view ready for your browser’s print command.</p></div>
-      <nav className="tools-print-list" aria-label="Printable event sheets"><Link to={`/event-tools/${competitionId}/print/draw`}><span><strong>Draw and lanes</strong><small>Sessions, heats, lanes and race order</small></span><ChevronLeft className="h-5 w-5 rotate-180" /></Link><Link to={`/event-tools/${competitionId}/print/score-sheets`}><span><strong>Score sheets</strong><small>Blank placing, elimination and points columns</small></span><ChevronLeft className="h-5 w-5 rotate-180" /></Link><Link to={`/event-tools/${competitionId}/print/results`}><span><strong>Results</strong><small>Current section standings, marked provisional when unfinished</small></span><ChevronLeft className="h-5 w-5 rotate-180" /></Link></nav>
+    {tab === 'print' && <section aria-labelledby="print-title">
+      <RefineSection title="Print event sheets" />
+      <h2 id="print-title" className="sr-only">Print event sheets</h2>
+      <RefineNote>Each link opens a clean A4 view ready for your browser’s print command.</RefineNote>
+      <nav aria-label="Printable event sheets"><RefineList as="div">
+        {printSheets.map((sheet) => <Link key={sheet.to} className="rf-row" to={`/event-tools/${competitionId}/print/${sheet.to}`}>
+          <span className="rf-grow"><span className="rf-t1">{sheet.title}</span><span className="rf-t2">{sheet.detail}</span></span><Chevron />
+        </Link>)}
+      </RefineList></nav>
     </section>}
-  </div>;
+  </RefinePage>;
 }

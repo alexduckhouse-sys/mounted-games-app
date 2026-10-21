@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Plus } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { SectionFormatLabel } from '../../types';
+import { Chevron, RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
 import { seasonError, type SeasonView } from './seasonViewTypes';
 import './seasonViews.css';
@@ -14,7 +15,8 @@ export function SeasonsPage() {
   const [seasons, setSeasons] = useState<SeasonView[] | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const [view, setView] = useState<'list' | 'create'>('list');
+  const [params, setParams] = useSearchParams();
+  const creating = canCreate && params.get('new') !== null;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -27,52 +29,44 @@ export function SeasonsPage() {
     return () => controller.abort();
   }, [attempt, user?.id]);
 
-  if (view === 'create' && canCreate) {
-    return <div className="skin season-shell season-shell-narrow py-5">
-      <button type="button" className="mg-text-link mb-5 inline-flex min-h-11 items-center gap-1" onClick={() => setView('list')}>
-        <ChevronLeft className="h-4 w-4" /> Back to seasons
-      </button>
-      <header className="season-heading">
-        <p className="season-kicker">New competition series</p>
-        <h1 className="mg-h1">Create a season</h1>
-        <p className="mg-meta mt-2">Set the division and points once. You can add event rounds after the season is created.</p>
-      </header>
-      <SeasonSettingsForm key={user?.id} label="Create season" onCancel={() => setView('list')} onSave={async (settings) => {
+  if (creating) {
+    return <RefinePage>
+      <RefineHeader back="/seasons" backLabel="Back to seasons" context="Seasons" title="Create a season" subtitle="Set the division and points once. You can add event rounds after the season is created." />
+      <SeasonSettingsForm key={user?.id} create label="Create season" onCancel={() => setParams({})} onSave={async (settings) => {
         const { data } = await api.post<SeasonView>('/seasons', settings);
         navigate(`/seasons/${data.id}`);
       }} />
-    </div>;
+    </RefinePage>;
   }
 
-  return <div className="skin season-shell py-5">
-    <header className="season-index-header">
-      <div>
-        <p className="season-kicker">Published standings</p>
-        <h1 className="mg-h1">Seasons</h1>
-        <p className="mg-meta mt-2 max-w-xl">Follow the same teams across a series of events. Each table uses results published by the season organiser.</p>
-      </div>
-      {canCreate && <button className="mg-btn mg-btn-primary" onClick={() => setView('create')}><Plus className="h-4 w-4" />Create season</button>}
-    </header>
-
-    {error && <div role="alert" className="mg-notice">{error} <button className="mg-text-link min-h-11" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div>}
-    {!seasons && !error && <p role="status" className="season-loading">Loading seasons…</p>}
-    {seasons?.length === 0 && <div className="season-empty"><h2>No seasons yet</h2><p>Published season tables will appear here.</p>{canCreate && <button className="mg-btn mg-btn-primary mt-4" onClick={() => setView('create')}>Create the first season</button>}</div>}
-    {!!seasons?.length && <ul className="season-list" aria-label="Seasons">
-      {seasons.map((season) => {
-        const roundCount = season.rounds.filter((round) => round.isIncluded).length;
-        return <li key={season.id}>
-          <Link className="season-list-row" to={`/seasons/${season.id}`}>
-            <span className="season-year">{season.year}</span>
-            <span className="season-list-main">
-              <strong>{season.title}</strong>
-              <span>{SectionFormatLabel[season.format]} · {season.ageGroup}</span>
-            </span>
-            <span className="season-list-count"><strong>{roundCount}</strong><span>{roundCount === 1 ? 'round' : 'rounds'}</span></span>
-            <span className="season-list-rule">{season.bestResultsToCount ? `Best ${season.bestResultsToCount}` : 'All count'}</span>
-            <ChevronRight aria-hidden="true" className="h-5 w-5" />
-          </Link>
-        </li>;
-      })}
-    </ul>}
-  </div>;
+  const years = seasons ? [...new Set(seasons.map((season) => season.year))].sort((a, b) => b - a) : [];
+  return <RefinePage>
+    <RefineHeader
+      context="Published standings" title="Seasons"
+      actions={canCreate ? <Link className="rf-btn" to="?new=1"><Plus className="h-4 w-4" aria-hidden="true" />Create season</Link> : undefined}
+    />
+    {error && <div role="alert" className="mg-notice sv-msg">{error} <button className="mg-text-link min-h-11" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div>}
+    {!seasons && !error && <p role="status" className="rf-note">Loading seasons…</p>}
+    {seasons?.length === 0 && <div className="sv-empty"><h2>No seasons yet</h2><p>Published season tables will appear here.</p>{canCreate && <Link className="rf-btn rf-btn-primary" style={{ marginTop: 12 }} to="?new=1">Create the first season</Link>}</div>}
+    {years.map((year) => {
+      const group = seasons?.filter((season) => season.year === year) ?? [];
+      return <section key={year} aria-label={`${year} seasons`}>
+        <RefineSection title={String(year)} meta={`${group.length} ${group.length === 1 ? 'season' : 'seasons'}`} />
+        <RefineList label={`${year} seasons`}>
+          {group.map((season) => {
+            const roundCount = season.rounds.filter((round) => round.isIncluded).length;
+            return <li key={season.id}>
+              <Link className="rf-row" to={`/seasons/${season.id}`}>
+                <span className="rf-grow">
+                  <span className="rf-t1">{season.title}</span>
+                  <span className="rf-t2">{SectionFormatLabel[season.format]} · {season.ageGroup} · {roundCount} {roundCount === 1 ? 'round' : 'rounds'} · {season.bestResultsToCount ? `best ${season.bestResultsToCount} count` : 'all count'}</span>
+                </span>
+                <Chevron />
+              </Link>
+            </li>;
+          })}
+        </RefineList>
+      </section>;
+    })}
+  </RefinePage>;
 }

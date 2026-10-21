@@ -42,4 +42,33 @@ describe('ScoreAuditPanel', () => {
     await user.click(await screen.findByRole('button', { name: 'Sign off results' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/races/9/score/sign-off', expect.objectContaining({ expectedRevision: 1 })));
   });
+  it('keeps corrections behind a collapsed row and saves with a reason', async () => {
+    const user = userEvent.setup();
+    render(<ScoreAuditPanel raceId={9} />);
+    await screen.findByText('Open for scoring');
+    expect(screen.getByText('Correct placings').closest('details')).not.toHaveAttribute('open');
+
+    await user.type(screen.getByRole('textbox', { name: 'Correction reason' }), 'Judge recount');
+    await user.click(screen.getByRole('button', { name: 'Save correction' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/races/9/score', expect.objectContaining({
+      places: [{ teamId: 4, place: 1, eliminated: false }], expectedRevision: 1, reason: 'Judge recount',
+    })));
+    expect(await screen.findByText('Correction saved.')).toBeInTheDocument();
+  });
+
+  it('lists history as rows and asks for a reason before reopening', async () => {
+    const signedOff = { ...score, isSignedOff: true, signedOffAt: '2030-01-01T10:00:00Z', signedOffByUserId: 'u1' };
+    vi.mocked(api.get).mockImplementation((url: string) => Promise.resolve({ data: url.endsWith('/history')
+      ? [{ revision: 2, kind: 3, before: score.results, after: score.results, actorUserId: 'u1', reason: 'All checked', createdAt: '2030-01-01T10:00:00Z' }]
+      : signedOff }));
+    const user = userEvent.setup();
+    render(<ScoreAuditPanel raceId={9} />);
+
+    expect(await screen.findAllByText('Signed off')).toHaveLength(2);
+    expect(screen.getByRole('list', { name: 'Score history' })).toHaveTextContent('All checked');
+    expect(screen.queryByText('Correct placings')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reopen results' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Add a reason for reopening these results.');
+    expect(api.post).not.toHaveBeenCalled();
+  });
 });

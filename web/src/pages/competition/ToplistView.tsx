@@ -49,7 +49,10 @@ export function ToplistView({ list, section }: { list: Toplist; section: Competi
               {list.hc.map((team) => (
                 <li key={team.teamId} className="flex min-h-14 items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3.5 text-[rgb(var(--mg-muted))] last:border-b-0">
                   <span className="mg-display w-8 shrink-0 text-[22px] font-bold leading-none text-[rgb(var(--mg-faint))]">HC</span>
-                  <span className="min-w-0 flex-1 truncate text-base font-semibold">{team.teamName}</span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                    <span className="truncate text-base font-semibold leading-tight">{team.teamName}</span>
+                    {team.racesLeft > 0 && <span className="text-[13px] font-medium leading-none">{team.racesLeft} {team.racesLeft === 1 ? 'race' : 'races'} left</span>}
+                  </span>
                   <span className="mg-display shrink-0 text-2xl font-bold leading-none tabular-nums">{team.points}<span className="sr-only"> points</span></span>
                 </li>
               ))}

@@ -64,7 +64,7 @@ test('races left, sessions done and points per session come from the heats, igno
 test('hors concours teams are listed apart with their own points', () => {
   const sessions = [session(1, [heat(1, [5], [race(1, true, [{ id: 1, teamId: 5, teamName: 'Team 5', placing: 1, eliminated: false, points: 4 }])])])];
   const list = buildToplist([standing(1, 3)], sessions, [team(1), team(5, { isHorsConcours: true }), team(6, { isHorsConcours: true, competitionSectionId: 10 })], 9, null);
-  assert.deepEqual(list.hc, [{ teamId: 5, teamName: 'Team 5', points: 4 }]);
+  assert.deepEqual(list.hc, [{ teamId: 5, teamName: 'Team 5', points: 4, racesLeft: 0 }]);
 });
 
 test('finals points get their own column so the session columns add up to the total', () => {

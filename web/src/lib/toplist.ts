@@ -21,7 +21,7 @@ export interface Toplist {
   /** Index of the last row above the final cut-off line, or null when there is no line to draw. */
   cutAfter: number | null;
   runoff: { place: number; teams: ToplistRow[] } | null;
-  hc: { teamId: number; teamName: string; points: number }[];
+  hc: { teamId: number; teamName: string; points: number; racesLeft: number }[];
   sessionsDone: number;
   sessionsTotal: number;
   /** Points per heat session in running order, then finals ("F") once they have points; `cells` follows `sessions`. */
@@ -107,7 +107,7 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
 
   const hc = teams
     .filter((team) => team.isHorsConcours && team.competitionSectionId === sectionId)
-    .map((team) => ({ teamId: team.id, teamName: team.displayName, points: (sessionPoints.get(team.id) ?? []).reduce((sum, value) => sum + value, 0) }))
+    .map((team) => ({ teamId: team.id, teamName: team.displayName, points: (sessionPoints.get(team.id) ?? []).reduce((sum, value) => sum + value, 0), racesLeft: racesLeft.get(team.id) ?? 0 }))
     .sort((a, b) => b.points - a.points || a.teamName.localeCompare(b.teamName));
 
   // Totals include finals, so the session columns only add up with a finals column alongside.
