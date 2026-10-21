@@ -1,0 +1,42 @@
+# API — agent guide
+
+ASP.NET Core 10, EF Core (Npgsql in production, SQLite locally and in tests), SignalR. Repo-wide rules are in `../CLAUDE.md`, and tests in `../tests/CLAUDE.md`. Run `dotnet run` here (port 5050, SQLite, demo data in Development).
+
+## Glossary (entity names in `Entities/`)
+
+- **Competition**: one event. `CreatedByUserId` is its owner; `SignupsLocked` closes entries.
+- **Section** (`CompetitionSection`): an age group in a competition, with a `Format` (Pairs, Teams, Individual), `UsesRaceFinals`, `PriceMinor` (pence), `MaxParticipants` and `FinalistCount`.
+- **Session**: a timetable block with `Kind` (Race, Break, Briefing, Custom), `Status` (Upcoming, InArena, Finished) and `LanesPerHeat`. The **timetable** is sessions and heats ordered by `OrderIndex` and `ScheduledStart`.
+- **Heat**: the teams racing together, with `HeatEntry` lanes and a `RaceRoundStage` (None, Qualifier, Final). **Race**: one game run within a heat, holding `Result` rows (placing, points, eliminated). **RaceTemplate**: a library game with rules and `DiagramJson`; `IsBuiltIn` ones are refreshed at startup.
+- **Team**: a club's entry in a section. **HC** (`IsHorsConcours`) teams race but are left out of standings and finals. **TeamSupporter**: a follower the trainer has approved.
+- **Declaration form** (`DeclarationForm`): a team's riders (`RiderEntry`: captain, reserve, `HorseName`). There's no pony entity. `SavedRider` is a reusable roster entry. **Bib**: `BibColour` on club, team or rider.
+- **Signup** (`SectionSignup`): a paid entry. An admin marks payment received; no real money moves (Commerce uses a fake provider).
+- **Season**: a points league over competition sections (`SeasonRound`, `SeasonPlacePoints`, `BestResultsToCount`). Results are published as versioned snapshots (`SeasonRoundPublication`).
+- **Operations**: rulebook, score state and audit (`RaceScoreState`, `RaceScoreEvent`), draw, readiness checks and equipment acknowledgements. **Event tools**: clone, CSV team import, printable pack.
+- **Shop** (`ShopPost`, `ShopComment`, `ShopReport`): marketplace posts. **Commerce**: event shops with listings and orders.
+- **Roles** (`Auth/Roles.cs`): Admin, Trainer, TrainerRequest (signed up, awaiting approval), Manager, Member, Rider. "Steward" and "spectator" are product words with no role behind them.
+
+## Recipes
+
+- **Endpoint:** attribute-routed action with `[Authorize(Roles = Roles.Organiser)]` and, for per-competition writes, `[CompetitionAccess("competitionId")]`. The name must match an `int` action argument; use `CompetitionResource.Signup` when the id is a signup id. It's method-only, returns 404 (not 403) to non-owners, and admins pass. Reject bad input with `BadRequest(new { message = "..." })` (newer code uses `ValidationProblem` or `Problem`) and use `[Range]` on DTO records. Every non-GET `/api` call is already rate-limited (60/min per user or IP); add `[EnableRateLimiting("auth")]` only to sign-in-style endpoints. Copy `Controllers/TeamsController.cs`.
+- **Field through the stack** (see `Team.IsHorsConcours`): entity, then the request and response records in `Dtos/ApiDtos.cs` (positional, so order matters), then **every** `ToDto…` overload in `Services/Mappings.cs`, then controller create and update (nullable on update means "leave unchanged"), then `web/src/types.ts`, then the schema steps below.
+- **Schema:** `dotnet ef migrations add <Name>` (design time uses Npgsql). Then `dotnet ef migrations script <previous> <Name> --idempotent -o Data/Migrations/Scripts/<timestamp>_<Name>.sql`, matching the migration's file name. Then add the SQLite guard: `CREATE TABLE IF NOT EXISTS` or `EnsureColumnAsync(db, table, column, "INTEGER NOT NULL DEFAULT 0")` in `DbInitializer.EnsureSqliteSchemaAsync`, or in the area's `Services/{Operations,Commerce,Seasons}/*SqliteSchema.cs`. Use SQLite types (`INTEGER` for bool and enum, `TEXT` for DateTime and Guid). Add a schema test. Run `npm run db:migrate` (root, EF `MigrateAsync`) on Neon **before** the API deploys: on Postgres the API won't start with a pending migration.
+- **Live event:** add a method to `ILiveBroadcaster`, implement it in `LiveBroadcaster` (`Hubs/LiveHub.cs`), call it after `SaveChanges`. Groups: `comp:{id}` (everyone joined), `comp:{id}:admins` (Admins only), or `Clients.User(id)`. Register it in `web/src/live/useLiveHub.ts` with the same name. Staff-only data needs **both** a restricted broadcast and a filter on the REST read (see `ChatController.Recent` and `Post`).
+- **Demo data:** `DbInitializer.SeedDemoDataAsync` runs in Development only (and not when `Database:SeedDemoData` is false). The larger review set comes from `ReviewCompetitionSeeder` through `npm run db:seed-review`, never at startup.
+
+## Invariants
+
+- **Scoring goes through `ScoringService`**; never write `Result` rows from a controller.
+  - Placing points = largest heat size in the session − place + 1. Eliminated = 0.
+  - Qualifier heats in race finals give 1 per finisher.
+  - Each save replaces a race's results and bumps `RaceScoreState.Revision`. Corrections need a `reason`; signed-off races refuse with 409.
+  - Every write carries a `RequestId`, replayed idempotently (that's how the web outbox retries safely). Runs in a Serializable transaction.
+- **Scoring endpoints are admin-only** (`ScoringController` is class-level `Roles.Admin`), as are timetable and moderation. Trainers organise their own competitions but don't score them (`docs/decisions.md`).
+- **Standings and finals seeding** exclude HC teams and sort by total points, then wins (first places, not eliminated). There's no further tiebreak; `FinalsBoundary` reports ties at the cutoff. Race finals interleave the top N from Q1 and Q2 into the Final. `FinalistCount` is stored but not yet used by server logic.
+- **Wire format:** enums are numbers (no string converter). On Postgres every `DateTime` is UTC except birth dates, which are calendar dates (`AppDbContext`).
+- **ETags:** `JsonEtagMiddleware` hashes every `GET /api/*` body for 304s and sends `private, no-cache`. Keep it that way, because many responses vary by user.
+- **Streaming:** only the API talks to Cloudflare (`Streaming:Cloudflare:*`). DTOs never include SFU session ids or tokens, and nothing logs bodies, tokens or SDP. Streaming is off (writes return 503) unless both AppId and AppToken are set. Hub methods (`WatchStream`, `AnswerStream`) allow anonymous callers, so a new hub method must make its own checks.
+- **Startup checks** (`Security/SecurityConfiguration.cs`): outside Development, `Jwt:Key` must be at least 32 bytes and not come from appsettings. `Admin:Key` is optional but at least 20 bytes if set (without it, there's no shared admin). `Database:SeedDemoData=true` throws.
+- **Client IP** comes from `Security/ProxyClientIpMiddleware` (trusted proxy plus `Security:ProxyKey`) before rate limits, IP blocks and chat. Don't read `X-Forwarded-For` yourself.
+- Headers in `Security/SecurityHeadersMiddleware.cs` must match `web/vercel.json`.
+- `MountedGames.Api.http` is a stale template; ignore it.
