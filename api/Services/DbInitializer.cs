@@ -502,7 +502,11 @@ public static class DbInitializer
             db.Sessions.AddRange(session1, lunchBreak, session2, session3);
             await db.SaveChangesAsync();
 
-            var raceNames = new[] { "Bending", "Litter Lifter", "Five Flag", "Stepping Stones", "Tack Shop" };
+            var raceNames = new[]
+            {
+                "Bending", "Litter Lifter", "Five Flag", "Stepping Stones",
+                "Tack Shop", "Bottle", "Big Sack", "Two Flag",
+            };
             var heat1 = new Heat
             {
                 SessionId = session1.Id,
@@ -627,7 +631,7 @@ public static class DbInitializer
         {
             Name = compName,
             Location = "Demo Arena",
-            Description = "Example: heat-to-heat race-finals format. 12 teams across Seniors, Juniors and Pairs. " +
+            Description = "Example: heat-to-heat race-finals format. 26 teams across Seniors (12), Juniors (8) and Pairs (6). " +
                           "Every race becomes Q1 + Q2 + Final scaffold; admin populates each final with top-N.",
             StartDate = startDate,
             EndDate = startDate.AddHours(8),
@@ -655,13 +659,13 @@ public static class DbInitializer
         db.CompetitionSections.AddRange(secSeniors, secJuniors, secPairs);
         await db.SaveChangesAsync();
 
-        var clubs = await db.Clubs.OrderBy(c => c.Id).Take(12).ToListAsync();
+        var clubs = await db.Clubs.OrderBy(c => c.Id).Take(26).ToListAsync();
         var teamsBySection = new Dictionary<int, List<Team>>();
         var sliceMap = new (CompetitionSection section, IEnumerable<Club> clubs)[]
         {
-            (secSeniors, clubs.Take(4)),
-            (secJuniors, clubs.Skip(4).Take(4)),
-            (secPairs, clubs.Skip(8).Take(4)),
+            (secSeniors, clubs.Take(12)),
+            (secJuniors, clubs.Skip(12).Take(8)),
+            (secPairs, clubs.Skip(20).Take(6)),
         };
         foreach (var (section, slice) in sliceMap)
         {
@@ -695,12 +699,8 @@ public static class DbInitializer
         };
         var pairsRaces = new[]
         {
-            "Bending", "Hollywood Bowl Boule & Bucket", "Bottle",
-            "Litter", "Litter",
-            "Tally Ho Farm Ball & Socket", "Tally Ho Farm Ball & Socket",
-            "STRUK Pole", "STRUK Pole",
-            "PGSports UK Shopping Spree", "Stepping Stones", "EGUK Mug Changes",
-            "5 Flag", "5 Flag",
+            "Bending", "Hollywood Bowl Boule & Bucket", "Bottle", "Litter",
+            "Tally Ho Farm Ball & Socket", "5 Flag",
         };
 
         var cursor = startDate;
@@ -720,7 +720,7 @@ public static class DbInitializer
                 ArenaName = "Main",
                 OrderIndex = order++,
                 ScheduledStart = cursor,
-                LanesPerHeat = 4,
+                LanesPerHeat = 6,
                 MinutesPerHeat = 5,
                 Status = SessionStatus.Upcoming,
             };
@@ -810,27 +810,35 @@ public static class DbInitializer
             CompetitionId = comp.Id, Format = SectionFormat.Teams, AgeGroup = "Seniors",
             DisplayName = "Seniors", RunoffRaceName = "2 Flag",
         };
+        // Juniors are split into two sections (A / B) to show a divided age group.
         var secJuniors = new CompetitionSection
         {
             CompetitionId = comp.Id, Format = SectionFormat.Teams, AgeGroup = "Juniors",
-            DisplayName = "Juniors", RunoffRaceName = "2 Flag",
+            DisplayName = "Juniors A", RunoffRaceName = "2 Flag",
+        };
+        var secJuniorsB = new CompetitionSection
+        {
+            CompetitionId = comp.Id, Format = SectionFormat.Teams, AgeGroup = "Juniors",
+            DisplayName = "Juniors B", RunoffRaceName = "2 Flag",
         };
         var secPairs = new CompetitionSection
         {
             CompetitionId = comp.Id, Format = SectionFormat.Pairs, AgeGroup = "Open",
             DisplayName = "Pairs", RunoffRaceName = "2 Flag",
         };
-        db.CompetitionSections.AddRange(secSeniors, secJuniors, secPairs);
+        db.CompetitionSections.AddRange(secSeniors, secJuniors, secJuniorsB, secPairs);
         await db.SaveChangesAsync();
 
-        // 6 teams per section, drawn from clubs after the race-finals demo's slice.
-        var clubs = await db.Clubs.OrderBy(c => c.Id).Skip(12).Take(18).ToListAsync();
+        // Varied entries: Seniors 16 (3 heats), Juniors A 6, Juniors B 5, Pairs 4.
+        // Drawn from clubs after the race-finals demo's slice.
+        var clubs = await db.Clubs.OrderBy(c => c.Id).Skip(26).Take(31).ToListAsync();
         var teamsBySection = new Dictionary<int, List<Team>>();
         foreach (var (section, slice) in new[]
         {
-            (secSeniors, clubs.Take(6)),
-            (secJuniors, clubs.Skip(6).Take(6)),
-            (secPairs, clubs.Skip(12).Take(6)),
+            (secSeniors, clubs.Take(16)),
+            (secJuniors, clubs.Skip(16).Take(6)),
+            (secJuniorsB, clubs.Skip(22).Take(5)),
+            (secPairs, clubs.Skip(27).Take(4)),
         })
         {
             var list = new List<Team>();
@@ -864,7 +872,7 @@ public static class DbInitializer
         var zonePairs = new[]
         {
             "Bending", "Hollywood Bowl Boule & Bucket", "Bottle", "Tally Ho Farm Ball & Socket",
-            "STRUK Pole", "PGSports UK Shopping Spree", "Stepping Stones", "EGUK Mug Changes", "5 Flag",
+            "STRUK Pole", "5 Flag",
         };
 
         // Round-robin qualifier sessions across day 1 (session 1 for each section)
@@ -875,9 +883,11 @@ public static class DbInitializer
         {
             (secSeniors, zoneSenior, day1Start),
             (secJuniors, zoneJunior, day1Start.AddHours(2)),
+            (secJuniorsB, zoneJunior, day1Start.AddHours(3)),
             (secPairs, zonePairs, day1Start.AddHours(4)),
             (secSeniors, zoneSenior, day2Start),
             (secJuniors, zoneJunior, day2Start.AddHours(2)),
+            (secJuniorsB, zoneJunior, day2Start.AddHours(3)),
             (secPairs, zonePairs, day2Start.AddHours(4)),
         };
 
@@ -931,7 +941,8 @@ public static class DbInitializer
         var finalStart = day2Start.AddHours(6);
         foreach (var (section, races) in new[]
         {
-            (secSeniors, zoneSenior), (secJuniors, zoneJunior), (secPairs, zonePairs),
+            (secSeniors, zoneSenior), (secJuniors, zoneJunior),
+            (secJuniorsB, zoneJunior), (secPairs, zonePairs),
         })
         {
             var finalsSession = new Session
