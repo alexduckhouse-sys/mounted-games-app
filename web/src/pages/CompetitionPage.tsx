@@ -3,6 +3,7 @@ import { Link, useLocation, useParams, Outlet } from 'react-router-dom';
 import { api } from '../api';
 import type { ChatMessage, CompetitionDetail, Session, Heat } from '../types';
 import { useCompetitionStreams } from '../hooks/useCompetitionStreams';
+import { useStreamOverlay } from '../hooks/useStreamOverlay';
 import { appendStreamMessage } from '../lib/streams';
 import { tickerItems } from '../lib/ticker';
 import { useTicker } from '../components/TickerContext';
@@ -158,6 +159,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const { setItems, setWatchCompetitionId } = useTicker();
   const [ready, setReady] = useState(0);
   const streamState = useCompetitionStreams(competitionId, ready);
+  const overlayState = useStreamOverlay(competitionId, ready);
   const [streamMessages, setStreamMessages] = useState<{ message: ChatMessage; receivedAt: number }[]>([]);
   const addStreamMessage = (value: unknown) => {
     const message = value as ChatMessage;
@@ -196,6 +198,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     onReady: () => { load(); setReady((value) => value + 1); },
     onStreamUpdated: streamState.onStreamUpdated,
     onStreamViewers: streamState.onStreamViewers,
+    onOverlayUpdated: overlayState.onOverlayUpdated,
     onChatMessage: addStreamMessage,
     onAnnouncement: (m) => {
       const message = m as ChatMessage;
@@ -295,7 +298,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing);
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save }}>
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />

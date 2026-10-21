@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { Camera, Eye, Mic, MicOff, Pause, Play, RefreshCw, Square, Wifi } from 'lucide-react';
+import { Camera, Eye, Megaphone, Mic, MicOff, Pause, Play, RefreshCw, Square, Wifi } from 'lucide-react';
+import { readMessages } from '../../lib/overlayMessages';
+import { DEFAULT_OVERLAY } from '../../lib/overlays';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { browserPublisherDependencies, createStreamPublisher, type PublisherSnapshot } from '../../live/streamPublisher';
@@ -93,6 +95,7 @@ function BroadcastStudio() {
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={flip}><RefreshCw />Flip</button>
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={() => run(() => publisher.current!.mute(!snapshot.audioMuted))}>{snapshot.audioMuted ? <MicOff /> : <Mic />}{snapshot.audioMuted ? 'Sound off' : 'Sound on'}</button>
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={() => run(() => publisher.current!.pause(snapshot.state !== 'paused'))}>{snapshot.state === 'paused' ? <Play /> : <Pause />}{snapshot.state === 'paused' ? 'Resume' : 'Back soon'}</button>
+        <BannerButton competitionId={competition.id} />
         <button className="mg-stream-control flex-col !rounded-xl !bg-[rgb(var(--mg-red))] p-2" onClick={() => setConfirmEnd(true)}><Square />End</button>
       </div>
       <div className="absolute bottom-20 left-4 right-24 flex flex-col items-start gap-2">{streamMessages.slice(-3).map((item) => <StreamNotice key={`${item.message.id}-${item.receivedAt}`} {...item} duration={10_000} />)}</div>
@@ -122,3 +125,24 @@ function BroadcastStudio() {
   </div>;
 }
 function VideoIcon() { return <span aria-hidden="true" className="h-2 w-2 rounded-full bg-white" />; }
+
+/**
+ * A quick banner switch for the person filming: clears the banner that's up, or puts back the latest
+ * message saved on this phone's producer screen. Everything else lives on the producer screen.
+ */
+export function BannerButton({ competitionId }: { competitionId: number }) {
+  const { overlay, saveOverlay } = useCompetition();
+  const [busy, setBusy] = useState(false);
+  const current = overlay ?? DEFAULT_OVERLAY;
+  const on = current.bannerText !== null;
+  const next = readMessages(competitionId).at(-1);
+  if (!saveOverlay || (!on && !next)) return null;
+  async function toggle() {
+    setBusy(true);
+    await saveOverlay!((o) => (on ? { ...o, bannerText: null } : { ...o, bannerText: next!.text, bannerStyle: next!.style }));
+    setBusy(false);
+  }
+  return <button className={`mg-stream-control flex-col !rounded-xl p-2 ${on ? '!bg-amber-500 !text-black' : ''}`} disabled={busy} onClick={() => void toggle()}
+    aria-label={on ? 'Clear the banner' : `Show banner: ${next!.text}`}><Megaphone />{on ? 'Banner on' : 'Banner'}</button>;
+}
+

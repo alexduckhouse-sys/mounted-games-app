@@ -9,6 +9,7 @@ import { readToken } from '../api';
 export interface LiveHandlers {
   onStreamUpdated?: (stream: LiveStream) => void;
   onStreamViewers?: (payload: { streamId: number; count: number }) => void;
+  onOverlayUpdated?: (overlay: unknown) => void;
   onReady?: () => void;
   onChatMessage?: (msg: unknown) => void;
   onChatMessageDeleted?: (payload: { id: number }) => void;
@@ -56,6 +57,7 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
     // Events from a connection that has been replaced (new competition or auth session) are dropped.
     const forward = <A extends unknown[]>(deliver: (...args: A) => void) => (...args: A) => { if (active) deliver(...args); };
     conn.on('streamUpdated', forward((s) => handlersRef.current.onStreamUpdated?.(s as LiveStream)));
+    conn.on('overlayUpdated', forward((o) => handlersRef.current.onOverlayUpdated?.(o)));
     conn.on('streamViewers', forward((p) => handlersRef.current.onStreamViewers?.(p as { streamId: number; count: number })));
     conn.on('chatMessage', forward((m) => handlersRef.current.onChatMessage?.(m)));
     conn.on('chatMessageDeleted', forward((p) => handlersRef.current.onChatMessageDeleted?.(p as { id: number })));
