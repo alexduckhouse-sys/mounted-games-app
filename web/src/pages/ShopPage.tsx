@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as ImageIcon, Check } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { LazyImage } from '../components/LazyImage';
 import type { ShopComment, ShopPost } from '../types';
 
 function priceLabel(p?: number | null): string {
@@ -233,7 +234,7 @@ function PostCard({
   return (
     <article className={`card p-3 space-y-2 flex flex-col ${post.isDeleted ? 'opacity-60 border-rose-200' : ''}`}>
       {post.imageBase64 && (
-        <img src={post.imageBase64} alt={post.title} className="rounded-md max-h-40 w-full object-cover" />
+        <LazyImage src={post.imageBase64} alt={post.title} className="rounded-md max-h-40 w-full object-cover" />
       )}
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">

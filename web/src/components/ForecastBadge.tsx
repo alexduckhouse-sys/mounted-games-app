@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Cloud, CloudRain, CloudSnow, Sun, CloudFog, CloudLightning } from 'lucide-react';
 import { getWeather } from '../weather/weather';
+import { useLiteMode } from '../lite/LiteModeContext';
 
 interface ForecastData {
   daily?: {
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export function ForecastBadge({ lat, lon, date, className = '' }: Props) {
+  const { lite } = useLiteMode();
   // The forecast is stored with the request it answers, so a change of venue or date
   // shows nothing until the new answer arrives, with no state reset inside the effect.
   const requestKey = `${lat}|${lon}|${date}`;
@@ -42,16 +44,16 @@ export function ForecastBadge({ lat, lon, date, className = '' }: Props) {
   const data = result?.key === requestKey ? result.data : null;
 
   useEffect(() => {
-    if (lat == null || lon == null || !date) return;
+    if (lite || lat == null || lon == null || !date) return;
     let cancelled = false;
     const day = new Date(date).toISOString().slice(0, 10);
     getWeather<ForecastData>('/weather/forecast', { lat, lon, date: day })
       .then((r) => { if (!cancelled) setResult({ key: requestKey, data: r }); })
       .catch(() => { if (!cancelled) setResult({ key: requestKey, data: null }); });
     return () => { cancelled = true; };
-  }, [lat, lon, date, requestKey]);
+  }, [lat, lon, date, requestKey, lite]);
 
-  if (lat == null || lon == null || !date) return null;
+  if (lite || lat == null || lon == null || !date) return null;
 
   const daily = data?.daily ?? data?.fallback;
   const code = daily?.weather_code?.[0];

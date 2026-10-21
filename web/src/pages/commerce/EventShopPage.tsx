@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Receipt } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { LazyImage } from '../../components/LazyImage';
 import { useCompetition } from '../competition/context';
 import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineQty, RefineSection, RefineStatus } from '../refine/Refine';
 import { LoadError } from './commerceUi';
@@ -202,7 +203,7 @@ function EventShopContent() {
                 return (
                   <li key={listing.id} className="rf-row">
                     {listing.imageUrl
-                      ? <img src={listing.imageUrl} alt="" className="rf-thumb" loading="lazy" />
+                      ? <LazyImage src={listing.imageUrl} alt="" className="rf-thumb" compact />
                       : <span className="rf-thumb" aria-hidden="true">{initials(listing.title)}</span>}
                     <span className="rf-grow">
                       <span className="rf-t1">{listing.title}</span>

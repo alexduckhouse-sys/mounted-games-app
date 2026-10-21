@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Cloud, CloudRain, CloudSnow, Sun, CloudFog, CloudLightning, Moon } from 'lucide-react';
 import { getWeather } from '../weather/weather';
 import { forecastHour, WEATHER_REFRESH_MS } from '../weather/requestCache';
+import { useLiteMode } from '../lite/LiteModeContext';
 
 interface AtResponse {
   hour?: string;
@@ -35,6 +36,7 @@ export function WeatherAt({
   when?: string | Date | null;
   className?: string;
 }) {
+  const { lite } = useLiteMode();
   const iso = when ? forecastHour(when) : null;
   // Each answer is stored with the request it belongs to, so a change of venue or time
   // shows nothing until the new answer arrives, with no state reset inside the effect.
@@ -43,15 +45,15 @@ export function WeatherAt({
   const data = result?.key === requestKey ? result.data : null;
 
   useEffect(() => {
-    if (lat == null || lon == null || !iso) return;
+    if (lite || lat == null || lon == null || !iso) return;
     let cancelled = false;
     getWeather<AtResponse>('/weather/at', { lat, lon, when: iso })
       .then((r) => { if (!cancelled) setResult({ key: requestKey, data: r }); })
       .catch(() => { if (!cancelled) setResult({ key: requestKey, data: null }); });
     return () => { cancelled = true; };
-  }, [lat, lon, iso, requestKey]);
+  }, [lat, lon, iso, requestKey, lite]);
 
-  if (lat == null || lon == null || !iso) return null;
+  if (lite || lat == null || lon == null || !iso) return null;
   const t = data?.temperature_2m ?? data?.fallback?.temperature_2m;
   const code = data?.weather_code ?? data?.fallback?.weather_code;
   const isDay = data?.is_day ?? data?.fallback?.is_day;
@@ -74,12 +76,13 @@ export function WeatherNow({
   lon?: number | null;
   className?: string;
 }) {
+  const { lite } = useLiteMode();
   const requestKey = `${lat}|${lon}`;
   const [result, setResult] = useState<{ key: string; data: CurrentResponse | null } | null>(null);
   const data = result?.key === requestKey ? result.data : null;
 
   useEffect(() => {
-    if (lat == null || lon == null) return;
+    if (lite || lat == null || lon == null) return;
     let cancelled = false;
     function pull() {
       if (!navigator.onLine || document.visibilityState !== 'visible') return;
@@ -90,9 +93,9 @@ export function WeatherNow({
     pull();
     const i = setInterval(pull, WEATHER_REFRESH_MS);
     return () => { cancelled = true; clearInterval(i); };
-  }, [lat, lon, requestKey]);
+  }, [lat, lon, requestKey, lite]);
 
-  if (lat == null || lon == null) return null;
+  if (lite || lat == null || lon == null) return null;
   const cur = data?.current ?? data?.fallback ?? {};
   const t = cur.temperature_2m;
   const code = cur.weather_code;

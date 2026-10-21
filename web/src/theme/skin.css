@@ -303,3 +303,37 @@ a.mg-row:hover, button.mg-row:hover { background: rgb(var(--mg-subtle)); }
 .mg-stream-chip { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgb(var(--mg-rule)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 14px/1 'Barlow', sans-serif; }
 .mg-stream-chip[aria-pressed="true"] { background: rgb(var(--mg-header)); border-color: rgb(var(--mg-header)); color: white; }
 .mg-stream-control:disabled { opacity: .5; }
+
+/* Lite mode (slow connection or Data Saver): see src/lite. */
+.mg-lite-chip { flex-shrink: 0; display: inline-flex; align-items: center; min-height: 44px; padding: 0; background: transparent; cursor: pointer; }
+.mg-lite-chip > span {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 14px;
+  background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 700 12.5px/1 'Barlow', sans-serif; white-space: nowrap;
+}
+.mg-lite-chip svg { width: 14px; height: 14px; }
+/* A picture that waits for a tap. Takes the size and shape of the image it stands in for. */
+.mg-tap-image {
+  display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 64px; padding: 10px 14px; border-radius: 12px;
+  background: rgb(var(--mg-tint)); border: 1px dashed rgb(var(--mg-dash)); color: rgb(var(--mg-heading)); text-align: left; cursor: pointer;
+}
+.mg-tap-image > svg { width: 22px; height: 22px; flex: none; }
+.mg-tap-image-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.mg-tap-image-text b { font: 600 15px/1.2 'Barlow', sans-serif; }
+.mg-tap-image-text small { font: 400 13px/1.2 'Barlow', sans-serif; color: rgb(var(--mg-muted)); }
+.mg-tap-image--compact { min-height: 0; padding: 0; gap: 0; border-radius: 9px; }
+.mg-tap-image--compact > svg { width: 20px; height: 20px; }
+/* The soft block of colour behind a picture that is still on its way. */
+.mg-lazy-img { background-color: rgb(var(--mg-tint)); }
+.mg-lazy-img[data-state="loaded"] { background-color: transparent; }
+.mg-tap-video {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 100%; aspect-ratio: 16 / 9; padding: 0 20px;
+  background: rgb(var(--mg-header-deep)); color: #fff; text-align: center; cursor: pointer;
+}
+.mg-tap-video-play { width: 56px; height: 56px; border-radius: 50%; background: rgb(var(--mg-red)); display: flex; align-items: center; justify-content: center; }
+.mg-tap-video b { font: 700 20px/1 'Barlow Condensed', sans-serif; }
+.mg-tap-video small { font: 400 13px/1.3 'Barlow', sans-serif; color: rgb(var(--mg-header-sub)); }
+.mg-tap-image:focus-visible, .mg-tap-video:focus-visible, .mg-lite-chip:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+/* Lite mode also stills CSS animations and transitions; motion in React is switched off separately. */
+[data-lite="true"] *, [data-lite="true"] *::before, [data-lite="true"] *::after {
+  animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+}
