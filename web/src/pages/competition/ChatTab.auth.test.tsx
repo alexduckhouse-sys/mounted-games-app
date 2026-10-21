@@ -22,6 +22,7 @@ vi.mock('../../auth/AuthContext', () => ({
     token: state.token,
     canEdit: () => state.roles.includes('Admin'),
     hasRole: (role: Role) => state.roles.includes(role),
+    canOrganise: () => false,
   }),
 }));
 vi.mock('../../api', () => ({
@@ -37,8 +38,12 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function contextValue(extra: Partial<CompetitionDetail> = {}) {
+  return { competition: competition(extra), reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [] };
+}
+
 function mount(extra: Partial<CompetitionDetail> = {}) {
-  const value = { competition: competition(extra), reload: vi.fn() };
+  const value = contextValue(extra);
   return render(
     <MemoryRouter>
       <CompetitionContext.Provider value={value}>
@@ -65,7 +70,7 @@ describe('ChatTab auth sessions', () => {
 
     expect(screen.getByText('Messaging the organisers isn’t available for this event yet.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Only organisers see your messages')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Message the organisers…')).not.toBeInTheDocument();
     expect(state.post).not.toHaveBeenCalled();
   });
 
@@ -75,7 +80,7 @@ describe('ChatTab auth sessions', () => {
     state.get.mockResolvedValue({ data: [] });
     mount();
 
-    expect(screen.getByText('Only organisers see your messages')).toBeInTheDocument();
+    expect(screen.queryByText('Messaging the organisers isn’t available for this event yet.')).not.toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText('Message the organisers…'), 'Please call collecting ring');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -100,7 +105,7 @@ describe('ChatTab auth sessions', () => {
     state.roles = [];
     view.rerender(
       <MemoryRouter>
-        <CompetitionContext.Provider value={{ competition: competition(), reload: vi.fn() }}>
+        <CompetitionContext.Provider value={contextValue()}>
           <ChatTab />
         </CompetitionContext.Provider>
       </MemoryRouter>,
