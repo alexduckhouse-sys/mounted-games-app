@@ -31,7 +31,8 @@ export function DashboardPage() {
   const { user, hasRole } = useAuth();
   const { current } = useCurrentCompetition();
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
-  const [focusedDetail, setFocusedDetail] = useState<CompetitionDetail | null>(null);
+  // The detail is stored with the competition it was fetched for, so it is ignored once focus moves on.
+  const [focused, setFocused] = useState<{ id: number; detail: CompetitionDetail | null } | null>(null);
 
   useEffect(() => {
     api.get<CompetitionSummary[]>('/competitions').then((r) => setCompetitions(r.data)).catch(() => {});
@@ -40,11 +41,15 @@ export function DashboardPage() {
   const active = competitions.find((c) => c.isActive && !c.isArchived);
   const focusId = current?.id ?? active?.id ?? null;
 
+  const focusedDetail = focused != null && focused.id === focusId ? focused.detail : null;
+
   useEffect(() => {
-    if (focusId == null) { setFocusedDetail(null); return; }
+    if (focusId == null) return;
+    let cancelled = false;
     api.get<CompetitionDetail>(`/competitions/${focusId}`)
-      .then((r) => setFocusedDetail(r.data))
-      .catch(() => setFocusedDetail(null));
+      .then((r) => { if (!cancelled) setFocused({ id: focusId, detail: r.data }); })
+      .catch(() => { if (!cancelled) setFocused({ id: focusId, detail: null }); });
+    return () => { cancelled = true; };
   }, [focusId]);
 
   const isAdmin = hasRole('Admin');

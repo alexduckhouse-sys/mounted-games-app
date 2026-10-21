@@ -83,7 +83,7 @@ export function computeTimings(sessions: Session[]): Map<number, SessionTiming> 
       // Per-heat scheduledStart, when set, pins the heat (and resets the
       // cascade cursor for subsequent heats).
       const pinned = h.scheduledStart ? new Date(h.scheduledStart) : null;
-      let hScheduled = pinned ?? (scheduledCursor ? new Date(scheduledCursor) : null);
+      const hScheduled = pinned ?? (scheduledCursor ? new Date(scheduledCursor) : null);
       let hEffective: Date | null = null;
       if (h.startedAt) {
         hEffective = new Date(h.startedAt);

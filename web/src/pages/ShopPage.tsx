@@ -27,11 +27,19 @@ export function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
 
+  // Bumping the version re-runs the fetch below; the initial load happens on mount.
+  const [version, setVersion] = useState(0);
   function load() {
     setLoading(true);
-    api.get<ShopPost[]>('/shop/posts').then((r) => setPosts(r.data)).finally(() => setLoading(false));
+    setVersion((v) => v + 1);
   }
-  useEffect(load, []);
+  useEffect(() => {
+    let cancelled = false;
+    api.get<ShopPost[]>('/shop/posts')
+      .then((r) => { if (!cancelled) setPosts(r.data); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [version]);
 
   const isAdmin = canEdit();
 

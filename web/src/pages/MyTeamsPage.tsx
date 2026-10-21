@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, FileText, Clock, Activity, CheckCircle2, KeyRound, UserPlus, X, RefreshCw, Copy, Check, Bell, BellOff, Sparkles } from 'lucide-react';
 import { api } from '../api';
@@ -331,13 +331,17 @@ function SupportersBlock({ team, onTeamUpdated }: { team: Team; onTeamUpdated: (
   const [codeErr, setCodeErr] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
-  async function load() {
-    try {
-      const { data } = await api.get<TeamSupporter[]>(`/teams/${team.id}/supporters`);
-      setSupporters(data);
-    } catch { setSupporters([]); }
-  }
-  useEffect(() => { if (open) load(); }, [open, team.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fetchSupporters = useCallback(
+    () => api.get<TeamSupporter[]>(`/teams/${team.id}/supporters`).then((r) => r.data).catch(() => [] as TeamSupporter[]),
+    [team.id],
+  );
+  async function load() { setSupporters(await fetchSupporters()); }
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetchSupporters().then((list) => { if (!cancelled) setSupporters(list); });
+    return () => { cancelled = true; };
+  }, [open, fetchSupporters]);
 
   async function rotate() {
     setBusy(true);

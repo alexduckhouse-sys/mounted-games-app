@@ -38,16 +38,20 @@ export function CurrentCompetitionProvider({ children }: { children: ReactNode }
   useEffect(() => {
     // Retire the old preference, which was saved without asking.
     try { localStorage.removeItem('mg.currentCompetition'); } catch { /* Storage may be blocked. */ }
+    let error: string | null = null;
     try {
       document.cookie = competitionCookie(rememberChoice === 'remember' ? current : null, location.protocol === 'https:');
       if (rememberChoice === 'visit' && current) sessionStorage.setItem('mg.competitionVisit', JSON.stringify(current));
       else sessionStorage.removeItem('mg.competitionVisit');
       if (rememberChoice === 'remember' && current && readCompetitionCookie(document.cookie)?.id !== current.id) {
-        setStorageError('Your browser could not save this competition. You can still use it for this visit.');
-      } else setStorageError(null);
+        error = 'Your browser could not save this competition. You can still use it for this visit.';
+      }
     } catch {
-      setStorageError('Your browser could not save this choice. You can still use the competition.');
+      error = 'Your browser could not save this choice. You can still use the competition.';
     }
+    // The outcome of writing to the browser's storage is only known after the write, so it is reported here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- result of syncing with cookie/sessionStorage
+    setStorageError(error);
   }, [current, rememberChoice]);
 
   const setCurrent = useCallback((c: CurrentCompetition | null) => {
@@ -59,6 +63,7 @@ export function CurrentCompetitionProvider({ children }: { children: ReactNode }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook lives beside its provider by design
 export function useCurrentCompetition() {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useCurrentCompetition must be used inside CurrentCompetitionProvider');

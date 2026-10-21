@@ -26,6 +26,7 @@ export function NavExtrasProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook lives beside its provider by design
 export function useNavExtras() {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useNavExtras must be used inside NavExtrasProvider');
