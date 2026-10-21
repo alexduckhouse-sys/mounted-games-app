@@ -41,7 +41,7 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
 
     // Built once. The timeout is generous so a busy host can't turn a match into an exception.
     private static readonly System.Text.RegularExpressions.Regex PublicCacheablePath = new(
-        @"^/api/(competitions(/picker|/[1-9]\d*(/standings)?)?|race-templates|weather/(at|current|forecast))/?$",
+        @"^/api/(competitions(/picker|/[1-9]\d*(/standings|/first-view)?)?|race-templates|weather/(at|current|forecast))/?$",
         System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
 

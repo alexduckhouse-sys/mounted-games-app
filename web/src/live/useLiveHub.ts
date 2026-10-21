@@ -21,6 +21,9 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
   const { token } = useAuth();
   const connectionRef = useRef<HubConnection | null>(null);
   const readyRef = useRef(false);
+  const recoveryRef = useRef<{ reconnect: () => void } | null>(null);
+  /** Try the live link again now, e.g. when the user taps the connection pill. */
+  const reconnect = useCallback(() => recoveryRef.current?.reconnect(), []);
   const invoke = useCallback<StreamInvoke>((method, ...args) => {
     if (!readyRef.current || !connectionRef.current || connectionRef.current.state !== 'Connected') return Promise.reject(new Error('Live connection is not ready'));
     return connectionRef.current.invoke(method, ...args);
@@ -74,15 +77,18 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
         return () => clearTimeout(timer);
       },
     });
+    recoveryRef.current = recovery;
     window.addEventListener('online', recovery.reconnect);
     return () => {
       active = false;
       readyRef.current = false;
-      if (connectionRef.current === conn) connectionRef.current = null;
+      // React runs this before the next effect, so the refs always hold this connection here.
+      connectionRef.current = null;
+      recoveryRef.current = null;
       window.removeEventListener('online', recovery.reconnect);
       recovery.dispose();
     };
   }, [competitionId, token]);
 
-  return { connected, invoke };
+  return { connected, invoke, reconnect };
 }
