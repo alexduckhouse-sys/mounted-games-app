@@ -50,6 +50,7 @@ public interface ILiveBroadcaster
     Task Announcement(int competitionId, object announcement);
     Task StreamUpdated(int competitionId, LiveStreamDto stream);
     Task StreamViewers(int competitionId, int streamId, int count);
+    Task OverlayUpdated(int competitionId, StreamOverlayDto overlay);
 }
 
 public class LiveBroadcaster : ILiveBroadcaster
@@ -59,6 +60,9 @@ public class LiveBroadcaster : ILiveBroadcaster
 
     public Task StreamViewers(int competitionId, int streamId, int count)
         => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("streamViewers", new { streamId, count });
+
+    public Task OverlayUpdated(int competitionId, StreamOverlayDto overlay)
+        => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("overlayUpdated", overlay);
 
     private readonly IHubContext<LiveHub> _hub;
     public LiveBroadcaster(IHubContext<LiveHub> hub) => _hub = hub;

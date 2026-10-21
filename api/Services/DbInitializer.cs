@@ -90,6 +90,25 @@ public static class DbInitializer
             CREATE INDEX IF NOT EXISTS "IX_LiveStreams_CompetitionId_Status" ON "LiveStreams" ("CompetitionId", "Status");
             """);
 
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "StreamOverlays" (
+                "CompetitionId" INTEGER NOT NULL CONSTRAINT "PK_StreamOverlays" PRIMARY KEY,
+                "BannerText" TEXT NULL,
+                "BannerStyle" INTEGER NOT NULL DEFAULT 0,
+                "BannerArenas" TEXT NOT NULL DEFAULT '[]',
+                "StripMode" INTEGER NOT NULL DEFAULT 0,
+                "ScoreCardMode" INTEGER NOT NULL DEFAULT 0,
+                "ScoreCardDelaySeconds" INTEGER NOT NULL DEFAULT 4,
+                "ScoreCardSeconds" INTEGER NOT NULL DEFAULT 10,
+                "LookJson" TEXT NOT NULL DEFAULT '{{}}',
+                "Revision" INTEGER NOT NULL DEFAULT 0,
+                "UpdatedAt" TEXT NOT NULL DEFAULT '0001-01-01 00:00:00',
+                "UpdatedByUserId" TEXT NULL,
+                CONSTRAINT "FK_StreamOverlays_Competitions_CompetitionId" FOREIGN KEY ("CompetitionId")
+                    REFERENCES "Competitions" ("Id") ON DELETE CASCADE
+            );
+            """);
+
         // For new tables added after the DB was first created, EnsureCreated is a no-op.
         // Make the schema additive by running CREATE TABLE IF NOT EXISTS for those.
         await db.Database.ExecuteSqlRawAsync(@"
