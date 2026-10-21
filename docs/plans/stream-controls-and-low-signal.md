@@ -84,4 +84,4 @@ Design board: `docs/designs/stream-controls-and-low-signal.html`. The decisions 
 ## Open points (to confirm when building)
 - Lite mode's auto threshold: does a "3g" phone count as slow, or only 2g and Data Saver? Proposed: 3g counts only when RTT is over 600 ms.
 - Scorers on bad signal: the outbox sends only while the app is open. Should it try Background Sync (Android only)?
-- Hosting: the user believes everything is on Vercel. The live headers show `/api` answered by Render's Kestrel through the Vercel rewrite. Settle this before Render is removed. The always-on question affects how fast the fallback recovers.
+- Hosting: the API moved to Vercel on 21 October (#43). Before events it needs the Redis backplane and shared state listed in `NEXT_STEPS.md`; the polling fallback also covers a missed live update in the meantime.
