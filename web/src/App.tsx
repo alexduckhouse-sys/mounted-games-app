@@ -7,6 +7,7 @@ import { CurrentCompetitionProvider } from './competition/CurrentCompetitionCont
 import { NavExtrasProvider } from './components/NavExtrasContext';
 import { AgeGroupsProvider } from './components/AgeGroupsContext';
 import { TickerProvider } from './components/TickerContext';
+import { ConnectionStatusProvider } from './live/ConnectionStatusContext';
 import { CompetitionMetaProvider } from './components/CompetitionMetaContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppShell } from './components/AppShell';
@@ -57,6 +58,7 @@ export default function App() {
         <NavExtrasProvider>
         <AgeGroupsProvider>
         <TickerProvider>
+        <ConnectionStatusProvider>
         <CompetitionMetaProvider>
         <CompactPageBarProvider>
         <BrowserRouter>
@@ -129,6 +131,7 @@ export default function App() {
         </BrowserRouter>
         </CompactPageBarProvider>
         </CompetitionMetaProvider>
+        </ConnectionStatusProvider>
         </TickerProvider>
         </AgeGroupsProvider>
         </NavExtrasProvider>
