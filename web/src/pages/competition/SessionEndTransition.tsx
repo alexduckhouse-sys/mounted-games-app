@@ -43,16 +43,17 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
     .filter((s) => s.orderIndex > finishedSession.orderIndex && !s.isBreak)
     .sort((a, b) => a.orderIndex - b.orderIndex)[0] ?? null;
 
+  const nextRealSessionId = nextRealSession?.id;
+  const nextRealSectionId = nextRealSession?.competitionSectionId;
   useEffect(() => {
-    if (!nextRealSession) return;
-    const target = nextRealSession;
+    if (nextRealSessionId == null) return;
     const teamIds = competition.teams
-      .filter((t) => target.competitionSectionId == null || t.competitionSectionId === target.competitionSectionId)
+      .filter((t) => nextRealSectionId == null || t.competitionSectionId === nextRealSectionId)
       .map((t) => t.id);
     api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id } })
       .then((r) => setForms(r.data.filter((f) => teamIds.includes(f.teamId))))
       .catch(() => setForms([]));
-  }, [competition.id, competition.teams, nextRealSession?.id]);
+  }, [competition.id, competition.teams, nextRealSessionId, nextRealSectionId]);
 
   async function markFinished(session: Session) {
     await api.put(`/competitions/${competition.id}/sessions/${session.id}/status`, { status: 2 });

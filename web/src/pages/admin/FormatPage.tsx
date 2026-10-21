@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Sparkles, Lock, Unlock, Users, ChevronLeft, AlertTriangle,
@@ -29,7 +29,7 @@ export function FormatPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function reload() {
+  const reload = useCallback(async () => {
     if (!editingId) return;
     try {
       const { data: c } = await api.get<CompetitionDetail>(`/competitions/${editingId}`);
@@ -39,9 +39,26 @@ export function FormatPage() {
         setSignups(data);
       } else setSignups([]);
     } catch { setError('Could not load organiser details. Please try again.'); }
-  }
+  }, [editingId, canOrganise]);
 
-  useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [editingId]);
+  // Initial load. The same steps as reload(), kept inline so state is only set once a response
+  // has arrived, and so a response for a competition we have since left is ignored.
+  useEffect(() => {
+    if (!editingId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: c } = await api.get<CompetitionDetail>(`/competitions/${editingId}`);
+        if (cancelled) return;
+        setComp(c);
+        if (canOrganise(c)) {
+          const { data } = await api.get<SectionSignup[]>(`/competitions/${editingId}/signups`);
+          if (!cancelled) setSignups(data);
+        } else setSignups([]);
+      } catch { if (!cancelled) setError('Could not load organiser details. Please try again.'); }
+    })();
+    return () => { cancelled = true; };
+  }, [editingId, canOrganise]);
 
   async function toggleLock() {
     if (!comp || busy) return;

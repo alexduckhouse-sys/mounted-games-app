@@ -94,7 +94,6 @@ The status below records earlier work and deployment follow-ups; verify its host
   - the blank-suffix branch in `TeamsController.Update`
   - the unauthorised early returns in `MyTeams` and `LoadTeamForTrainerAsync`
   - the empty-string guard in `GeocodingService.ResolvePostcodeAsync`
-- Lint: about 46 existing errors on `main`. Clear them, then add `npm run lint` to CI.
 - Scoring: tied places share points and HC teams keep stored points. This matches `APP_DESIGN.md`; change it only if the rules say otherwise.
 
 ## Testing

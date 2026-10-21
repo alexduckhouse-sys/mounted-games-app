@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import { Trash2, Plus, X, ChevronUp, ArrowUp, ArrowDown } from 'lucide-react';
 import type { DiagramElement, DiagramPos, DiagramTool, ConeKind, ItemKind } from '../types';
 import { DIAGRAM_TOOLS } from '../types';
-import { ElementShape, LANE, CENTRE_Y, pctToPx, pxToPct, clampPct, resolveX } from './RaceDiagram';
+import { ElementShape } from './RaceDiagram';
+import { LANE, CENTRE_Y, pctToPx, pxToPct, clampPct, resolveX } from './diagramGeometry';
 
 interface Props {
   value: string;

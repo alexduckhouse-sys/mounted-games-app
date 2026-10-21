@@ -13,6 +13,7 @@ export function AgeGroupsProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook lives beside its provider by design
 export function useAgeGroups() {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useAgeGroups must be used within AgeGroupsProvider');
