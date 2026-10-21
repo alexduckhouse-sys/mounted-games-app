@@ -1,5 +1,5 @@
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import {
   ChevronLeft, CloudOff, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Coffee, Wand2, X, Clock, Columns3, ClipboardList, Users, CheckCircle2,
@@ -97,12 +97,14 @@ export function SessionPage() {
       const raw = localStorage.getItem(scoringDraftKey);
       if (raw) {
         const parsed = JSON.parse(raw) as PendingPlace[];
+        // The pending placings follow the active race, and the effects below reset and re-seed them
+        // for the same race change. Their order decides which write wins, so they stay as effects.
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- loading a saved draft from localStorage on race change
         if (Array.isArray(parsed)) setPending(parsed);
       }
     } catch { /* ignore */ }
     // Only hydrate when the active race changes — admin's interactive
     // changes are saved by the next effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoringDraftKey]);
   useEffect(() => {
     if (!scoringDraftKey) return;
@@ -131,9 +133,8 @@ export function SessionPage() {
     return m;
   }, [decForms]);
 
-  useEffect(() => {
-    if (activeHeatId == null && firstIncompleteHeatId != null) setActiveHeatId(firstIncompleteHeatId);
-  }, [firstIncompleteHeatId, activeHeatId]);
+  // Fall back to the first unfinished heat when none is chosen yet (adjusted during render, not in an effect).
+  if (activeHeatId == null && firstIncompleteHeatId != null) setActiveHeatId(firstIncompleteHeatId);
 
   const activeHeat = orderedHeats.find((h) => h.id === activeHeatId) ?? null;
 
@@ -143,6 +144,7 @@ export function SessionPage() {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the race selection when the heat's races change; ordered with the hydrate and seed effects
     if (!activeHeat) { setActiveRaceId(null); return; }
     // Don't loop back to race 1 when all are complete — leave activeRaceId null so the
     // UI shows "Select a race" and the admin can re-score by clicking a race tab.
@@ -155,6 +157,7 @@ export function SessionPage() {
   useEffect(() => {
     if (!activeRaceId) return;
     const race = orderedRaces.find((r) => r.id === activeRaceId);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- seeds the pending placings for the selected race; ordered with the hydrate and reset effects
     if (!race || !race.isComplete) { setPending([]); return; }
     const seeded: PendingPlace[] = race.results
       .slice()
@@ -183,14 +186,15 @@ export function SessionPage() {
     prevHeatStateRef.current = now;
   }, [activeHeat, orderedHeats]);
 
-  useEffect(() => {
-    if (!session) return;
-    if (orderedHeats.length === 0) return;
-    const allComplete = orderedHeats.every(heatIsComplete);
-    if (allComplete && session.status !== 2) {
+  // Offer the end-of-session screen whenever the session or its heats change and every heat is done.
+  // Adjusted during render against the last values seen, so closing the screen is not undone on re-render.
+  const [transitionChecked, setTransitionChecked] = useState<{ session: Session | null; orderedHeats: Heat[] } | null>(null);
+  if (transitionChecked?.session !== session || transitionChecked?.orderedHeats !== orderedHeats) {
+    setTransitionChecked({ session, orderedHeats });
+    if (session && orderedHeats.length > 0 && orderedHeats.every(heatIsComplete) && session.status !== 2) {
       setShowTransition(true);
     }
-  }, [session, orderedHeats]);
+  }
 
   if (!session) {
     return (
@@ -432,26 +436,36 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
     () => competition.teams.filter((t) => session.competitionSectionId == null || t.competitionSectionId === session.competitionSectionId),
     [competition.teams, session.competitionSectionId]
   );
-  const [decForms, setDecForms] = useState<DeclarationForm[] | null>(null);
-  const [decFormsLoading, setDecFormsLoading] = useState(true);
+  // The forms are stored with the competition they belong to, so they count as loading until
+  // the fetch for this competition has finished.
+  const [decFormsResult, setDecFormsResult] = useState<{ competitionId: number; forms: DeclarationForm[] } | null>(null);
+  const decForms = decFormsResult?.competitionId === competition.id ? decFormsResult.forms : null;
+  const decFormsLoading = decForms == null;
 
   useEffect(() => {
-    setDecFormsLoading(true);
+    let cancelled = false;
     api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id } })
-      .then((r) => setDecForms(r.data))
-      .catch(() => setDecForms([]))
-      .finally(() => setDecFormsLoading(false));
+      .then((r) => r.data)
+      .catch(() => [] as DeclarationForm[])
+      .then((forms) => { if (!cancelled) setDecFormsResult({ competitionId: competition.id, forms }); });
+    return () => { cancelled = true; };
   }, [competition.id]);
 
   const decdTeamIds = useMemo(() => new Set((decForms ?? []).map((f) => f.teamId)), [decForms]);
   const [showAll, setShowAll] = useState(false);
-  const [selected, setSelected] = useState<Set<number>>(() => new Set());
-
-  useEffect(() => {
-    if (decFormsLoading) return;
+  // Nothing is selected until the dec forms are in; then teams with a dec form (or all teams, if none
+  // has one). The trainer's own choice replaces that, but only while the teams and forms it was
+  // made against are unchanged.
+  const defaultSelection = useMemo(() => {
+    if (decFormsLoading) return new Set<number>();
     const defaults = sectionTeams.filter((t) => decdTeamIds.has(t.id)).map((t) => t.id);
-    setSelected(new Set(defaults.length > 0 ? defaults : sectionTeams.map((t) => t.id)));
+    return new Set(defaults.length > 0 ? defaults : sectionTeams.map((t) => t.id));
   }, [decFormsLoading, sectionTeams, decdTeamIds]);
+  const [choice, setChoice] = useState<{ sectionTeams: typeof sectionTeams; decdTeamIds: Set<number>; selected: Set<number> } | null>(null);
+  const selected = choice && choice.sectionTeams === sectionTeams && choice.decdTeamIds === decdTeamIds ? choice.selected : defaultSelection;
+  function setSelected(next: Set<number> | ((current: Set<number>) => Set<number>)) {
+    setChoice({ sectionTeams, decdTeamIds, selected: typeof next === 'function' ? next(selected) : next });
+  }
 
   const groupedByClub = useMemo(() => {
     const visible = sectionTeams.filter((t) => showAll || decdTeamIds.has(t.id));
@@ -909,14 +923,11 @@ function ScoreTile({
   }
 
   const base = 'relative select-none touch-pan-y p-3 rounded-xl text-left font-semibold border-2 transition min-h-[72px]';
-  let style = '';
-  if (eliminated) {
-    style = 'bg-rose-100 border-rose-500 text-rose-900';
-  } else if (place != null) {
-    style = 'bg-brand-600 border-brand-700 text-white shadow-card';
-  } else {
-    style = 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-50';
-  }
+  const style = eliminated
+    ? 'bg-rose-100 border-rose-500 text-rose-900'
+    : place != null
+      ? 'bg-brand-600 border-brand-700 text-white shadow-card'
+      : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-50';
 
   return (
     <motion.div
@@ -1082,6 +1093,19 @@ function HeatEndOverlay({
  * second while the race is running. Optimistic: shows the tap at once and
  * sends the tap time, so a slow connection doesn't shift the race time.
  */
+// A once-a-second clock for the running race timer, read through useSyncExternalStore so that
+// rendering never calls Date.now() itself.
+let clockNow = Date.now();
+function useClock(active: boolean): number {
+  const subscribe = useCallback((notify: () => void) => {
+    if (!active) return () => {};
+    clockNow = Date.now(); // the first reading after subscribing is current
+    const timer = setInterval(() => { clockNow = Date.now(); notify(); }, 1000);
+    return () => clearInterval(timer);
+  }, [active]);
+  return useSyncExternalStore(subscribe, () => clockNow);
+}
+
 function RaceClock({ race: serverRace }: { race: Race }) {
   type Action = 'start' | 'stop';
   interface Tap { action: Action; at: string; startedAt: string | null; finishedAt: string | null; unsent: boolean; basis: string }
@@ -1095,16 +1119,11 @@ function RaceClock({ race: serverRace }: { race: Race }) {
   const started = race.startedAt ? new Date(race.startedAt) : null;
   const finished = race.finishedAt ? new Date(race.finishedAt) : null;
   const running = started != null && finished == null;
-  const [, force] = useState(0);
-  useEffect(() => {
-    if (!running) return;
-    const i = setInterval(() => force((n) => n + 1), 1000);
-    return () => clearInterval(i);
-  }, [running]);
+  const now = useClock(running);
 
   function elapsed(): string {
     if (!started) return '—';
-    const end = finished?.getTime() ?? Date.now();
+    const end = finished?.getTime() ?? now;
     const s = Math.max(0, Math.round((end - started.getTime()) / 1000));
     const m = Math.floor(s / 60);
     const sec = (s % 60).toString().padStart(2, '0');

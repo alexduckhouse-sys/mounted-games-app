@@ -193,11 +193,15 @@ public class CompetitionPickerTests
             .ToListAsync();
         Assert.All(competitions, competition =>
         {
-            Assert.Equal(3, competition.Sections.Count);
-            Assert.InRange(competition.Teams.Count, 15, 18);
+            Assert.InRange(competition.Sections.Count, 3, 6); // large age groups split into A/B
             Assert.All(competition.Sections, section =>
-                Assert.InRange(competition.Teams.Count(team => team.CompetitionSectionId == section.Id), 5, 6));
-            Assert.Equal(6, competition.Sessions.Count);
+                Assert.InRange(competition.Teams.Count(team => team.CompetitionSectionId == section.Id), 3, 16));
+            Assert.Equal(competition.Sections.Count * 2, competition.Sessions.Count);
+            Assert.All(competition.Sessions.SelectMany(s => s.Heats), heat =>
+            {
+                Assert.InRange(heat.Entries.Count, 1, 6);
+                Assert.InRange(heat.Races.Count, 6, 10);
+            });
             Assert.All(competition.Sessions.SelectMany(s => s.Heats).SelectMany(h => h.Entries), entry =>
                 Assert.Equal(competition.Id, entry.Team!.CompetitionId));
             Assert.All(competition.Sessions.SelectMany(s => s.Heats).SelectMany(h => h.Races).SelectMany(r => r.Results), result =>

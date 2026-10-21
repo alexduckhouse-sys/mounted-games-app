@@ -36,7 +36,8 @@ public record CompetitionDetail(
     string? PaymentDestination = null,
     bool SignupsLocked = false,
     string Icon = "flag",
-    string? CreatedByUserId = null);
+    string? CreatedByUserId = null,
+    bool StaffChatEnabled = true);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,

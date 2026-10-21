@@ -229,6 +229,8 @@ export interface CompetitionDetail {
   paymentDestination?: string | null;
   /** When true the public signup form is hidden and the API rejects new signups. */
   signupsLocked?: boolean;
+  /** Explicit capability from APIs that keep trainer messages private. Missing means unavailable. */
+  staffChatEnabled?: boolean;
 }
 
 export interface MySignup {

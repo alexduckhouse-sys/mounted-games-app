@@ -37,20 +37,13 @@ export function TeamsTab() {
       .catch(() => setDecFormTeamIds(new Set()));
   }, [competition.id, hasRole]);
 
-  useEffect(() => {
-    if (showForm && competition.sections.length > 0) {
-      setDraft((d) => ({
-        ...d,
-        competitionSectionId: d.competitionSectionId || competition.sections[0].id,
-      }));
-    }
-  }, [showForm, competition.sections]);
-
-  useEffect(() => {
-    if (showForm && user?.clubId && draft.clubId === 0) {
-      setDraft((d) => ({ ...d, clubId: user.clubId! }));
-    }
-  }, [showForm, user, draft.clubId]);
+  // A new team starts on the competition's first section and the trainer's own club. These
+  // defaults fill the zero placeholders on the way out rather than being copied into state.
+  const form = {
+    ...draft,
+    competitionSectionId: draft.competitionSectionId || competition.sections[0]?.id || 0,
+    clubId: draft.clubId || user?.clubId || 0,
+  };
 
   const grouped = useMemo(() => {
     const filter = sectionId === 'all'
@@ -67,13 +60,13 @@ export function TeamsTab() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!draft.clubId || !draft.competitionSectionId) return;
+    if (!form.clubId || !form.competitionSectionId) return;
     setBusy(true);
     try {
       await api.post(`/competitions/${competition.id}/teams`, {
-        competitionSectionId: draft.competitionSectionId,
-        clubId: draft.clubId,
-        suffix: draft.suffix.trim() || 'A',
+        competitionSectionId: form.competitionSectionId,
+        clubId: form.clubId,
+        suffix: form.suffix.trim() || 'A',
         bibColour: null,
         trainerUserId: null,
       });
@@ -120,8 +113,8 @@ export function TeamsTab() {
             <span className="text-xs text-slate-500">Section</span>
             <select
               className="input mt-1"
-              value={draft.competitionSectionId}
-              onChange={(e) => setDraft({ ...draft, competitionSectionId: parseInt(e.target.value, 10) })}
+              value={form.competitionSectionId}
+              onChange={(e) => setDraft({ ...form, competitionSectionId: parseInt(e.target.value, 10) })}
               required
             >
               {competition.sections.map((s) => (
@@ -133,8 +126,8 @@ export function TeamsTab() {
             <span className="text-xs text-slate-500">Club</span>
             <select
               className="input mt-1"
-              value={draft.clubId}
-              onChange={(e) => setDraft({ ...draft, clubId: parseInt(e.target.value, 10) })}
+              value={form.clubId}
+              onChange={(e) => setDraft({ ...form, clubId: parseInt(e.target.value, 10) })}
               required
             >
               <option value={0}>— pick club —</option>
@@ -147,14 +140,14 @@ export function TeamsTab() {
             <span className="text-xs text-slate-500">Suffix</span>
             <input
               className="input mt-1 uppercase" maxLength={4}
-              value={draft.suffix}
-              onChange={(e) => setDraft({ ...draft, suffix: e.target.value })}
+              value={form.suffix}
+              onChange={(e) => setDraft({ ...form, suffix: e.target.value })}
               required
             />
           </label>
           <div className="sm:col-span-12 flex justify-end gap-2">
             <button type="button" className="btn-ghost" onClick={() => setShowForm(false)}>Cancel</button>
-            <button type="submit" disabled={busy || !draft.clubId} className="btn-primary">
+            <button type="submit" disabled={busy || !form.clubId} className="btn-primary">
               <Save className="w-4 h-4" /> {busy ? 'Creating…' : 'Create team'}
             </button>
           </div>

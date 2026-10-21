@@ -32,10 +32,20 @@ function saveLastChatComp(value: LastChatComp) {
 const messageTime = (message: ChatMessage) => new Date(message.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 export function ChatTab() {
+  // Remount on sign-in, sign-out or a role change so private messages, drafts and
+  // in-flight responses from the previous session never reach the new one.
+  const { user } = useAuth();
+  const authSession = user ? `${user.id}:${[...user.roles].sort().join(',')}` : 'signed-out';
+  return <ChatTabSession key={authSession} />;
+}
+
+function ChatTabSession() {
   const { competition, reload, streams, streamingEnabled, invoke, ready, streamMessages } = useCompetition();
   const { canEdit, hasRole, canOrganise } = useAuth();
   const isAdmin = hasRole('Admin');
   const isTrainer = hasRole('Trainer');
+  // Older APIs don't keep trainer messages private, so they must say they do before trainers can post.
+  const trainerMessagingAvailable = competition.staffChatEnabled === true;
   const canPost = isAdmin || isTrainer;
   const canModerate = canEdit();
   const canManageStream = isAdmin ? canModerate : isTrainer && canOrganise(competition);
@@ -100,7 +110,7 @@ export function ChatTab() {
   const activeStreams = streams.filter((stream) => stream.status !== 2);
   const liveNow = competition.sessions.some((session) => session.status === 1) || activeStreams.length > 0;
   const effectiveMode = canModerate ? mode : 'announcement';
-  const canCompose = canModerate || isTrainer;
+  const canCompose = canModerate || (isTrainer && trainerMessagingAvailable);
   const closeAnnouncements = useCallback(() => setAllOpen(false), []);
   const dismissActionError = useCallback(() => setActionError(null), []);
 
@@ -249,6 +259,9 @@ export function ChatTab() {
             <button type="button" className="live-send" aria-label="Send" disabled={!body.trim() || sending} onClick={send}><Send aria-hidden="true" /></button>
           </div>
         </div>
+      )}
+      {isTrainer && !canModerate && !trainerMessagingAvailable && (
+        <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Messaging the organisers isn’t available for this event yet.</div>
       )}
       {isAdmin && !canModerate && (
         <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Turn Edit mode on to post an announcement or pin a banner.</div>

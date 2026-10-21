@@ -1,7 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { ThemeProvider, THEMES, useTheme } from './ThemeContext';
+import { ThemeProvider, useTheme } from './ThemeContext';
+import { THEMES } from './themes';
 
 const wrapper = ({ children }: { children: ReactNode }) => <ThemeProvider>{children}</ThemeProvider>;
 const mount = () => renderHook(() => useTheme(), { wrapper });

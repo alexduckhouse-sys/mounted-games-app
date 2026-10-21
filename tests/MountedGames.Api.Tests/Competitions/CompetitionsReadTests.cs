@@ -147,6 +147,8 @@ public class CompetitionsReadTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var d = await r.ReadAsync<CompetitionDetail>();
+        using var json = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.GetProperty("staffChatEnabled").GetBoolean());
         Assert.Equal(comp, d.Id);
         Assert.Equal(new[] { "A section", "B section" }, d.Sections.Select(s => s.DisplayName));
         Assert.Equal(new[] { "Zeta A", "Zeta B" }, d.Teams.Select(t => t.DisplayName));

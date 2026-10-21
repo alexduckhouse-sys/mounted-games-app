@@ -8,24 +8,31 @@ import { useCurrentCompetition } from '../competition/CurrentCompetitionContext'
 
 type View = 'current' | 'all';
 
+const NO_FORMS: DeclarationForm[] = [];
+
 export function DeclarationsIndexPage() {
   const { current } = useCurrentCompetition();
   const { user } = useAuth();
   const [view, setView] = useState<View>(current ? 'current' : 'all');
-  const [forms, setForms] = useState<DeclarationForm[]>([]);
+  // The list is stored with the view and competition it was fetched for; until a fetch for the
+  // current ones has finished the page is loading.
+  const [loaded, setLoaded] = useState<{ view: View; current: typeof current; forms: DeclarationForm[] } | null>(null);
+  const isLoaded = loaded != null && loaded.view === view && loaded.current === current;
+  const forms = isLoaded ? loaded.forms : NO_FORMS;
+  const loading = !isLoaded;
   const [comps, setComps] = useState<CompetitionSummary[]>([]);
   const [pickComp, setPickComp] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
     const params: Record<string, number> = {};
     if (view === 'current' && current) params.competitionId = current.id;
     api.get<DeclarationForm[]>('/declaration-forms', { params })
-      .then((r) => setForms(r.data))
-      .catch(() => setForms([]))
-      .finally(() => setLoading(false));
+      .then((r) => r.data)
+      .catch(() => [] as DeclarationForm[])
+      .then((list) => { if (!cancelled) setLoaded({ view, current, forms: list }); });
+    return () => { cancelled = true; };
   }, [view, current]);
 
   useEffect(() => {
