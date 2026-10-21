@@ -140,6 +140,63 @@ public class CompetitionsController : ControllerBase
     }
 
     /// <summary>
+    /// A small first answer for phones on a weak signal. It has the same shape as <see cref="Get"/>, but holds
+    /// only the sessions that matter now in each arena (on now, the last finished, the next two) and the teams
+    /// racing in them. The web shows it straight away and swaps in the full timetable when that arrives.
+    /// </summary>
+    [HttpGet("{id:int}/first-view")]
+    public async Task<ActionResult<CompetitionDetail>> FirstView(int id)
+    {
+        var c = await _db.Competitions.AsNoTracking().Include(x => x.Sections).FirstOrDefaultAsync(x => x.Id == id);
+        if (c is null) return NotFound();
+
+        var outline = await _db.Sessions.AsNoTracking()
+            .Where(s => s.CompetitionId == id)
+            .Select(s => new SessionOutline(s.Id, s.ArenaName, s.Status, s.OrderIndex))
+            .ToListAsync();
+        var sessionIds = FirstViewSessionIds(outline);
+        var sessions = await _db.Sessions.AsNoTracking().AsSplitQuery()
+            .Where(s => sessionIds.Contains(s.Id))
+            .Include(s => s.Section)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .ToListAsync();
+        var teamIds = sessions.SelectMany(s => s.Heats).SelectMany(h => h.Entries).Select(e => e.TeamId).Distinct().ToList();
+        var teams = await _db.Teams.AsNoTracking()
+            .Where(t => t.CompetitionId == id && teamIds.Contains(t.Id))
+            .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer)
+            .ToListAsync();
+
+        return new CompetitionDetail(
+            c.Id, c.Name, c.Location, c.Description,
+            c.Latitude, c.Longitude,
+            c.What3Words, c.AppleMapsUrl,
+            c.StartDate, c.EndDate,
+            c.IsActive, c.IsArchived,
+            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
+            teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
+            sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
+            c.StreamUrl, c.OrganiserName, c.PaymentDestination,
+            c.SignupsLocked, c.Icon, c.CreatedByUserId);
+    }
+
+    internal sealed record SessionOutline(int Id, string? ArenaName, SessionStatus Status, int OrderIndex);
+
+    /// <summary>Per arena: every session on now, the last one finished and the next two.</summary>
+    internal static HashSet<int> FirstViewSessionIds(IEnumerable<SessionOutline> sessions)
+    {
+        var ids = new HashSet<int>();
+        foreach (var arena in sessions.GroupBy(s => s.ArenaName ?? string.Empty))
+        {
+            var ordered = arena.OrderBy(s => s.OrderIndex).ToList();
+            ids.UnionWith(ordered.Where(s => s.Status == SessionStatus.InArena).Select(s => s.Id));
+            if (ordered.LastOrDefault(s => s.Status == SessionStatus.Finished) is { } last) ids.Add(last.Id);
+            ids.UnionWith(ordered.Where(s => s.Status == SessionStatus.Upcoming).Take(2).Select(s => s.Id));
+        }
+        return ids;
+    }
+
+    /// <summary>
     /// Toggle whether public signups are accepted for this competition.
     /// Used by the format-after-signups flow to "close entries" before forming teams.
     /// </summary>
