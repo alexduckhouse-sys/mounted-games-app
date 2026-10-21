@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeStoredAuth } from '../api';
 import { useLiveHub, type LiveHandlers } from './useLiveHub';
 
+const auth = vi.hoisted(() => ({ token: null as string | null }));
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ token: auth.token }) }));
+
 class FakeConnection {
   state = 'Disconnected';
   handlers = new Map<string, (payload: unknown) => void>();
@@ -39,6 +42,7 @@ const next = () => { const connection = new FakeConnection(); hub.connections.pu
 const flush = () => act(async () => { for (let n = 0; n < 12; n++) await Promise.resolve(); });
 
 beforeEach(() => {
+  auth.token = null;
   hub.connections.length = 0;
   hub.reconnect = false;
   hub.url = undefined;
@@ -72,13 +76,78 @@ describe('useLiveHub', () => {
     expect(result.current.connected).toBe(false);
   });
 
-  it('sends the signed-in token with the connection, or an empty one when signed out', async () => {
+  it('replaces the connection when the auth session changes and ignores the old connection', async () => {
+    const first = next();
+    const onChatMessage = vi.fn();
+    const { rerender } = renderHook(() => useLiveHub(1, { onChatMessage }));
+    await flush();
+    const firstFactory = (hub.options as { accessTokenFactory: () => string }).accessTokenFactory;
+    expect(firstFactory()).toBe('');
+
+    const second = next();
+    auth.token = 'fake-admin-token';
+    writeStoredAuth({
+      token: auth.token,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      user: { id: 'fake-user', email: 'admin@example.test', fullName: 'Example Admin', clubId: null, clubName: null, roles: ['Admin'] },
+    });
+    rerender();
+    await flush();
+
+    const secondFactory = (hub.options as { accessTokenFactory: () => string }).accessTokenFactory;
+    expect(first.stop).toHaveBeenCalledOnce();
+    expect(secondFactory()).toBe('fake-admin-token');
+    expect(second.invoke).toHaveBeenCalledWith('JoinCompetition', 1);
+    first.emit('chatMessage', { id: 1 });
+    second.emit('chatMessage', { id: 2 });
+
+    const third = next();
+    auth.token = null;
+    writeStoredAuth(null);
+    rerender();
+    await flush();
+
+    const thirdFactory = (hub.options as { accessTokenFactory: () => string }).accessTokenFactory;
+    expect(second.stop).toHaveBeenCalledOnce();
+    expect(thirdFactory()).toBe('');
+    second.emit('chatMessage', { id: 3 });
+    third.emit('chatMessage', { id: 4 });
+    expect(onChatMessage.mock.calls).toEqual([[{ id: 2 }], [{ id: 4 }]]);
+  });
+
+  it('ignores status changes from a connection replaced by a new auth session', async () => {
+    const first = next();
+    const { result, rerender } = renderHook(() => useLiveHub(1, {}));
+    await flush();
+    expect(result.current.connected).toBe(true);
+
+    next();
+    auth.token = 'fake-admin-token';
+    writeStoredAuth({
+      token: auth.token,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      user: { id: 'fake-user', email: 'admin@example.test', fullName: 'Example Admin', clubId: null, clubName: null, roles: ['Admin'] },
+    });
+    rerender();
+    await flush();
+    expect(result.current.connected).toBe(true);
+
+    act(() => first.reconnecting?.());
+    expect(result.current.connected).toBe(true);
+    writeStoredAuth(null);
+  });
+
+  it('does not present an expired token when SignalR reconnects', () => {
+    auth.token = 'expired-fake-token';
+    writeStoredAuth({
+      token: auth.token,
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      user: { id: 'fake-user', email: 'admin@example.test', fullName: 'Example Admin', clubId: null, clubName: null, roles: ['Admin'] },
+    });
     next();
     renderHook(() => useLiveHub(1, {}));
     const factory = (hub.options as { accessTokenFactory: () => string }).accessTokenFactory;
     expect(factory()).toBe('');
-    writeStoredAuth({ token: 'abc', expiresAt: new Date(Date.now() + 60_000).toISOString(), user: { id: '1', email: 'a@b.c', fullName: 'A', clubId: null, clubName: null, roles: [] } });
-    expect(factory()).toBe('abc');
   });
 
   it('can be pointed at another hub with a build-time setting', () => {
