@@ -40,6 +40,6 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
     }
 
     private static bool IsPublicCacheable(PathString path) =>
-        System.Text.RegularExpressions.Regex.IsMatch(path.Value ?? "", @"^/api/(competitions(/picker|/[1-9]\d*(/standings)?)?|race-templates|weather/(at|current))/?$",
+        System.Text.RegularExpressions.Regex.IsMatch(path.Value ?? "", @"^/api/(competitions(/picker|/[1-9]\d*(/standings)?)?|race-templates|weather/(at|current|forecast))/?$",
             System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 }

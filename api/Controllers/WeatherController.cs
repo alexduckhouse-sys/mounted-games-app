@@ -1,6 +1,5 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Net.Http.Json;
+using MountedGames.Api.Services;
 using System.Text.Json;
 
 namespace MountedGames.Api.Controllers;
@@ -9,106 +8,144 @@ namespace MountedGames.Api.Controllers;
 [Route("api/weather")]
 public class WeatherController : ControllerBase
 {
-    private readonly IHttpClientFactory _http;
-    public WeatherController(IHttpClientFactory http) => _http = http;
+    // Successful lookups may be reused by browsers and the CDN for 10 minutes; the server cache holds
+    // them for longer. SecurityHeadersMiddleware exempts these paths from "no-store", and
+    // JsonEtagMiddleware only fills in Cache-Control when it is absent, so this header survives.
+    private const string PublicCacheControl = "public, max-age=600";
 
-    [HttpGet("current")]
-    public async Task<ActionResult<object>> Current([FromQuery] double lat, [FromQuery] double lon)
+    private readonly IHttpClientFactory _http;
+    private readonly WeatherCache _cache;
+    private readonly TimeProvider _time;
+
+    public WeatherController(IHttpClientFactory http, WeatherCache cache, TimeProvider time)
     {
-        var client = _http.CreateClient("weather");
-        var url = $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m,is_day&timezone=auto";
-        try
+        _http = http;
+        _cache = cache;
+        _time = time;
+    }
+
+    private async Task<ActionResult<object>> ServeAsync(string key, Func<Task<WeatherOutcome>> fetch)
+    {
+        var (body, cacheable) = await _cache.GetOrFetchAsync(key, fetch);
+        if (cacheable) Response.Headers.CacheControl = PublicCacheControl;
+        return Ok(body);
+    }
+
+    // Lookups use the rounded coordinates (about 1 km) so the cached answer is the same whichever
+    // phone asked first.
+    [HttpGet("current")]
+    public Task<ActionResult<object>> Current([FromQuery] double lat, [FromQuery] double lon)
+    {
+        lat = WeatherCache.RoundCoordinate(lat);
+        lon = WeatherCache.RoundCoordinate(lon);
+        return ServeAsync(WeatherCache.CurrentKey(lat, lon), async () =>
         {
-            using var resp = await client.GetAsync(url);
-            resp.EnsureSuccessStatusCode();
-            await using var stream = await resp.Content.ReadAsStreamAsync();
-            using var doc = await JsonDocument.ParseAsync(stream);
-            return Ok(JsonSerializer.Deserialize<object>(doc.RootElement.GetRawText())!);
-        }
-        catch (Exception ex)
-        {
-            return Ok(new
+            var client = _http.CreateClient("weather");
+            var url = $"https://api.open-meteo.com/v1/forecast?latitude={WeatherCache.Format(lat)}&longitude={WeatherCache.Format(lon)}&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m,is_day&timezone=auto";
+            try
             {
-                error = "weather_unavailable",
-                detail = ex.Message,
-                fallback = new { temperature_2m = 15, weather_code = 3, wind_speed_10m = 8, is_day = 1 }
-            });
-        }
+                using var resp = await client.GetAsync(url);
+                resp.EnsureSuccessStatusCode();
+                await using var stream = await resp.Content.ReadAsStreamAsync();
+                using var doc = await JsonDocument.ParseAsync(stream);
+                return new WeatherOutcome(JsonSerializer.Deserialize<object>(doc.RootElement.GetRawText())!, WeatherCache.CurrentTtl);
+            }
+            catch (Exception ex)
+            {
+                return new WeatherOutcome(new
+                {
+                    error = "weather_unavailable",
+                    detail = ex.Message,
+                    fallback = new { temperature_2m = 15, weather_code = 3, wind_speed_10m = 8, is_day = 1 }
+                }, null);
+            }
+        });
     }
 
     [HttpGet("at")]
-    public async Task<ActionResult<object>> AtTime(
+    public Task<ActionResult<object>> AtTime(
         [FromQuery] double lat,
         [FromQuery] double lon,
         [FromQuery] DateTime when)
     {
-        var client = _http.CreateClient("weather");
-        var day = when.ToString("yyyy-MM-dd");
-        var url = $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&hourly=temperature_2m,weather_code,is_day&start_date={day}&end_date={day}&timezone=auto";
-        try
+        lat = WeatherCache.RoundCoordinate(lat);
+        lon = WeatherCache.RoundCoordinate(lon);
+        return ServeAsync(WeatherCache.AtKey(lat, lon, when), async () =>
         {
-            using var resp = await client.GetAsync(url);
-            resp.EnsureSuccessStatusCode();
-            await using var stream = await resp.Content.ReadAsStreamAsync();
-            using var doc = await JsonDocument.ParseAsync(stream);
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("hourly", out var hourly))
-                return Ok(new { fallback = new { temperature_2m = 15, weather_code = 3, is_day = 1 } });
-            var times = hourly.GetProperty("time").EnumerateArray().Select(t => t.GetString()).ToList();
-            var temps = hourly.GetProperty("temperature_2m").EnumerateArray().Select(t => t.GetDouble()).ToList();
-            var codes = hourly.GetProperty("weather_code").EnumerateArray().Select(t => t.GetInt32()).ToList();
-            var days = hourly.GetProperty("is_day").EnumerateArray().Select(t => t.GetInt32()).ToList();
-            var targetHour = when.Hour;
-            var idx = 0;
-            for (var i = 0; i < times.Count; i++)
+            var client = _http.CreateClient("weather");
+            var day = when.ToString("yyyy-MM-dd");
+            var url = $"https://api.open-meteo.com/v1/forecast?latitude={WeatherCache.Format(lat)}&longitude={WeatherCache.Format(lon)}&hourly=temperature_2m,weather_code,is_day&start_date={day}&end_date={day}&timezone=auto";
+            try
             {
-                if (times[i] is string s && s.Length >= 13 && int.TryParse(s.Substring(11, 2), out var h) && h == targetHour)
-                { idx = i; break; }
+                using var resp = await client.GetAsync(url);
+                resp.EnsureSuccessStatusCode();
+                await using var stream = await resp.Content.ReadAsStreamAsync();
+                using var doc = await JsonDocument.ParseAsync(stream);
+                var root = doc.RootElement;
+                // A payload without hourly data isn't a real answer: serve the fallback but don't keep it.
+                if (!root.TryGetProperty("hourly", out var hourly))
+                    return new WeatherOutcome(new { fallback = new { temperature_2m = 15, weather_code = 3, is_day = 1 } }, null);
+                var times = hourly.GetProperty("time").EnumerateArray().Select(t => t.GetString()).ToList();
+                var temps = hourly.GetProperty("temperature_2m").EnumerateArray().Select(t => t.GetDouble()).ToList();
+                var codes = hourly.GetProperty("weather_code").EnumerateArray().Select(t => t.GetInt32()).ToList();
+                var days = hourly.GetProperty("is_day").EnumerateArray().Select(t => t.GetInt32()).ToList();
+                var targetHour = when.Hour;
+                var idx = 0;
+                for (var i = 0; i < times.Count; i++)
+                {
+                    if (times[i] is string s && s.Length >= 13 && int.TryParse(s.Substring(11, 2), out var h) && h == targetHour)
+                    { idx = i; break; }
+                }
+                return new WeatherOutcome(new
+                {
+                    hour = times.ElementAtOrDefault(idx),
+                    temperature_2m = temps.ElementAtOrDefault(idx),
+                    weather_code = codes.ElementAtOrDefault(idx),
+                    is_day = days.ElementAtOrDefault(idx)
+                }, WeatherCache.ForecastTtl(when, _time.GetUtcNow()));
             }
-            return Ok(new
+            catch (Exception ex)
             {
-                hour = times.ElementAtOrDefault(idx),
-                temperature_2m = temps.ElementAtOrDefault(idx),
-                weather_code = codes.ElementAtOrDefault(idx),
-                is_day = days.ElementAtOrDefault(idx)
-            });
-        }
-        catch (Exception ex)
-        {
-            return Ok(new
-            {
-                error = "weather_unavailable",
-                detail = ex.Message,
-                fallback = new { temperature_2m = 15, weather_code = 3, is_day = 1 }
-            });
-        }
+                return new WeatherOutcome(new
+                {
+                    error = "weather_unavailable",
+                    detail = ex.Message,
+                    fallback = new { temperature_2m = 15, weather_code = 3, is_day = 1 }
+                }, null);
+            }
+        });
     }
 
     [HttpGet("forecast")]
-    public async Task<ActionResult<object>> Forecast(
+    public Task<ActionResult<object>> Forecast(
         [FromQuery] double lat,
         [FromQuery] double lon,
         [FromQuery] DateTime date)
     {
-        var client = _http.CreateClient("weather");
-        var iso = date.ToString("yyyy-MM-dd");
-        var url = $"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&start_date={iso}&end_date={iso}&timezone=auto";
-        try
+        lat = WeatherCache.RoundCoordinate(lat);
+        lon = WeatherCache.RoundCoordinate(lon);
+        return ServeAsync(WeatherCache.ForecastKey(lat, lon, date), async () =>
         {
-            using var resp = await client.GetAsync(url);
-            resp.EnsureSuccessStatusCode();
-            await using var stream = await resp.Content.ReadAsStreamAsync();
-            using var doc = await JsonDocument.ParseAsync(stream);
-            return Ok(JsonSerializer.Deserialize<object>(doc.RootElement.GetRawText())!);
-        }
-        catch (Exception ex)
-        {
-            return Ok(new
+            var client = _http.CreateClient("weather");
+            var iso = date.ToString("yyyy-MM-dd");
+            var url = $"https://api.open-meteo.com/v1/forecast?latitude={WeatherCache.Format(lat)}&longitude={WeatherCache.Format(lon)}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&start_date={iso}&end_date={iso}&timezone=auto";
+            try
             {
-                error = "weather_unavailable",
-                detail = ex.Message,
-                fallback = new { weather_code = new[] { 3 }, temperature_2m_max = new[] { 15 }, temperature_2m_min = new[] { 8 } }
-            });
-        }
+                using var resp = await client.GetAsync(url);
+                resp.EnsureSuccessStatusCode();
+                await using var stream = await resp.Content.ReadAsStreamAsync();
+                using var doc = await JsonDocument.ParseAsync(stream);
+                return new WeatherOutcome(JsonSerializer.Deserialize<object>(doc.RootElement.GetRawText())!, WeatherCache.ForecastTtl(date, _time.GetUtcNow()));
+            }
+            catch (Exception ex)
+            {
+                return new WeatherOutcome(new
+                {
+                    error = "weather_unavailable",
+                    detail = ex.Message,
+                    fallback = new { weather_code = new[] { 3 }, temperature_2m_max = new[] { 15 }, temperature_2m_min = new[] { 8 } }
+                }, null);
+            }
+        });
     }
 }
