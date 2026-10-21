@@ -29,6 +29,7 @@ const hub = vi.hoisted(() => ({
 
 vi.mock('@microsoft/signalr', () => ({
   LogLevel: { Warning: 3 },
+  HttpTransportType: { WebSockets: 1 },
   HubConnectionBuilder: class {
     withUrl(url: string, options: unknown) { hub.url = url; hub.options = options; return this; }
     withAutomaticReconnect() { hub.reconnect = true; return this; }
@@ -148,6 +149,12 @@ describe('useLiveHub', () => {
     renderHook(() => useLiveHub(1, {}));
     const factory = (hub.options as { accessTokenFactory: () => string }).accessTokenFactory;
     expect(factory()).toBe('');
+  });
+
+  it('connects straight over WebSockets so every request reaches the same API instance', () => {
+    next();
+    renderHook(() => useLiveHub(1, {}));
+    expect(hub.options).toMatchObject({ skipNegotiation: true, transport: 1 });
   });
 
   it('can be pointed at another hub with a build-time setting', () => {

@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1.7
+# API-only image for the Vercel container project (the website deploys separately from web/).
+# Vercel routes traffic to $PORT (80 by default).
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS api-build
+WORKDIR /src
+COPY api/MountedGames.Api.csproj ./
+RUN dotnet restore
+COPY api/ ./
+RUN dotnet publish -c Release -o /out /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+COPY --from=api-build /out ./
+ENV ASPNETCORE_ENVIRONMENT=Production
+EXPOSE 80
+ENTRYPOINT ["sh", "-c", "ASPNETCORE_URLS=http://+:${PORT:-80} exec dotnet MountedGames.Api.dll"]
