@@ -46,24 +46,25 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
       .build();
 
     connectionRef.current = conn;
-    conn.on('streamUpdated', (s) => { if (active) handlersRef.current.onStreamUpdated?.(s as LiveStream); });
-    conn.on('streamViewers', (p) => { if (active) handlersRef.current.onStreamViewers?.(p as { streamId: number; count: number }); });
-    conn.on('chatMessage', (m) => { if (active) handlersRef.current.onChatMessage?.(m); });
-    conn.on('chatMessageDeleted', (p) => { if (active) handlersRef.current.onChatMessageDeleted?.(p as { id: number }); });
-    conn.on('sessionUpdated', (s) => { if (active) handlersRef.current.onSessionUpdated?.(s); });
-    conn.on('resultsUpdated', (p) => { if (active) handlersRef.current.onResultsUpdated?.(p); });
-    conn.on('announcement', (a) => { if (active) handlersRef.current.onAnnouncement?.(a); });
+    // Events from a connection that has been replaced (new competition or auth session) are dropped.
+    const forward = <A extends unknown[]>(deliver: (...args: A) => void) => (...args: A) => { if (active) deliver(...args); };
+    conn.on('streamUpdated', forward((s) => handlersRef.current.onStreamUpdated?.(s as LiveStream)));
+    conn.on('streamViewers', forward((p) => handlersRef.current.onStreamViewers?.(p as { streamId: number; count: number })));
+    conn.on('chatMessage', forward((m) => handlersRef.current.onChatMessage?.(m)));
+    conn.on('chatMessageDeleted', forward((p) => handlersRef.current.onChatMessageDeleted?.(p as { id: number })));
+    conn.on('sessionUpdated', forward((s) => handlersRef.current.onSessionUpdated?.(s)));
+    conn.on('resultsUpdated', forward((p) => handlersRef.current.onResultsUpdated?.(p)));
+    conn.on('announcement', forward((a) => handlersRef.current.onAnnouncement?.(a)));
 
     const recovery = recoverConnection({
       connection: conn,
       competitionId,
       online: () => navigator.onLine,
-      onStatus: (value) => {
-        if (!active) return;
+      onStatus: forward((value: boolean) => {
         readyRef.current = value;
         setConnectionState({ competitionId, token, connected: value });
-      },
-      onReady: () => { if (active) handlersRef.current.onReady?.(); },
+      }),
+      onReady: forward(() => handlersRef.current.onReady?.()),
       schedule: (callback, delay) => {
         const timer = setTimeout(callback, delay);
         return () => clearTimeout(timer);

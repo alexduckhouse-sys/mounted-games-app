@@ -115,6 +115,28 @@ describe('useLiveHub', () => {
     expect(onChatMessage.mock.calls).toEqual([[{ id: 2 }], [{ id: 4 }]]);
   });
 
+  it('ignores status changes from a connection replaced by a new auth session', async () => {
+    const first = next();
+    const { result, rerender } = renderHook(() => useLiveHub(1, {}));
+    await flush();
+    expect(result.current.connected).toBe(true);
+
+    next();
+    auth.token = 'fake-admin-token';
+    writeStoredAuth({
+      token: auth.token,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      user: { id: 'fake-user', email: 'admin@example.test', fullName: 'Example Admin', clubId: null, clubName: null, roles: ['Admin'] },
+    });
+    rerender();
+    await flush();
+    expect(result.current.connected).toBe(true);
+
+    act(() => first.reconnecting?.());
+    expect(result.current.connected).toBe(true);
+    writeStoredAuth(null);
+  });
+
   it('does not present an expired token when SignalR reconnects', () => {
     auth.token = 'expired-fake-token';
     writeStoredAuth({
