@@ -222,6 +222,25 @@ describe('useLiveHub', () => {
     expect(second.invoke).toHaveBeenCalledWith('JoinCompetition', 2);
   });
 
+  it('tries again at once when asked, and does nothing once unmounted', async () => {
+    const connection = next();
+    connection.start.mockRejectedValueOnce(new Error('no signal'));
+    const { result, unmount } = renderHook(() => useLiveHub(1, {}));
+    await flush();
+    expect(result.current.connected).toBe(false);
+    act(() => result.current.reconnect());
+    await flush();
+    expect(connection.start).toHaveBeenCalledTimes(2);
+    expect(result.current.connected).toBe(true);
+
+    const { reconnect } = result.current;
+    unmount();
+    connection.state = 'Disconnected';
+    reconnect();
+    await flush();
+    expect(connection.start).toHaveBeenCalledTimes(2);
+  });
+
   it('retries as soon as the phone comes back online, and stops listening on unmount', async () => {
     const connection = next();
     connection.start.mockRejectedValueOnce(new Error('no signal'));
