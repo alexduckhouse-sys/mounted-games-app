@@ -12,6 +12,7 @@ import { ProducePage } from './ProducePage';
 
 const auth = vi.hoisted(() => ({ organiser: true }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => auth.organiser }) }));
+vi.mock('../../api', () => ({ api: { get: vi.fn(async () => ({ data: [] })), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 
 let overlay: StreamOverlay;
 let outcome: OverlaySaveResult;

@@ -1,17 +1,22 @@
-# Next steps (21 October 2026)
+# Next steps (22 October 2026)
 
 The cross-chat to-do list. Update or delete items as they land.
 
 ## Where things stand
 
-- **Merged:** PRs #1–#41 (the last few on 21 October: #38 live feed sign-in fix, #40 demo reseed, #41 lint in CI).
+- **Merged:** PRs #1–#53. Since 21 October:
+  - #38 live feed sign-in fix, #40 demo reseed, #41 lint in CI;
+  - #43 and #47 API on Vercel;
+  - low signal: #45 connection pill and adaptive checks, #48 fast first view, #46 server weather cache, #49 lite mode and lazy images, #52 CSP allows https images;
+  - stream controls: #50 overlays (banners, strip, look, producer screen), #53 score cards with producer show, skip and edit.
+- **Live API is confirmed:** the live headers show `cle1` in `x-vercel-id`, and the overlays, first-view and weather endpoints answer.
 - **Hosting:** the website is on Vercel (project `mounted-games-app`, root `web/`). On 21 October the API moved from Render to its own Vercel project, `mounted-games-api`. It's a container built from `Dockerfile.vercel` at the repo root and runs in `cle1`, next to Neon in AWS us-east-2. The website rewrites `/api` there, and the live hub connects to it directly.
-- **Database:** Neon. Every migration on main is applied. On 21 October the live-video migration's history row was renamed from `20261016181150_AddLiveStreams` to `20261017070452_AddLiveStreams` to match main (the schema is identical); a backup of the history table is in `~/.config/mounted-games/backups/`.
+- **Database:** Neon. Every migration on main is applied, including `AddStreamOverlays` (21 Oct) and `AddOverlayLooks` (22 Oct), each with a `backup-pre-…` branch taken first. To reach Neon without the guarded env file: `npx neonctl connection-string --project-id wild-leaf-19597390`. On 21 October the live-video migration's history row was renamed from `20261016181150_AddLiveStreams` to `20261017070452_AddLiveStreams` to match main (the schema is identical); a backup of the history table is in `~/.config/mounted-games/backups/`.
 - **Plans:** `docs/plans/stream-controls-and-low-signal.md`, with designs in `docs/designs/stream-controls-and-low-signal.html`.
 
 ## Needs you
 
-1. **Delete Render** once the Vercel API is confirmed live: the `mounted-games-scoreboard` service, which is suspended. `render.yaml` can go at the same time.
+1. **Delete Render** (the Vercel API is confirmed live): the `mounted-games-scoreboard` service, which is suspended. `render.yaml` can go at the same time.
 2. **New sign-in keys.** The Vercel API uses new `Jwt__Key`, `Admin__Key` and `Security__ProxyKey` values (stored in `~/.config/mounted-games/fly-prod.env`, chmod 600). Organisers sign in with the new admin key, and everyone was signed out once. `MG_PROXY_KEY` on the website project holds the same value as `Security__ProxyKey`.
 3. **Before the first real event: make the API safe to run as several instances.** Vercel scales containers out and to zero (after 5 minutes idle), and the API still assumes one long-running process:
    - Live updates: add a SignalR Redis backplane (Upstash via the Vercel Marketplace). Without it, a score saved on one instance doesn't reach phones connected to another.
@@ -45,6 +50,10 @@ The cross-chat to-do list. Update or delete items as they land.
 - Put the cookie/storage policy wording in the repo (it only exists in the low-bandwidth chat). Add a privacy note covering chat IP storage, and a controller/contact.
 
 ## Bugs and tidy-ups
+
+- Flaky under load: `StreamingHubTests.RewatchReplacesAndClosesPreviousSession_EvenAtTheCap_DisconnectClosesCurrent` (seen in CI on #52 and locally) and, once, `CommerceEndpointsTests.DemoDeclineReleasesStock_AndRetryCanSucceed`. Both pass on rerun; make them deterministic.
+- Heat page draft restore looks dead on main (the seed effect overwrites the hydrated draft); found by the lint work in #41.
+- Stream controls still to come: instant replays (needs recording), and the producer screen's per-angle preview tiles from the design board.
 
 - Unreachable code noted by the test agents:
   - the blank-suffix branch in `TeamsController.Update`

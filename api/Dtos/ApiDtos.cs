@@ -378,3 +378,8 @@ public record ScoreCardControlDto(
     int HeatId, int RaceId, string Action, IReadOnlyList<int> HiddenTeamIds,
     IReadOnlyDictionary<int, string> Names, int? Seconds);
 
+/// <summary>A saved overlay look an organiser can apply to any of their events.</summary>
+public record OverlayLookDto(int Id, string Name, System.Text.Json.JsonElement Look, bool Mine, DateTime UpdatedAt);
+
+public record SaveOverlayLookRequest([Required, StringLength(60, MinimumLength = 1)] string Name, System.Text.Json.JsonElement Look);
+

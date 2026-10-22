@@ -23,6 +23,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<LiveStream> LiveStreams => Set<LiveStream>();
     public DbSet<StreamOverlay> StreamOverlays => Set<StreamOverlay>();
+    public DbSet<OverlayLook> OverlayLooks => Set<OverlayLook>();
     public DbSet<TrainerNote> TrainerNotes => Set<TrainerNote>();
     public DbSet<IpBlock> IpBlocks => Set<IpBlock>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
@@ -38,6 +39,13 @@ public class AppDbContext : IdentityDbContext<AppUser>
         base.OnModelCreating(b);
         b.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
+        b.Entity<OverlayLook>(e =>
+        {
+            e.Property(l => l.OwnerUserId).IsRequired();
+            e.Property(l => l.Name).HasMaxLength(60).IsRequired();
+            e.Property(l => l.LookJson).HasMaxLength(4000).IsRequired();
+            e.HasIndex(l => l.OwnerUserId);
+        });
         b.Entity<StreamOverlay>(e =>
         {
             e.HasKey(o => o.CompetitionId);
