@@ -5,6 +5,7 @@ import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { LazyImage } from '../../components/LazyImage';
 import { useCompetition } from '../competition/context';
+import { ShopClassifieds } from '../ShopPage';
 import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineQty, RefineSection, RefineStatus } from '../refine/Refine';
 import { LoadError } from './commerceUi';
 import { CATEGORY_LABEL, errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
@@ -221,6 +222,10 @@ function EventShopContent() {
             </RefineList>
           </>
         )}
+      </div>
+      <RefineSection title="Tack and equipment for sale" />
+      <div className="px-4 pb-6">
+        <ShopClassifieds intro="Posts from other Pony Clubbers. Agree a price with the seller and collect it at the event." />
       </div>
       {basketLines.length > 0 && (
         <RefineFoot aboveTabs label="Basket summary">

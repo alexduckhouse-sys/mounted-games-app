@@ -15,6 +15,7 @@ import type { EventOrder } from './types';
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../competition/context', () => ({ useCompetition: vi.fn() }));
+vi.mock('../ShopPage', () => ({ ShopClassifieds: () => <p>Classified listings</p> }));
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);

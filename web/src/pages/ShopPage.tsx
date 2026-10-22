@@ -4,7 +4,7 @@ import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { LazyImage } from '../components/LazyImage';
-import type { ShopComment, ShopPost } from '../types';
+import type { CompetitionSummary, ShopComment, ShopPost } from '../types';
 
 function priceLabel(p?: number | null): string {
   if (p == null) return '';
@@ -22,7 +22,56 @@ function timeAgo(iso: string): string {
   return `${d}d ago`;
 }
 
+/**
+ * The shop: event shops (merchandise and add-ons, collected at the event) and the tack and equipment
+ * listings from other Pony Clubbers. The same listings also appear inside each event's shop.
+ */
 export function ShopPage() {
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold flex items-center gap-2">
+        <ShoppingBag className="w-6 h-6 text-brand-600" /> Shop
+      </h1>
+      <EventShopLinks />
+      <section aria-labelledby="classifieds-title" className="space-y-3">
+        <h2 id="classifieds-title" className="text-lg font-bold">Tack and equipment</h2>
+        <ShopClassifieds />
+      </section>
+    </div>
+  );
+}
+
+/** The events that are on or coming up, each with a link to its own shop. */
+function EventShopLinks() {
+  const [events, setEvents] = useState<CompetitionSummary[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.get<CompetitionSummary[]>('/competitions')
+      .then((r) => { if (!cancelled) setEvents(r.data.filter((c) => !c.isArchived)); })
+      .catch(() => { if (!cancelled) setEvents([]); });
+    return () => { cancelled = true; };
+  }, []);
+  return (
+    <section aria-labelledby="event-shops-title" className="space-y-2">
+      <h2 id="event-shops-title" className="text-lg font-bold">Event shops</h2>
+      <p className="text-xs text-slate-500 dark:text-slate-300">Merchandise and add-ons from the organisers, collected at the event.</p>
+      {events === null ? <p className="text-sm text-slate-500">Loading events…</p>
+        : events.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-300">No events to shop for right now.</p>
+        : <ul className="flex flex-col gap-1.5">
+          {events.map((event) => (
+            <li key={event.id}>
+              <Link to={`/competitions/${event.id}/shop`} className="card flex items-center gap-2 p-3 text-sm font-semibold hover:opacity-80">
+                <ShoppingBag className="w-4 h-4 text-brand-600" aria-hidden="true" /> {event.name}
+              </Link>
+            </li>
+          ))}
+        </ul>}
+    </section>
+  );
+}
+
+/** Buy, sell or swap tack and equipment. Used on the main shop page and inside each event's shop. */
+export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment with other Pony Clubbers.' }: { intro?: string }) {
   const { user, canEdit } = useAuth();
   const [posts, setPosts] = useState<ShopPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +86,7 @@ export function ShopPage() {
   useEffect(() => {
     let cancelled = false;
     api.get<ShopPost[]>('/shop/posts')
-      .then((r) => { if (!cancelled) setPosts(r.data); })
+      .then((r) => { if (!cancelled) setPosts(Array.isArray(r.data) ? r.data : []); })
       .catch(() => { /* leave the list as it was; the page then shows its empty state */ })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -48,11 +97,8 @@ export function ShopPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <ShoppingBag className="w-6 h-6 text-brand-600" /> Shop
-        </h1>
         <p className="text-xs text-slate-500 dark:text-slate-300 flex-1">
-          Buy, sell or swap tack and equipment with other Pony Clubbers.
+          {intro}
         </p>
         {user ? (
           <button onClick={() => setComposerOpen((v) => !v)} className="btn-primary !py-1.5 !px-3 text-sm">

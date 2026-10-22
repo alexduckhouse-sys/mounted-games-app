@@ -52,7 +52,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
     { to: base, label: 'Timetable', icon: Clock, end: true, badge: false },
     { to: current ? `${base}/toplists` : '/competitions', label: 'Toplists', icon: Trophy, end: true, badge: false },
     { to: current ? `${base}/chat` : '/chat', label: 'Live feed & stream', icon: MessageSquare, end: true, badge: !!shown?.live },
-    { to: current ? `${base}/shop` : '/competitions', label: 'Event shop', icon: ShoppingBag, end: true, badge: false },
+    { to: current ? `${base}/shop` : '/shop', label: 'Event shop', icon: ShoppingBag, end: true, badge: false },
     { to: current ? `${base}/rulebooks` : '/competitions', label: 'Rulebooks', icon: BookOpen, end: true, badge: false },
     { to: current ? `${base}/details` : '/competitions', label: 'Details & entries', icon: Info, end: true, badge: false },
   ];

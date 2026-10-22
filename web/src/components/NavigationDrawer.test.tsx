@@ -92,7 +92,7 @@ describe('NavigationDrawer: when no competition is followed', () => {
   it('sends the competition links to the picker or the general feed', () => {
     mount();
     expect(links('Main navigation')).toEqual([
-      ['Following', '/following'], ['Timetable', '/competitions'], ['Toplists', '/competitions'], ['Live feed & stream', '/chat'], ['Event shop', '/competitions'], ['Rulebooks', '/competitions'], ['Details & entries', '/competitions'],
+      ['Following', '/following'], ['Timetable', '/competitions'], ['Toplists', '/competitions'], ['Live feed & stream', '/chat'], ['Event shop', '/shop'], ['Rulebooks', '/competitions'], ['Details & entries', '/competitions'],
     ]);
   });
 
