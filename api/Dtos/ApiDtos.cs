@@ -303,9 +303,10 @@ public record SavedRiderDto(
 
 public record ChatMessageDto(
     int Id, int CompetitionId, string? UserId, string AuthorName,
-    string Body, ChatMessageType Type, string? Tag, DateTime CreatedAt, bool AdminOnly);
+    string Body, ChatMessageType Type, string? Tag, DateTime CreatedAt, bool AdminOnly,
+    string? RecipientUserId = null);
 
-public record PostChatMessageRequest(string Body);
+public record PostChatMessageRequest(string Body, string? ReplyToUserId = null);
 
 public record AnnouncementRequest(string Body, string? Tag);
 

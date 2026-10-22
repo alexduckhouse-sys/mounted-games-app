@@ -14,8 +14,11 @@ public class ChatMessage
     public ChatMessageType Type { get; set; } = ChatMessageType.Chat;
     public string? Tag { get; set; }
 
-    /// <summary>Trainer messages: visible to admins and the trainer who sent them, never the public feed.</summary>
+    /// <summary>Private messages to the organisers: visible to admins and the sender (and a reply's recipient), never the public feed.</summary>
     public bool AdminOnly { get; set; }
+
+    /// <summary>For an organiser's private reply: the user whose message thread it belongs to. That user and admins see it.</summary>
+    public string? RecipientUserId { get; set; }
 
     /// <summary>IP of the poster, captured server-side. Admin-only use for IP blocking.</summary>
     public string? IpAddress { get; set; }

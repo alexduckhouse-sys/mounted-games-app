@@ -87,6 +87,50 @@ describe('ChatTab auth sessions', () => {
     expect(state.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'Please call collecting ring' });
   });
 
+  it.each(['Manager', 'Member', 'Rider'] as const)('lets a %s message the organisers privately', async (role) => {
+    state.token = 'fake-member-token';
+    state.roles = [role];
+    state.get.mockResolvedValue({ data: [] });
+    state.post.mockResolvedValue({ data: chat(9, { body: 'Where is the ring?', type: 0, adminOnly: true, userId: 'fake-user' }) });
+    mount({ staffChatEnabled: true });
+
+    await userEvent.type(screen.getByPlaceholderText('Message the organisers…'), 'Where is the ring?');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(state.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'Where is the ring?' });
+    expect(await screen.findByText('Where is the ring?')).toBeInTheDocument();
+  });
+
+  it('shows a person their own private thread and the organisers’ reply, not other people’s messages', async () => {
+    state.token = 'fake-member-token';
+    state.roles = ['Member'];
+    state.get.mockResolvedValue({ data: [
+      chat(1, { body: 'My question', type: 0, adminOnly: true, userId: 'fake-user' }),
+      chat(2, { body: 'Your answer', type: 0, adminOnly: true, userId: 'admin-1', recipientUserId: 'fake-user' }),
+      chat(3, { body: 'Someone else', type: 0, adminOnly: true, userId: 'other-user' }),
+    ] });
+    mount({ staffChatEnabled: true });
+
+    expect(await screen.findByText('Your answer')).toBeInTheDocument();
+    expect(screen.getByText('My question')).toBeInTheDocument();
+    expect(screen.queryByText('Someone else')).not.toBeInTheDocument();
+  });
+
+  it('lets an admin reply privately to a message instead of announcing to everyone', async () => {
+    state.get.mockResolvedValue({ data: [chat(1, { body: 'Where is the ring?', type: 0, adminOnly: true, userId: 'asker-1', authorName: 'Sam Rider' })] });
+    state.post.mockResolvedValue({ data: chat(2, { body: 'By the lorries', type: 0, adminOnly: true, userId: 'fake-user', recipientUserId: 'asker-1' }) });
+    mount({ staffChatEnabled: true });
+
+    await userEvent.click(await screen.findByRole('button', { name: /Reply privately/ }));
+    expect(screen.getByText(/Private reply to Sam Rider/)).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText('Write a private reply…'), 'By the lorries');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(state.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'By the lorries', replyToUserId: 'asker-1' });
+    expect(state.post).not.toHaveBeenCalledWith('/competitions/1/chat/announcement', expect.anything());
+    await waitFor(() => expect(screen.queryByText(/Private reply to/)).not.toBeInTheDocument());
+  });
+
   it('clears private messages and ignores the previous session response after sign-out', async () => {
     const privateMessage = chat(1, { body: 'Private trainer message', type: 0, adminOnly: true });
     state.get.mockResolvedValueOnce({ data: [privateMessage] });

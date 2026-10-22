@@ -359,8 +359,10 @@ export interface ChatMessage {
   type: ChatMessageType;
   tag?: string | null;
   createdAt: string;
-  /** Trainer message: only admins and its author see it. */
+  /** Private message to the organisers: only admins and its author see it (and the recipient of an organiser's reply). */
   adminOnly: boolean;
+  /** For an organiser's private reply: the person whose thread it answers. */
+  recipientUserId?: string | null;
 }
 
 export interface RiderEntry {

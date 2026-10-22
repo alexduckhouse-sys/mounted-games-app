@@ -186,12 +186,64 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
     [Theory]
     [InlineData("Manager")]
     [InlineData("Member")]
-    public async Task Post_Returns403_ForOtherTeamRoles(string role)
+    [InlineData("Rider")]
+    public async Task Post_FromOtherSignedInRoles_IsAPrivateMessageToTheAdmins(string role)
     {
         var a = await _f.CreateArenaAsync(1);
-        var (client, _) = await _f.SignupAsync(role);
+        var (client, auth) = await _f.SignupAsync(role);
 
-        var r = await client.PostAsJsonAsync(Url(a), new PostChatMessageRequest("hi"));
+        var r = await client.PostAsJsonAsync(Url(a), new PostChatMessageRequest("question"));
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var dto = await r.ReadAsync<ChatMessageDto>();
+        Assert.True(dto.AdminOnly);
+        Assert.Equal(auth.User.Id, dto.UserId);
+        var publicList = await (await _f.CreateClient().GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.DoesNotContain(publicList, m => m.Body == "question");
+        var own = await (await client.GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.Contains(own, m => m.Body == "question");
+    }
+
+    [Fact]
+    public async Task Post_AdminReply_IsPrivateToThatUser_AndNotTheirNeighbours()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var (asker, askerAuth) = await _f.SignupAsync("Member");
+        var (neighbour, _) = await _f.SignupAsync("Member");
+        await asker.PostAsJsonAsync(Url(a), new PostChatMessageRequest("where is the ring?"));
+
+        var r = await (await _f.AdminAsync()).PostAsJsonAsync(Url(a), new PostChatMessageRequest("By the lorry park", askerAuth.User.Id));
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var dto = await r.ReadAsync<ChatMessageDto>();
+        Assert.True(dto.AdminOnly);
+        Assert.Equal(askerAuth.User.Id, dto.RecipientUserId);
+        var seenByAsker = await (await asker.GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.Contains(seenByAsker, m => m.Body == "By the lorry park");
+        var seenByNeighbour = await (await neighbour.GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.DoesNotContain(seenByNeighbour, m => m.AdminOnly);
+        var publicList = await (await _f.CreateClient().GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.DoesNotContain(publicList, m => m.Body == "By the lorry park");
+    }
+
+    [Fact]
+    public async Task Post_AdminReply_Returns400_WhenThatPersonHasNotMessaged()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var (_, quiet) = await _f.SignupAsync("Member");
+
+        var r = await (await _f.AdminAsync()).PostAsJsonAsync(Url(a), new PostChatMessageRequest("hello?", quiet.User.Id));
+
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task Post_ReplyToUserId_Returns403_ForANonAdmin()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var (client, auth) = await _f.SignupAsync("Member");
+
+        var r = await client.PostAsJsonAsync(Url(a), new PostChatMessageRequest("hi", auth.User.Id));
 
         Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
     }

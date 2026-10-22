@@ -149,7 +149,7 @@ public static class Mappings
         new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes, r.UseInitialOnly, r.NoFilming);
 
     public static ChatMessageDto ToDto(this ChatMessage m) => new(
-        m.Id, m.CompetitionId, m.UserId, m.AuthorName, m.Body, m.Type, m.Tag, m.CreatedAt, m.AdminOnly);
+        m.Id, m.CompetitionId, m.UserId, m.AuthorName, m.Body, m.Type, m.Tag, m.CreatedAt, m.AdminOnly, m.RecipientUserId);
 
     public static TrainerNoteDto ToDto(this TrainerNote n) =>
         new(n.Id, n.UserId, n.Title, n.Body, n.CreatedAt, n.UpdatedAt);
