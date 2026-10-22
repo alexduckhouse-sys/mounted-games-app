@@ -207,3 +207,47 @@ describe('organising and managing one competition', () => {
     expect(result.current.canManage(comp)).toBe(false);
   });
 });
+
+describe('managing entries and the shop', () => {
+  it.each([
+    [0, true], [1, false], [2, false], [3, false], [4, false],
+  ])('lets a helper with role %i manage entries: %s', async (role, expected) => {
+    signIn(['Member']);
+    serve([{ competitionId: 5, owner: false, role }]);
+    const { result } = mount();
+    await waitFor(() => expect(result.current.canOrganise(comp)).toBe(true));
+    expect(result.current.canManageEntries(comp)).toBe(expected);
+  });
+
+  it('never extends a co-organiser’s entry access to another competition', async () => {
+    signIn(['Member']);
+    serve([{ competitionId: 5, owner: false, role: 0 }]);
+    const { result } = mount();
+    await waitFor(() => expect(result.current.canOrganise(comp)).toBe(true));
+    expect(result.current.canManageEntries({ id: 6, createdByUserId: 'someone-else' })).toBe(false);
+  });
+
+  it('lets the owner in, from the competition or from the access list', async () => {
+    signIn(['Trainer']);
+    serve([{ competitionId: 9, owner: true, role: null }]);
+    const { result } = mount();
+    expect(result.current.canManageEntries({ id: 5, createdByUserId: 'u1' })).toBe(true);
+    expect(result.current.canManageEntries({ id: 5, createdByUserId: 'u2' })).toBe(false);
+    await waitFor(() => expect(result.current.canManageEntries({ id: 9, createdByUserId: 'u2' })).toBe(true));
+  });
+
+  it('lets an admin in whether or not Edit mode is on, and a trainer with no competition in question', () => {
+    signIn(['Admin']);
+    expect(mount().result.current.canManageEntries(comp)).toBe(true);
+    signIn(['Trainer']);
+    expect(mount().result.current.canManageEntries()).toBe(true);
+  });
+
+  it('keeps out ordinary members, other accounts and signed-out visitors', () => {
+    signIn(['Member']);
+    expect(mount().result.current.canManageEntries(comp)).toBe(false);
+    expect(mount().result.current.canManageEntries()).toBe(false);
+    localStorage.clear();
+    expect(mount().result.current.canManageEntries(comp)).toBe(false);
+  });
+});

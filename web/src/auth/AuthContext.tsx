@@ -34,6 +34,12 @@ interface AuthContextValue {
    * everyone else just needs to be able to organise that competition.
    */
   canManage: (competition?: CompetitionRef) => boolean;
+  /**
+   * Entrant sign-ups, form-teams and the event shop are for co-organisers only: admins, the owner,
+   * and helpers whose role is co-organiser. Other helpers would get a 404, so never show them these screens.
+   * Admins see them in view mode too; writes still need `canEdit()`.
+   */
+  canManageEntries: (competition?: CompetitionRef) => boolean;
   /** How the signed-in user relates to a competition: its owner, a helper role, or neither. */
   competitionRole: (competitionId: number) => 'owner' | CompetitionHelperRole | null;
   /** Reload the competitions this user owns or helps on, e.g. after leaving a team. */
@@ -198,6 +204,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       || (hasRole('Trainer') && (!competition || competition.createdByUserId === user?.id))
       || (!!user && competition?.id != null && access.some((entry) => entry.competitionId === competition.id)),
     [hasRole, user, access]);
+  const canManageEntries = useCallback(
+    (competition?: CompetitionRef) => hasRole('Admin')
+      || (!competition ? hasRole('Trainer')
+        : (hasRole('Trainer') && competition.createdByUserId === user?.id)
+          || (!!user && access.some((entry) => entry.competitionId === competition.id && (entry.owner || entry.role === 0)))),
+    [hasRole, user, access]);
   // Mirrors OperationsPage: an admin must switch Edit mode on; everyone else may act once they can organise.
   const canManage = useCallback(
     (competition?: CompetitionRef) => (hasRole('Admin') ? canEdit() : canOrganise(competition)),
@@ -222,6 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     canEdit,
     canOrganise,
     canManage,
+    canManageEntries,
     competitionRole,
     refreshAccess,
   };
