@@ -11,6 +11,7 @@ import { DemoEntryPayment } from '../commerce/DemoEntryPayment';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
+import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
@@ -29,17 +30,15 @@ const SIGNUP_STATUS: Record<SignupPaymentStatus, { label: string; tone: StatusTo
 
 export function DetailsTab() {
   const { competition, reload } = useCompetition();
-  const { canEdit, canManage, canManageEntries, canOrganise, hasRole, user } = useAuth();
+  const { canEdit, canManage, canOrganise, hasRole, user } = useAuth();
   const [signupResult, setSignupResult] = useState<{ key: string; items: SectionSignup[] } | null>(null);
   const signupKey = `${competition.id}:${user?.id ?? ''}`;
   const mayOrganise = canOrganise(competition);
-  // Entrants and the shop are for co-organisers; other helpers would be refused.
-  const mayEntries = canManageEntries(competition);
-  const allSignups = mayEntries && signupResult?.key === signupKey ? signupResult.items : [];
+  const allSignups = mayOrganise && signupResult?.key === signupKey ? signupResult.items : [];
   const [lockBusy, setLockBusy] = useState(false);
 
   async function refreshSignups() {
-    if (!mayEntries) return;
+    if (!mayOrganise) return;
     try {
       const r = await api.get<SectionSignup[]>(`/competitions/${competition.id}/signups`);
       setSignupResult({ key: signupKey, items: r.data });
@@ -48,13 +47,13 @@ export function DetailsTab() {
 
   useEffect(() => {
     let cancelled = false;
-    if (mayEntries) {
+    if (mayOrganise) {
       api.get<SectionSignup[]>(`/competitions/${competition.id}/signups`)
         .then(({ data }) => { if (!cancelled) setSignupResult({ key: signupKey, items: data }); })
         .catch(() => { if (!cancelled) setSignupResult({ key: signupKey, items: [] }); });
     }
     return () => { cancelled = true; };
-  }, [competition.id, mayEntries, signupKey]);
+  }, [competition.id, mayOrganise, signupKey]);
 
   async function toggleLock() {
     if (lockBusy) return;
@@ -129,13 +128,13 @@ export function DetailsTab() {
         {linkRow('../rulebooks', 'Rulebooks')}
         {linkRow(`/event-tools/${competition.id}/print/draw`, 'Print draw')}
         {linkRow(`/event-tools/${competition.id}/print/results`, 'Print results')}
-        {(hasRole('Admin') || (hasRole('Trainer') && competition.createdByUserId === user?.id)) && linkRow(`/event-tools/${competition.id}`, 'Import, duplicate & print')}
-        {mayEntries && linkRow('../shop/manage', 'Manage event shop')}
+        {mayOrganise && linkRow(`/event-tools/${competition.id}`, hasRole('Admin') || hasRole('Trainer') ? 'Import, duplicate & print' : 'Import & print')}
+        {mayOrganise && linkRow('../shop/manage', 'Manage event shop')}
         {mayOrganise && linkRow('../operations', 'Readiness & draw')}
       </RefineList>
 
       {/* Entry controls (co-organisers and admins): lock signups, jump to the format wizard, CSV export. */}
-      {mayEntries && competition.sections.length > 0 && (
+      {mayOrganise && competition.sections.length > 0 && (
         <>
           <RefineSection title="Organiser tools" />
           <div className="rf-list flex flex-col gap-2 p-3">
@@ -178,7 +177,7 @@ export function DetailsTab() {
         </>
       )}
 
-      {/* Owner, helpers and admins see who runs the event; the owner (or an admin in Edit mode) manages it. */}
+      {/* The owner, competition admins and site admins see who runs the event and can change it (site admins in Edit mode). */}
       {user && (mayOrganise || hasRole('Admin')) && (
         <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
       )}
@@ -203,7 +202,7 @@ export function DetailsTab() {
                 paymentDestination={competition.paymentDestination ?? null}
                 competitionName={competition.name}
                 onChanged={() => { refreshSignups(); reload(); }}
-                canManage={canEdit() || mayEntries}
+                canManage={canEdit() || mayOrganise}
                 hideJoin={hasRole('Admin')}
               />
             ))}
@@ -239,6 +238,7 @@ function SectionSignupCard({
   const [ponyClub, setPonyClub] = useState('');
   const [contact, setContact] = useState('');
   const [teamCode, setTeamCode] = useState('');
+  const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -259,8 +259,10 @@ function SectionSignupCard({
         ponyClubName: ponyClub.trim() || null,
         contactInfo: contact.trim() || null,
         teamCode: teamCode.trim() || null,
+        ...privacy,
       });
       setFullName(''); setPonyClub(''); setContact(''); setTeamCode('');
+      setPrivacy({ useInitialOnly: false, noFilming: false });
       setCreatedSignup(signup);
       setDone(signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.');
       onChanged();
@@ -316,6 +318,7 @@ function SectionSignupCard({
               onChange={(e) => setTeamCode(e.target.value)}
             />
           </label>
+          <RiderPrivacyFields value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
           <div className="flex gap-2">
             <button
               type="button"

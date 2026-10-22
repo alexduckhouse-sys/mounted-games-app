@@ -12,6 +12,11 @@ public class SavedRider
     public string? HorseName { get; set; }
     public string? Notes { get; set; }
 
+    /// <summary>Show only the surname's initial on public pages ("Oliver S.").</summary>
+    public bool UseInitialOnly { get; set; }
+    /// <summary>Opt out of close-up filming and photography; shown to stream staff only.</summary>
+    public bool NoFilming { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 }

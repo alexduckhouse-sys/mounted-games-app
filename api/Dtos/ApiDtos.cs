@@ -112,11 +112,12 @@ public record SectionSignupDto(
     int Id, int CompetitionSectionId, string SectionName,
     string FullName, string? PonyClubName, string? ContactInfo,
     int AmountMinor, SignupPaymentStatus Status, DateTime? PaidAt,
-    int? TeamId, DateTime CreatedAt);
+    int? TeamId, DateTime CreatedAt,
+    bool UseInitialOnly = false, bool NoFilming = false);
 
 public record CreateSectionSignupRequest(
     string FullName, string? PonyClubName, string? ContactInfo,
-    string? TeamCode = null);
+    string? TeamCode = null, bool UseInitialOnly = false, bool NoFilming = false);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 
@@ -280,7 +281,8 @@ public record DeclarationFormDto(
 
 public record RiderEntryDto(
     int Id, int? SavedRiderId, string FullName, DateTime? DateOfBirth,
-    string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex);
+    string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex,
+    bool UseInitialOnly = false, bool NoFilming = false);
 
 public record SubmitDeclarationFormRequest(
     int TeamId, string? Notes, IReadOnlyList<RiderEntryInput> Riders, bool SaveToRoster,
@@ -288,10 +290,12 @@ public record SubmitDeclarationFormRequest(
 
 public record RiderEntryInput(
     int? SavedRiderId, string FullName, DateTime? DateOfBirth,
-    string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex);
+    string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex,
+    bool UseInitialOnly = false, bool NoFilming = false);
 
 public record SavedRiderDto(
-    int Id, int ClubId, string FullName, DateTime? DateOfBirth, string? HorseName, string? Notes);
+    int Id, int ClubId, string FullName, DateTime? DateOfBirth, string? HorseName, string? Notes,
+    bool UseInitialOnly = false, bool NoFilming = false);
 
 public record ChatMessageDto(
     int Id, int CompetitionId, string? UserId, string AuthorName,
@@ -383,3 +387,9 @@ public record OverlayLookDto(int Id, string Name, System.Text.Json.JsonElement L
 
 public record SaveOverlayLookRequest([Required, StringLength(60, MinimumLength = 1)] string Name, System.Text.Json.JsonElement Look);
 
+
+/// <summary>A heat that includes a rider who opted out of close-up filming. Staff only: it names the rider.</summary>
+public record FilmingOptOutDto(
+    int HeatId, int SessionId, string SessionName, string? ArenaName, string HeatLabel,
+    int TeamId, string TeamName, int Lane, string RiderName, bool IsReserve, bool HeatFinished,
+    int SessionOrder, int HeatOrder);

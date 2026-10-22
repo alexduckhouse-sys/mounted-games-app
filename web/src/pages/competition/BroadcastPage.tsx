@@ -10,6 +10,7 @@ import { browserPublisherDependencies, createStreamPublisher, type PublisherSnap
 import { streamHeatLabel } from '../../lib/streams';
 import { setBroadcasting } from '../../pwa';
 import { OverlayLayer, StreamNotice } from '../../components/stream/StreamOverlays';
+import { FilmingBanner } from '../../components/FilmingBanner';
 
 export function BroadcastPage() {
   const { competition, streamingEnabled } = useCompetition();
@@ -91,6 +92,7 @@ function BroadcastStudio() {
         <span className={`mg-stream-glass flex items-center gap-1 border px-2 py-1 ${snapshot.signal === 'poor' ? 'border-[rgb(var(--mg-red))]' : snapshot.signal === 'fair' ? 'border-amber-400' : 'border-transparent'}`}><Wifi className="h-4 w-4" />{snapshot.signal === 'good' ? 'Good' : snapshot.signal === 'fair' ? 'Fair' : 'Weak signal'}</span>
         <span className="mg-stream-glass px-2 py-1">{arena} · {angle}</span>
       </div>
+      <div className="absolute left-4 right-24 top-14"><FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} /></div>
       <div className="pointer-events-auto absolute bottom-4 right-3 top-16 flex flex-col justify-center gap-2 overflow-y-auto text-center text-xs">
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={flip}><RefreshCw />Flip</button>
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={() => run(() => publisher.current!.mute(!snapshot.audioMuted))}>{snapshot.audioMuted ? <MicOff /> : <Mic />}{snapshot.audioMuted ? 'Sound off' : 'Sound on'}</button>
@@ -112,6 +114,7 @@ function BroadcastStudio() {
   return <div className="mx-auto flex max-w-xl flex-col gap-4 pb-6">
     <Link className="mg-text-link" to={`/competitions/${competition.id}/chat`}>‹ Live &amp; stream</Link><h1 className="mg-h1">Go live</h1>
     {error || snapshot.error ? <p role="alert" className="mg-notice">{error || snapshot.error}</p> : null}
+    <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
     <label className="mg-card flex items-center justify-between p-3"><span>Sound</span><input type="checkbox" checked={sound} disabled={busy} onChange={(event) => { const next = event.target.checked; void run(async () => { if (snapshot.media) await publisher.current!.capture(next); setSound(next); }); }} /></label>
     {!snapshot.media ? <button disabled={busy} className="mg-btn mg-btn-primary min-h-12" onClick={() => run(async () => { await publisher.current!.capture(sound); setDevices(await publisher.current!.devices()); })}><Camera />Allow camera</button> : <>
       <div className="relative aspect-video overflow-hidden rounded-2xl bg-[rgb(var(--mg-header-deep))]">{preview}<span className="mg-font mg-stream-glass absolute left-3 top-3 px-2 py-1">Preview</span><button className="mg-stream-control absolute bottom-3 right-3" aria-label="Flip camera" disabled={busy} onClick={flip}><RefreshCw /></button></div>
