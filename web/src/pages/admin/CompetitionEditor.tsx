@@ -43,13 +43,13 @@ const ZONE_PAIRS = [
   'Bending',
   'Hollywood Bowl Boule & Bucket',
   'Bottle',
-  'Litter', 'Litter',
-  'Tally Ho Farm Ball & Socket', 'Tally Ho Farm Ball & Socket',
-  'STRUK Pole', 'STRUK Pole',
+  'Litter',
+  'Tally Ho Farm Ball & Socket',
+  'STRUK Pole',
   'PGSports UK Shopping Spree',
   'Stepping Stones',
   'EGUK Mug Changes',
-  '5 Flag', '5 Flag',
+  '5 Flag',
 ];
 
 // Area 2026 race lists — sponsored names + dedicated junior variants. Spare
@@ -77,11 +77,11 @@ const AREA_PAIRS = [
   'Bending',
   '2 Mug',
   'Old Sock',
-  'Tally Ho Farm Ball & Socket', 'Tally Ho Farm Ball & Socket',
-  'PGUK Pyramid', 'PGUK Pyramid',
+  'Tally Ho Farm Ball & Socket',
+  'PGUK Pyramid',
   'Hollywood Bowl Bottle',
   'Stepping Stones',
-  'EGUK 5 Flag', 'EGUK 5 Flag',
+  'EGUK 5 Flag',
 ];
 
 const ZONE_RUNOFF = '2 Flag';

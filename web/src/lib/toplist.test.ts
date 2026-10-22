@@ -264,3 +264,26 @@ describe('toplistNote', () => {
     expect(toplistNote(row({ needed: 0 }))).toBe('0 needed to make the final');
   });
 });
+
+describe('buildToplist started', () => {
+  it('is false while nobody has points and no race has results', () => {
+    const open = session(1, [heat(1, [1, 2], [race(1)])]);
+    expect(buildToplist([standing(1, 0), standing(2, 0)], [open], [], SECTION, null).started).toBe(false);
+    expect(buildToplist([standing(1, 0), standing(2, 0)], [], [], SECTION, null).started).toBe(false);
+  });
+
+  it('is true once any team has points', () => {
+    expect(buildToplist([standing(1, 3), standing(2, 0)], [], [], SECTION, null).started).toBe(true);
+  });
+
+  it('is true once a race in the age group has results, even if every team scored nothing', () => {
+    const allOut = race(1, { isComplete: true, results: [result(1, null, { eliminated: true }), result(2, null, { eliminated: true })] });
+    const played = session(1, [heat(1, [1, 2], [allOut])]);
+    expect(buildToplist([standing(1, 0), standing(2, 0)], [played], [], SECTION, null).started).toBe(true);
+  });
+
+  it('ignores results in other age groups', () => {
+    const other = session(1, [heat(1, [1, 2], [scored(1, [1, 0])])], { competitionSectionId: SECTION + 1 });
+    expect(buildToplist([standing(1, 0), standing(2, 0)], [other], [], SECTION, null).started).toBe(false);
+  });
+});

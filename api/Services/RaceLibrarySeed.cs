@@ -82,6 +82,11 @@ internal static class RaceLibrarySeed
             "Four Bending Poles 7–9 m apart; mug on Pole 2. Numbers 1 & 3 at Start/Finish, 2 & 4 at Changeover. Number One moves the mug from Pole 2 to Pole 3 then crosses Changeover. Number Two moves it back from Pole 3 to Pole 2 then crosses Start/Finish. Numbers 3 & 4 repeat. Winner: Number Four first over the line with the mug on Pole 2.",
             FourPoles),
 
+        new Entry("Three Mug and Table (Pairs)", "Mug",
+            "Pairs version — shuttle three mugs between a table and the poles, inverted; riders ride straight and need not bend.",
+            "Five Bending Poles 7–9 m apart, Pole 1 nearest the Start/Finish Line; a Table 3 m behind the Changeover Line. Both riders form up at the Start/Finish End. Each pair has three mugs: two inverted on the Table and one carried by Number One. Number One places the carried mug inverted on the Table, collects another mug from it and hands it to Number Two behind the Start/Finish Line. Number Two rides down, places the mug inverted on top of Pole 5, collects the final mug from the Table and returns to place it on Pole 1 before crossing the Start/Finish Line. Riders ride straight and need not bend through the poles. Any mug knocked off the Table must always be replaced inverted.",
+            """[{"t":"pole","x":17,"label":"1"},{"t":"pole","x":33,"label":"2"},{"t":"pole","x":50,"label":"3"},{"t":"pole","x":67,"label":"4"},{"t":"pole","x":83,"label":"5"},{"t":"table","x":95,"label":""}]"""),
+
         // ── Ball / Cone family ────────────────────────────────────────────
         new Entry("Ball and Cone", "Ball",
             "Move a tennis ball back and forth between two cones level with Poles 1 and 4.",
@@ -97,6 +102,11 @@ internal static class RaceLibrarySeed
             "Balance a tennis ball on a racquet through four bending poles.",
             "Four Bending Poles 7–9 m apart; tennis racquet and ball per team. Numbers 1 & 3 at Start/Finish, 2 & 4 at Changeover. Each rider in turn carries the ball on the racquet head, weaving through the poles, and hands over behind the line. Hand must always be behind the racquet's crosspiece. If the ball drops, the rider must retrieve and continue from where it fell.",
             FourPoles),
+
+        new Entry("Ball & Racquet (Old Version)", "Ball",
+            "Balance a tennis ball on a racquet through three bending poles.",
+            "Three Bending Poles 7–9 m apart per team; all riders form up behind the Start/Finish Line. Number One carries a racquet (with a cross piece through the centre of the handle) holding a tennis ball. The rider's hand must stay behind the cross piece and the ball must not be touched by hand, except when correcting an error. Number One rides up and back through the poles and hands the racquet and ball to Number Two behind the Start/Finish Line; Numbers Two, Three and Four repeat. If the ball is dropped the rider picks it up, mounted or dismounted, and resumes from where it fell. If it is dropped at the handover, the incoming rider may dismount and put it on the next rider's racquet, behind the Start/Finish Line. Any pole knocked down must be replaced by the rider concerned. Winner: Number Four first over the Start/Finish Line carrying the ball on the racquet.",
+            """[{"t":"pole","x":25,"label":"1"},{"t":"pole","x":50,"label":"2"},{"t":"pole","x":75,"label":"3"}]"""),
 
         new Entry("Ball and Socket", "Ball",
             "Place a ball into a high socket board at the changeover, then return collecting from a cone.",
@@ -126,6 +136,11 @@ internal static class RaceLibrarySeed
         new Entry("Four Ball Cone (Tennis Ball Shuffle)", "Ball",
             "Collect a tennis ball from a penny dish at the Changeover and place on cones one by one.",
             "Four Ball Cones level with Poles 1–4; a pole topped with a Penny Dish containing four tennis balls 3 m beyond the Changeover. Each rider in turn collects a ball from the Penny Dish and places it on any cone on the way back. Winner: Number Four first over the line with a ball on every cone.",
+            FourConesAtPoles),
+
+        new Entry("Four Ball Cone (2002)", "Ball",
+            "Collect a tennis ball from a penny dish at the Changeover and place it on any ball cone, one rider at a time.",
+            "Four Ball Cones in a line down the arena, level with Poles 1–4; a Bending Pole topped with a Penny Dish holding four tennis balls 3 m behind the Changeover Line, in line with the cones. All four riders start from the Start/Finish End. Number One rides across the Changeover Line, collects a ball from the Penny Dish, rides back and places it on any ball cone before crossing the Start/Finish Line. Numbers Two, Three and Four repeat. Winner: Number Four first over the Start/Finish Line with a tennis ball on each of the four ball cones.",
             FourConesAtPoles),
 
         // ── Flag family ───────────────────────────────────────────────────
@@ -223,6 +238,11 @@ internal static class RaceLibrarySeed
             "Table level with Pole 1; three bean bags and a tennis ball placed randomly in a circle 3 m behind the Changeover. All four riders at Start/Finish. Numbers 1, 2 and 3 each ride up, dismount, collect a bean bag and place it on the table. Number Four collects the tennis ball and places it on the table. Bean bags and ball may touch. Winner: Number Four first over the line with all items on the table.",
             TableAtPole1AndChangeover),
 
+        new Entry("Two Bean Bag Race (Junior)", "Equipment",
+            "Junior version — swap two bean bags between a centre-line table and a table behind the Changeover.",
+            "Two Tables per team: one on the Centre Line and one 3 m beyond the Changeover Line, with a bean bag on the Changeover table. All four riders line up mounted at the Start/Finish End. Number One, carrying a bean bag, places it on the Centre Line table, rides on to collect the bean bag from the Changeover table and returns to hand it to Number Two behind the Start/Finish Line. Number Two places the bean bag on the Changeover table, collects the one on the Centre Line table on the way back and hands it on. Number Three repeats Number One and Number Four repeats Number Two. Winner: Number Four first over the Start/Finish Line carrying a bean bag, with the other on the Changeover table.",
+            TableMidlineAndChangeover),
+
         new Entry("Litter", "Equipment",
             "Spear pieces of litter with a cane and drop them in a bin on the centre line.",
             "Four pieces of litter side-by-side in a circle 3 m beyond the Changeover (open ends towards the Start/Finish); litter bin on the Centre Line. Each rider in turn rides up with a cane, spears a piece of litter at the Changeover and drops it into the bin on the way back. Litter must not be touched by hand except to clear jams. Winner: Number Four first over the line carrying the cane with all four pieces in the bin.",
@@ -293,6 +313,11 @@ internal static class RaceLibrarySeed
         new Entry("Spell PONY PREP", "Spelling",
             "As Spell EGUK but the cards spell PONY on top and PREP on the bottom.",
             "Table on the Centre Line with eight cards spelling PONY PREP; gibbet at the Changeover with two crossbars of four hooks. Each rider collects two cards in turn and hangs them so PONY sits across the top row and PREP across the bottom row.",
+            SpellTableAndGibbet),
+
+        new Entry("Spell PONY (Juniors)", "Spelling",
+            "Junior version — pick up four letter cards from the centre line and hang them on a post to spell PONY.",
+            "A Table on the Centre Line with four 20 cm square cards spelling PONY, placed side by side and separately spaced. Number Five stands 3 m behind the Changeover Line holding a post about 1.22 m (4 ft) high with a cross bar of four hooks facing Number Five. All four riders line up at the Start/Finish End. Number One picks up any one card, hands it to Number Five over the Changeover Line and waits behind the line until Number Five has hung it so that, viewed from the Start/Finish Line, the cards read PONY; Number One then returns across the Start/Finish Line. Numbers Two, Three and Four repeat. Number Five must stay behind the Changeover Line. A dropped card may be retrieved mounted or dismounted but must be handed to Number Five from the mounted position. Cards knocked off the Table can be replaced in any order. Winner: Number Four first over the Start/Finish Line with all four cards on the hooks spelling PONY.",
             SpellTableAndGibbet),
 
         // ── Sharpshooters / Bowling ───────────────────────────────────────

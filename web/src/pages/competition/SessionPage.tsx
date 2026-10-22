@@ -1,5 +1,5 @@
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import {
   ChevronLeft, CloudOff, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Coffee, Wand2, X, Clock, Columns3, ClipboardList, Users, CheckCircle2,
@@ -12,8 +12,11 @@ import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
 import { bibAccent } from '../../lib/bib';
-import { retryOnNetworkError } from '../../lib/liveUpdates';
 import { describePlacings, enqueue, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
+import {
+  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
+  writeScoringDraft, type PendingPlace,
+} from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 
 function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
@@ -25,12 +28,6 @@ function teamForDisplayLane(heat: Heat, raceIndex: number, displayLane: number):
   const size = heat.entries.length;
   if (size <= 0) return null;
   return heat.entries.find((e) => displayLaneFor(e.laneIndex, raceIndex, size) === displayLane) ?? null;
-}
-
-interface PendingPlace {
-  teamId: number;
-  place: number;
-  eliminated: boolean;
 }
 
 function formatTime(d: Date | null): string {
@@ -85,34 +82,6 @@ export function SessionPage() {
   const [activeHeatId, setActiveHeatId] = useState<number | null>(() => orderedHeats.find((heat) => heat.id === requestedHeat)?.id ?? firstIncompleteHeatId);
   const [activeRaceId, setActiveRaceId] = useState<number | null>(null);
   const [correctionReasons, setCorrectionReasons] = useState<Record<number, string>>({});
-  const [pending, setPending] = useState<PendingPlace[]>([]);
-
-  // Auto-save the admin's in-progress placings per (heat, race) so a reload
-  // doesn't wipe them. Cleared on submit + reset.
-  const scoringDraftKey = activeHeatId && activeRaceId
-    ? `mg.draft.scoring:${activeHeatId}:${activeRaceId}` : null;
-  useEffect(() => {
-    if (!scoringDraftKey) return;
-    try {
-      const raw = localStorage.getItem(scoringDraftKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as PendingPlace[];
-        // The pending placings follow the active race, and the effects below reset and re-seed them
-        // for the same race change. Their order decides which write wins, so they stay as effects.
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- loading a saved draft from localStorage on race change
-        if (Array.isArray(parsed)) setPending(parsed);
-      }
-    } catch { /* ignore */ }
-    // Only hydrate when the active race changes — admin's interactive
-    // changes are saved by the next effect.
-  }, [scoringDraftKey]);
-  useEffect(() => {
-    if (!scoringDraftKey) return;
-    try {
-      if (pending.length === 0) localStorage.removeItem(scoringDraftKey);
-      else localStorage.setItem(scoringDraftKey, JSON.stringify(pending));
-    } catch { /* quota */ }
-  }, [scoringDraftKey, pending]);
   const outbox = useScoreOutbox();
   const [showResults, setShowResults] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
@@ -143,32 +112,44 @@ export function SessionPage() {
     [activeHeat]
   );
 
+  const preferredRaceRef = useRef<number | null>(null);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the race selection when the heat's races change; ordered with the hydrate and seed effects
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the race selection when the heat's races change
     if (!activeHeat) { setActiveRaceId(null); return; }
     // Don't loop back to race 1 when all are complete — leave activeRaceId null so the
     // UI shows "Select a race" and the admin can re-score by clicking a race tab.
-    const nextRace = orderedRaces.find((r) => !r.isComplete) ?? null;
+    const preferred = preferredRaceRef.current;
+    preferredRaceRef.current = null;
+    const nextRace = orderedRaces.find((r) => r.id === preferred && !r.isComplete) ?? orderedRaces.find((r) => !r.isComplete) ?? null;
     setActiveRaceId(nextRace?.id ?? null);
-    setPending([]);
   }, [activeHeat, orderedRaces]);
 
-  // When admin clicks a completed race tab to edit results, pre-fill pending from existing results.
+  // The placings being entered belong to one race, so they are stored with that race's draft key.
+  // Switching race swaps them, in the same render, for that race's saved draft (a draft always wins)
+  // or else nothing. Until the scorer changes something, a finished race simply shows its saved results.
+  const scoringDraftKey = activeHeatId && activeRaceId ? draftKeyFor(activeHeatId, activeRaceId) : null;
+  const draftRace = orderedRaces.find((r) => r.id === activeRaceId) ?? null;
+  const savedPlaces = useMemo(() => (draftRace?.isComplete ? placesFromResults(draftRace) : []), [draftRace]);
+  const [pendingState, setPendingState] = useState<{ key: string | null; places: PendingPlace[]; edited: boolean }>(
+    { key: null, places: [], edited: false },
+  );
+  if (pendingState.key !== scoringDraftKey) {
+    const draft = scoringDraftKey ? readScoringDraft(scoringDraftKey) : null;
+    setPendingState({ key: scoringDraftKey, places: draft ?? [], edited: draft != null });
+  }
+  const pending = pendingState.edited ? pendingState.places : savedPlaces;
+  function setPending(change: PendingPlace[] | ((current: PendingPlace[]) => PendingPlace[])) {
+    setPendingState((cur) => {
+      const base = cur.edited ? cur.places : savedPlaces;
+      return { key: cur.key, edited: true, places: typeof change === 'function' ? change(base) : change };
+    });
+  }
+  // Auto-save the scorer's placings per (heat, race) so a reload doesn't wipe them.
   useEffect(() => {
-    if (!activeRaceId) return;
-    const race = orderedRaces.find((r) => r.id === activeRaceId);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- seeds the pending placings for the selected race; ordered with the hydrate and reset effects
-    if (!race || !race.isComplete) { setPending([]); return; }
-    const seeded: PendingPlace[] = race.results
-      .slice()
-      .sort((a, b) => (a.placing ?? 999) - (b.placing ?? 999))
-      .map((r, i) => ({
-        teamId: r.teamId,
-        place: r.placing ?? i + 1,
-        eliminated: r.eliminated,
-      }));
-    setPending(seeded);
-  }, [activeRaceId, orderedRaces]);
+    if (scoringDraftKey && pendingState.key === scoringDraftKey && pendingState.edited) {
+      writeScoringDraft(scoringDraftKey, pendingState.places);
+    }
+  }, [scoringDraftKey, pendingState]);
 
   // Detect when the heat the admin is scoring transitions from in-progress → complete,
   // and prompt to advance to the next heat.
@@ -231,22 +212,11 @@ export function SessionPage() {
 
   function clickTeam(teamId: number) {
     if (!activeRace) return;
-    setPending((cur) => {
-      if (cur.some((p) => p.teamId === teamId)) {
-        return cur.filter((p) => p.teamId !== teamId).map((p, i) => ({ ...p, place: i + 1 }));
-      }
-      return [...cur, { teamId, place: cur.length + 1, eliminated: false }];
-    });
+    setPending((cur) => tapTeam(cur, teamId));
   }
 
   function toggleElim(teamId: number) {
-    setPending((cur) => {
-      const existing = cur.find((p) => p.teamId === teamId);
-      if (existing) {
-        return cur.map((p) => p.teamId === teamId ? { ...p, eliminated: !p.eliminated } : p);
-      }
-      return [...cur, { teamId, place: cur.length + 1, eliminated: true }];
-    });
+    setPending((cur) => toggleEliminated(cur, teamId));
   }
 
   function resetPending() { setPending([]); }
@@ -276,11 +246,17 @@ export function SessionPage() {
     }));
     if (!stored) { setSaveError(OUTBOX_STORAGE_ERROR); return; }
     setSaveError(null);
+    if (scoringDraftKey) writeScoringDraft(scoringDraftKey, []);
     setPending([]);
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
-    const nextRace = orderedRaces.find((r) => !r.isComplete && !queuedIds.has(r.id));
-    if (nextRace) {
-      setActiveRaceId(nextRace.id);
+    const next = nextRaceToScore(orderedHeats, session.raceOrderAlternating === true, { heatId: activeHeat.id, raceId: activeRace.id }, queuedIds);
+    if (next) {
+      if (next.heatId !== activeHeat.id) {
+        // Changing heat resets the race selection (effect above); it should land on this race.
+        preferredRaceRef.current = next.raceId;
+        setActiveHeatId(next.heatId);
+      }
+      setActiveRaceId(next.raceId);
     }
   }
 
@@ -759,7 +735,6 @@ function ScoringSection({
             <h3 className="font-semibold flex items-center gap-1.5 text-sm flex-1 min-w-0">
               <Flag className="w-4 h-4 text-brand-600 shrink-0" /> Scoring · {activeRace.name}
             </h3>
-            <RaceClock key={activeRace.id} race={activeRace} />
           </div>
           {activeQueued && (
             <p role="status" className="mb-2 rounded-md bg-amber-50 p-2 text-[11px] text-amber-900">
@@ -1085,101 +1060,5 @@ function HeatEndOverlay({
         )}
       </motion.div>
     </motion.div>
-  );
-}
-
-/**
- * Live race clock — Start/Stop buttons + an elapsed timer that ticks every
- * second while the race is running. Optimistic: shows the tap at once and
- * sends the tap time, so a slow connection doesn't shift the race time.
- */
-// A once-a-second clock for the running race timer, read through useSyncExternalStore so that
-// rendering never calls Date.now() itself.
-let clockNow = Date.now();
-function useClock(active: boolean): number {
-  const subscribe = useCallback((notify: () => void) => {
-    if (!active) return () => {};
-    clockNow = Date.now(); // the first reading after subscribing is current
-    const timer = setInterval(() => { clockNow = Date.now(); notify(); }, 1000);
-    return () => clearInterval(timer);
-  }, [active]);
-  return useSyncExternalStore(subscribe, () => clockNow);
-}
-
-function RaceClock({ race: serverRace }: { race: Race }) {
-  type Action = 'start' | 'stop';
-  interface Tap { action: Action; at: string; startedAt: string | null; finishedAt: string | null; unsent: boolean; basis: string }
-  // The tap waiting on (or confirmed by) the server. It applies only while the
-  // live competition data still shows what was on screen when it was tapped.
-  const [tap, setTap] = useState<Tap | null>(null);
-  const basis = `${serverRace.startedAt ?? ''}|${serverRace.finishedAt ?? ''}`;
-  const pendingTap = tap?.basis === basis ? tap : null;
-  const race = pendingTap ? { ...serverRace, startedAt: pendingTap.startedAt, finishedAt: pendingTap.finishedAt } : serverRace;
-
-  const started = race.startedAt ? new Date(race.startedAt) : null;
-  const finished = race.finishedAt ? new Date(race.finishedAt) : null;
-  const running = started != null && finished == null;
-  const now = useClock(running);
-
-  function elapsed(): string {
-    if (!started) return '—';
-    const end = finished?.getTime() ?? now;
-    const s = Math.max(0, Math.round((end - started.getTime()) / 1000));
-    const m = Math.floor(s / 60);
-    const sec = (s % 60).toString().padStart(2, '0');
-    return `${m}:${sec}`;
-  }
-
-  async function send(action: Action, at: string) {
-    // A reply only counts for its own tap: Stop may be tapped before Start's reply lands.
-    const update = (change: Partial<Tap>) => setTap((t) => (t && t.at === at && t.action === action ? { ...t, ...change } : t));
-    update({ unsent: false });
-    try {
-      const { data } = await retryOnNetworkError(() => api.post<Race>(`/races/${serverRace.id}/${action}`, { at }));
-      update({ startedAt: data.startedAt ?? null, finishedAt: data.finishedAt ?? null });
-    } catch {
-      update({ unsent: true });
-    }
-  }
-  function press(action: Action) {
-    const at = new Date().toISOString();
-    const startedAt = race.startedAt ?? at;
-    setTap({ action, at, startedAt, finishedAt: action === 'start' ? null : at, unsent: false, basis });
-    void send(action, at);
-  }
-
-  if (race.isComplete) {
-    // After results submitted, just show the final duration.
-    return started && finished ? (
-      <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
-        <Clock className="inline w-3 h-3 -mt-px" /> {elapsed()}
-      </span>
-    ) : null;
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`font-mono tabular-nums font-bold text-sm px-2 py-0.5 rounded-md ${
-        running
-          ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200 animate-pulse'
-          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-      }`}>
-        <Clock className="inline w-3 h-3 -mt-px" /> {elapsed()}
-      </span>
-      {running ? (
-        <button onClick={() => press('stop')} className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-rose-600">
-          Stop
-        </button>
-      ) : (
-        <button onClick={() => press('start')} className="btn-primary !py-0.5 !px-2 text-[11px]">
-          Start
-        </button>
-      )}
-      {pendingTap?.unsent && (
-        <button role="alert" onClick={() => void send(pendingTap.action, pendingTap.at)} className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-amber-700">
-          Not sent · Retry
-        </button>
-      )}
-    </span>
   );
 }
