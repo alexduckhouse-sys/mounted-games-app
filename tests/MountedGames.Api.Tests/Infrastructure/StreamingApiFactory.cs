@@ -22,6 +22,21 @@ public sealed class StreamingApiFactory : ApiFactory
     public string FailureBody { get; set; } = "{}";
     public HttpStatusCode FailureStatus { get; set; } = HttpStatusCode.BadGateway;
     public bool ThrowFailure { get; set; }
+
+    /// <summary>
+    /// Waits for work the server finishes after a client call has returned, such as the disconnect handler
+    /// that runs once a hub connection stops. Checks every 10 ms, for up to 5 seconds.
+    /// </summary>
+    public static async Task<bool> EventuallyAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) return false;
+            await Task.Delay(10);
+        }
+        return true;
+    }
     public Action<string>? OnRequest { get; set; }
     private int _session;
 

@@ -137,8 +137,9 @@ public class StreamingHubTests : IClassFixture<StreamingApiFactory>
         Assert.Single(f.SfuRequests, r => r.Url.EndsWith("/tracks/close"));
         await hub.InvokeAsync("AnswerStream", second.WatchId, "fake-answer");
         await hub.StopAsync();
+        // The server closes the current session in its disconnect handler, after StopAsync has returned.
+        Assert.True(await StreamingApiFactory.EventuallyAsync(() => f.SfuRequests.Count(r => r.Url.EndsWith("/tracks/close")) == 2));
         Assert.Equal(0, f.Viewers.Count(attempt.StreamId));
-        Assert.Equal(2, f.SfuRequests.Count(r => r.Url.EndsWith("/tracks/close")));
     }
 
     [Fact]
