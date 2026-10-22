@@ -76,7 +76,8 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         // A signup is also a payment record, so it stays with the name the organiser took payment from; the contact details go.
         await db.SectionSignups.Where(x => x.UserId == id).ExecuteUpdateAsync(s => s
             .SetProperty(x => x.UserId, (string?)null)
-            .SetProperty(x => x.ContactInfo, (string?)null), ct);
+            .SetProperty(x => x.ContactInfo, (string?)null)
+            .SetProperty(x => x.ContactEmail, (string?)null), ct);
 
         // --- Ownership links: cleared, so the competition or team carries on without an owner. ---
         await db.Competitions.Where(c => c.CreatedByUserId == id)

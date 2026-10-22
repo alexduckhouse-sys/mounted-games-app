@@ -32,8 +32,23 @@ public class SectionSignup
     public string FullName { get; set; } = string.Empty;
     /// <summary>Pony Club branch they're representing — free text for v1.</summary>
     public string? PonyClubName { get; set; }
-    /// <summary>Optional phone / email captured for the organiser.</summary>
+    /// <summary>Optional phone number (or anything else) captured for the organiser.</summary>
     public string? ContactInfo { get; set; }
+
+    /// <summary>
+    /// Optional email address of the adult who signed up (never a rider's). The entry confirmation goes here.
+    /// Visible to the competition's staff only.
+    /// </summary>
+    public string? ContactEmail { get; set; }
+    /// <summary>Whether the entry confirmation email went out. Staff can see this; nobody else's email state is shown.</summary>
+    public EmailDeliveryStatus ConfirmationEmailStatus { get; set; }
+    public DateTime? ConfirmationEmailAt { get; set; }
+
+    /// <summary>
+    /// Client-made id for one submit of the sign-up form. A retry of the same submit (same user and section)
+    /// returns the existing entry rather than creating another and emailing again.
+    /// </summary>
+    public string? ClientRequestId { get; set; }
 
     /// <summary>Show only the surname's initial on public pages ("Oliver S.").</summary>
     public bool UseInitialOnly { get; set; }

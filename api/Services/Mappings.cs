@@ -27,7 +27,8 @@ public static class Mappings
         s.Section?.DisplayName ?? string.Empty,
         s.FullName, s.PonyClubName, s.ContactInfo,
         s.AmountMinor, s.Status, s.PaidAt, s.TeamId, s.CreatedAt,
-        s.UseInitialOnly, s.NoFilming);
+        s.UseInitialOnly, s.NoFilming,
+        s.ContactEmail, s.ConfirmationEmailStatus, s.ConfirmationEmailAt);
 
     public static MySignupDto ToMyDto(this SectionSignup s, Team? team = null) => new(
         s.Id,

@@ -282,6 +282,8 @@ public static class DbInitializer
 
         await Seasons.SeasonsSqliteSchema.EnsureAsync(db);
 
+        await Email.EmailSqliteSchema.EnsureAsync(db);
+
     }
 
     private static async Task SeedReferenceDataAsync(AppDbContext db, RoleManager<IdentityRole> roles)
@@ -1052,7 +1054,7 @@ public static class DbInitializer
     /// Adds a column to an existing table if it isn't present yet. Idempotent.
     /// SQLite-only (uses PRAGMA table_info).
     /// </summary>
-    private static async Task EnsureColumnAsync(AppDbContext db, string table, string column, string columnDef)
+    internal static async Task EnsureColumnAsync(AppDbContext db, string table, string column, string columnDef)
     {
         var conn = db.Database.GetDbConnection();
         await conn.OpenAsync();
