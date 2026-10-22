@@ -14,7 +14,7 @@ import { HeatScores } from './HeatScores';
 import { bibAccent } from '../../lib/bib';
 import { retryOnNetworkError } from '../../lib/liveUpdates';
 import { describePlacings, enqueue, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
-import { tapTeam, toggleEliminated, type PendingPlace } from '../../lib/raceScoring';
+import { nextRaceToScore, tapTeam, toggleEliminated, type PendingPlace } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 
 function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
@@ -138,12 +138,15 @@ export function SessionPage() {
     [activeHeat]
   );
 
+  const preferredRaceRef = useRef<number | null>(null);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the race selection when the heat's races change; ordered with the hydrate and seed effects
     if (!activeHeat) { setActiveRaceId(null); return; }
     // Don't loop back to race 1 when all are complete — leave activeRaceId null so the
     // UI shows "Select a race" and the admin can re-score by clicking a race tab.
-    const nextRace = orderedRaces.find((r) => !r.isComplete) ?? null;
+    const preferred = preferredRaceRef.current;
+    preferredRaceRef.current = null;
+    const nextRace = orderedRaces.find((r) => r.id === preferred && !r.isComplete) ?? orderedRaces.find((r) => !r.isComplete) ?? null;
     setActiveRaceId(nextRace?.id ?? null);
     setPending([]);
   }, [activeHeat, orderedRaces]);
@@ -262,9 +265,14 @@ export function SessionPage() {
     setSaveError(null);
     setPending([]);
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
-    const nextRace = orderedRaces.find((r) => !r.isComplete && !queuedIds.has(r.id));
-    if (nextRace) {
-      setActiveRaceId(nextRace.id);
+    const next = nextRaceToScore(orderedHeats, session.raceOrderAlternating === true, { heatId: activeHeat.id, raceId: activeRace.id }, queuedIds);
+    if (next) {
+      if (next.heatId !== activeHeat.id) {
+        // Changing heat resets the race selection (effect above); it should land on this race.
+        preferredRaceRef.current = next.raceId;
+        setActiveHeatId(next.heatId);
+      }
+      setActiveRaceId(next.raceId);
     }
   }
 

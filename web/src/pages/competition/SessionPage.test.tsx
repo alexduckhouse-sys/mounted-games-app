@@ -134,6 +134,49 @@ describe('SessionPage', () => {
     });
   });
 
+  describe('moving on after saving a race', () => {
+    const twoHeats = (alternating: boolean) => competition({
+      teams,
+      sessions: [session(1, {
+        status: 1,
+        raceOrderAlternating: alternating,
+        heats: [1, 2].map((n) => heat(n, {
+          label: `Heat ${n}`,
+          entries: entries(2),
+          races: [1, 2].map((r) => race(n * 10 + r, { name: `H${n} R${r}`, orderIndex: r, heatId: n })),
+        })),
+      })],
+    });
+    const saveRace = async () => {
+      await userEvent.click(screen.getByText('Rider 1'));
+      await userEvent.click(screen.getByText('Rider 2'));
+      await userEvent.click(screen.getByRole('button', { name: /^Save 2 results$/ }));
+    };
+    const scoring = (name: string) => screen.findByRole('heading', { name: `Scoring · ${name}` });
+
+    it('runs through one heat before starting the next', async () => {
+      mount(twoHeats(false));
+      await scoring('H1 R1');
+      await saveRace();
+      await scoring('H1 R2');
+      await saveRace();
+      await scoring('H2 R1');
+      await saveRace();
+      await scoring('H2 R2');
+    });
+
+    it('goes across the heats for each race when the session alternates', async () => {
+      mount(twoHeats(true));
+      await scoring('H1 R1');
+      await saveRace();
+      await scoring('H2 R1');
+      await saveRace();
+      await scoring('H1 R2');
+      await saveRace();
+      await scoring('H2 R2');
+    });
+  });
+
   describe('Set up heats', () => {
     const data = () => competition({ teams, sessions: [session(1, { status: 0, heats: [] })] });
 
