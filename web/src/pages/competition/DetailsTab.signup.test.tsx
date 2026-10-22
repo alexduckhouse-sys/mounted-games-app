@@ -15,7 +15,7 @@ vi.mock('../../api', async (importOriginal) => ({
 }));
 vi.mock('../commerce/DemoEntryPayment', () => ({ DemoEntryPayment: () => null }));
 
-const section: CompetitionSection = { id: 5, competitionId: 1, format: 0, ageGroup: 'U12', displayName: 'Under 12', priceMinor: 1500 };
+const section: CompetitionSection = { id: 5, competitionId: 1, format: 1, ageGroup: 'U12', displayName: 'Under 12', priceMinor: 1500 };
 
 function signup(extra: Partial<SectionSignup> = {}): SectionSignup {
   return {
