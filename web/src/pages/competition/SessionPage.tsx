@@ -14,6 +14,7 @@ import { HeatScores } from './HeatScores';
 import { bibAccent } from '../../lib/bib';
 import { retryOnNetworkError } from '../../lib/liveUpdates';
 import { describePlacings, enqueue, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
+import { tapTeam, toggleEliminated, type PendingPlace } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 
 function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
@@ -25,12 +26,6 @@ function teamForDisplayLane(heat: Heat, raceIndex: number, displayLane: number):
   const size = heat.entries.length;
   if (size <= 0) return null;
   return heat.entries.find((e) => displayLaneFor(e.laneIndex, raceIndex, size) === displayLane) ?? null;
-}
-
-interface PendingPlace {
-  teamId: number;
-  place: number;
-  eliminated: boolean;
 }
 
 function formatTime(d: Date | null): string {
@@ -231,22 +226,11 @@ export function SessionPage() {
 
   function clickTeam(teamId: number) {
     if (!activeRace) return;
-    setPending((cur) => {
-      if (cur.some((p) => p.teamId === teamId)) {
-        return cur.filter((p) => p.teamId !== teamId).map((p, i) => ({ ...p, place: i + 1 }));
-      }
-      return [...cur, { teamId, place: cur.length + 1, eliminated: false }];
-    });
+    setPending((cur) => tapTeam(cur, teamId));
   }
 
   function toggleElim(teamId: number) {
-    setPending((cur) => {
-      const existing = cur.find((p) => p.teamId === teamId);
-      if (existing) {
-        return cur.map((p) => p.teamId === teamId ? { ...p, eliminated: !p.eliminated } : p);
-      }
-      return [...cur, { teamId, place: cur.length + 1, eliminated: true }];
-    });
+    setPending((cur) => toggleEliminated(cur, teamId));
   }
 
   function resetPending() { setPending([]); }

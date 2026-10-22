@@ -1,9 +1,10 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { competition, heat, race, session, team } from '../../test/factories';
+import type { HeatEntry } from '../../types';
 import type { CompetitionDetail, DeclarationForm } from '../../types';
 import { CompetitionContext } from './context';
 import { SessionPage } from './SessionPage';
@@ -35,6 +36,16 @@ function mount(data: CompetitionDetail, forms: DeclarationForm[] = []) {
     </MemoryRouter>,
   );
 }
+
+const entries = (n: number): HeatEntry[] => Array.from({ length: n }, (_, i) => ({
+  id: i + 1, teamId: i + 1, teamName: `Rider ${i + 1}`, laneIndex: i + 1,
+}));
+const scoringData = (n = 4) => competition({
+  teams,
+  sessions: [session(1, { status: 1, heats: [heat(1, { entries: entries(n), races: [race(1, { name: 'Bending' }), race(2, { name: 'Flag' })] })] })],
+});
+const tile = (name: string) => screen.getByText(name).closest('div[class*="rounded-xl"]') as HTMLElement;
+const badge = (name: string) => within(tile(name)).queryByText(/^\d+$/, { selector: 'div' });
 
 const teams = [team(1, { displayName: 'Oak A' }), team(2, { displayName: 'Beech B' }), team(3, { displayName: 'Ash C' })];
 
@@ -97,6 +108,30 @@ describe('SessionPage', () => {
   it('shows a dash for a race that has not started', () => {
     mount(competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { races: [race(1)] })] })] }));
     expect(screen.getByText('—')).toBeInTheDocument();
+  });
+
+  describe('placing teams', () => {
+    it('gives each tapped team the next place, and closes the gap when one is tapped again', async () => {
+      mount(scoringData());
+      await userEvent.click(screen.getByText('Rider 3'));
+      await userEvent.click(screen.getByText('Rider 1'));
+      await userEvent.click(screen.getByText('Rider 2'));
+      expect(badge('Rider 3')).toHaveTextContent('1');
+      expect(badge('Rider 1')).toHaveTextContent('2');
+      expect(badge('Rider 2')).toHaveTextContent('3');
+      await userEvent.click(screen.getByText('Rider 3'));
+      await waitFor(() => expect(badge('Rider 3')).toBeNull());
+      expect(badge('Rider 1')).toHaveTextContent('1');
+      expect(badge('Rider 2')).toHaveTextContent('2');
+    });
+
+    it('does not place the last team by itself', async () => {
+      mount(scoringData(3));
+      await userEvent.click(screen.getByText('Rider 1'));
+      await userEvent.click(screen.getByText('Rider 2'));
+      expect(badge('Rider 3')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Save 2 results' })).toBeInTheDocument();
+    });
   });
 
   describe('Set up heats', () => {
