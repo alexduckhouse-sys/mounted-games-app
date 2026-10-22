@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { ScoreAuditPanel } from './ScoreAuditPanel';
 
-vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canEdit: () => true }) }));
+const auth = vi.hoisted(() => ({ manage: true, asked: [] as unknown[] }));
+vi.mock('../../auth/AuthContext', () => ({
+  useAuth: () => ({ canManage: (competition: unknown) => { auth.asked.push(competition); return auth.manage; } }),
+}));
+vi.mock('../competition/context', () => ({ useCompetition: () => ({ competition: { id: 5, createdByUserId: 'owner-1' } }) }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn() } }));
 
 const score = { raceId: 9, revision: 1, isSignedOff: false, signedOffAt: null, signedOffByUserId: null, idempotentReplay: false, results: [{ teamId: 4, place: 1, eliminated: false, points: 4 }] };
@@ -12,9 +16,20 @@ const score = { raceId: 9, revision: 1, isSignedOff: false, signedOffAt: null, s
 describe('ScoreAuditPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    auth.manage = true;
+    auth.asked = [];
     vi.mocked(api.get).mockImplementation((url: string) => Promise.resolve({ data: url.endsWith('/history') ? [] : score }));
     vi.mocked(api.put).mockResolvedValue({ data: score });
     vi.mocked(api.post).mockResolvedValue({ data: { ...score, revision: 2, isSignedOff: true } });
+  });
+
+  it('shows the record but no sign-off or corrections to someone who cannot manage this competition', async () => {
+    auth.manage = false;
+    render(<ScoreAuditPanel raceId={9} />);
+    await screen.findByText('Open for scoring');
+    expect(screen.queryByRole('button', { name: 'Sign off results' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save correction' })).not.toBeInTheDocument();
+    expect(auth.asked).toContainEqual({ id: 5, createdByUserId: 'owner-1' });
   });
 
   it('requires a reason before saving a correction', async () => {

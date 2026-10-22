@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { RefreshCw, Save } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { useCompetition } from '../competition/context';
 import { RefineDisclosure, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 import type { RaceScore, RaceScoreEventKind, RaceScoreHistory, ScorePlace } from './types';
 import { apiMessage } from './types';
@@ -13,7 +14,8 @@ export function ScoreAuditPanel(props: { raceId: number; onChanged?: () => void 
 }
 
 function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: () => void }) {
-  const { canEdit } = useAuth();
+  const { canManage } = useAuth();
+  const { competition } = useCompetition();
   const [score, setScore] = useState<RaceScore | null>(null);
   const [history, setHistory] = useState<RaceScoreHistory[]>([]);
   const [draft, setDraft] = useState<ScorePlace[]>([]);
@@ -123,7 +125,7 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
             </div>
           </RefineList>
 
-          {canEdit() && <>
+          {canManage(competition) && <>
             <RefineSection title={score.isSignedOff ? 'Reopen' : 'Sign off'} />
             <div className="ops-form ops-panel">
               <label className="rf-fld" htmlFor={`score-action-reason-${raceId}`}>{score.isSignedOff ? 'Reason for reopening' : 'Sign-off note (optional)'}
@@ -133,7 +135,7 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
             </div>
           </>}
 
-          {canEdit() && !score.isSignedOff && draft.length > 0 && <>
+          {canManage(competition) && !score.isSignedOff && draft.length > 0 && <>
             <RefineSection title="Corrections" />
             <RefineList as="div">
               <RefineDisclosure title="Correct placings" sub="Every correction needs a reason">

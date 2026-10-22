@@ -10,6 +10,7 @@ import { competitionDateText } from '../../lib/competitionDates';
 import { DemoEntryPayment } from '../commerce/DemoEntryPayment';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { CompetitionTeamCard } from './CompetitionTeamCard';
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
@@ -28,7 +29,7 @@ const SIGNUP_STATUS: Record<SignupPaymentStatus, { label: string; tone: StatusTo
 
 export function DetailsTab() {
   const { competition, reload } = useCompetition();
-  const { canEdit, canOrganise, hasRole, user } = useAuth();
+  const { canEdit, canManage, canOrganise, hasRole, user } = useAuth();
   const [signupResult, setSignupResult] = useState<{ key: string; items: SectionSignup[] } | null>(null);
   const signupKey = `${competition.id}:${user?.id ?? ''}`;
   const mayOrganise = canOrganise(competition);
@@ -173,6 +174,11 @@ export function DetailsTab() {
             )}
           </div>
         </>
+      )}
+
+      {/* Owner, helpers and admins see who runs the event; the owner (or an admin in Edit mode) manages it. */}
+      {user && (mayOrganise || hasRole('Admin')) && (
+        <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
       )}
 
       {/* Signup by section: signed-in users only; the public can't enter. */}

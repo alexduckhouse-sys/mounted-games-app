@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, readStoredAuth, writeStoredAuth, type StoredAuth } from '../api';
-import type { Role, UserProfile } from '../types';
+import type { CompetitionAccess, CompetitionHelperRole, Role, UserProfile } from '../types';
 
 interface AuthContextValue {
   user: UserProfile | null;
@@ -27,7 +27,42 @@ interface AuthContextValue {
    * Trainers regardless of editorMode (no view/edit toggle for trainers).
    * Use for organiser-only surfaces like the comp creator wizard's Save.
    */
-  canOrganise: (competition?: { createdByUserId?: string | null }) => boolean;
+  canOrganise: (competition?: CompetitionRef) => boolean;
+  /**
+   * Whether to show the controls that run one competition's day (scoring,
+   * sessions, finals, timetable). Admins need Edit mode on, as everywhere else;
+   * everyone else just needs to be able to organise that competition.
+   */
+  canManage: (competition?: CompetitionRef) => boolean;
+  /** How the signed-in user relates to a competition: its owner, a helper role, or neither. */
+  competitionRole: (competitionId: number) => 'owner' | CompetitionHelperRole | null;
+  /** Reload the competitions this user owns or helps on, e.g. after leaving a team. */
+  refreshAccess: () => Promise<void>;
+}
+
+/** The parts of a competition that decide who may organise it. */
+type CompetitionRef = { id?: number; createdByUserId?: string | null };
+
+const NO_ACCESS: CompetitionAccess[] = [];
+const HELPER_ROLES = new Set<unknown>([0, 1, 2, 3, 4]);
+
+/** The signed-in user's list, or null when it can't be had: a dropped connection must not take access away. */
+async function fetchAccess(): Promise<CompetitionAccess[] | null> {
+  try {
+    const { data } = await api.get<unknown>('/competitions/access');
+    return parseAccess(data);
+  } catch {
+    return null;
+  }
+}
+
+/** Keeps only well-formed entries, so a wrong response can never grant access. */
+function parseAccess(data: unknown): CompetitionAccess[] | null {
+  if (!Array.isArray(data)) return null;
+  return data.filter((item): item is CompetitionAccess => !!item
+    && typeof item.competitionId === 'number'
+    && typeof item.owner === 'boolean'
+    && (item.role === null || HELPER_ROLES.has(item.role)));
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -64,6 +99,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return () => { cancelled = true; };
   }, [token, pendingTrainer]);
+
+  const userKey = auth?.user.id ?? null;
+  // Remember whose list this is, so one person's access is never shown to the next.
+  const [accessState, setAccessState] = useState<{ userKey: string; items: CompetitionAccess[] } | null>(null);
+  const access = accessState && accessState.userKey === userKey ? accessState.items : NO_ACCESS;
+  useEffect(() => {
+    if (!token || !userKey) return;
+    let current = true;
+    fetchAccess().then((items) => { if (current && items) setAccessState({ userKey, items }); });
+    return () => { current = false; };
+  }, [token, userKey]);
+  const refreshAccess = useCallback(async () => {
+    if (!token || !userKey) return;
+    const items = await fetchAccess();
+    if (items) setAccessState({ userKey, items });
+  }, [token, userKey]);
 
   const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
@@ -143,9 +194,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canEdit = useCallback(() => editorMode && hasRole('Admin'), [editorMode, hasRole]);
   // Ownership is also enforced by the API; this hides controls the viewer cannot use.
   const canOrganise = useCallback(
-    (competition?: { createdByUserId?: string | null }) => hasRole('Admin')
-      || (hasRole('Trainer') && (!competition || competition.createdByUserId === user?.id)),
-    [hasRole, user?.id]);
+    (competition?: CompetitionRef) => hasRole('Admin')
+      || (hasRole('Trainer') && (!competition || competition.createdByUserId === user?.id))
+      || (!!user && competition?.id != null && access.some((entry) => entry.competitionId === competition.id)),
+    [hasRole, user, access]);
+  // Mirrors OperationsPage: an admin must switch Edit mode on; everyone else may act once they can organise.
+  const canManage = useCallback(
+    (competition?: CompetitionRef) => (hasRole('Admin') ? canEdit() : canOrganise(competition)),
+    [hasRole, canEdit, canOrganise]);
+  const competitionRole = useCallback((competitionId: number) => {
+    const entry = access.find((item) => item.competitionId === competitionId);
+    return entry ? (entry.owner ? 'owner' : entry.role) : null;
+  }, [access]);
 
   const value: AuthContextValue = {
     user,
@@ -161,6 +221,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setEditorMode,
     canEdit,
     canOrganise,
+    canManage,
+    competitionRole,
+    refreshAccess,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

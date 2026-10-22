@@ -17,7 +17,7 @@ const NO_ROWS: StandingRow[] = [];
 
 export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const { competition, reload } = useCompetition();
-  const { canEdit } = useAuth();
+  const { canManage } = useAuth();
   // The age group lives in the URL (?section=ID) so the menu can link straight to one.
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSection = Number(searchParams.get('section'));
@@ -88,7 +88,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
       {standings.length > 0 && <ToplistView list={list} section={section} />}
     </section>
   );
-  const finalsButton = canEdit() && sectionId != null && (
+  const finalsButton = canManage(competition) && sectionId != null && (
     <button onClick={() => setShowFinals(true)} className="mg-btn mg-btn-primary">
       <Sparkles className="h-4 w-4" /> Create finals
     </button>

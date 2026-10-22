@@ -31,7 +31,7 @@ function bibSwatch(name?: string | null): string {
 
 export function SessionEndTransition({ competition, finishedSession, onClose, onAdvanced }: Props) {
   const nav = useNavigate();
-  const { canEdit } = useAuth();
+  const { canManage } = useAuth();
   const [forms, setForms] = useState<DeclarationForm[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -64,7 +64,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
   }
 
   async function continueFlow() {
-    if (!canEdit()) {
+    if (!canManage(competition)) {
       onClose();
       return;
     }

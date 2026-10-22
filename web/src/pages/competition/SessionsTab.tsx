@@ -10,7 +10,7 @@ import { TimetableBoard } from './TimetableBoard';
 const TimetableManagement = lazy(() => import('./TimetableManagement').then((module) => ({ default: module.TimetableManagement })));
 
 export function SessionsTab() {
-  const { canEdit } = useAuth();
+  const { canManage } = useAuth();
   const { competition } = useCompetition();
   const [manage, setManage] = useState(false);
   const ordered = useMemo(() => competition.sessions.slice().sort((a, b) => a.orderIndex - b.orderIndex), [competition.sessions]);
@@ -22,7 +22,7 @@ export function SessionsTab() {
       </button>
     )}
     <button type="button" className="mg-text-link self-center" aria-expanded={manage} onClick={() => setManage((open) => !open)}>
-      {manage ? 'Close timetable details' : canEdit() ? 'Manage timetable' : 'Arena setup and full timetable'}
+      {manage ? 'Close timetable details' : canManage(competition) ? 'Manage timetable' : 'Arena setup and full timetable'}
     </button>
   </>;
   return <>
