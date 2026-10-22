@@ -9,6 +9,7 @@ import type { OverlayBannerStyle, OverlayMode, StreamOverlay } from '../../types
 import type { OverlaySaveResult } from '../../hooks/useStreamOverlay';
 import { readMessages, writeMessages } from '../../lib/overlayMessages';
 import { ScoreCardQueue } from './ScoreCardQueue';
+import { SavedLooks } from './SavedLooks';
 
 const STYLES: { value: OverlayBannerStyle; label: string }[] = [{ value: 0, label: 'Ticker' }, { value: 1, label: 'Lower bar' }, { value: 2, label: 'Alert' }];
 const MODES: { value: OverlayMode; label: string }[] = [{ value: 0, label: 'Auto' }, { value: 1, label: 'On' }, { value: 2, label: 'Off' }];
@@ -162,6 +163,7 @@ function Producer() {
 
       <section className="mg-card flex flex-col gap-3 p-4" aria-labelledby="look-title">
         <h2 id="look-title" className="font-bold">Strip, score cards and look</h2>
+        <SavedLooks current={draft.look} onApply={(look) => edit({ look })} onError={setNotice} />
         <div className="flex flex-wrap items-center gap-3">
           <span className="w-32 text-sm">Now racing strip</span>
           <Segmented label="Now racing strip" options={MODES} value={draft.stripMode} onChange={(stripMode) => edit({ stripMode })} />

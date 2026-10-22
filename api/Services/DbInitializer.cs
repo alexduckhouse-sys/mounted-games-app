@@ -109,6 +109,18 @@ public static class DbInitializer
             );
             """);
 
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "OverlayLooks" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_OverlayLooks" PRIMARY KEY AUTOINCREMENT,
+                "OwnerUserId" TEXT NOT NULL,
+                "Name" TEXT NOT NULL,
+                "LookJson" TEXT NOT NULL DEFAULT '{{}}',
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_OverlayLooks_OwnerUserId" ON "OverlayLooks" ("OwnerUserId");
+            """);
+
         // For new tables added after the DB was first created, EnsureCreated is a no-op.
         // Make the schema additive by running CREATE TABLE IF NOT EXISTS for those.
         await db.Database.ExecuteSqlRawAsync(@"
