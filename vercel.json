@@ -1,10 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["cle1"],
-  "ignoreCommand": "[ -n \"$VERCEL_GIT_PREVIOUS_SHA\" ] && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- api Dockerfile.vercel vercel.json",
   "git": { "deploymentEnabled": { "docs/*": false } },
   "services": {
-    "api": { "root": ".", "runtime": "container", "entrypoint": "Dockerfile.vercel" }
+    "api": {
+      "root": ".", "runtime": "container", "entrypoint": "Dockerfile.vercel",
+      "ignoreCommand": "[ -n \"$VERCEL_GIT_PREVIOUS_SHA\" ] && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- api Dockerfile.vercel vercel.json"
+    }
   },
   "rewrites": [
     { "source": "/(.*)", "destination": { "service": "api" } }
