@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
+import { NeedsYouProvider } from './pages/profile/NeedsYouProvider';
 import { ThemeProvider } from './theme/ThemeContext';
 import { LiteModeProvider } from './lite/LiteModeContext';
 import { LiteMotionConfig } from './lite/LiteMotionConfig';
@@ -20,6 +21,8 @@ import { SessionsTab } from './pages/competition/SessionsTab';
 import './App.css';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
+const SignUpPage = lazy(() => import('./pages/SignUpPage').then((module) => ({ default: module.SignUpPage })));
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })));
 const CompetitionsPage = lazy(() => import('./pages/CompetitionsPage').then((module) => ({ default: module.CompetitionsPage })));
 const ScoringTab = lazy(() => import('./pages/competition/ScoringTab').then((module) => ({ default: module.ScoringTab })));
@@ -61,6 +64,7 @@ export default function App() {
     <LiteMotionConfig>
     <ThemeProvider>
       <AuthProvider>
+        <NeedsYouProvider>
         <CurrentCompetitionProvider>
         <NavExtrasProvider>
         <AgeGroupsProvider>
@@ -73,6 +77,7 @@ export default function App() {
           <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignUpPage />} />
             <Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} />
             <Route element={<AppShell />}>
               <Route index element={<StartPage />} />
@@ -111,6 +116,7 @@ export default function App() {
               <Route path="declarations" element={<DeclarationsIndexPage />} />
               <Route path="chat" element={<ChatIndexPage />} />
               <Route path="shop" element={<Navigate to="/competitions" replace />} />
+              <Route path="me" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="me/catalogue" element={<ProtectedRoute><SellerCataloguePage /></ProtectedRoute>} />
               <Route path="me/orders" element={<ProtectedRoute><CommerceOrdersPage /></ProtectedRoute>} />
               <Route path="admin" element={
@@ -146,6 +152,7 @@ export default function App() {
         </AgeGroupsProvider>
         </NavExtrasProvider>
         </CurrentCompetitionProvider>
+        </NeedsYouProvider>
       </AuthProvider>
     </ThemeProvider>
     </LiteMotionConfig>
