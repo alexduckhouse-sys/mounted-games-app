@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FAVOURITES_CHANGED, FAVOURITES_KEY, readFavourites, toggleFavourite, type FavouriteTeam } from '../lib/favourites';
+import { FAVOURITES_CHANGED, FAVOURITES_KEY, readFavourites, setFavourites as setManyFavourites, toggleFavourite, type FavouriteTeam } from '../lib/favourites';
 
 export function useFavourites() {
   const [favourites, setFavourites] = useState(readFavourites);
@@ -14,5 +14,10 @@ export function useFavourites() {
       window.removeEventListener('storage', storage);
     };
   }, []);
-  return { favourites, error, toggle: (item: FavouriteTeam) => setError(toggleFavourite(item)) };
+  return {
+    favourites, error,
+    toggle: (item: FavouriteTeam) => setError(toggleFavourite(item)),
+    /** Follow or unfollow several teams at once, e.g. a whole club. */
+    setMany: (items: FavouriteTeam[], follow: boolean) => setError(setManyFavourites(items, follow)),
+  };
 }

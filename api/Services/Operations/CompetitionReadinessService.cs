@@ -2,6 +2,7 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
@@ -56,10 +57,12 @@ public class CompetitionReadinessService(AppDbContext db, EquipmentCalculator eq
 
         var sessions = await db.Sessions.AsNoTracking()
             .Where(s => s.CompetitionId == competitionId && s.ScheduledStart != null)
-            .Include(s => s.Heats)
+            .Include(s => s.Section)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
             .OrderBy(s => s.ScheduledStart).ThenBy(s => s.Id)
             .ToListAsync(cancellationToken);
         var overlaps = FindOverlaps(sessions);
+        overlaps.AddRange(FindRiderClashes(sessions, teams));
 
         var equipment = await GetEquipmentStateAsync(competitionId, cancellationToken);
 
@@ -203,8 +206,7 @@ public class CompetitionReadinessService(AppDbContext db, EquipmentCalculator eq
                 Session = session,
                 Arena = ArenaBucket(session),
                 Start = session.ScheduledStart!.Value,
-                Minutes = session.DurationMinutes
-                    ?? session.Heats.Sum(h => h.DurationMinutes ?? session.MinutesPerHeat ?? 0),
+                Minutes = SessionMinutes(session),
             })
             .Where(x => x.Minutes > 0)
             .ToList();
@@ -226,11 +228,105 @@ public class CompetitionReadinessService(AppDbContext db, EquipmentCalculator eq
         return result;
     }
 
+    private static int SessionMinutes(Session session) =>
+        session.DurationMinutes
+        ?? session.Heats.Sum(h => h.DurationMinutes ?? session.MinutesPerHeat ?? 0);
+
+    /// <summary>
+    /// Finds a rider declared in two teams that race in different arenas at overlapping times.
+    /// Matches on the rider's name only (trimmed, case-insensitive, spaces collapsed): trainers and
+    /// pony names are ignored, because ponies often share names. Reserves are left out, since they
+    /// only ride if called on. Results use the same shape as session overlaps, so they appear under
+    /// the arena clashes: the first session name is prefixed with the rider and the arena field
+    /// names both arenas.
+    /// </summary>
+    private static List<SessionOverlapDto> FindRiderClashes(
+        IReadOnlyList<Session> sessions, IReadOnlyList<Team> teams)
+    {
+        var ridersByTeam = teams.ToDictionary(t => t.Id, t =>
+        {
+            var latest = t.DeclarationForms.OrderByDescending(d => d.SubmittedAt).FirstOrDefault();
+            return (latest?.Riders ?? [])
+                .Where(r => !r.IsReserve && !string.IsNullOrWhiteSpace(r.FullName))
+                .Select(r => CollapseSpaces(r.FullName))
+                .DistinctBy(name => name.ToLowerInvariant())
+                .ToList();
+        });
+        var teamsById = teams.ToDictionary(t => t.Id);
+
+        var slots = new List<RiderSlot>();
+        foreach (var session in sessions)
+        {
+            var arena = ArenaBucket(session);
+            if (arena == UnsetArena) continue;
+            var cursor = session.ScheduledStart!.Value;
+            var sessionMinutes = SessionMinutes(session);
+            foreach (var heat in session.Heats.OrderBy(h => h.OrderIndex).ThenBy(h => h.Id))
+            {
+                var heatMinutes = heat.DurationMinutes ?? session.MinutesPerHeat ?? 0;
+                var start = heat.ScheduledStart ?? cursor;
+                var end = start.AddMinutes(heatMinutes);
+                if (heatMinutes > 0) cursor = end;
+                else
+                {
+                    // No heat length to go on: treat the heat as running for the whole session.
+                    if (sessionMinutes <= 0) continue;
+                    start = session.ScheduledStart!.Value;
+                    end = start.AddMinutes(sessionMinutes);
+                }
+                foreach (var entry in heat.Entries)
+                {
+                    if (!ridersByTeam.TryGetValue(entry.TeamId, out var riders)) continue;
+                    var sectionName = teamsById[entry.TeamId].Section?.DisplayName
+                        ?? session.Section?.DisplayName ?? string.Empty;
+                    foreach (var rider in riders)
+                        slots.Add(new RiderSlot(rider, session, sectionName, arena, start, end));
+                }
+            }
+        }
+
+        var result = new List<SessionOverlapDto>();
+        var reported = new HashSet<(string, int, int)>();
+        foreach (var group in slots.GroupBy(s => s.Rider.ToLowerInvariant()))
+        {
+            var list = group.OrderBy(s => s.Start).ThenBy(s => s.Session.Id).ToList();
+            for (var i = 0; i < list.Count; i++)
+            for (var j = i + 1; j < list.Count; j++)
+            {
+                var first = list[i];
+                var second = list[j];
+                if (first.Session.Id == second.Session.Id) continue;
+                if (string.Equals(first.Arena, second.Arena, StringComparison.OrdinalIgnoreCase)) continue;
+                if (first.Start >= second.End || second.Start >= first.End) continue;
+                if (!reported.Add((group.Key, Math.Min(first.Session.Id, second.Session.Id),
+                        Math.Max(first.Session.Id, second.Session.Id)))) continue;
+                result.Add(new SessionOverlapDto(
+                    first.Session.Id, $"{first.Rider}: {SessionLabel(first)}",
+                    second.Session.Id, SessionLabel(second),
+                    $"{first.Arena} and {second.Arena}",
+                    first.Start > second.Start ? first.Start : second.Start,
+                    first.End < second.End ? first.End : second.End));
+            }
+        }
+        return result;
+    }
+
+    private static string SessionLabel(RiderSlot slot) =>
+        slot.SectionName.Length == 0 ? slot.Session.Name : $"{slot.Session.Name} ({slot.SectionName})";
+
+    private static string CollapseSpaces(string value) =>
+        Regex.Replace(value.Trim(), @"\s+", " ");
+
+    private const string UnsetArena = "Arena not set";
+
     private static string ArenaBucket(Session session)
     {
         var arena = (session.ArenaName ?? session.Location ?? string.Empty).Trim();
-        return arena.Length == 0 ? "Arena not set" : arena;
+        return arena.Length == 0 ? UnsetArena : arena;
     }
+
+    private sealed record RiderSlot(
+        string Rider, Session Session, string SectionName, string Arena, DateTime Start, DateTime End);
 
     private sealed record EquipmentState(
         IReadOnlyList<EquipmentChecklistItemDto> Checklist,

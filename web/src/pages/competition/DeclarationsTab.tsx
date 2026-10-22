@@ -57,7 +57,7 @@ function readDecDraft(competitionId: number): DecFormDraft | null {
 
 export function DeclarationsTab() {
   const { competition } = useCompetition();
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, canOrganise } = useAuth();
   const [forms, setForms] = useState<DeclarationForm[]>([]);
   const persistedDraft = readDecDraft(competition.id);
   const [draftTeam, setDraftTeam] = useState<Team | null>(() => {
@@ -89,13 +89,13 @@ export function DeclarationsTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only on mount
   }, []);
 
-  // Trainers can submit for any team that's either assigned to them or unassigned.
-  // (Teams claimed by a different trainer stay hidden so two trainers don't fight over a roster.)
+  // Trainers submit for the teams they coach. Admins and people who organise this competition can submit for any
+  // team; the API enforces the same rule.
   const myTeams = useMemo(() => {
-    if (hasRole('Admin')) return competition.teams;
+    if (hasRole('Admin') || canOrganise(competition)) return competition.teams;
     if (!user) return [];
-    return competition.teams.filter((t) => t.trainerUserId == null || t.trainerUserId === user.id);
-  }, [competition.teams, hasRole, user]);
+    return competition.teams.filter((t) => t.trainerUserId === user.id);
+  }, [competition, hasRole, canOrganise, user]);
 
   useEffect(() => {
     api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id } })

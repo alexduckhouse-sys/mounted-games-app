@@ -8,7 +8,11 @@ namespace MountedGames.Api.Hubs;
 public class LiveHub(ViewerRegistry viewers) : Hub
 {
     public Task<WatchStreamResponse> WatchStream(int competitionId, int streamId) =>
-        viewers.WatchAsync(Context.ConnectionId, competitionId, streamId, Context.ConnectionAborted);
+        viewers.WatchAsync(Context.ConnectionId, competitionId, streamId, Context.ConnectionAborted, AnonymousViewerIp());
+
+    // Signed-in viewers are accountable already; anonymous ones are capped per address.
+    private string? AnonymousViewerIp() =>
+        Context.User?.Identity?.IsAuthenticated == true ? null : Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString();
 
     public Task AnswerStream(string watchId, string sdpAnswer) =>
         viewers.AnswerAsync(Context.ConnectionId, watchId, sdpAnswer, Context.ConnectionAborted);

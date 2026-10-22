@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { competition, heat, session } from '../../test/factories';
 import { dayKey } from '../../lib/timetableDay';
@@ -13,11 +13,11 @@ vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => 
 const day = dayKey(new Date());
 const reload = vi.fn();
 
-function setCompetition(extra: Record<string, unknown> = {}, updatedAt: Date | null = null) {
+function setCompetition(extra: Record<string, unknown> = {}, updatedAt: Date | null = null, secondArena = 'Arena Two') {
   // Session 3 finished first; session 1 started six minutes late, which pushes session 2 back by the same.
   const sessions = [
     session(1, { status: 1, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, startedAt: `${day}T10:06:00`, heats: [heat(11, { sessionId: 1, orderIndex: 0, label: 'Heat 1' })] }),
-    session(2, { status: 0, arenaName: 'Arena Two', scheduledStart: `${day}T11:00:00`, heats: [heat(22, { sessionId: 2, orderIndex: 0, label: 'Heat 2' })] }),
+    session(2, { status: 0, arenaName: secondArena, scheduledStart: `${day}T11:00:00`, heats: [heat(22, { sessionId: 2, orderIndex: 0, label: 'Heat 2' })] }),
     session(3, { status: 2, orderIndex: 0, arenaName: 'Finished Arena', scheduledStart: `${day}T08:00:00`, heats: [heat(33, { sessionId: 3, label: 'Heat 3', finishedAt: `${day}T08:30:00` })] }),
   ];
   state.value = { competition: competition({ startDate: day, endDate: day, sessions, ...extra }), reload, updatedAt };
@@ -28,12 +28,19 @@ function renderBoard(ui = <TimetableBoard />) {
 }
 
 beforeEach(() => {
+  // The fixture is a morning at the venue; pin the clock so the late-running maths doesn't depend on when the tests run.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(`${day}T09:00:00`));
   localStorage.clear();
   reload.mockClear();
   setCompetition();
 });
 
+afterEach(() => { vi.useRealTimers(); });
+
 it('shows a late row with its delay and the planned time struck through', () => {
+  // Delays cascade within an arena, so the second session shares the first one's arena.
+  setCompetition({}, null, 'Main Arena');
   const { container } = renderBoard();
   const late = container.querySelector('.tt-late')!;
   expect(late).toHaveTextContent('Heat 2');
@@ -42,7 +49,7 @@ it('shows a late row with its delay and the planned time struck through', () => 
   // Screen readers get the planned time, the new time and the status in words.
   expect(late).toHaveTextContent(/Planned 11:00.*, now 11:06/);
   expect(late).toHaveTextContent('+6 min');
-  expect(screen.getByText('Arena Two · 6 min late')).toBeVisible();
+  expect(screen.getAllByText('Main Arena · 6 min late').length).toBeGreaterThan(0);
 });
 
 it('marks the running heat "ON NOW" without a planned-time note', () => {

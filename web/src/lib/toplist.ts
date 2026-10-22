@@ -120,10 +120,13 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   });
 
   const finalGroups = buildFinalGroups(sessions, sectionId);
-  const ordered = [...standings].sort((a, b) => b.totalPoints - a.totalPoints);
+  // Once finals exist the final a team is in (A, then B, then C) decides its place before points do.
+  const tier = (row: StandingRow) => row.finalTier ?? Number.MAX_SAFE_INTEGER;
+  const level = (a: StandingRow, b: StandingRow) => tier(a) === tier(b) && a.totalPoints === b.totalPoints;
+  const ordered = [...standings].sort((a, b) => tier(a) - tier(b) || b.totalPoints - a.totalPoints);
   const rows: ToplistRow[] = ordered.map((row) => {
-    const position = ordered.findIndex((other) => other.totalPoints === row.totalPoints) + 1;
-    const joint = ordered.filter((other) => other.totalPoints === row.totalPoints).length > 1;
+    const position = ordered.findIndex((other) => level(other, row)) + 1;
+    const joint = ordered.filter((other) => level(other, row)).length > 1;
     return { teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position, joint, runoff: false, out: false, needed: null, racesLeft: racesLeft.get(row.teamId) ?? 0 };
   });
 

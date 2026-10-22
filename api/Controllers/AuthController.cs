@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services;
 
 namespace MountedGames.Api.Controllers;
 
@@ -168,6 +169,39 @@ public class AuthController : ControllerBase
         var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
         return new AuthResponse(token, expiresAt,
             new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList()));
+    }
+
+    /// <summary>
+    /// Deletes the signed-in person's own account (see <see cref="AccountDeletionService"/> for what happens to
+    /// their data). Needs the current password. The shared admin account and the last Admin are refused.
+    /// </summary>
+    [EnableRateLimiting("auth")]
+    [HttpDelete("me")]
+    [Authorize]
+    public async Task<IActionResult> DeleteMe(DeleteAccountRequest req, [FromServices] AccountDeletionService deletion, [FromServices] LiveAccounts accounts)
+    {
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+
+        // Signing in with the admin key gives a token for the shared organiser account, which has no password of its own to confirm.
+        if (string.Equals(user.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase) || !await _users.HasPasswordAsync(user))
+            return Conflict(new { message = "This account signs in without a password, so it can't be deleted here. Ask an administrator." });
+        if (string.IsNullOrEmpty(req.Password))
+            return BadRequest(new { message = "Enter your current password to delete your account." });
+
+        // Counts towards the same lockout as signing in, so this can't be used to guess the password.
+        var check = await _signIn.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: true);
+        if (check.IsLockedOut)
+            return BadRequest(new { message = "Too many wrong passwords. Try again in a few minutes." });
+        if (!check.Succeeded)
+            return BadRequest(new { message = "That password isn't right." });
+
+        if (await deletion.IsLastAdminAsync(user, Roles.Admin))
+            return Conflict(new { message = "This is the only administrator account. Make someone else an administrator first." });
+
+        await deletion.DeleteAsync(user, HttpContext.RequestAborted);
+        accounts.Forget(user.Id);
+        return NoContent();
     }
 
     [HttpGet("me")]
