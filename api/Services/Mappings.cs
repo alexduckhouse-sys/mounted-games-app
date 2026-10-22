@@ -18,16 +18,17 @@ public static class Mappings
         c.Teams?.Count ?? 0,
         c.Sessions?.Count ?? 0);
 
-    public static CompetitionSectionDto ToDto(this CompetitionSection s) =>
+    /// <param name="activeSignups">Paid and pending entries: the ones that count towards <c>MaxParticipants</c>.</param>
+    public static CompetitionSectionDto ToDto(this CompetitionSection s, int activeSignups = 0) =>
         new(s.Id, s.CompetitionId, s.Format, s.AgeGroup, s.DisplayName,
-            s.RunoffRaceName, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants, s.FinalistCount);
+            s.RunoffRaceName, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants, s.FinalistCount, activeSignups);
 
     public static SectionSignupDto ToDto(this SectionSignup s) => new(
         s.Id, s.CompetitionSectionId,
         s.Section?.DisplayName ?? string.Empty,
         s.FullName, s.PonyClubName, s.ContactInfo,
         s.AmountMinor, s.Status, s.PaidAt, s.TeamId, s.CreatedAt,
-        s.UseInitialOnly, s.NoFilming);
+        s.UseInitialOnly, s.NoFilming, s.TeamName, s.IsWholeTeam);
 
     public static MySignupDto ToMyDto(this SectionSignup s, Team? team = null) => new(
         s.Id,

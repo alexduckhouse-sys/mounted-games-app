@@ -71,7 +71,8 @@ public record FormedTeamPreview(
     int ClubId,
     string Suffix,
     IReadOnlyList<int> SignupIds,
-    IReadOnlyList<string> RiderNames);
+    IReadOnlyList<string> RiderNames,
+    string? TeamName = null);
 
 public record FormTeamsResult(
     bool Preview,
@@ -101,7 +102,8 @@ public record UpsertRaceTemplateRequest(
 public record CompetitionSectionDto(
     int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName,
     string? RunoffRaceName, bool UsesRaceFinals, int PriceMinor,
-    int? MaxParticipants = null, int? FinalistCount = null);
+    int? MaxParticipants = null, int? FinalistCount = null,
+    int ActiveSignupsCount = 0);
 public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName,
     string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0,
     int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null);
@@ -113,11 +115,13 @@ public record SectionSignupDto(
     string FullName, string? PonyClubName, string? ContactInfo,
     int AmountMinor, SignupPaymentStatus Status, DateTime? PaidAt,
     int? TeamId, DateTime CreatedAt,
-    bool UseInitialOnly = false, bool NoFilming = false);
+    bool UseInitialOnly = false, bool NoFilming = false,
+    string? TeamName = null, bool IsWholeTeam = false);
 
 public record CreateSectionSignupRequest(
     string FullName, string? PonyClubName, string? ContactInfo,
-    string? TeamCode = null, bool UseInitialOnly = false, bool NoFilming = false);
+    string? TeamCode = null, bool UseInitialOnly = false, bool NoFilming = false,
+    [StringLength(200)] string? TeamName = null, bool WholeTeam = false);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 

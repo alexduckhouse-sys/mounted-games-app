@@ -122,6 +122,8 @@ export interface CompetitionSection {
   priceMinor?: number;
   /** Cap on active signups (null/undefined = unlimited). */
   maxParticipants?: number | null;
+  /** Paid and pending entries, the ones that take a seat. Public, so everyone sees the real seats left. */
+  activeSignupsCount?: number;
 }
 
 export type RaceRoundStage = 0 | 1 | 2; // None / Qualifier / Final
@@ -302,6 +304,10 @@ export interface SectionSignup {
   createdAt: string;
   useInitialOnly?: boolean;
   noFilming?: boolean;
+  /** A custom team name; riders who share one form a team of that name. */
+  teamName?: string | null;
+  /** A team manager or trainer entering a whole team in one go. */
+  isWholeTeam?: boolean;
 }
 
 export interface ShopPost {

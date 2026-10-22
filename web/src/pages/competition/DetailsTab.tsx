@@ -238,22 +238,30 @@ function SectionSignupCard({
   /** Only organisers receive the signup list, so places taken is only known to them. */
   countsKnown: boolean;
 }) {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [createdSignup, setCreatedSignup] = useState<SectionSignup | null>(null);
   const [open, setOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [ponyClub, setPonyClub] = useState('');
   const [contact, setContact] = useState('');
   const [teamCode, setTeamCode] = useState('');
+  const [teamName, setTeamName] = useState('');
+  const [wholeTeam, setWholeTeam] = useState(false);
   const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const signups = allSignups.filter((s) => s.competitionSectionId === section.id);
-  const paidCount = signups.filter((s) => s.status === 1).length;
+  // Paid and pending entries both take a seat (the API counts them the same way). Only organisers load the
+  // signup list, so everyone else reads the count the API sends with the section.
+  const takenSeats = allSignups.length > 0
+    ? signups.filter((s) => s.status === 0 || s.status === 1).length
+    : section.activeSignupsCount ?? 0;
+  const known = countsKnown || section.activeSignupsCount != null;
+  const canEnterWholeTeam = section.format === 2 && (hasRole('Manager') || hasRole('Trainer'));
   const max = section.maxParticipants;
-  const seatsLeft = max ? Math.max(0, max - paidCount) : null;
+  const seatsLeft = max ? Math.max(0, max - takenSeats) : null;
   const full = seatsLeft != null && seatsLeft === 0;
 
   async function submit() {
@@ -266,9 +274,11 @@ function SectionSignupCard({
         ponyClubName: ponyClub.trim() || null,
         contactInfo: contact.trim() || null,
         teamCode: teamCode.trim() || null,
+        teamName: teamName.trim() || null,
+        wholeTeam: wholeTeam && canEnterWholeTeam,
         ...privacy,
       });
-      setFullName(''); setPonyClub(''); setContact(''); setTeamCode('');
+      setFullName(''); setPonyClub(''); setContact(''); setTeamCode(''); setTeamName(''); setWholeTeam(false);
       setPrivacy({ useInitialOnly: false, noFilming: false });
       setCreatedSignup(signup);
       setDone(signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.');
@@ -290,7 +300,7 @@ function SectionSignupCard({
     );
   }
 
-  const places = max ? Math.round((paidCount / max) * 100) : 30;
+  const places = max ? Math.round((takenSeats / max) * 100) : 30;
   const scarce = seatsLeft != null && seatsLeft > 0 && seatsLeft <= 4;
   const wide = open || !!createdSignup || (canManage && signups.length > 0);
   return (
@@ -299,15 +309,15 @@ function SectionSignupCard({
         <span className="mg-display flex-1 text-base font-bold uppercase leading-none tracking-[0.03em] text-[rgb(var(--mg-heading))]">{section.displayName}</span>
         <span className="mg-display text-base font-bold leading-none">{priceLabel(section.priceMinor)}</span>
       </div>
-      {countsKnown && (
+      {known && (
         <div className="h-1 overflow-hidden rounded-sm bg-[rgb(var(--mg-tint))]" aria-hidden="true">
           <div className={`h-full ${full ? 'bg-[rgb(var(--mg-dash))]' : scarce ? 'bg-[rgb(var(--mg-late-time))]' : 'bg-[rgb(var(--mg-heading))]'}`} style={{ width: `${places}%` }} />
         </div>
       )}
       <span className={`text-xs font-medium ${scarce ? 'text-[rgb(var(--mg-late-ink))]' : 'text-[rgb(var(--mg-muted))]'}`}>
-        {!countsKnown ? (max ? `Up to ${max} places` : 'No limit')
-          : full ? 'Full' : max ? `${seatsLeft} of ${max} places left` : `${paidCount} entered · no limit`}
-        {countsKnown && <span className="sr-only">. {paidCount} in{max ? `, ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left` : `, ${signups.length} signup${signups.length === 1 ? '' : 's'}`}</span>}
+        {!known ? (max ? `Up to ${max} places` : 'No limit')
+          : full ? 'Full' : max ? `${seatsLeft} of ${max} places left` : `${takenSeats} entered · no limit`}
+        {known && <span className="sr-only">. {takenSeats} in{max ? `, ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left` : `, ${signups.length} signup${signups.length === 1 ? '' : 's'}`}</span>}
       </span>
       {hideJoin ? (
         <p className="rf-note !p-0 italic">Admin view — entrants only.</p>
@@ -326,6 +336,15 @@ function SectionSignupCard({
           <label className="rf-fld">Your full name<input placeholder="Your full name" value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
           <label className="rf-fld">Pony Club<input placeholder="Pony Club (optional)" value={ponyClub} onChange={(e) => setPonyClub(e.target.value)} /></label>
           <label className="rf-fld">Phone or email<input placeholder="Phone / email (optional)" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
+          {canEnterWholeTeam && (
+            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
+              <input type="checkbox" checked={wholeTeam} onChange={(e) => setWholeTeam(e.target.checked)} />
+              Enter a whole team
+            </label>
+          )}
+          <label className="rf-fld">{wholeTeam ? 'Team name' : 'Team name (optional)'}
+            <input placeholder={wholeTeam ? 'e.g. Welsh Dragons' : 'Riders with the same team name are put together'} value={teamName} onChange={(e) => setTeamName(e.target.value)} />
+          </label>
           <label className="rf-fld">Team code
             <input
               className="font-mono uppercase"
@@ -339,7 +358,7 @@ function SectionSignupCard({
             <button
               type="button"
               onClick={submit}
-              disabled={busy || !fullName.trim()}
+              disabled={busy || !fullName.trim() || (wholeTeam && !teamName.trim())}
               className="mg-btn mg-btn-primary flex-1 !min-h-11"
             >
               <Check className="h-4 w-4" aria-hidden="true" /> {busy ? 'Joining…' : 'Confirm'}

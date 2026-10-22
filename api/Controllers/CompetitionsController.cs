@@ -127,6 +127,7 @@ public class CompetitionsController : ControllerBase
             .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return NotFound();
+        var signupCounts = await ActiveSignupCountsAsync(id);
 
         return new CompetitionDetail(
             c.Id, c.Name, c.Location, c.Description,
@@ -134,7 +135,7 @@ public class CompetitionsController : ControllerBase
             c.What3Words, c.AppleMapsUrl,
             c.StartDate, c.EndDate,
             c.IsActive, c.IsArchived,
-            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
+            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
             c.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
@@ -168,6 +169,7 @@ public class CompetitionsController : ControllerBase
             .Where(t => t.CompetitionId == id && teamIds.Contains(t.Id))
             .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer)
             .ToListAsync();
+        var signupCounts = await ActiveSignupCountsAsync(id);
 
         return new CompetitionDetail(
             c.Id, c.Name, c.Location, c.Description,
@@ -175,7 +177,7 @@ public class CompetitionsController : ControllerBase
             c.What3Words, c.AppleMapsUrl,
             c.StartDate, c.EndDate,
             c.IsActive, c.IsArchived,
-            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
+            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
             teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
@@ -372,6 +374,15 @@ public class CompetitionsController : ControllerBase
         return section.ToDto();
     }
 
+    /// <summary>Entries that count towards a section's cap (paid and pending), by section id.</summary>
+    private async Task<Dictionary<int, int>> ActiveSignupCountsAsync(int competitionId)
+        => await _db.SectionSignups.AsNoTracking()
+            .Where(s => s.Section!.CompetitionId == competitionId
+                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending))
+            .GroupBy(s => s.CompetitionSectionId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count);
+
     [HttpPut("{id:int}/sections/{sectionId:int}")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]
@@ -388,7 +399,7 @@ public class CompetitionsController : ControllerBase
         // always sends the full section, and null is how an organiser unsets it.
         section.FinalistCount = req.FinalistCount;
         await _db.SaveChangesAsync();
-        return section.ToDto();
+        return section.ToDto((await ActiveSignupCountsAsync(id)).GetValueOrDefault(section.Id));
     }
 
     [HttpDelete("{id:int}/sections/{sectionId:int}")]
@@ -857,6 +868,7 @@ public class CompetitionsController : ControllerBase
             .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstAsync(c => c.Id == id);
 
+        var signupCounts = await ActiveSignupCountsAsync(id);
         foreach (var s in createdSessions)
         {
             var dto = refreshed.Sessions.First(x => x.Id == s.Id).ToDto();
@@ -869,7 +881,7 @@ public class CompetitionsController : ControllerBase
             refreshed.What3Words, refreshed.AppleMapsUrl,
             refreshed.StartDate, refreshed.EndDate,
             refreshed.IsActive, refreshed.IsArchived,
-            refreshed.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
+            refreshed.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
             refreshed.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             refreshed.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList());
     }

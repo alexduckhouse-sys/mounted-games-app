@@ -41,6 +41,18 @@ public class SignupController : ControllerBase
             return StatusCode(403, new { message = "Signups are closed for this competition." });
         var name = req.FullName?.Trim();
         if (string.IsNullOrEmpty(name)) return BadRequest(new { message = "Full name required." });
+        var teamName = req.TeamName?.Trim();
+        if (string.IsNullOrEmpty(teamName)) teamName = null;
+        if (req.WholeTeam)
+        {
+            // A whole team is entered by someone who runs a team, in a team section.
+            if (section.Format != SectionFormat.Teams)
+                return BadRequest(new { message = "Only team sections take a whole-team entry." });
+            if (!User.IsInRole(Roles.Manager) && !User.IsInRole(Roles.Trainer))
+                return StatusCode(403, new { message = "Only a team manager or trainer can enter a whole team." });
+            if (teamName is null)
+                return BadRequest(new { message = "Give the team a name." });
+        }
 
         // Honour the section's signup cap, counting Paid + Pending only.
         if (section.MaxParticipants.HasValue)
@@ -81,6 +93,8 @@ public class SignupController : ControllerBase
             UserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
             FullName = name.Length > 200 ? name[..200] : name,
             PonyClubName = req.PonyClubName?.Trim(),
+            TeamName = teamName,
+            IsWholeTeam = req.WholeTeam,
             ContactInfo = req.ContactInfo?.Trim(),
             UseInitialOnly = req.UseInitialOnly,
             NoFilming = req.NoFilming,
@@ -214,51 +228,75 @@ public class SignupController : ControllerBase
         };
         var ridersPerTeam = Math.Clamp(req.RidersPerTeam ?? defaultSize, 1, 12);
 
-        var paidSignups = await _db.SectionSignups
-            .Where(s => s.CompetitionSectionId == sectionId && s.Status == SignupPaymentStatus.Paid)
-            .OrderBy(s => s.CreatedAt)
+        // Teams that may be replaced (unused: no heats, no declarations) free their signups to be re-formed.
+        // Signups already on a team that stays are left where they are, so nobody lands on two teams.
+        var sectionTeams = await _db.Teams
+            .Include(t => t.HeatEntries)
+            .Include(t => t.DeclarationForms)
+            .Where(t => t.CompetitionSectionId == sectionId)
             .ToListAsync();
+        var replaceable = req.ReplaceExisting
+            ? sectionTeams.Where(t => t.HeatEntries.Count == 0 && t.DeclarationForms.Count == 0).ToList()
+            : new List<Team>();
+        var replaceableIds = replaceable.Select(t => t.Id).ToHashSet();
+
+        var paidSignups = (await _db.SectionSignups
+                .Where(s => s.CompetitionSectionId == sectionId && s.Status == SignupPaymentStatus.Paid)
+                .OrderBy(s => s.CreatedAt)
+                .ToListAsync())
+            .Where(s => s.TeamId == null || replaceableIds.Contains(s.TeamId.Value))
+            .ToList();
         if (paidSignups.Count == 0)
             return BadRequest(new { message = "No paid signups to form teams from." });
 
-        // Resolve each signup's club. PonyClubName is free text — try a
-        // case-insensitive exact match against the Clubs table first; fall
-        // back to "Unaffiliated" if blank or no match.
+        // Resolve each signup's club from its free-text PonyClubName (case-insensitive). A name that
+        // isn't a club yet becomes its own club when the teams are formed, so different new clubs
+        // are never merged; only a blank name goes to "Unaffiliated".
         var allClubs = await _db.Clubs.ToListAsync();
         var clubsByName = allClubs.ToDictionary(c => c.Name, c => c, StringComparer.OrdinalIgnoreCase);
-        var unaffiliated = allClubs.FirstOrDefault(c => string.Equals(c.Name, "Unaffiliated", StringComparison.OrdinalIgnoreCase));
-        if (unaffiliated is null)
+        string ClubNameOf(SectionSignup s)
         {
-            unaffiliated = new Club { Name = "Unaffiliated" };
-            _db.Clubs.Add(unaffiliated);
+            var typed = (s.PonyClubName ?? string.Empty).Trim();
+            return typed.Length == 0 ? "Unaffiliated" : typed;
+        }
+        if (!req.Preview)
+        {
+            foreach (var typed in paidSignups.Select(ClubNameOf).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (clubsByName.ContainsKey(typed)) continue;
+                var club = new Club { Name = typed };
+                _db.Clubs.Add(club);
+                clubsByName[typed] = club;
+                allClubs.Add(club);
+            }
             await _db.SaveChangesAsync();
-            allClubs.Add(unaffiliated);
-            clubsByName[unaffiliated.Name] = unaffiliated;
         }
 
-        // Bin by club then split into teams of `ridersPerTeam`.
-        var byClub = paidSignups
-            .GroupBy(s =>
-            {
-                var name = (s.PonyClubName ?? string.Empty).Trim();
-                return string.IsNullOrEmpty(name) || !clubsByName.TryGetValue(name, out var club)
-                    ? unaffiliated.Id : club.Id;
-            })
-            .OrderBy(g => allClubs.First(c => c.Id == g.Key).Name)
-            .ToList();
-
+        // Bin by club, then: whole-team entries and custom-named teams stay together as the team they
+        // asked for; everyone else is split into teams of `ridersPerTeam`.
         var previews = new List<FormedTeamPreview>();
-        foreach (var group in byClub)
+        foreach (var group in paidSignups.GroupBy(ClubNameOf, StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(g => clubsByName.TryGetValue(g.Key, out var known) ? known.Name : g.Key, StringComparer.OrdinalIgnoreCase))
         {
-            var club = allClubs.First(c => c.Id == group.Key);
-            var ordered = group.OrderBy(s => s.CreatedAt).ToList();
+            var known = clubsByName.GetValueOrDefault(group.Key);
+            var clubName = known?.Name ?? group.Key;
+            var clubId = known?.Id ?? 0;
+
+            foreach (var whole in group.Where(s => s.IsWholeTeam))
+                previews.Add(new FormedTeamPreview(clubName, clubId, string.Empty,
+                    new[] { whole.Id }, new[] { whole.FullName }, whole.TeamName));
+            var singles = group.Where(s => !s.IsWholeTeam).OrderBy(s => s.CreatedAt).ToList();
+            foreach (var named in singles.Where(s => !string.IsNullOrWhiteSpace(s.TeamName))
+                         .GroupBy(s => s.TeamName!.Trim(), StringComparer.OrdinalIgnoreCase))
+                previews.Add(new FormedTeamPreview(clubName, clubId, string.Empty,
+                    named.Select(x => x.Id).ToList(), named.Select(x => x.FullName).ToList(), named.Key));
+            var ordered = singles.Where(s => string.IsNullOrWhiteSpace(s.TeamName)).ToList();
             for (var i = 0; i < ordered.Count; i += ridersPerTeam)
             {
                 var slice = ordered.Skip(i).Take(ridersPerTeam).ToList();
-                var suffixIdx = i / ridersPerTeam;
-                var suffix = ((char)('A' + suffixIdx)).ToString();
+                var suffix = ((char)('A' + i / ridersPerTeam)).ToString();
                 previews.Add(new FormedTeamPreview(
-                    club.Name, club.Id, suffix,
+                    clubName, clubId, suffix,
                     slice.Select(x => x.Id).ToList(),
                     slice.Select(x => x.FullName).ToList()));
             }
@@ -269,18 +307,10 @@ public class SignupController : ControllerBase
             return new FormTeamsResult(true, ridersPerTeam, paidSignups.Count, previews, Array.Empty<TeamDto>());
         }
 
-        if (req.ReplaceExisting)
+        if (replaceable.Count > 0)
         {
-            // Drop teams that were previously auto-formed for this section
-            // and were never used (no heat entries, no dec forms).
-            var sectionTeams = await _db.Teams
-                .Include(t => t.HeatEntries)
-                .Include(t => t.DeclarationForms)
-                .Where(t => t.CompetitionSectionId == sectionId)
-                .ToListAsync();
-            foreach (var t in sectionTeams)
+            foreach (var t in replaceable)
             {
-                if (t.HeatEntries.Count > 0 || t.DeclarationForms.Count > 0) continue;
                 // Detach signups so we can re-bin them.
                 var linkedSignups = await _db.SectionSignups
                     .Where(s => s.TeamId == t.Id).ToListAsync();
@@ -300,7 +330,7 @@ public class SignupController : ControllerBase
                 .ToListAsync();
             var suffix = preview.Suffix;
             var bump = 0;
-            while (existingSuffixes.Contains(suffix, StringComparer.OrdinalIgnoreCase))
+            while (suffix.Length > 0 && existingSuffixes.Contains(suffix, StringComparer.OrdinalIgnoreCase))
             {
                 bump++;
                 suffix = ((char)('A' + (preview.Suffix[0] - 'A') + bump)).ToString();
@@ -313,7 +343,7 @@ public class SignupController : ControllerBase
                 CompetitionSectionId = sectionId,
                 ClubId = preview.ClubId,
                 Suffix = suffix,
-                DisplayName = $"{preview.ClubName} {suffix}".Trim(),
+                DisplayName = preview.TeamName ?? $"{preview.ClubName} {suffix}".Trim(),
                 BibColour = allClubs.First(c => c.Id == preview.ClubId).BibColour,
             };
             _db.Teams.Add(team);
