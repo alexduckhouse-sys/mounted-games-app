@@ -1,5 +1,30 @@
 # Project decisions
 
+## 2026-10-22: Deleting your own account
+- Why: people must be able to remove themselves, and the privacy page promises it. `DELETE /api/auth/me` with the current password in the body does it (the same lockout as sign-in applies to wrong guesses).
+- Refused: the shared admin account and any account with no password (admin-key sessions), with a message to ask an administrator; the last account in the Admin role.
+- Rule: private data goes, event history stays with the person removed, ownership links are cleared. Each step is explicit in `AccountDeletionService`, not left to foreign-key cascades.
+  - Deleted: trainer notes, push subscriptions, overlay looks, team supporter requests, competition team memberships, the saved rider roster (other people's children; declarations already made keep their own copy), private marketplace messages they wrote, sign-in roles/claims/logins/tokens.
+  - Anonymised, kept: chat messages, marketplace posts, comments and reports (author link cleared, name becomes "Deleted user", IP address and post contact details cleared); declaration forms (`SubmittedByUserId` cleared); section signups (a payment record: account link and contact details cleared, the payer's name stays); private messages sent to them stay for their author, no longer addressed to anyone.
+  - Ownership cleared: `Competition.CreatedByUserId` and `Team.TrainerUserId` become null. The competition or team carries on, an admin can run it, and a team shows as unclaimed.
+  - Left as they are: audit columns that hold a bare user id with no foreign key (scoring audit, rulebook and overlay "updated by", `CompetitionCollaborator.AddedByUserId`, IP block creator, stream starter). With the account gone the id points at nobody.
+  - Kept as an emptied shell (no migration): seasons, team profiles, season publications, event team links, catalogue items and event orders reference the account with non-nullable restricted keys. If the account owns any, the row stays but is anonymised in place: email and name replaced, phone and password cleared, roles removed, locked out for good, and catalogue items switched off. Everything else above still happens. The username is freed for reuse.
+- Sessions end with the account: `LiveAccounts` turns away a token whose account is gone or emptied (checked on each request, cached for 60 seconds, so another API instance may accept it for up to a minute).
+- Rejected: always anonymising in place (leaves a row for every leaver); cascading deletes through seasons and orders (would erase published results and payment records other people rely on); a migration to make those keys nullable (not worth it for this change; revisit if shells pile up).
+- Files: `api/Services/AccountDeletionService.cs`, `api/Controllers/AuthController.cs`, `tests/MountedGames.Api.Tests/Auth/AccountDeletionTests.cs`, `web/src/pages/AccountPage.tsx`.
+
+## 2026-10-22: Raw IP addresses are kept for 30 days
+- Why: addresses on chat messages and marketplace posts, comments and reports exist so an admin can block an abusive poster. They shouldn't sit in the database for ever.
+- Rule: after 30 days (`Privacy:IpRetentionDays`) `IpRetention` replaces each address with `h1:` plus a shortened HMAC-SHA256 of it, keyed from `Privacy:IpHashKey` (or derived from the JWT key). It runs shortly after start-up and every six hours, because the API scales to zero. A hashed address can't be blocked; the block action says so.
+- Rejected: plain SHA-256 (the IPv4 space is small enough to reverse); clearing the value (loses the ability to spot a repeat poster inside the same event).
+- Files: `api/Services/IpRetention.cs`, `api/Controllers/ChatController.cs`.
+
+## 2026-10-22: Declarations need a coach or an organiser
+- Why: any Trainer, Manager or Member could submit or overwrite a declaration for a team nobody had claimed.
+- Rule: `POST /api/declaration-forms` needs the team's coach (`TrainerUserId`), an admin, the competition's owning Trainer or someone on its team. The web now lists only those teams.
+- Also: `GET /api/geocode` is limited per IP (`RateLimits:GeocodePerMinute`, 20) because it can call the paid What3Words API, and an anonymous viewer can hold at most 5 streams open per IP (`Streaming:MaxViewersPerIp`).
+- Files: `api/Controllers/DeclarationFormsController.cs`, `api/Security/RequestLimits.cs`, `api/Services/Streaming/ViewerRegistry.cs`, `web/src/pages/competition/DeclarationsTab.tsx`.
+
 ## 2026-10-15: Trainers organise their own competitions
 - Why: self-service trainer registration must not grant access to another organiser's competition or entrant records.
 - Rule: admins can use organiser endpoints for any competition; trainers can use them only where the stored `CreatedByUserId` matches their authenticated ID. Managers and members are not organisers.

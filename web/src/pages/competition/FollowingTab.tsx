@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import { useFavourites } from '../../hooks/useFavourites';
-import { followedHeats } from '../../lib/following';
+import { arenaNames, arenaToShow, followedHeats } from '../../lib/following';
 import { displaySectionName } from '../../lib/section';
 import { formatTime } from '../../lib/time';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
@@ -10,7 +10,7 @@ import { useCompetition } from './context';
 
 export function FollowingTab() {
   const { competition, updatedAt, isStale, reload } = useCompetition();
-  const { favourites, error, toggle } = useFavourites();
+  const { favourites, error, toggle, setMany } = useFavourites();
   const [search, setSearch] = useState('');
   const [showTeams, setShowTeams] = useState(false);
   const [selectedDay, setSelectedDay] = useState('');
@@ -18,12 +18,25 @@ export function FollowingTab() {
   const teams = competition.teams.filter((team) => ids.has(team.id));
   const missing = [...ids].filter((id) => !competition.teams.some((team) => team.id === id));
   const rows = useMemo(() => followedHeats(competition, ids), [competition, ids]);
+  const arenas = useMemo(() => arenaNames(competition.sessions), [competition.sessions]);
   const days = [...new Set(rows.flatMap((row) => row.effective ? [dayKey(row.effective)] : []))].sort();
   const day = days.includes(selectedDay) ? selectedDay : defaultTimetableDay(days, dayKey(new Date()));
   const today = rows.filter((row) => !row.effective || dayKey(row.effective) === day);
   const upcoming = today.filter((row) => row.status !== 'finished');
   const results = [...rows].reverse().filter((row) => row.scores.some((score) => score.racesRun > 0)).slice(0, 6);
-  const filtered = competition.teams.filter((team) => `${team.displayName} ${team.sectionName}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const query = search.trim().toLowerCase();
+  const filtered = competition.teams.filter((team) => `${team.displayName} ${team.clubName} ${team.sectionName}`.toLowerCase().includes(query));
+  const clubs = useMemo(() => {
+    const byClub = new Map<number, { id: number; name: string; teamIds: number[] }>();
+    for (const team of competition.teams) {
+      const club = byClub.get(team.clubId) ?? { id: team.clubId, name: team.clubName, teamIds: [] };
+      club.teamIds.push(team.id);
+      byClub.set(team.clubId, club);
+    }
+    return [...byClub.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [competition.teams]);
+  const shownClubs = clubs.filter((club) => filtered.some((team) => team.clubId === club.id));
+  const followClub = (teamIds: number[], follow: boolean) => setMany(teamIds.map((teamId) => ({ competitionId: competition.id, teamId })), follow);
 
   return <div className="mx-auto max-w-2xl space-y-5 py-4">
     <div className="flex items-center justify-between gap-3">
@@ -48,8 +61,17 @@ export function FollowingTab() {
 
     {(showTeams || teams.length === 0) && <section className="mg-card p-4 space-y-3" aria-label="Choose teams">
       {teams.length === 0 && <p>Star a team to see its next heats and results here.</p>}
-      <label className="block font-semibold">Find a team<input type="search" className="input mt-1" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Team or age group" /></label>
+      <label className="block font-semibold">Find a team<input type="search" className="input mt-1" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Team, club or age group" /></label>
       {!filtered.length && <p className="mg-meta">{competition.teams.length ? 'No teams match that search.' : 'Teams haven’t been added to this event yet.'}</p>}
+      {shownClubs.length > 0 && <ul aria-label="Clubs" className="divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule-soft))] px-3">
+        {shownClubs.map((club) => {
+          const following = club.teamIds.every((id) => ids.has(id));
+          return <li key={club.id} className="flex items-center gap-3 py-1">
+            <div className="min-w-0 flex-1"><p className="font-semibold break-words">{club.name}</p><p className="mg-meta">{club.teamIds.length} {club.teamIds.length === 1 ? 'entry' : 'entries'}</p></div>
+            <button className="mg-btn mg-btn-secondary !px-3" aria-pressed={following} aria-label={`${following ? 'Unfollow' : 'Follow'} club ${club.name}`} onClick={() => followClub(club.teamIds, !following)}>{following ? 'Unfollow club' : 'Follow club'}</button>
+          </li>;
+        })}
+      </ul>}
       <ul className="max-h-80 divide-y divide-[rgb(var(--mg-rule-soft))] overflow-y-auto">
         {filtered.map((team) => <li key={team.id} className="flex items-center gap-3 py-1">
           <div className="min-w-0 flex-1"><p className="font-semibold break-words">{team.displayName}</p><p className="mg-meta">{displaySectionName(team.sectionName)}</p></div>
@@ -70,8 +92,8 @@ export function FollowingTab() {
             <div className="flex flex-wrap items-center gap-2"><h3 className="font-bold">{displaySectionName(row.session.sectionName || row.session.name)} · {row.heat!.label || `Heat ${row.heatIndex + 1}`}</h3>
               {row.status === 'live' && <span className={`mg-badge ${isStale ? '' : 'mg-badge-live'}`}>{isStale ? 'Was in arena' : 'On now'}</span>}
             </div>
-            <p className="mg-meta mt-1">{row.session.name}{row.session.arenaName && ` · ${row.session.arenaName}`}</p>
-            {row.scores.map((score) => <p key={score.team.id} className="mt-1 text-sm font-medium">{score.team.displayName} · starting lane {score.lane}</p>)}
+            <p className="mg-meta mt-1">{row.session.name}{arenaToShow(row.session, arenas) && ` · ${arenaToShow(row.session, arenas)}`}</p>
+            {row.scores.map((score) => <p key={score.team.id} className="mt-1 text-sm font-medium">{score.team.displayName} · Lane {score.lane}</p>)}
           </Link>
         </li>)}</ol>
         {upcoming.length > 0 && <p className="mg-meta">Heat times are estimates. Check the timetable and listen for the collecting ring call.</p>}

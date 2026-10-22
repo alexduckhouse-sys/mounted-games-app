@@ -9,22 +9,25 @@ namespace MountedGames.Api.Security;
 public static class RequestLimits
 {
     /// <summary>
-    /// Per-minute limits for sign-in (per IP), API writes (per user, or per IP when anonymous) and the public
-    /// calendar and link-preview reads (per IP). <c>RateLimits:AuthPerMinute</c>, <c>RateLimits:WritesPerMinute</c>
-    /// and <c>RateLimits:PublicReadsPerMinute</c> override the defaults.
+    /// Per-minute limits for sign-in (per IP), geocoding (per IP), API writes (per user, or per IP when anonymous) and the public
+    /// calendar and link-preview reads (per IP). <c>RateLimits:AuthPerMinute</c>, <c>RateLimits:GeocodePerMinute</c>,
+    /// <c>RateLimits:WritesPerMinute</c> and <c>RateLimits:PublicReadsPerMinute</c> override the defaults.
     /// </summary>
     public static IServiceCollection AddRequestLimits(this IServiceCollection services, IConfiguration configuration)
     {
         var authPermits = configuration.GetValue("RateLimits:AuthPerMinute", 10);
         var writePermits = configuration.GetValue("RateLimits:WritesPerMinute", 60);
+        var geocodePermits = configuration.GetValue("RateLimits:GeocodePerMinute", 20);
         var publicReadPermits = configuration.GetValue("RateLimits:PublicReadsPerMinute", 120);
-        return services.AddRateLimiter(options => Configure(options, authPermits, writePermits, publicReadPermits));
+        return services.AddRateLimiter(options => Configure(options, authPermits, writePermits, geocodePermits, publicReadPermits));
     }
 
-    private static void Configure(RateLimiterOptions options, int authPermits, int writePermits, int publicReadPermits)
+    private static void Configure(RateLimiterOptions options, int authPermits, int writePermits, int geocodePermits, int publicReadPermits)
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         options.AddPolicy("auth", context => Partition(context, $"auth:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", authPermits));
+        // Geocoding can call the paid What3Words API, so callers are limited per IP.
+        options.AddPolicy("geocode", context => Partition(context, $"geocode:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", geocodePermits));
         // Anonymous reads made by crawlers and calendar apps (link previews, calendar files and feeds).
         options.AddPolicy("public-read", context => Partition(context, $"public-read:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", publicReadPermits));
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>

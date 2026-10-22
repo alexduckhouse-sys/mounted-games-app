@@ -1,0 +1,75 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { competition, heat, race, session } from '../../test/factories';
+import { ArenaPage } from './ArenaPage';
+
+const state = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock('./context', () => ({ useCompetition: () => state.value }));
+vi.mock('../../api', () => ({ api: { get: vi.fn(async () => ({ data: [] })) } }));
+
+const sessions = () => [
+  session(1, { arenaName: 'Arena 1', status: 1, name: 'First arena session', heats: [heat(11, { sessionId: 1, label: 'Heat A', races: [race(1, { name: 'Bending' })] })] }),
+  session(2, { arenaName: 'Arena 2', status: 1, name: 'Second arena session', heats: [heat(22, { sessionId: 2, label: 'Heat B', races: [race(2, { name: 'Pairs' })] })] }),
+];
+
+function show(items = sessions()) {
+  state.value = { competition: competition({ sessions: items }), reload: vi.fn(), updatedAt: null };
+  return render(<MemoryRouter><ArenaPage /></MemoryRouter>);
+}
+
+beforeEach(() => localStorage.clear());
+
+it('shows no arena bar when there is only one arena', async () => {
+  show(sessions().slice(0, 1));
+  expect(await screen.findByRole('heading', { level: 2, name: 'Bending' })).toBeInTheDocument();
+  expect(screen.queryByRole('group', { name: 'Choose arena' })).toBeNull();
+});
+
+it('shows a pill per arena and starts on the first', async () => {
+  show();
+  expect(await screen.findByRole('heading', { level: 2, name: 'Bending' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Arena 1' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Arena 2' })).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.queryByRole('heading', { level: 2, name: 'Pairs' })).toBeNull();
+});
+
+it('switches to the other arena’s live heat and remembers the choice for the competition', async () => {
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Arena 2' }));
+  expect(screen.getByRole('heading', { level: 2, name: 'Pairs' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { level: 2, name: 'Bending' })).toBeNull();
+  expect(localStorage.getItem('mg.arena.page.1')).toBe('Arena 2');
+});
+
+it('opens on the remembered arena and ignores one that no longer exists', async () => {
+  localStorage.setItem('mg.arena.page.1', 'Arena 2');
+  const first = show();
+  expect(await screen.findByRole('heading', { level: 2, name: 'Pairs' })).toBeInTheDocument();
+  first.unmount();
+  localStorage.setItem('mg.arena.page.1', 'Gone');
+  show();
+  expect(await screen.findByRole('heading', { level: 2, name: 'Bending' })).toBeInTheDocument();
+});
+
+it('counts a session with no arena in every arena', async () => {
+  const items = [
+    ...sessions().slice(0, 1),
+    session(2, { arenaName: 'Arena 2', status: 2, heats: [heat(22, { sessionId: 2, label: 'Heat B', finishedAt: '2026-06-01T10:00:00Z', races: [race(2, { isComplete: true })] })] }),
+    session(3, { arenaName: null, status: 0, orderIndex: 3, heats: [heat(33, { sessionId: 3, label: 'Heat C', races: [race(3, { name: 'Relay' })] })] }),
+  ];
+  show(items);
+  fireEvent.click(await screen.findByRole('button', { name: 'Arena 2' }));
+  expect(screen.getByRole('heading', { level: 2, name: 'Relay' })).toBeInTheDocument();
+});
+
+it('keeps the bar when an arena has nothing to run', async () => {
+  const items = [
+    ...sessions().slice(0, 1),
+    session(2, { arenaName: 'Arena 2', status: 2, heats: [heat(22, { sessionId: 2, finishedAt: '2026-06-01T10:00:00Z', races: [race(2, { isComplete: true })] })] }),
+  ];
+  show(items);
+  fireEvent.click(await screen.findByRole('button', { name: 'Arena 2' }));
+  expect(screen.getByText('Nothing currently in the arena.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Arena 1' })).toBeInTheDocument();
+});

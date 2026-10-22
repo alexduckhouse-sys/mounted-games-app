@@ -23,6 +23,13 @@ describe('timetableStatus', () => {
     expect(timetableStatus(false, false, scheduled, scheduled).status).toBe('on-time');
   });
 
+  it('ignores a delay of under five minutes but flags five or more', () => {
+    const minutes = (n: number) => new Date(scheduled.getTime() + n * 60_000);
+    expect(timetableStatus(false, false, scheduled, minutes(4))).toEqual({ status: 'on-time', delayMinutes: 0 });
+    expect(timetableStatus(false, false, scheduled, minutes(5))).toEqual({ status: 'late', delayMinutes: 5 });
+    expect(timetableStatus(false, false, scheduled, minutes(-8))).toEqual({ status: 'on-time', delayMinutes: 0 });
+  });
+
   it('is on time when either time is unknown', () => {
     expect(timetableStatus(false, false, null, null).status).toBe('on-time');
     expect(timetableStatus(false, false, scheduled, null).delayMinutes).toBe(0);

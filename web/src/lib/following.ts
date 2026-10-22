@@ -1,4 +1,4 @@
-import type { CompetitionDetail } from '../types';
+import type { CompetitionDetail, Session } from '../types';
 import { computeTimings } from './time';
 import { timetableRows } from './timetableRows';
 
@@ -18,4 +18,14 @@ export function followedHeats(competition: CompetitionDetail, teamIds: ReadonlyS
       });
       return [{ ...row, scores }];
     });
+}
+
+/** Distinct arena names used by a competition's sessions, in session order. */
+export function arenaNames(sessions: readonly Session[]): string[] {
+  return [...new Set(sessions.flatMap((session) => session.arenaName?.trim() || []))];
+}
+
+/** The arena to show on a heat row: only when the competition runs more than one. */
+export function arenaToShow(session: Session, arenas: readonly string[]): string | null {
+  return arenas.length > 1 ? session.arenaName?.trim() || null : null;
 }

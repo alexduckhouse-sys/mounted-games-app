@@ -36,4 +36,15 @@ describe('useFavourites', () => {
     act(() => { toggleFavourite({ competitionId: 1, teamId: 3 }); });
     expect(result.current.favourites).toHaveLength(2);
   });
+  it('follows and unfollows several teams at once and reports a failure', () => {
+    const { result } = renderHook(useFavourites);
+    const items = [{ competitionId: 1, teamId: 2 }, { competitionId: 1, teamId: 3 }];
+    act(() => result.current.setMany(items, true));
+    expect(result.current.favourites).toEqual(items);
+    act(() => result.current.setMany([{ competitionId: 0, teamId: 1 }], true));
+    expect(result.current.error).toMatch(/couldn’t be followed/);
+    act(() => result.current.setMany(items, false));
+    expect(result.current.favourites).toEqual([]);
+    expect(result.current.error).toBeNull();
+  });
 });

@@ -30,10 +30,28 @@ export function toggleFavourite(item: FavouriteTeam): string | null {
   if (!exists && current.length >= MAX_FAVOURITES) return 'You’re following 100 teams. Remove a team before adding another.';
   const next = exists ? current.filter((f) => f.competitionId !== item.competitionId || f.teamId !== item.teamId)
     : [...current, { competitionId: item.competitionId, teamId: item.teamId }];
+  return save(next);
+}
+
+function save(next: FavouriteTeam[]): string | null {
   try {
     if (next.length) localStorage.setItem(FAVOURITES_KEY, JSON.stringify(next));
     else localStorage.removeItem(FAVOURITES_KEY);
   } catch { return 'Your choice couldn’t be saved on this device. Check your browser’s storage settings and try again.'; }
   window.dispatchEvent(new Event(FAVOURITES_CHANGED));
   return null;
+}
+
+/** Follows or unfollows several teams in one write (a whole club). Follows all of them or none. */
+export function setFavourites(items: FavouriteTeam[], follow: boolean): string | null {
+  if (!items.every(valid)) return 'These teams couldn’t be followed. Refresh the page and try again.';
+  const keyOf = (f: FavouriteTeam) => `${f.competitionId}:${f.teamId}`;
+  const current = readFavourites();
+  const wanted = new Map(items.map((f) => [keyOf(f), { competitionId: f.competitionId, teamId: f.teamId }]));
+  const next = follow
+    ? [...current, ...[...wanted].filter(([key]) => !current.some((f) => keyOf(f) === key)).map(([, f]) => f)]
+    : current.filter((f) => !wanted.has(keyOf(f)));
+  if (next.length === current.length) return null;
+  if (next.length > MAX_FAVOURITES) return `Following all of these would go over ${MAX_FAVOURITES} teams. Remove some teams first.`;
+  return save(next);
 }

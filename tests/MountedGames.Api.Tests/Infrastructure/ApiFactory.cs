@@ -38,11 +38,14 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimits:AuthPerMinute", "100000");
         builder.UseSetting("RateLimits:WritesPerMinute", "100000");
         builder.UseSetting("RateLimits:PublicReadsPerMinute", "100000");
+        builder.UseSetting("RateLimits:GeocodePerMinute", "100000");
         builder.ConfigureServices(services =>
         {
             var scheduler = services.Single(d => d.ImplementationType == typeof(NotificationScheduler));
             services.Remove(scheduler);
             services.Remove(services.Single(d => d.ImplementationType == typeof(MountedGames.Api.Services.Streaming.StreamSweeper)));
+
+            services.Remove(services.Single(d => d.ImplementationType == typeof(IpRetentionSweeper)));
 
             services.AddTransient<IStartupFilter, TestIpStartupFilter>();
 

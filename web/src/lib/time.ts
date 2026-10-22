@@ -43,34 +43,70 @@ function sessionDurationMinutes(s: Session): number {
   return heats.reduce((sum, h) => sum + heatDurationMinutes(h, s), 0);
 }
 
+/** Running delay and end of the last session placed for one arena (or for the whole event). */
+interface Lane {
+  offsetMs: number;
+  lastEffectiveEnd: Date | null;
+}
+
+const arenaKey = (s: Session) => s.arenaName?.trim() ?? '';
+
 /**
- * Walks all sessions in order. When a session has `startedAt` we anchor on the
- * real start; the resulting offset cascades forward to every later session that
- * hasn't started yet. Returns scheduled + effective times for the session and
- * each of its heats with a `shifted` flag if the two differ by ≥1 minute.
+ * Walks the sessions in order. When a session has `startedAt` we anchor on the
+ * real start; the resulting offset cascades forward to every later session of
+ * the same arena that hasn't started yet. Returns scheduled + effective times
+ * for the session and each of its heats with a `shifted` flag if the two differ
+ * by at least 5 minutes.
+ *
+ * Arenas run independently: each named arena has its own offset and its own
+ * "previous session ended" cursor, so Arena 1 running late never moves Arena 2.
+ * Sessions with no arena (whole-event breaks and briefings) are placed after
+ * the arenas: they take the largest delay of any arena so far (never less than
+ * on schedule) and wait for the last arena session before them to end, because
+ * everyone needs to be free for them. They don't hold the arenas back in turn;
+ * each arena carries on with its own delay. When no session names an arena
+ * (a single-arena event) everything shares one lane, as before.
  */
 export function computeTimings(sessions: Session[]): Map<number, SessionTiming> {
   const ordered = sessions.slice().sort((a, b) => a.orderIndex - b.orderIndex);
   const result = new Map<number, SessionTiming>();
-  let offsetMs = 0;
-  let lastEffectiveEnd: Date | null = null;
+  const hasArenas = ordered.some((s) => arenaKey(s) !== '');
+  const lanes = new Map<string, Lane>();
+  const laneFor = (key: string): Lane => {
+    let lane = lanes.get(key);
+    if (!lane) { lane = { offsetMs: 0, lastEffectiveEnd: null }; lanes.set(key, lane); }
+    return lane;
+  };
 
   for (const s of ordered) {
+    const key = hasArenas ? arenaKey(s) : '';
+    let lane: Lane;
+    if (key === '' && hasArenas) {
+      // Whole-event item: a throwaway lane built from every arena so far.
+      const all = [...lanes.values()];
+      lane = {
+        offsetMs: Math.max(0, ...all.map((l) => l.offsetMs)),
+        lastEffectiveEnd: all.reduce<Date | null>((latest, l) => (l.lastEffectiveEnd && (!latest || l.lastEffectiveEnd > latest) ? l.lastEffectiveEnd : latest), null),
+      };
+    } else {
+      lane = laneFor(key);
+    }
+
     const scheduled = s.scheduledStart ? new Date(s.scheduledStart) : null;
     let effective: Date | null = null;
 
     if (s.startedAt) {
       effective = new Date(s.startedAt);
-      if (scheduled) offsetMs = effective.getTime() - scheduled.getTime();
+      if (scheduled) lane.offsetMs = effective.getTime() - scheduled.getTime();
     } else if (scheduled) {
-      effective = new Date(scheduled.getTime() + offsetMs);
+      effective = new Date(scheduled.getTime() + lane.offsetMs);
       // Don't let an early-shifted session start before the previous one ended.
-      if (lastEffectiveEnd && effective < lastEffectiveEnd) {
-        effective = new Date(lastEffectiveEnd);
-        if (scheduled) offsetMs = effective.getTime() - scheduled.getTime();
+      if (lane.lastEffectiveEnd && effective < lane.lastEffectiveEnd) {
+        effective = new Date(lane.lastEffectiveEnd);
+        lane.offsetMs = effective.getTime() - scheduled.getTime();
       }
-    } else if (lastEffectiveEnd) {
-      effective = new Date(lastEffectiveEnd);
+    } else if (lane.lastEffectiveEnd) {
+      effective = new Date(lane.lastEffectiveEnd);
     }
 
     const heats = (s.heats ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
@@ -105,7 +141,7 @@ export function computeTimings(sessions: Session[]): Map<number, SessionTiming> 
 
     const dur = sessionDurationMinutes(s);
     const effectiveEnd: Date | null = effective ? new Date(effective.getTime() + dur * 60_000) : null;
-    if (effectiveEnd) lastEffectiveEnd = effectiveEnd;
+    if (effectiveEnd) lane.lastEffectiveEnd = effectiveEnd;
 
     const shifted = !!(scheduled && effective
       && Math.abs(effective.getTime() - scheduled.getTime()) >= 5 * 60_000);
