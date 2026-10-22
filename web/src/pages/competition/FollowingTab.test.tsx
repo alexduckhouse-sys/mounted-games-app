@@ -63,4 +63,27 @@ describe('FollowingTab', () => {
     mount({}, multi);
     expect(screen.getByRole('link', { name: /Lane 3/ })).toHaveTextContent('Main Arena');
   });
+  it('follows and unfollows every entry from a club in one tap', async () => {
+    const club = (id: number, clubId: number, clubName: string, displayName: string, sectionName: string) => team(id, { clubId, clubName, displayName, sectionName });
+    const multi = competition({ teams: [club(1, 7, 'Hill Pony Club', 'Hill A', 'Seniors'), club(2, 7, 'Hill Pony Club', 'Hill Pair', 'Pairs'), club(3, 7, 'Hill Pony Club', 'Hill Solo', 'Individual'), club(4, 8, 'Vale Pony Club', 'Vale A', 'Seniors')] });
+    mount({}, multi);
+    expect(screen.getByRole('list', { name: 'Clubs' }).querySelectorAll('li')).toHaveLength(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Follow club Hill Pony Club' }));
+    expect(JSON.parse(localStorage.getItem(FAVOURITES_KEY)!)).toEqual([1, 2, 3].map((teamId) => ({ competitionId: 1, teamId })));
+    expect(screen.getByRole('button', { name: 'Unfollow Hill Pair' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add teams' }));
+    expect(screen.getByRole('button', { name: 'Follow club Vale Pony Club' })).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(screen.getByRole('button', { name: 'Unfollow club Hill Pony Club' }));
+    expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();
+    await userEvent.type(screen.getByRole('searchbox'), 'vale');
+    expect(screen.queryByRole('button', { name: 'Follow club Hill Pony Club' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Follow Vale A' })).toBeInTheDocument();
+  });
+  it('tells the visitor when a club would take them over the follow limit', async () => {
+    localStorage.setItem(FAVOURITES_KEY, JSON.stringify(Array.from({ length: 99 }, (_, i) => ({ competitionId: 9, teamId: i + 1 }))));
+    const multi = competition({ teams: [team(1, { clubName: 'Hill Pony Club' }), team(2, { clubName: 'Hill Pony Club' })] });
+    mount({}, multi);
+    await userEvent.click(screen.getByRole('button', { name: 'Follow club Hill Pony Club' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('over 100 teams');
+  });
 });
