@@ -1,0 +1,90 @@
+using Microsoft.EntityFrameworkCore;
+using MountedGames.Api.Data;
+using MountedGames.Api.Entities;
+
+namespace MountedGames.Api.Services;
+
+/// <summary>
+/// Heat-heat-final: two qualifier heats feed a final. The top finishers of each qualifier are
+/// interleaved (Q1 first, Q2 first, Q1 second, ...) into the final's lanes.
+/// </summary>
+public sealed class RaceFinalService(AppDbContext db)
+{
+    /// <summary>How many teams go through from each qualifier when the session doesn't say.</summary>
+    public const int DefaultQualifiers = 3;
+
+    /// <summary>
+    /// Fills <paramref name="finalHeat"/> (loaded with its session and entries) from its round's qualifiers.
+    /// Returns an error message, or null when the final was filled.
+    /// </summary>
+    public async Task<string?> PopulateAsync(Heat finalHeat, int topN, CancellationToken ct = default)
+    {
+        if (finalHeat.RaceRoundStage != RaceRoundStage.Final || finalHeat.RaceRoundId is null)
+            return "This heat isn't a race-final scaffold.";
+        if (topN < 1) return "TopN must be at least 1.";
+
+        var siblings = await db.Heats
+            .Include(h => h.Races).ThenInclude(r => r.Results)
+            .Where(h => h.SessionId == finalHeat.SessionId
+                && h.RaceRoundId == finalHeat.RaceRoundId
+                && h.RaceRoundStage == RaceRoundStage.Qualifier)
+            .OrderBy(h => h.OrderIndex)
+            .ToListAsync(ct);
+        if (siblings.Count < 2) return "Both qualifier heats must exist before populating the final.";
+
+        int?[] TopPlacings(Heat h) => h.Races
+            .SelectMany(r => r.Results)
+            .Where(r => !r.Eliminated && r.Placing.HasValue)
+            .OrderBy(r => r.Placing!.Value)
+            .Take(topN)
+            .Select(r => (int?)r.TeamId)
+            .ToArray();
+
+        var q1Top = TopPlacings(siblings[0]);
+        var q2Top = TopPlacings(siblings[1]);
+        if (q1Top.Length == 0 && q2Top.Length == 0) return "No qualifier results recorded yet.";
+
+        // Interleave: Q1[1], Q2[1], Q1[2], Q2[2], ... up to LanesPerHeat lanes.
+        var lanes = finalHeat.Session?.LanesPerHeat ?? (q1Top.Length + q2Top.Length);
+        var interleaved = new List<int>();
+        for (var i = 0; i < topN && interleaved.Count < lanes; i++)
+        {
+            if (i < q1Top.Length && q1Top[i].HasValue && interleaved.Count < lanes)
+                interleaved.Add(q1Top[i]!.Value);
+            if (i < q2Top.Length && q2Top[i].HasValue && interleaved.Count < lanes)
+                interleaved.Add(q2Top[i]!.Value);
+        }
+
+        db.HeatEntries.RemoveRange(finalHeat.Entries);
+        await db.SaveChangesAsync(ct);
+        var lane = 1;
+        foreach (var teamId in interleaved)
+            db.HeatEntries.Add(new HeatEntry { HeatId = finalHeat.Id, TeamId = teamId, LaneIndex = lane++ });
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+
+    /// <summary>
+    /// After a qualifier race is scored: once both qualifiers of the round are complete, fill the round's
+    /// final from them (using the session's qualifier count). Leaves a final that already has results
+    /// alone. Returns the session id when the final was filled, otherwise null.
+    /// </summary>
+    public async Task<int?> TryAutoPopulateAsync(int raceId, CancellationToken ct = default)
+    {
+        var heat = await db.Heats.Include(h => h.Session).FirstOrDefaultAsync(h => h.Races.Any(r => r.Id == raceId), ct);
+        if (heat is null || heat.RaceRoundStage != RaceRoundStage.Qualifier || heat.RaceRoundId is null) return null;
+
+        var round = await db.Heats
+            .Include(h => h.Session).Include(h => h.Entries).Include(h => h.Races)
+            .Where(h => h.SessionId == heat.SessionId && h.RaceRoundId == heat.RaceRoundId)
+            .ToListAsync(ct);
+        var qualifiers = round.Where(h => h.RaceRoundStage == RaceRoundStage.Qualifier).ToList();
+        var final = round.FirstOrDefault(h => h.RaceRoundStage == RaceRoundStage.Final);
+        if (final is null || qualifiers.Count < 2) return null;
+        if (qualifiers.Any(q => q.Races.Count == 0 || q.Races.Any(r => !r.IsComplete))) return null;
+        if (final.Races.Any(r => r.IsComplete)) return null;
+
+        var error = await PopulateAsync(final, heat.Session?.QualifiersPerHeat ?? DefaultQualifiers, ct);
+        return error is null ? heat.SessionId : null;
+    }
+}

@@ -17,6 +17,9 @@ import { retryOnNetworkError } from '../../lib/liveUpdates';
 import { describePlacings, enqueue, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 
+/** How many teams go through from each qualifier to the final. */
+const qualifiersOf = (session: Session): number => session.qualifiersPerHeat ?? 3;
+
 /** How lanes change from race to race in this session, and how many lanes there are. */
 interface LaneRules { lanesPerHeat: number | null | undefined; mode: LaneRotationModeValue }
 
@@ -247,11 +250,18 @@ export function SessionPage() {
 
   const activeRace = orderedRaces.find((r) => r.id === activeRaceId) ?? null;
 
+  // In a qualifier only the teams that go through to the final need placing. The rest finish on 1 point each,
+  // and tapping one of those marks it eliminated instead (0 points).
+  const qualifierCap = activeHeat?.raceRoundStage === 1 ? qualifiersOf(session) : null;
+
   function clickTeam(teamId: number) {
     if (!activeRace) return;
     setPending((cur) => {
       if (cur.some((p) => p.teamId === teamId)) {
         return cur.filter((p) => p.teamId !== teamId).map((p, i) => ({ ...p, place: i + 1 }));
+      }
+      if (qualifierCap != null && cur.filter((p) => !p.eliminated).length >= qualifierCap) {
+        return [...cur, { teamId, place: cur.length + 1, eliminated: true }];
       }
       return [...cur, { teamId, place: cur.length + 1, eliminated: false }];
     });
@@ -268,6 +278,14 @@ export function SessionPage() {
   }
 
   function resetPending() { setPending([]); }
+
+  // Qualifier teams nobody placed finish after those who were, in lane order, on the qualifier's 1 point.
+  function restOfQualifier(heat: Heat, placed: PendingPlace[]): PendingPlace[] {
+    if (heat.raceRoundStage !== 1) return [];
+    const done = new Set(placed.map((p) => p.teamId));
+    let next = placed.filter((p) => !p.eliminated).length + 1;
+    return byDrawnLane(heat).filter((e) => !done.has(e.teamId)).map((e) => ({ teamId: e.teamId, place: next++, eliminated: false }));
+  }
 
   // Teams with no lane this race still go in the result: no place, no points, shown as S.
   function sitOutPlaces(heat: Heat, raceIndex: number, rules: LaneRules): PendingPlace[] {
@@ -292,7 +310,7 @@ export function SessionPage() {
       competitionId: session.competitionId,
       sessionId: session.id,
       label: `${activeHeat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
-      places: [...pending, ...sitOutPlaces(activeHeat, orderedRaces.findIndex((r) => r.id === activeRace.id), lanesOf(session))],
+      places: [...pending, ...restOfQualifier(activeHeat, pending), ...sitOutPlaces(activeHeat, orderedRaces.findIndex((r) => r.id === activeRace.id), lanesOf(session))],
       expected: placingsOf(activeRace.results),
       teamNames: Object.fromEntries(activeHeat.entries.map((e) => [e.teamId, e.teamName])),
       queuedAt: new Date().toISOString(),
@@ -318,6 +336,7 @@ export function SessionPage() {
         {canManage(competition) && (
           <div className="flex gap-1.5">
             <LaneRotationControl session={session} onChanged={reload} />
+            {orderedHeats.some((h) => h.raceRoundStage) && <QualifiersControl session={session} onChanged={reload} />}
             <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
               <Wand2 className="w-3.5 h-3.5" /> Set up heats
             </button>
@@ -342,6 +361,7 @@ export function SessionPage() {
               onSelectRace={(id) => { setActiveRaceId(id); setPending([]); }}
               sessionBase={sessionBase}
               laneRules={lanesOf(session)}
+              qualifiers={qualifiersOf(session)}
               pending={pending}
               canScore
               queued={outbox}
@@ -430,6 +450,31 @@ function LaneRotationControl({ session, onChanged }: { session: Session; onChang
         onChange={(e) => void change(Number(e.target.value) as LaneRotationModeValue)}
       >
         {([0, 1, 2] as const).map((mode) => <option key={mode} value={mode}>{LANE_ROTATION_LABELS[mode]}</option>)}
+      </select>
+      {error && <span role="alert" className="text-rose-600">Not saved</span>}
+    </label>
+  );
+}
+
+/** Heat-heat-final: how many teams go through from each qualifier. The final fills itself from this once both qualifiers are scored. */
+function QualifiersControl({ session, onChanged }: { session: Session; onChanged: () => void }) {
+  const [error, setError] = useState(false);
+  async function change(count: number) {
+    setError(false);
+    try {
+      await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/settings`, {
+        minutesPerHeat: session.minutesPerHeat ?? null,
+        raceOrderAlternating: session.raceOrderAlternating ?? false,
+        qualifiersPerHeat: count,
+      });
+      onChanged();
+    } catch { setError(true); }
+  }
+  return (
+    <label className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+      <span>Through to the final</span>
+      <select className="input !min-h-0 !py-1 text-xs" value={qualifiersOf(session)} onChange={(e) => void change(Number(e.target.value))}>
+        {Array.from({ length: 10 }, (_, i) => i + 1).map((count) => <option key={count} value={count}>{count} from each</option>)}
       </select>
       {error && <span role="alert" className="text-rose-600">Not saved</span>}
     </label>
@@ -741,6 +786,7 @@ interface ScoringProps {
   onSelectRace: (id: number) => void;
   sessionBase: number;
   laneRules: LaneRules;
+  qualifiers: number;
   pending: PendingPlace[];
   canScore: boolean;
   queued: QueuedScore[];
@@ -757,7 +803,7 @@ interface ScoringProps {
 }
 
 function ScoringSection({
-  heat, races, activeRace, onSelectRace, sessionBase, laneRules, pending, canScore, queued, showResults,
+  heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued, showResults,
   onToggleResults, showLaneView, onToggleLaneView, onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason,
 }: ScoringProps) {
   const pendingByTeam = new Map(pending.map((p) => [p.teamId, p]));
@@ -765,10 +811,14 @@ function ScoringSection({
   const activeQueued = activeRace ? queuedByRace.get(activeRace.id) : undefined;
   const activeRaceIdx = activeRace ? races.findIndex((r) => r.id === activeRace.id) : 0;
   const heatSize = heat.entries.length;
+  // A qualifier gives 1 point a finisher; a final is scored on its own field plus one (so last place beats a qualifier's 1).
+  const isQualifier = heat.raceRoundStage === 1;
+  const scoringBase = heat.raceRoundStage === 2 ? heatSize + 1 : sessionBase;
   function pointsFor(place: number, eliminated: boolean) {
     if (eliminated) return 0;
-    if (place < 1 || place > sessionBase) return 0;
-    return sessionBase - place + 1;
+    if (isQualifier) return 1;
+    if (place < 1 || place > scoringBase) return 0;
+    return scoringBase - place + 1;
   }
 
   return (
@@ -828,7 +878,9 @@ function ScoringSection({
             </p>
           )}
           <p className="text-[11px] text-slate-500 dark:text-slate-300 mb-3">
-            Tap a team to assign its place · swipe a tile <span className="font-semibold">downwards</span> to eliminate (0 pts).
+            {isQualifier
+              ? <>Tap the first {qualifiers} teams home, in order. The rest score 1 point each; tap one of them to eliminate it (0 pts).</>
+              : <>Tap a team to assign its place · swipe a tile <span className="font-semibold">downwards</span> to eliminate (0 pts).</>}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {heat.entries.map((e) => {

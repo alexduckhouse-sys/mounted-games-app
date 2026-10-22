@@ -17,11 +17,13 @@ public class SessionsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ILiveBroadcaster _live;
+    private readonly RaceFinalService _raceFinals;
 
-    public SessionsController(AppDbContext db, ILiveBroadcaster live)
+    public SessionsController(AppDbContext db, ILiveBroadcaster live, RaceFinalService raceFinals)
     {
         _db = db;
         _live = live;
+        _raceFinals = raceFinals;
     }
 
     private IQueryable<Session> SessionsWithDetail() => _db.Sessions
@@ -250,52 +252,8 @@ public class SessionsController : ControllerBase
             .Include(h => h.Races)
             .FirstOrDefaultAsync(h => h.Id == heatId && h.SessionId == id);
         if (finalHeat is null || finalHeat.Session?.CompetitionId != competitionId) return NotFound();
-        if (finalHeat.RaceRoundStage != RaceRoundStage.Final || finalHeat.RaceRoundId is null)
-            return BadRequest("This heat isn't a race-final scaffold.");
-        if (req.TopN < 1) return BadRequest("TopN must be at least 1.");
-
-        var siblings = await _db.Heats
-            .Include(h => h.Races).ThenInclude(r => r.Results)
-            .Where(h => h.SessionId == id
-                && h.RaceRoundId == finalHeat.RaceRoundId
-                && h.RaceRoundStage == RaceRoundStage.Qualifier)
-            .OrderBy(h => h.OrderIndex)
-            .ToListAsync();
-        if (siblings.Count < 2) return BadRequest("Both qualifier heats must exist before populating the final.");
-
-        int?[] TopPlacings(Heat h) => h.Races
-            .SelectMany(r => r.Results)
-            .Where(r => !r.Eliminated && r.Placing.HasValue)
-            .OrderBy(r => r.Placing!.Value)
-            .Take(req.TopN)
-            .Select(r => (int?)r.TeamId)
-            .ToArray();
-
-        var q1Top = TopPlacings(siblings[0]);
-        var q2Top = TopPlacings(siblings[1]);
-        if (q1Top.Length == 0 && q2Top.Length == 0)
-            return BadRequest("No qualifier results recorded yet.");
-
-        // Interleave: Q1[1], Q2[1], Q1[2], Q2[2], ... up to LanesPerHeat lanes.
-        var lanes = finalHeat.Session?.LanesPerHeat ?? (q1Top.Length + q2Top.Length);
-        var interleaved = new List<int>();
-        for (var i = 0; i < req.TopN && interleaved.Count < lanes; i++)
-        {
-            if (i < q1Top.Length && q1Top[i].HasValue && interleaved.Count < lanes)
-                interleaved.Add(q1Top[i]!.Value);
-            if (i < q2Top.Length && q2Top[i].HasValue && interleaved.Count < lanes)
-                interleaved.Add(q2Top[i]!.Value);
-        }
-
-        _db.HeatEntries.RemoveRange(finalHeat.Entries);
-        await _db.SaveChangesAsync();
-
-        var lane = 1;
-        foreach (var tid in interleaved)
-        {
-            _db.HeatEntries.Add(new HeatEntry { HeatId = finalHeat.Id, TeamId = tid, LaneIndex = lane++ });
-        }
-        await _db.SaveChangesAsync();
+        var problem = await _raceFinals.PopulateAsync(finalHeat, req.TopN);
+        if (problem is not null) return BadRequest(problem);
 
         var refreshed = await _db.Heats
             .Include(h => h.Entries).ThenInclude(e => e.Team)
@@ -418,6 +376,7 @@ public class SessionsController : ControllerBase
 
         s.MinutesPerHeat = req.MinutesPerHeat is > 0 ? req.MinutesPerHeat : null;
         if (req.RaceOrderAlternating.HasValue) s.RaceOrderAlternating = req.RaceOrderAlternating.Value;
+        if (req.QualifiersPerHeat.HasValue) s.QualifiersPerHeat = req.QualifiersPerHeat.Value;
         if (req.LaneRotationMode.HasValue)
         {
             if (!Enum.IsDefined(req.LaneRotationMode.Value)) return BadRequest(new { message = "Unknown lane rotation." });

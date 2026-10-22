@@ -30,6 +30,8 @@ public class Session
     public bool RaceOrderAlternating { get; set; }
     /// <summary>Lane change after each race. Defaults to moving up one, as every session did before this was a choice.</summary>
     public LaneRotationMode LaneRotationMode { get; set; } = LaneRotationMode.MoveUp;
+    /// <summary>Heat-heat-final: how many teams go through from each qualifier to the final. Null means the default (3).</summary>
+    public int? QualifiersPerHeat { get; set; }
 
     public ICollection<Heat> Heats { get; set; } = new List<Heat>();
 }

@@ -192,6 +192,9 @@ public class ScoringService
             throw new ScoreValidationException("Submit one result for every team in the heat.");
         var sessionBase = await GetSessionBaseAsync(heat.SessionId);
         if (sessionBase < 1) sessionBase = heat.Entries.Count;
+        // A race final is scored on its own field: last place in a final of 4 takes 2 points, a point more than
+        // a team that only qualified and didn't make it through, whatever size the qualifiers were.
+        if (heat.RaceRoundStage == RaceRoundStage.Final) sessionBase = heat.Entries.Count + 1;
         var racing = heat.Entries.Count - sitOut.Count;
         if (strictValidation && finishingPlaces.Any(p => !p.Eliminated && p.Place > racing))
             throw new ScoreValidationException($"Placings must be between 1 and {racing}.");

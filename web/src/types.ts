@@ -232,6 +232,8 @@ export interface Session {
   raceOrderAlternating?: boolean;
   /** How teams change lane after each race: 0 move up one (the default), 1 stay, 2 move down one. */
   laneRotationMode?: 0 | 1 | 2;
+  /** Heat-heat-final: how many teams go through from each qualifier to the final (3 when unset). */
+  qualifiersPerHeat?: number | null;
   heats: Heat[];
 }
 

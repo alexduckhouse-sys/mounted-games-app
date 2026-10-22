@@ -185,10 +185,11 @@ public record SessionDto(
     string? StreamUrl, int? LanesPerHeat,
     int? MinutesPerHeat, bool RaceOrderAlternating,
     IReadOnlyList<HeatDto> Heats,
-    LaneRotationMode LaneRotationMode = LaneRotationMode.MoveUp);
+    LaneRotationMode LaneRotationMode = LaneRotationMode.MoveUp,
+    int? QualifiersPerHeat = null);
 
 public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating,
-    LaneRotationMode? LaneRotationMode = null);
+    LaneRotationMode? LaneRotationMode = null, [Range(1, 20)] int? QualifiersPerHeat = null);
 
 public record HeatAssignmentEntry(string Label, IReadOnlyList<int> TeamIds);
 public record UpdateHeatAssignmentsRequest(IReadOnlyList<HeatAssignmentEntry> Assignments);
