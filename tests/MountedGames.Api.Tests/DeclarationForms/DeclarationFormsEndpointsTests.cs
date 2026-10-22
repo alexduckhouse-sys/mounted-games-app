@@ -38,13 +38,21 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
             return d.Id;
         });
 
+    /// <summary>Makes the seeded trainer the coach of every team in the arena and returns their client.</summary>
+    private async Task<HttpClient> CoachAsync(Arena a)
+    {
+        var id = await _f.TrainerIdAsync();
+        foreach (var t in a.TeamIds) await SetTrainerAsync(t, id);
+        return await _f.TrainerAsync();
+    }
+
     // ---- Submit ----
 
     [Fact]
     public async Task Submit_CreatesLockedForm_WithOrderedRidersAndTrimmedBib()
     {
         var a = await _f.CreateArenaAsync(1);
-        var trainer = await _f.TrainerAsync();
+        var trainer = await CoachAsync(a);
         var riders = new[]
         {
             Rider("First", bib: "  red  ", captain: true),          // order 0 -> position 0
@@ -92,7 +100,7 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Submit_Allowed_ForOwnTeam_AndForUnassignedTeam()
+    public async Task Submit_Allowed_ForOwnTeam_ButNotForUnassignedTeam()
     {
         var a = await _f.CreateArenaAsync(2);
         var me = await _f.LoginAsync(TestClients.TrainerEmail, TestClients.TrainerPassword);
@@ -103,7 +111,71 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
         var unassigned = await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[1]));
 
         Assert.Equal(HttpStatusCode.OK, own.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, unassigned.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, unassigned.StatusCode);
+        Assert.False(await _f.WithDbAsync(db => db.DeclarationForms.AnyAsync(d => d.TeamId == a.TeamIds[1])));
+    }
+
+    [Fact]
+    public async Task Submit_Returns403_ForUnclaimedTeam_ForEveryTeamRole()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var (manager, _) = await _f.SignupAsync("Manager");
+        var (member, _) = await _f.SignupAsync("Member");
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await manager.PostAsJsonAsync(Url, Form(a.TeamIds[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.PostAsJsonAsync(Url, Form(a.TeamIds[0]))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Submit_Allowed_ForCompetitionOwner_OnAnyTeamInIt()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var me = await _f.LoginAsync(TestClients.TrainerEmail, TestClients.TrainerPassword);
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Competitions.SingleAsync(c => c.Id == a.CompetitionId)).CreatedByUserId = me.User.Id;
+            await db.SaveChangesAsync();
+        });
+
+        var r = await _f.WithToken(me.Token).PostAsJsonAsync(Url, Form(a.TeamIds[0]));
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task Submit_Allowed_ForCompetitionTeamMember_ButNotForOtherCompetitions()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var b = await _f.CreateArenaAsync(1);
+        var (helper, auth) = await _f.SignupAsync("Member");
+        await _f.WithDbAsync(async db =>
+        {
+            db.CompetitionCollaborators.Add(new CompetitionCollaborator
+            {
+                CompetitionId = a.CompetitionId, UserId = auth.User.Id, Role = CollaboratorRole.CoOrganiser,
+                AddedByUserId = auth.User.Id, AddedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        });
+
+        Assert.Equal(HttpStatusCode.OK, (await helper.PostAsJsonAsync(Url, Form(a.TeamIds[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await helper.PostAsJsonAsync(Url, Form(b.TeamIds[0]))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Submit_Returns403_ForTrainerWhoDoesNotOwnTheCompetition()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var other = await _f.LoginAsync("coach@mg.local", TestClients.TrainerPassword);
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Competitions.SingleAsync(c => c.Id == a.CompetitionId)).CreatedByUserId = other.User.Id;
+            await db.SaveChangesAsync();
+        });
+
+        var r = await (await _f.TrainerAsync()).PostAsJsonAsync(Url, Form(a.TeamIds[0]));
+
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
     }
 
     [Fact]
@@ -120,14 +192,16 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Submit_ManagerAndMemberRolesAreAllowed()
+    public async Task Submit_ManagerAndMemberRolesAreAllowed_ForTeamsTheyCoach()
     {
-        var a = await _f.CreateArenaAsync(1);
-        var (manager, _) = await _f.SignupAsync("Manager");
-        var (member, _) = await _f.SignupAsync("Member");
+        var a = await _f.CreateArenaAsync(2);
+        var (manager, m1) = await _f.SignupAsync("Manager");
+        var (member, m2) = await _f.SignupAsync("Member");
+        await SetTrainerAsync(a.TeamIds[0], m1.User.Id);
+        await SetTrainerAsync(a.TeamIds[1], m2.User.Id);
 
         Assert.Equal(HttpStatusCode.OK, (await manager.PostAsJsonAsync(Url, Form(a.TeamIds[0]))).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await member.PostAsJsonAsync(Url, Form(a.TeamIds[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await member.PostAsJsonAsync(Url, Form(a.TeamIds[1]))).StatusCode);
     }
 
     [Fact]
@@ -156,6 +230,7 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     {
         var a = await _f.CreateArenaAsync(1);
         var (client, auth) = await _f.SignupAsync();
+        await SetTrainerAsync(a.TeamIds[0], auth.User.Id);
 
         var dto = await (await client.PostAsJsonAsync(Url, Form(a.TeamIds[0], phone: "  07700 900123 "))).ReadAsync<DeclarationFormDto>();
 
@@ -168,6 +243,7 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     {
         var a = await _f.CreateArenaAsync(1);
         var (client, auth) = await _f.SignupAsync();
+        await SetTrainerAsync(a.TeamIds[0], auth.User.Id);
         await client.PostAsJsonAsync(Url, Form(a.TeamIds[0], phone: "07700 900123"));
 
         // Same number again (no update path) and blank (ignored).
@@ -181,7 +257,7 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     public async Task Submit_WithoutSaveToRoster_DoesNotTouchRoster()
     {
         var a = await _f.CreateArenaAsync(1);
-        var trainer = await _f.TrainerAsync();
+        var trainer = await CoachAsync(a);
 
         await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0], new[] { Rider("Nobody Saved") }, save: false));
 
@@ -201,7 +277,7 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
             await db.SaveChangesAsync();
             return existing.Id;
         });
-        var trainer = await _f.TrainerAsync();
+        var trainer = await CoachAsync(a);
         var dob = new DateTime(2012, 4, 5, 0, 0, 0, DateTimeKind.Utc);
         var riders = new[]
         {
@@ -232,7 +308,7 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
             db.SavedRiders.Add(new SavedRider { ClubId = clubId, CreatedByUserId = trainerId, FullName = "Needs Horse", DateOfBirth = new DateTime(2010, 1, 1, 0, 0, 0, DateTimeKind.Utc) });
             await db.SaveChangesAsync();
         });
-        var trainer = await _f.TrainerAsync();
+        var trainer = await CoachAsync(a);
         var dob = new DateTime(2012, 4, 5, 0, 0, 0, DateTimeKind.Utc);
         var riders = new[]
         {
