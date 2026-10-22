@@ -16,7 +16,7 @@ public class StreamingHubTests : IClassFixture<StreamingApiFactory>
     private readonly StreamingApiFactory _f;
     public StreamingHubTests(StreamingApiFactory factory) => _f = factory;
 
-    private static async Task<(HttpClient Admin, int Competition, PublishResponse Attempt)> LiveAsync(StreamingApiFactory f, bool audio = true, bool simulcast = true)
+    internal static async Task<(HttpClient Admin, int Competition, PublishResponse Attempt)> LiveAsync(StreamingApiFactory f, bool audio = true, bool simulcast = true)
     {
         var admin = await f.AdminAsync();
         var competition = await f.SeedCompetitionAsync();

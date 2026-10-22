@@ -94,6 +94,8 @@ builder.Services.AddHttpClient(CloudflareSfuClient.HttpClientName, c => c.Timeou
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<ISfuClient, CloudflareSfuClient>();
 builder.Services.AddSingleton<CompetitionStreamLocks>();
+builder.Services.AddSingleton<RedisConnection>();
+builder.Services.AddSingleton<SharedViewerCounts>();
 builder.Services.AddSingleton<ViewerRegistry>();
 builder.Services.AddScoped<StreamLifecycle>();
 builder.Services.AddHostedService<StreamSweeper>();
