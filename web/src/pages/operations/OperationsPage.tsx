@@ -6,6 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
 import { Chevron, RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet } from '../refine/Refine';
 import { DrawResult, DrawSettingsForm } from './DrawPreviewView';
+import { EntriesPanel } from './EntriesPanel';
 import { EquipmentList } from './EquipmentList';
 import { ReadinessDesk } from './ReadinessDesk';
 import { buildIssueGroups, clock, drawSubtitle, plural, type IssueGroup } from './readiness';
@@ -39,7 +40,7 @@ export function OperationsPage() {
   return <OperationsPageContent key={`${competition.id}:${user.id}`} canWrite={canWrite} />;
 }
 
-type View = 'checks' | 'equipment' | 'draw';
+type View = 'checks' | 'equipment' | 'draw' | 'entries';
 type Sheet = 'more' | 'draw' | null;
 
 function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
@@ -208,6 +209,10 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
       ].filter(Boolean).join(' · ');
     }
     if (wide) actions = <button type="button" className="rf-btn" onClick={() => void loadReadiness()} disabled={loadingReadiness}>{loadingReadiness ? 'Checking…' : 'Recheck now'}</button>;
+  } else if (shownView === 'entries') {
+    title = 'Entries';
+    context = `Organiser · ${competition.name}`;
+    actions = null;
   } else if (shownView === 'equipment') {
     title = 'Equipment';
     if (readiness) subtitle = `${checkedEquipment.size} of ${equipmentTotal} items checked`;
@@ -224,6 +229,7 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
     { label: 'Readiness', active: shownView === 'checks', onSelect: () => setView('checks') },
     ...(wide ? [] : [{ label: 'Equipment', active: shownView === 'equipment', onSelect: () => setView('equipment') }]),
     { label: 'Draw', active: shownView === 'draw', onSelect: () => setView('draw') },
+    { label: 'Entries', active: shownView === 'entries', onSelect: () => setView('entries') },
   ];
 
   const clashes = groups.find((group) => group.id === 'clashes')?.items.length ?? 0;
@@ -249,6 +255,8 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
           <EquipmentList items={readiness.equipmentChecklist} checked={checkedEquipment} canWrite={canWrite} onToggle={toggleEquipment} />
         </section>
       )}
+
+      {shownView === 'entries' && <EntriesPanel canWrite={canWrite} onTimetableChanged={reloadCompetition} />}
 
       {shownView === 'draw' && (
         <section aria-label="Section draw">
