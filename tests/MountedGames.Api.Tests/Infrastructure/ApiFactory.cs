@@ -44,6 +44,8 @@ public class ApiFactory : WebApplicationFactory<Program>
             services.Remove(scheduler);
             services.Remove(services.Single(d => d.ImplementationType == typeof(MountedGames.Api.Services.Streaming.StreamSweeper)));
 
+            services.Remove(services.Single(d => d.ImplementationType == typeof(IpRetentionSweeper)));
+
             services.AddTransient<IStartupFilter, TestIpStartupFilter>();
 
             services.ConfigureAll<HttpClientFactoryOptions>(o =>

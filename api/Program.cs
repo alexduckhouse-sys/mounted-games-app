@@ -88,6 +88,8 @@ builder.Services.AddSingleton<VapidKeyService>();
 builder.Services.AddScoped<PushNotifier>();
 builder.Services.AddScoped<EquipmentCalculator>();
 builder.Services.AddHostedService<NotificationScheduler>();
+builder.Services.AddScoped<IpRetention>();
+builder.Services.AddHostedService<IpRetentionSweeper>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<StreamingOptions>(builder.Configuration.GetSection("Streaming"));
 builder.Services.AddHttpClient(CloudflareSfuClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
