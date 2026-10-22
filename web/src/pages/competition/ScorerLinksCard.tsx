@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api';
+import { QrCode } from '../../components/QrCode';
 import { scorerLinkUrl } from '../../offline/scorerLink';
 import type { CreatedScorerLink, ScorerLink, ScorerLinkList } from '../../types';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
@@ -164,6 +165,8 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
               <p className="font-medium">{created.label}’s link is ready. Copy it now: it can’t be shown again.</p>
               <input readOnly aria-label={`Link for ${created.label}`} className="w-full break-all" value={created.url} onFocus={(event) => event.currentTarget.select()} />
               <button type="button" className="mg-btn mg-btn-primary" onClick={() => void copy(created.url)}>Copy link</button>
+              <p className="mg-meta">Or let them scan this with their phone’s camera.</p>
+              <QrCode value={created.url} label={`QR code for ${created.label}’s scorer link`} className="w-48 max-w-full" />
             </div>
           )}
 

@@ -73,6 +73,7 @@ describe('ScorerLinksCard', () => {
     expect(shown).toHaveValue(`${window.location.origin}/score#t=mgs_secret`);
     expect(screen.getByText('Sam · Side')).toBeInTheDocument();
     expect(screen.getByLabelText('Scorer’s name')).toHaveValue('');
+    expect(screen.getByRole('img', { name: 'QR code for Sam’s scorer link' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Copy link' }));
     expect(write).toHaveBeenCalledWith(`${window.location.origin}/score#t=mgs_secret`);
