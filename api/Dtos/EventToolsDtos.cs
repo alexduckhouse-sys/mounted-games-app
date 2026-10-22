@@ -31,7 +31,7 @@ public record PrintableDrawDto(PrintableCompetitionDto Competition, IReadOnlyLis
 
 /// <summary><c>Lane</c> is the team's drawn lane in the heat; <c>Bib</c> is what its bibs look like, if known.</summary>
 public record PrintableScoreCellDto(int TeamId, string TeamName, int? Placing, bool Eliminated, int? Points,
-    int Lane = 0, string? Bib = null);
+    int Lane = 0, string? Bib = null, bool IsSitOut = false);
 public record PrintableScoreRaceDto(int RaceId, string Name, IReadOnlyList<PrintableScoreCellDto> Teams);
 public record PrintableScoreHeatDto(
     int HeatId, string Label, string SectionName, string SessionName,

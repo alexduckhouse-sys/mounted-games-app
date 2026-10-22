@@ -74,6 +74,8 @@ export interface PrintableScoreCell {
   lane?: number;
   /** What the team's bibs look like, if known. */
   bib?: string | null;
+  /** The team had no lane this race and sat it out. */
+  isSitOut?: boolean;
 }
 export interface PrintableScoreRace { raceId: number; name: string; teams: PrintableScoreCell[] }
 export interface PrintableScoreHeat {

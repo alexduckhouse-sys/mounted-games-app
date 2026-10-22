@@ -12,19 +12,35 @@ import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
 import { bibAccent } from '../../lib/bib';
+import { LANE_ROTATION_LABELS, LaneRotationMode, lanesInUse, laneLabel, positionFor, sitsOut, type LaneRotationModeValue } from '../../lib/lanes';
 import { retryOnNetworkError } from '../../lib/liveUpdates';
 import { describePlacings, enqueue, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 
-function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
-  if (heatSize <= 0) return baseLane;
-  return ((baseLane - 1 + raceIndex) % heatSize) + 1;
+/** How lanes change from race to race in this session, and how many lanes there are. */
+interface LaneRules { lanesPerHeat: number | null | undefined; mode: LaneRotationModeValue }
+
+const lanesOf = (session: Session): LaneRules => ({ lanesPerHeat: session.lanesPerHeat, mode: session.laneRotationMode ?? LaneRotationMode.MoveUp });
+
+/** The heat's teams in drawn-lane order. Their place in this list is their starting position, as the server counts it. */
+const byDrawnLane = (heat: Heat): HeatEntry[] => heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex || a.id - b.id);
+
+/** What to show for a team's lane in a race: its lane number, or S while it sits out. */
+function displayLaneFor(heat: Heat, entry: HeatEntry, raceIndex: number, rules: LaneRules): string {
+  const drawn = byDrawnLane(heat).findIndex((e) => e.id === entry.id) + 1;
+  return laneLabel(drawn, raceIndex, heat.entries.length, rules.lanesPerHeat, rules.mode);
 }
 
-function teamForDisplayLane(heat: Heat, raceIndex: number, displayLane: number): HeatEntry | null {
+/** Whether the team has no lane in this race. */
+function sitsOutOf(heat: Heat, entry: HeatEntry, raceIndex: number, rules: LaneRules): boolean {
+  const drawn = byDrawnLane(heat).findIndex((e) => e.id === entry.id) + 1;
+  return sitsOut(drawn, raceIndex, heat.entries.length, rules.lanesPerHeat, rules.mode);
+}
+
+function teamForDisplayLane(heat: Heat, raceIndex: number, displayLane: number, rules: LaneRules): HeatEntry | null {
   const size = heat.entries.length;
   if (size <= 0) return null;
-  return heat.entries.find((e) => displayLaneFor(e.laneIndex, raceIndex, size) === displayLane) ?? null;
+  return byDrawnLane(heat).find((_, i) => positionFor(i + 1, raceIndex, size, rules.mode) === displayLane) ?? null;
 }
 
 interface PendingPlace {
@@ -69,7 +85,8 @@ export function SessionPage() {
 
   const sessionBase = useMemo(() => {
     if (!session) return 0;
-    return session.heats.reduce((m, h) => Math.max(m, h.entries.length), 0);
+    // A heat with more teams than lanes races only the lanes, so points are out of the lanes, not the teams.
+    return session.heats.reduce((m, h) => Math.max(m, lanesInUse(h.entries.length, session.lanesPerHeat)), 0);
   }, [session]);
 
   const orderedHeats = useMemo(
@@ -160,6 +177,7 @@ export function SessionPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- seeds the pending placings for the selected race; ordered with the hydrate and reset effects
     if (!race || !race.isComplete) { setPending([]); return; }
     const seeded: PendingPlace[] = race.results
+      .filter((r) => !r.isSitOut)
       .slice()
       .sort((a, b) => (a.placing ?? 999) - (b.placing ?? 999))
       .map((r, i) => ({
@@ -251,6 +269,12 @@ export function SessionPage() {
 
   function resetPending() { setPending([]); }
 
+  // Teams with no lane this race still go in the result: no place, no points, shown as S.
+  function sitOutPlaces(heat: Heat, raceIndex: number, rules: LaneRules): PendingPlace[] {
+    return heat.entries.filter((e) => sitsOutOf(heat, e, Math.max(raceIndex, 0), rules))
+      .map((e) => ({ teamId: e.teamId, place: 0, eliminated: false }));
+  }
+
   // Results go into this phone's outbox and send when there's signal, so the
   // scorer can move straight on to the next race.
   function submit() {
@@ -268,7 +292,7 @@ export function SessionPage() {
       competitionId: session.competitionId,
       sessionId: session.id,
       label: `${activeHeat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
-      places: pending,
+      places: [...pending, ...sitOutPlaces(activeHeat, orderedRaces.findIndex((r) => r.id === activeRace.id), lanesOf(session))],
       expected: placingsOf(activeRace.results),
       teamNames: Object.fromEntries(activeHeat.entries.map((e) => [e.teamId, e.teamName])),
       queuedAt: new Date().toISOString(),
@@ -293,6 +317,7 @@ export function SessionPage() {
         </Link>
         {canManage(competition) && (
           <div className="flex gap-1.5">
+            <LaneRotationControl session={session} onChanged={reload} />
             <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
               <Wand2 className="w-3.5 h-3.5" /> Set up heats
             </button>
@@ -316,6 +341,7 @@ export function SessionPage() {
               activeRace={activeRace}
               onSelectRace={(id) => { setActiveRaceId(id); setPending([]); }}
               sessionBase={sessionBase}
+              laneRules={lanesOf(session)}
               pending={pending}
               canScore
               queued={outbox}
@@ -378,6 +404,35 @@ export function SessionPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/** How teams change lane after each race. Saved with the session's other timing settings, which it must carry along. */
+function LaneRotationControl({ session, onChanged }: { session: Session; onChanged: () => void }) {
+  const [error, setError] = useState(false);
+  async function change(mode: LaneRotationModeValue) {
+    setError(false);
+    try {
+      await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/settings`, {
+        minutesPerHeat: session.minutesPerHeat ?? null,
+        raceOrderAlternating: session.raceOrderAlternating ?? false,
+        laneRotationMode: mode,
+      });
+      onChanged();
+    } catch { setError(true); }
+  }
+  return (
+    <label className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+      <span>Lanes after each race</span>
+      <select
+        className="input !min-h-0 !py-1 text-xs"
+        value={session.laneRotationMode ?? LaneRotationMode.MoveUp}
+        onChange={(e) => void change(Number(e.target.value) as LaneRotationModeValue)}
+      >
+        {([0, 1, 2] as const).map((mode) => <option key={mode} value={mode}>{LANE_ROTATION_LABELS[mode]}</option>)}
+      </select>
+      {error && <span role="alert" className="text-rose-600">Not saved</span>}
+    </label>
   );
 }
 
@@ -645,18 +700,19 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
   );
 }
 
-function LaneGrid({ heat, raceIndex, raceName }: { heat: Heat; raceIndex: number; raceName: string }) {
+function LaneGrid({ heat, raceIndex, raceName, rules }: { heat: Heat; raceIndex: number; raceName: string; rules: LaneRules }) {
   const size = heat.entries.length;
   if (size === 0) return null;
-  const lanes = Array.from({ length: size }, (_, i) => i + 1);
+  const lanes = Array.from({ length: lanesInUse(size, rules.lanesPerHeat) }, (_, i) => i + 1);
+  const sittingOut = heat.entries.filter((e) => sitsOutOf(heat, e, raceIndex, rules));
   return (
     <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 bg-slate-50/60 dark:bg-slate-800/40">
       <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-300 mb-1 flex items-center gap-1">
-        <Columns3 className="w-3 h-3" /> Lanes for {raceName} {raceIndex > 0 && <span className="font-normal text-slate-400">(rotated +{raceIndex})</span>}
+        <Columns3 className="w-3 h-3" /> Lanes for {raceName} {raceIndex > 0 && rules.mode !== LaneRotationMode.Stay && <span className="font-normal text-slate-400">(rotated {rules.mode === LaneRotationMode.MoveDown ? '-' : '+'}{raceIndex})</span>}
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
         {lanes.map((laneNum) => {
-          const team = teamForDisplayLane(heat, raceIndex, laneNum);
+          const team = teamForDisplayLane(heat, raceIndex, laneNum, rules);
           return (
             <div
               key={laneNum}
@@ -669,6 +725,11 @@ function LaneGrid({ heat, raceIndex, raceName }: { heat: Heat; raceIndex: number
           );
         })}
       </div>
+      {sittingOut.length > 0 && (
+        <p className="mt-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+          <span className="font-bold">S</span> Sitting out this race: {sittingOut.map((e) => e.teamName).join(', ')}
+        </p>
+      )}
     </div>
   );
 }
@@ -679,6 +740,7 @@ interface ScoringProps {
   activeRace: Race | null;
   onSelectRace: (id: number) => void;
   sessionBase: number;
+  laneRules: LaneRules;
   pending: PendingPlace[];
   canScore: boolean;
   queued: QueuedScore[];
@@ -695,7 +757,7 @@ interface ScoringProps {
 }
 
 function ScoringSection({
-  heat, races, activeRace, onSelectRace, sessionBase, pending, canScore, queued, showResults,
+  heat, races, activeRace, onSelectRace, sessionBase, laneRules, pending, canScore, queued, showResults,
   onToggleResults, showLaneView, onToggleLaneView, onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason,
 }: ScoringProps) {
   const pendingByTeam = new Map(pending.map((p) => [p.teamId, p]));
@@ -703,7 +765,6 @@ function ScoringSection({
   const activeQueued = activeRace ? queuedByRace.get(activeRace.id) : undefined;
   const activeRaceIdx = activeRace ? races.findIndex((r) => r.id === activeRace.id) : 0;
   const heatSize = heat.entries.length;
-
   function pointsFor(place: number, eliminated: boolean) {
     if (eliminated) return 0;
     if (place < 1 || place > sessionBase) return 0;
@@ -749,7 +810,7 @@ function ScoringSection({
           </div>
         )}
         {showLaneView && activeRace && heatSize > 0 && (
-          <LaneGrid heat={heat} raceIndex={activeRaceIdx} raceName={activeRace.name} />
+          <LaneGrid heat={heat} raceIndex={activeRaceIdx} raceName={activeRace.name} rules={laneRules} />
         )}
       </div>
 
@@ -772,7 +833,8 @@ function ScoringSection({
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {heat.entries.map((e) => {
               const state = pendingByTeam.get(e.teamId);
-              const lane = displayLaneFor(e.laneIndex, activeRaceIdx, heatSize);
+              const sat = sitsOutOf(heat, e, activeRaceIdx, laneRules);
+              const lane = displayLaneFor(heat, e, activeRaceIdx, laneRules);
               return (
                 <ScoreTile
                   key={e.id}
@@ -781,7 +843,7 @@ function ScoringSection({
                   colour={bibAccent(e.bibColour)}
                   place={state?.eliminated ? undefined : state?.place}
                   eliminated={state?.eliminated ?? false}
-                  disabled={!canScore}
+                  disabled={!canScore || sat}
                   onTap={() => onClickTeam(e.teamId)}
                   onSwipeEliminate={() => onToggleElim(e.teamId)}
                 />
@@ -903,7 +965,7 @@ function HeatResultsTable({ heat, pending, activeRaceId, pointsFor }: {
 
 interface ScoreTileProps {
   teamName: string;
-  lane: number;
+  lane: number | string;
   colour: string;
   place?: number;
   eliminated: boolean;

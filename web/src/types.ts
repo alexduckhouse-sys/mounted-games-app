@@ -179,6 +179,8 @@ export interface ResultRow {
   placing: number | null;
   eliminated: boolean;
   points: number;
+  /** The team had no lane this race (more teams than lanes) and sat it out. Shown as S. */
+  isSitOut?: boolean;
 }
 
 export interface Race {
@@ -228,6 +230,8 @@ export interface Session {
   lanesPerHeat?: number | null;
   minutesPerHeat?: number | null;
   raceOrderAlternating?: boolean;
+  /** How teams change lane after each race: 0 move up one (the default), 1 stay, 2 move down one. */
+  laneRotationMode?: 0 | 1 | 2;
   heats: Heat[];
 }
 
