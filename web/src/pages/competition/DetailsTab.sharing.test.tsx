@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../../api';
 import { DetailsTab } from './DetailsTab';
 
-vi.mock('../../api', () => ({ api: { get: vi.fn().mockResolvedValue({ data: [] }), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
+vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('./CompetitionTeamCard', () => ({ CompetitionTeamCard: () => null }));
 vi.mock('../commerce/DemoEntryPayment', () => ({ DemoEntryPayment: () => null }));
 
@@ -28,7 +29,10 @@ vi.mock('./context', () => ({
   }),
 }));
 
-beforeEach(() => { auth.organise = false; });
+beforeEach(() => {
+  auth.organise = false;
+  vi.mocked(api.get).mockResolvedValue({ data: [] });
+});
 
 function renderTab() {
   return render(<MemoryRouter><DetailsTab /></MemoryRouter>);
