@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Weather;
@@ -17,6 +19,14 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
           "is_day":[0,1,1]}}
         """;
 
+    // The weather cache is per host and this class's tests share one host, so start each test cold.
+    // (Caching itself is covered in WeatherCacheTests.)
+    private void Reset()
+    {
+        _f.Http.Reset();
+        _f.Services.GetRequiredService<WeatherCache>().Clear();
+    }
+
     private async Task<(HttpStatusCode Status, JsonElement Body)> GetJsonAsync(string url)
     {
         var r = await _f.CreateClient().GetAsync(url);
@@ -28,7 +38,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Current_PassesThroughUpstreamJson()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.RespondJson("open-meteo", """{"current":{"temperature_2m":21.5,"weather_code":0}}""");
 
         var (status, body) = await GetJsonAsync("/api/weather/current?lat=52.5&lon=-1.25");
@@ -44,7 +54,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Current_ReturnsFallback_WhenUpstreamFails()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.Throw("open-meteo");
 
         var (status, body) = await GetJsonAsync("/api/weather/current?lat=1&lon=2");
@@ -58,7 +68,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Current_ReturnsFallback_WhenUpstreamReturnsErrorStatus()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.RespondJson("open-meteo", "{}", HttpStatusCode.InternalServerError);
 
         var (_, body) = await GetJsonAsync("/api/weather/current?lat=1&lon=2");
@@ -71,7 +81,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task At_ReturnsTheMatchingHour()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.RespondJson("open-meteo", Hourly);
 
         var (status, body) = await GetJsonAsync("/api/weather/at?lat=52&lon=-1&when=2030-06-01T14:30:00");
@@ -87,7 +97,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task At_FallsBackToFirstHour_WhenNoHourMatches()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.RespondJson("open-meteo", Hourly);
 
         var (_, body) = await GetJsonAsync("/api/weather/at?lat=52&lon=-1&when=2030-06-01T09:00:00");
@@ -99,7 +109,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task At_IgnoresUnparseableTimeStrings()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.RespondJson("open-meteo", """
             {"hourly":{"time":["short",null,"2030-06-01Txx:00","2030-06-01T08:00"],
               "temperature_2m":[1,2,3,4],"weather_code":[1,2,3,4],"is_day":[1,1,1,1]}}
@@ -114,7 +124,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task At_ReturnsFallback_WhenPayloadHasNoHourlyBlock()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.RespondJson("open-meteo", """{"reason":"nope"}""");
 
         var (status, body) = await GetJsonAsync("/api/weather/at?lat=52&lon=-1&when=2030-06-01T08:00:00");
@@ -127,7 +137,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task At_ReturnsErrorFallback_WhenHourlyBlockIsMalformed()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.RespondJson("open-meteo", """{"hourly":{"time":[]}}""");
 
         var (_, body) = await GetJsonAsync("/api/weather/at?lat=52&lon=-1&when=2030-06-01T08:00:00");
@@ -138,7 +148,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task At_ReturnsErrorFallback_WhenUpstreamFails()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.Throw("open-meteo");
 
         var (status, body) = await GetJsonAsync("/api/weather/at?lat=52&lon=-1&when=2030-06-01T08:00:00");
@@ -153,7 +163,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Forecast_PassesThroughUpstreamJson()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.RespondJson("open-meteo", """{"daily":{"temperature_2m_max":[22.1]}}""");
 
         var (status, body) = await GetJsonAsync("/api/weather/forecast?lat=52&lon=-1&date=2030-07-04");
@@ -166,7 +176,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Forecast_ReturnsFallback_WhenUpstreamFails()
     {
-        _f.Http.Reset();
+        Reset();
         _f.Http.Throw("open-meteo");
 
         var (status, body) = await GetJsonAsync("/api/weather/forecast?lat=52&lon=-1&date=2030-07-04");
