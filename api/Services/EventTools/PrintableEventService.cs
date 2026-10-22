@@ -48,6 +48,7 @@ public sealed class PrintableEventService(AppDbContext db)
     {
         var competition = await LoadAsync(competitionId, ct);
         if (competition is null) return null;
+        var tiers = FinalsTiers.From(competition.Sessions);
         var sections = competition.Sections.OrderBy(x => x.DisplayName).Select(section =>
         {
             var rows = section.Teams.Where(x => !x.IsHorsConcours).Select(team =>
@@ -56,19 +57,21 @@ public sealed class PrintableEventService(AppDbContext db)
                 return new
                 {
                     Team = team,
+                    Tier = tiers.SortKey(team.Id),
                     Total = results.Sum(x => x.Points),
                     Run = results.Length,
                     Wins = results.Count(x => x.Placing == 1 && !x.Eliminated),
                     Eliminations = results.Count(x => x.Eliminated),
                 };
-            }).OrderByDescending(x => x.Total).ThenBy(x => x.Team.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Team.Id).ToList();
-            int? previous = null;
+            }).OrderBy(x => x.Tier).ThenByDescending(x => x.Total).ThenBy(x => x.Team.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Team.Id).ToList();
+            (int Tier, int Total)? previous = null;
             var rank = 0;
             var result = new List<PrintableResultRowDto>();
             for (var i = 0; i < rows.Count; i++)
             {
-                if (previous != rows[i].Total) rank = i + 1;
-                previous = rows[i].Total;
+                // Teams only tie on the same points within the same final.
+                if (previous != (rows[i].Tier, rows[i].Total)) rank = i + 1;
+                previous = (rows[i].Tier, rows[i].Total);
                 result.Add(new PrintableResultRowDto(rank, rows[i].Team.Id, rows[i].Team.DisplayName,
                     rows[i].Team.Club?.Name ?? string.Empty, rows[i].Total, rows[i].Run, rows[i].Wins, rows[i].Eliminations));
             }

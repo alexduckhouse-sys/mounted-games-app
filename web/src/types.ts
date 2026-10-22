@@ -346,6 +346,8 @@ export interface StandingRow {
   racesRun: number;
   wins: number;
   eliminations: number;
+  /** 0 for the A Final, 1 for the B Final and so on; null when the team is in no lettered final. */
+  finalTier?: number | null;
 }
 
 export interface ChatMessage {

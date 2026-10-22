@@ -213,19 +213,69 @@ public class EquipmentEndpointTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Compute_SumsDistinctRacesWithinASession()
+    public async Task Compute_TakesMaxOfReusableFixtures_AcrossRacesInASession()
     {
-        var one = Unique("sum1");
-        var two = Unique("sum2");
-        await SeedTemplateAsync(one, """[{"t":"pole"}]""");
-        await SeedTemplateAsync(two, """[{"t":"pole"},{"t":"pole"}]""");
+        var one = Unique("fix1");
+        var two = Unique("fix2");
+        await SeedTemplateAsync(one, """[{"t":"pole"},{"t":"cone","kind":"litter","anchor":"start"},{"t":"table","x":50}]""");
+        await SeedTemplateAsync(two, """[{"t":"pole"},{"t":"pole"},{"t":"cone","kind":"litter","anchor":"start"},{"t":"cone","kind":"litter","anchor":"start"},{"t":"in","x":50}]""");
         var comp = await _f.SeedCompetitionAsync();
         await SeedSessionAsync(comp, new[] { 2 }, new[] { one, two });
 
         var r = await GetAsync(comp);
 
-        Assert.Equal(6, CountOf(r, "Pole", "Lane")); // (1 + 2 poles) x 2 riders
+        Assert.Equal(4, CountOf(r, "Pole", "Lane")); // the biggest single race (2 poles) x 2 riders, not 3 x 2
+        Assert.Equal(4, CountOf(r, "Litter", "Start"));
+        Assert.Equal(2, CountOf(r, "In / station", "Mid")); // table and "in" are the same fixture
         Assert.Equal(2, r.RacesCounted);
+    }
+
+    [Fact]
+    public async Task Compute_StillSumsItemsAcrossRacesInASession()
+    {
+        var one = Unique("kit1");
+        var two = Unique("kit2");
+        await SeedTemplateAsync(one, """[{"t":"pole"},{"t":"item","kind":"mug","anchor":"start"}]""");
+        await SeedTemplateAsync(two, """[{"t":"pole"},{"t":"item","kind":"mug","anchor":"start"},{"t":"item","kind":"mug","anchor":"start"}]""");
+        var comp = await _f.SeedCompetitionAsync();
+        await SeedSessionAsync(comp, new[] { 2 }, new[] { one, two });
+
+        var r = await GetAsync(comp);
+
+        Assert.Equal(6, CountOf(r, "Mug", "Start")); // (1 + 2 mugs) x 2 riders
+        Assert.Equal(2, CountOf(r, "Pole", "Lane"));
+    }
+
+    [Fact]
+    public async Task Compute_KeepsFixtureAndItemOfTheSameKindApart()
+    {
+        var one = Unique("mix1");
+        var two = Unique("mix2");
+        await SeedTemplateAsync(one, """[{"t":"cone","kind":"flag","anchor":"start"}]""");
+        await SeedTemplateAsync(two, """[{"t":"cone","kind":"flag","anchor":"start"},{"t":"item","kind":"flag","anchor":"start"}]""");
+        var comp = await _f.SeedCompetitionAsync();
+        await SeedSessionAsync(comp, new[] { 2 }, new[] { one, two });
+
+        var r = await GetAsync(comp);
+
+        // One flag cone (reused by both races) plus one flag item, per rider.
+        Assert.Equal(4, CountOf(r, "Flag", "Start"));
+    }
+
+    [Fact]
+    public async Task Compute_MaxesStackedFixtures_ButSumsStackedItems()
+    {
+        var one = Unique("stk1");
+        var two = Unique("stk2");
+        await SeedTemplateAsync(one, """[{"t":"pole","on":[{"t":"item","kind":"mug"}]}]""");
+        await SeedTemplateAsync(two, """[{"t":"pole","on":[{"t":"item","kind":"mug"}]}]""");
+        var comp = await _f.SeedCompetitionAsync();
+        await SeedSessionAsync(comp, new[] { 3 }, new[] { one, two });
+
+        var r = await GetAsync(comp);
+
+        Assert.Equal(3, CountOf(r, "Pole", "Lane"));
+        Assert.Equal(6, CountOf(r, "Mug", "Lane"));
     }
 
     [Fact]

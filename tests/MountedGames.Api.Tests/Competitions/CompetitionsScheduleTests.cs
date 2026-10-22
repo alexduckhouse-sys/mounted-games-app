@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Competitions;
@@ -257,6 +258,51 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
         Assert.Equal(5, s.Heats.Sum(h => h.Entries.Count));
         Assert.All(s.Heats, h => Assert.InRange(h.Entries.Count, 1, 2));
         Assert.Equal(2, s.LanesPerHeat);
+    }
+
+    [Fact]
+    public async Task CreateFinals_PlacesTeamsInRankOrder_AcrossAThenBThenCFinal()
+    {
+        var (comp, section, t) = await CompWithTeamsAsync(5, "Ranked");
+        // Seeded in a scrambled order so only the points decide the ranking: t[2] > t[4] > t[0] > t[3] > t[1].
+        await _f.SeedScoredRaceAsync(comp, section, new (int, int?, bool, int)[]
+        {
+            (t[0], 3, false, 6), (t[1], 5, false, 2), (t[2], 1, false, 10), (t[3], 4, false, 4), (t[4], 2, false, 8),
+        });
+        var admin = await _f.AdminAsync();
+
+        // Repeat: the old shuffle only went wrong some of the time.
+        for (var run = 0; run < 5; run++)
+        {
+            var s = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals", new
+            {
+                competitionSectionId = section, topN = 5, raceNames = new[] { "R" }, lanesPerHeat = 2,
+            })).ReadAsync<SessionDto>();
+
+            Assert.Equal(new[] { "A Final", "B Final", "C Final" }, s.Heats.Select(h => h.Label));
+            Assert.Equal(new[] { t[2], t[4] }, s.Heats[0].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+            Assert.Equal(new[] { t[0], t[3] }, s.Heats[1].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+            Assert.Equal(new[] { t[1] }, s.Heats[2].Entries.Select(e => e.TeamId));
+        }
+    }
+
+    [Fact]
+    public async Task CreateFinals_ATopNSmallerThanTheSection_OnlyTakesTheBest()
+    {
+        var (comp, section, t) = await CompWithTeamsAsync(4, "TopOnly");
+        await _f.SeedScoredRaceAsync(comp, section, new (int, int?, bool, int)[]
+        {
+            (t[0], 4, false, 1), (t[1], 3, false, 3), (t[2], 1, false, 9), (t[3], 2, false, 5),
+        });
+        var admin = await _f.AdminAsync();
+
+        var s = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals", new
+        {
+            competitionSectionId = section, topN = 2, raceNames = new[] { "R" }, lanesPerHeat = 6,
+        })).ReadAsync<SessionDto>();
+
+        var a = Assert.Single(s.Heats);
+        Assert.Equal(new[] { t[2], t[3] }, a.Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
     }
 
     [Fact]
@@ -572,6 +618,65 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
         replaceExisting = replace,
         sectionIds,
     };
+
+    // ---- auto-timetable order by age ----
+
+    [Theory]
+    [InlineData("Open", 0)]
+    [InlineData("Seniors", 0)]
+    [InlineData("Under 18", 1)]
+    [InlineData("U17", 1)]
+    [InlineData("Under 15", 2)]
+    [InlineData("Intermediate", 2)]
+    [InlineData("Under 14", 3)]
+    [InlineData("u-12", 4)]
+    [InlineData("Juniors", 4)]
+    [InlineData("Under 10", 5)]
+    [InlineData("Novices", 5)]
+    [InlineData("Lead Rein", 6)]
+    [InlineData("Lead-rein Under 10", 6)]
+    [InlineData("Mystery", SectionAgeOrder.Unclassified)]
+    [InlineData("", SectionAgeOrder.Unclassified)]
+    [InlineData(null, SectionAgeOrder.Unclassified)]
+    public void SectionAgeOrder_PlacesAgeGroupsOldestFirst(string? text, int rank)
+        => Assert.Equal(rank, SectionAgeOrder.Rank(text));
+
+    [Fact]
+    public void SectionAgeOrder_FallsBackToTheDisplayName_WhenTheAgeGroupIsNoHelp()
+    {
+        var section = new CompetitionSection { AgeGroup = "Mixed", DisplayName = "Teams Under 14" };
+        Assert.Equal(3, SectionAgeOrder.Rank(section));
+        Assert.Equal(4, SectionAgeOrder.Rank(new CompetitionSection { AgeGroup = "Under 12", DisplayName = "Teams Open" }));
+    }
+
+    [Fact]
+    public async Task AutoTimetable_SchedulesOldestAgeGroupFirst_ThenUnclassifiedByName()
+    {
+        var comp = await _f.SeedCompetitionAsync(start: new DateTime(2032, 3, 10, 14, 30, 0, DateTimeKind.Utc));
+        var club = await _f.SeedClubAsync();
+        // Created youngest-first and in a jumbled order; names chosen so the alphabetical order differs too.
+        var names = new[] { "Zebra Cup", "Lead Rein", "Under 10", "Junior", "Under 14", "Under 15", "Under 17", "Open", "Alpha Cup" };
+        foreach (var name in names)
+        {
+            var section = await _f.WithDbAsync(async db =>
+            {
+                var s = new CompetitionSection { CompetitionId = comp, Format = SectionFormat.Teams, AgeGroup = name, DisplayName = name };
+                db.CompetitionSections.Add(s);
+                await db.SaveChangesAsync();
+                return s.Id;
+            });
+            await _f.SeedTeamAsync(comp, section, club, $"Team {name}");
+        }
+        var admin = await _f.AdminAsync();
+
+        var detail = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/auto-timetable", Auto())).ReadAsync<CompetitionDetail>();
+
+        var ordered = detail.Sessions.OrderBy(s => s.OrderIndex).ToList();
+        Assert.Equal(
+            new[] { "Open", "Under 17", "Under 15", "Under 14", "Junior", "Under 10", "Lead Rein", "Alpha Cup", "Zebra Cup" },
+            ordered.Select(s => s.Name));
+        Assert.Equal(ordered.Select(s => s.ScheduledStart), ordered.Select(s => s.ScheduledStart).OrderBy(x => x));
+    }
 
     [Fact]
     public async Task AutoTimetable_Returns401_WhenAnonymous()
