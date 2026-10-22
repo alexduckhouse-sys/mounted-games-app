@@ -1,5 +1,5 @@
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import {
   ChevronLeft, CloudOff, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Coffee, Wand2, X, Clock, Columns3, ClipboardList, Users, CheckCircle2,
@@ -12,7 +12,6 @@ import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
 import { bibAccent } from '../../lib/bib';
-import { retryOnNetworkError } from '../../lib/liveUpdates';
 import { describePlacings, enqueue, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
 import {
   nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
@@ -736,7 +735,6 @@ function ScoringSection({
             <h3 className="font-semibold flex items-center gap-1.5 text-sm flex-1 min-w-0">
               <Flag className="w-4 h-4 text-brand-600 shrink-0" /> Scoring · {activeRace.name}
             </h3>
-            <RaceClock key={activeRace.id} race={activeRace} />
           </div>
           {activeQueued && (
             <p role="status" className="mb-2 rounded-md bg-amber-50 p-2 text-[11px] text-amber-900">
@@ -1062,101 +1060,5 @@ function HeatEndOverlay({
         )}
       </motion.div>
     </motion.div>
-  );
-}
-
-/**
- * Live race clock — Start/Stop buttons + an elapsed timer that ticks every
- * second while the race is running. Optimistic: shows the tap at once and
- * sends the tap time, so a slow connection doesn't shift the race time.
- */
-// A once-a-second clock for the running race timer, read through useSyncExternalStore so that
-// rendering never calls Date.now() itself.
-let clockNow = Date.now();
-function useClock(active: boolean): number {
-  const subscribe = useCallback((notify: () => void) => {
-    if (!active) return () => {};
-    clockNow = Date.now(); // the first reading after subscribing is current
-    const timer = setInterval(() => { clockNow = Date.now(); notify(); }, 1000);
-    return () => clearInterval(timer);
-  }, [active]);
-  return useSyncExternalStore(subscribe, () => clockNow);
-}
-
-function RaceClock({ race: serverRace }: { race: Race }) {
-  type Action = 'start' | 'stop';
-  interface Tap { action: Action; at: string; startedAt: string | null; finishedAt: string | null; unsent: boolean; basis: string }
-  // The tap waiting on (or confirmed by) the server. It applies only while the
-  // live competition data still shows what was on screen when it was tapped.
-  const [tap, setTap] = useState<Tap | null>(null);
-  const basis = `${serverRace.startedAt ?? ''}|${serverRace.finishedAt ?? ''}`;
-  const pendingTap = tap?.basis === basis ? tap : null;
-  const race = pendingTap ? { ...serverRace, startedAt: pendingTap.startedAt, finishedAt: pendingTap.finishedAt } : serverRace;
-
-  const started = race.startedAt ? new Date(race.startedAt) : null;
-  const finished = race.finishedAt ? new Date(race.finishedAt) : null;
-  const running = started != null && finished == null;
-  const now = useClock(running);
-
-  function elapsed(): string {
-    if (!started) return '—';
-    const end = finished?.getTime() ?? now;
-    const s = Math.max(0, Math.round((end - started.getTime()) / 1000));
-    const m = Math.floor(s / 60);
-    const sec = (s % 60).toString().padStart(2, '0');
-    return `${m}:${sec}`;
-  }
-
-  async function send(action: Action, at: string) {
-    // A reply only counts for its own tap: Stop may be tapped before Start's reply lands.
-    const update = (change: Partial<Tap>) => setTap((t) => (t && t.at === at && t.action === action ? { ...t, ...change } : t));
-    update({ unsent: false });
-    try {
-      const { data } = await retryOnNetworkError(() => api.post<Race>(`/races/${serverRace.id}/${action}`, { at }));
-      update({ startedAt: data.startedAt ?? null, finishedAt: data.finishedAt ?? null });
-    } catch {
-      update({ unsent: true });
-    }
-  }
-  function press(action: Action) {
-    const at = new Date().toISOString();
-    const startedAt = race.startedAt ?? at;
-    setTap({ action, at, startedAt, finishedAt: action === 'start' ? null : at, unsent: false, basis });
-    void send(action, at);
-  }
-
-  if (race.isComplete) {
-    // After results submitted, just show the final duration.
-    return started && finished ? (
-      <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
-        <Clock className="inline w-3 h-3 -mt-px" /> {elapsed()}
-      </span>
-    ) : null;
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`font-mono tabular-nums font-bold text-sm px-2 py-0.5 rounded-md ${
-        running
-          ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200 animate-pulse'
-          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-      }`}>
-        <Clock className="inline w-3 h-3 -mt-px" /> {elapsed()}
-      </span>
-      {running ? (
-        <button onClick={() => press('stop')} className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-rose-600">
-          Stop
-        </button>
-      ) : (
-        <button onClick={() => press('start')} className="btn-primary !py-0.5 !px-2 text-[11px]">
-          Start
-        </button>
-      )}
-      {pendingTap?.unsent && (
-        <button role="alert" onClick={() => void send(pendingTap.action, pendingTap.at)} className="btn-ghost !py-0.5 !px-1.5 text-[11px] text-amber-700">
-          Not sent · Retry
-        </button>
-      )}
-    </span>
   );
 }
