@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Sessions;
@@ -423,6 +424,159 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         Assert.Null(byId[h1].Races.Single().FinishedAt);
         Assert.Null(byId[h1].StartedAt);
         Assert.Null(byId[h1].FinishedAt);
+    }
+
+    /// <summary>Two heats of two teams, each with one completed, scored race. Heat 1 has T0/T1, Heat 2 has T2/T3.</summary>
+    private async Task<(Arena A, int H1, int H2, int[] Races)> ScoredTwoHeatSessionAsync()
+    {
+        var a = await _f.CreateArenaAsync();
+        var (h1, r1) = await _f.AddHeatAsync(a.SessionId, new[] { a.TeamIds[0], a.TeamIds[1] }, "Heat 1", 1);
+        var (h2, r2) = await _f.AddHeatAsync(a.SessionId, new[] { a.TeamIds[2], a.TeamIds[3] }, "Heat 2", 2);
+        await _f.WithDbAsync(async db =>
+        {
+            foreach (var (raceId, first, second) in new[] { (r1[0], a.TeamIds[0], a.TeamIds[1]), (r2[0], a.TeamIds[2], a.TeamIds[3]) })
+            {
+                db.Results.Add(new Result { RaceId = raceId, TeamId = first, Placing = 1, Points = 2 });
+                db.Results.Add(new Result { RaceId = raceId, TeamId = second, Placing = 2, Points = 1 });
+                var race = await db.Races.SingleAsync(r => r.Id == raceId);
+                race.IsComplete = true;
+                race.StartedAt = DateTime.UtcNow;
+                race.FinishedAt = DateTime.UtcNow;
+            }
+            await db.SaveChangesAsync();
+        });
+        return (a, h1, h2, new[] { r1[0], r2[0] });
+    }
+
+    [Fact]
+    public async Task UpdateHeatAssignments_KeepsScoresInHeatsThatDidNotChange()
+    {
+        var (a, h1, h2, _) = await ScoredTwoHeatSessionAsync();
+        var admin = await _f.AdminAsync();
+        // Heat 1 is sent back exactly as it is; Heat 2 swaps its lanes.
+        var req = new UpdateHeatAssignmentsRequest(new[]
+        {
+            new HeatAssignmentEntry("Heat 1", new[] { a.TeamIds[0], a.TeamIds[1] }),
+            new HeatAssignmentEntry("Heat 2", new[] { a.TeamIds[3], a.TeamIds[2] }),
+        });
+
+        var r = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/heat-assignments"), req);
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var byId = (await r.ReadAsync<SessionDto>()).Heats.ToDictionary(h => h.Id);
+        var scored = byId[h1].Races.Single();
+        Assert.True(scored.IsComplete);
+        Assert.NotNull(scored.StartedAt);
+        Assert.Equal(new[] { a.TeamIds[0], a.TeamIds[1] }, scored.Results.OrderBy(x => x.Placing).Select(x => x.TeamId));
+        Assert.Equal(new[] { a.TeamIds[0], a.TeamIds[1] }, byId[h1].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+        // The changed heat is rewritten: new lane order, results cleared.
+        Assert.Equal(new[] { a.TeamIds[3], a.TeamIds[2] }, byId[h2].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+        Assert.Equal(new[] { 1, 2 }, byId[h2].Entries.OrderBy(e => e.LaneIndex).Select(e => e.LaneIndex));
+        Assert.Empty(byId[h2].Races.Single().Results);
+        Assert.False(byId[h2].Races.Single().IsComplete);
+    }
+
+    [Fact]
+    public async Task UpdateHeatAssignments_ResendingEverythingUnchanged_ChangesNothing()
+    {
+        var (a, _, _, _) = await ScoredTwoHeatSessionAsync();
+        var admin = await _f.AdminAsync();
+        var req = new UpdateHeatAssignmentsRequest(new[]
+        {
+            new HeatAssignmentEntry("Heat 1", new[] { a.TeamIds[0], a.TeamIds[1] }),
+            new HeatAssignmentEntry("Heat 2", new[] { a.TeamIds[2], a.TeamIds[3] }),
+        });
+
+        var r = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/heat-assignments"), req);
+
+        var s = await r.ReadAsync<SessionDto>();
+        Assert.All(s.Heats, h => Assert.Equal(2, h.Races.Single().Results.Count));
+        Assert.All(s.Heats, h => Assert.True(h.Races.Single().IsComplete));
+    }
+
+    [Fact]
+    public async Task UpdateHeatAssignments_MovingATeamBetweenHeats_ClearsOnlyThoseTwoHeats()
+    {
+        var a = await _f.CreateArenaAsync(teamCount: 5);
+        var (h1, r1) = await _f.AddHeatAsync(a.SessionId, new[] { a.TeamIds[0], a.TeamIds[1] }, "Heat 1", 1);
+        var (h2, r2) = await _f.AddHeatAsync(a.SessionId, new[] { a.TeamIds[2], a.TeamIds[3] }, "Heat 2", 2);
+        var (h3, r3) = await _f.AddHeatAsync(a.SessionId, new[] { a.TeamIds[4] }, "Heat 3", 3);
+        await _f.WithDbAsync(async db =>
+        {
+            foreach (var (raceId, team) in new[] { (r1[0], a.TeamIds[0]), (r2[0], a.TeamIds[2]), (r3[0], a.TeamIds[4]) })
+            {
+                db.Results.Add(new Result { RaceId = raceId, TeamId = team, Placing = 1, Points = 2 });
+                (await db.Races.SingleAsync(r => r.Id == raceId)).IsComplete = true;
+            }
+            await db.SaveChangesAsync();
+        });
+        var admin = await _f.AdminAsync();
+        var req = new UpdateHeatAssignmentsRequest(new[]
+        {
+            new HeatAssignmentEntry("Heat 1", new[] { a.TeamIds[0] }),
+            new HeatAssignmentEntry("Heat 2", new[] { a.TeamIds[2], a.TeamIds[3], a.TeamIds[1] }),
+            new HeatAssignmentEntry("Heat 3", new[] { a.TeamIds[4] }),
+        });
+
+        var byId = (await (await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/heat-assignments"), req)).ReadAsync<SessionDto>())
+            .Heats.ToDictionary(h => h.Id);
+
+        Assert.Empty(byId[h1].Races.Single().Results);
+        Assert.Empty(byId[h2].Races.Single().Results);
+        Assert.Single(byId[h3].Races.Single().Results);
+        Assert.True(byId[h3].Races.Single().IsComplete);
+    }
+
+    [Fact]
+    public async Task UpdateHeatAssignments_Returns409AndSavesNothing_WhenAChangedHeatIsSignedOff()
+    {
+        var (a, h1, h2, races) = await ScoredTwoHeatSessionAsync();
+        await _f.WithDbAsync(async db =>
+        {
+            db.Add(new RaceScoreState { RaceId = races[0], Revision = 1, IsSignedOff = true, SignedOffAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        });
+        var admin = await _f.AdminAsync();
+        // Heat 1 is signed off and its lanes change; Heat 2 would also change.
+        var req = new UpdateHeatAssignmentsRequest(new[]
+        {
+            new HeatAssignmentEntry("Heat 1", new[] { a.TeamIds[1], a.TeamIds[0] }),
+            new HeatAssignmentEntry("Heat 2", new[] { a.TeamIds[3], a.TeamIds[2] }),
+        });
+
+        var r = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/heat-assignments"), req);
+
+        Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
+        Assert.Contains("Heat 1", (await r.ReadAsync<System.Text.Json.JsonElement>()).GetProperty("message").GetString());
+        var s = await (await admin.GetAsync(Url(a, $"/{a.SessionId}"))).ReadAsync<SessionDto>();
+        var byId = s.Heats.ToDictionary(h => h.Id);
+        Assert.Equal(new[] { a.TeamIds[0], a.TeamIds[1] }, byId[h1].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+        Assert.Equal(new[] { a.TeamIds[2], a.TeamIds[3] }, byId[h2].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+        Assert.Equal(2, byId[h2].Races.Single().Results.Count);
+    }
+
+    [Fact]
+    public async Task UpdateHeatAssignments_AllowsEditingOtherHeats_WhenASignedOffHeatIsUntouched()
+    {
+        var (a, h1, h2, races) = await ScoredTwoHeatSessionAsync();
+        await _f.WithDbAsync(async db =>
+        {
+            db.Add(new RaceScoreState { RaceId = races[0], Revision = 1, IsSignedOff = true, SignedOffAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        });
+        var admin = await _f.AdminAsync();
+        var req = new UpdateHeatAssignmentsRequest(new[]
+        {
+            new HeatAssignmentEntry("Heat 1", new[] { a.TeamIds[0], a.TeamIds[1] }),
+            new HeatAssignmentEntry("Heat 2", new[] { a.TeamIds[3], a.TeamIds[2] }),
+        });
+
+        var r = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/heat-assignments"), req);
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var byId = (await r.ReadAsync<SessionDto>()).Heats.ToDictionary(h => h.Id);
+        Assert.Equal(2, byId[h1].Races.Single().Results.Count);
+        Assert.Empty(byId[h2].Races.Single().Results);
     }
 
     [Fact]

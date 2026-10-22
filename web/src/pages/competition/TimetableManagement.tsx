@@ -1040,10 +1040,16 @@ function HeatAssignmentEditor({
   async function save() {
     setBusy(true);
     try {
-      const assignments = labels.map((label) => ({
-        label,
-        teamIds: teamsInSession.filter((t) => picks[t.id] === label).map((t) => t.id),
-      }));
+      // Teams already in a heat keep their lane order and newcomers go on the end, so a heat
+      // you haven't touched is sent back exactly as it is and keeps its results.
+      const assignments = labels.map((label, i) => {
+        const picked = teamsInSession.filter((t) => picks[t.id] === label).map((t) => t.id);
+        const kept = [...(heats[i]?.entries ?? [])]
+          .sort((a, b) => a.laneIndex - b.laneIndex)
+          .map((e) => e.teamId)
+          .filter((id) => picked.includes(id));
+        return { label, teamIds: [...kept, ...picked.filter((id) => !kept.includes(id))] };
+      });
       await api.put(`/competitions/${competition.id}/sessions/${session.id}/heat-assignments`, { assignments });
       onSaved();
     } finally {
@@ -1063,7 +1069,7 @@ function HeatAssignmentEditor({
         </div>
       </div>
       <p className="text-[11px] text-slate-600 dark:text-slate-200">
-        Pick which heat each team runs in. Saving clears any existing results in this session.
+        Pick which heat each team runs in. Heats you leave alone keep their results; any heat whose teams change has its results cleared.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-72 overflow-auto">
         {teamsInSession.map((t) => (
