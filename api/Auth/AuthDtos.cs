@@ -22,6 +22,9 @@ public record SignupTrainerRequest(
     string? Role = null,
     string? ClubName = null);
 
+/// <summary>Deleting your own account needs the current password again, so a stolen session can't do it.</summary>
+public record DeleteAccountRequest(string Password);
+
 public record AuthResponse(
     string Token,
     DateTime ExpiresAt,

@@ -89,6 +89,7 @@ builder.Services.AddScoped<PushNotifier>();
 builder.Services.AddScoped<EquipmentCalculator>();
 builder.Services.AddHostedService<NotificationScheduler>();
 builder.Services.AddScoped<IpRetention>();
+builder.Services.AddScoped<AccountDeletionService>();
 builder.Services.AddHostedService<IpRetentionSweeper>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<StreamingOptions>(builder.Configuration.GetSection("Streaming"));
