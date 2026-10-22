@@ -2,8 +2,9 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import { chat, competition } from '../test/factories';
+import { chat, competition, session } from '../test/factories';
 import { CompetitionPage } from './CompetitionPage';
+import { useCompetition } from './competition/context';
 import { readSavedCopy, savedCopyKeys, writeSavedCopy } from '../offline/savedCopies';
 
 const state = vi.hoisted(() => ({
@@ -140,5 +141,35 @@ describe('first view', () => {
     renderAt('/competitions/1');
     expect(await screen.findByText('Competition loaded')).toBeVisible();
     expect(vi.mocked(api.get).mock.calls.map(([url]) => url)).not.toContain('/competitions/1/first-view');
+  });
+});
+
+describe('score cards', () => {
+  function Cards() {
+    const { scoreCards } = useCompetition();
+    return <p>{(scoreCards ?? []).map((c) => `${c.heading} / ${c.card.raceName}`).join('|') || 'No cards'}</p>;
+  }
+  const entries = [{ id: 1, teamId: 1, teamName: 'England', laneIndex: 0 }, { id: 2, teamId: 2, teamName: 'Wales', laneIndex: 1 }];
+  const raceOf = (scored: boolean) => ({ id: 7, heatId: 5, name: 'Bottle Race', orderIndex: 1, isComplete: scored,
+    results: scored ? [{ id: 1, teamId: 1, teamName: 'England', placing: 1, eliminated: false, points: 2 }, { id: 2, teamId: 2, teamName: 'Wales', placing: 2, eliminated: false, points: 1 }] : [] });
+  const heatOf = (scored: boolean) => ({ id: 5, sessionId: 1, orderIndex: 1, entries, races: [raceOf(scored)] });
+
+  it('queues a card when live results score a race', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => url.endsWith('/chat')
+      ? { data: [] }
+      : { data: competition({ sessions: [session(1, { arenaName: 'Arena 1', sectionName: 'Seniors', name: 'Seniors', heats: [heatOf(false)] })] }), headers: {} });
+    render(<MemoryRouter initialEntries={['/competitions/1']}><Routes><Route path="/competitions/:id" element={<CompetitionPage />}><Route index element={<Cards />} /></Route></Routes></MemoryRouter>);
+    expect(await screen.findByText('No cards')).toBeVisible();
+
+    act(() => state.handlers?.onResultsUpdated({ sessionId: 1, heat: heatOf(true) } as never));
+    expect(await screen.findByText(/Heat 1 \/ Bottle Race$/)).toBeVisible();
+
+    act(() => state.handlers?.onResultsUpdated({ sessionId: 1, raceId: 7, started: null } as never));
+    expect(screen.getByText(/Bottle Race$/).textContent?.split('|')).toHaveLength(1);
+
+    act(() => state.handlers?.onScoreCardControl('nonsense' as never));
+    expect(screen.getByText(/Bottle Race$/)).toBeVisible();
+    act(() => state.handlers?.onScoreCardControl({ heatId: 5, raceId: 7, action: 'skip' } as never));
+    expect(await screen.findByText('No cards')).toBeVisible();
   });
 });

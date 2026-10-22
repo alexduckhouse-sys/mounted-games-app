@@ -1,16 +1,17 @@
-import { act, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StreamOverlay } from '../../types';
 import { CompetitionContext, type CompetitionCtx } from '../../pages/competition/context';
 import { DEFAULT_OVERLAY } from '../../lib/overlays';
+import type { QueuedScoreCard } from '../../lib/scoreCard';
 import { competition } from '../../test/factories';
 import { liveStream } from '../../test/streamFakes';
 import { StreamOverlays } from './StreamOverlays';
 
-function show(overlay: Partial<StreamOverlay>, extra: { label?: string | null; arena?: string } = {}) {
+function show(overlay: Partial<StreamOverlay>, extra: { label?: string | null; arena?: string; scoreCards?: QueuedScoreCard[] } = {}) {
   const value: CompetitionCtx = {
     competition: competition(), reload: vi.fn(), streams: [], streamingEnabled: true, invoke: vi.fn(), ready: 1, streamMessages: [],
-    overlay: { ...DEFAULT_OVERLAY, ...overlay },
+    overlay: { ...DEFAULT_OVERLAY, ...overlay }, scoreCards: extra.scoreCards,
   };
   return render(
     <CompetitionContext.Provider value={value}>
@@ -96,5 +97,82 @@ describe('producer overlays on the video', () => {
   it('puts chips in the bottom corners too', () => {
     show({ look: { elements: { arena: { show: true, place: 'bottom-left' }, clock: { show: true, place: 'bottom-right' } } } });
     expect(screen.getByText('Arena 1').closest('div')).toHaveClass('left-3', 'bottom-14');
+  });
+});
+
+describe('score card on the video', () => {
+  const START = new Date('2026-10-22T10:00:00Z').getTime();
+  const card = (arenaName = 'Arena 1', receivedAt = START): QueuedScoreCard => ({
+    key: `k-${receivedAt}`, arenaName, heading: 'Seniors Session 1 · Heat 2', receivedAt,
+    card: {
+      heatId: 1, raceId: 13, raceName: 'Bottle Race', raceNumber: 3, raceCount: 5,
+      rows: [
+        { teamId: 1, teamName: 'Pony Club Seniors A', total: 15, added: 6, eliminated: false, place: 1, change: 'up' },
+        { teamId: 2, teamName: 'England Seniors', total: 14, added: 0, eliminated: true, place: 2, change: 'down' },
+        { teamId: 3, teamName: 'Wales Seniors', total: 9, added: 4, eliminated: false, place: 3, change: null },
+      ],
+    },
+  });
+  const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(START); });
+
+  it('appears after the delay with the whole heat table, then goes', () => {
+    show({ scoreCardDelaySeconds: 4, scoreCardSeconds: 10 }, { scoreCards: [card()] });
+    expect(screen.queryByRole('region')).toBeNull();
+
+    tick(4_000);
+    const shown = screen.getByRole('region', { name: 'Results: Seniors Session 1 · Heat 2' });
+    expect(shown).toHaveTextContent('after Bottle Race (race 3 of 5)');
+    expect(shown).toHaveClass('mg-ov-card-right');
+    const rows = within(shown).getAllByRole('listitem');
+    expect(rows.map((row) => row.textContent)).toEqual(['1Pony Club Seniors A+615', '2England SeniorsE14', '3Wales Seniors+49']);
+    expect(within(rows[0]).getByLabelText('moved up')).toBeInTheDocument();
+    expect(within(rows[1]).getByLabelText('moved down')).toBeInTheDocument();
+
+    tick(10_000);
+    expect(screen.queryByRole('region')).toBeNull();
+  });
+
+  it('shows the newest card for this arena, or a card with no arena anywhere', () => {
+    const { unmount } = show({ scoreCardDelaySeconds: 0 }, { scoreCards: [card('Arena 1'), card('Arena 2', START + 1)] });
+    tick(1);
+    expect(screen.getByRole('region')).toBeInTheDocument();
+    unmount();
+
+    show({ scoreCardDelaySeconds: 0 }, { scoreCards: [card('')], arena: 'Arena 9' });
+    tick(1);
+    expect(screen.getByRole('region')).toBeInTheDocument();
+  });
+
+  it('stays away when score cards are off, hidden, for another arena, or long past', () => {
+    for (const [overlay, cards, arena] of [
+      [{ scoreCardMode: 2 as const }, [card()], 'Arena 1'],
+      [{ look: { elements: { scoreCard: { show: false } } } }, [card()], 'Arena 1'],
+      [{}, [card('Arena 2')], 'Arena 1'],
+      [{}, [card('Arena 1', START - 60_000)], 'Arena 1'],
+      [{}, [], 'Arena 1'],
+    ] as const) {
+      const { unmount } = show(overlay, { scoreCards: [...cards], arena });
+      tick(5_000);
+      expect(screen.queryByRole('region')).toBeNull();
+      unmount();
+    }
+  });
+
+  it('follows the producer’s edits: hidden rows, names and time on screen', () => {
+    show({ scoreCardDelaySeconds: 0, scoreCardSeconds: 10 }, { scoreCards: [{ ...card(), hiddenTeamIds: [3], names: { 1: 'PC Seniors A' }, seconds: 20 }] });
+    tick(1);
+    const shown = screen.getByRole('region');
+    expect(within(shown).getAllByRole('listitem').map((row) => row.textContent)).toEqual(['1PC Seniors A+615', '2England SeniorsE14']);
+    tick(15_000);
+    expect(screen.getByRole('region')).toBeInTheDocument();
+    tick(5_000);
+    expect(screen.queryByRole('region')).toBeNull();
+  });
+
+  it('can sit along the bottom', () => {
+    show({ scoreCardDelaySeconds: 0, look: { elements: { scoreCard: { show: true, place: 'bottom' } } } }, { scoreCards: [card()] });
+    tick(1);
+    expect(screen.getByRole('region')).toHaveClass('mg-ov-card-bottom');
   });
 });

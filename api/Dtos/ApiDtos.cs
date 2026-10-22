@@ -364,3 +364,17 @@ public record UpdateStreamOverlayRequest(
     System.Text.Json.JsonElement? Look,
     int? ExpectedRevision);
 
+/// <summary>A producer's instruction for one race's score card: show it now, skip it, or change how it looks.</summary>
+public record ScoreCardControlRequest(
+    int HeatId,
+    int RaceId,
+    string Action,
+    IReadOnlyList<int>? HiddenTeamIds,
+    IReadOnlyDictionary<int, string>? Names,
+    [Range(3, 60)] int? Seconds);
+
+/// <summary>Sent to every viewer as <c>scoreCardControl</c>. Display only: results never change.</summary>
+public record ScoreCardControlDto(
+    int HeatId, int RaceId, string Action, IReadOnlyList<int> HiddenTeamIds,
+    IReadOnlyDictionary<int, string> Names, int? Seconds);
+
