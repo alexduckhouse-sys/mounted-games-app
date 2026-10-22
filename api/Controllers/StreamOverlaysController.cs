@@ -32,7 +32,7 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
     }
 
     [HttpPut]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<StreamOverlayDto>> Update(int competitionId, UpdateStreamOverlayRequest req)
     {
@@ -89,7 +89,7 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
     /// screen) for every viewer. Nothing is stored and results are untouched; viewers apply it to the card they hold.
     /// </summary>
     [HttpPost("score-card")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<ScoreCardControlDto>> ControlScoreCard(int competitionId, ScoreCardControlRequest req)
     {

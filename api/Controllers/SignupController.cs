@@ -97,8 +97,8 @@ public class SignupController : ControllerBase
 
     /// <summary>Contact and payment details are restricted to the competition organiser.</summary>
     [HttpGet("api/competitions/{competitionId:int}/signups")]
-    [Authorize(Roles = Roles.Organiser)]
-    [CompetitionAccess("competitionId")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
     public async Task<IEnumerable<SectionSignupDto>> List(int competitionId)
     {
         var rows = await _db.SectionSignups
@@ -111,8 +111,8 @@ public class SignupController : ControllerBase
 
     /// <summary>Organiser (trainer or admin) marks a signup paid / refunded / cancelled.</summary>
     [HttpPut("api/signups/{id:int}/status")]
-    [Authorize(Roles = Roles.Organiser)]
-    [CompetitionAccess("id", CompetitionResource.Signup)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id", CompetitionResource.Signup, CoOrganisersOnly = true)]
     public async Task<ActionResult<SectionSignupDto>> UpdateStatus(int id, UpdateSignupStatusRequest req)
     {
         var signup = await _db.SectionSignups
@@ -132,8 +132,8 @@ public class SignupController : ControllerBase
     }
 
     [HttpDelete("api/signups/{id:int}")]
-    [Authorize(Roles = Roles.Organiser)]
-    [CompetitionAccess("id", CompetitionResource.Signup)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id", CompetitionResource.Signup, CoOrganisersOnly = true)]
     public async Task<IActionResult> Delete(int id)
     {
         var signup = await _db.SectionSignups.FindAsync(id);
@@ -195,8 +195,8 @@ public class SignupController : ControllerBase
     /// people manually via the Teams tab later.
     /// </summary>
     [HttpPost("api/competitions/{competitionId:int}/sections/{sectionId:int}/form-teams")]
-    [Authorize(Roles = Roles.Organiser)]
-    [CompetitionAccess("competitionId")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
     public async Task<ActionResult<FormTeamsResult>> FormTeams(int competitionId, int sectionId, FormTeamsFromSignupsRequest req)
     {
         var section = await _db.CompetitionSections

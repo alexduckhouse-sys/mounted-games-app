@@ -47,7 +47,8 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> Create(int competitionId, CreateSessionRequest req)
     {
         if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
@@ -76,7 +77,8 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPut("{id:int}/status")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> SetStatus(int competitionId, int id, UpdateSessionStatusRequest req)
     {
         var s = await SessionsWithDetail()
@@ -113,7 +115,8 @@ public class SessionsController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<IActionResult> Delete(int competitionId, int id)
     {
         var s = await _db.Sessions.FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
@@ -124,11 +127,13 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/heats")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<HeatDto>> AddHeat(int competitionId, int id, CreateHeatRequest req)
     {
         var s = await _db.Sessions.FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
 
         var heat = new Heat
         {
@@ -159,13 +164,15 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/generate-race-finals")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> GenerateRaceFinals(int competitionId, int id, GenerateRaceFinalsRequest req)
     {
         var s = await _db.Sessions
             .Include(s => s.Heats)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
 
         var teamIds = req.TeamIds.Distinct().ToList();
         var raceNames = req.RaceNames.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
@@ -231,7 +238,8 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/heats/{heatId:int}/populate-race-final")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<HeatDto>> PopulateRaceFinal(
         int competitionId, int id, int heatId, PopulateRaceFinalRequest req)
     {
@@ -298,7 +306,8 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPut("{id:int}/heats/{heatId:int}/scheduled-start")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<HeatDto>> UpdateHeatScheduledStart(
         int competitionId, int id, int heatId, UpdateHeatScheduledStartRequest req)
     {
@@ -318,7 +327,8 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPut("{id:int}/heat-assignments")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> UpdateHeatAssignments(int competitionId, int id, UpdateHeatAssignmentsRequest req)
     {
         var s = await _db.Sessions
@@ -326,6 +336,7 @@ public class SessionsController : ControllerBase
             .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        if (!await TeamsBelongAsync(competitionId, req.Assignments.SelectMany(a => a.TeamIds))) return BadRequest(new { message = "Some of those teams aren't in this competition." });
 
         var teamForLabel = new Dictionary<string, List<int>>();
         foreach (var a in req.Assignments)
@@ -364,7 +375,8 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPut("{id:int}/settings")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> SetSettings(int competitionId, int id, UpdateSessionSettingsRequest req)
     {
         var s = await SessionsWithDetail()
@@ -381,7 +393,8 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPut("{id:int}/lanes")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> SetLanes(int competitionId, int id, UpdateSessionLanesRequest req)
     {
         var s = await SessionsWithDetail()
@@ -396,13 +409,15 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/generate-heats")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> GenerateHeats(int competitionId, int id, GenerateHeatsRequest req)
     {
         var s = await _db.Sessions
             .Include(s => s.Heats)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
 
         var teamIds = req.TeamIds.Distinct().ToList();
         var raceNames = req.RaceNames.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
@@ -469,5 +484,15 @@ public class SessionsController : ControllerBase
         for (var i = 0; i < shuffled.Count; i++)
             groups[i % groupCount].Add(shuffled[i]);
         return groups;
+    }
+
+    /// <summary>
+    /// Team ids sent in a request must all belong to this competition. Owners and their teams run sessions,
+    /// so one competition's organiser mustn't be able to pull another competition's teams into a heat.
+    /// </summary>
+    private async Task<bool> TeamsBelongAsync(int competitionId, IEnumerable<int> teamIds)
+    {
+        var ids = teamIds.Distinct().ToList();
+        return ids.Count == 0 || await _db.Teams.CountAsync(t => t.CompetitionId == competitionId && ids.Contains(t.Id)) == ids.Count;
     }
 }

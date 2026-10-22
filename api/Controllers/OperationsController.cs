@@ -11,7 +11,7 @@ namespace MountedGames.Api.Controllers;
 
 [ApiController]
 [Route("api/competitions/{competitionId:int}")]
-[Authorize(Roles = Roles.Organiser)]
+[Authorize(Policy = CompetitionStaff.Policy)]
 public class OperationsController(
     AppDbContext db, EquipmentCalculator equipmentCalculator) : ControllerBase
 {
