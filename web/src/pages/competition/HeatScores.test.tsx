@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
@@ -34,4 +34,17 @@ it('keeps the delay visible in the table while the compact bar labels the heat a
   render(<CompactPageBarProvider><MemoryRouter><BarProbe /><HeatScores session={shownSession} heats={[shownHeat]} activeHeatId={2} /></MemoryRouter></CompactPageBarProvider>);
   expect(screen.getByRole('columnheader', { name: /running 12 min late/ })).toBeVisible();
   expect(screen.getByTestId('bar')).toHaveTextContent('|next');
+});
+
+it('lists each race with a rules button, marking the one running', () => {
+  const shownHeat = heat(3, { sessionId: 3, orderIndex: 0, label: 'Heat 1', entries: [{ id: 3, teamId: 3, teamName: 'Ash C', laneIndex: 1 }],
+    races: [race(1, { name: 'Bending', orderIndex: 0, isComplete: true }), race(2, { name: 'Sack', orderIndex: 1 })] });
+  const shownSession = session(3, { sectionName: 'Teams Seniors', status: 1, scheduledStart: '2026-10-16T10:00:00', heats: [shownHeat] });
+  state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[shownHeat]} activeHeatId={3} /></MemoryRouter></CompactPageBarProvider>);
+  const list = screen.getByRole('list');
+  expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+  expect(within(list).getByRole('button', { name: 'Rules for Bending' })).toBeInTheDocument();
+  expect(within(list).getByRole('button', { name: 'Rules for Sack' })).toBeInTheDocument();
+  expect(within(list).getByText(/running/)).toBeInTheDocument();
 });
