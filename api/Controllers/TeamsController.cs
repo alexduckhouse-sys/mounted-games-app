@@ -78,9 +78,7 @@ public class TeamsController : ControllerBase
         if (!string.IsNullOrWhiteSpace(req.Suffix))
         {
             t.Suffix = req.Suffix.Trim().ToUpperInvariant();
-            t.DisplayName = string.IsNullOrWhiteSpace(t.Suffix)
-                ? t.Club?.Name ?? t.DisplayName
-                : $"{t.Club?.Name ?? string.Empty} {t.Suffix}".Trim();
+            t.DisplayName = $"{t.Club?.Name ?? string.Empty} {t.Suffix}".Trim();
         }
         if (req.IsHorsConcours.HasValue) t.IsHorsConcours = req.IsHorsConcours.Value;
         await _db.SaveChangesAsync();
