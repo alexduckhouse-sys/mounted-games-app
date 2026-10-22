@@ -10,7 +10,6 @@ import type { EventOrder, FakePaymentOutcome, TestPayment } from './types';
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 
 const post = vi.mocked(api.post);
-const get = vi.mocked(api.get);
 
 beforeEach(() => {
   vi.clearAllMocks();
