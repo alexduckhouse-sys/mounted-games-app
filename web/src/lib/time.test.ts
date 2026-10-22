@@ -247,6 +247,34 @@ describe('computeTimings', () => {
     });
   });
 
+  describe('pinned heats and heat drift', () => {
+    it('applies the session delay to a pinned heat and the heats after it', () => {
+      const timings = computeTimings([session(1, {
+        orderIndex: 1, scheduledStart: at(0), startedAt: at(10),
+        heats: [heat(1), heat(2, { scheduledStart: at(30) }), heat(3)],
+      })]).get(1)!;
+      expect(timings.heats.map((h) => timeOf(h.effective))).toEqual([ms(10), ms(40), ms(70)]);
+      expect(timeOf(timings.effectiveEnd)).toBe(ms(100));
+    });
+
+    it('does not start a pinned heat before the one ahead of it has finished', () => {
+      const timings = computeTimings([session(1, {
+        orderIndex: 1, scheduledStart: at(0),
+        heats: [heat(1, { durationMinutes: 40 }), heat(2, { scheduledStart: at(30) })],
+      })]).get(1)!;
+      expect(timeOf(timings.heats[1].effective)).toBe(ms(40));
+    });
+
+    it('moves later heats and the session end when a heat starts late', () => {
+      const timings = computeTimings([
+        session(1, { orderIndex: 1, scheduledStart: at(0), heats: [heat(1), heat(2, { startedAt: at(45) })] }),
+        session(2, { orderIndex: 2, scheduledStart: at(60) }),
+      ]);
+      expect(timeOf(timings.get(1)!.effectiveEnd)).toBe(ms(75));
+      expect(timeOf(timings.get(2)!.effective)).toBe(ms(75));
+    });
+  });
+
   describe('session length for the next session', () => {
     const next = (first: Partial<Session>) => {
       const timings = computeTimings([

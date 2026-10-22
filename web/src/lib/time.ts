@@ -116,15 +116,16 @@ export function computeTimings(sessions: Session[]): Map<number, SessionTiming> 
 
     for (const h of heats) {
       const dur = heatDurationMinutes(h, s);
-      // Per-heat scheduledStart, when set, pins the heat (and resets the
-      // cascade cursor for subsequent heats).
+      // Per-heat scheduledStart, when set, pins the heat: it carries the session's delay, and never
+      // starts before the heat ahead of it has finished.
       const pinned = h.scheduledStart ? new Date(h.scheduledStart) : null;
       const hScheduled = pinned ?? (scheduledCursor ? new Date(scheduledCursor) : null);
       let hEffective: Date | null = null;
       if (h.startedAt) {
         hEffective = new Date(h.startedAt);
       } else if (pinned) {
-        hEffective = new Date(pinned);
+        const delayed = pinned.getTime() + lane.offsetMs;
+        hEffective = new Date(heatCursor ? Math.max(delayed, heatCursor.getTime()) : delayed);
       } else if (heatCursor) {
         hEffective = new Date(heatCursor);
       }
@@ -133,14 +134,18 @@ export function computeTimings(sessions: Session[]): Map<number, SessionTiming> 
       const hShifted = !!(hScheduled && hEffective
         && Math.abs(hEffective.getTime() - hScheduled.getTime()) >= 5 * 60_000);
       heatTimings.push({ heatId: h.id, scheduled: hScheduled, effective: hEffective, shifted: hShifted });
-      const advanceFrom = pinned ?? heatCursor;
-      heatCursor = advanceFrom ? new Date(advanceFrom.getTime() + dur * 60_000) : null;
+      // The next heat follows when this one actually runs, so a late or early start carries on.
+      heatCursor = hEffective ? new Date(hEffective.getTime() + dur * 60_000) : null;
       const advanceFromScheduled = pinned ?? scheduledCursor;
       scheduledCursor = advanceFromScheduled ? new Date(advanceFromScheduled.getTime() + dur * 60_000) : null;
     }
 
     const dur = sessionDurationMinutes(s);
-    const effectiveEnd: Date | null = effective ? new Date(effective.getTime() + dur * 60_000) : null;
+    // A race session ends when its last heat does (heats can run early or late); breaks and the like have their own length.
+    const isBreakLike = s.kind === 1 || s.kind === 2 || s.kind === 3;
+    const effectiveEnd: Date | null = !isBreakLike && heats.length > 0 && heatCursor
+      ? new Date(heatCursor)
+      : effective ? new Date(effective.getTime() + dur * 60_000) : null;
     if (effectiveEnd) lane.lastEffectiveEnd = effectiveEnd;
 
     const shifted = !!(scheduled && effective
