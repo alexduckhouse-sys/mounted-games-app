@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -38,6 +39,7 @@ public class CompetitionsController : ControllerBase
 
     [HttpGet("/api/geocode")]
     [AllowAnonymous]
+    [EnableRateLimiting("geocode")]
     public async Task<ActionResult<GeocodeResult>> Geocode(
         [FromQuery] string? postcode = null,
         [FromQuery] string? w3w = null,

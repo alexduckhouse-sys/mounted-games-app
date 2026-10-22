@@ -5,6 +5,8 @@ public sealed class StreamingOptions
     public CloudflareOptions Cloudflare { get; set; } = new();
     public int MaxLivePerCompetition { get; set; } = 9;
     public int MaxViewerSessions { get; set; } = 300;
+    /// <summary>Most streams one address can hold open as an anonymous viewer at once.</summary>
+    public int MaxViewersPerIp { get; set; } = 5;
     public double ViewerSessionsPerSecond { get; set; } = 10;
     public int HeartbeatTimeoutSeconds { get; set; } = 180;
     public int PendingAttemptSeconds { get; set; } = 30;
