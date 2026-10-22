@@ -549,3 +549,26 @@ export interface StreamOverlay {
   revision: number;
   updatedAt: string | null;
 }
+
+/** A scorer link as the organiser sees it (`/competitions/{id}/scorer-links`). The token is never part of it. */
+export interface ScorerLink {
+  id: number;
+  label: string;
+  arenaName: string;
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+export interface ScorerLinkList { arenas: string[]; defaultExpiresAt: string; links: ScorerLink[] }
+/** The reply to creating a link. `token` and `path` are shown once and never returned again. */
+export interface CreatedScorerLink { link: ScorerLink; token: string; path: string }
+/** What a scorer link holder gets: their arena's timetable and nothing else. */
+export interface ScorerSession {
+  label: string;
+  competitionId: number;
+  competitionName: string;
+  arenaName: string;
+  expiresAt: string;
+  sessions: Session[];
+}

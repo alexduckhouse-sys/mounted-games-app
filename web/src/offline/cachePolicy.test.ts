@@ -32,6 +32,9 @@ describe('canCachePublicApi', () => {
     '/api/commerce/orders/mine',
     '/api/commerce/catalogue',
     '/api/commerce/competitions/12/orders',
+    '/api/scorer/session',
+    '/api/scorer/races/12/score',
+    '/api/competitions/12/scorer-links',
   ])('refuses %s because it may differ per viewer', (path) => {
     expect(canCachePublicApi(path)).toBe(false);
   });
