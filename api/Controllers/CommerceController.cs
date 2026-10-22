@@ -320,6 +320,10 @@ public class CommerceController(AppDbContext db) : ControllerBase
             var locked = await IsDemoClassificationLockedAsync(competitionId, cancellationToken);
             if (locked && current != request.IsDemo)
                 return Conflict(new { message = "Demo mode cannot change after an order or test payment exists." });
+            // A real event must never become payable by test checkout: once it has priced entries, demo mode stays off.
+            if (request.IsDemo && !current && await db.SectionSignups.AnyAsync(
+                    x => x.Section!.CompetitionId == competitionId && x.AmountMinor > 0, cancellationToken))
+                return Conflict(new { message = "Demo mode cannot be turned on once paid entries exist." });
             if (settings is null)
             {
                 settings = new EventCommerceSettings { CompetitionId = competitionId };
@@ -658,7 +662,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
             if (signup?.Section is null) return NotFound();
             var competitionId = signup.Section.CompetitionId;
             if (!await IsDemoAsync(competitionId, cancellationToken))
-                return Conflict(new { message = "Fake checkout is available only for demo competitions." });
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Test payments are available only for demo competitions." });
             if (signup.AmountMinor <= 0)
                 return Conflict(new { message = "Free entries do not use checkout." });
             var replay = await FindPaymentReplayAsync(userId, request.IdempotencyKey!, cancellationToken);
@@ -736,7 +740,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
             if (signup?.Section is null) return NotFound();
             var competitionId = signup.Section.CompetitionId;
             if (!await IsDemoAsync(competitionId, cancellationToken))
-                return Conflict(new { message = "Fake refunds are available only for demo competitions." });
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Test refunds are available only for demo competitions." });
             var replay = await FindPaymentReplayAsync(userId, key, cancellationToken);
             if (replay is not null)
             {

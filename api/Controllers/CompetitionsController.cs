@@ -6,6 +6,7 @@ using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
 using MountedGames.Api.Services.Streaming;
@@ -112,6 +113,10 @@ public class CompetitionsController : ControllerBase
         return (await q.OrderByDescending(c => c.StartDate).ToListAsync()).Select(c => c.ToSummary());
     }
 
+    /// <summary>True for a competition marked as a demo event (the same mark the fake payment endpoints check).</summary>
+    private Task<bool> IsDemoCompetitionAsync(int competitionId) =>
+        _db.Set<EventCommerceSettings>().AsNoTracking().AnyAsync(x => x.CompetitionId == competitionId && x.IsDemo);
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<CompetitionDetail>> Get(int id)
     {
@@ -138,7 +143,8 @@ public class CompetitionsController : ControllerBase
             c.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
-            c.SignupsLocked, c.Icon, c.CreatedByUserId);
+            c.SignupsLocked, c.Icon, c.CreatedByUserId,
+            IsDemo: await IsDemoCompetitionAsync(c.Id));
     }
 
     /// <summary>
@@ -179,7 +185,8 @@ public class CompetitionsController : ControllerBase
             teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
-            c.SignupsLocked, c.Icon, c.CreatedByUserId);
+            c.SignupsLocked, c.Icon, c.CreatedByUserId,
+            IsDemo: await IsDemoCompetitionAsync(c.Id));
     }
 
     internal sealed record SessionOutline(int Id, string? ArenaName, SessionStatus Status, int OrderIndex);
@@ -871,6 +878,7 @@ public class CompetitionsController : ControllerBase
             refreshed.IsActive, refreshed.IsArchived,
             refreshed.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
             refreshed.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
-            refreshed.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList());
+            refreshed.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
+            IsDemo: await IsDemoCompetitionAsync(refreshed.Id));
     }
 }
