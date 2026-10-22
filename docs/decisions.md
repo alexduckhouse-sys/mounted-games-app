@@ -65,3 +65,11 @@
 - Not yet: recording and replays (the client's decision), Nest or RTMP cameras, a player that floats across pages.
 - Files: `docs/specs/live-stream.md`, `api/Controllers/StreamsController.cs`, `api/Services/Streaming/`, `api/Hubs/LiveHub.cs`, `web/src/live/stream*.ts`, `web/src/components/stream/`.
 - Source: live stream chat in the AI Control Centre, 16 October 2026.
+
+## 2026-10-22: Clubs, approvals and the bug list
+- Why: `BUGS.md` found people with no club, managers who could act at once, and a club's manager who couldn't see their own club's teams.
+- Rule: everyone who signs up names a club (a new name creates it). A Team Manager signs up as Member plus `ManagerRequest` until an admin approves. A club's Manager approves Trainer requests for that club only (other clubs' requests answer 404) and sees and runs every team, declaration and saved rider of the club. Members still join with no approval.
+- Rejected: approving Members too (it would break the sign-up flow); creating clubs from the entry form (anyone signed in could add clubs); widening `Roles.Organiser` to Managers (it gates running a competition, not a club).
+- Declarations: a team has one declaration and resubmitting updates it. One bib description per team replaces per-rider bib colours (old colours stay in the data but are no longer asked for).
+- Lane rotation: stored as move up = 0, so existing sessions need no default. One team over the lane count is allowed (it sits out in turn); more would leave teams that never race.
+- Files: `api/Controllers/AuthController.cs`, `TrainerRequestsController.cs`, `TeamsController.cs`, `DeclarationFormsController.cs`, `api/Services/ClubAccess.cs`, `LaneRotation.cs`, `RaceFinalService.cs`.
