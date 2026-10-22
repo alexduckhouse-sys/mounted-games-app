@@ -212,6 +212,8 @@ export function LoginPage() {
             : (tab === 'signup' ? `Create ${signupRole.toLowerCase()} account` : 'Sign in')}
         </button>
 
+        <p className="mt-4 text-center text-xs text-slate-500"><Link to="/privacy" className="underline">How we use your information</Link></p>
+
         <div className="mt-6 text-xs text-slate-500">
           {tab === 'trainer' && (
             <>

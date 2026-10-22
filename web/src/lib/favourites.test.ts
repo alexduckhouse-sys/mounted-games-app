@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FAVOURITES_CHANGED, FAVOURITES_KEY, readFavourites, toggleFavourite } from './favourites';
+import { FAVOURITES_CHANGED, FAVOURITES_KEY, readFavourites, setFavourites, toggleFavourite } from './favourites';
 
 describe('public favourites', () => {
   it('works without an account and stores only IDs', () => {
@@ -42,5 +42,35 @@ describe('public favourites', () => {
     expect(readFavourites()).toEqual([]);
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('full'); });
     expect(toggleFavourite({ competitionId: 1, teamId: 1 })).toMatch(/couldn’t be saved/);
+  });
+
+  it('follows and unfollows a group of teams in one go', () => {
+    const listener = vi.fn();
+    window.addEventListener(FAVOURITES_CHANGED, listener);
+    const club = [1, 2, 3].map((teamId) => ({ competitionId: 1, teamId }));
+    expect(toggleFavourite({ competitionId: 1, teamId: 2 })).toBeNull();
+    expect(setFavourites([...club, club[0]], true)).toBeNull();
+    expect(readFavourites()).toEqual([{ competitionId: 1, teamId: 2 }, { competitionId: 1, teamId: 1 }, { competitionId: 1, teamId: 3 }]);
+    expect(setFavourites(club, true)).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(toggleFavourite({ competitionId: 2, teamId: 2 })).toBeNull();
+    expect(setFavourites(club, false)).toBeNull();
+    expect(readFavourites()).toEqual([{ competitionId: 2, teamId: 2 }]);
+    expect(setFavourites(club, false)).toBeNull();
+    expect(setFavourites([{ competitionId: 2, teamId: 2 }], false)).toBeNull();
+    expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();
+    window.removeEventListener(FAVOURITES_CHANGED, listener);
+  });
+
+  it('follows a group completely or not at all, and reports problems', () => {
+    localStorage.setItem(FAVOURITES_KEY, JSON.stringify(Array.from({ length: 98 }, (_, i) => ({ competitionId: 1, teamId: i + 1 }))));
+    const three = [200, 201, 202].map((teamId) => ({ competitionId: 1, teamId }));
+    expect(setFavourites(three, true)).toMatch(/over 100 teams/);
+    expect(readFavourites()).toHaveLength(98);
+    expect(setFavourites(three.slice(0, 2), true)).toBeNull();
+    expect(readFavourites()).toHaveLength(100);
+    expect(setFavourites([{ competitionId: 0, teamId: 1 }], true)).toMatch(/couldn’t be followed/);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('full'); });
+    expect(setFavourites([{ competitionId: 1, teamId: 1 }], false)).toMatch(/couldn’t be saved/);
   });
 });

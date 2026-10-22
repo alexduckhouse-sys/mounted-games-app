@@ -110,6 +110,8 @@ public class ChatController : ControllerBase
         if (msg is null) return NotFound();
         if (string.IsNullOrWhiteSpace(msg.IpAddress))
             return BadRequest(new { message = "No IP recorded for that message (posted before tracking was added)." });
+        if (IpRetention.IsHashed(msg.IpAddress))
+            return BadRequest(new { message = "That address is no longer stored; addresses are removed from messages after 30 days." });
         if (await _db.IpBlocks.AnyAsync(b => b.IpAddress == msg.IpAddress))
             return new { alreadyBlocked = true, ipAddress = msg.IpAddress };
         var admin = await _users.GetUserAsync(User);

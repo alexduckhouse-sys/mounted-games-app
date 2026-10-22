@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Clock, Trophy, LogOut, MessageSquare, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, Package } from 'lucide-react';
+import { Clock, Trophy, LogOut, MessageSquare, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, Package, UserRound, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES } from '../theme/themes';
 import { useTheme } from '../theme/ThemeContext';
@@ -57,6 +57,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
     { to: current ? `${base}/details` : '/competitions', label: 'Details & entries', icon: Info, end: true, badge: false },
   ];
   const accountLinks = [
+    { to: '/me/account', label: 'My account', icon: UserRound, show: !!user },
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: !!user },
     { to: '/teams', label: 'My teams', icon: Users, show: hasRole('Trainer') && !hasRole('Admin') },
     { to: '/declarations', label: 'Dec forms', icon: ClipboardList, show: hasRole('Trainer') || hasRole('Admin') },
@@ -114,6 +115,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
             <NavLink to="/team-profiles" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Users className={iconClass(isActive)} />Team history</>}</NavLink>
             <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
             {user && <NavLink to="/teams" onClick={onClose} className={`${itemClass(false)} justify-between`}><span className="flex items-center gap-3"><Bell className={iconClass(false)} />Notifications</span><span className="text-sm text-[rgb(var(--mg-muted))]">In My teams</span></NavLink>}
+            <NavLink to="/privacy" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShieldCheck className={iconClass(isActive)} />Privacy</>}</NavLink>
             <button onClick={() => setSettingsOpen((v) => !v)} className={itemClass(settingsOpen)} aria-expanded={settingsOpen}><SlidersHorizontal className={iconClass(settingsOpen)} />Settings</button>
             {settingsOpen && (
               <section aria-label="Settings" className="mt-2 flex flex-col gap-4 rounded-xl border border-[rgb(var(--mg-rule))] p-3">

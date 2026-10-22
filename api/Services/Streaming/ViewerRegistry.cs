@@ -16,6 +16,8 @@ public sealed class ViewerRegistry : IDisposable
     {
         public Queue<DateTimeOffset> Calls { get; } = new();
         public Dictionary<int, Watch> Streams { get; } = new();
+        /// <summary>The caller's address when it was capped by IP (anonymous viewers); null otherwise.</summary>
+        public string? Ip { get; set; }
     }
 
     private sealed class Watch(string connectionId, int competitionId, int streamId)
@@ -75,7 +77,12 @@ public sealed class ViewerRegistry : IDisposable
 
     private int CountLocked(int streamId) => _watches.Values.Count(w => w.StreamId == streamId && w.Answered);
 
-    public async Task<WatchStreamResponse> WatchAsync(string connectionId, int competitionId, int streamId, CancellationToken ct = default)
+    /// <param name="clientIp">
+    /// The viewer's address for anonymous viewers, so one address can't hold a lot of the stream's capacity.
+    /// Null means no per-address cap (signed-in viewers, or an address that isn't known).
+    /// </param>
+    public async Task<WatchStreamResponse> WatchAsync(string connectionId, int competitionId, int streamId,
+        CancellationToken ct = default, string? clientIp = null)
     {
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -99,6 +106,13 @@ public sealed class ViewerRegistry : IDisposable
             _refilled = now;
             if (_tokens < 1) throw Error("RATE_LIMITED", "Please wait before watching again.");
             connection.Streams.TryGetValue(streamId, out replaced);
+            if (clientIp is not null && _options.MaxViewersPerIp > 0)
+            {
+                connection.Ip = clientIp;
+                var open = _connections.Values.Where(c => c.Ip == clientIp).Sum(c => c.Streams.Count) - (replaced is null ? 0 : 1);
+                if (open >= _options.MaxViewersPerIp)
+                    throw Error("RATE_LIMITED", "Too many streams are open from your connection. Close one and try again.");
+            }
             if (_watches.Count - (replaced is null ? 0 : 1) >= _options.MaxViewerSessions)
                 throw Error("STREAM_FULL", "The stream is full. Please try again shortly.");
             _tokens--;
