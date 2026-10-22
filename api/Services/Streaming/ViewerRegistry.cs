@@ -37,6 +37,8 @@ public sealed class ViewerRegistry : IDisposable
         public DateTimeOffset Due { get; set; } = due;
         public int Sent { get; set; }
         public bool Pending { get; set; } = true;
+        /// <summary>When this instance last shared its count (only matters with Redis).</summary>
+        public DateTimeOffset Reported { get; set; } = DateTimeOffset.MinValue;
     }
 
     private readonly object _gate = new();
@@ -49,15 +51,16 @@ public sealed class ViewerRegistry : IDisposable
     private readonly StreamingOptions _options;
     private readonly TimeProvider _time;
     private readonly ILogger<ViewerRegistry> _log;
+    private readonly SharedViewerCounts _shared;
     private readonly ITimer _timer;
     private readonly SemaphoreSlim _tick = new(1, 1);
     private double _tokens = 40;
     private DateTimeOffset _refilled;
 
     public ViewerRegistry(IServiceScopeFactory scopes, ISfuClient sfu, ILiveBroadcaster live,
-        IOptions<StreamingOptions> options, TimeProvider time, ILogger<ViewerRegistry> log)
+        IOptions<StreamingOptions> options, TimeProvider time, ILogger<ViewerRegistry> log, SharedViewerCounts shared)
     {
-        _scopes = scopes; _sfu = sfu; _live = live; _options = options.Value; _time = time; _log = log;
+        _scopes = scopes; _sfu = sfu; _live = live; _options = options.Value; _time = time; _log = log; _shared = shared;
         _refilled = time.GetUtcNow();
         _timer = time.CreateTimer(_ => _ = TickSafelyAsync(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -66,6 +69,9 @@ public sealed class ViewerRegistry : IDisposable
     {
         lock (_gate) return CountLocked(streamId);
     }
+
+    /// <summary>Viewers across every API instance (this instance's own count without Redis).</summary>
+    public Task<int> TotalAsync(int streamId) => _shared.TotalAsync(streamId, Count(streamId));
 
     private int CountLocked(int streamId) => _watches.Values.Count(w => w.StreamId == streamId && w.Answered);
 
@@ -240,22 +246,31 @@ public sealed class ViewerRegistry : IDisposable
         try
         {
             await RemoveWhereAsync(w => !w.Answered && !w.Answering && _time.GetUtcNow() >= w.Deadline);
-            List<(int CompetitionId, int StreamId, int Count)> updates = new();
+            List<(CountChange Change, int StreamId, int Local)> due = new();
+            var now = _time.GetUtcNow();
+            var shared = _shared.Shared;
             lock (_gate)
             {
                 foreach (var (streamId, change) in _counts.ToArray())
                 {
-                    if (!change.Pending || _time.GetUtcNow() < change.Due) continue;
+                    var local = CountLocked(streamId);
+                    var changed = change.Pending && now >= change.Due;
+                    // With Redis, an unchanged count is re-shared now and then so other instances keep counting it.
+                    var refresh = shared && local > 0 && now - change.Reported >= SharedViewerCounts.Refresh;
+                    if (!changed && !refresh) continue;
                     change.Pending = false;
-                    var count = CountLocked(streamId);
-                    if (count == 0) _counts.Remove(streamId);
-                    if (count == change.Sent) continue;
-                    change.Sent = count;
-                    updates.Add((change.CompetitionId, streamId, count));
+                    change.Reported = now;
+                    if (local == 0) _counts.Remove(streamId);
+                    due.Add((change, streamId, local));
                 }
             }
-            foreach (var (competitionId, streamId, count) in updates)
-                await _live.StreamViewers(competitionId, streamId, count);
+            foreach (var (change, streamId, local) in due)
+            {
+                var total = await _shared.ReportAsync(streamId, local);
+                if (total == change.Sent) continue;
+                change.Sent = total;
+                await _live.StreamViewers(change.CompetitionId, streamId, total);
+            }
         }
         finally { _tick.Release(); }
     }

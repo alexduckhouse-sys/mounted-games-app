@@ -1,6 +1,8 @@
 using System.Threading.RateLimiting;
 using System.Security.Claims;
 using Microsoft.AspNetCore.RateLimiting;
+using MountedGames.Api.Services;
+using RedisRateLimiting;
 
 namespace MountedGames.Api.Security;
 
@@ -20,19 +22,34 @@ public static class RequestLimits
     private static void Configure(RateLimiterOptions options, int authPermits, int writePermits)
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-        options.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => Window(authPermits)));
+        options.AddPolicy("auth", context => Partition(context, $"auth:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", authPermits));
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
             !context.Request.Path.StartsWithSegments("/api") || HttpMethods.IsGet(context.Request.Method)
                 || HttpMethods.IsHead(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method)
                 ? RateLimitPartition.GetNoLimiter("read")
-                : RateLimitPartition.GetFixedWindowLimiter(WritePartition(context), _ => Window(writePermits)));
+                : Partition(context, $"write:{WritePartition(context)}", writePermits));
         options.OnRejected = (context, _) =>
         {
             context.HttpContext.Response.Headers.RetryAfter = "60";
             return ValueTask.CompletedTask;
         };
+    }
+
+    /// <summary>
+    /// A per-minute window for <paramref name="key"/>. With Redis reachable, the window is shared by every API
+    /// instance; otherwise each instance counts on its own. The two use different keys, so a switch starts afresh.
+    /// </summary>
+    private static RateLimitPartition<string> Partition(HttpContext context, string key, int permits)
+    {
+        var redis = context.RequestServices.GetService<RedisConnection>()?.Available;
+        return redis is null
+            ? RateLimitPartition.GetFixedWindowLimiter($"memory:{key}", _ => Window(permits))
+            : RedisRateLimitPartition.GetFixedWindowRateLimiter($"mg:rl:{key}", _ => new RedisFixedWindowRateLimiterOptions
+            {
+                ConnectionMultiplexerFactory = () => redis,
+                PermitLimit = permits,
+                Window = TimeSpan.FromMinutes(1),
+            });
     }
 
     private static string WritePartition(HttpContext context)

@@ -17,6 +17,8 @@ public sealed class StreamingApiFactory : ApiFactory
 {
     public ManualTimeProvider Clock { get; } = new();
     public Dictionary<string, string> Settings { get; } = new();
+    /// <summary>Settings outside the Streaming section, e.g. <c>Redis:ConnectionString</c>.</summary>
+    public Dictionary<string, string> AppSettings { get; } = new();
     public ConcurrentQueue<(string Url, string Method, JsonElement Body, string? Token)> SfuRequests { get; } = new();
     public string? FailPath { get; set; }
     public string FailureBody { get; set; } = "{}";
@@ -85,6 +87,7 @@ public sealed class StreamingApiFactory : ApiFactory
         builder.UseSetting("Streaming:Cloudflare:AppToken", "fake-app-token");
         builder.UseSetting("Streaming:Cloudflare:BaseUrl", "https://sfu.test/v1");
         foreach (var (key, value) in Settings) builder.UseSetting($"Streaming:{key}", value);
+        foreach (var (key, value) in AppSettings) builder.UseSetting(key, value);
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<TimeProvider>();

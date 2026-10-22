@@ -21,6 +21,7 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.8" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="RedisRateLimiting.AspNetCore" Version="1.2.1" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.18.0" />
     <!-- Pin patched transitive dependencies until their parent packages raise the minimum. -->
     <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />

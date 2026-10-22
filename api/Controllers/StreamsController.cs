@@ -31,7 +31,9 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
         var streams = await db.LiveStreams.AsNoTracking().Where(s => s.CompetitionId == competitionId && s.Generation >= 1
             && (s.Status == LiveStreamStatus.Live || s.Status == LiveStreamStatus.Paused))
             .OrderBy(s => s.ArenaName).ThenBy(s => s.AngleName).ToListAsync(ct);
-        return new LiveStreamsResponse(true, streams.Select(s => s.ToDto(viewers.Count(s.Id))).ToArray());
+        var dtos = new List<LiveStreamDto>(streams.Count);
+        foreach (var stream in streams) dtos.Add(stream.ToDto(await viewers.TotalAsync(stream.Id)));
+        return new LiveStreamsResponse(true, dtos.ToArray());
     }
 
     [HttpGet("ice-servers")]
@@ -125,7 +127,7 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
         await db.SaveChangesAsync(ct);
         await sfu.CloseAsync(oldSid, StreamLifecycle.Mids(oldMids));
         foreach (var closure in closures) await lifecycle.CompleteEndAsync(closure);
-        var dto = stream.ToDto(viewers.Count(stream.Id));
+        var dto = stream.ToDto(await viewers.TotalAsync(stream.Id));
         await live.StreamUpdated(competitionId, dto);
         return dto;
     }
@@ -183,7 +185,7 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
             stream.Caption = string.IsNullOrEmpty(caption) ? null : caption;
         }
         await db.SaveChangesAsync(ct);
-        var dto = stream.ToDto(viewers.Count(streamId));
+        var dto = stream.ToDto(await viewers.TotalAsync(streamId));
         await live.StreamUpdated(competitionId, dto);
         return dto;
     }
