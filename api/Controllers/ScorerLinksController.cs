@@ -10,7 +10,7 @@ using MountedGames.Api.Entities;
 namespace MountedGames.Api.Controllers;
 
 /// <summary>
-/// Scorer links: the organiser's side. An owner, a co-organiser or an admin makes a link for one arena of one
+/// Scorer links: the organiser's side. An owner, a competition admin (team member) or an admin makes a link for one arena of one
 /// competition, lists them and revokes them. Anyone else gets 404. The token is returned once, on creation.
 /// </summary>
 [ApiController]
@@ -21,7 +21,7 @@ public class ScorerLinksController(AppDbContext db, TimeProvider time) : Control
     private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
     [HttpGet("api/competitions/{competitionId:int}/scorer-links")]
-    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<ScorerLinkListDto>> List(int competitionId, CancellationToken ct)
     {
         var competition = await db.Competitions.AsNoTracking().FirstAsync(c => c.Id == competitionId, ct);
@@ -32,7 +32,7 @@ public class ScorerLinksController(AppDbContext db, TimeProvider time) : Control
     }
 
     [HttpPost("api/competitions/{competitionId:int}/scorer-links")]
-    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<CreatedScorerLinkDto>> Create(int competitionId, CreateScorerLinkRequest req, CancellationToken ct)
     {
         var label = req.Label.Trim();
@@ -67,7 +67,7 @@ public class ScorerLinksController(AppDbContext db, TimeProvider time) : Control
     }
 
     [HttpPost("api/competitions/{competitionId:int}/scorer-links/{linkId:int}/revoke")]
-    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<ScorerLinkDto>> Revoke(int competitionId, int linkId, CancellationToken ct)
     {
         var link = await db.ScorerLinks.FirstOrDefaultAsync(l => l.Id == linkId && l.CompetitionId == competitionId, ct);

@@ -236,30 +236,30 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
     // ---- who may manage links ---------------------------------------------------------------------
 
     [Fact]
-    public async Task OnlyOwnersCoOrganisersAndAdminsManageLinks()
+    public async Task OnlyTheOwnerItsTeamAndAdminsManageLinks()
     {
         var w = await WorldAsync();
         var other = await WorldAsync();
         var (member, _) = await _f.SignupAsync("Member");
-        var (scorerHelper, scorerAuth) = await _f.SignupAsync("Member");
-        var (coOrg, coAuth) = await _f.SignupAsync("Member");
-        await w.Owner.PostAsJsonAsync($"/api/competitions/{w.Arena.CompetitionId}/team", new { email = scorerAuth.User.Email, role = CollaboratorRole.RingScorer });
-        await w.Owner.PostAsJsonAsync($"/api/competitions/{w.Arena.CompetitionId}/team", new { email = coAuth.User.Email, role = CollaboratorRole.CoOrganiser });
+        var (teamMember, teamAuth) = await _f.SignupAsync("Member");
+        var (otherTeam, otherTeamAuth) = await _f.SignupAsync("Member");
+        await w.Owner.PostAsJsonAsync($"/api/competitions/{w.Arena.CompetitionId}/team", new { email = teamAuth.User.Email });
+        await other.Owner.PostAsJsonAsync($"/api/competitions/{other.Arena.CompetitionId}/team", new { email = otherTeamAuth.User.Email });
         var url = LinksUrl(w.Arena.CompetitionId);
         var body = new { label = "Sam", arenaName = "Main" };
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PostAsJsonAsync(url, body)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await member.PostAsJsonAsync(url, body)).StatusCode);
-        // A different trainer, and a ring scorer on this very competition: not found, never "forbidden".
+        // Another trainer, and a team member of a different competition: not found, never "forbidden".
         Assert.Equal(HttpStatusCode.NotFound, (await other.Owner.PostAsJsonAsync(url, body)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await other.Owner.GetAsync(url)).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await scorerHelper.PostAsJsonAsync(url, body)).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await scorerHelper.GetAsync(url)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherTeam.PostAsJsonAsync(url, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherTeam.GetAsync(url)).StatusCode);
 
         Assert.Equal(HttpStatusCode.OK, (await w.Owner.PostAsJsonAsync(url, body)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await coOrg.PostAsJsonAsync(url, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await teamMember.PostAsJsonAsync(url, body)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await (await _f.AdminAsync()).PostAsJsonAsync(url, body)).StatusCode);
-        Assert.Equal(3, (await coOrg.GetFromJsonAsync<ScorerLinkListDto>(url, TestClients.Json))!.Links.Count);
+        Assert.Equal(3, (await teamMember.GetFromJsonAsync<ScorerLinkListDto>(url, TestClients.Json))!.Links.Count);
     }
 
     // ---- what a link can do -----------------------------------------------------------------------
