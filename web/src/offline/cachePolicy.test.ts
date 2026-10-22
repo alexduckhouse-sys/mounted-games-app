@@ -1,7 +1,7 @@
 // @vitest-environment node
 // These helpers run in the service worker, which has native fetch types (jsdom's Blob does not mix with them).
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { canCachePublicApi, markSavedResponse, stampPublicResponse } from './cachePolicy';
+import { canCachePublicApi, isEmbedRequest, markSavedResponse, NAVIGATION_DENYLIST, stampPublicResponse } from './cachePolicy';
 
 describe('canCachePublicApi', () => {
   it.each([
@@ -77,5 +77,19 @@ describe('markSavedResponse', () => {
 
   it('returns undefined when nothing was saved', () => {
     expect(markSavedResponse(undefined)).toBeUndefined();
+  });
+});
+
+describe('embed requests and navigation', () => {
+  it('recognises the widget header' , () => {
+    expect(isEmbedRequest(new Headers({ 'X-MG-Embed': '1' }))).toBe(true);
+    expect(isEmbedRequest(new Headers())).toBe(false);
+    expect(isEmbedRequest(new Headers({ 'X-MG-Embed': '0' }))).toBe(false);
+  });
+
+  it('leaves the API, the hub and /embed/ pages to the network', () => {
+    const denied = (path: string) => NAVIGATION_DENYLIST.some((rule) => rule.test(path));
+    for (const path of ['/api/x', '/hubs/live', '/embed/competitions/1/standings', '/embed']) expect(denied(path)).toBe(true);
+    for (const path of ['/', '/competitions/1', '/embedded', '/competitions/embed/x']) expect(denied(path)).toBe(false);
   });
 });
