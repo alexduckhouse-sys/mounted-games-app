@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
-import { AlertTriangle, Clock, Eye, MapPin, Megaphone } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, Clock, Eye, MapPin, Megaphone } from 'lucide-react';
 import type { LiveStream, StreamOverlay } from '../../types';
 import { bannerShowsIn, type OverlayLook, type OverlayPlace } from '../../lib/overlays';
+import type { QueuedScoreCard } from '../../lib/scoreCard';
 
 const CORNERS: Partial<Record<OverlayPlace, string>> = {
   'top-left': 'left-3 top-3', 'top-right': 'right-3 top-3', 'bottom-left': 'left-3 bottom-14', 'bottom-right': 'right-3 bottom-14',
@@ -55,4 +56,53 @@ export function ProducerBanner({ stream, overlay, look }: { stream: LiveStream; 
   return <div role="status" className={`mg-ov-ticker absolute inset-x-0 ${edge}`} aria-label={text}>
     <span aria-hidden="true">{text}</span>
   </div>;
+}
+
+/** The latest card for this stream's arena, while it's due on screen: from the delay until the delay plus its length. */
+function useDueCard(cards: QueuedScoreCard[], arenaName: string, delayMs: number, defaultLengthMs: number): QueuedScoreCard | null {
+  const arena = arenaName.trim();
+  const card = cards.filter((c) => c.arenaName === '' || c.arenaName === arena).at(-1) ?? null;
+  // A producer can change how long this card stays up.
+  const lengthMs = card?.seconds ? card.seconds * 1000 : defaultLengthMs;
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    if (!card) return;
+    const show = card.receivedAt + delayMs;
+    const hide = show + lengthMs;
+    // The next edge after what's on screen now: showing, then hiding. A card already due shows at once.
+    const next = now < show ? show : now < hide ? hide : null;
+    if (next === null) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(0, next - Date.now()));
+    return () => clearTimeout(timer);
+  }, [card, delayMs, lengthMs, now]);
+  if (!card || now < card.receivedAt + delayMs || now >= card.receivedAt + delayMs + lengthMs) return null;
+  return card;
+}
+
+/** The whole heat table after the race just scored, with what it added and who moved. */
+export function ScoreCardOverlay({ stream, overlay, look, cards }: { stream: LiveStream; overlay: StreamOverlay; look: OverlayLook; cards: QueuedScoreCard[] }) {
+  const due = useDueCard(cards, stream.arenaName, overlay.scoreCardDelaySeconds * 1000, overlay.scoreCardSeconds * 1000);
+  if (!due || overlay.scoreCardMode === 2 || !look.elements.scoreCard.show) return null;
+  const { card } = due;
+  const where = look.elements.scoreCard.place === 'bottom' ? 'mg-ov-card-bottom' : 'mg-ov-card-right';
+  return (
+    <section className={`mg-ov-card mg-stream-fade ${where}`} aria-label={`Results: ${due.heading}`}>
+      <header>
+        <strong>{due.heading}</strong>
+        <span>after {card.raceName} (race {card.raceNumber} of {card.raceCount})</span>
+      </header>
+      <ol>
+        {card.rows.filter((row) => !due.hiddenTeamIds?.includes(row.teamId)).map((row) => (
+          <li key={row.teamId}>
+            <span className="mg-ov-card-place">{row.place}</span>
+            <span className="mg-ov-card-team">{due.names?.[row.teamId] ?? row.teamName}</span>
+            {row.change === 'up' && <ArrowUp className="mg-ov-card-up" aria-label="moved up" />}
+            {row.change === 'down' && <ArrowDown className="mg-ov-card-down" aria-label="moved down" />}
+            <span className={`mg-ov-card-added ${row.eliminated ? 'is-out' : ''}`}>{row.eliminated ? 'E' : `+${row.added}`}</span>
+            <span className="mg-ov-card-total">{row.total}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
 }

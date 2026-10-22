@@ -311,6 +311,20 @@ a.mg-row:hover, button.mg-row:hover { background: rgb(var(--mg-subtle)); }
 @keyframes mg-ov-crawl { to { transform: translateX(-100%); } }
 @media (prefers-reduced-motion: reduce) { .mg-ov-ticker span { animation: none; padding-left: 12px; } }
 .mg-ov-small { font-size: 12px; } .mg-ov-medium { font-size: 14px; } .mg-ov-large { font-size: 17px; }
+.mg-ov-card { position: absolute; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--ov-bg, #0F1E3D) 94%, transparent); max-height: calc(100% - 64px); overflow: hidden; font-size: .85em; }
+.mg-ov-card-right { right: 10px; top: 48px; width: min(46%, 22rem); }
+.mg-ov-card-bottom { left: 10px; right: 10px; bottom: 48px; }
+.mg-ov-card header { display: flex; flex-direction: column; gap: 1px; }
+.mg-ov-card header span { font-size: .8em; opacity: .8; }
+.mg-ov-card ol { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.mg-ov-card li { display: grid; grid-template-columns: 1.4em 1fr auto auto 2em; align-items: center; gap: 6px; padding: 2px 0; border-top: 1px solid rgb(255 255 255 / .1); }
+.mg-ov-card-place { font-weight: 700; opacity: .85; }
+.mg-ov-card-team { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mg-ov-card-up, .mg-ov-card-down { width: 1em; height: 1em; }
+.mg-ov-card-up { color: #4ADE80; } .mg-ov-card-down { color: #F87171; }
+.mg-ov-card-added { padding: 1px 6px; border-radius: 6px; background: var(--ov-accent, #F5B82E); color: #111; font-weight: 700; font-size: .85em; }
+.mg-ov-card-added.is-out { background: rgb(255 255 255 / .2); color: #fff; }
+.mg-ov-card-total { text-align: right; font-weight: 700; font-size: 1.1em; }
 .mg-strip-watch { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; font: 700 13px/1 'Barlow', sans-serif; letter-spacing: .04em; text-transform: uppercase; }
 .mg-strip-watch::before { content: none; }
 .mg-stream-chip { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgb(var(--mg-rule)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 14px/1 'Barlow', sans-serif; }

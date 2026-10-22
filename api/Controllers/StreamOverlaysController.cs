@@ -80,6 +80,35 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
         return dto;
     }
 
+    private static readonly string[] ScoreCardActions = ["show", "skip", "edit"];
+    private const int MaxNames = 32;
+    private const int MaxNameLength = 60;
+
+    /// <summary>
+    /// Shows a race's score card now, skips it, or changes its display (hidden rows, display names, time on
+    /// screen) for every viewer. Nothing is stored and results are untouched; viewers apply it to the card they hold.
+    /// </summary>
+    [HttpPost("score-card")]
+    [Authorize(Roles = Roles.Organiser)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<ScoreCardControlDto>> ControlScoreCard(int competitionId, ScoreCardControlRequest req)
+    {
+        if (!ScoreCardActions.Contains(req.Action)) return BadRequest(new { message = "Action must be show, skip or edit." });
+        var names = (req.Names ?? new Dictionary<int, string>())
+            .Where(n => !string.IsNullOrWhiteSpace(n.Value))
+            .ToDictionary(n => n.Key, n => n.Value.Trim());
+        if (names.Count > MaxNames || names.Values.Any(n => n.Length > MaxNameLength))
+            return BadRequest(new { message = "Too many names, or a name is too long." });
+        var raceInCompetition = await db.Races.AnyAsync(r => r.Id == req.RaceId && r.HeatId == req.HeatId
+            && r.Heat!.Session!.CompetitionId == competitionId);
+        if (!raceInCompetition) return NotFound();
+
+        var control = new ScoreCardControlDto(req.HeatId, req.RaceId, req.Action,
+            (req.HiddenTeamIds ?? []).Distinct().Take(MaxNames).ToList(), names, req.Seconds);
+        await live.ScoreCardControl(competitionId, control);
+        return control;
+    }
+
     private static StreamOverlayDto ToDto(StreamOverlay o)
     {
         using var look = JsonDocument.Parse(string.IsNullOrWhiteSpace(o.LookJson) ? "{}" : o.LookJson);

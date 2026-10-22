@@ -8,6 +8,7 @@ import { DEFAULT_OVERLAY, ELEMENT_PLACES, parseLook, type OverlayElement, type O
 import type { OverlayBannerStyle, OverlayMode, StreamOverlay } from '../../types';
 import type { OverlaySaveResult } from '../../hooks/useStreamOverlay';
 import { readMessages, writeMessages } from '../../lib/overlayMessages';
+import { ScoreCardQueue } from './ScoreCardQueue';
 
 const STYLES: { value: OverlayBannerStyle; label: string }[] = [{ value: 0, label: 'Ticker' }, { value: 1, label: 'Lower bar' }, { value: 2, label: 'Alert' }];
 const MODES: { value: OverlayMode; label: string }[] = [{ value: 0, label: 'Auto' }, { value: 1, label: 'On' }, { value: 2, label: 'Off' }];
@@ -156,6 +157,8 @@ function Producer() {
           <button type="button" className="mg-btn mg-btn-secondary" disabled={!bannerText.trim()} onClick={saveMessage}>Save message</button>
         </div>
       </section>
+
+      <ScoreCardQueue competitionId={competition.id} cards={context.scoreCards ?? []} onError={setNotice} />
 
       <section className="mg-card flex flex-col gap-3 p-4" aria-labelledby="look-title">
         <h2 id="look-title" className="font-bold">Strip, score cards and look</h2>

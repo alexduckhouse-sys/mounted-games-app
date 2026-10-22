@@ -13,6 +13,7 @@ import { isFocusPage, pollIntervalMs } from '../live/connectionStatus';
 import { HEAT_SAVED } from '../offline/useScoreOutbox';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
 import { applyResultsUpdate, replaceHeat, type ResultsUpdate } from '../lib/liveUpdates';
+import { applyScoreCardControl, parseScoreCardControl, queueScoreCard, type QueuedScoreCard } from '../lib/scoreCard';
 import { CompetitionContext } from './competition/context';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useNavExtras } from '../components/NavExtrasContext';
@@ -160,6 +161,10 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const [ready, setReady] = useState(0);
   const streamState = useCompetitionStreams(competitionId, ready);
   const overlayState = useStreamOverlay(competitionId, ready);
+  // Score cards are worked out from what this phone held before each results update.
+  const latestData = useRef(data);
+  useEffect(() => { latestData.current = data; }, [data]);
+  const [scoreCards, setScoreCards] = useState<QueuedScoreCard[]>([]);
   const [streamMessages, setStreamMessages] = useState<{ message: ChatMessage; receivedAt: number }[]>([]);
   const addStreamMessage = (value: unknown) => {
     const message = value as ChatMessage;
@@ -199,6 +204,10 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     onStreamUpdated: streamState.onStreamUpdated,
     onStreamViewers: streamState.onStreamViewers,
     onOverlayUpdated: overlayState.onOverlayUpdated,
+    onScoreCardControl: (raw) => {
+      const control = parseScoreCardControl(raw);
+      if (control) setScoreCards((cards) => applyScoreCardControl(cards, control, Date.now(), overlayState.overlay.scoreCardDelaySeconds * 1000));
+    },
     onChatMessage: addStreamMessage,
     onAnnouncement: (m) => {
       const message = m as ChatMessage;
@@ -220,7 +229,10 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       setUpdatedAt(new Date());
     },
     onResultsUpdated: (p) => {
-      setData((cur) => (cur ? applyResultsUpdate(cur, p as ResultsUpdate) : cur));
+      const update = p as ResultsUpdate;
+      const queued = 'heat' in update && update.heat ? queueScoreCard(latestData.current, update.sessionId, update.heat, Date.now()) : null;
+      if (queued) setScoreCards((cards) => [...cards.slice(-4), queued]);
+      setData((cur) => (cur ? applyResultsUpdate(cur, update) : cur));
       dataAt.current = Date.now();
       setUpdatedAt(new Date());
     },
@@ -298,7 +310,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing);
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards }}>
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />

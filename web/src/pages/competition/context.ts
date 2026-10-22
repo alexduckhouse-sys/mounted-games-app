@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react';
 import type { StreamInvoke } from '../../live/streamRuntime';
 import type { CompetitionDetail, LiveStream, ChatMessage, StreamOverlay } from '../../types';
 import type { OverlaySaveResult } from '../../hooks/useStreamOverlay';
+import type { QueuedScoreCard } from '../../lib/scoreCard';
 
 export interface CompetitionCtx {
   competition: CompetitionDetail;
@@ -19,6 +20,8 @@ export interface CompetitionCtx {
   overlay?: StreamOverlay;
   /** Change the overlays (broadcasters only); see `useStreamOverlay`. */
   saveOverlay?: (change: (overlay: StreamOverlay) => StreamOverlay) => Promise<OverlaySaveResult>;
+  /** Score cards from recent results, newest last, for the video overlays. */
+  scoreCards?: QueuedScoreCard[];
 }
 
 export const CompetitionContext = createContext<CompetitionCtx | null>(null);
