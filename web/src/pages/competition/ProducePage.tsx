@@ -10,6 +10,7 @@ import type { OverlaySaveResult } from '../../hooks/useStreamOverlay';
 import { readMessages, writeMessages } from '../../lib/overlayMessages';
 import { ScoreCardQueue } from './ScoreCardQueue';
 import { SavedLooks } from './SavedLooks';
+import { FilmingBanner } from '../../components/FilmingBanner';
 
 const STYLES: { value: OverlayBannerStyle; label: string }[] = [{ value: 0, label: 'Ticker' }, { value: 1, label: 'Lower bar' }, { value: 2, label: 'Alert' }];
 const MODES: { value: OverlayMode; label: string }[] = [{ value: 0, label: 'Auto' }, { value: 1, label: 'On' }, { value: 2, label: 'Off' }];
@@ -119,6 +120,8 @@ function Producer() {
           <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)}><X aria-hidden="true" /></button>
         </div>
       )}
+
+      <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
 
       <section className="mg-card flex flex-col gap-3 p-4" aria-labelledby="banner-title">
         <div className="flex items-center justify-between gap-2">

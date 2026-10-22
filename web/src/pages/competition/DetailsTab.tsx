@@ -11,6 +11,7 @@ import { DemoEntryPayment } from '../commerce/DemoEntryPayment';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
+import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
@@ -239,6 +240,7 @@ function SectionSignupCard({
   const [ponyClub, setPonyClub] = useState('');
   const [contact, setContact] = useState('');
   const [teamCode, setTeamCode] = useState('');
+  const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -259,8 +261,10 @@ function SectionSignupCard({
         ponyClubName: ponyClub.trim() || null,
         contactInfo: contact.trim() || null,
         teamCode: teamCode.trim() || null,
+        ...privacy,
       });
       setFullName(''); setPonyClub(''); setContact(''); setTeamCode('');
+      setPrivacy({ useInitialOnly: false, noFilming: false });
       setCreatedSignup(signup);
       setDone(signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.');
       onChanged();
@@ -316,6 +320,7 @@ function SectionSignupCard({
               onChange={(e) => setTeamCode(e.target.value)}
             />
           </label>
+          <RiderPrivacyFields value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
           <div className="flex gap-2">
             <button
               type="button"
