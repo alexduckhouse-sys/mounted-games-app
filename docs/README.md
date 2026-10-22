@@ -20,8 +20,7 @@ What each document is for and how far to trust it. When a doc and the code disag
 | `neon-setup.md` | Neon Postgres: local runs against a branch, `npm run db:migrate`, verification | Current. Its "Move the live API" section may be overtaken by hosting changes |
 | `security-review.md` | Security review of 15 October: headers, rate limits, proxy IPs, remaining limits | Current for what it covers; not a pentest |
 | `connection-performance.md` | Work done for slow or patchy venue connections, and what comes next | Partly done; check `NEXT_STEPS.md` |
-| `test-coverage-handoff.md` | API test suite status, untestable areas, suspected bugs found while testing | Current (2026-10-16) |
-| `test-coverage.md` | Early web coverage notes | **Stale**: predates the Vitest suite and the API tests. Use `tests/CLAUDE.md` and `web/CLAUDE.md` |
+| `test-coverage-handoff.md` | API and web test suite status, what isn't covered, suspected bugs found while testing | Current (2026-10-22) |
 
 ## Specs and designs
 

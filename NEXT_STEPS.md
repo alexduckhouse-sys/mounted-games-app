@@ -73,7 +73,3 @@ The cross-chat to-do list. Update or delete items as they land.
 - The items still open in `docs/security-review.md`.
 - Seven Tailwind 3 build-tool advisories. The fix is a breaking Tailwind 4 migration, so plan it as its own PR.
 - #20 pinned patched `Microsoft.OpenApi` and `SQLitePCLRaw`, and runtime npm audit is clean.
-
-## Housekeeping
-
-- `docs/test-coverage.md` predates both test suites. Fold it into `docs/test-coverage-handoff.md`, or replace it.
