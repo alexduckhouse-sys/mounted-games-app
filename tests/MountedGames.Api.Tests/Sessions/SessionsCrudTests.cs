@@ -477,6 +477,27 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task UpdateHeatAssignments_MatchesUnlabelledHeatsByPosition()
+    {
+        var a = await _f.CreateArenaAsync();
+        var (h1, _) = await _f.AddHeatAsync(a.SessionId, new[] { a.TeamIds[0], a.TeamIds[1] }, null!, 1);
+        var (h2, _) = await _f.AddHeatAsync(a.SessionId, new[] { a.TeamIds[2], a.TeamIds[3] }, null!, 2);
+        var admin = await _f.AdminAsync();
+        // The web editor names unlabelled heats "Heat 1", "Heat 2" by position.
+        var req = new UpdateHeatAssignmentsRequest(new[]
+        {
+            new HeatAssignmentEntry("Heat 1", new[] { a.TeamIds[0], a.TeamIds[1] }),
+            new HeatAssignmentEntry("Heat 2", new[] { a.TeamIds[3], a.TeamIds[2] }),
+        });
+
+        var byId = (await (await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/heat-assignments"), req)).ReadAsync<SessionDto>())
+            .Heats.ToDictionary(h => h.Id);
+
+        Assert.Equal(new[] { a.TeamIds[0], a.TeamIds[1] }, byId[h1].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+        Assert.Equal(new[] { a.TeamIds[3], a.TeamIds[2] }, byId[h2].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+    }
+
+    [Fact]
     public async Task UpdateHeatAssignments_ResendingEverythingUnchanged_ChangesNothing()
     {
         var (a, _, _, _) = await ScoredTwoHeatSessionAsync();

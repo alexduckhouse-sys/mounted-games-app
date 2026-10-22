@@ -350,10 +350,15 @@ public class SessionsController : ControllerBase
         // Only a heat whose teams or lane order actually change is rewritten. The rest keep their
         // lanes and any scores, so fixing one heat doesn't wipe the others.
         var changed = new List<(Heat Heat, List<int> TeamIds)>();
-        foreach (var heat in s.Heats)
+        var heatsInOrder = s.Heats.OrderBy(h => h.OrderIndex).ToList();
+        for (var i = 0; i < heatsInOrder.Count; i++)
         {
-            var key = (heat.Label ?? string.Empty).Trim();
-            if (!teamForLabel.TryGetValue(key, out var teamIds)) teamIds = new List<int>();
+            var heat = heatsInOrder[i];
+            // The web editor calls an unlabelled heat "Heat N" by its position; older callers send a blank label.
+            List<int>? teamIds;
+            if (!string.IsNullOrWhiteSpace(heat.Label)) teamForLabel.TryGetValue(heat.Label.Trim(), out teamIds);
+            else if (!teamForLabel.TryGetValue($"Heat {i + 1}", out teamIds)) teamForLabel.TryGetValue(string.Empty, out teamIds);
+            teamIds ??= new List<int>();
             teamIds = teamIds.Distinct().ToList();
             var current = heat.Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId);
             if (current.SequenceEqual(teamIds)) continue;
