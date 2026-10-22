@@ -102,6 +102,8 @@ builder.Services.AddHttpClient("weather", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(8);
 });
+// Owns its own size-limited cache (weather keys come from query-string coordinates).
+builder.Services.AddSingleton<WeatherCache>(_ => new WeatherCache());
 builder.Services.AddHttpClient(PushNotifier.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient("geocoding", c =>
