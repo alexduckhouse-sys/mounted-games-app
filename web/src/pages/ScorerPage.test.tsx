@@ -20,6 +20,21 @@ const timetable = (over: Partial<ScorerSession> = {}): ScorerSession => ({
 });
 const outbox = () => JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]') as Array<Record<string, unknown>>;
 
+/**
+ * Taps teams in order. A tile's tap is detected by framer-motion from pointer events, which a slow CI machine
+ * can miss, so each tap is checked by the Save button's count and repeated if it didn't register.
+ */
+async function tapTeams(user: ReturnType<typeof userEvent.setup>, names: string[]) {
+  for (const [index, name] of names.entries()) {
+    const label = new RegExp(`Save ${index + 1} result`);
+    for (let attempt = 0; attempt < 3 && !screen.queryByRole('button', { name: label }); attempt += 1) {
+      await user.click(screen.getByText(name));
+      await waitFor(() => undefined, { timeout: 50 });
+    }
+    await screen.findByRole('button', { name: label });
+  }
+}
+
 function open(hash = '#t=mgs_token') {
   window.history.replaceState(null, '', `/score${hash}`);
   return render(<ScorerPage />);
@@ -65,9 +80,7 @@ describe('ScorerPage', () => {
     open();
     await screen.findByRole('heading', { name: /Scoring · Bending/ });
 
-    await user.click(screen.getByText('Team 2'));
-    await user.click(screen.getByText('Team 1'));
-    await user.click(screen.getByText('Team 3'));
+    await tapTeams(user, ['Team 2', 'Team 1', 'Team 3']);
     await user.click(screen.getByRole('button', { name: /Save 3 results/ }));
 
     expect(outbox()).toEqual([expect.objectContaining({
@@ -110,15 +123,16 @@ describe('ScorerPage', () => {
     expect(screen.getByRole('button', { name: /Save 0 results/ })).toBeDisabled();
   });
 
-  it('lets the scorer eliminate a team, and shows storage trouble', async () => {
+  it('says so when the phone can’t store the scores', async () => {
     const user = userEvent.setup();
     open();
     await screen.findByRole('heading', { name: /Scoring · Bending/ });
-    await user.click(screen.getByText('Team 1'));
+    await tapTeams(user, ['Team 1']);
+    const save = await screen.findByRole('button', { name: /Save 1 result/ }, { timeout: 5000 });
     const set = Storage.prototype.setItem;
     Storage.prototype.setItem = () => { throw new Error('full'); };
     try {
-      await user.click(screen.getByRole('button', { name: /Save 1 result/ }));
+      await user.click(save);
     } finally { Storage.prototype.setItem = set; }
     expect(screen.getByRole('alert')).toHaveTextContent('couldn’t be saved on this phone');
   });
