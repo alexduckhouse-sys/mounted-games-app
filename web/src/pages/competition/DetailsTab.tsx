@@ -15,6 +15,7 @@ import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPri
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
+import { usePageHeader } from '../../components/CompactPageBarContext';
 
 function priceLabel(minor?: number | null): string {
   if (!minor) return 'Free';
@@ -36,6 +37,9 @@ export function DetailsTab() {
   const mayOrganise = canOrganise(competition);
   const allSignups = mayOrganise && signupResult?.key === signupKey ? signupResult.items : [];
   const [lockBusy, setLockBusy] = useState(false);
+  const [descOpen, setDescOpen] = useState(false);
+
+  usePageHeader({ title: 'Details', subtitle: `${competition.name}${competitionDateText(competition.startDate, competition.endDate) ? ` · ${competitionDateText(competition.startDate, competition.endDate)}` : ''}`, onRefresh: reload, refreshLabel: 'Refresh details' });
 
   async function refreshSignups() {
     if (!mayOrganise) return;
@@ -73,37 +77,42 @@ export function DetailsTab() {
   }
 
   const infoRow = (icon: ReactNode, label: string, value: ReactNode) => (
-    <div className="rf-row">
-      <span className="text-[rgb(var(--mg-heading))]" aria-hidden="true">{icon}</span>
-      <div className="rf-grow"><dt className="rf-t2 !font-bold uppercase tracking-[0.08em]">{label}</dt><dd className="m-0 break-words text-[15px]">{value}</dd></div>
+    <div className="flex items-start gap-2">
+      <span className="mt-0.5 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true">{icon}</span>
+      <div className="flex flex-col gap-0.5"><dt className="rf-t2 !font-bold uppercase tracking-[0.08em]">{label}</dt><dd className="m-0 break-words text-[15px]">{value}</dd></div>
     </div>
   );
   const linkRow = (to: string, label: string) => (
     <li key={label}><Link className="rf-row" to={to}><span className="rf-grow rf-t1">{label}</span><Chevron /></Link></li>
   );
 
-  return (
-    <div className="rf-page mx-auto flex w-full max-w-3xl flex-col pb-4">
-      <div className="mg-band py-3">
-        <h1 className="mg-h1 mg-h1-sm">Details &amp; entries</h1>
-      </div>
+  const longDescription = (competition.description?.length ?? 0) > 140;
 
-      <RefineSection title={competition.name} />
-      <div className="rf-list">
-        {(competition.organiserName || competition.description) && (
-          <div className="px-4 py-3">
-            {competition.organiserName && (
-              <p className="mg-meta">Organised by <span className="font-semibold">{competition.organiserName}</span></p>
-            )}
-            {competition.description && (
-              <p className="mg-lede mt-1 whitespace-pre-wrap">{competition.description}</p>
-            )}
-          </div>
-        )}
-        <dl className="m-0">
-          {infoRow(<CalendarDays className="h-5 w-5" />, 'Dates', competitionDateText(competition.startDate, competition.endDate, true))}
-          {competition.location && infoRow(<MapPin className="h-5 w-5" />, 'Location', competition.location)}
-          {competition.what3Words && infoRow(<Info className="h-5 w-5" />, 'what3words', (
+  return (
+    <div className="rf-page mx-auto flex w-full max-w-3xl flex-col gap-2.5 pb-4 pt-3">
+      <h1 className="sr-only">Details &amp; entries</h1>
+
+      <div className="mg-card flex flex-col gap-4 p-4">
+        <div>
+          <h2 className="mg-display text-2xl font-bold leading-[1.1] text-[rgb(var(--mg-heading))]">{competition.name}</h2>
+          {competition.organiserName && (
+            <p className="mg-meta mt-1">Organised by <span className="font-semibold">{competition.organiserName}</span></p>
+          )}
+          {competition.description && (
+            <>
+              <p className={`mg-lede mt-2 whitespace-pre-wrap ${longDescription && !descOpen ? 'line-clamp-2' : ''}`}>{competition.description}</p>
+              {longDescription && (
+                <button type="button" className="mg-text-link !min-h-11 !justify-start" aria-expanded={descOpen} onClick={() => setDescOpen((open) => !open)}>
+                  {descOpen ? 'Less' : 'More'}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        <dl className="m-0 grid grid-cols-1 gap-3">
+          {infoRow(<CalendarDays className="h-4 w-4" />, 'Dates', competitionDateText(competition.startDate, competition.endDate, true))}
+          {competition.location && infoRow(<MapPin className="h-4 w-4" />, 'Location', competition.location)}
+          {competition.what3Words && infoRow(<Info className="h-4 w-4" />, 'what3words', (
             <a
               href={`https://what3words.com/${competition.what3Words.replace(/^\/\/\//, '')}`}
               target="_blank" rel="noreferrer"
@@ -112,13 +121,13 @@ export function DetailsTab() {
               {competition.what3Words.startsWith('///') ? competition.what3Words : `///${competition.what3Words}`}
             </a>
           ))}
-          {competition.appleMapsUrl && infoRow(<MapPinned className="h-5 w-5" />, 'Map pin', (
+          {competition.appleMapsUrl && infoRow(<MapPinned className="h-4 w-4" />, 'Map pin', (
             <a href={competition.appleMapsUrl} target="_blank" rel="noreferrer" className="font-semibold text-[rgb(var(--mg-heading))] hover:underline">
               Open in Apple Maps
             </a>
           ))}
-          {infoRow(<Layers className="h-5 w-5" />, 'Age groups', competition.sections.length || '—')}
-          {infoRow(<Users className="h-5 w-5" />, 'Teams', competition.teams.length)}
+          {infoRow(<Layers className="h-4 w-4" />, 'Age groups', competition.sections.length || '—')}
+          {infoRow(<Users className="h-4 w-4" />, 'Teams', competition.teams.length)}
         </dl>
       </div>
 
@@ -185,13 +194,8 @@ export function DetailsTab() {
       {/* Signup by section: signed-in users only; the public can't enter. */}
       {user && competition.sections.length > 0 && (
         <>
-          <RefineSection title="Enter the competition" />
-          {competition.paymentDestination && (
-            <p className="rf-note !pt-0">
-              Pay to: <span className="font-mono">{competition.paymentDestination}</span>
-            </p>
-          )}
-          <ul className="rf-list">
+          <RefineSection title="Enter the competition" meta={competition.paymentDestination ? <>Pay to <span className="font-mono">{competition.paymentDestination}</span></> : undefined} />
+          <div className="grid grid-cols-2 gap-2">
             {competition.sections.map((sec) => (
               <SectionSignupCard
                 key={sec.id}
@@ -204,9 +208,10 @@ export function DetailsTab() {
                 onChanged={() => { refreshSignups(); reload(); }}
                 canManage={canEdit() || mayOrganise}
                 hideJoin={hasRole('Admin')}
+                countsKnown={mayOrganise}
               />
             ))}
-          </ul>
+          </div>
         </>
       )}
 
@@ -218,7 +223,7 @@ export function DetailsTab() {
 function SectionSignupCard({
   competitionId, section, allSignups, signupsLocked,
   competitionName,
-  onChanged, canManage, hideJoin,
+  onChanged, canManage, hideJoin, countsKnown,
 }: {
   competitionId: number;
   section: CompetitionSection;
@@ -230,6 +235,8 @@ function SectionSignupCard({
   canManage: boolean;
   /** True when the viewer is an admin — hide the Join CTA + form, keep manage list. */
   hideJoin: boolean;
+  /** Only organisers receive the signup list, so places taken is only known to them. */
+  countsKnown: boolean;
 }) {
   const { user } = useAuth();
   const [createdSignup, setCreatedSignup] = useState<SectionSignup | null>(null);
@@ -283,22 +290,31 @@ function SectionSignupCard({
     );
   }
 
+  const places = max ? Math.round((paidCount / max) * 100) : 30;
+  const scarce = seatsLeft != null && seatsLeft > 0 && seatsLeft <= 4;
+  const wide = open || !!createdSignup || (canManage && signups.length > 0);
   return (
-    <li className="flex flex-col gap-2 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rf-t1 flex-1">{section.displayName}</span>
-        <span className="rf-price text-[rgb(var(--mg-heading))]">{priceLabel(section.priceMinor)}</span>
+    <div className={`mg-card flex flex-col gap-1.5 p-2.5 ${wide ? 'col-span-2 border-[rgb(var(--mg-heading))]' : ''}`}>
+      <div className="flex items-baseline gap-1.5">
+        <span className="mg-display flex-1 text-base font-bold uppercase leading-none tracking-[0.03em] text-[rgb(var(--mg-heading))]">{section.displayName}</span>
+        <span className="mg-display text-base font-bold leading-none">{priceLabel(section.priceMinor)}</span>
       </div>
-      <div className="rf-t2">
-        {paidCount} in
-        {max ? ` · ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left` : ` · ${signups.length} signup${signups.length === 1 ? '' : 's'}`}
-      </div>
+      {countsKnown && (
+        <div className="h-1 overflow-hidden rounded-sm bg-[rgb(var(--mg-tint))]" aria-hidden="true">
+          <div className={`h-full ${full ? 'bg-[rgb(var(--mg-dash))]' : scarce ? 'bg-[rgb(var(--mg-late-time))]' : 'bg-[rgb(var(--mg-heading))]'}`} style={{ width: `${places}%` }} />
+        </div>
+      )}
+      <span className={`text-xs font-medium ${scarce ? 'text-[rgb(var(--mg-late-ink))]' : 'text-[rgb(var(--mg-muted))]'}`}>
+        {!countsKnown ? (max ? `Up to ${max} places` : 'No limit')
+          : full ? 'Full' : max ? `${seatsLeft} of ${max} places left` : `${paidCount} entered · no limit`}
+        {countsKnown && <span className="sr-only">. {paidCount} in{max ? `, ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left` : `, ${signups.length} signup${signups.length === 1 ? '' : 's'}`}</span>}
+      </span>
       {hideJoin ? (
         <p className="rf-note !p-0 italic">Admin view — entrants only.</p>
       ) : signupsLocked ? (
         <p className="rf-note !p-0 italic">Entries closed.</p>
       ) : full ? (
-        <p className="rf-note !p-0 italic">Section is full.</p>
+        <span className="flex min-h-9 items-center justify-center rounded-lg bg-[rgb(var(--mg-subtle))] text-[13px] font-semibold text-[rgb(var(--mg-muted))]">Full</span>
       ) : !user ? (
         <Link to="/login" className="mg-btn mg-btn-primary w-full !min-h-11">Sign in to enter</Link>
       ) : !open ? (
@@ -371,7 +387,7 @@ function SectionSignupCard({
           </ul>
         </details>
       )}
-    </li>
+    </div>
   );
 }
 
