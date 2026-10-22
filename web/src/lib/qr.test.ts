@@ -5,7 +5,7 @@ import { qrShape } from './qr';
 /** Reads the dark modules back out of path data made by qrShape. */
 function darkModules(path: string): Set<string> {
   const dark = new Set<string>();
-  for (const [, x, y, length] of path.matchAll(/M(\d+) (\d+)h(\d+)v1h-\d+z/g).map((m) => m.map(Number))) {
+  for (const [, x, y, length] of Array.from(path.matchAll(/M(\d+) (\d+)h(\d+)v1h-\d+z/g), (m) => m.map(Number))) {
     for (let i = 0; i < length; i++) dark.add(`${x + i},${y}`);
   }
   return dark;

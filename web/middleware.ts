@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // Vercel Routing Middleware. It does two jobs.
 //
 // 1. /api/*: runs before the rewrite to the API project in vercel.json and passes the visitor's IP with a
