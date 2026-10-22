@@ -178,7 +178,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     [HttpDelete("me")]
     [Authorize]
-    public async Task<IActionResult> DeleteMe(DeleteAccountRequest req, [FromServices] AccountDeletionService deletion)
+    public async Task<IActionResult> DeleteMe(DeleteAccountRequest req, [FromServices] AccountDeletionService deletion, [FromServices] LiveAccounts accounts)
     {
         var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
@@ -200,6 +200,7 @@ public class AuthController : ControllerBase
             return Conflict(new { message = "This is the only administrator account. Make someone else an administrator first." });
 
         await deletion.DeleteAsync(user, HttpContext.RequestAborted);
+        accounts.Forget(user.Id);
         return NoContent();
     }
 

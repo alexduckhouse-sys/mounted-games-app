@@ -19,12 +19,11 @@ export function PrivacyPage() {
         <p>
           You don't need an account to follow a competition, so we don't know who you are. Your device's IP address
           reaches our servers like it does for any website, and we use it to limit abuse (for example, how often one
-          address can ask for a lookup). Those counters last about a minute. Our hosts, Vercel and Render, keep their own
-          ordinary server logs.
+          address can ask for a lookup). Those counters last about a minute. Our host, Vercel, keeps its own ordinary
+          server logs.
         </p>
         <p>
-          If you watch a live stream, your connection goes through Cloudflare, which carries the video. We cap how many
-          streams one address can open at once.
+          If you watch a live stream, your connection goes through Cloudflare, which carries the video.
         </p>
       </section>
 
@@ -47,8 +46,8 @@ export function PrivacyPage() {
         <h2 className="text-lg font-bold">IP addresses on posts</h2>
         <p>
           When you post a chat message or something in the marketplace, we record your IP address so an administrator can
-          block someone who is abusing the service. After 30 days the address is replaced with a scrambled code that can't
-          be turned back into the address. IP addresses on the block list stay until an administrator removes the block.
+          block someone who is abusing the service. After 30 days the address is replaced with a scrambled code. That still
+          shows when the same address posts again, but the address itself is no longer stored. IP addresses on the block list stay until an administrator removes the block.
         </p>
       </section>
 
@@ -94,8 +93,9 @@ export function PrivacyPage() {
         <h2 className="text-lg font-bold">Children</h2>
         <p>
           Many riders are under 18. Trainers and parents enter their details on a declaration, and only organisers of that
-          competition, the trainer and administrators see dates of birth. If you want a young rider's details removed, ask
-          us at the address below.
+          competition, the trainer and administrators see dates of birth. A rider can be shown on public pages with their
+          surname as an initial only (Oliver S.), and can ask not to be filmed or photographed close up: tick either box
+          on the declaration or entry form. If you want a young rider's details removed, ask us at the address below.
         </p>
       </section>
 

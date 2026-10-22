@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.IO.Compression;
 using System.Text;
 using MountedGames.Api.Security;
@@ -75,11 +76,20 @@ builder.Services
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                     ctx.Token = accessToken;
                 return Task.CompletedTask;
+            },
+            OnTokenValidated = async ctx =>
+            {
+                var uid = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                var accounts = ctx.HttpContext.RequestServices.GetRequiredService<LiveAccounts>();
+                if (uid is null || !await accounts.IsActiveAsync(uid, ctx.HttpContext.RequestAborted))
+                    ctx.Fail("This account no longer exists.");
             }
         };
     });
 
 builder.Services.AddAuthorizationWithCompetitionStaff();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<LiveAccounts>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ScoringService>();

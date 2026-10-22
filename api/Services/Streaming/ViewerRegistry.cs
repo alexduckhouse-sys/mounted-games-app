@@ -106,7 +106,7 @@ public sealed class ViewerRegistry : IDisposable
             _refilled = now;
             if (_tokens < 1) throw Error("RATE_LIMITED", "Please wait before watching again.");
             connection.Streams.TryGetValue(streamId, out replaced);
-            if (clientIp is not null)
+            if (clientIp is not null && _options.MaxViewersPerIp > 0)
             {
                 connection.Ip = clientIp;
                 var open = _connections.Values.Where(c => c.Ip == clientIp).Sum(c => c.Streams.Count) - (replaced is null ? 0 : 1);

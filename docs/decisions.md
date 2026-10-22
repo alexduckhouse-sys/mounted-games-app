@@ -9,7 +9,7 @@
   - Ownership cleared: `Competition.CreatedByUserId` and `Team.TrainerUserId` become null. The competition or team carries on, an admin can run it, and a team shows as unclaimed.
   - Left as they are: audit columns that hold a bare user id with no foreign key (scoring audit, rulebook and overlay "updated by", `CompetitionCollaborator.AddedByUserId`, IP block creator, stream starter). With the account gone the id points at nobody.
   - Kept as an emptied shell (no migration): seasons, team profiles, season publications, event team links, catalogue items and event orders reference the account with non-nullable restricted keys. If the account owns any, the row stays but is anonymised in place: email and name replaced, phone and password cleared, roles removed, locked out for good, and catalogue items switched off. Everything else above still happens. The username is freed for reuse.
-- Known gap: a token issued before deletion stays valid until it expires (24 hours by default), because the API doesn't look the user up on each request.
+- Sessions end with the account: `LiveAccounts` turns away a token whose account is gone or emptied (checked on each request, cached for 60 seconds, so another API instance may accept it for up to a minute).
 - Rejected: always anonymising in place (leaves a row for every leaver); cascading deletes through seasons and orders (would erase published results and payment records other people rely on); a migration to make those keys nullable (not worth it for this change; revisit if shells pile up).
 - Files: `api/Services/AccountDeletionService.cs`, `api/Controllers/AuthController.cs`, `tests/MountedGames.Api.Tests/Auth/AccountDeletionTests.cs`, `web/src/pages/AccountPage.tsx`.
 

@@ -152,7 +152,7 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
         {
             db.CompetitionCollaborators.Add(new CompetitionCollaborator
             {
-                CompetitionId = a.CompetitionId, UserId = auth.User.Id, Role = CollaboratorRole.CoOrganiser,
+                CompetitionId = a.CompetitionId, UserId = auth.User.Id, Role = CollaboratorRole.CompetitionAdmin,
                 AddedByUserId = auth.User.Id, AddedAt = DateTime.UtcNow
             });
             await db.SaveChangesAsync();

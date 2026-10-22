@@ -64,6 +64,8 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
             // The fifth wrong guess is the one that triggers the lockout.
             Assert.Contains(i < 4 ? "isn't right" : "Too many", await MessageAsync(wrong), StringComparison.Ordinal);
         }
+        // A lockout after wrong passwords doesn't end the session itself.
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me")).StatusCode);
         // Even the right password is refused once the account is locked, like signing in.
         using var locked = await Delete(client, Password);
         Assert.Equal(HttpStatusCode.BadRequest, locked.StatusCode);
@@ -144,7 +146,7 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
             (await db.Teams.SingleAsync(t => t.Id == arena.TeamIds[0])).TrainerUserId = userId;
             var club = await db.Clubs.SingleAsync(c => c.Id == db.Teams.Single(t => t.Id == arena.TeamIds[0]).ClubId);
 
-            var collaborator = new CompetitionCollaborator { CompetitionId = other.CompetitionId, UserId = userId, Role = CollaboratorRole.RingScorer, AddedByUserId = bystander.User.Id, AddedAt = DateTime.UtcNow };
+            var collaborator = new CompetitionCollaborator { CompetitionId = other.CompetitionId, UserId = userId, Role = CollaboratorRole.CompetitionAdmin, AddedByUserId = bystander.User.Id, AddedAt = DateTime.UtcNow };
             var chat = new ChatMessage { CompetitionId = arena.CompetitionId, UserId = userId, AuthorName = "Real Name", Body = "Hello", IpAddress = "203.0.113.50" };
             var othersChat = new ChatMessage { CompetitionId = arena.CompetitionId, UserId = bystander.User.Id, AuthorName = "Bystander", Body = "Hi", IpAddress = "203.0.113.51" };
             var post = new ShopPost { AuthorUserId = userId, AuthorName = "Real Name", Title = "Saddle", Body = "For sale", ContactInfo = "07700 900000", IpAddress = "203.0.113.50", DeletedByUserId = userId };
@@ -188,6 +190,8 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.NoContent, r.StatusCode);
         Assert.False(await CanSignInAsync(auth.User.Email));
+        // The session they deleted from ends with the account.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
         await _f.WithDbAsync(async db =>
         {
             Assert.False(await db.Users.AnyAsync(u => u.Id == id));
@@ -298,6 +302,7 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
         using var r = await Delete(client, Password);
 
         Assert.Equal(HttpStatusCode.NoContent, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
         Assert.Equal(AccountDeletionService.DeletedName, (await _f.WithDbAsync(db => db.Users.SingleAsync(u => u.Id == auth.User.Id))).FullName);
         Assert.Equal(1, await _f.WithDbAsync(db => db.Set<EventOrder>().CountAsync(o => o.BuyerUserId == auth.User.Id)));
     }

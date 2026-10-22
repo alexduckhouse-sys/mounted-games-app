@@ -90,7 +90,7 @@ public class DeclarationFormsController : ControllerBase
         // Only the team's own trainer, or someone who organises its competition, may submit or overwrite a
         // declaration. An unclaimed team is not open to everyone.
         if (!isAdmin && !(userId is not null && team.TrainerUserId == userId)
-            && !await CanOrganiseAsync(team.CompetitionId, userId))
+            && !await _db.CanManageAsync(User, team.CompetitionId))
             return Forbid();
 
         var savedIds = req.Riders.Where(r => r.SavedRiderId.HasValue).Select(r => r.SavedRiderId!.Value).Distinct().ToArray();
@@ -170,19 +170,6 @@ public class DeclarationFormsController : ControllerBase
         await _db.Entry(form).Reference(f => f.Team).LoadAsync();
         await _db.Entry(form).Reference(f => f.SubmittedBy).LoadAsync();
         return form.ToDto(includePrivate: true);
-    }
-
-    /// <summary>
-    /// Mirrors <see cref="CompetitionAccessAttribute"/>: the competition's owning Trainer, or anyone on its team.
-    /// Admins are handled by the caller.
-    /// </summary>
-    private async Task<bool> CanOrganiseAsync(int competitionId, string? userId)
-    {
-        if (string.IsNullOrEmpty(userId)) return false;
-        var owner = User.IsInRole(Roles.Trainer);
-        return await _db.Competitions.AsNoTracking().AnyAsync(c => c.Id == competitionId
-            && ((owner && c.CreatedByUserId == userId)
-                || _db.CompetitionCollaborators.Any(k => k.CompetitionId == c.Id && k.UserId == userId)));
     }
 
     [HttpDelete("{id:int}")]

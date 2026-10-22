@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
+using MountedGames.Api.Auth;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Tests.Infrastructure;
@@ -19,8 +20,20 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
     private static RiderEntryInput Rider(string name, bool initial = false, bool noFilming = false, int? savedId = null)
         => new(savedId, name, new DateTime(2012, 3, 4, 0, 0, 0, DateTimeKind.Utc), "Pony", null, false, false, 0, initial, noFilming);
 
+    /// <summary>Makes the trainer the team's own coach, since only they (or its organisers) may submit for it.</summary>
+    private async Task ClaimAsync(HttpClient trainer, int teamId)
+    {
+        var me = await (await trainer.GetAsync("/api/auth/me")).ReadAsync<UserProfile>();
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Teams.FindAsync(teamId))!.TrainerUserId = me.Id;
+            await db.SaveChangesAsync();
+        });
+    }
+
     private async Task<int> SubmitAsync(HttpClient trainer, int teamId, params RiderEntryInput[] riders)
     {
+        await ClaimAsync(trainer, teamId);
         var r = await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(teamId, null, riders, false, null));
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         return (await r.ReadAsync<DeclarationFormDto>()).Id;
@@ -82,6 +95,7 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
     {
         var a = await _f.CreateArenaAsync(1);
         var trainer = await _f.TrainerAsync();
+        await ClaimAsync(trainer, a.TeamIds[0]);
         var created = await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null,
             new[] { Rider("Oliver Smith", initial: true, noFilming: true) }, false, null));
         var submitted = await created.ReadAsync<DeclarationFormDto>();
@@ -134,6 +148,7 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
     {
         var a = await _f.CreateArenaAsync(1);
         var trainer = await _f.TrainerAsync();
+        await ClaimAsync(trainer, a.TeamIds[0]);
         var clubId = await _f.WithDbAsync(async db => (await db.Teams.SingleAsync(t => t.Id == a.TeamIds[0])).ClubId);
         var first = await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null,
             new[] { Rider("Roster Rider", initial: true, noFilming: true) }, true, null));
@@ -157,6 +172,7 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
     {
         var a = await _f.CreateArenaAsync(1);
         var trainer = await _f.TrainerAsync();
+        await ClaimAsync(trainer, a.TeamIds[0]);
         var clubId = await _f.WithDbAsync(async db => (await db.Teams.SingleAsync(t => t.Id == a.TeamIds[0])).ClubId);
         await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null, new[] { Rider("Changing Rider") }, true, null));
         await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null, new[] { Rider("Changing Rider", noFilming: true) }, true, null));
@@ -171,7 +187,9 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
     public async Task TheChoices_AreOffByDefault()
     {
         var a = await _f.CreateArenaAsync(1);
-        var submitted = await (await (await _f.TrainerAsync()).PostAsJsonAsync(Forms,
+        var trainer = await _f.TrainerAsync();
+        await ClaimAsync(trainer, a.TeamIds[0]);
+        var submitted = await (await trainer.PostAsJsonAsync(Forms,
             new SubmitDeclarationFormRequest(a.TeamIds[0], null, new[] { new RiderEntryInput(null, "Plain Rider", null, null, null, false, false, 0) }, false, null)))
             .ReadAsync<DeclarationFormDto>();
         Assert.False(submitted.Riders[0].UseInitialOnly);
