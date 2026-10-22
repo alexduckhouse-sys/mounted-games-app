@@ -293,4 +293,14 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
             _errors.Release();
         }
     }
+
+    [Theory]
+    [InlineData("2026-07-04T08:00:00Z", "09:00")] // British Summer Time
+    [InlineData("2026-12-05T09:00:00Z", "09:00")] // GMT
+    public void UkTime_ShowsVenueTime_NotTheServersUtc(string utc, string expected)
+    {
+        var time = NotificationScheduler.UkTime(DateTime.Parse(utc, null, System.Globalization.DateTimeStyles.AdjustToUniversal));
+
+        Assert.Equal(expected, time.ToString("HH:mm"));
+    }
 }
