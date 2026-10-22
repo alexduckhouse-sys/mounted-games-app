@@ -30,7 +30,6 @@ vi.mock('../auth/AuthContext', () => ({
     hasRole: (role: string) => hoisted.roles.includes(role),
     canEdit: () => hoisted.roles.includes('Admin'),
     canOrganise: () => true,
-    canManageEntries: () => true,
   }),
 }));
 
