@@ -364,3 +364,6 @@ a.mg-row:hover, button.mg-row:hover { background: rgb(var(--mg-subtle)); }
 [data-lite="true"] *, [data-lite="true"] *::before, [data-lite="true"] *::after {
   animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important;
 }
+
+/* Fields that failed validation: a red border and the message under them (no banner). */
+.mg-field[data-invalid="true"] { border-color: rgb(var(--mg-elim)); }
