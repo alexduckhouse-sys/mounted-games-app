@@ -105,6 +105,13 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
   });
 
+  it('links to the privacy page for everyone', async () => {
+    mount();
+    await userEvent.click(screen.getByRole('link', { name: 'Privacy' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('probe')).toHaveTextContent('/privacy');
+  });
+
   it('offers to change competition and see past ones', async () => {
     mount();
     await userEvent.click(screen.getByRole('button', { name: 'Change competition' }));
@@ -216,7 +223,7 @@ describe('NavigationDrawer: signed in', () => {
   it('shows a trainer their pages and who they are signed in as', () => {
     mount({ roles: ['Trainer'] });
     expect(links('Account and management')).toEqual([
-      ['Dashboard', '/dashboard'], ['My teams', '/teams'], ['Dec forms', '/declarations'], ['My signups', '/me/signups'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders'],
+      ['My account', '/me/account'], ['Dashboard', '/dashboard'], ['My teams', '/teams'], ['Dec forms', '/declarations'], ['My signups', '/me/signups'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders'],
     ]);
     expect(screen.getByText('Signed in as Ann Smith')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Notifications/ })).toHaveAttribute('href', '/teams');
@@ -225,12 +232,12 @@ describe('NavigationDrawer: signed in', () => {
 
   it('shows an admin the admin page and not the trainer-only pages', () => {
     mount({ roles: ['Admin', 'Trainer'] });
-    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['Dec forms', '/declarations'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders'], ['Admin', '/admin']]);
+    expect(links('Account and management')).toEqual([['My account', '/me/account'], ['Dashboard', '/dashboard'], ['Dec forms', '/declarations'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders'], ['Admin', '/admin']]);
   });
 
   it('shows a member their dashboard, signups and shop', () => {
     mount({ roles: ['Member'], fullName: '' });
-    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['My signups', '/me/signups'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders']]);
+    expect(links('Account and management')).toEqual([['My account', '/me/account'], ['Dashboard', '/dashboard'], ['My signups', '/me/signups'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders']]);
     expect(screen.getByText('Signed in as ann@example.com')).toBeInTheDocument();
   });
 

@@ -25,6 +25,32 @@ public class GeocodingServiceTests : IClassFixture<ApiFactory>
     private const string PostcodeOk = """{"result":{"latitude":52.1,"longitude":-1.2}}""";
     private const string W3wOk = """{"coordinates":{"lat":51.5,"lng":-0.12}}""";
 
+    // ---- rate limit ----
+
+    [Fact]
+    public async Task Geocode_IsLimitedPerIp_SoThePaidLookupCannotBeHammered()
+    {
+        var limited = _f.WithWebHostBuilder(b => b.UseSetting("RateLimits:GeocodePerMinute", "2"));
+        _f.Http.Reset();
+        _f.Http.RespondJson("postcodes.io", PostcodeOk);
+        var client = limited.CreateClient();
+
+        async Task<HttpStatusCode> Call(string ip)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/geocode?postcode=B1");
+            request.Headers.Add(TestIpStartupFilter.Header, ip);
+            using var response = await client.SendAsync(request);
+            return response.StatusCode;
+        }
+
+        Assert.Equal(HttpStatusCode.OK, await Call("203.0.113.5"));
+        Assert.Equal(HttpStatusCode.OK, await Call("203.0.113.5"));
+        Assert.Equal(HttpStatusCode.TooManyRequests, await Call("203.0.113.5"));
+        // Someone else is unaffected, and the refused call never reached the lookup.
+        Assert.Equal(HttpStatusCode.OK, await Call("203.0.113.6"));
+        Assert.Equal(3, _f.Http.Requests.Count);
+    }
+
     // ---- postcode ----
 
     [Fact]

@@ -107,6 +107,46 @@ public class StreamingHubTests : IClassFixture<StreamingApiFactory>
     }
 
     [Fact]
+    public async Task AnonymousViewersAreCappedPerIp_NotPerStreamOrPerConnection()
+    {
+        using var f = new StreamingApiFactory();
+        f.Settings["MaxViewersPerIp"] = "2";
+        var (_, competition, attempt) = await LiveAsync(f);
+        await using var a = await f.ConnectAsync(ip: "198.51.100.1");
+        await using var b = await f.ConnectAsync(ip: "198.51.100.1");
+        await using var other = await f.ConnectAsync(ip: "198.51.100.2");
+
+        await a.InvokeAsync<WatchStreamResponse>("WatchStream", competition, attempt.StreamId);
+        await b.InvokeAsync<WatchStreamResponse>("WatchStream", competition, attempt.StreamId);
+        // Re-watching the same stream on a connection replaces its watch; it doesn't add one.
+        await a.InvokeAsync<WatchStreamResponse>("WatchStream", competition, attempt.StreamId);
+        await using var third = await f.ConnectAsync(ip: "198.51.100.1");
+        await ErrorAsync("RATE_LIMITED", () => third.InvokeAsync<WatchStreamResponse>("WatchStream", competition, attempt.StreamId));
+        // A different address is unaffected.
+        await other.InvokeAsync<WatchStreamResponse>("WatchStream", competition, attempt.StreamId);
+        // Letting go frees the slot.
+        await b.InvokeAsync("StopWatching", attempt.StreamId);
+        await third.InvokeAsync<WatchStreamResponse>("WatchStream", competition, attempt.StreamId);
+    }
+
+    [Fact]
+    public async Task RegistryCapIgnoresViewersWithNoAddress_AndFreesSlotsOnDisconnect()
+    {
+        using var f = new StreamingApiFactory();
+        f.Settings["MaxViewersPerIp"] = "1";
+        var (_, competition, attempt) = await LiveAsync(f);
+
+        await f.Viewers.WatchAsync("known-1", competition, attempt.StreamId, clientIp: "198.51.100.9");
+        var full = await Assert.ThrowsAsync<HubException>(() => f.Viewers.WatchAsync("known-2", competition, attempt.StreamId, clientIp: "198.51.100.9"));
+        Assert.Contains("RATE_LIMITED: ", full.Message);
+        // No address (signed in, or unknown) means no per-address cap.
+        await f.Viewers.WatchAsync("none-1", competition, attempt.StreamId);
+        await f.Viewers.WatchAsync("none-2", competition, attempt.StreamId);
+        await f.Viewers.DisconnectAsync("known-1");
+        await f.Viewers.WatchAsync("known-2", competition, attempt.StreamId, clientIp: "198.51.100.9");
+    }
+
+    [Fact]
     public async Task StartingEndedMissingAndForeignStreamsCannotBeWatched()
     {
         using var admin = await _f.AdminAsync();
