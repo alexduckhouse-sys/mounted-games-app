@@ -24,6 +24,8 @@ export interface Toplist {
   hc: { teamId: number; teamName: string; points: number; racesLeft: number }[];
   sessionsDone: number;
   sessionsTotal: number;
+  /** False until a race in this age group has been scored: before that nobody has a real position. */
+  started: boolean;
   /** Points per heat session in running order, then finals ("F") once they have points; `cells` follows `sessions`. */
   bySession: { sessions: { id: number; label: string; title: string }[]; cells: Map<number, number[]> };
   /** Each final that has results, in running order ("A Final", "B Final"...). Empty until a final has been ridden. */
@@ -171,7 +173,9 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   const qualifying = qualifyingRanks(rows, sessionPoints);
   for (const group of finalGroups) for (const finalRow of group.rows) finalRow.qualifyingPosition = qualifying.get(finalRow.teamId)?.position ?? null;
   const detail = buildDetail(rows, finalGroups, heatSessions, qualifying);
-  return { rows, cutAfter, runoff, hc, sessionsDone, sessionsTotal: heatSessions.length, bySession: { sessions: columns, cells }, finals: finalGroups, detail };
+  const started = scored || sessions.some((session) => session.competitionSectionId === sectionId && isRace(session)
+    && session.heats.some((heat) => heat.races.some((race) => race.results.length > 0)));
+  return { rows, cutAfter, runoff, hc, sessionsDone, sessionsTotal: heatSessions.length, started, bySession: { sessions: columns, cells }, finals: finalGroups, detail };
 }
 
 const finalWording = /\bfinals?\b/i;
