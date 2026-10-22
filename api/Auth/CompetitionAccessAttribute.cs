@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
+using MountedGames.Api.Entities;
 
 namespace MountedGames.Api.Auth;
 
@@ -18,6 +19,12 @@ public enum CompetitionResource { Competition, Signup, Session, Heat, Race }
 public sealed class CompetitionAccessAttribute(string argument, CompetitionResource resource = CompetitionResource.Competition)
     : Attribute, IAsyncAuthorizationFilter
 {
+    /// <summary>
+    /// Entrant and money data: of the competition's team, only co-organisers get in (plus the owner and admins).
+    /// Ring scorers, line judges, commentators and stream producers don't need entrants' personal details.
+    /// </summary>
+    public bool CoOrganisersOnly { get; set; }
+
     // An authorization filter, so it runs after the [Authorize] policy but before model binding and validation:
     // someone with no access gets 404, never a 400 that hints the route exists. The id comes from the route.
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
@@ -49,7 +56,8 @@ public sealed class CompetitionAccessAttribute(string argument, CompetitionResou
         var allowed = user.IsInRole(Roles.Admin)
             ? await competitions.AnyAsync(context.HttpContext.RequestAborted)
             : !string.IsNullOrEmpty(uid) && await competitions.AnyAsync(c =>
-                (trainer && c.CreatedByUserId == uid) || db.CompetitionCollaborators.Any(k => k.CompetitionId == c.Id && k.UserId == uid),
+                (trainer && c.CreatedByUserId == uid) || db.CompetitionCollaborators.Any(k => k.CompetitionId == c.Id && k.UserId == uid
+                    && (!CoOrganisersOnly || k.Role == CollaboratorRole.CoOrganiser)),
                 context.HttpContext.RequestAborted);
         if (!allowed) context.Result = new NotFoundResult();
     }

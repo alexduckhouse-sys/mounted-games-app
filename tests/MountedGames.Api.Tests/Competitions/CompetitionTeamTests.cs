@@ -145,4 +145,18 @@ public class CompetitionTeamTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync($"{url}/heats", new { label = "Own teams", orderIndex = 6, teamIds = arena.TeamIds, raceNames = new[] { "R" } })).StatusCode);
         _ = heatId;
     }
+
+    [Theory]
+    [InlineData(CollaboratorRole.RingScorer, HttpStatusCode.NotFound)]
+    [InlineData(CollaboratorRole.Commentator, HttpStatusCode.NotFound)]
+    [InlineData(CollaboratorRole.CoOrganiser, HttpStatusCode.OK)]
+    public async Task EntrantDetails_AreForCoOrganisersOnly(CollaboratorRole role, HttpStatusCode expected)
+    {
+        var (arena, _, _, owner, _) = await OwnedAsync();
+        var (helper, helperAuth) = await _f.SignupAsync("Member");
+        await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email, role });
+
+        Assert.Equal(expected, (await helper.GetAsync($"/api/competitions/{arena.CompetitionId}/signups")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync($"/api/competitions/{arena.CompetitionId}/signups")).StatusCode);
+    }
 }

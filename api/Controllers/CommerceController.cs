@@ -253,7 +253,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
     [HttpGet("competitions/{competitionId:int}/listings/manage")]
     [Authorize(Policy = CompetitionStaff.Policy)]
-    [CompetitionAccess("competitionId")]
+    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
     public async Task<ActionResult<IReadOnlyList<CompetitionListingDto>>> ManageListings(
         int competitionId,
         CancellationToken cancellationToken)
@@ -306,7 +306,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
     [HttpPut("competitions/{competitionId:int}/settings")]
     [Authorize(Policy = CompetitionStaff.Policy)]
-    [CompetitionAccess("competitionId")]
+    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
     public async Task<ActionResult<EventCommerceSettingsDto>> UpdateSettings(
         int competitionId,
         UpdateEventCommerceSettingsRequest request,
@@ -407,7 +407,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
     [HttpGet("competitions/{competitionId:int}/orders")]
     [Authorize(Policy = CompetitionStaff.Policy)]
-    [CompetitionAccess("competitionId")]
+    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
     public async Task<ActionResult<IReadOnlyList<EventOrderDto>>> CompetitionOrders(
         int competitionId,
         CancellationToken cancellationToken)
