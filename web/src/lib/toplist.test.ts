@@ -30,6 +30,29 @@ describe('buildToplist positions', () => {
     expect(input.map((s) => s.teamId)).toEqual([1, 2]);
   });
 
+  it('puts A finalists above B finalists above everyone else, then orders by points within each', () => {
+    const input = [
+      { ...standing(1, 7), finalTier: 0 },
+      { ...standing(2, 10), finalTier: 1 },
+      { ...standing(3, 12), finalTier: 0 },
+      { ...standing(4, 20), finalTier: null },
+      { ...standing(5, 5), finalTier: 1 },
+    ];
+    const list = buildToplist(input, [], [], SECTION, null);
+    expect(list.rows.map((r) => r.teamId)).toEqual([3, 1, 2, 5, 4]);
+    expect(list.rows.map((r) => r.position)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('does not tie teams on equal points when they are in different finals', () => {
+    const list = buildToplist([{ ...standing(1, 7), finalTier: 0 }, { ...standing(2, 7), finalTier: 1 }, { ...standing(3, 7), finalTier: 1 }], [], [], SECTION, null);
+    expect(list.rows.map((r) => [r.teamId, r.position, r.joint])).toEqual([[1, 1, false], [2, 2, true], [3, 2, true]]);
+  });
+
+  it('keeps plain points order when no team has a final tier', () => {
+    const list = buildToplist([standing(1, 3), { ...standing(2, 9), finalTier: null }, standing(3, 6)], [], [], SECTION, null);
+    expect(list.rows.map((r) => r.teamId)).toEqual([2, 3, 1]);
+  });
+
   it('is empty for no standings', () => {
     const list = buildToplist([], [], [], SECTION, 3);
     expect(list).toMatchObject({ rows: [], cutAfter: null, runoff: null, hc: [], sessionsDone: 0, sessionsTotal: 0 });

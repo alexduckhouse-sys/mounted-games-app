@@ -40,6 +40,7 @@ public sealed class SeasonPublicationService(AppDbContext db)
                 && r.Heat.Entries.Select(e => e.TeamId).Order().SequenceEqual(r.Results.Select(x => x.TeamId).Order()) == false))
             throw new SeasonPublicationException("Every team in every completed race must have a recorded result.", 409);
 
+        var tiers = FinalsTiers.From(sessions);
         var totals = races.SelectMany(x => x.Results)
             .Where(x => x.Team is { IsHorsConcours: false })
             .GroupBy(x => x.TeamId)
@@ -48,8 +49,10 @@ public sealed class SeasonPublicationService(AppDbContext db)
                 TeamId = x.Key,
                 Team = x.First().Team!,
                 Points = x.Sum(y => y.Points),
+                Tier = tiers.SortKey(x.Key),
             })
-            .OrderByDescending(x => x.Points)
+            .OrderBy(x => x.Tier)
+            .ThenByDescending(x => x.Points)
             .ThenBy(x => x.Team.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(x => x.TeamId)
             .ToList();
@@ -64,13 +67,14 @@ public sealed class SeasonPublicationService(AppDbContext db)
 
         var points = round.Season!.PlacePoints.ToDictionary(x => x.Place, x => x.Points);
         var rows = new List<SeasonPublicationPreviewRow>();
-        int? previousPoints = null;
+        (int Tier, int Points)? previous = null;
         var rank = 0;
         for (var index = 0; index < totals.Count; index++)
         {
             var total = totals[index];
-            if (previousPoints != total.Points) rank = index + 1;
-            previousPoints = total.Points;
+            // Teams only tie on the same points within the same final.
+            if (previous != (total.Tier, total.Points)) rank = index + 1;
+            previous = (total.Tier, total.Points);
             rows.Add(new SeasonPublicationPreviewRow(
                 links[total.TeamId].TeamProfileId,
                 total.TeamId,

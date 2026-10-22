@@ -435,14 +435,18 @@ public class CompetitionsController : ControllerBase
         if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
 
         var teams = await teamsQ.ToListAsync();
+        var tiers = await FinalsTiers.LoadAsync(_db, id);
 
+        // Once finals exist, the final a team is in decides its place before points do.
         var rows = teams.Select(t => new StandingRow(
             t.Id, t.DisplayName, t.Club?.Name ?? string.Empty, t.BibColour,
             t.Results.Sum(r => r.Points),
             t.Results.Count,
             t.Results.Count(r => r.Placing == 1 && !r.Eliminated),
-            t.Results.Count(r => r.Eliminated)))
-        .OrderByDescending(r => r.TotalPoints)
+            t.Results.Count(r => r.Eliminated),
+            tiers.TierOf(t.Id)))
+        .OrderBy(r => r.FinalTier ?? FinalsTiers.NotInFinals)
+        .ThenByDescending(r => r.TotalPoints)
         .ThenByDescending(r => r.Wins)
         .ToList();
 
