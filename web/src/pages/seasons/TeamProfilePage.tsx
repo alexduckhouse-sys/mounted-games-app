@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ChevronLeft, ChevronRight, Link2, Plus, Save } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link2, Plus, Save, Star } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { FAVOURITES_CHANGED, readFavourites, toggleFavourite } from '../../lib/favourites';
+import { SectionFormatLabel } from '../../types';
+import { Chevron, RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, type RefineTab } from '../refine/Refine';
+import { ordinal, positionLabels, shortDate } from './seasonModel';
+import type { SeasonView, StandingView } from './seasonViewTypes';
+import { buildRows, latestPerRound, seasonChoices, type SeasonDetail } from './teamHistoryModel';
 import type { ClubOption, CompetitionDetailOption, CompetitionSummaryOption, TeamProfile, TeamProfileHistory } from './teamProfileTypes';
 import './seasonViews.css';
 
@@ -41,6 +47,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const { user, canOrganise, hasRole, canEdit } = useAuth();
   const mayManage = canOrganise() && (!hasRole('Admin') || canEdit());
   const navigate = useNavigate();
+  const [query] = useSearchParams();
   const [profiles, setProfiles] = useState<TeamProfile[] | null>(null);
   const [history, setHistory] = useState<TeamProfileHistory | null>(null);
   const [clubs, setClubs] = useState<ClubOption[]>([]);
@@ -58,7 +65,13 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [favourites, setFavourites] = useState(readFavourites);
+  const [seasonData, setSeasonData] = useState<{ seasonId: string; season: SeasonView; standings: StandingView[] } | null>(null);
   const canManageProfile = !!history?.profile.canManage && mayManage;
+
+  const choices = useMemo(() => seasonChoices(history?.publishedResults ?? []), [history]);
+  const selected = choices.find((choice) => choice.seasonId === query.get('season')) ?? choices[0] ?? null;
+  const selectedId = selected?.seasonId ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +101,27 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       .catch((caught) => { if (!cancelled) setError(message(caught, 'Couldn’t load teams for that competition.')); });
     return () => { cancelled = true; };
   }, [competitionId, user?.id]);
+
+  // The season's own settings and table give the place, the "best N" rule and which results were dropped.
+  // If they can't be loaded the history still shows, just without those extras.
+  useEffect(() => {
+    if (!selectedId) return;
+    const controller = new AbortController();
+    Promise.all([
+      api.get<SeasonView>(`/seasons/${selectedId}`, { signal: controller.signal }),
+      api.get<{ standings: StandingView[] }>(`/seasons/${selectedId}/standings`, { signal: controller.signal }),
+    ]).then(([season, table]) => {
+      if (!controller.signal.aborted) setSeasonData({ seasonId: selectedId, season: season.data, standings: table.data.standings });
+    }).catch(() => { /* optional detail */ });
+    return () => controller.abort();
+  }, [selectedId, refresh]);
+
+  useEffect(() => {
+    const sync = () => setFavourites(readFavourites());
+    window.addEventListener(FAVOURITES_CHANGED, sync);
+    window.addEventListener('storage', sync);
+    return () => { window.removeEventListener(FAVOURITES_CHANGED, sync); window.removeEventListener('storage', sync); };
+  }, []);
 
   const matchingTeams = useMemo(() => {
     if (!competition || !history) return [];
@@ -125,56 +159,133 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     finally { setBusy(false); }
   }
 
-  if (loading) return <p role="status" className="skin season-shell py-5">Loading team history…</p>;
+  if (loading) return <RefinePage><RefineHeader context="Team profiles" title={id ? 'Team history' : 'Team profiles'} /><p role="status" className="rf-note">Loading team history…</p></RefinePage>;
 
   if (!id) {
-    if (creating && mayManage) return <div className="skin season-shell season-shell-narrow py-5">
-      <button type="button" className="mg-text-link mb-5 inline-flex min-h-11 items-center gap-1" onClick={() => setCreating(false)}><ChevronLeft className="h-4 w-4" />Back to team profiles</button>
-      <header className="season-heading"><p className="season-kicker">Stable team identity</p><h1 className="mg-h1">Create a team profile</h1><p className="mg-meta mt-2">Use one profile for the same club team across different events.</p></header>
-      {error && <div role="alert" className="mg-notice mb-4">{error}</div>}
-      <form className="season-form" onSubmit={saveProfile}>
-        <fieldset disabled={busy} className="season-form-section space-y-4"><legend className="season-form-legend">Team details</legend>
-          <label className="block font-semibold">Club<select className="input mt-1" value={clubId} onChange={(event) => setClubId(event.target.value)} required><option value="">Choose a club</option>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}</select></label>
-          <div className="grid gap-4 sm:grid-cols-[140px_1fr]"><label className="block font-semibold">Suffix<input className="input mt-1" value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} required /></label><label className="block font-semibold">Display name<input className="input mt-1" value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div>
+    if (creating && mayManage) return <RefinePage>
+      <RefineHeader context="Team profiles" title="Create a team profile" subtitle="Use one profile for the same club team across different events." />
+      {error && <div role="alert" className="mg-notice sv-msg">{error}</div>}
+      <form onSubmit={saveProfile}>
+        <fieldset disabled={busy} className="sv-fieldset sv-stack">
+          <legend className="sr-only">Team details</legend>
+          <label className="rf-fld">Club<select value={clubId} onChange={(event) => setClubId(event.target.value)} required><option value="">Choose a club</option>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}</select></label>
+          <div className="sv-two"><label className="rf-fld">Suffix<input value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} required /></label><label className="rf-fld">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div>
         </fieldset>
-        <div className="flex flex-wrap gap-2"><button className="mg-btn mg-btn-primary" disabled={busy}><Plus className="h-4 w-4" />{busy ? 'Creating…' : 'Create profile'}</button><button type="button" className="mg-btn mg-btn-secondary" onClick={() => setCreating(false)} disabled={busy}>Cancel</button></div>
+        <RefineFoot>
+          <span className="rf-grow" />
+          <button type="button" className="rf-btn rf-btn-text" onClick={() => setCreating(false)} disabled={busy}>Cancel</button>
+          <button className="rf-btn rf-btn-primary" disabled={busy}><Plus className="h-4 w-4" aria-hidden="true" />{busy ? 'Creating…' : 'Create profile'}</button>
+        </RefineFoot>
       </form>
-    </div>;
+    </RefinePage>;
 
-    return <div className="skin season-shell py-5">
-      <header className="season-index-header"><div><p className="season-kicker">Across every event</p><h1 className="mg-h1">Team profiles</h1><p className="mg-meta mt-2">Published results stay together when the same team competes at more than one event.</p></div>{mayManage && <button className="mg-btn mg-btn-primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />New profile</button>}</header>
-      {error && <div role="alert" className="mg-notice mb-4">{error} <button type="button" className="mg-text-link min-h-11" onClick={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>Try again</button></div>}
-      {!error && (profiles?.length ? <ul className="season-list" aria-label="Team profiles">{profiles.map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="season-list-row team-profile-row"><span className="season-list-main"><strong>{profile.displayName}</strong><span>{profile.clubName} · suffix {profile.suffix}</span></span><span className="season-list-rule">View history</span><ChevronRight className="h-5 w-5" /></Link></li>)}</ul> : <div className="season-empty"><h2>No team profiles yet</h2><p>Profiles will appear here once an organiser creates them.</p></div>)}
-    </div>;
+    return <RefinePage>
+      <RefineHeader
+        context="Across every event" title="Team profiles" subtitle="Published results stay together when the same team competes at more than one event."
+        actions={mayManage ? <button type="button" className="rf-btn" onClick={() => setCreating(true)}><Plus className="h-4 w-4" aria-hidden="true" />New profile</button> : undefined}
+      />
+      {error && <div role="alert" className="mg-notice sv-msg">{error} <button type="button" className="mg-text-link min-h-11" onClick={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>Try again</button></div>}
+      {!error && (profiles?.length ? <>
+        <RefineSection title="All profiles" meta={profiles.length} />
+        <RefineList label="Team profiles">{profiles.map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="rf-row"><span className="rf-grow"><span className="rf-t1">{profile.displayName}</span><span className="rf-t2">{profile.clubName} · suffix {profile.suffix}</span></span><Chevron /></Link></li>)}</RefineList>
+      </> : <div className="sv-empty"><h2>No team profiles yet</h2><p>Profiles will appear here once an organiser creates them.</p></div>)}
+    </RefinePage>;
   }
 
-  if (!history) return <div className="skin season-shell py-5" role="alert"><p className="mg-notice">{error ?? 'Team profile not found.'} {error && <button type="button" className="mg-text-link min-h-11" onClick={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>Try again</button>}</p><Link className="mg-text-link mt-3 inline-flex min-h-11 items-center" to="/team-profiles">Back to profiles</Link></div>;
+  if (!history) return <RefinePage>
+    <RefineHeader back="/team-profiles" backLabel="Back to team profiles" context="Team profiles" title="Team history" />
+    <div role="alert" className="mg-notice sv-msg">{error ?? 'Team profile not found.'} {error && <button type="button" className="mg-text-link min-h-11" onClick={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>Try again</button>}</div>
+  </RefinePage>;
+
   const profile = history.profile;
   const identityLocked = history.eventTeams.length > 0 || history.publishedResults.length > 0;
-  const tabs: { id: ProfileTab; label: string }[] = [
-    { id: 'history', label: 'History' },
-    ...(canManageProfile ? [{ id: 'edit' as const, label: 'Edit profile' }, { id: 'link' as const, label: 'Link event' }] : []),
-  ];
+  const tabs: (RefineTab & { id: ProfileTab })[] = canManageProfile ? ([['history', 'History'], ['edit', 'Edit profile'], ['link', 'Link event']] as [ProfileTab, string][])
+    .map(([key, label]) => ({ id: key, label, active: tab === key, onSelect: () => { setTab(key); setError(null); setSuccess(null); } })) : [];
 
-  return <div className="skin season-shell py-5">
-    <Link to="/team-profiles" className="mg-text-link mb-4 inline-flex min-h-11 items-center gap-1"><ChevronLeft className="h-4 w-4" />Team profiles</Link>
-    <header className="season-heading"><p className="season-kicker">Team record</p><h1 className="mg-h1">{profile.displayName}</h1><p className="mg-meta mt-2">{profile.clubName} · suffix {profile.suffix}</p></header>
-    {error && <div role="alert" className="mg-notice mb-4">{error}</div>}
-    {success && <div role="status" className="mg-notice mb-4">{success}</div>}
-    <nav className="season-tabs" aria-label="Team profile sections">{tabs.map((item) => <button key={item.id} type="button" className="season-tab" aria-pressed={tab === item.id} onClick={() => { setTab(item.id); setError(null); setSuccess(null); }}>{item.label}</button>)}</nav>
+  const eventTeams = history.eventTeams;
+  const following = eventTeams.length > 0 && eventTeams.every((team) => favourites.some((item) => item.competitionId === team.competitionId && item.teamId === team.teamId));
+  function toggleStar() {
+    let problem: string | null = null;
+    for (const team of eventTeams) {
+      const isFollowed = favourites.some((item) => item.competitionId === team.competitionId && item.teamId === team.teamId);
+      if (following === isFollowed) problem = toggleFavourite({ competitionId: team.competitionId, teamId: team.teamId }) ?? problem;
+    }
+    setFavourites(readFavourites());
+    setError(problem);
+  }
 
-    {tab === 'history' && <section className="season-panel" aria-labelledby="profile-history-title">
-      <div className="season-panel-heading"><div><h2 id="profile-history-title" className="mg-h1 mg-h1-sm">Published season history</h2><p className="mg-meta mt-1">The latest published result from each season round.</p></div></div>
-      {history.publishedResults.length === 0 ? <div className="season-empty"><h2>No published results</h2><p>This team hasn’t appeared in a published season round yet.</p></div> : <div className="season-table-wrap"><table className="season-table text-sm"><thead><tr><th className="text-left">Season</th><th className="text-left">Event</th><th className="text-center">Pos.</th><th className="text-center">Event pts</th><th className="text-center">Season pts</th></tr></thead><tbody>{history.publishedResults.map((result) => <tr key={`${result.roundId}-${result.publicationVersion}`}><td><Link className="mg-text-link font-semibold" to={`/seasons/${result.seasonId}`}>{result.seasonTitle}</Link><span className="mg-meta block">{result.seasonYear} · R{result.roundOrder}</span></td><td>{result.competitionName}<span className="mg-meta block">{date(result.competitionDate)}</span></td><td className="text-center font-bold">{result.eventRank}</td><td className="text-center">{result.eventPoints}</td><td className="text-center font-bold">{result.seasonPoints}</td></tr>)}</tbody></table></div>}
-      <div className="mt-8"><h2 className="mg-h1 mg-h1-sm">Linked events</h2>{history.eventTeams.length === 0 ? <p className="mg-meta mt-2">No event teams are linked yet.</p> : <ul className="profile-event-list mt-3">{history.eventTeams.map((item) => <li key={item.id}><span><strong>{item.competitionName}</strong><span>{item.teamName}</span></span><time dateTime={item.linkedAt}>Linked {date(item.linkedAt)}</time></li>)}</ul>}</div>
-    </section>}
+  const seasonResults = history.publishedResults.filter((result) => result.seasonId === selectedId);
+  const detail: SeasonDetail | null = seasonData && seasonData.seasonId === selectedId
+    ? { season: seasonData.season, standing: seasonData.standings.find((row) => row.teamProfileId === profile.id) ?? null } : null;
+  const rows = buildRows(seasonResults, detail);
+  const entered = rows.filter((row) => row.place !== null).length;
+  const standing = detail?.standing ?? null;
+  const total = standing?.totalPoints ?? latestPerRound(seasonResults).reduce((sum, result) => sum + result.seasonPoints, 0);
+  const bestCount = detail?.season.bestResultsToCount ?? null;
+  const roundsText = bestCount && bestCount < entered ? `best ${bestCount} of ${entered} rounds` : `${entered} ${entered === 1 ? 'round' : 'rounds'}`;
+  const placeLabel = standing && detail ? (() => {
+    const label = positionLabels(seasonData!.standings).get(standing.teamProfileId) ?? String(standing.rank);
+    return label.startsWith('=') ? `=${ordinal(standing.rank)}` : ordinal(standing.rank);
+  })() : null;
+  const context = !selected ? 'Team record' : detail ? `${detail.season.ageGroup} ${SectionFormatLabel[detail.season.format]} · ${detail.season.year}` : `${selected.title} · ${selected.year}`;
+  const previous = choices.filter((choice) => choice.seasonId !== selectedId);
 
-    {tab === 'edit' && canManageProfile && <section className="season-panel"><h2 className="mg-h1 mg-h1-sm mb-1">Edit profile</h2><p className="mg-meta mb-5">Once this profile is linked, the club and suffix stay fixed. You can still correct the display name.</p>
-      <form className="season-form" onSubmit={saveProfile}><fieldset disabled={busy} className="season-form-section space-y-4"><legend className="sr-only">Profile details</legend><label className="block font-semibold">Club<select className="input mt-1" value={clubId} onChange={(event) => setClubId(event.target.value)} required disabled={identityLocked}>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}</select></label><div className="grid gap-4 sm:grid-cols-[140px_1fr]"><label className="block font-semibold">Suffix<input className="input mt-1" value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} required disabled={identityLocked} /></label><label className="block font-semibold">Display name<input className="input mt-1" value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div></fieldset><button className="mg-btn mg-btn-primary" disabled={busy}><Save className="h-4 w-4" />{busy ? 'Saving…' : 'Save profile'}</button></form>
-    </section>}
+  return <RefinePage>
+    <RefineHeader
+      back={selected ? `/seasons/${selected.seasonId}` : '/team-profiles'} backLabel={selected ? 'Back to standings' : 'Back to team profiles'}
+      context={context} title={profile.displayName}
+      subtitle={selected ? <>{placeLabel && <><strong>{placeLabel}</strong> · </>}{total} pts · {roundsText}</> : `${profile.clubName} · suffix ${profile.suffix}`}
+      actions={history.eventTeams.length > 0 ? <button type="button" className="rf-ib sv-star" aria-pressed={following} aria-label={`${following ? 'Unstar' : 'Star'} ${profile.displayName}`} title="Follow on this device" onClick={toggleStar}><Star className="h-5 w-5" aria-hidden="true" /></button> : undefined}
+      tabs={tabs} tabsKind="tablist" tabsLabel="Team profile sections"
+    />
+    {error && <div role="alert" className="mg-notice sv-msg">{error}</div>}
+    {success && <div role="status" className="mg-notice sv-msg">{success}</div>}
 
-    {tab === 'link' && canManageProfile && <section className="season-panel"><h2 className="mg-h1 mg-h1-sm mb-1">Link an event team</h2><p className="mg-meta mb-5">Choose the event team yourself. The system won’t match teams by name.</p>
-      <form className="season-form" onSubmit={linkTeam}><fieldset disabled={busy} className="season-form-section space-y-4"><legend className="sr-only">Event team link</legend><label className="block font-semibold">Competition<select className="input mt-1" value={competitionId} onChange={(event) => chooseCompetition(event.target.value)} required><option value="">Choose a competition</option>{competitions.map((item) => <option key={item.id} value={item.id}>{item.name} · {date(item.startDate)}</option>)}</select></label><label className="block font-semibold">Event team<select className="input mt-1" value={teamId} onChange={(event) => setTeamId(event.target.value)} required disabled={!competition}><option value="">Choose the matching team</option>{matchingTeams.map((team) => <option key={team.id} value={team.id}>{team.displayName}</option>)}</select></label>{competition && matchingTeams.length === 0 && <p className="mg-meta">There’s no unlinked team with this profile’s club and suffix in that competition.</p>}</fieldset><button className="mg-btn mg-btn-primary" disabled={busy || !teamId}><Link2 className="h-4 w-4" />{busy ? 'Linking…' : 'Link event team'}</button></form>
-    </section>}
-  </div>;
+    {tab === 'history' && <>
+      {history.publishedResults.length === 0 ? <div className="sv-empty"><h2>No published results</h2><p>This team hasn’t appeared in a published season round yet.</p></div> : <>
+        <div className="rf-table-wrap sv-gap"><table className="rf-table sv-table sv-hist">
+          <caption className="sr-only">Rounds in {selected?.title}. Struck-through points fall outside the best results that count.</caption>
+          <thead><tr><th scope="col">Round</th><th scope="col" className="sv-place">Place</th><th scope="col">Pts</th></tr></thead>
+          <tbody>{rows.map((row) => <tr key={row.key}>
+            <td><span className="rf-t1">R{row.order} · {row.name}</span><span className="rf-t2">{shortDate(row.date, false)}{row.dropped ? ' · dropped' : row.place === null ? ' · did not enter' : ''}</span></td>
+            <td className={row.place === null ? 'sv-dim' : row.dropped ? 'rf-num sv-dim' : 'rf-num'}>{row.place === null ? '—' : ordinal(row.place)}</td>
+            <td className={row.points === null ? 'sv-dim' : 'rf-num'}>{row.points === null ? '—' : row.dropped ? <s className="sv-struck">{row.points}</s> : row.points}</td>
+          </tr>)}</tbody>
+        </table></div>
+        {previous.length > 0 && <div className="sv-gap"><RefineList as="div"><RefineDisclosure title="Previous seasons" sub={`${previous.length} more`}>
+          <div className="sv-prev">{previous.map((choice) => <Link key={choice.seasonId} className="rf-row" to={`?season=${choice.seasonId}`}><span className="rf-grow"><span className="rf-t1">{choice.title}</span><span className="rf-t2">{choice.year}</span></span><Chevron /></Link>)}</div>
+        </RefineDisclosure></RefineList></div>}
+        <RefineNote>Public results only. No rider names.</RefineNote>
+      </>}
+      <RefineSection title="Linked events" />
+      {history.eventTeams.length === 0 ? <p className="rf-note">No event teams are linked yet.</p> : <RefineList label="Linked events">{history.eventTeams.map((item) => <li key={item.id} className="rf-row"><span className="rf-grow"><span className="rf-t1">{item.competitionName}</span><span className="rf-t2">{item.teamName}</span></span><time className="rf-t2" dateTime={item.linkedAt}>Linked {date(item.linkedAt)}</time></li>)}</RefineList>}
+    </>}
+
+    {tab === 'edit' && canManageProfile && <>
+      <RefineSection title="Edit profile" />
+      <form onSubmit={saveProfile} className="sv-stack">
+        <fieldset disabled={busy} className="sv-fieldset sv-stack">
+          <legend className="sr-only">Profile details</legend>
+          <label className="rf-fld">Club<select value={clubId} onChange={(event) => setClubId(event.target.value)} required disabled={identityLocked}>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}</select></label>
+          <div className="sv-two"><label className="rf-fld">Suffix<input value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} required disabled={identityLocked} /></label><label className="rf-fld">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div>
+        </fieldset>
+        <RefineNote>Once this profile is linked, the club and suffix stay fixed. You can still correct the display name.</RefineNote>
+        <button className="rf-btn rf-btn-primary" disabled={busy}><Save className="h-4 w-4" aria-hidden="true" />{busy ? 'Saving…' : 'Save profile'}</button>
+      </form>
+    </>}
+
+    {tab === 'link' && canManageProfile && <>
+      <RefineSection title="Link an event team" />
+      <form onSubmit={linkTeam} className="sv-stack">
+        <fieldset disabled={busy} className="sv-fieldset sv-stack">
+          <legend className="sr-only">Event team link</legend>
+          <label className="rf-fld">Competition<select value={competitionId} onChange={(event) => chooseCompetition(event.target.value)} required><option value="">Choose a competition</option>{competitions.map((item) => <option key={item.id} value={item.id}>{item.name} · {date(item.startDate)}</option>)}</select></label>
+          <label className="rf-fld">Event team<select value={teamId} onChange={(event) => setTeamId(event.target.value)} required disabled={!competition}><option value="">Choose the matching team</option>{matchingTeams.map((team) => <option key={team.id} value={team.id}>{team.displayName}</option>)}</select></label>
+          {competition && matchingTeams.length === 0 && <p className="rf-note sv-flush">There’s no unlinked team with this profile’s club and suffix in that competition.</p>}
+        </fieldset>
+        <RefineNote>Choose the event team yourself. The system won’t match teams by name.</RefineNote>
+        <button className="rf-btn rf-btn-primary" disabled={busy || !teamId}><Link2 className="h-4 w-4" aria-hidden="true" />{busy ? 'Linking…' : 'Link event team'}</button>
+      </form>
+    </>}
+  </RefinePage>;
 }

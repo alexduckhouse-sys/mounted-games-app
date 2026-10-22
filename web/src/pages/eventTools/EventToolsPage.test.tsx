@@ -57,7 +57,7 @@ describe('EventToolsPage', () => {
     post.mockRejectedValue({ response: { data: { detail: 'Those dates overlap another event.' } } });
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Duplicate event' }));
+    await user.click(await screen.findByRole('tab', { name: 'Duplicate event' }));
     const name = await screen.findByLabelText('New competition name');
     await user.clear(name);
     await user.type(name, 'Autumn championship');
@@ -114,5 +114,48 @@ describe('EventToolsPage', () => {
 
     expect(await screen.findByText('Spring event')).toBeInTheDocument();
     expect(get).toHaveBeenCalledTimes(2);
+  });
+  it('uses tabs for the three tools and lists the print sheets as links', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const import_ = await screen.findByRole('tab', { name: 'Import teams' });
+    expect(import_).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('link', { name: 'Back to event' })).toHaveAttribute('href', '/competitions/12');
+
+    await user.click(screen.getByRole('tab', { name: 'Print sheets' }));
+    expect(screen.getByRole('tab', { name: 'Print sheets' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('link', { name: /Draw and lanes/ })).toHaveAttribute('href', '/event-tools/12/print/draw');
+    expect(screen.getByRole('link', { name: /Score sheets/ })).toHaveAttribute('href', '/event-tools/12/print/score-sheets');
+    expect(screen.getByRole('link', { name: /Results/ })).toHaveAttribute('href', '/event-tools/12/print/results');
+  });
+
+  it('marks failing import rows with a word as well as colour and blocks adding them', async () => {
+    post.mockResolvedValue({ data: {
+      previewVersion: 1, fingerprint: 'ABC', totalRows: 2, validRows: 1,
+      rows: [
+        { rowNumber: 2, clubId: 4, club: 'North Club', suffix: 'A', competitionSectionId: 8, section: 'Under 12', teamName: 'North Club A', errors: [] },
+        { rowNumber: 3, clubId: null, club: 'Nowhere', suffix: 'B', competitionSectionId: 8, section: 'Under 12', teamName: 'Nowhere B', errors: ['Club not found.'] },
+      ],
+    } });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Preview teams' }));
+
+    expect(await screen.findByText('Ready')).toBeInTheDocument();
+    expect(screen.getByText('Fix')).toBeInTheDocument();
+    expect(screen.getByText('Club not found.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add 1 team' })).toBeDisabled();
+  });
+
+  it('shows the copied counts and a link to the new event after duplicating', async () => {
+    post.mockResolvedValue({ data: { competitionId: 99, name: 'Spring event copy', sections: 2, teams: 8, sessions: 3, heats: 6, races: 12 } });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('tab', { name: 'Duplicate event' }));
+    await user.click(screen.getByRole('button', { name: 'Duplicate setup' }));
+
+    expect(await screen.findByText('2 sections, 8 teams and 6 heats copied.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Spring event copy/ })).toHaveAttribute('href', '/admin/competitions/99');
+    expect(screen.getByRole('status')).toHaveTextContent('Spring event copy is ready to edit.');
   });
 });

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Archive, ArrowLeft, CalendarRange, Edit3, PackagePlus, RotateCcw, Send } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { MoreHorizontal } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { LazyImage } from '../../components/LazyImage';
-import { LoadError, StatusPill } from './commerceUi';
-import { CATEGORY_LABEL, LISTING_LABEL, errorMessage, pounds } from './commerceFormat';
-import type { CatalogueItem, CommerceItemCategory, CompetitionChoice, CompetitionChoicePage, CompetitionListing } from './types';
+import { Chevron, RefineDisclosure, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet, RefineStatus, type StatusTone } from '../refine/Refine';
+import { LoadError } from './commerceUi';
+import { CATEGORY_LABEL, errorMessage, pounds } from './commerceFormat';
+import type { CatalogueItem, CommerceItemCategory, CommerceListingStatus, CompetitionChoice, CompetitionChoicePage, CompetitionListing } from './types';
 import './commerce.css';
 
 interface ItemForm {
@@ -21,6 +22,14 @@ const EMPTY_FORM: ItemForm = { title: '', description: '', price: '', category: 
 const PICKER_PAGE_SIZE = 50;
 const MAX_PICKER_PAGES = 10_000;
 
+/** Status word and colour for one event's listing of an item. */
+const LISTING_STATUS: Record<CommerceListingStatus, { text: string; tone: StatusTone }> = {
+  0: { text: 'Pending', tone: 'warn' },
+  1: { text: 'Approved', tone: 'ok' },
+  2: { text: 'Declined', tone: 'bad' },
+  3: { text: 'Withdrawn', tone: 'mut' },
+};
+
 async function loadUpcomingCompetitions(): Promise<CompetitionChoice[]> {
   const choices: CompetitionChoice[] = [];
   for (let page = 1; page <= MAX_PICKER_PAGES; page += 1) {
@@ -35,6 +44,21 @@ async function loadUpcomingCompetitions(): Promise<CompetitionChoice[]> {
   throw new Error('The competition list is too large to load.');
 }
 
+const eventDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const countText = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+/** One-line summary of where an item is on offer. Colour is only used when something needs attention. */
+function itemSummary(item: CatalogueItem, listings: CompetitionListing[]) {
+  if (!item.isActive) return { text: 'Archived', tone: 'mut' as StatusTone };
+  if (listings.length === 0) return { text: 'Draft · not offered', tone: 'mut' as StatusTone };
+  const pending = listings.filter((listing) => listing.status === 0).length;
+  const declined = listings.filter((listing) => listing.status === 2).length;
+  const live = listings.filter((listing) => listing.status === 0 || listing.status === 1).length;
+  if (pending > 0) return { text: `${countText(live, 'event')} · ${pending} pending`, tone: 'warn' as StatusTone };
+  if (declined > 0 && live === 0) return { text: `Declined at ${countText(declined, 'event')}`, tone: 'bad' as StatusTone };
+  return { text: live === 0 ? 'Not offered' : countText(live, 'event'), tone: 'mut' as StatusTone };
+}
+
 export function SellerCataloguePage() {
   const { user } = useAuth();
   return <SellerCatalogueContent key={user?.id ?? 'signed-out'} />;
@@ -45,43 +69,64 @@ function SellerCatalogueContent() {
   const [items, setItems] = useState<CatalogueItem[] | null>(null);
   const [listings, setListings] = useState<CompetitionListing[]>([]);
   const [competitions, setCompetitions] = useState<CompetitionChoice[]>([]);
-  const [view, setView] = useState<'catalogue' | 'form' | 'events'>('catalogue');
-  const [activeItem, setActiveItem] = useState<CatalogueItem | null>(null);
-  const [editing, setEditing] = useState<CatalogueItem | null>(null);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [sheet, setSheet] = useState<'add' | 'edit' | 'more' | null>(null);
   const [form, setForm] = useState<ItemForm>(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!user) return Promise.resolve();
     return Promise.all([
-        api.get<CatalogueItem[]>('/commerce/catalogue'),
-        api.get<CompetitionListing[]>('/commerce/listings/mine'),
-        loadUpcomingCompetitions(),
-      ])
+      api.get<CatalogueItem[]>('/commerce/catalogue'),
+      api.get<CompetitionListing[]>('/commerce/listings/mine'),
+      loadUpcomingCompetitions(),
+    ])
       .then(([itemsResponse, listingsResponse, competitionChoices]) => {
-      setError(null);
-      setItems(itemsResponse.data);
-      setListings(listingsResponse.data);
-      setCompetitions(competitionChoices);
+        setError(null);
+        setItems(itemsResponse.data);
+        setListings(listingsResponse.data);
+        setCompetitions(competitionChoices);
       })
       .catch((requestError: unknown) => {
-      setError(errorMessage(requestError, 'Couldn’t load your catalogue.'));
+        setError(errorMessage(requestError, 'Couldn’t load your catalogue.'));
       });
   }, [user]);
 
   useEffect(() => { void load(); }, [load]);
 
-  function beginAdd() {
-    setEditing(null);
-    setActiveItem(null);
-    setForm(EMPTY_FORM);
-    setView('form');
+  const listingsByItem = useMemo(() => {
+    const grouped = new Map<number, CompetitionListing[]>();
+    for (const listing of listings) grouped.set(listing.catalogueItemId, [...(grouped.get(listing.catalogueItemId) ?? []), listing]);
+    return grouped;
+  }, [listings]);
+
+  const active = items?.find((item) => item.id === activeId) ?? null;
+
+  /** Runs a write, then reloads. Returns whether it worked, so callers can close sheets or move on. */
+  async function run<T>(action: () => Promise<T>, failure: string): Promise<{ ok: true; value: T } | { ok: false }> {
+    setBusy(true);
+    setError(null);
+    try {
+      const value = await action();
+      await load();
+      return { ok: true, value };
+    } catch (requestError) {
+      setError(errorMessage(requestError, failure));
+      return { ok: false };
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function beginEdit(item: CatalogueItem) {
-    setEditing(item);
-    setActiveItem(item);
+  function openAdd() {
+    setForm(EMPTY_FORM);
+    setFormError(null);
+    setSheet('add');
+  }
+
+  function openEdit(item: CatalogueItem) {
     setForm({
       title: item.title,
       description: item.description,
@@ -90,20 +135,21 @@ function SellerCatalogueContent() {
       stock: item.stockQuantity?.toString() ?? '',
       imageUrl: item.imageUrl ?? '',
     });
-    setView('form');
+    setFormError(null);
+    setSheet('edit');
   }
 
-  async function save(event: FormEvent) {
-    event.preventDefault();
+  /** Saves the form as a new item or as changes to the open one. Returns the saved item, or null if the form was invalid or the call failed. */
+  async function save(): Promise<CatalogueItem | null> {
     const price = Number(form.price);
     const stock = form.stock.trim() === '' ? null : Number(form.stock);
-    if (!form.title.trim() || !form.description.trim() || !Number.isFinite(price) || price < 0 ||
+    if (!form.title.trim() || !form.description.trim() || form.price.trim() === '' || !Number.isFinite(price) || price < 0 ||
       (stock !== null && (!Number.isInteger(stock) || stock < 0))) {
-      setError('Add a title and description, then check the price and stock.');
-      return;
+      setFormError('Add a name and description, then check the price and stock.');
+      return null;
     }
-    setBusy(true);
-    setError(null);
+    setFormError(null);
+    const editing = sheet === 'edit' ? active : null;
     const body = {
       title: form.title.trim(),
       description: form.description.trim(),
@@ -114,195 +160,209 @@ function SellerCatalogueContent() {
       isActive: editing?.isActive ?? true,
       expectedVersion: editing?.version,
     };
-    try {
-      if (editing) await api.put(`/commerce/catalogue/${editing.id}`, body);
-      else await api.post('/commerce/catalogue', body);
-      setView('catalogue');
-      setEditing(null);
-      await load();
-    } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t save the item.'));
-    } finally {
-      setBusy(false);
-    }
+    const result = await run(async () => {
+      if (editing) return (await api.put<CatalogueItem>(`/commerce/catalogue/${editing.id}`, body)).data;
+      return (await api.post<CatalogueItem>('/commerce/catalogue', body)).data;
+    }, 'Couldn’t save the item.');
+    if (!result.ok) return null;
+    setSheet(null);
+    return result.value ?? editing;
   }
 
-  async function submit(item: CatalogueItem, competitionId: number) {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.post(`/commerce/competitions/${competitionId}/listings`, { catalogueItemId: item.id });
-      await load();
-    } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t send this item for approval.'));
-    } finally {
-      setBusy(false);
-    }
+  async function saveDraft(event: FormEvent) {
+    event.preventDefault();
+    await save();
   }
 
-  async function withdraw(listingId: number) {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.delete(`/commerce/listings/${listingId}`);
-      await load();
-    } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t withdraw the listing.'));
-    } finally {
-      setBusy(false);
-    }
+  async function saveAndChoose() {
+    const saved = await save();
+    if (saved?.id != null) setActiveId(saved.id);
   }
 
-  async function archive(itemId: number) {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.delete(`/commerce/catalogue/${itemId}`);
-      await load();
-    } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t archive the item.'));
-    } finally {
-      setBusy(false);
-    }
-  }
+  if (!user) return <RefinePage><p className="rf-note py-6">Sign in to manage your event catalogue.</p></RefinePage>;
 
-  async function reactivate(item: CatalogueItem) {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.put(`/commerce/catalogue/${item.id}`, {
-        title: item.title,
-        description: item.description,
-        priceMinor: item.priceMinor,
-        stockQuantity: item.stockQuantity,
-        category: item.category,
-        imageUrl: item.imageUrl,
-        isActive: true,
-        expectedVersion: item.version,
-      });
-      await load();
-    } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t restore the item. Refresh the catalogue and try again.'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const listingsByItem = useMemo(() => {
-    const grouped = new Map<number, CompetitionListing[]>();
-    for (const listing of listings) grouped.set(listing.catalogueItemId, [...(grouped.get(listing.catalogueItemId) ?? []), listing]);
-    return grouped;
-  }, [listings]);
-
-  if (!user) {
-    return <div className="skin mg-card p-5">Sign in to manage your event catalogue.</div>;
-  }
-
-  if (view === 'form') {
+  if (active) {
+    const itemListings = listingsByItem.get(active.id) ?? [];
+    const offered = new Set(itemListings.filter((listing) => listing.status === 0 || listing.status === 1).map((listing) => listing.competitionId));
+    const others = competitions.filter((competition) => !offered.has(competition.id));
+    const nameOf = (id: number) => competitions.find((competition) => competition.id === id);
     return (
-      <div className="skin commerce-page mx-auto w-full max-w-3xl pb-6">
-        <button type="button" className="commerce-back" disabled={busy} onClick={() => setView('catalogue')}><ArrowLeft className="h-4 w-4" /> Back to catalogue</button>
-        <header className="commerce-title-block">
-          <p className="mg-eyebrow">Your catalogue</p>
-          <h1 className="mg-h1">{editing ? `Edit ${editing.title}` : 'Add an item'}</h1>
-          <p className="mg-lede">Save the details once, then choose which events should offer it.</p>
-        </header>
+      <RefinePage>
+        <RefineHeader
+          onBack={() => setActiveId(null)}
+          backLabel="Back to catalogue"
+          context="Catalogue"
+          actions={<button type="button" className="rf-ib" aria-label="More actions for this item" onClick={() => setSheet('more')}><MoreHorizontal className="h-5 w-5" aria-hidden="true" /></button>}
+          title={active.title}
+        />
         {error && <LoadError message={error} onRetry={() => void load()} />}
-        <form className="flex flex-col gap-4" onSubmit={(event) => void save(event)}>
-          <label className="flex flex-col gap-1 text-sm font-semibold">Title<input required maxLength={200} className="input min-h-11" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-          <label className="flex flex-col gap-1 text-sm font-semibold">Description<textarea required maxLength={4000} rows={4} className="input" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="flex flex-col gap-1 text-sm font-semibold">Price in GBP<input required inputMode="decimal" className="input min-h-11" placeholder="12.00" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></label>
-            <label className="flex flex-col gap-1 text-sm font-semibold">Category<select className="input min-h-11" value={form.category} onChange={(event) => setForm({ ...form, category: Number(event.target.value) as CommerceItemCategory })}>{([0, 1, 2, 3] as CommerceItemCategory[]).map((category) => <option key={category} value={category}>{CATEGORY_LABEL[category]}</option>)}</select></label>
-            <label className="flex flex-col gap-1 text-sm font-semibold">Stock <span className="font-normal text-[rgb(var(--mg-muted))]">Blank means unlimited</span><input inputMode="numeric" min="0" className="input min-h-11" value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} /></label>
-          </div>
-          <label className="flex flex-col gap-1 text-sm font-semibold">Image URL <span className="font-normal text-[rgb(var(--mg-muted))]">Optional HTTPS link</span><input type="url" className="input min-h-11" placeholder="https://…" value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} /></label>
-          <div className="commerce-inline-actions">
-            <button className="mg-btn mg-btn-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add to catalogue'}</button>
-            <button type="button" className="mg-btn mg-btn-secondary" disabled={busy} onClick={() => setView('catalogue')}>Cancel</button>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
-  if (view === 'events' && activeItem) {
-    const itemListings = listingsByItem.get(activeItem.id) ?? [];
-    return (
-      <div className="skin commerce-page mx-auto w-full max-w-3xl pb-6">
-        <button type="button" className="commerce-back" onClick={() => setView('catalogue')}><ArrowLeft className="h-4 w-4" /> Back to catalogue</button>
-        <header className="commerce-title-block">
-          <p className="mg-eyebrow">Offer at events</p>
-          <h1 className="mg-h1">{activeItem.title}</h1>
-          <p className="mg-lede">Choose an event. Its organiser must approve the item before it appears in the shop.</p>
-        </header>
-        {error && <LoadError message={error} onRetry={() => void load()} />}
-        <div className="commerce-item-strip">
-          <div><strong>{pounds(activeItem.priceMinor)}</strong><span>{CATEGORY_LABEL[activeItem.category]}</span></div>
-          <span>{activeItem.stockQuantity == null ? 'Unlimited stock' : `${activeItem.stockQuantity} available`}</span>
+        <div className="mt-3">
+          <RefineList label="Item details">
+            <li>
+              <button type="button" className="rf-row" onClick={() => openEdit(active)}>
+                <span className="rf-grow">
+                  <span className="rf-t1">{pounds(active.priceMinor)} · {CATEGORY_LABEL[active.category]}</span>
+                  <span className="rf-t2">{active.stockQuantity == null ? 'Unlimited stock' : `${active.stockQuantity} available`}{!active.isActive && ' · Archived'}</span>
+                </span>
+                <span className="rf-st" style={{ color: 'rgb(var(--mg-heading))' }}>Edit</span>
+              </button>
+            </li>
+          </RefineList>
         </div>
-        {competitions.length === 0 ? <p className="mg-card p-5">There are no upcoming events to choose from.</p> : (
-          <section className="commerce-rows" aria-label={`Events for ${activeItem.title}`}>
-            {competitions.map((competition) => {
-              const listing = itemListings.find((entry) => entry.competitionId === competition.id);
-              const canRequest = !listing || listing.status === 2 || listing.status === 3;
+
+        <RefineSection title="Events for this item" />
+        {itemListings.length === 0 ? <RefineNote>Not offered anywhere yet. Pick an event below.</RefineNote> : (
+          <RefineList label="Events for this item">
+            {itemListings.map((listing) => {
+              const status = LISTING_STATUS[listing.status];
+              const event = nameOf(listing.competitionId);
+              const detail = event ? eventDate(event.startDate) : '';
+              const row = (
+                <>
+                  <span className="rf-grow"><span className="rf-t1">{event?.name ?? `Event #${listing.competitionId}`}</span>{detail && <span className="rf-t2">{detail}</span>}</span>
+                  <RefineStatus tone={status.tone}>{status.text}</RefineStatus>
+                </>
+              );
+              if (listing.status === 2 && listing.reviewNote) {
+                return (
+                  <li key={listing.id}>
+                    <details>
+                      <summary className="rf-row">{row}<Chevron down /></summary>
+                      <p className="rf-note px-4 pt-0">Organiser: “{listing.reviewNote}”</p>
+                    </details>
+                  </li>
+                );
+              }
               return (
-                <article key={competition.id} className="commerce-event-row">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="commerce-row-title">{competition.name}</h2>
-                    <p className="mg-meta">{new Date(competition.startDate).toLocaleDateString()}</p>
-                  </div>
-                  {listing && <StatusPill tone={listing.status === 1 ? 'good' : listing.status === 0 ? 'warn' : 'neutral'}>{LISTING_LABEL[listing.status]}</StatusPill>}
-                  {canRequest ? (
-                    <button type="button" className="commerce-compact-button commerce-compact-button--primary" disabled={busy || !activeItem.isActive} onClick={() => void submit(activeItem, competition.id)}><Send className="h-4 w-4" /> Request</button>
-                  ) : listing.status === 0 ? (
-                    <button type="button" className="commerce-compact-button" disabled={busy} onClick={() => void withdraw(listing.id)}>Withdraw</button>
-                  ) : null}
-                </article>
+                <li key={listing.id} className="rf-row">
+                  {row}
+                  {listing.status === 0 && <button type="button" className="rf-btn" disabled={busy} onClick={() => void run(() => api.delete(`/commerce/listings/${listing.id}`), 'Couldn’t withdraw the listing.')}>Withdraw</button>}
+                </li>
               );
             })}
-          </section>
+          </RefineList>
         )}
-      </div>
+
+        {active.isActive && (
+          <div className="mt-3 rf-list">
+            <RefineDisclosure title="Offer at another event" defaultOpen={itemListings.length === 0}>
+              {others.length === 0 ? <p className="rf-note px-4">There are no other upcoming events to choose from.</p> : (
+                <ul className="m-0 list-none p-0">
+                  {others.map((competition) => (
+                    <li key={competition.id} className="rf-row" style={{ borderTop: '1px solid rgb(var(--mg-rule-soft))' }}>
+                      <span className="rf-grow"><span className="rf-t1">{competition.name}</span><span className="rf-t2">{eventDate(competition.startDate)}</span></span>
+                      <button type="button" className="rf-btn" disabled={busy} aria-label={`Request ${competition.name}`} onClick={() => void run(() => api.post(`/commerce/competitions/${competition.id}/listings`, { catalogueItemId: active.id }), 'Couldn’t send this item for approval.')}>Request</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </RefineDisclosure>
+          </div>
+        )}
+        <RefineNote>Each organiser approves items for their own event. Changing the price sends approved events back to pending.</RefineNote>
+
+        {sheet === 'more' && (
+          <RefineSheet title="This item" onClose={() => setSheet(null)}>
+            <div className="flex flex-col gap-2">
+              <button type="button" className="rf-btn rf-wide" onClick={() => openEdit(active)}>Edit details</button>
+              {active.isActive
+                ? <button type="button" className="rf-btn rf-wide" aria-label={`Archive ${active.title}`} disabled={busy} onClick={() => void run(() => api.delete(`/commerce/catalogue/${active.id}`), 'Couldn’t archive the item.').then((result) => { if (result.ok) setSheet(null); })}>Archive item</button>
+                : <button type="button" className="rf-btn rf-wide" disabled={busy} onClick={() => void run(() => api.put(`/commerce/catalogue/${active.id}`, { title: active.title, description: active.description, priceMinor: active.priceMinor, stockQuantity: active.stockQuantity, category: active.category, imageUrl: active.imageUrl, isActive: true, expectedVersion: active.version }), 'Couldn’t restore the item. Refresh the catalogue and try again.').then((result) => { if (result.ok) setSheet(null); })}>Restore item</button>}
+            </div>
+          </RefineSheet>
+        )}
+        {sheet === 'edit' && <ItemSheet title="Edit item" form={form} setForm={setForm} busy={busy} error={formError ?? error} onClose={() => setSheet(null)} onSubmit={saveDraft} primaryLabel="Save changes" />}
+      </RefinePage>
     );
   }
 
   return (
-    <div className="skin commerce-page mx-auto w-full max-w-3xl pb-6">
-      <div className="flex flex-wrap items-start gap-3">
-        <header className="commerce-title-block min-w-0 flex-1"><p className="mg-eyebrow">Selling at events</p><h1 className="mg-h1">Your catalogue</h1><p className="mg-lede">Add an item once, then offer it at any upcoming event.</p></header>
-        <button type="button" className="mg-btn mg-btn-primary" onClick={beginAdd}><PackagePlus className="h-5 w-5" /> Add item</button>
-      </div>
-
+    <RefinePage>
+      <RefineHeader
+        context="Selling at events"
+        actions={<button type="button" className="rf-btn" onClick={openAdd}>+ Add item</button>}
+        title="Catalogue"
+      />
       {error && <LoadError message={error} onRetry={() => void load()} />}
-
-      {items == null && !error && <p className="mg-card p-4" role="status">Loading your catalogue…</p>}
-      {items?.length === 0 && <p className="mg-card p-5">Your catalogue is empty. Add an item once, then reuse it at future events.</p>}
+      <RefineNote>Items you can offer at any event. Each organiser approves them for their own event.</RefineNote>
+      {items == null && !error && <p className="rf-note" role="status">Loading your catalogue…</p>}
+      {items?.length === 0 && <p className="rf-note">Your catalogue is empty. Add an item once, then reuse it at future events.</p>}
       {items && items.length > 0 && (
-        <section className="commerce-rows" aria-label="Catalogue items">
+        <RefineList label="Catalogue items">
           {items.map((item) => {
-            const itemListings = listingsByItem.get(item.id) ?? [];
+            const summary = itemSummary(item, listingsByItem.get(item.id) ?? []);
             return (
-              <article key={item.id} className={`commerce-catalogue-row ${item.isActive ? '' : 'opacity-60'}`}>
-                <div className="flex min-w-0 flex-1 items-start gap-3">
-                  {item.imageUrl ? <LazyImage className="commerce-catalogue-image" src={item.imageUrl} alt="" compact /> : <div className="commerce-catalogue-image commerce-product-image--empty" aria-hidden="true"><PackagePlus className="h-5 w-5" /></div>}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2"><h2 className="mg-h2">{item.title}</h2>{!item.isActive && <StatusPill>Archived</StatusPill>}</div>
-                    <p className="commerce-row-description">{item.description}</p>
-                    <p className="mt-1 text-sm font-bold text-[rgb(var(--mg-heading))]">{pounds(item.priceMinor)} <span className="font-normal text-[rgb(var(--mg-muted))]">· {CATEGORY_LABEL[item.category]} · {item.stockQuantity == null ? 'Unlimited' : `${item.stockQuantity} left`}</span></p>
-                </div>
-                </div>
-                <div className="commerce-inline-actions">
-                  {item.isActive && <button type="button" className="commerce-compact-button commerce-compact-button--primary" onClick={() => { setActiveItem(item); setView('events'); }}><CalendarRange className="h-4 w-4" /> Events{itemListings.length > 0 ? ` (${itemListings.length})` : ''}</button>}
-                  <button type="button" className="commerce-compact-button" aria-label={`Edit ${item.title}`} onClick={() => beginEdit(item)}><Edit3 className="h-4 w-4" /> Edit</button>
-                  {item.isActive ? <button type="button" className="commerce-compact-button" aria-label={`Archive ${item.title}`} disabled={busy} onClick={() => void archive(item.id)}><Archive className="h-4 w-4" /> Archive</button>
-                    : <button type="button" className="commerce-compact-button" disabled={busy} onClick={() => void reactivate(item)}><RotateCcw className="h-4 w-4" /> Restore</button>}
-                  </div>
-              </article>
+              <li key={item.id}>
+                <button type="button" className="rf-row" aria-label={item.title} onClick={() => setActiveId(item.id)} style={item.isActive ? undefined : { opacity: 0.65 }}>
+                  <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className={`rf-t2 ${summary.tone === 'mut' ? '' : `rf-${summary.tone}`}`}>{summary.text}</span></span>
+                  <span className="rf-price">{pounds(item.priceMinor)}</span>
+                  <Chevron />
+                </button>
+              </li>
             );
           })}
-        </section>
+        </RefineList>
       )}
-    </div>
+      <RefineNote>Orders for your items appear under <Link to="/me/orders">Orders</Link>.</RefineNote>
+
+      {sheet === 'add' && (
+        <ItemSheet
+          title="Add item"
+          form={form}
+          setForm={setForm}
+          busy={busy}
+          error={formError ?? error}
+          onClose={() => setSheet(null)}
+          onSubmit={saveDraft}
+          primaryLabel="Save draft"
+          onChoose={() => void saveAndChoose()}
+        />
+      )}
+    </RefinePage>
+  );
+}
+
+interface ItemSheetProps {
+  title: string;
+  form: ItemForm;
+  setForm: (form: ItemForm) => void;
+  busy: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSubmit: (event: FormEvent) => void;
+  primaryLabel: string;
+  /** Adding only: save, then go straight to choosing events. */
+  onChoose?: () => void;
+}
+
+function ItemSheet({ title, form, setForm, busy, error, onClose, onSubmit, primaryLabel, onChoose }: ItemSheetProps) {
+  return (
+    <RefineSheet title={title} onClose={onClose}>
+      <form className="flex flex-col gap-3" onSubmit={onSubmit} noValidate>
+        <label className="rf-fld">Name<input maxLength={200} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
+        <div className="grid grid-cols-2 gap-2.5">
+          <label className="rf-fld">Price (£)<input inputMode="decimal" placeholder="12.00" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></label>
+          <label className="rf-fld">Category
+            <select value={form.category} onChange={(event) => setForm({ ...form, category: Number(event.target.value) as CommerceItemCategory })}>
+              {([0, 1, 2, 3] as CommerceItemCategory[]).map((category) => <option key={category} value={category}>{CATEGORY_LABEL[category]}</option>)}
+            </select>
+          </label>
+        </div>
+        <label className="rf-fld">Description<textarea rows={3} maxLength={4000} style={{ padding: 10 }} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+        <details>
+          <summary className="rf-btn rf-btn-text" style={{ justifyContent: 'flex-start', padding: 0, listStyle: 'none' }}>+ Stock and image</summary>
+          <div className="mt-2 flex flex-col gap-3">
+            <label className="rf-fld">Stock <span className="font-normal">Blank means unlimited</span><input inputMode="numeric" value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} /></label>
+            <label className="rf-fld">Image link <span className="font-normal">Optional HTTPS link</span><input type="url" placeholder="https://…" value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} /></label>
+          </div>
+        </details>
+        {error && <p role="alert" className="m-0 text-sm font-semibold text-[rgb(var(--mg-elim))]">{error}</p>}
+        {onChoose && <p className="rf-note !py-0">You’ll choose events for this item after saving.</p>}
+        <div className="rf-actions">
+          <button type="submit" className={`rf-btn ${onChoose ? '' : 'rf-btn-primary rf-grow'}`} disabled={busy}>{busy ? 'Saving…' : primaryLabel}</button>
+          {onChoose && <button type="button" className="rf-btn rf-btn-primary rf-grow" disabled={busy} onClick={onChoose}>Save and choose events</button>}
+        </div>
+      </form>
+    </RefineSheet>
   );
 }

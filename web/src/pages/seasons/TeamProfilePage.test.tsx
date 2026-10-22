@@ -1,9 +1,10 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { readFavourites } from '../../lib/favourites';
 import TeamProfilePage from './TeamProfilePage';
 import type { TeamProfileHistory } from './teamProfileTypes';
 
@@ -38,7 +39,7 @@ describe('TeamProfilePage', () => {
   it('requires the organiser to choose a matching event team explicitly', async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole('button', { name: 'Link event' }));
+    await user.click(await screen.findByRole('tab', { name: 'Link event' }));
     const competition = await screen.findByLabelText('Competition');
     await user.selectOptions(competition, '12');
     const team = await screen.findByLabelText('Event team');
@@ -65,9 +66,60 @@ describe('TeamProfilePage', () => {
     });
     renderPage();
 
-    expect(await screen.findByText('League')).toBeInTheDocument();
-    expect(screen.queryByText('Profile details')).not.toBeInTheDocument();
+    expect(await screen.findByText('League · 2031')).toBeInTheDocument();
+    expect(screen.getByText(/10 pts · 1 round/)).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByText('Edit profile')).not.toBeInTheDocument();
     expect(screen.queryByText('Link an event team')).not.toBeInTheDocument();
+    expect(screen.getByText('Public results only. No rider names.')).toBeInTheDocument();
+  });
+
+  it('shows the place, the best-N summary, dropped results and rounds not entered, using the season table', async () => {
+    const result = (roundId: string, order: number, name: string, date: string, rank: number, points: number) => ({ seasonId: 'season-1', seasonTitle: 'League', seasonYear: 2031, roundId, roundOrder: order, competitionName: name, competitionDate: date, publicationVersion: 1, publishedAt: date, eventRank: rank, eventPoints: 0, seasonPoints: points });
+    const round = (id: string, order: number, name: string, date: string, published: number | null) => ({ id, competitionId: order, competitionName: name, competitionDate: date, competitionSectionId: order, sectionName: 'U14', orderIndex: order, isIncluded: true, publishedVersion: published, publishedAt: null, publicationIsCurrent: true });
+    const linked = { ...history, profile: { ...profile, canManage: false }, publishedResults: [result('r1', 1, 'Club Day', '2031-04-26T00:00:00Z', 1, 10), result('r3', 3, 'May Cup', '2031-05-31T00:00:00Z', 4, 5)] };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/team-profiles') return { data: [linked.profile] };
+      if (url === '/clubs') return { data: [] };
+      if (String(url).endsWith('/history')) return { data: linked };
+      if (url === '/seasons/season-1') return { data: { id: 'season-1', title: 'League', year: 2031, format: 2, ageGroup: 'U14', bestResultsToCount: 1, placePoints: [], canManage: false, rounds: [round('r1', 1, 'Club Day', '2031-04-26T00:00:00Z', 1), round('r2', 2, 'Spring Qualifier', '2031-05-10T00:00:00Z', 1), round('r3', 3, 'May Cup', '2031-05-31T00:00:00Z', 1), round('r4', 4, 'Autumn Classic', '2031-09-12T00:00:00Z', null)] } };
+      if (url === '/seasons/season-1/standings') return { data: { standings: [
+        { rank: 3, teamProfileId: 'profile-1', teamName: 'North Club A', clubName: 'North Club', totalPoints: 10, rounds: [{ roundId: 'r1', eventRank: 1, seasonPoints: 10, counted: true }, { roundId: 'r3', eventRank: 4, seasonPoints: 5, counted: false }] },
+        { rank: 3, teamProfileId: 'other', teamName: 'South Club B', clubName: 'South Club', totalPoints: 10, rounds: [] },
+      ] } };
+      throw new Error(`Unexpected GET ${url}`);
+    });
+    renderPage();
+
+    expect(await screen.findByText('U14 Teams · 2031')).toBeInTheDocument();
+    expect(screen.getByText(/best 1 of 2 rounds/)).toHaveTextContent('=3rd · 10 pts · best 1 of 2 rounds');
+    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent('R3 · May Cup31 May · dropped4th5');
+    expect(rows[0].querySelector('s')).toHaveTextContent('5');
+    expect(rows[1]).toHaveTextContent('R2 · Spring Qualifier10 May · did not enter——');
+    expect(rows[2]).toHaveTextContent('R1 · Club Day26 Apr1st10');
+    expect(screen.getByRole('link', { name: 'Back to standings' })).toHaveAttribute('href', '/seasons/season-1');
+  });
+
+  it('follows the linked event teams on this device from the star in the header', async () => {
+    currentHistory = { ...history, eventTeams: [{ id: 1, teamProfileId: profile.id, competitionId: 12, competitionName: 'Spring', teamId: 41, teamName: 'North Club A', linkedAt: '2031-05-04' }] };
+    const user = userEvent.setup();
+    renderPage();
+
+    const star = await screen.findByRole('button', { name: 'Star North Club A' });
+    expect(star).toHaveAttribute('aria-pressed', 'false');
+    await user.click(star);
+    expect(readFavourites()).toEqual([{ competitionId: 12, teamId: 41 }]);
+    expect(screen.getByRole('button', { name: 'Unstar North Club A' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Unstar North Club A' }));
+    expect(readFavourites()).toEqual([]);
+  });
+
+  it('has no star when no event team is linked yet', async () => {
+    renderPage();
+    await screen.findByRole('heading', { name: 'North Club A' });
+    expect(screen.queryByRole('button', { name: /Star/ })).not.toBeInTheDocument();
   });
 
   it('locks club and suffix after the profile has been linked', async () => {
@@ -75,7 +127,7 @@ describe('TeamProfilePage', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'Edit profile' }));
+    await user.click(await screen.findByRole('tab', { name: 'Edit profile' }));
     expect(screen.getByLabelText('Club')).toBeDisabled();
     expect(screen.getByLabelText('Suffix')).toBeDisabled();
     expect(screen.getByLabelText('Display name')).toBeEnabled();

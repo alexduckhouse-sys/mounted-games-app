@@ -154,10 +154,10 @@ describe('buildToplist hors concours', () => {
       team(9, { isHorsConcours: true, competitionSectionId: 10 }),
     ];
     expect(buildToplist([standing(1, 3)], sessions, teams, SECTION, null).hc).toEqual([
-      { teamId: 6, teamName: 'Abe', points: 4 },
-      { teamId: 5, teamName: 'Zed', points: 4 },
-      { teamId: 8, teamName: 'Low', points: 1 },
-      { teamId: 7, teamName: 'Nobody', points: 0 },
+      { teamId: 6, teamName: 'Abe', points: 4, racesLeft: 0 },
+      { teamId: 5, teamName: 'Zed', points: 4, racesLeft: 0 },
+      { teamId: 8, teamName: 'Low', points: 1, racesLeft: 0 },
+      { teamId: 7, teamName: 'Nobody', points: 0, racesLeft: 0 },
     ]);
   });
 });

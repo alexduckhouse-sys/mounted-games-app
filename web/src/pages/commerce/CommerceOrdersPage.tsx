@@ -1,15 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, CreditCard, RotateCcw } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { LoadError, StatusPill, TestReceipt } from './commerceUi';
-import { ORDER_LABEL, errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
-import { DemoPaymentFlow } from './DemoPaymentFlow';
-import type { DemoOrderPaymentResult, EventOrder, FakePaymentOutcome, SellerSale, TestPayment } from './types';
+import { RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet, RefineStatus, type StatusTone } from '../refine/Refine';
+import { LoadError, TestReceipt } from './commerceUi';
+import { errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
+import { OutcomeState } from './DemoPaymentFlow';
+import { DemoOrderCheckout } from './EventShopPage';
+import type { CommerceOrderStatus, DemoOrderPaymentResult, EventOrder, EventOrderLine, SellerSale, TestPayment } from './types';
 import './commerce.css';
 
 type View = 'purchases' | 'sales';
+
+/** The word shown for an order: what the buyer needs to do or what happened. Colour only reinforces it. */
+const STATUS: Record<CommerceOrderStatus, { text: string; tone: StatusTone }> = {
+  0: { text: 'Pay the organiser', tone: 'warn' },
+  1: { text: 'Payment due', tone: 'warn' },
+  2: { text: 'Paid', tone: 'ok' },
+  3: { text: 'Declined', tone: 'bad' },
+  4: { text: 'Cancelled', tone: 'mut' },
+  5: { text: 'Refunded', tone: 'mut' },
+};
+
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const whenText = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const lineCount = (lines: EventOrderLine[]) => lines.reduce((total, line) => total + line.quantity, 0);
 
 export function CommerceOrdersPage() {
   const { user } = useAuth();
@@ -18,31 +33,42 @@ export function CommerceOrdersPage() {
 
 function CommerceOrdersContent() {
   const { user } = useAuth();
+  const [params, setParams] = useSearchParams();
   const [view, setView] = useState<View>('purchases');
   const [orders, setOrders] = useState<EventOrder[] | null>(null);
   const [sales, setSales] = useState<SellerSale[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [paymentOrderId, setPaymentOrderId] = useState<number | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
   const refundAttempts = useRef(new Map<number, string>());
+  const openId = Number(params.get('order')) || null;
 
   const load = useCallback(() => {
     if (!user) return Promise.resolve();
     return Promise.all([
-        api.get<EventOrder[]>('/commerce/orders/mine'),
-        api.get<SellerSale[]>('/commerce/sales/mine'),
-      ])
+      api.get<EventOrder[]>('/commerce/orders/mine'),
+      api.get<SellerSale[]>('/commerce/sales/mine'),
+    ])
       .then(([ordersResponse, salesResponse]) => {
-      setError(null);
-      setOrders(ordersResponse.data);
-      setSales(salesResponse.data);
+        setError(null);
+        setOrders(ordersResponse.data);
+        setSales(salesResponse.data);
       })
       .catch((requestError: unknown) => {
-      setError(errorMessage(requestError, 'Couldn’t load your orders.'));
+        setError(errorMessage(requestError, 'Couldn’t load your orders.'));
       });
   }, [user]);
 
   useEffect(() => { void load(); }, [load]);
+
+  function open(id: number | null) {
+    setPaying(false);
+    setRefundOpen(false);
+    setParams(id == null ? {} : { order: String(id) }, { replace: false });
+  }
+
+  const replaceOrder = (next: EventOrder) => setOrders((current) => current?.map((existing) => existing.id === next.id ? next : existing) ?? null);
 
   async function cancel(order: EventOrder) {
     setBusyId(order.id);
@@ -57,145 +83,225 @@ function CommerceOrdersContent() {
     }
   }
 
-  async function demo(order: EventOrder, outcome: FakePaymentOutcome, idempotencyKey: string) {
-    const { data } = await api.post<DemoOrderPaymentResult>(`/commerce/orders/${order.id}/demo-checkout`, {
-      idempotencyKey,
-      outcome,
-    });
-    setOrders((current) => current?.map((existing) => existing.id === order.id ? data.order : existing) ?? null);
-    return data.payment;
-  }
-
   async function refund(order: EventOrder) {
     const idempotencyKey = refundAttempts.current.get(order.id) ?? newIdempotencyKey(`demo-refund-${order.id}`);
     refundAttempts.current.set(order.id, idempotencyKey);
     setBusyId(order.id);
     setError(null);
     try {
-      const { data } = await api.post<DemoOrderPaymentResult>(`/commerce/orders/${order.id}/demo-refund`, {
-        idempotencyKey, outcome: 0,
-      });
+      const { data } = await api.post<DemoOrderPaymentResult>(`/commerce/orders/${order.id}/demo-refund`, { idempotencyKey, outcome: 0 });
       refundAttempts.current.delete(order.id);
-      setOrders((current) => current?.map((existing) => existing.id === order.id ? data.order : existing) ?? null);
+      replaceOrder(data.order);
+      setRefundOpen(false);
     } catch (requestError) {
       setError(errorMessage(requestError, 'Couldn’t run the test refund.'));
+      setRefundOpen(false);
     } finally {
       setBusyId(null);
     }
   }
 
-  if (!user) return <div className="skin mg-card p-5">Sign in to see your purchases and sales. <Link className="mg-text-link" to="/login">Sign in</Link></div>;
+  if (!user) return <RefinePage><p className="rf-note py-6">Sign in to see your purchases and sales. <Link to="/login">Sign in</Link></p></RefinePage>;
 
-  const paymentOrder = orders?.find((order) => order.id === paymentOrderId) ?? null;
-  if (paymentOrder) {
-    const receipt = [...paymentOrder.testPayments].reverse().find((payment) => payment.isTest);
+  const current = openId != null ? orders?.find((order) => order.id === openId) ?? null : null;
+
+  if (current && paying) {
     return (
-      <div className="skin commerce-page mx-auto w-full max-w-3xl pb-6">
-        <button type="button" className="commerce-back" onClick={() => setPaymentOrderId(null)}><ArrowLeft className="h-4 w-4" /> Back to orders</button>
-        <header className="commerce-title-block">
-          <p className="mg-eyebrow">Demo checkout</p>
-          <h1 className="mg-h1">Order #{paymentOrder.id}</h1>
-          <p className="mg-lede">{paymentOrder.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</p>
-        </header>
-        <DemoPaymentFlow
-          targetKey={`order-${paymentOrder.id}`}
-          title={`Order #${paymentOrder.id}`}
-          amountMinor={paymentOrder.totalMinor}
-          initialPayment={receipt}
-          canPay={paymentOrder.status === 1 || paymentOrder.status === 3}
-          onPay={(outcome, idempotencyKey) => demo(paymentOrder, outcome, idempotencyKey)}
-        />
-      </div>
+      <DemoOrderCheckout
+        order={current}
+        onChanged={replaceOrder}
+        variant="page"
+        context={`Order #${current.id} · ${pounds(current.totalMinor)}`}
+        onBack={() => setPaying(false)}
+        backLabel="Back to order"
+        approvedTitle="Payment approved"
+        resultContext={`Order #${current.id}`}
+        renderResult={({ payment, retry }) => (
+          <>
+            <OutcomeState payment={payment} />
+            <RefineFoot column>
+              {payment.status === 1 && <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>Try again</button>}
+              <button type="button" className={`rf-btn ${payment.status === 1 ? 'rf-btn-text' : 'rf-btn-primary'}`} onClick={() => setPaying(false)}>Back to order</button>
+            </RefineFoot>
+          </>
+        )}
+      />
     );
   }
 
+  if (current) {
+    return (
+      <Receipt
+        order={current}
+        busy={busyId === current.id}
+        error={error}
+        onRetry={() => void load()}
+        onBack={() => open(null)}
+        onPay={() => setPaying(true)}
+        onCancel={() => void cancel(current)}
+        onRefund={() => setRefundOpen(true)}
+        refundOpen={refundOpen}
+        onRefundConfirm={() => void refund(current)}
+        onRefundClose={() => setRefundOpen(false)}
+      />
+    );
+  }
+
+  const demoOrders = orders?.filter((order) => order.isTestOrder) ?? [];
+  const realOrders = orders?.filter((order) => !order.isTestOrder) ?? [];
   return (
-    <div className="skin commerce-page mx-auto w-full max-w-3xl pb-6">
-      <header className="commerce-title-block"><p className="mg-eyebrow">Shop activity</p><h1 className="mg-h1">Orders</h1><p className="mg-lede">Your purchases and the items people have bought from you.</p></header>
-      <div className="mg-seg self-start" aria-label="Order view">
-        <button type="button" aria-pressed={view === 'purchases'} onClick={() => setView('purchases')}>Purchases</button>
-        <button type="button" aria-pressed={view === 'sales'} onClick={() => setView('sales')}>Sales</button>
-      </div>
+    <RefinePage>
+      <RefineHeader
+        back="/competitions"
+        backLabel="Back to competitions"
+        context="Shop"
+        title="Your orders"
+        tabs={[
+          { label: 'Purchases', active: view === 'purchases', onSelect: () => setView('purchases') },
+          { label: 'Sales', active: view === 'sales', onSelect: () => setView('sales') },
+        ]}
+        tabsKind="tablist"
+        tabsLabel="Order view"
+      />
       {error && <LoadError message={error} onRetry={() => void load()} />}
       {view === 'purchases' ? (
-        <PurchaseList orders={orders} busyId={busyId} onCancel={cancel} onPay={setPaymentOrderId} onRefund={refund} />
+        orders == null ? <p role="status" className="rf-note">Loading purchases…</p>
+          : orders.length === 0 ? <p className="rf-note">You haven’t placed an event order yet.</p>
+            : (
+              <>
+                {realOrders.length > 0 && <OrderGroup title="Orders" orders={realOrders} onOpen={open} />}
+                {demoOrders.length > 0 && <OrderGroup title="Demo orders" meta="Test payments only" orders={demoOrders} onOpen={open} />}
+              </>
+            )
       ) : (
         <SalesList sales={sales} />
       )}
-    </div>
+    </RefinePage>
   );
 }
 
-function PurchaseList({
-  orders, busyId, onCancel, onPay, onRefund,
-}: {
-  orders: EventOrder[] | null;
-  busyId: number | null;
-  onCancel: (order: EventOrder) => Promise<void>;
-  onPay: (orderId: number) => void;
-  onRefund: (order: EventOrder) => Promise<void>;
-}) {
-  if (orders == null) return <p role="status" className="mg-card p-4">Loading purchases…</p>;
-  if (orders.length === 0) return <p className="mg-card p-5">You haven’t placed an event order yet.</p>;
+function OrderGroup({ title, meta, orders, onOpen }: { title: string; meta?: string; orders: EventOrder[]; onOpen: (id: number) => void }) {
   return (
-    <section className="commerce-rows" aria-label="Purchases">
-      {orders.map((order) => {
-        const receipt = [...order.testPayments].reverse().find((payment) => payment.isTest);
-        const canCancel = [0, 1, 3].includes(order.status);
-        return (
-          <article key={order.id} className="commerce-order-row">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="mg-h2">Order #{order.id}</h2>
-              <StatusPill tone={order.isTestOrder ? 'test' : order.status === 2 ? 'good' : 'neutral'}>{order.isTestOrder ? `Demo · ${ORDER_LABEL[order.status]}` : ORDER_LABEL[order.status]}</StatusPill>
-              <strong className="ml-auto">{pounds(order.totalMinor)}</strong>
-            </div>
-            <p className="commerce-order-items">{order.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</p>
-            {!order.isTestOrder && order.status === 0 && <p className="mg-notice">Pay the organiser directly. They’ll update this order when the money arrives.</p>}
-            {receipt && <CompactReceipt payment={receipt} />}
-            <div className="commerce-inline-actions">
-              {order.isTestOrder && (order.status === 1 || order.status === 3) && (
-                <button type="button" className="commerce-compact-button commerce-compact-button--primary" onClick={() => onPay(order.id)}><CreditCard className="h-4 w-4" /> {order.status === 3 ? 'Retry demo payment' : 'Pay demo order'}</button>
-              )}
-              {canCancel && <button type="button" className="commerce-compact-button" disabled={busyId === order.id} onClick={() => void onCancel(order)}>Cancel order</button>}
-              {order.isTestOrder && order.status === 2 && <button type="button" className="commerce-compact-button" disabled={busyId === order.id} onClick={() => void onRefund(order)}><RotateCcw className="h-4 w-4" /> Demo refund</button>}
-            </div>
-          </article>
-        );
-      })}
-    </section>
+    <>
+      <RefineSection title={title} meta={meta} />
+      <RefineList label={title}>
+        {orders.map((order) => {
+          const status = STATUS[order.status];
+          return (
+            <li key={order.id}>
+              <button type="button" className="rf-row" onClick={() => onOpen(order.id)}>
+                <span className="rf-grow">
+                  <span className="rf-t1">Order #{order.id}</span>
+                  <span className="rf-t2">{shortDate(order.createdAt)} · {lineCount(order.lines)} {lineCount(order.lines) === 1 ? 'item' : 'items'}</span>
+                </span>
+                <span className="text-right"><span className="rf-price block">{pounds(order.totalMinor)}</span><RefineStatus tone={status.tone}>{status.text}</RefineStatus></span>
+              </button>
+            </li>
+          );
+        })}
+      </RefineList>
+    </>
   );
 }
 
 function SalesList({ sales }: { sales: SellerSale[] | null }) {
-  if (sales == null) return <p role="status" className="mg-card p-4">Loading sales…</p>;
-  if (sales.length === 0) return <p className="mg-card p-5">You don’t have any event sales yet.</p>;
+  if (sales == null) return <p role="status" className="rf-note">Loading sales…</p>;
+  if (sales.length === 0) return <p className="rf-note">You don’t have any event sales yet.</p>;
   return (
-    <section className="commerce-rows" aria-label="Sales">
-      {sales.map((sale) => (
-        <article key={sale.orderId} className="commerce-order-row">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="mg-h2">Order #{sale.orderId}</h2>
-            <StatusPill tone={sale.isTestOrder ? 'test' : sale.status === 2 ? 'good' : 'neutral'}>{sale.isTestOrder ? `Demo · ${ORDER_LABEL[sale.status]}` : ORDER_LABEL[sale.status]}</StatusPill>
-            <strong className="ml-auto">{pounds(sale.sellerTotalMinor)}</strong>
+    <>
+      <RefineSection title="Sales" meta="Collection at the event" />
+      <RefineList label="Sales">
+        {sales.map((sale) => {
+          const status = STATUS[sale.status];
+          return (
+            <li key={sale.orderId} className="rf-row">
+              <span className="rf-grow">
+                <span className="rf-t1">Order #{sale.orderId}{sale.isTestOrder && ' · demo'}</span>
+                <span className="rf-t2">{sale.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</span>
+              </span>
+              <span className="text-right"><span className="rf-price block">{pounds(sale.sellerTotalMinor)}</span><RefineStatus tone={status.tone}>{status.text}</RefineStatus></span>
+            </li>
+          );
+        })}
+      </RefineList>
+    </>
+  );
+}
+
+interface ReceiptProps {
+  order: EventOrder;
+  busy: boolean;
+  error: string | null;
+  refundOpen: boolean;
+  onRetry: () => void;
+  onBack: () => void;
+  onPay: () => void;
+  onCancel: () => void;
+  onRefund: () => void;
+  onRefundConfirm: () => void;
+  onRefundClose: () => void;
+}
+
+function Receipt({ order, busy, error, refundOpen, onRetry, onBack, onPay, onCancel, onRefund, onRefundConfirm, onRefundClose }: ReceiptProps) {
+  const status = STATUS[order.status];
+  const payment: TestPayment | undefined = [...order.testPayments].reverse().find((candidate) => candidate.isTest);
+  const canPay = order.isTestOrder && (order.status === 1 || order.status === 3);
+  const canCancel = [0, 1, 3].includes(order.status);
+  const canRefund = order.isTestOrder && order.status === 2;
+  const when = order.paidAt ?? order.refundedAt ?? order.cancelledAt ?? order.createdAt;
+  return (
+    <RefinePage>
+      <RefineHeader onBack={onBack} backLabel="Back to orders" context="Orders" title={`Order #${order.id}`} demo={order.isTestOrder} />
+      {error && <LoadError message={error} onRetry={onRetry} />}
+      <div className="rf-list mt-3" style={{ padding: '6px 0' }}>
+        <div className="rf-sum"><span className="rf-mut">Status</span><RefineStatus tone={status.tone}>{status.text}</RefineStatus></div>
+        <div className="rf-sum"><span className="rf-mut">When</span><span>{whenText(when)}</span></div>
+        {payment && <div className="rf-sum"><span className="rf-mut">Reference</span><span className="break-all text-right text-sm">{payment.receiptReference}</span></div>}
+      </div>
+      <RefineSection title="Items" />
+      <RefineList label="Items">
+        {order.lines.map((line) => (
+          <li key={line.id} className="rf-row" style={{ minHeight: 48 }}>
+            <span className="rf-grow">{line.title} × {line.quantity}</span>
+            <span className="rf-price">{pounds(line.lineTotalMinor)}</span>
+          </li>
+        ))}
+      </RefineList>
+      <div className="rf-sum rf-sum-total -mx-4"><span>Total</span><span>{pounds(order.totalMinor)}</span></div>
+      {order.isTestOrder && payment && <TestReceipt payment={payment} />}
+      <RefineNote>
+        {order.isTestOrder ? 'A demo order: no money moved. ' : order.status === 0 ? 'Pay the organiser directly. They’ll update this order when the money arrives. ' : ''}
+        Collect at the event.
+      </RefineNote>
+      {(canCancel || canRefund) && (
+        <div className="rf-list mt-3">
+          <RefineDisclosure title="Order actions">
+            <div className="flex flex-col gap-2 px-4 pb-3">
+              {canCancel && <button type="button" className="rf-btn rf-wide" disabled={busy} onClick={onCancel}>Cancel order</button>}
+              {canRefund && <button type="button" className="rf-btn rf-wide" disabled={busy} onClick={onRefund}>Refund order…</button>}
+            </div>
+          </RefineDisclosure>
+        </div>
+      )}
+      {canPay && (
+        <RefineFoot>
+          <button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={onPay}>{order.status === 3 ? 'Retry demo payment' : 'Pay demo order'}</button>
+        </RefineFoot>
+      )}
+      {refundOpen && (
+        <RefineSheet title={`Refund ${pounds(order.totalMinor)}?`} onClose={onRefundClose}>
+          <p className="m-0 text-sm">Refunds the whole of order #{order.id}. It’s a demo, so no money moves. The order shows as Refunded.</p>
+          <div className="rf-actions">
+            <button type="button" className="rf-btn" onClick={onRefundClose}>Keep order</button>
+            <button type="button" className="rf-btn rf-btn-danger rf-grow" disabled={busy} onClick={onRefundConfirm}>Refund {pounds(order.totalMinor)}</button>
           </div>
-          <p className="text-sm text-[rgb(var(--mg-body))]">{sale.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</p>
-          <p className="mg-meta">Collection at the event.</p>
-        </article>
-      ))}
-    </section>
+        </RefineSheet>
+      )}
+    </RefinePage>
   );
 }
 
 export function LatestTestReceipt({ payments }: { payments: TestPayment[] }) {
   const payment = payments.at(-1);
   return payment ? <TestReceipt payment={payment} /> : null;
-}
-
-function CompactReceipt({ payment }: { payment: TestPayment }) {
-  return (
-    <p className="commerce-receipt">
-      <span>{payment.receiptLabel}</span>
-      <span>{payment.receiptReference}</span>
-    </p>
-  );
 }

@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion';
-import { CreditCard, ShieldCheck } from 'lucide-react';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { CreditCard, Lock, ShieldCheck } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { RefineFoot, RefineHeader, RefinePage } from '../refine/Refine';
 import { newIdempotencyKey, pounds } from './commerceFormat';
 import { TestReceipt } from './commerceUi';
 import type { FakePaymentOutcome, TestPayment, TestPaymentStatus } from './types';
@@ -16,12 +17,26 @@ export interface DemoPaymentFlowProps {
   canPay?: boolean;
   onPay: (outcome: FakePaymentOutcome, idempotencyKey: string) => Promise<TestPayment>;
   onPayment?: (payment: TestPayment) => void;
+  /** `page` is the full-screen checkout: own header, test details filled in, a result toggle and a sticky Pay button. */
+  variant?: 'inline' | 'page';
+  /** Page variant: small text in the header's top row while paying, e.g. '2 items · £17.00'. */
+  context?: string;
+  onBack?: () => void;
+  backLabel?: string;
+  /** Page variant: header title and context once there is a result. */
+  approvedTitle?: string;
+  resultContext?: string;
+  /** Page variant: everything under the result header. Use OutcomeState for the icon and wording. */
+  renderResult?: (result: { payment: TestPayment; retry: () => void }) => ReactNode;
+  /** Page variant: how long the padlock screen shows at least, so a fast reply doesn't flash by. */
+  minProcessingMs?: number;
 }
 
 const SUCCESS_CARD = '4242424242424242';
 const DECLINE_CARD = '4000000000000002';
-const DEMO_EXPIRY = '12/34';
+const DEMO_EXPIRY = '12/30';
 const DEMO_CVC = '123';
+const DEMO_NAME = 'Demo Buyer';
 
 function paymentState(status: TestPaymentStatus): DemoPaymentLockState {
   if (status === 0) return 'success';
@@ -42,14 +57,23 @@ export function DemoPaymentFlow({
   canPay = true,
   onPay,
   onPayment,
+  variant = 'inline',
+  context = '',
+  onBack,
+  backLabel = 'Back',
+  approvedTitle = 'Payment approved',
+  resultContext,
+  renderResult,
+  minProcessingMs = 1200,
 }: DemoPaymentFlowProps) {
+  const page = variant === 'page';
   const reducedMotion = Boolean(useReducedMotion());
-  const [step, setStep] = useState<Step>(initialPayment ? 'result' : 'review');
+  const [step, setStep] = useState<Step>(initialPayment ? 'result' : page ? 'details' : 'review');
   const [payment, setPayment] = useState<TestPayment | null>(initialPayment);
-  const [name, setName] = useState('');
-  const [card, setCard] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cvc, setCvc] = useState('');
+  const [name, setName] = useState(page ? DEMO_NAME : '');
+  const [card, setCard] = useState(page ? formatCard(SUCCESS_CARD) : '');
+  const [expiry, setExpiry] = useState(page ? DEMO_EXPIRY : '');
+  const [cvc, setCvc] = useState(page ? DEMO_CVC : '');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   const attempt = useRef<{ outcome: FakePaymentOutcome; key: string } | null>(null);
@@ -64,7 +88,7 @@ export function DemoPaymentFlow({
   }, [initialPayment]);
 
   function fillDemoDetails(cardNumber = SUCCESS_CARD) {
-    setName('Demo Rider');
+    setName(page ? DEMO_NAME : 'Demo Rider');
     setCard(formatCard(cardNumber));
     setExpiry(DEMO_EXPIRY);
     setCvc(DEMO_CVC);
@@ -76,6 +100,7 @@ export function DemoPaymentFlow({
     setPayment(null);
     setRequestError(null);
     setValidationError(null);
+    if (page) fillDemoDetails();
     setStep('details');
   }
 
@@ -86,7 +111,10 @@ export function DemoPaymentFlow({
     setRequestError(null);
     setStep('processing');
     try {
-      const confirmed = await onPay(outcome, attempt.current.key);
+      const [confirmed] = await Promise.all([
+        onPay(outcome, attempt.current.key),
+        page && minProcessingMs > 0 ? new Promise((resolve) => setTimeout(resolve, minProcessingMs)) : null,
+      ]);
       attempt.current = null;
       setName('');
       setCard('');
@@ -121,8 +149,75 @@ export function DemoPaymentFlow({
     void submitOutcome(digits === SUCCESS_CARD ? 0 : 1);
   }
 
+  const declining = card.replace(/\D/g, '') === DECLINE_CARD;
   const transition = reducedMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' as const };
   const resultState = payment ? paymentState(payment.status) : 'failed';
+
+  if (page) {
+    const amount = pounds(amountMinor);
+    const headerTitle = step === 'result' && payment
+      ? payment.status === 0 ? approvedTitle : payment.status === 1 ? 'Payment declined' : payment.status === 2 ? 'Checkout cancelled' : 'Payment refunded'
+      : 'Payment';
+    const headerContext = step === 'result' && resultContext ? resultContext : context;
+    return (
+      <RefinePage>
+        <RefineHeader
+          onBack={step === 'details' ? onBack : undefined}
+          backLabel={backLabel}
+          context={headerContext}
+          title={headerTitle}
+          demo
+        />
+        {step === 'processing' && (
+          <div className="rf-lockwrap" role="status" aria-live="polite">
+            <DemoPaymentLock state="waiting" reducedMotion={reducedMotion} />
+            <h2 className="mg-h2">Processing demo payment</h2>
+            <p className="rf-note">{amount} · a few seconds</p>
+          </div>
+        )}
+        {step === 'result' && payment && <ResultSlot payment={payment} retry={resetForAnotherAttempt} render={renderResult} />}
+        {(step === 'details' || step === 'review') && (
+          <>
+            <form id="demo-pay-form" className="flex flex-col gap-3 py-3" onSubmit={submit} noValidate>
+              <p className="rf-note !py-0">Test card filled in for you. Nothing is sent or charged.</p>
+              <label className="rf-fld">Card number
+                <input value={card} onChange={(event) => setCard(formatCard(event.target.value))} inputMode="numeric" autoComplete="off" placeholder="0000 0000 0000 0000" />
+              </label>
+              <div className="grid grid-cols-2 gap-2.5">
+                <label className="rf-fld">Expiry
+                  <input value={expiry} onChange={(event) => setExpiry(event.target.value.slice(0, 5))} inputMode="numeric" autoComplete="off" placeholder="MM/YY" />
+                </label>
+                <label className="rf-fld">CVC
+                  <input value={cvc} onChange={(event) => setCvc(event.target.value.replace(/\D/g, '').slice(0, 3))} inputMode="numeric" autoComplete="off" placeholder="000" />
+                </label>
+              </div>
+              <label className="rf-fld">Name on card
+                <input value={name} onChange={(event) => setName(event.target.value.slice(0, 80))} autoComplete="off" spellCheck={false} />
+              </label>
+              <fieldset className="m-0 border-0 p-0">
+                <legend className="rf-fld mb-1 p-0">Demo result</legend>
+                <div className="mg-seg">
+                  <button type="button" aria-pressed={!declining} onClick={() => fillDemoDetails(SUCCESS_CARD)}>Approve</button>
+                  <button type="button" aria-pressed={declining} onClick={() => fillDemoDetails(DECLINE_CARD)}>Decline</button>
+                </div>
+              </fieldset>
+              {validationError && <p role="alert" className="text-sm font-semibold text-[rgb(var(--mg-elim))]">{validationError}</p>}
+              {requestError && (
+                <div role="alert" className="demo-pay__error">
+                  <p>{requestError}</p>
+                  <p className="mt-1 text-xs">Your demo details are still here. Trying again will check the same payment attempt.</p>
+                </div>
+              )}
+            </form>
+            <RefineFoot column aboveTabs>
+              <button type="submit" form="demo-pay-form" className="rf-btn rf-btn-primary"><Lock className="h-4 w-4" aria-hidden="true" />Pay {amount}</button>
+              <button type="button" className="rf-btn rf-btn-text" onClick={() => void submitOutcome(2)}>Cancel</button>
+            </RefineFoot>
+          </>
+        )}
+      </RefinePage>
+    );
+  }
 
   return (
     <section className="demo-pay" data-reduced-motion={reducedMotion ? 'true' : 'false'} aria-label="Demo payment">
@@ -221,6 +316,28 @@ export function DemoPaymentFlow({
         )}
       </>
     </section>
+  );
+}
+
+function ResultSlot({ payment, retry, render }: { payment: TestPayment; retry: () => void; render?: DemoPaymentFlowProps['renderResult'] }) {
+  return <>{render ? render({ payment, retry }) : <OutcomeState payment={payment} />}</>;
+}
+
+/** Round icon plus a title and one line, for the page checkout's outcome screens. */
+export function OutcomeState({ payment, title, detail, role }: { payment: TestPayment; title?: string; detail?: ReactNode; role?: 'alert' | 'status' }) {
+  const tone = payment.status === 0 ? 'ok' : payment.status === 1 ? 'bad' : 'mut';
+  const heading = title ?? (payment.status === 0 ? 'Payment approved' : payment.status === 1 ? 'The demo card was declined' : payment.status === 2 ? 'Payment cancelled' : 'Payment refunded');
+  const line = detail ?? (payment.status === 0 ? `Paid ${pounds(payment.amountMinor)}` : payment.status === 1 ? 'Nothing was charged.' : payment.status === 2 ? 'Nothing was charged.' : 'No money moved.');
+  return (
+    <div className="rf-state" role={role ?? (payment.status === 1 ? 'alert' : 'status')}>
+      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r="19" className={`rf-state-${tone}`} />
+        {payment.status === 0 && <path d="M12 20.5l5 5L28 14.5" fill="none" stroke="rgb(var(--mg-ok))" strokeWidth="3" />}
+        {payment.status === 1 && <path d="M20 12v10M20 27v1" fill="none" stroke="rgb(var(--mg-elim))" strokeWidth="3" strokeLinecap="round" />}
+        {payment.status > 1 && <path d="M14 14l12 12M26 14L14 26" fill="none" stroke="rgb(var(--mg-body))" strokeWidth="3" strokeLinecap="round" />}
+      </svg>
+      <div><div className="rf-t1">{heading}</div><div className="rf-t2">{line}</div></div>
+    </div>
   );
 }
 
