@@ -51,7 +51,7 @@ The cross-chat to-do list. Update or delete items as they land.
 
 ## Bugs and tidy-ups
 
-- Flaky under load: `StreamingHubTests.RewatchReplacesAndClosesPreviousSession_EvenAtTheCap_DisconnectClosesCurrent` (seen in CI on #52 and locally) and, once, `CommerceEndpointsTests.DemoDeclineReleasesStock_AndRetryCanSucceed`. Both pass on rerun; make them deterministic.
+- Flaky once under heavy load (load average about 20): `CommerceEndpointsTests.DemoDeclineReleasesStock_AndRetryCanSucceed` (14 s, passed on rerun). Capture the failure message next time it fails. The streaming hub flake is fixed (#55).
 - Heat page draft restore looks dead on main (the seed effect overwrites the hydrated draft); found by the lint work in #41.
 - Stream controls still to come: instant replays (needs recording), and the producer screen's per-angle preview tiles from the design board.
 
