@@ -26,7 +26,7 @@ public class TeamsController : ControllerBase
         .Select(t => t.ToDto());
 
     [HttpPost]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<TeamDto>> Create(int competitionId, CreateTeamRequest req)
     {
@@ -67,7 +67,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<TeamDto>> Update(int competitionId, int id, UpdateTeamRequest req)
     {
@@ -88,7 +88,7 @@ public class TeamsController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<IActionResult> Delete(int competitionId, int id)
     {

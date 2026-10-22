@@ -16,7 +16,7 @@ namespace MountedGames.Api.Controllers;
 public class CompetitionsController : ControllerBase
 {
     [HttpPut("{id:int}/stream-url")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]
     public async Task<IActionResult> SetStreamUrl(int id, StreamUrlRequest request, CancellationToken ct)
     {
@@ -201,7 +201,7 @@ public class CompetitionsController : ControllerBase
     /// Used by the format-after-signups flow to "close entries" before forming teams.
     /// </summary>
     [HttpPost("{id:int}/signups-locked")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]
     public async Task<ActionResult<object>> SetSignupsLocked(int id, SetSignupsLockedRequest req)
     {
@@ -254,7 +254,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]
     public async Task<ActionResult<CompetitionSummary>> Update(int id, UpdateCompetitionRequest req)
     {
@@ -343,7 +343,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/sections")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]
     public async Task<ActionResult<CompetitionSectionDto>> AddSection(int id, CreateSectionRequest req)
     {
@@ -371,7 +371,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPut("{id:int}/sections/{sectionId:int}")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]
     public async Task<ActionResult<CompetitionSectionDto>> UpdateSection(int id, int sectionId, UpdateSectionRequest req)
     {
@@ -450,7 +450,8 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/shift-day")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
     public async Task<ActionResult<CompetitionDetail>> ShiftDay(int id, [FromQuery] int days = 1)
     {
         var c = await _db.Competitions
@@ -471,7 +472,8 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpGet("{id:int}/finals/boundary")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
     public async Task<ActionResult<object>> FinalsBoundary(int id,
         [FromQuery] int topN, [FromQuery] int? sectionId = null)
     {
@@ -512,7 +514,8 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/finals")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
     public async Task<ActionResult<SessionDto>> CreateFinals(int id, CreateFinalsRequest req)
     {
         var comp = await _db.Competitions.FirstOrDefaultAsync(c => c.Id == id);
@@ -615,7 +618,8 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/finals/scaffold")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
     public async Task<ActionResult<SessionDto>> ScaffoldFinals(int id, ScaffoldFinalsRequest req)
     {
         var comp = await _db.Competitions.FirstOrDefaultAsync(c => c.Id == id);
@@ -673,7 +677,8 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/sessions/{sessionId:int}/populate-finals")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
     public async Task<ActionResult<SessionDto>> PopulateFinals(int id, int sessionId)
     {
         var session = await _db.Sessions
@@ -724,7 +729,8 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpPost("{id:int}/auto-timetable")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
     public async Task<ActionResult<CompetitionDetail>> AutoTimetable(int id, AutoTimetableRequest req)
     {
         var comp = await _db.Competitions

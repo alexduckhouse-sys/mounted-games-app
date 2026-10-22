@@ -252,7 +252,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("competitions/{competitionId:int}/listings/manage")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<IReadOnlyList<CompetitionListingDto>>> ManageListings(
         int competitionId,
@@ -305,7 +305,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("competitions/{competitionId:int}/settings")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<EventCommerceSettingsDto>> UpdateSettings(
         int competitionId,
@@ -406,7 +406,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("competitions/{competitionId:int}/orders")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<IReadOnlyList<EventOrderDto>>> CompetitionOrders(
         int competitionId,

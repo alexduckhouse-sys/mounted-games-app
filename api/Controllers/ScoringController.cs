@@ -14,7 +14,8 @@ using Npgsql;
 namespace MountedGames.Api.Controllers;
 
 [ApiController]
-[Authorize(Roles = Roles.Admin)]
+// The competition's owner, its team and admins run scoring; [CompetitionAccess] on each action picks the competition.
+[Authorize(Policy = CompetitionStaff.Policy)]
 public class ScoringController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -29,6 +30,7 @@ public class ScoringController : ControllerBase
     }
 
     [HttpPost("api/races/{raceId:int}/results")]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
     public async Task<ActionResult<HeatDto>> SubmitRaceResults(
         int raceId, SubmitRaceResultsRequest req, CancellationToken cancellationToken)
     {
@@ -58,6 +60,7 @@ public class ScoringController : ControllerBase
     }
 
     [HttpGet("api/races/{raceId:int}/score")]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
     public async Task<ActionResult<RaceScoreDto>> GetRaceScore(int raceId, CancellationToken cancellationToken)
     {
         try { return await _scoring.GetAsync(raceId, cancellationToken); }
@@ -65,6 +68,7 @@ public class ScoringController : ControllerBase
     }
 
     [HttpPut("api/races/{raceId:int}/score")]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
     public async Task<ActionResult<RaceScoreDto>> UpdateRaceScore(
         int raceId, UpdateRaceScoreRequest request, CancellationToken cancellationToken)
     {
@@ -85,6 +89,7 @@ public class ScoringController : ControllerBase
     }
 
     [HttpGet("api/races/{raceId:int}/score/history")]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
     public async Task<ActionResult<IReadOnlyList<RaceScoreHistoryDto>>> ScoreHistory(
         int raceId, CancellationToken cancellationToken)
     {
@@ -93,11 +98,13 @@ public class ScoringController : ControllerBase
     }
 
     [HttpPost("api/races/{raceId:int}/score/sign-off")]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
     public Task<ActionResult<RaceScoreDto>> SignOff(
         int raceId, ScoreActionRequest request, CancellationToken cancellationToken)
         => ScoreAction(raceId, request, true, cancellationToken);
 
     [HttpPost("api/races/{raceId:int}/score/reopen")]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
     public Task<ActionResult<RaceScoreDto>> Reopen(
         int raceId, ScoreActionRequest request, CancellationToken cancellationToken)
         => ScoreAction(raceId, request, false, cancellationToken);
@@ -164,6 +171,7 @@ public class ScoringController : ControllerBase
     /// the timer runs again if you re-start a race in error.
     /// </summary>
     [HttpPost("api/races/{raceId:int}/start")]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
     public async Task<ActionResult<RaceDto>> StartRace(int raceId,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null,
         CancellationToken cancellationToken = default)
@@ -187,6 +195,7 @@ public class ScoringController : ControllerBase
 
     /// <summary>Admin stops the live clock — sets `FinishedAt` to the tap time.</summary>
     [HttpPost("api/races/{raceId:int}/stop")]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
     public async Task<ActionResult<RaceDto>> StopRace(int raceId,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null,
         CancellationToken cancellationToken = default)
@@ -210,6 +219,7 @@ public class ScoringController : ControllerBase
     }
 
     [HttpPut("api/heats/{heatId:int}/duration")]
+    [CompetitionAccess("heatId", CompetitionResource.Heat)]
     public async Task<ActionResult<HeatDto>> SetHeatDuration(int heatId, UpdateHeatDurationRequest req)
     {
         var heat = await _db.Heats

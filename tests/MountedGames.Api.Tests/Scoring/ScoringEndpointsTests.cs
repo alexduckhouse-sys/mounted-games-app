@@ -49,10 +49,19 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(Endpoints))]
-    public async Task Returns403_WhenTrainer(string method, string path)
+    public async Task Returns403_WhenMemberIsOnNoCompetitionTeam(string method, string path)
+    {
+        var (member, _) = await _f.SignupAsync("Member");
+        var r = await member.SendAsync(Req(method, path));
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+    }
+
+    [Theory]
+    [MemberData(nameof(Endpoints))]
+    public async Task Returns404_WhenTrainerDoesNotRunTheCompetition(string method, string path)
     {
         var r = await (await _f.TrainerAsync()).SendAsync(Req(method, path));
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
     // ---- results ----

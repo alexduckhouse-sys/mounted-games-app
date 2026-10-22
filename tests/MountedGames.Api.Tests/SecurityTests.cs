@@ -344,7 +344,7 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
         builder.Services.AddIdentityCore<AppUser>().AddRoles<IdentityRole>().AddEntityFrameworkStores<AppDbContext>().AddSignInManager();
         builder.Services.AddScoped<TokenService>();
         builder.Services.AddAuthentication("test").AddScheme<AuthenticationSchemeOptions, TestAuthentication>("test", _ => { });
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorizationWithCompetitionStaff();
         builder.Services.AddHttpClient();
         builder.Services.AddScoped<GeocodingService>();
         builder.Services.AddSignalR();

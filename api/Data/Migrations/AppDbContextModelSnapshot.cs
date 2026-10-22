@@ -727,6 +727,41 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("Competitions");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.CompetitionCollaborator", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AddedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("CompetitionId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("CompetitionCollaborators");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.CompetitionSection", b =>
                 {
                     b.Property<int>("Id")
@@ -2312,6 +2347,25 @@ namespace MountedGames.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("CreatedBy");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.CompetitionCollaborator", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Competition");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.CompetitionSection", b =>

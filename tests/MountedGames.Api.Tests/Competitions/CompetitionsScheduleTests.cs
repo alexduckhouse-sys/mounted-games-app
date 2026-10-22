@@ -34,11 +34,11 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task ShiftDay_Returns403_ForTrainer()
+    public async Task ShiftDay_Returns404_ForTrainerWhoDoesNotRunIt()
     {
         var trainer = await _f.TrainerAsync();
         var r = await trainer.PostAsync("/api/competitions/1/shift-day", null);
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
     [Fact]
@@ -105,11 +105,11 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task FinalsBoundary_Returns403_ForTrainer()
+    public async Task FinalsBoundary_Returns404_ForTrainerWhoDoesNotRunIt()
     {
         var trainer = await _f.TrainerAsync();
         var r = await trainer.GetAsync("/api/competitions/1/finals/boundary?topN=2");
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
     [Fact]
@@ -176,11 +176,11 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task CreateFinals_Returns403_ForTrainer()
+    public async Task CreateFinals_Returns404_ForTrainerWhoDoesNotRunIt()
     {
         var trainer = await _f.TrainerAsync();
         var r = await trainer.PostAsJsonAsync("/api/competitions/1/finals", new { topN = 2, raceNames = new[] { "R" } });
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
     [Fact]
@@ -355,11 +355,11 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Scaffold_Returns403_ForTrainer()
+    public async Task Scaffold_Returns404_ForTrainerWhoDoesNotRunIt()
     {
         var trainer = await _f.TrainerAsync();
         var r = await trainer.PostAsJsonAsync("/api/competitions/1/finals/scaffold", Scaffold());
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
     [Fact]
@@ -446,11 +446,11 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Populate_Returns403_ForTrainer()
+    public async Task Populate_Returns404_ForTrainerWhoDoesNotRunIt()
     {
         var trainer = await _f.TrainerAsync();
         var r = await trainer.PostAsync("/api/competitions/1/sessions/1/populate-finals", null);
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
     [Fact]
@@ -581,11 +581,11 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task AutoTimetable_Returns403_ForTrainer()
+    public async Task AutoTimetable_Returns404_ForTrainerWhoDoesNotRunIt()
     {
         var trainer = await _f.TrainerAsync();
         var r = await trainer.PostAsJsonAsync("/api/competitions/1/auto-timetable", Auto());
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
     [Fact]

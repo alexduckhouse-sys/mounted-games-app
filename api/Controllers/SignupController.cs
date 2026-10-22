@@ -97,7 +97,7 @@ public class SignupController : ControllerBase
 
     /// <summary>Contact and payment details are restricted to the competition organiser.</summary>
     [HttpGet("api/competitions/{competitionId:int}/signups")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<IEnumerable<SectionSignupDto>> List(int competitionId)
     {
@@ -111,7 +111,7 @@ public class SignupController : ControllerBase
 
     /// <summary>Organiser (trainer or admin) marks a signup paid / refunded / cancelled.</summary>
     [HttpPut("api/signups/{id:int}/status")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id", CompetitionResource.Signup)]
     public async Task<ActionResult<SectionSignupDto>> UpdateStatus(int id, UpdateSignupStatusRequest req)
     {
@@ -132,7 +132,7 @@ public class SignupController : ControllerBase
     }
 
     [HttpDelete("api/signups/{id:int}")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id", CompetitionResource.Signup)]
     public async Task<IActionResult> Delete(int id)
     {
@@ -195,7 +195,7 @@ public class SignupController : ControllerBase
     /// people manually via the Teams tab later.
     /// </summary>
     [HttpPost("api/competitions/{competitionId:int}/sections/{sectionId:int}/form-teams")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<FormTeamsResult>> FormTeams(int competitionId, int sectionId, FormTeamsFromSignupsRequest req)
     {

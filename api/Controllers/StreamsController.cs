@@ -37,7 +37,7 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
     }
 
     [HttpGet("ice-servers")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<IceServersResponse>> IceServers(int competitionId, CancellationToken ct)
     {
@@ -47,7 +47,7 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
     }
 
     [HttpPost]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<PublishResponse>> Start(int competitionId, StartStreamRequest request, CancellationToken ct)
     {
@@ -90,7 +90,7 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
     }
 
     [HttpPost("{streamId:int}/ready")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<LiveStreamDto>> Ready(int competitionId, int streamId, ReadyRequest request, CancellationToken ct)
     {
@@ -133,7 +133,7 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
     }
 
     [HttpPost("{streamId:int}/republish")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<PublishResponse>> Republish(int competitionId, int streamId, PublishRequest request, CancellationToken ct)
     {
@@ -162,7 +162,7 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
     }
 
     [HttpPatch("{streamId:int}")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<LiveStreamDto>> Update(int competitionId, int streamId, UpdateStreamRequest request, CancellationToken ct)
     {
@@ -191,7 +191,7 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
     }
 
     [HttpPost("{streamId:int}/heartbeat")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<IActionResult> Heartbeat(int competitionId, int streamId, CancellationToken ct)
     {
@@ -206,7 +206,7 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
     }
 
     [HttpPost("{streamId:int}/end")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<IActionResult> End(int competitionId, int streamId, CancellationToken ct)
     {
