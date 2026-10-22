@@ -9,6 +9,14 @@
 - Files: `api/Auth/CompetitionAccessAttribute.cs`, `api/Auth/Roles.cs`, organiser controller actions and frontend organiser controls.
 - Source: AI Control Centre security-review chat, 15 October 2026.
 
+## 2026-10-22: Owners and their competition team run the day
+- Why: events are run by the organiser and helpers (co-organisers, ring scorers, line judges, commentators, stream producers), not by global admins. This was decided by the user in the 22 October review.
+- Rule: scoring, sessions, finals and timetable endpoints are open to the competition's owner (a Trainer whose ID is the stored `CreatedByUserId`), to people on that competition's team (`CompetitionCollaborators`, any account type), and to admins. They're gated by the `CompetitionStaff` policy (Admin, Trainer, or on at least one team) plus `[CompetitionAccess]`, which checks the particular competition and returns 404 otherwise. Only the owner or an admin changes the team; a helper can leave.
+- Still admin-only: deleting a competition or section, chat moderation, private trainer chat, global data (race templates, clubs, IP blocks, trainer approval).
+- Session actions that take team IDs reject teams from another competition.
+- Supersedes: "Existing admin-only scoring, timetable and moderation operations remain admin-only" in the 15 October entry, apart from moderation.
+- Files: `api/Auth/CompetitionStaffPolicy.cs`, `api/Auth/CompetitionAccessAttribute.cs`, `api/Controllers/CompetitionTeamController.cs`, `ScoringController`, `SessionsController`, `CompetitionsController`.
+
 ## 2026-10-16: Admins approve new trainers
 - Why: trainer signup was open to anyone, and trainers can create public competitions and (with live video) broadcast on them.
 - Rule: self-service trainer signup creates a Member with a `TrainerRequest` role; an admin approves (Member becomes Trainer) or declines on the admin page. Approved users must sign in again, because roles travel in the JWT. Existing trainers and admin-created accounts are unchanged.

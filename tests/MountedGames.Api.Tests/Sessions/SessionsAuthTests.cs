@@ -9,7 +9,7 @@ public class SessionsAuthTests : IClassFixture<ApiFactory>
     private readonly ApiFactory _f;
     public SessionsAuthTests(ApiFactory f) => _f = f;
 
-    public static IEnumerable<object[]> AdminOnly() => new[]
+    public static IEnumerable<object[]> StaffOnly() => new[]
     {
         new object[] { "POST", "/api/competitions/1/sessions" },
         new object[] { "PUT", "/api/competitions/1/sessions/1/status" },
@@ -28,7 +28,7 @@ public class SessionsAuthTests : IClassFixture<ApiFactory>
         => new(new HttpMethod(method), path) { Content = JsonContent.Create(new { }) };
 
     [Theory]
-    [MemberData(nameof(AdminOnly))]
+    [MemberData(nameof(StaffOnly))]
     public async Task Returns401_WhenAnonymous(string method, string path)
     {
         var r = await _f.CreateClient().SendAsync(Req(method, path));
@@ -36,11 +36,20 @@ public class SessionsAuthTests : IClassFixture<ApiFactory>
     }
 
     [Theory]
-    [MemberData(nameof(AdminOnly))]
-    public async Task Returns403_WhenTrainer(string method, string path)
+    [MemberData(nameof(StaffOnly))]
+    public async Task Returns403_WhenMemberIsOnNoCompetitionTeam(string method, string path)
+    {
+        var (member, _) = await _f.SignupAsync("Member");
+        var r = await member.SendAsync(Req(method, path));
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+    }
+
+    [Theory]
+    [MemberData(nameof(StaffOnly))]
+    public async Task Returns404_WhenTrainerDoesNotRunTheCompetition(string method, string path)
     {
         var trainer = await _f.TrainerAsync();
         var r = await trainer.SendAsync(Req(method, path));
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 }

@@ -121,6 +121,23 @@ public static class DbInitializer
             CREATE INDEX IF NOT EXISTS "IX_OverlayLooks_OwnerUserId" ON "OverlayLooks" ("OwnerUserId");
             """);
 
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "CompetitionCollaborators" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_CompetitionCollaborators" PRIMARY KEY AUTOINCREMENT,
+                "CompetitionId" INTEGER NOT NULL,
+                "UserId" TEXT NOT NULL,
+                "Role" INTEGER NOT NULL DEFAULT 0,
+                "AddedByUserId" TEXT NOT NULL,
+                "AddedAt" TEXT NOT NULL,
+                CONSTRAINT "FK_CompetitionCollaborators_Competitions_CompetitionId" FOREIGN KEY ("CompetitionId")
+                    REFERENCES "Competitions" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_CompetitionCollaborators_AspNetUsers_UserId" FOREIGN KEY ("UserId")
+                    REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_CompetitionCollaborators_CompetitionId_UserId" ON "CompetitionCollaborators" ("CompetitionId", "UserId");
+            CREATE INDEX IF NOT EXISTS "IX_CompetitionCollaborators_UserId" ON "CompetitionCollaborators" ("UserId");
+            """);
+
         // For new tables added after the DB was first created, EnsureCreated is a no-op.
         // Make the schema additive by running CREATE TABLE IF NOT EXISTS for those.
         await db.Database.ExecuteSqlRawAsync(@"

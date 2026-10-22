@@ -24,6 +24,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<LiveStream> LiveStreams => Set<LiveStream>();
     public DbSet<StreamOverlay> StreamOverlays => Set<StreamOverlay>();
     public DbSet<OverlayLook> OverlayLooks => Set<OverlayLook>();
+    public DbSet<CompetitionCollaborator> CompetitionCollaborators => Set<CompetitionCollaborator>();
     public DbSet<TrainerNote> TrainerNotes => Set<TrainerNote>();
     public DbSet<IpBlock> IpBlocks => Set<IpBlock>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
@@ -39,6 +40,15 @@ public class AppDbContext : IdentityDbContext<AppUser>
         base.OnModelCreating(b);
         b.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
+        b.Entity<CompetitionCollaborator>(e =>
+        {
+            e.HasIndex(c => new { c.CompetitionId, c.UserId }).IsUnique();
+            e.HasIndex(c => c.UserId);
+            e.Property(c => c.UserId).IsRequired();
+            e.Property(c => c.AddedByUserId).IsRequired();
+            e.HasOne(c => c.Competition).WithMany().HasForeignKey(c => c.CompetitionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(c => c.User).WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
         b.Entity<OverlayLook>(e =>
         {
             e.Property(l => l.OwnerUserId).IsRequired();

@@ -37,7 +37,7 @@ public class RulebooksController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<RulebookDto>> Create(
         int competitionId, UpsertRulebookRequest request, CancellationToken cancellationToken)
@@ -65,7 +65,7 @@ public class RulebooksController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<RulebookDto>> Update(
         int competitionId, int id, UpsertRulebookRequest request, CancellationToken cancellationToken)
@@ -91,7 +91,7 @@ public class RulebooksController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<IActionResult> Delete(int competitionId, int id, CancellationToken cancellationToken)
     {
