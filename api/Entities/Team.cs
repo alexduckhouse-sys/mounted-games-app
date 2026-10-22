@@ -22,6 +22,12 @@ public class Team
     /// <summary>Hors Concours — team competes but is excluded from scoring + standings.</summary>
     public bool IsHorsConcours { get; set; }
 
+    /// <summary>
+    /// Withdrawn or no-show teams are out of the unscored heats and the draw. Scored results stay.
+    /// The reason lives in <c>TeamStatusEvent</c>, never on this row, so it can't leak through a team DTO.
+    /// </summary>
+    public TeamEntryStatus EntryStatus { get; set; } = TeamEntryStatus.Active;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
