@@ -34,6 +34,45 @@ export function toggleEliminated(list: PendingPlace[], teamId: number): PendingP
   return renumber(list.map((p) => (p.teamId === teamId ? { ...p, eliminated: true } : p)));
 }
 
+/** The placings already saved for a race, as the scorer would have entered them. */
+export function placesFromResults(race: Race): PendingPlace[] {
+  return race.results
+    .slice()
+    .sort((a, b) => (a.placing ?? 999) - (b.placing ?? 999))
+    .map((r, i) => ({ teamId: r.teamId, place: r.eliminated ? 0 : r.placing ?? i + 1, eliminated: r.eliminated }));
+}
+
+/** Where a race's unsaved placings are kept on this phone, so a reload doesn't lose them. */
+export function scoringDraftKey(heatId: number, raceId: number): string {
+  return `mg.draft.scoring:${heatId}:${raceId}`;
+}
+
+function isPendingPlace(value: unknown): value is PendingPlace {
+  const p = value as PendingPlace | null;
+  return typeof p === 'object' && p !== null
+    && Number.isInteger(p.teamId) && Number.isInteger(p.place) && typeof p.eliminated === 'boolean';
+}
+
+/** The saved draft under `key`, or null when there is none or it can't be read. */
+export function readScoringDraft(key: string): PendingPlace[] | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 && parsed.every(isPendingPlace) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Keep `places` as the draft under `key`; an empty list removes it. */
+export function writeScoringDraft(key: string, places: PendingPlace[]): void {
+  try {
+    if (places.length === 0) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(places));
+  } catch { /* storage full or blocked: the draft is a convenience */ }
+}
+
 export interface RacePosition {
   heatId: number;
   raceId: number;

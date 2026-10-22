@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Heat } from '../types';
-import { heat, race } from '../test/factories';
-import { nextRaceToScore, tapTeam, toggleEliminated, type PendingPlace } from './raceScoring';
+import { heat, race, result } from '../test/factories';
+import {
+  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey, tapTeam, toggleEliminated, writeScoringDraft, type PendingPlace,
+} from './raceScoring';
 
 const places = (list: PendingPlace[]) => list.map((p) => (p.eliminated ? `${p.teamId}:out` : `${p.teamId}:${p.place}`));
 const tapAll = (...ids: number[]) => ids.reduce<PendingPlace[]>((list, id) => tapTeam(list, id), []);
@@ -129,5 +131,57 @@ describe('nextRaceToScore', () => {
     expect(next(finals, false, 1, 13, [11, 12])).toBeNull();
     expect(next(finals, false, 7, 11)).toBeNull();
     expect(next(finals, false, 1, 11, [12])).toBe(13);
+  });
+});
+
+describe('placesFromResults', () => {
+  it('lists saved results in finishing order, with eliminated teams last and without a place', () => {
+    const r = race(1, {
+      isComplete: true,
+      results: [result(3, null, { eliminated: true }), result(2, 2), result(1, 1)],
+    });
+    expect(placesFromResults(r)).toEqual([
+      { teamId: 1, place: 1, eliminated: false },
+      { teamId: 2, place: 2, eliminated: false },
+      { teamId: 3, place: 0, eliminated: true },
+    ]);
+  });
+
+  it('numbers a result that has no placing by its position', () => {
+    expect(placesFromResults(race(1, { results: [result(5, null)] }))).toEqual([{ teamId: 5, place: 1, eliminated: false }]);
+  });
+});
+
+describe('scoring drafts', () => {
+  const key = scoringDraftKey(4, 9);
+  const draft: PendingPlace[] = [{ teamId: 2, place: 1, eliminated: false }, { teamId: 1, place: 0, eliminated: true }];
+
+  it('is kept per heat and race', () => {
+    expect(key).toBe('mg.draft.scoring:4:9');
+    expect(scoringDraftKey(4, 10)).not.toBe(key);
+  });
+
+  it('is written, read back, and removed when emptied', () => {
+    expect(readScoringDraft(key)).toBeNull();
+    writeScoringDraft(key, draft);
+    expect(readScoringDraft(key)).toEqual(draft);
+    writeScoringDraft(key, []);
+    expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it('ignores a draft that is not a list of placings', () => {
+    for (const bad of ['not json', '{"teamId":1}', '[]', '[{"teamId":"1","place":1,"eliminated":false}]', '[null]', '[{"teamId":1,"place":1}]']) {
+      localStorage.setItem(key, bad);
+      expect(readScoringDraft(key)).toBeNull();
+    }
+  });
+
+  it('carries on when storage refuses', () => {
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('full'); });
+    expect(readScoringDraft(key)).toBeNull();
+    expect(() => writeScoringDraft(key, draft)).not.toThrow();
+    get.mockRestore();
+    set.mockRestore();
   });
 });

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
-import { competition, heat, race, session, team } from '../../test/factories';
+import { competition, heat, race, result, session, team } from '../../test/factories';
 import type { HeatEntry } from '../../types';
 import type { CompetitionDetail, DeclarationForm } from '../../types';
 import { CompetitionContext } from './context';
@@ -131,6 +131,68 @@ describe('SessionPage', () => {
       await userEvent.click(screen.getByText('Rider 2'));
       expect(badge('Rider 3')).toBeNull();
       expect(screen.getByRole('button', { name: 'Save 2 results' })).toBeInTheDocument();
+    });
+  });
+
+  describe('draft placings', () => {
+    const draftKey = (raceId: number) => `mg.draft.scoring:1:${raceId}`;
+    const keepDraft = (raceId: number, places: Array<{ teamId: number; place: number; eliminated: boolean }>) =>
+      localStorage.setItem(draftKey(raceId), JSON.stringify(places));
+    const finishedBending = () => race(1, { name: 'Bending', isComplete: true, results: [result(1, 1), result(3, 2)] });
+    const withFinishedRace = () => competition({
+      teams,
+      sessions: [session(1, { status: 1, heats: [heat(1, { entries: entries(3), races: [finishedBending(), race(2, { name: 'Flag' })] })] })],
+    });
+
+    it('restores the draft saved for the race being scored', async () => {
+      keepDraft(1, [{ teamId: 2, place: 1, eliminated: false }, { teamId: 1, place: 2, eliminated: false }]);
+      mount(scoringData(3));
+      await waitFor(() => expect(badge('Rider 2')).toHaveTextContent('1'));
+      expect(badge('Rider 1')).toHaveTextContent('2');
+      expect(badge('Rider 3')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Save 2 results' })).toBeInTheDocument();
+    });
+
+    it('leaves a draft for a different race alone until that race is opened', async () => {
+      keepDraft(2, [{ teamId: 2, place: 1, eliminated: false }]);
+      mount(scoringData(3));
+      await screen.findByRole('heading', { name: 'Scoring · Bending' });
+      expect(badge('Rider 2')).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: /Flag/ }));
+      await waitFor(() => expect(badge('Rider 2')).toHaveTextContent('1'));
+    });
+
+    it('prefers the draft to the saved results of a finished race', async () => {
+      keepDraft(1, [{ teamId: 3, place: 1, eliminated: false }]);
+      mount(withFinishedRace());
+      await userEvent.click(screen.getByRole('button', { name: /Bending/ }));
+      await waitFor(() => expect(badge('Rider 3')).toHaveTextContent('1'));
+      expect(badge('Rider 1')).toBeNull();
+    });
+
+    it('shows the saved results of a finished race when there is no draft, without keeping them as a draft', async () => {
+      mount(withFinishedRace());
+      await userEvent.click(screen.getByRole('button', { name: /Bending/ }));
+      await waitFor(() => expect(badge('Rider 3')).toHaveTextContent('2'));
+      expect(badge('Rider 1')).toHaveTextContent('1');
+      expect(localStorage.getItem(draftKey(1))).toBeNull();
+    });
+
+    it('saves what is entered, and drops the draft once the race is saved', async () => {
+      mount(scoringData(2));
+      await userEvent.click(screen.getByText('Rider 2'));
+      await waitFor(() => expect(JSON.parse(localStorage.getItem(draftKey(1))!)).toEqual([{ teamId: 2, place: 1, eliminated: false }]));
+      await userEvent.click(screen.getByText('Rider 1'));
+      await userEvent.click(screen.getByRole('button', { name: /^Save 2 results$/ }));
+      await screen.findByRole('heading', { name: 'Scoring · Flag' });
+      expect(localStorage.getItem(draftKey(1))).toBeNull();
+    });
+
+    it('ignores a damaged draft', async () => {
+      localStorage.setItem(draftKey(1), '{oops');
+      mount(scoringData(2));
+      await screen.findByRole('heading', { name: 'Scoring · Bending' });
+      expect(badge('Rider 1')).toBeNull();
     });
   });
 

@@ -14,7 +14,10 @@ import { HeatScores } from './HeatScores';
 import { bibAccent } from '../../lib/bib';
 import { retryOnNetworkError } from '../../lib/liveUpdates';
 import { describePlacings, enqueue, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
-import { nextRaceToScore, tapTeam, toggleEliminated, type PendingPlace } from '../../lib/raceScoring';
+import {
+  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
+  writeScoringDraft, type PendingPlace,
+} from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 
 function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
@@ -80,34 +83,6 @@ export function SessionPage() {
   const [activeHeatId, setActiveHeatId] = useState<number | null>(() => orderedHeats.find((heat) => heat.id === requestedHeat)?.id ?? firstIncompleteHeatId);
   const [activeRaceId, setActiveRaceId] = useState<number | null>(null);
   const [correctionReasons, setCorrectionReasons] = useState<Record<number, string>>({});
-  const [pending, setPending] = useState<PendingPlace[]>([]);
-
-  // Auto-save the admin's in-progress placings per (heat, race) so a reload
-  // doesn't wipe them. Cleared on submit + reset.
-  const scoringDraftKey = activeHeatId && activeRaceId
-    ? `mg.draft.scoring:${activeHeatId}:${activeRaceId}` : null;
-  useEffect(() => {
-    if (!scoringDraftKey) return;
-    try {
-      const raw = localStorage.getItem(scoringDraftKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as PendingPlace[];
-        // The pending placings follow the active race, and the effects below reset and re-seed them
-        // for the same race change. Their order decides which write wins, so they stay as effects.
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- loading a saved draft from localStorage on race change
-        if (Array.isArray(parsed)) setPending(parsed);
-      }
-    } catch { /* ignore */ }
-    // Only hydrate when the active race changes — admin's interactive
-    // changes are saved by the next effect.
-  }, [scoringDraftKey]);
-  useEffect(() => {
-    if (!scoringDraftKey) return;
-    try {
-      if (pending.length === 0) localStorage.removeItem(scoringDraftKey);
-      else localStorage.setItem(scoringDraftKey, JSON.stringify(pending));
-    } catch { /* quota */ }
-  }, [scoringDraftKey, pending]);
   const outbox = useScoreOutbox();
   const [showResults, setShowResults] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
@@ -140,7 +115,7 @@ export function SessionPage() {
 
   const preferredRaceRef = useRef<number | null>(null);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the race selection when the heat's races change; ordered with the hydrate and seed effects
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the race selection when the heat's races change
     if (!activeHeat) { setActiveRaceId(null); return; }
     // Don't loop back to race 1 when all are complete — leave activeRaceId null so the
     // UI shows "Select a race" and the admin can re-score by clicking a race tab.
@@ -148,25 +123,34 @@ export function SessionPage() {
     preferredRaceRef.current = null;
     const nextRace = orderedRaces.find((r) => r.id === preferred && !r.isComplete) ?? orderedRaces.find((r) => !r.isComplete) ?? null;
     setActiveRaceId(nextRace?.id ?? null);
-    setPending([]);
   }, [activeHeat, orderedRaces]);
 
-  // When admin clicks a completed race tab to edit results, pre-fill pending from existing results.
+  // The placings being entered belong to one race, so they are stored with that race's draft key.
+  // Switching race swaps them, in the same render, for that race's saved draft (a draft always wins)
+  // or else nothing. Until the scorer changes something, a finished race simply shows its saved results.
+  const scoringDraftKey = activeHeatId && activeRaceId ? draftKeyFor(activeHeatId, activeRaceId) : null;
+  const draftRace = orderedRaces.find((r) => r.id === activeRaceId) ?? null;
+  const savedPlaces = useMemo(() => (draftRace?.isComplete ? placesFromResults(draftRace) : []), [draftRace]);
+  const [pendingState, setPendingState] = useState<{ key: string | null; places: PendingPlace[]; edited: boolean }>(
+    { key: null, places: [], edited: false },
+  );
+  if (pendingState.key !== scoringDraftKey) {
+    const draft = scoringDraftKey ? readScoringDraft(scoringDraftKey) : null;
+    setPendingState({ key: scoringDraftKey, places: draft ?? [], edited: draft != null });
+  }
+  const pending = pendingState.edited ? pendingState.places : savedPlaces;
+  function setPending(change: PendingPlace[] | ((current: PendingPlace[]) => PendingPlace[])) {
+    setPendingState((cur) => {
+      const base = cur.edited ? cur.places : savedPlaces;
+      return { key: cur.key, edited: true, places: typeof change === 'function' ? change(base) : change };
+    });
+  }
+  // Auto-save the scorer's placings per (heat, race) so a reload doesn't wipe them.
   useEffect(() => {
-    if (!activeRaceId) return;
-    const race = orderedRaces.find((r) => r.id === activeRaceId);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- seeds the pending placings for the selected race; ordered with the hydrate and reset effects
-    if (!race || !race.isComplete) { setPending([]); return; }
-    const seeded: PendingPlace[] = race.results
-      .slice()
-      .sort((a, b) => (a.placing ?? 999) - (b.placing ?? 999))
-      .map((r, i) => ({
-        teamId: r.teamId,
-        place: r.placing ?? i + 1,
-        eliminated: r.eliminated,
-      }));
-    setPending(seeded);
-  }, [activeRaceId, orderedRaces]);
+    if (scoringDraftKey && pendingState.key === scoringDraftKey && pendingState.edited) {
+      writeScoringDraft(scoringDraftKey, pendingState.places);
+    }
+  }, [scoringDraftKey, pendingState]);
 
   // Detect when the heat the admin is scoring transitions from in-progress → complete,
   // and prompt to advance to the next heat.
@@ -263,6 +247,7 @@ export function SessionPage() {
     }));
     if (!stored) { setSaveError(OUTBOX_STORAGE_ERROR); return; }
     setSaveError(null);
+    if (scoringDraftKey) writeScoringDraft(scoringDraftKey, []);
     setPending([]);
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
     const next = nextRaceToScore(orderedHeats, session.raceOrderAlternating === true, { heatId: activeHeat.id, raceId: activeRace.id }, queuedIds);
