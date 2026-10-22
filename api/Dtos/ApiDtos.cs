@@ -281,9 +281,13 @@ public record SubmitRaceResultsRequest(
     string? Reason = null);
 public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated);
 
+/// <param name="FinalTier">
+/// 0 for a team in the A Final, 1 for the B Final, and so on; null when it isn't in a lettered
+/// final (including every team in a section that has none). Rows are ordered by tier first.
+/// </param>
 public record StandingRow(
     int TeamId, string TeamName, string ClubName, string? BibColour,
-    int TotalPoints, int RacesRun, int Wins, int Eliminations);
+    int TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,

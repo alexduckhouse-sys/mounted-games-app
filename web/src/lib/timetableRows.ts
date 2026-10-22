@@ -5,8 +5,12 @@ import type { HeatTiming, SessionTiming } from './time';
 export type TimetableStatus = 'on-time' | 'late' | 'live' | 'finished';
 export const TIMETABLE_COLOURS = { 'on-time': '#2E8B4F', late: '#C08308', live: '#2563EB', finished: '#A3A39B' } as const;
 
+/** A row only counts as running late from this many minutes; smaller drifts round away and just look noisy. */
+export const LATE_THRESHOLD_MINUTES = 5;
+
 export function timetableStatus(finished: boolean, live: boolean, scheduled: Date | null, effective: Date | null): { status: TimetableStatus; delayMinutes: number } {
-  const delayMinutes = scheduled && effective ? Math.max(0, Math.round((effective.getTime() - scheduled.getTime()) / 60_000)) : 0;
+  const drift = scheduled && effective ? Math.max(0, Math.round((effective.getTime() - scheduled.getTime()) / 60_000)) : 0;
+  const delayMinutes = drift >= LATE_THRESHOLD_MINUTES ? drift : 0;
   return { status: finished ? 'finished' : live ? 'live' : delayMinutes > 0 ? 'late' : 'on-time', delayMinutes };
 }
 

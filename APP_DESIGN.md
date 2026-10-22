@@ -327,8 +327,11 @@ shop described below is the current buying and selling flow.
 Backend service (`EquipmentCalculator`) parses every race in every session
 of a competition, looks up the diagram from `RaceTemplates`, counts each
 equipment element (recursing into stacked `on:` children), multiplies by the
-largest heat size in that session, deduplicates across sessions taking the
-MAX per (kind, bucket), and returns a flat list.
+largest heat size in that session, and returns a flat list. Within a session,
+arena fixtures that stay put between races (poles, cones, tables / stations)
+take the MAX any single race needs rather than the sum; items (mugs, batons,
+buckets) are set out per race and still add up. It then deduplicates across
+sessions taking the MAX per (kind, bucket).
 
 - **Buckets**: `Lane` (poles + anything anchored to `poleN`), `Start`,
   `Mid` (midline / x≈50), `Top` (changeover, top, finish, x>80),

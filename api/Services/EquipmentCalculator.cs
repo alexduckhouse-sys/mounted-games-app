@@ -11,6 +11,11 @@ namespace MountedGames.Api.Services;
 /// MAX — so if Session A needs 10 litter cones and Session B needs 12, the
 /// total order is 12, not 22.
 ///
+/// Within a session, arena fixtures that stay put between races (poles,
+/// cones, tables / stations) are reused: the session needs the MAX any single
+/// race asks for, not the sum. Everything else (items such as mugs, batons or
+/// buckets) is kit set out per race, so those counts still add up.
+///
 /// Output is bucketed into Lane / Start / Top / Side / Other by the
 /// element's anchor + position so an organiser can read the printable
 /// equipment list per arena zone.
@@ -56,7 +61,11 @@ public class EquipmentCalculator
         var racesCounted = 0;
         foreach (var session in sessions)
         {
-            var sessionMax = new Dictionary<(string Kind, string Bucket), int>();
+            // Kit that is set out per race adds up; fixtures that stay in the
+            // arena only need the biggest single-race requirement. They're
+            // tracked apart because a cone "Flag" and an item "Flag" share a key.
+            var consumed = new Dictionary<(string Kind, string Bucket), int>();
+            var reusableMax = new Dictionary<(string Kind, string Bucket), int>();
             // Find the largest heat (by entry count) so equipment is sized for
             // the busiest run of the session.
             var largest = session.Heats.Select(h => h.Entries.Count).DefaultIfEmpty(0).Max();
@@ -66,11 +75,22 @@ public class EquipmentCalculator
                 if (!templates.TryGetValue(race.Name, out var template)) continue;
                 racesCounted++;
                 var elements = ParseElements(template.DiagramJson);
-                foreach (var (kind, bucket) in BucketEach(elements))
+                var raceReusable = new Dictionary<(string Kind, string Bucket), int>();
+                foreach (var (kind, bucket, reusable) in BucketEach(elements))
                 {
                     var key = (kind, bucket);
-                    sessionMax[key] = (sessionMax.TryGetValue(key, out var cur) ? cur : 0) + largest;
+                    var target = reusable ? raceReusable : consumed;
+                    target[key] = (target.TryGetValue(key, out var cur) ? cur : 0) + largest;
                 }
+                foreach (var (key, v) in raceReusable)
+                {
+                    if (!reusableMax.TryGetValue(key, out var cur) || v > cur) reusableMax[key] = v;
+                }
+            }
+            var sessionMax = new Dictionary<(string Kind, string Bucket), int>(consumed);
+            foreach (var (key, v) in reusableMax)
+            {
+                sessionMax[key] = (sessionMax.TryGetValue(key, out var cur) ? cur : 0) + v;
             }
             perSession.Add(sessionMax);
         }
@@ -94,9 +114,10 @@ public class EquipmentCalculator
     /// Pulls (kind, bucket) for each non-midline element. `kind` is the
     /// `kind` field for items/cones or the type name for poles/ins. `bucket`
     /// is one of: Lane (poles, anything on poleN), Start, Top (changeover or
-    /// past top), Side (named anchor not above), Other.
+    /// past top), Side (named anchor not above), Other. `Reusable` marks fixtures
+    /// that stay in the arena between races.
     /// </summary>
-    private static IEnumerable<(string Kind, string Bucket)> BucketEach(IEnumerable<JsonElement> elements)
+    private static IEnumerable<(string Kind, string Bucket, bool Reusable)> BucketEach(IEnumerable<JsonElement> elements)
     {
         foreach (var el in elements)
         {
@@ -113,7 +134,7 @@ public class EquipmentCalculator
                     : Capitalise(type),
             };
             var bucket = ClassifyBucket(el, type);
-            yield return (kind, bucket);
+            yield return (kind, bucket, IsReusable(type));
 
             // Recurse into stacked equipment (on:[…]).
             if (el.TryGetProperty("on", out var onArr) && onArr.ValueKind == JsonValueKind.Array)
@@ -131,11 +152,17 @@ public class EquipmentCalculator
                             ? Capitalise(k2.GetString() ?? ctype)
                             : Capitalise(ctype),
                     };
-                    yield return (childKind, bucket); // inherit parent's bucket
+                    yield return (childKind, bucket, IsReusable(ctype)); // inherit parent's bucket
                 }
             }
         }
     }
+
+    /// <summary>
+    /// Poles, cones and tables / stations are arena fixtures that stay put
+    /// between races. Items (mugs, batons, buckets, ...) are set out per race.
+    /// </summary>
+    private static bool IsReusable(string type) => type is "pole" or "cone" or "in" or "table";
 
     private static string ClassifyBucket(JsonElement el, string type)
     {

@@ -5,6 +5,7 @@ using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
 
@@ -346,10 +347,42 @@ public class SessionsController : ControllerBase
             teamForLabel[key].AddRange(a.TeamIds.Distinct());
         }
 
-        foreach (var heat in s.Heats)
+        // Only a heat whose teams or lane order actually change is rewritten. The rest keep their
+        // lanes and any scores, so fixing one heat doesn't wipe the others.
+        var changed = new List<(Heat Heat, List<int> TeamIds)>();
+        var heatsInOrder = s.Heats.OrderBy(h => h.OrderIndex).ToList();
+        for (var i = 0; i < heatsInOrder.Count; i++)
         {
-            var key = (heat.Label ?? string.Empty).Trim();
-            if (!teamForLabel.TryGetValue(key, out var teamIds)) teamIds = new List<int>();
+            var heat = heatsInOrder[i];
+            // The web editor calls an unlabelled heat "Heat N" by its position; older callers send a blank label.
+            List<int>? teamIds;
+            if (!string.IsNullOrWhiteSpace(heat.Label)) teamForLabel.TryGetValue(heat.Label.Trim(), out teamIds);
+            else if (!teamForLabel.TryGetValue($"Heat {i + 1}", out teamIds)) teamForLabel.TryGetValue(string.Empty, out teamIds);
+            teamIds ??= new List<int>();
+            teamIds = teamIds.Distinct().ToList();
+            var current = heat.Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId);
+            if (current.SequenceEqual(teamIds)) continue;
+            changed.Add((heat, teamIds));
+        }
+
+        // A signed-off race is final; the scoring endpoint refuses to touch it, so this must too.
+        var changedRaceIds = changed.SelectMany(c => c.Heat.Races).Select(r => r.Id).ToList();
+        if (changedRaceIds.Count > 0)
+        {
+            var signedOff = (await _db.Set<RaceScoreState>()
+                .Where(x => changedRaceIds.Contains(x.RaceId) && x.IsSignedOff)
+                .Select(x => x.RaceId)
+                .ToListAsync()).ToHashSet();
+            var locked = changed
+                .Where(c => c.Heat.Races.Any(r => signedOff.Contains(r.Id)))
+                .Select(c => string.IsNullOrWhiteSpace(c.Heat.Label) ? $"Heat {c.Heat.OrderIndex}" : c.Heat.Label!.Trim())
+                .ToList();
+            if (locked.Count > 0)
+                return Conflict(new { message = $"Results are signed off for {string.Join(", ", locked)}, so the teams there can't be changed. Nothing was saved." });
+        }
+
+        foreach (var (heat, teamIds) in changed)
+        {
             _db.HeatEntries.RemoveRange(heat.Entries);
             foreach (var race in heat.Races)
             {

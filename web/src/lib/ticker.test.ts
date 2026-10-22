@@ -236,7 +236,7 @@ describe('tickerItems: fallback and limits', () => {
   it(`never returns more than ${MAX_TICKER_ITEMS} lines`, () => {
     const sessions = [
       session([heat(1, { finishedAt: at(-5), races: [won(1, 'Bending', 5, 'Ashdown')] }), heat(2), heat(3)], { status: 1, arenaName: 'Main', scheduledStart: at(-60), startedAt: at(-40) }),
-      session([heat(4), heat(5)], { id: 2, name: 'Juniors', sectionName: 'Teams Juniors', competitionSectionId: 6, orderIndex: 2, status: 1, scheduledStart: at(-30), startedAt: at(-30) }),
+      session([heat(4), heat(5)], { id: 2, name: 'Juniors', sectionName: 'Teams Juniors', competitionSectionId: 6, orderIndex: 2, status: 1, arenaName: 'Main', scheduledStart: at(-30), startedAt: at(-30) }),
       pause({ scheduledStart: at(20) }),
     ];
     const items = tickerItems(sessions, [note(1, 'x', 1), note(2, 'y', 2), note(3, 'z', 3)], now);

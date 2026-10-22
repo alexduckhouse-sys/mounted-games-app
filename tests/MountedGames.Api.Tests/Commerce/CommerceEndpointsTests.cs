@@ -363,11 +363,13 @@ public class CommerceEndpointsTests : IClassFixture<ApiFactory>
         var (buyer, _) = await _f.SignupAsync();
         var order = await CreateOrderAsync(buyer, competitionId, "demo-decline", (listing.Id, 1));
 
-        var declined = await (await buyer.PostAsJsonAsync($"/api/commerce/orders/{order.Id}/demo-checkout",
-            Checkout("decline", FakePaymentOutcome.Decline))).ReadAsync<DemoOrderPaymentResultDto>();
+        // Read each step through ReadOkAsync so a failure names the status and body instead of
+        // surfacing later as a null reference on an error payload.
+        var declined = await ReadOkAsync<DemoOrderPaymentResultDto>(await buyer.PostAsJsonAsync(
+            $"/api/commerce/orders/{order.Id}/demo-checkout", Checkout("decline", FakePaymentOutcome.Decline)));
         var afterDecline = await StockAsync(listing.CatalogueItemId);
-        var paid = await (await buyer.PostAsJsonAsync($"/api/commerce/orders/{order.Id}/demo-checkout",
-            Checkout("retry", FakePaymentOutcome.Success))).ReadAsync<DemoOrderPaymentResultDto>();
+        var paid = await ReadOkAsync<DemoOrderPaymentResultDto>(await buyer.PostAsJsonAsync(
+            $"/api/commerce/orders/{order.Id}/demo-checkout", Checkout("retry", FakePaymentOutcome.Success)));
 
         Assert.Equal((CommerceOrderStatus.Declined, false, 1),
             (declined.Order.Status, declined.Order.HasStockReservation, afterDecline));
@@ -593,6 +595,13 @@ public class CommerceEndpointsTests : IClassFixture<ApiFactory>
         var response = await buyer.PostAsJsonAsync($"/api/commerce/competitions/{competitionId}/orders", OrderRequest(key, items));
         response.EnsureSuccessStatusCode();
         return await response.ReadAsync<EventOrderDto>();
+    }
+
+    private static async Task<T> ReadOkAsync<T>(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, $"Expected success but got {(int)response.StatusCode}: {body}");
+        return await response.ReadAsync<T>();
     }
 
     private Task<int?> StockAsync(int itemId) =>
