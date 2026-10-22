@@ -112,9 +112,8 @@ public class WithdrawalRedrawService(AppDbContext db)
         var pool = unscored.ToDictionary(h => h.Id, h => arrangement[h.Id].Where(id => !outIds.Contains(id)).ToList());
         var total = pool.Values.Sum(l => l.Count);
         var nonEmpty = unscored.Where(h => pool[h.Id].Count > 0).ToList();
-        var cap = session.LanesPerHeat is > 0
-            ? session.LanesPerHeat.Value
-            : Math.Max(1, heats.Max(h => arrangement[h.Id].Count));
+        // With no lane limit set, only the "too small to race" rule merges heats.
+        var cap = session.LanesPerHeat is > 0 ? session.LanesPerHeat.Value : int.MaxValue;
 
         var keep = nonEmpty.Count;
         if (keep > 0)
