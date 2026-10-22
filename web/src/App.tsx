@@ -51,6 +51,8 @@ const SeasonPage = lazy(() => import('./pages/seasons/SeasonPage').then((module)
 const TeamProfilePage = lazy(() => import('./pages/seasons/TeamProfilePage'));
 const EventToolsPage = lazy(() => import('./pages/eventTools/EventToolsPage'));
 const PrintEventPage = lazy(() => import('./pages/eventTools/PrintEventPage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then((module) => ({ default: module.PrivacyPage })));
+const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({ default: module.AccountPage })));
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 
 export default function App() {
@@ -126,6 +128,8 @@ export default function App() {
               <Route path="admin/rules" element={
                 <ProtectedRoute roles={['Admin']}><RulesPage /></ProtectedRoute>
               } />
+              <Route path="privacy" element={<PrivacyPage />} />
+              <Route path="me/account"element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
               <Route path="me/signups" element={
                 <ProtectedRoute><MySignupsPage /></ProtectedRoute>
               } />
