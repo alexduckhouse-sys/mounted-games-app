@@ -260,6 +260,51 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task CreateFinals_PlacesTeamsInRankOrder_AcrossAThenBThenCFinal()
+    {
+        var (comp, section, t) = await CompWithTeamsAsync(5, "Ranked");
+        // Seeded in a scrambled order so only the points decide the ranking: t[2] > t[4] > t[0] > t[3] > t[1].
+        await _f.SeedScoredRaceAsync(comp, section, new (int, int?, bool, int)[]
+        {
+            (t[0], 3, false, 6), (t[1], 5, false, 2), (t[2], 1, false, 10), (t[3], 4, false, 4), (t[4], 2, false, 8),
+        });
+        var admin = await _f.AdminAsync();
+
+        // Repeat: the old shuffle only went wrong some of the time.
+        for (var run = 0; run < 5; run++)
+        {
+            var s = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals", new
+            {
+                competitionSectionId = section, topN = 5, raceNames = new[] { "R" }, lanesPerHeat = 2,
+            })).ReadAsync<SessionDto>();
+
+            Assert.Equal(new[] { "A Final", "B Final", "C Final" }, s.Heats.Select(h => h.Label));
+            Assert.Equal(new[] { t[2], t[4] }, s.Heats[0].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+            Assert.Equal(new[] { t[0], t[3] }, s.Heats[1].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+            Assert.Equal(new[] { t[1] }, s.Heats[2].Entries.Select(e => e.TeamId));
+        }
+    }
+
+    [Fact]
+    public async Task CreateFinals_ATopNSmallerThanTheSection_OnlyTakesTheBest()
+    {
+        var (comp, section, t) = await CompWithTeamsAsync(4, "TopOnly");
+        await _f.SeedScoredRaceAsync(comp, section, new (int, int?, bool, int)[]
+        {
+            (t[0], 4, false, 1), (t[1], 3, false, 3), (t[2], 1, false, 9), (t[3], 2, false, 5),
+        });
+        var admin = await _f.AdminAsync();
+
+        var s = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals", new
+        {
+            competitionSectionId = section, topN = 2, raceNames = new[] { "R" }, lanesPerHeat = 6,
+        })).ReadAsync<SessionDto>();
+
+        var a = Assert.Single(s.Heats);
+        Assert.Equal(new[] { t[2], t[3] }, a.Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+    }
+
+    [Fact]
     public async Task CreateFinals_UsesCustomNameAndNonPositiveLanesFallBackToAllTeams()
     {
         var (comp, _, _) = await CompWithTeamsAsync(3);

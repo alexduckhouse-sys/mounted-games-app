@@ -570,7 +570,7 @@ public class CompetitionsController : ControllerBase
         _db.Sessions.Add(session);
         await _db.SaveChangesAsync();
 
-        var groups = SplitIntoBalancedGroups(top, maxHeatSize);
+        var groups = SplitIntoRankedGroups(top, maxHeatSize);
         for (var gi = 0; gi < groups.Count; gi++)
         {
             // Finals are labelled A Final, B Final, C Final, etc. (top group first).
@@ -615,6 +615,16 @@ public class CompetitionsController : ControllerBase
         for (var i = 0; i < shuffled.Count; i++)
             groups[i % groupCount].Add(shuffled[i]);
         return groups;
+    }
+
+    /// <summary>
+    /// Cuts the ranked team ids into consecutive blocks: ranks 1..n for the A Final, the
+    /// next n for the B Final, and so on. The last block holds whatever is left.
+    /// </summary>
+    private static List<List<int>> SplitIntoRankedGroups(IReadOnlyList<int> rankedTeamIds, int maxPerGroup)
+    {
+        var size = Math.Max(1, maxPerGroup);
+        return rankedTeamIds.Chunk(size).Select(chunk => chunk.ToList()).ToList();
     }
 
     [HttpPost("{id:int}/finals/scaffold")]
