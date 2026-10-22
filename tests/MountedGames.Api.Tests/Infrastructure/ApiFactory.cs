@@ -37,6 +37,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         // Tests sign in far more often than the production limits allow.
         builder.UseSetting("RateLimits:AuthPerMinute", "100000");
         builder.UseSetting("RateLimits:WritesPerMinute", "100000");
+        builder.UseSetting("RateLimits:PublicReadsPerMinute", "100000");
         builder.ConfigureServices(services =>
         {
             var scheduler = services.Single(d => d.ImplementationType == typeof(NotificationScheduler));

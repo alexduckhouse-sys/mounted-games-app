@@ -231,6 +231,41 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.CalendarHeatVersion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("HeatId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamId");
+
+                    b.HasIndex("HeatId", "TeamId")
+                        .IsUnique();
+
+                    b.ToTable("CalendarHeatVersions");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.ChatMessage", b =>
                 {
                     b.Property<int>("Id")
@@ -2069,6 +2104,13 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("BibColour")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("CalendarFeedTokenCreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CalendarFeedTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<int>("ClubId")
                         .HasColumnType("integer");
 
@@ -2238,6 +2280,21 @@ namespace MountedGames.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Club");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.CalendarHeatVersion", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Heat", null)
+                        .WithMany()
+                        .HasForeignKey("HeatId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.Team", null)
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.ChatMessage", b =>
