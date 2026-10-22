@@ -11,12 +11,12 @@ using MountedGames.Api.Entities;
 namespace MountedGames.Api.Controllers;
 
 /// <summary>
-/// Saved overlay looks. Trainers see and change their own; admins see and change everyone's, so a club's
+/// Saved overlay looks. Trainers and competition admins see and change their own; admins see and change everyone's, so a club's
 /// look can be shared by whoever runs the stream.
 /// </summary>
 [ApiController]
 [Route("api/overlay-looks")]
-[Authorize(Roles = Roles.Organiser)]
+[Authorize(Policy = CompetitionStaff.Policy)]
 public class OverlayLooksController(AppDbContext db, TimeProvider time) : ControllerBase
 {
     private const int MaxLookBytes = 4000;

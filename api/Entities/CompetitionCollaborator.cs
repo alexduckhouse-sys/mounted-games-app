@@ -1,11 +1,13 @@
 namespace MountedGames.Api.Entities;
 
-/// <summary>The job a helper does at an event; a label for the team list. Every helper can run that event.</summary>
-public enum CollaboratorRole { CoOrganiser = 0, RingScorer = 1, LineJudge = 2, Commentator = 3, StreamProducer = 4 }
+/// <summary>
+/// One role for now: a competition admin can do everything the owner can for that event. The column stays so
+/// narrower roles could come back without a schema change.
+/// </summary>
+public enum CollaboratorRole { CompetitionAdmin = 0 }
 
 /// <summary>
-/// Someone the owner (or an admin) has added to run one competition, without making them a global admin
-/// or a trainer. <see cref="Auth.CompetitionAccessAttribute"/> lets them in to that competition only.
+/// A competition admin: someone added to run one competition, without making them a global admin or a trainer. <see cref="Auth.CompetitionAccessAttribute"/> lets them in to that competition only.
 /// </summary>
 public class CompetitionCollaborator
 {

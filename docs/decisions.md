@@ -11,7 +11,7 @@
 
 ## 2026-10-22: Sharing links, calendars and QR codes
 - Why: shared links showed a blank preview, and organisers and parents had no way to put heat times in a calendar or scan into an event or a team.
-- Rule: link previews are answered by `web/middleware.ts` for preview crawlers only (not search engines), from public share cards, with every value escaped. A team's calendar feed is one link per team, managed by the team's trainer, the competition's owner and admins; only a hash of its token is stored, regenerating replaces it, and it lists public timetable facts only. QR codes are generated in the browser. Followers don't get their own feed links; the trainer shares the team's link.
+- Rule: link previews are answered by `web/middleware.ts` for preview crawlers only (not search engines), from public share cards, with every value escaped. A team's calendar feed is one link per team, managed by the team's trainer and anyone who can run the competition (`CompetitionManagers`: admins, the owning Trainer, competition admins); only a hash of its token is stored, regenerating replaces it, and it lists public timetable facts only. QR codes are generated in the browser. Followers don't get their own feed links; the trainer shares the team's link.
 - Rejected: per-user feed tokens (a second table and revoke flow for little gain); signed-in-only feeds (calendar apps send no credentials); a QR web service (leaks the join key); the shareable team results card (not included for now).
 - Files: `web/middleware.ts`, `web/src/lib/shareCard.ts`, `api/Controllers/CalendarController.cs`, `api/Controllers/ShareController.cs`, `api/Services/Calendar/`, `web/src/pages/eventTools/PosterPage.tsx`, `web/src/pages/TeamSharing.tsx`.
 - Source: competitive-gaps point 6, decided 22 October 2026.
@@ -23,6 +23,14 @@
 - Session actions that take team IDs reject teams from another competition.
 - Supersedes: "Existing admin-only scoring, timetable and moderation operations remain admin-only" in the 15 October entry, apart from moderation.
 - Files: `api/Auth/CompetitionStaffPolicy.cs`, `api/Auth/CompetitionAccessAttribute.cs`, `api/Controllers/CompetitionTeamController.cs`, `ScoringController`, `SessionsController`, `CompetitionsController`.
+
+## 2026-10-22: One competition admin role instead of helper jobs
+- Why: the user wants helpers to "do whatever they need to", not to be split into scorers, line judges and so on.
+- Rule: everyone on a competition's team is a competition admin, with everything the owner has for that event: day-of running, entrant sign-ups and declarations, the event shop (listing approval, manual payments and refunds), CSV team import, saved overlay looks, and adding or removing other competition admins. Nobody can remove the owner. The access check lives in `CompetitionManagers` and is shared by `[CompetitionAccess]`, commerce and event tools.
+- Still not for competition admins: deleting the competition or a section (site admins only), season leagues (owner-based), and duplicating an event unless they also hold a Trainer account, since the copy belongs to whoever makes it.
+- No migration: `CompetitionCollaborators.Role` stays, with one value (`CompetitionAdmin = 0`), so narrower roles could return without a schema change.
+- Supersedes: the five helper roles and the co-organiser-only entrant and shop rule in the entry below.
+- Files: `api/Auth/CompetitionManagers.cs`, `api/Auth/CompetitionAccessAttribute.cs`, `api/Controllers/CompetitionTeamController.cs`, `CommerceController`, `EventToolsController`, `DeclarationFormsController`, `web/src/pages/competition/CompetitionTeamCard.tsx`.
 
 ## 2026-10-16: Admins approve new trainers
 - Why: trainer signup was open to anyone, and trainers can create public competitions and (with live video) broadcast on them.

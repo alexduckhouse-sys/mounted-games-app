@@ -36,7 +36,7 @@ export default function EventToolsPage() {
 }
 
 function EventToolsPageContent({ competitionId }: { competitionId: string }) {
-  const { user, hasRole, canEdit } = useAuth();
+  const { user, hasRole, canEdit, canOrganise } = useAuth();
   const mayManage = !hasRole('Admin') || canEdit();
   const fileRef = useRef<HTMLInputElement>(null);
   const [competition, setCompetition] = useState<CompetitionForTools | null>(null);
@@ -117,14 +117,14 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
 
   if (loading) return <RefinePage><p role="status" className="rf-note tools-pad">Loading organiser tools…</p></RefinePage>;
   if (!competition) return <RefinePage><div role="alert" className="tools-pad"><p className="mg-notice">{error ?? 'Competition not found.'} <button type="button" className="rf-btn rf-btn-text" onClick={() => { setLoading(true); setError(null); setLoadAttempt((value) => value + 1); }}>Try again</button></p></div></RefinePage>;
-  // The event tools API is for the owner and admins only (not the competition's helpers).
-  const ownsOrAdmin = hasRole('Admin') || (hasRole('Trainer') && competition.createdByUserId === user?.id);
-  if (!mayManage || !ownsOrAdmin) return <RefinePage><div role="alert" className="tools-pad"><p className="mg-notice">These tools are available to this competition’s organiser.</p></div></RefinePage>;
+  if (!mayManage || !canOrganise(competition)) return <RefinePage><div role="alert" className="tools-pad"><p className="mg-notice">These tools are available to this competition’s organiser.</p></div></RefinePage>;
 
   const hasErrors = preview?.rows.some((row) => row.errors.length > 0) ?? false;
+  // Duplicating makes a new competition the caller owns, so it needs a trainer (or admin) account.
+  const mayDuplicate = hasRole('Admin') || hasRole('Trainer');
   const tabs: { id: ToolTab; label: string }[] = [
     { id: 'import', label: 'Import teams' },
-    { id: 'duplicate', label: 'Duplicate event' },
+    ...(mayDuplicate ? [{ id: 'duplicate' as const, label: 'Duplicate event' }] : []),
     { id: 'print', label: 'Print sheets' },
   ];
   const printSheets = [
@@ -181,7 +181,7 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
       </>}
     </section>}
 
-    {tab === 'duplicate' && <section aria-labelledby="duplicate-title">
+    {tab === 'duplicate' && mayDuplicate && <section aria-labelledby="duplicate-title">
       <RefineSection title="Duplicate event setup" />
       <h2 id="duplicate-title" className="sr-only">Duplicate event setup</h2>
       <RefineNote>Sections, teams, sessions, heats and races are copied. Results, declarations, payments and team claim details stay with the original event.</RefineNote>

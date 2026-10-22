@@ -224,6 +224,28 @@ public class CalendarEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, (await trainer.PostAsync("/api/teams/99999999/calendar-feed", null)).StatusCode);
     }
 
+    [Fact]
+    public async Task ACompetitionAdminOnTheTeamCanManageItsTeamsLinks_AndNobodyElseOnAnotherCompetitionCan()
+    {
+        var s = await SeedAsync();
+        var (helper, auth) = await _f.SignupAsync("Member");
+        var (stranger, _) = await _f.SignupAsync("Member");
+        await _f.InDbAsync(async db =>
+        {
+            db.CompetitionCollaborators.Add(new CompetitionCollaborator
+            {
+                CompetitionId = s.CompetitionId, UserId = auth.User.Id, Role = CollaboratorRole.CompetitionAdmin,
+                AddedByUserId = auth.User.Id, AddedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        });
+
+        Assert.Equal(HttpStatusCode.OK, (await helper.PostAsync($"/api/teams/{s.TeamId}/calendar-feed", null)).StatusCode);
+        Assert.True((await (await helper.GetAsync($"/api/teams/{s.TeamId}/calendar-feed")).ReadAsync<CalendarFeedStatusDto>()).Enabled);
+        Assert.Equal(HttpStatusCode.NoContent, (await helper.DeleteAsync($"/api/teams/{s.TeamId}/calendar-feed")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await stranger.PostAsync($"/api/teams/{s.TeamId}/calendar-feed", null)).StatusCode);
+    }
+
     // ----- Team feed: the content -----
 
     [Fact]

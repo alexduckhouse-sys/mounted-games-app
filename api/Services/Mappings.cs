@@ -26,7 +26,8 @@ public static class Mappings
         s.Id, s.CompetitionSectionId,
         s.Section?.DisplayName ?? string.Empty,
         s.FullName, s.PonyClubName, s.ContactInfo,
-        s.AmountMinor, s.Status, s.PaidAt, s.TeamId, s.CreatedAt);
+        s.AmountMinor, s.Status, s.PaidAt, s.TeamId, s.CreatedAt,
+        s.UseInitialOnly, s.NoFilming);
 
     public static MySignupDto ToMyDto(this SectionSignup s, Team? team = null) => new(
         s.Id,
@@ -121,8 +122,19 @@ public static class Mappings
 
     public static RiderEntryDto ToDto(this RiderEntry r) => new(
         r.Id, r.SavedRiderId, r.FullName, r.DateOfBirth, r.HorseName, r.BibColour,
-        r.IsCaptain, r.IsReserve, r.OrderIndex);
+        r.IsCaptain, r.IsReserve, r.OrderIndex, r.UseInitialOnly, r.NoFilming);
 
+    /// <summary>
+    /// The rider as a public viewer sees them: the surname shortened when the rider asked for that, and the
+    /// date of birth, saved-rider link and filming opt-out left out. Staff and the owning trainer get <see cref="ToDto(RiderEntry)"/>.
+    /// </summary>
+    public static RiderEntryDto ToPublicDto(this RiderEntry r) => r.ToDto() with
+    {
+        FullName = RiderNames.Display(r.FullName, r.UseInitialOnly, viewerSeesFullNames: false),
+        DateOfBirth = null, SavedRiderId = null, NoFilming = false,
+    };
+
+    /// <param name="includePrivate">The viewer submitted the form, trains the team or runs the competition: contact details and full rider records.</param>
     public static DeclarationFormDto ToDto(this DeclarationForm d, bool includePrivate = false) => new(
         d.Id, d.TeamId,
         d.Team?.DisplayName ?? string.Empty,
@@ -131,11 +143,10 @@ public static class Mappings
         includePrivate ? d.SubmittedByUserId : null, d.SubmittedBy?.FullName,
         includePrivate ? d.SubmittedBy?.PhoneNumber : null,
         d.SubmittedAt, includePrivate ? d.Notes : null, d.IsLocked,
-        d.Riders.OrderBy(r => r.OrderIndex).Select(r => includePrivate ? r.ToDto()
-            : r.ToDto() with { DateOfBirth = null, SavedRiderId = null }).ToList());
+        d.Riders.OrderBy(r => r.OrderIndex).Select(r => includePrivate ? r.ToDto() : r.ToPublicDto()).ToList());
 
     public static SavedRiderDto ToDto(this SavedRider r) =>
-        new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes);
+        new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes, r.UseInitialOnly, r.NoFilming);
 
     public static ChatMessageDto ToDto(this ChatMessage m) => new(
         m.Id, m.CompetitionId, m.UserId, m.AuthorName, m.Body, m.Type, m.Tag, m.CreatedAt, m.AdminOnly);

@@ -180,17 +180,17 @@ public partial class CalendarController(AppDbContext db, IConfiguration configur
         return NoContent();
     }
 
-    /// <summary>The team, if the signed-in user trains it, owns its competition, or is an admin. Anyone else gets a 404.</summary>
+    /// <summary>
+    /// The team, if the signed-in user trains it or can manage its competition (<see cref="CompetitionManagers"/>: an admin,
+    /// the owning Trainer or a competition admin). Anyone else gets a 404.
+    /// </summary>
     private async Task<Team?> LoadManagedTeamAsync(int teamId, CancellationToken ct)
     {
         var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(uid)) return null;
-        var team = await db.Teams.Include(t => t.Competition).FirstOrDefaultAsync(t => t.Id == teamId, ct);
+        var team = await db.Teams.FirstOrDefaultAsync(t => t.Id == teamId, ct);
         if (team is null) return null;
-        var allowed = User.IsInRole(Roles.Admin)
-            || team.TrainerUserId == uid
-            || (User.IsInRole(Roles.Trainer) && team.Competition?.CreatedByUserId == uid);
-        return allowed ? team : null;
+        return team.TrainerUserId == uid || await db.CanManageAsync(User, team.CompetitionId, ct) ? team : null;
     }
 
     private HeatEvent BuildHeatEvent(Team team, Competition competition, Session session, Heat heat, int index, int lane,

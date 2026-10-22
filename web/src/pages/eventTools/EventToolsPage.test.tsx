@@ -32,12 +32,22 @@ beforeEach(() => {
 });
 
 describe('EventToolsPage', () => {
-  it('turns away a competition helper, since the tools are for the owner and admins', async () => {
+  it('turns away someone who does not run this competition', async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'visitor' }, canOrganise: () => false, hasRole: (role: Role) => role === 'Member', canEdit: () => false,
+    } as unknown as ReturnType<typeof useAuth>);
+    renderPage();
+    expect(await screen.findByText('These tools are available to this competition’s organiser.')).toBeInTheDocument();
+  });
+
+  it('gives a competition admin with a Member account import and print, but not duplicating', async () => {
     vi.mocked(useAuth).mockReturnValue({
       user: { id: 'helper' }, canOrganise: () => true, hasRole: (role: Role) => role === 'Member', canEdit: () => false,
     } as unknown as ReturnType<typeof useAuth>);
     renderPage();
-    expect(await screen.findByText('These tools are available to this competition’s organiser.')).toBeInTheDocument();
+    expect(await screen.findByLabelText('CSV text')).toBeInTheDocument();
+    expect(screen.getByText('Print sheets')).toBeInTheDocument();
+    expect(screen.queryByText('Duplicate event')).not.toBeInTheDocument();
   });
 
   it('previews CSV rows before applying the same fingerprint', async () => {
