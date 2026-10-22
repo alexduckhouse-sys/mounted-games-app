@@ -222,6 +222,41 @@ public class PushTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public void VapidKeyService_UsesConfiguredKeys_AndWritesNoFile()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Push:VapidPublicKey"] = " configured-public ", ["Push:VapidPrivateKey"] = "configured-private", ["Push:Subject"] = "mailto:x@example.test",
+            }).Build();
+
+            var keys = new VapidKeyService(new StubEnv(dir.FullName), config);
+
+            Assert.Equal(("configured-public", "configured-private", "mailto:x@example.test"), (keys.PublicKey, keys.PrivateKey, keys.Subject));
+            Assert.False(File.Exists(Path.Combine(dir.FullName, "vapid-keys.json")));
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [Fact]
+    public void VapidKeyService_IgnoresHalfAConfiguredPair()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Push:VapidPublicKey"] = "only-public" }).Build();
+
+            var keys = new VapidKeyService(new StubEnv(dir.FullName), config);
+
+            Assert.NotEqual("only-public", keys.PublicKey);
+            Assert.True(File.Exists(Path.Combine(dir.FullName, "vapid-keys.json")));
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [Fact]
     public void VapidKeyService_Throws_WhenKeyFileMalformed()
     {
         var dir = Directory.CreateTempSubdirectory();

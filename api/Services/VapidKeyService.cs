@@ -4,9 +4,10 @@ using WebPush;
 namespace MountedGames.Api.Services;
 
 /// <summary>
-/// Loads (or generates and persists) the VAPID keypair used to sign web-push
-/// messages. Keys live in <c>vapid-keys.json</c> next to the DB so a restart
-/// keeps existing browser subscriptions valid.
+/// The VAPID keypair used to sign web-push messages. Production sets <c>Push:VapidPublicKey</c> and
+/// <c>Push:VapidPrivateKey</c>, so every instance signs with the same keys and subscriptions survive new
+/// instances and deploys. Without them (local runs) the keys are generated once and kept in
+/// <c>vapid-keys.json</c> in the content root.
 /// </summary>
 public class VapidKeyService
 {
@@ -19,6 +20,13 @@ public class VapidKeyService
     public VapidKeyService(IWebHostEnvironment env, IConfiguration config)
     {
         Subject = config["Push:Subject"] ?? "mailto:admin@mountedgames.local";
+        var (configuredPublic, configuredPrivate) = (config["Push:VapidPublicKey"], config["Push:VapidPrivateKey"]);
+        if (!string.IsNullOrWhiteSpace(configuredPublic) && !string.IsNullOrWhiteSpace(configuredPrivate))
+        {
+            PublicKey = configuredPublic.Trim();
+            PrivateKey = configuredPrivate.Trim();
+            return;
+        }
         var path = Path.Combine(env.ContentRootPath, "vapid-keys.json");
         if (File.Exists(path))
         {

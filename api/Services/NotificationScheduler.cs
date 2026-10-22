@@ -37,6 +37,21 @@ public class NotificationScheduler : BackgroundService
         _interval = interval ?? TimeSpan.FromMinutes(1);
     }
 
+    private static readonly TimeZoneInfo UkZone = FindUkZone();
+
+    private static TimeZoneInfo FindUkZone()
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById("Europe/London"); }
+        catch (TimeZoneNotFoundException) { return TimeZoneInfo.Utc; }
+    }
+
+    /// <summary>
+    /// Events run in the UK, but the API runs in UTC (Vercel cle1), so <c>ToLocalTime</c> would show
+    /// 08:00 for a 09:00 start in summer. Times in notifications are UK time.
+    /// </summary>
+    internal static DateTime UkTime(DateTime utc) =>
+        TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), UkZone);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Small delay so the DB seed / migrations finish before we touch it.
@@ -81,7 +96,7 @@ public class NotificationScheduler : BackgroundService
             if (kind == SessionKind.Race && minsAhead is <= 60 and > 55)
             {
                 await FireForSession(db, push, s, "1h", $"1 hour to {s.Name}",
-                    $"Starts at {s.ScheduledStart.Value.ToLocalTime():HH:mm} — {s.Section?.DisplayName ?? "—"}.", ct);
+                    $"Starts at {UkTime(s.ScheduledStart.Value):HH:mm} — {s.Section?.DisplayName ?? "—"}.", ct);
             }
             // 30 minutes before a briefing.
             if (kind == SessionKind.Briefing && minsAhead is <= 30 and > 25)

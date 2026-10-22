@@ -21,8 +21,9 @@ The cross-chat to-do list. Update or delete items as they land.
 3. **Before the first real event: make the API safe to run as several instances.** Vercel scales containers out and to zero (after 5 minutes idle), and the API still assumes one long-running process:
    - Live updates: add a SignalR Redis backplane (Upstash via the Vercel Marketplace). Without it, a score saved on one instance doesn't reach phones connected to another.
    - Move live-video viewer tracking and the sign-in rate limits to Redis or the database.
-   - Put the VAPID push keys in settings rather than `vapid-keys.json`; each instance currently makes its own, which breaks push.
-   - `NotificationScheduler` and `StreamSweeper` are background timers and only run while an instance is up. Turn them into Vercel Cron jobs.
+   - Done 22 Oct: the VAPID push keys come from settings (`Push__VapidPublicKey`/`Push__VapidPrivateKey` on the API project; a copy is in `~/.config/mounted-games/vapid-prod.env`), and reminder times are in UK time rather than the container's UTC.
+   - Vercel has no "maximum instances" setting for containers, so the API can't be pinned to one instance. The backplane above is the fix.
+   - `NotificationScheduler` and `StreamSweeper` are background timers and only run while an instance is up. During events the open live connections keep instances awake. Per-minute Vercel Cron needs the Pro plan; on Hobby, crons run at most daily.
    - WebSocket connections end at the function's maximum duration; SignalR reconnects by itself.
    - Cold starts take a few seconds after 5 minutes idle.
 4. **Live video (#30).** It stays hidden until it's configured:
