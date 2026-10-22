@@ -214,6 +214,118 @@ public class ReadinessAndRulebooksTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Readiness_WarnsWhenSameRiderIsInTwoArenasAtOnce_MatchingNamesLoosely()
+    {
+        var c = await CreateRiderClashAsync("Jane  Smith", " jane smith ", "Arena 1", "Arena 2", 30);
+
+        var overlap = Assert.Single(await GetOverlapsAsync(c.CompetitionId));
+
+        Assert.Equal(c.FirstSessionId, overlap.FirstSessionId);
+        Assert.Equal(c.SecondSessionId, overlap.SecondSessionId);
+        Assert.Equal("Jane Smith: Clash A (Under 12 Teams)", overlap.FirstSessionName);
+        Assert.Equal("Clash B (Under 12 Teams)", overlap.SecondSessionName);
+        Assert.Equal("Arena 1 and Arena 2", overlap.Arena);
+        Assert.Equal(c.Start.AddMinutes(30), overlap.StartsAt);
+        Assert.Equal(c.Start.AddMinutes(60), overlap.EndsAt);
+        Assert.False((await GetReadinessAsync(c.CompetitionId)).IsReady);
+    }
+
+    [Theory]
+    [InlineData("Arena 1", "arena 1", 30)]
+    [InlineData("Arena 1", "Arena 2", 60)]
+    [InlineData("Arena 1", "Arena 2", 90)]
+    [InlineData("Arena 1", null, 30)]
+    public async Task Readiness_DoesNotWarnForSameArenaNonOverlappingOrUnsetArenaRiders(
+        string arenaA, string? arenaB, int offsetMinutes)
+    {
+        var c = await CreateRiderClashAsync("Jane Smith", "Jane Smith", arenaA, arenaB, offsetMinutes);
+
+        var overlaps = await GetOverlapsAsync(c.CompetitionId);
+
+        // The same arena is still reported as an ordinary session overlap, but never as a rider clash.
+        Assert.DoesNotContain(overlaps, o => o.FirstSessionName.StartsWith("Jane Smith:"));
+    }
+
+    [Fact]
+    public async Task Readiness_IgnoresSharedPonyNames()
+    {
+        var c = await CreateRiderClashAsync("Jane Smith", "Bob Jones", "Arena 1", "Arena 2", 30,
+            ponyA: "Biscuit", ponyB: "Biscuit");
+
+        Assert.Empty(await GetOverlapsAsync(c.CompetitionId));
+    }
+
+    [Fact]
+    public async Task Readiness_RiderClashUsesHeatTimes_NotTheWholeSession()
+    {
+        var c = await CreateRiderClashAsync("Jane Smith", "Jane Smith", "Arena 1", "Arena 2", 30);
+        await _f.WithDbAsync(async db =>
+        {
+            // The sessions overlap, but Jane's heats are 10 minutes each and an hour apart.
+            foreach (var id in new[] { c.FirstSessionId, c.SecondSessionId })
+                (await db.Sessions.FindAsync(id))!.MinutesPerHeat = 10;
+            var secondHeat = await db.Heats.SingleAsync(h => h.SessionId == c.SecondSessionId);
+            secondHeat.ScheduledStart = c.Start.AddMinutes(60);
+            await db.SaveChangesAsync();
+        });
+
+        var overlaps = await GetOverlapsAsync(c.CompetitionId);
+
+        Assert.DoesNotContain(overlaps, o => o.FirstSessionName.StartsWith("Jane Smith:"));
+    }
+
+    private async Task<List<SessionOverlapDto>> GetOverlapsAsync(int competitionId) =>
+        (await GetReadinessAsync(competitionId)).SessionOverlaps.ToList();
+
+    private async Task<CompetitionReadinessDto> GetReadinessAsync(int competitionId) =>
+        await (await (await _f.AdminAsync()).GetAsync(ReadinessUrl(competitionId)))
+            .ReadAsync<CompetitionReadinessDto>();
+
+    /// <summary>
+    /// Two teams in one competition, each declaring one rider, racing in two 60-minute sessions;
+    /// the second starts <paramref name="offsetMinutes"/> after the first.
+    /// </summary>
+    private async Task<RiderClash> CreateRiderClashAsync(
+        string riderA, string riderB, string? arenaA, string? arenaB, int offsetMinutes,
+        string? ponyA = null, string? ponyB = null)
+    {
+        var arena = await _f.CreateArenaAsync(2);
+        var start = new DateTime(2030, 8, 1, 9, 0, 0, DateTimeKind.Utc);
+        await _f.AddHeatAsync(arena.SessionId, [arena.TeamIds[0]]);
+        return await _f.WithDbAsync(async db =>
+        {
+            var first = await db.Sessions.FindAsync(arena.SessionId);
+            first!.Name = "Clash A";
+            first.ArenaName = arenaA;
+            first.ScheduledStart = start;
+            first.DurationMinutes = 60;
+            var second = new Session
+            {
+                CompetitionId = arena.CompetitionId, CompetitionSectionId = arena.SectionId,
+                Name = "Clash B", ArenaName = arenaB, OrderIndex = 2, Kind = SessionKind.Race,
+                ScheduledStart = start.AddMinutes(offsetMinutes), DurationMinutes = 60,
+            };
+            db.Sessions.Add(second);
+            await db.SaveChangesAsync();
+            var heat = new Heat { SessionId = second.Id, Label = "Heat 1", OrderIndex = 1 };
+            db.Heats.Add(heat);
+            await db.SaveChangesAsync();
+            db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = arena.TeamIds[1], LaneIndex = 1 });
+            foreach (var (teamId, name, pony) in new[]
+                     { (arena.TeamIds[0], riderA, ponyA), (arena.TeamIds[1], riderB, ponyB) })
+            {
+                var form = new DeclarationForm { TeamId = teamId };
+                form.Riders.Add(new RiderEntry { FullName = name, HorseName = pony, OrderIndex = 1 });
+                db.DeclarationForms.Add(form);
+            }
+            await db.SaveChangesAsync();
+            return new RiderClash(arena.CompetitionId, first.Id, second.Id, start);
+        });
+    }
+
+    private sealed record RiderClash(int CompetitionId, int FirstSessionId, int SecondSessionId, DateTime Start);
+
     private async Task<ReadinessData> CreateReadinessDataAsync()
     {
         var arena = await _f.CreateArenaAsync(1);
