@@ -226,8 +226,10 @@ Lifecycle the app supports today:
    payment destination, sections + their prices.
 2. **Competition entry**: signed-in entrants, excluding admins, can join a
    section from the competition's Details page. Priced entries remain Pending
-   until payment is confirmed. Free entries are marked Paid immediately. Demo
-   events offer a labelled test checkout; normal events use manual payments.
+   until payment is confirmed. Free entries are marked Paid immediately. After a
+   paid sign-up on a demo event the entrant goes straight to a labelled test
+   payment page (pay, declined card or cancel, then a TEST receipt; no card
+   fields). Normal events use manual payments: pay the organiser directly.
 3. **Payment confirmation**: organiser sees a list of pending vs paid
    signups on the Details tab and ticks them paid as money lands. Refund
    and cancel also live on the same row.
@@ -367,6 +369,8 @@ The scoring screen keeps a revision history. Corrections need a reason, includin
 Signed-in sellers can keep a catalogue of items and submit them to selected competitions. Each event’s organiser approves listings before they appear in its shop. Changing an approved listing’s content or price requires another review. Tickets, camping, merchandise and other items are collected at the event. Orders retain the agreed item names and prices; finite stock is reserved when an order is placed and released on cancellation or refund.
 
 Real-event payments are confirmed manually by the organiser. An event can be marked as a demo before it has orders or test payments. Demo checkout offers test success, decline, cancellation and refunds, and every test receipt states that no money was taken. The app does not collect payment-card details. Paid entries require sign-in and stay pending until payment is confirmed.
+
+Demo events carry the same mark the organiser sets under Demo in the shop settings (`EventCommerceSettings.IsDemo`); the review seeder sets it on its eight events. They show a "Demo event" badge on competition cards and a notice on every tab of the event. After a paid sign-up the entrant lands on `/me/signups/:id/test-payment`, which sends only the chosen outcome and shows a TEST receipt. Test payments are never real income: demo events earn nothing in `RealIncome`, and the organiser's signup list and CSV label demo payments as test.
 
 
 ### Seasons, team history and reusable event setup
