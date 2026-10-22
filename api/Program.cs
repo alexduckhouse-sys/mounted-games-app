@@ -135,7 +135,14 @@ builder.Services.AddTrustedProxies(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
-builder.Services.AddSignalR();
+var signalR = builder.Services.AddSignalR();
+// With several API instances (Vercel scales the container out), Redis carries hub messages between them.
+if (RedisBackplane.Options(builder.Configuration) is { } redis)
+    signalR.AddStackExchangeRedis(o =>
+    {
+        o.Configuration = redis;
+        o.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal("mg-live");
+    });
 
 var app = builder.Build();
 
