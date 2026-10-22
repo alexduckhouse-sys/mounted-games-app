@@ -6,7 +6,7 @@ using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Competitions;
 
-/// <summary>A competition's team: helpers added by the owner can run that one event, and nothing else.</summary>
+/// <summary>A competition's team: competition admins added by the owner can run that one event, and nothing else.</summary>
 public class CompetitionTeamTests : IClassFixture<ApiFactory>
 {
     private readonly ApiFactory _f;
@@ -41,100 +41,90 @@ public class CompetitionTeamTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task AHelperWithAMemberAccount_CanRunThatEventOnly()
+    public async Task ACompetitionAdminWithAMemberAccount_CanRunThatEventOnly()
     {
         var (arena, _, races, owner, _) = await OwnedAsync();
         var other = await OwnedAsync();
         var (helper, helperAuth) = await _f.SignupAsync("Member");
         Assert.Equal(HttpStatusCode.Forbidden, (await helper.PostAsync($"/api/races/{races[0]}/start", null)).StatusCode);
 
-        var added = await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email, role = CollaboratorRole.RingScorer });
+        // Older clients still send a role; it's ignored.
+        var added = await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email, role = 3 });
         Assert.Equal(HttpStatusCode.OK, added.StatusCode);
 
         Assert.Equal(HttpStatusCode.OK, (await helper.PostAsJsonAsync($"/api/races/{races[1]}/results", Results(arena.TeamIds))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await helper.PutAsJsonAsync($"/api/competitions/{arena.CompetitionId}/sessions/{arena.SessionId}/status", new { status = 1 })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await helper.PostAsync($"/api/races/{other.RaceIds[0]}/start", null)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await helper.GetAsync(Team(other.Arena.CompetitionId))).StatusCode);
-        // Deleting a competition stays admin-only.
+        // Deleting a competition stays with site admins.
         Assert.Equal(HttpStatusCode.Forbidden, (await helper.DeleteAsync($"/api/competitions/{arena.CompetitionId}")).StatusCode);
 
         var access = await helper.GetFromJsonAsync<List<CompetitionAccessDto>>("/api/competitions/access");
-        Assert.Equal(new CompetitionAccessDto(arena.CompetitionId, false, CollaboratorRole.RingScorer), Assert.Single(access!));
+        Assert.Equal(new CompetitionAccessDto(arena.CompetitionId, false), Assert.Single(access!));
     }
 
     [Fact]
-    public async Task OnlyTheOwnerOrAnAdminChangesTheTeam_AndHelpersCanLeave()
+    public async Task CompetitionAdminsManageTheTeam_AndCanLeave()
     {
-        var (arena, _, _, owner, _) = await OwnedAsync();
+        var (arena, _, _, owner, ownerEmail) = await OwnedAsync();
+        var other = await OwnedAsync();
         var (helper, helperAuth) = await _f.SignupAsync("Member");
         var (second, secondAuth) = await _f.SignupAsync("Member");
-        await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email, role = CollaboratorRole.CoOrganiser });
+        await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email });
 
-        Assert.Equal(HttpStatusCode.Forbidden, (await helper.PostAsJsonAsync(Team(arena.CompetitionId), new { email = secondAuth.User.Email, role = 0 })).StatusCode);
+        // A competition admin adds and removes others like the owner does, but can't touch the owner.
+        Assert.Equal(HttpStatusCode.OK, (await helper.PostAsJsonAsync(Team(arena.CompetitionId), new { email = secondAuth.User.Email })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await helper.PostAsJsonAsync(Team(arena.CompetitionId), new { email = ownerEmail })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await helper.DeleteAsync($"{Team(arena.CompetitionId)}/{secondAuth.User.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await helper.DeleteAsync($"{Team(arena.CompetitionId)}/{secondAuth.User.Id}")).StatusCode);
+
+        // Someone who runs a different competition can't change this one's team.
+        Assert.Equal(HttpStatusCode.NotFound, (await other.Owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = secondAuth.User.Email })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.Owner.DeleteAsync($"{Team(arena.CompetitionId)}/{helperAuth.User.Id}")).StatusCode);
+
         var admin = await _f.AdminAsync();
-        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync(Team(arena.CompetitionId), new { email = secondAuth.User.Email, role = CollaboratorRole.Commentator })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await helper.PutAsJsonAsync($"{Team(arena.CompetitionId)}/{secondAuth.User.Id}", new { role = 1 })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await helper.DeleteAsync($"{Team(arena.CompetitionId)}/{secondAuth.User.Id}")).StatusCode);
-
-        var changed = await (await owner.PutAsJsonAsync($"{Team(arena.CompetitionId)}/{secondAuth.User.Id}", new { role = CollaboratorRole.StreamProducer })).ReadAsync<TeamHelperDto>();
-        Assert.Equal(CollaboratorRole.StreamProducer, changed.Role);
-
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync(Team(arena.CompetitionId), new { email = secondAuth.User.Email })).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await second.DeleteAsync($"{Team(arena.CompetitionId)}/{secondAuth.User.Id}")).StatusCode);
         // Having left their only team, they're no longer competition staff at all.
         Assert.Equal(HttpStatusCode.Forbidden, (await second.GetAsync(Team(arena.CompetitionId))).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync($"{Team(arena.CompetitionId)}/{helperAuth.User.Id}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await owner.DeleteAsync($"{Team(arena.CompetitionId)}/{helperAuth.User.Id}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await owner.PutAsJsonAsync($"{Team(arena.CompetitionId)}/{helperAuth.User.Id}", new { role = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await helper.DeleteAsync($"{Team(arena.CompetitionId)}/{helperAuth.User.Id}")).StatusCode);
     }
 
     [Fact]
-    public async Task TheTeamList_ShowsEmailsOnlyToTheOwnerAndAdmins()
+    public async Task TheTeamList_ShowsTheOwnerAndEveryCompetitionAdmin()
     {
         var (arena, _, _, owner, _) = await OwnedAsync();
         var (helper, helperAuth) = await _f.SignupAsync("Member");
-        await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email, role = CollaboratorRole.LineJudge });
+        await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email });
 
-        var asOwner = await owner.GetFromJsonAsync<CompetitionTeamDto>(Team(arena.CompetitionId));
         var asHelper = await helper.GetFromJsonAsync<CompetitionTeamDto>(Team(arena.CompetitionId));
 
-        Assert.True(asOwner!.CanManageTeam);
-        Assert.NotNull(asOwner.Owner);
-        Assert.Equal(helperAuth.User.Email, Assert.Single(asOwner.Helpers).Email);
-        Assert.False(asHelper!.CanManageTeam);
-        Assert.Null(Assert.Single(asHelper.Helpers).Email);
+        Assert.NotNull(asHelper!.Owner);
+        Assert.Equal(helperAuth.User.Email, Assert.Single(asHelper.Helpers).Email);
     }
 
     [Fact]
-    public async Task AddingRejectsUnknownEmails_TheOwner_AndBadRoles()
+    public async Task AddingRejectsUnknownEmails_AndTheOwner_AndKeepsOneEntryPerPerson()
     {
         var (arena, _, _, owner, ownerProfile) = await OwnedAsync();
         var access = (await owner.GetFromJsonAsync<List<CompetitionAccessDto>>("/api/competitions/access"))!;
-        Assert.Contains(access, a => a.CompetitionId == arena.CompetitionId && a.Owner && a.Role is null);
+        Assert.Contains(access, a => a.CompetitionId == arena.CompetitionId && a.Owner);
 
-        Assert.Equal(HttpStatusCode.NotFound, (await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = "nobody-here@example.test", role = 0 })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = ownerProfile, role = 0 })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = "nobody-here@example.test" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = ownerProfile })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = "not-an-email" })).StatusCode);
+
         var (_, helperAuth) = await _f.SignupAsync("Member");
-        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email, role = 9 })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = "not-an-email", role = 0 })).StatusCode);
-    }
-
-    [Fact]
-    public async Task AddingTheSameHelperAgain_ChangesTheirRole()
-    {
-        var (arena, _, _, owner, _) = await OwnedAsync();
-        var (_, helperAuth) = await _f.SignupAsync("Member");
-        await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email, role = CollaboratorRole.LineJudge });
-
-        var again = await (await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email, role = CollaboratorRole.Commentator })).ReadAsync<TeamHelperDto>();
-
-        Assert.Equal(CollaboratorRole.Commentator, again.Role);
+        var first = await (await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email })).ReadAsync<TeamHelperDto>();
+        var again = await (await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email })).ReadAsync<TeamHelperDto>();
+        Assert.Equal(first.AddedAt, again.AddedAt);
         Assert.Single((await owner.GetFromJsonAsync<CompetitionTeamDto>(Team(arena.CompetitionId)))!.Helpers);
     }
 
     [Fact]
     public async Task SessionsRefuseTeamsFromAnotherCompetition()
     {
-        var (arena, heatId, _, owner, _) = await OwnedAsync();
+        var (arena, _, _, owner, _) = await OwnedAsync();
         var other = await OwnedAsync();
         var url = $"/api/competitions/{arena.CompetitionId}/sessions/{arena.SessionId}";
 
@@ -143,20 +133,23 @@ public class CompetitionTeamTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync($"{url}/generate-heats", new { teamIds = other.Arena.TeamIds, raceNames = new[] { "R" } })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync($"{url}/generate-race-finals", new { teamIds = other.Arena.TeamIds, raceNames = new[] { "R" } })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync($"{url}/heats", new { label = "Own teams", orderIndex = 6, teamIds = arena.TeamIds, raceNames = new[] { "R" } })).StatusCode);
-        _ = heatId;
     }
 
-    [Theory]
-    [InlineData(CollaboratorRole.RingScorer, HttpStatusCode.NotFound)]
-    [InlineData(CollaboratorRole.Commentator, HttpStatusCode.NotFound)]
-    [InlineData(CollaboratorRole.CoOrganiser, HttpStatusCode.OK)]
-    public async Task EntrantDetails_AreForCoOrganisersOnly(CollaboratorRole role, HttpStatusCode expected)
+    [Fact]
+    public async Task CompetitionAdmins_SeeEntrants_AndUseTheEventTools()
     {
         var (arena, _, _, owner, _) = await OwnedAsync();
         var (helper, helperAuth) = await _f.SignupAsync("Member");
-        await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email, role });
+        var (outsider, _) = await _f.SignupAsync("Member");
+        await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email });
+        var tools = $"/api/event-tools/competitions/{arena.CompetitionId}";
 
-        Assert.Equal(expected, (await helper.GetAsync($"/api/competitions/{arena.CompetitionId}/signups")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync($"/api/competitions/{arena.CompetitionId}/signups")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await helper.GetAsync($"/api/competitions/{arena.CompetitionId}/signups")).StatusCode);
+        // Past the access check: the CSV itself may still be refused.
+        var preview = (await helper.PostAsJsonAsync($"{tools}/team-import/preview", new { csv = "Club,Suffix\n" })).StatusCode;
+        Assert.DoesNotContain(preview, new[] { HttpStatusCode.NotFound, HttpStatusCode.Forbidden });
+        Assert.Equal(HttpStatusCode.Forbidden, (await outsider.PostAsJsonAsync($"{tools}/team-import/preview", new { csv = "Club,Suffix\n" })).StatusCode);
+        // Duplicating makes a new competition the caller owns, so it still needs a trainer account.
+        Assert.Equal(HttpStatusCode.Forbidden, (await helper.PostAsJsonAsync($"{tools}/clone", new { name = "Copy", startDate = DateTime.UtcNow.AddDays(30) })).StatusCode);
     }
 }

@@ -25,7 +25,6 @@ const competition = vi.mocked(useCompetition);
 const viewer = {
   user: { id: 'buyer', email: 'buyer@example.test', fullName: 'Buyer', clubId: null, clubName: null, roles: ['Member'] },
   canOrganise: vi.fn(() => false),
-  canManageEntries: vi.fn(() => false),
   hasRole: vi.fn(() => false),
   canEdit: vi.fn(() => false),
 };
@@ -411,13 +410,6 @@ describe('SellerCataloguePage', () => {
 });
 
 describe('ownership and demo states', () => {
-  it('keeps the shop away from a helper who is not a co-organiser', () => {
-    auth.mockReturnValue({ ...viewer, canOrganise: vi.fn(() => true), canManageEntries: vi.fn(() => false) } as unknown as ReturnType<typeof useAuth>);
-    render(<CommerceManagementPage />);
-    expect(screen.getByText(/Only this competition’s organiser/)).toBeInTheDocument();
-    expect(get).not.toHaveBeenCalled();
-  });
-
   it('keeps organiser controls hidden from another user', () => {
     render(<CommerceManagementPage />);
     expect(screen.getByText(/Only this competition’s organiser/)).toBeInTheDocument();
@@ -429,7 +421,6 @@ describe('ownership and demo states', () => {
       ...viewer,
       user: { ...viewer.user, id: 'admin', roles: ['Admin'] },
       canOrganise: vi.fn(() => true),
-      canManageEntries: vi.fn(() => true),
       hasRole: vi.fn((role: string) => role === 'Admin'),
       canEdit: vi.fn(() => false),
     } as unknown as ReturnType<typeof useAuth>);

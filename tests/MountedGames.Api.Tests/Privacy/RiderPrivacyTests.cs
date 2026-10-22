@@ -43,7 +43,7 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
         {
             db.CompetitionCollaborators.Add(new CompetitionCollaborator
             {
-                CompetitionId = competitionId, UserId = auth.User.Id, Role = CollaboratorRole.StreamProducer,
+                CompetitionId = competitionId, UserId = auth.User.Id, Role = CollaboratorRole.CompetitionAdmin,
                 AddedByUserId = auth.User.Id, AddedAt = DateTime.UtcNow,
             });
             await db.SaveChangesAsync();
@@ -113,7 +113,7 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task CompetitionTeamMember_SeesFullNames_ButNotDatesOfBirth_OrOtherCompetitions()
+    public async Task CompetitionAdmin_SeesTheFullRecord_ButOnlyForTheirCompetition()
     {
         var a = await _f.CreateArenaAsync(1);
         var other = await _f.CreateArenaAsync(1);
@@ -124,7 +124,8 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
 
         var rider = (await OnlyFormAsync(member, a.CompetitionId)).Riders[0];
         Assert.Equal("Oliver Smith", rider.FullName);
-        Assert.Null(rider.DateOfBirth);
+        Assert.NotNull(rider.DateOfBirth);
+        Assert.True(rider.NoFilming);
         Assert.Equal("Oliver S.", (await OnlyFormAsync(member, other.CompetitionId)).Riders[0].FullName);
     }
 
