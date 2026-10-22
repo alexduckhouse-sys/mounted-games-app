@@ -1,5 +1,14 @@
 # Project decisions
 
+## 2026-10-22: A test payment page for demo events, and nothing else
+- Why: the owner decided against real payments for now (competitive-gaps point 2), but the product must still show a complete entry flow in a sales demo.
+- Rule: after a paid sign-up on a **demo event** the entrant goes to `/me/signups/:id/test-payment`: a page that asks for no card details, offers pay, declined card and cancel, then shows a receipt marked TEST. Real events keep "pay the organiser directly" and a Pending entry, and never reach the fake provider. The server enforces it: `demo-checkout` and `demo-refund` return 403 on a non-demo event (404 for someone else's entry), every outcome replays idempotently by key, and demo mode cannot be turned on once an event has paid entries (so a real event cannot be made payable by test).
+- The mark is the existing `EventCommerceSettings.IsDemo`, not a new field. The review seeder now sets it on its eight events; competition cards, the picker and every tab of the event show "Demo event".
+- Money: test payments are flagged (`TestPaymentRecord.IsTest`) and `RealIncome.ForCompetitionAsync` is the one place for organiser totals and the committee report; it returns nothing for demo events and skips test orders. The organiser's signup list and CSV label demo payments as test.
+- Rejected: a new "isDemo" column on competitions (a second mark to keep in step); card-style inputs that accept test numbers (the page should never look like it collects card details).
+- Not changed: the shop checkout still uses the older card-style demo form (`DemoPaymentFlow`); its API answers 409 rather than 403 on a real event.
+- Files: `web/src/pages/commerce/TestEntryPaymentPage.tsx`, `DemoEntryPayment.tsx`, `web/src/components/DemoEventNotice.tsx`, `api/Controllers/CommerceController.cs`, `api/Services/Commerce/RealIncome.cs`, `api/Services/ReviewCompetitionSeeder.cs`.
+
 ## 2026-10-22: Deleting your own account
 - Why: people must be able to remove themselves, and the privacy page promises it. `DELETE /api/auth/me` with the current password in the body does it (the same lockout as sign-in applies to wrong guesses).
 - Refused: the shared admin account and any account with no password (admin-key sessions), with a message to ask an administrator; the last account in the Admin role.

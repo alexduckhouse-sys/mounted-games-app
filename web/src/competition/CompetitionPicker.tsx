@@ -10,6 +10,7 @@ import { competitionDateText, isOnToday } from '../lib/competitionDates';
 import { displaySectionName } from '../lib/section';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
 import { CompetitionListSkeleton } from '../components/Skeletons';
+import { DemoEventBadge } from '../components/DemoEventNotice';
 
 export function CompetitionPicker({ onClose, past = false }: { onClose?: () => void; past?: boolean }) {
   const [attempt, setAttempt] = useState(0);
@@ -131,6 +132,7 @@ function TodayCard({ competition, selected, onChoose }: { competition: Competiti
         </span>
       )}
       <span className="flex flex-col gap-1">
+        {competition.isDemo && <DemoEventBadge className="self-start" />}
         <span className="mg-display break-words text-2xl font-bold leading-tight text-[rgb(var(--mg-heading))]">{competition.name}</span>
         {details && <span className="text-sm leading-snug text-[rgb(var(--mg-body))]">{details}</span>}
       </span>
@@ -152,6 +154,7 @@ function CompetitionRow({ competition, past, selected, onChoose }: { competition
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <span className="break-words text-base font-semibold leading-tight">{competition.name}</span>
+        {competition.isDemo && <DemoEventBadge className="self-start" />}
         <span className="mg-meta">{[when, venue].filter(Boolean).join(' · ')}</span>
       </span>
       {competitionIcon(competition.icon).id !== 'flag' && <CompetitionIcon id={competition.icon} labelled className="text-xl" />}

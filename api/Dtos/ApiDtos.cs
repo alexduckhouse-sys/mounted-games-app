@@ -14,7 +14,7 @@ public record CompetitionSummary(
 public record PickerLiveHeat(string? SectionName, string HeatLabel, string? ArenaName);
 public record CompetitionPickerItem(
     int Id, string Name, DateTime StartDate, DateTime? EndDate, string Icon,
-    string? Location, int AgeGroupCount, PickerLiveHeat? Live);
+    string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false);
 public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore);
 
 public static class CompetitionIcons
@@ -37,7 +37,8 @@ public record CompetitionDetail(
     bool SignupsLocked = false,
     string Icon = "flag",
     string? CreatedByUserId = null,
-    bool StaffChatEnabled = true);
+    bool StaffChatEnabled = true,
+    bool IsDemo = false);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,

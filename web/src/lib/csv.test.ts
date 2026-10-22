@@ -49,6 +49,14 @@ describe('signupsToCsv', () => {
     expect(statuses).toEqual(['pending', 'paid', 'refunded', 'cancelled', '9']);
   });
 
+  it('marks a demo event\'s payments as test money in the header and the status', () => {
+    const rows = signupsToCsv([signup, { ...signup, fullName: 'Ben', status: 0 }, { ...signup, fullName: 'Cat', status: 7 }], { test: true }).split('\r\n');
+    expect(rows[0]).toBe('Section,Name,Pony Club,Contact,Test amount (GBP - no money taken),Status,Paid at,Signed up at');
+    expect(rows[1].split(',').slice(-3, -2)).toEqual(['paid (test)']);
+    expect(rows[2]).toContain(',pending,');
+    expect(rows[3]).toContain(',7 (test),');
+  });
+
   it('leaves optional fields blank when missing', () => {
     const row = signupsToCsv([{ ...signup, ponyClubName: null, contactInfo: undefined, paidAt: null }]).split('\r\n')[1];
     expect(row).toBe('Seniors,"Ann, Smith",,,12.50,paid,,2026-04-30');

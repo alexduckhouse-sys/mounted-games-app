@@ -173,3 +173,20 @@ describe('score cards', () => {
     expect(await screen.findByText('No cards')).toBeVisible();
   });
 });
+
+it('shows the demo event notice only on a demo competition', async () => {
+  vi.mocked(api.get).mockImplementation(async (url: string) => url.endsWith('/chat')
+    ? { data: [] }
+    : { data: competition({ isDemo: true }), headers: {} });
+  const demo = renderAt('/competitions/1');
+  expect(await screen.findByText('Competition loaded')).toBeVisible();
+  expect(screen.getByRole('note')).toHaveTextContent('Any payment here is a test');
+  demo.unmount();
+
+  vi.mocked(api.get).mockImplementation(async (url: string) => url.endsWith('/chat')
+    ? { data: [] }
+    : { data: competition(), headers: {} });
+  renderAt('/competitions/1');
+  expect(await screen.findByText('Competition loaded')).toBeVisible();
+  expect(screen.queryByRole('note')).not.toBeInTheDocument();
+});

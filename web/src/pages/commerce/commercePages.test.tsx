@@ -7,7 +7,6 @@ import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
 import { CommerceManagementPage } from './CommerceManagementPage';
 import { CommerceOrdersPage } from './CommerceOrdersPage';
-import { DemoEntryPayment } from './DemoEntryPayment';
 import { EventShopPage } from './EventShopPage';
 import { SellerCataloguePage } from './SellerCataloguePage';
 import type { EventOrder } from './types';
@@ -444,13 +443,6 @@ describe('ownership and demo states', () => {
     expect(screen.getByRole('button', { name: 'Manual' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Demo' })).toBeDisabled();
     expect(screen.getByText(/Admin view only is on/)).toBeInTheDocument();
-  });
-
-  it('does not show entry test payment controls on a real event', async () => {
-    get.mockResolvedValue({ data: { competitionId: 5, isDemo: false, isLocked: false, updatedAt: null } } as never);
-    render(<DemoEntryPayment signupId={42} amountMinor={500} signupStatus={0} onChanged={vi.fn()} />);
-    await waitFor(() => expect(get).toHaveBeenCalled());
-    expect(screen.queryByText('DEMO — no money is taken')).not.toBeInTheDocument();
   });
 
   it('labels demo purchases, opens the receipt and keeps sales separate', async () => {

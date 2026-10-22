@@ -501,7 +501,7 @@ public class CommerceEndpointsTests : IClassFixture<ApiFactory>
         var response = await owner.PostAsJsonAsync($"/api/commerce/signups/{signup.Id}/demo-checkout",
             Checkout("not-demo", FakePaymentOutcome.Success));
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal(SignupPaymentStatus.Pending,
             await _f.InDbAsync(db => db.SectionSignups.Where(x => x.Id == signup.Id).Select(x => x.Status).SingleAsync()));
     }
