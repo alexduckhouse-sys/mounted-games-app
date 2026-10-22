@@ -4,13 +4,13 @@ ASP.NET Core 10, EF Core (Npgsql in production, SQLite locally and in tests), Si
 
 ## Glossary (entity names in `Entities/`)
 
-- **Competition**: one event. `CreatedByUserId` is its owner; `SignupsLocked` closes entries.
+- **Competition**: one event. `CreatedByUserId` is its owner; `SignupsLocked` closes entries; `TermsText` is the organiser's optional terms shown beside the sign-up tick.
 - **Section** (`CompetitionSection`): an age group in a competition, with a `Format` (Pairs, Teams, Individual), `UsesRaceFinals`, `PriceMinor` (pence), `MaxParticipants` and `FinalistCount`.
 - **Session**: a timetable block with `Kind` (Race, Break, Briefing, Custom), `Status` (Upcoming, InArena, Finished) and `LanesPerHeat`. The **timetable** is sessions and heats ordered by `OrderIndex` and `ScheduledStart`.
 - **Heat**: the teams racing together, with `HeatEntry` lanes and a `RaceRoundStage` (None, Qualifier, Final). **Race**: one game run within a heat, holding `Result` rows (placing, points, eliminated). **RaceTemplate**: a library game with rules and `DiagramJson`; `IsBuiltIn` ones are refreshed at startup.
 - **Team**: a club's entry in a section. **HC** (`IsHorsConcours`) teams race but are left out of standings and finals. **TeamSupporter**: a follower the trainer has approved.
 - **Declaration form** (`DeclarationForm`): a team's riders (`RiderEntry`: captain, reserve, `HorseName`). There's no pony entity. `SavedRider` is a reusable roster entry. **Bib**: `BibColour` on club, team or rider.
-- **Signup** (`SectionSignup`): a paid entry. An admin marks payment received; no real money moves (Commerce uses a fake provider).
+- **Signup** (`SectionSignup`): a paid entry. An admin marks payment received; no real money moves (Commerce uses a fake provider). Creating one needs `AcceptTerms` and the current `ConsentVersion` (`SignupTerms`); the tick, who, when and wording version are stored on it.
 - **Season**: a points league over competition sections (`SeasonRound`, `SeasonPlacePoints`, `BestResultsToCount`). Results are published as versioned snapshots (`SeasonRoundPublication`).
 - **Operations**: rulebook, score state and audit (`RaceScoreState`, `RaceScoreEvent`), draw, readiness checks and equipment acknowledgements. **Event tools**: clone, CSV team import, printable pack.
 - **Shop** (`ShopPost`, `ShopComment`, `ShopReport`): marketplace posts. **Commerce**: event shops with listings and orders.
