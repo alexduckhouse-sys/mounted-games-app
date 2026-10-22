@@ -9,23 +9,43 @@ export interface CompactPageBarConfig {
   badge: CompactPageBarBadge;
 }
 
+/** What a competition page puts in the app header: its own title, a line under it and an optional refresh button. */
+export interface PageHeaderConfig {
+  title: string;
+  /** Replaces the competition name line, e.g. "Hartpury Area Festival · 10:54". */
+  subtitle?: string;
+  onRefresh?: () => void;
+  refreshLabel?: string;
+}
+
+type PageHeaderEntry = { title: string; subtitle?: string; refreshLabel?: string; refresh?: () => void };
+
 interface CompactPageBarState {
   config: CompactPageBarConfig | null;
   publish: (owner: symbol, config: CompactPageBarConfig) => void;
   clear: (owner: symbol) => void;
+  header: PageHeaderEntry | null;
+  publishHeader: (owner: symbol, entry: PageHeaderEntry) => void;
+  clearHeader: (owner: symbol) => void;
 }
 
 const CompactPageBarCtx = createContext<CompactPageBarState | null>(null);
 
 export function CompactPageBarProvider({ children }: { children: ReactNode }) {
   const [entry, setEntry] = useState<{ owner: symbol; config: CompactPageBarConfig } | null>(null);
+  const [headerEntry, setHeaderEntry] = useState<{ owner: symbol; value: PageHeaderEntry } | null>(null);
+  const publishHeader = useCallback((owner: symbol, value: PageHeaderEntry) => setHeaderEntry({ owner, value }), []);
+  const clearHeader = useCallback((owner: symbol) => setHeaderEntry((current) => current?.owner === owner ? null : current), []);
   const publish = useCallback((owner: symbol, config: CompactPageBarConfig) => setEntry({ owner, config }), []);
   const clear = useCallback((owner: symbol) => setEntry((current) => current?.owner === owner ? null : current), []);
   const value = useMemo<CompactPageBarState>(() => ({
     config: entry?.config ?? null,
     publish,
     clear,
-  }), [entry, publish, clear]);
+    header: headerEntry?.value ?? null,
+    publishHeader,
+    clearHeader,
+  }), [entry, publish, clear, headerEntry, publishHeader, clearHeader]);
   return <CompactPageBarCtx.Provider value={value}>{children}</CompactPageBarCtx.Provider>;
 }
 
@@ -48,4 +68,26 @@ export function useCompactPageBar(config: CompactPageBarConfig) {
     publish(ownerKey, { backTo, title, subtitle, badge });
     return () => clear(ownerKey);
   }, [backTo, title, subtitle, badge, publish, clear]);
+}
+
+/**
+ * Show this page's title (and optionally a refresh button) in the app header while it is mounted.
+ * Does nothing outside the app shell, so pages stay renderable on their own.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function usePageHeader(config: PageHeaderConfig) {
+  const context = useContext(CompactPageBarCtx);
+  const owner = useRef(Symbol('page-header'));
+  const refresh = useRef(config.onRefresh);
+  useLayoutEffect(() => { refresh.current = config.onRefresh; });
+  const { title, subtitle, refreshLabel } = config;
+  const hasRefresh = !!config.onRefresh;
+  const publishHeader = context?.publishHeader;
+  const clearHeader = context?.clearHeader;
+  useLayoutEffect(() => {
+    if (!publishHeader || !clearHeader) return;
+    const ownerKey = owner.current;
+    publishHeader(ownerKey, { title, subtitle, refreshLabel, refresh: hasRefresh ? () => refresh.current?.() : undefined });
+    return () => clearHeader(ownerKey);
+  }, [title, subtitle, refreshLabel, hasRefresh, publishHeader, clearHeader]);
 }

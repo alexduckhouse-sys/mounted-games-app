@@ -185,6 +185,69 @@ describe('buildToplist hors concours', () => {
   });
 });
 
+describe('buildToplist finals and team detail', () => {
+  const qualifier = session(1, [heat(1, [1, 2, 3], [scored(1, [1, 3], [2, 2], [3, 1])], { label: 'Heat 1' })], { status: 2 });
+  const finalHeat = (id: number, label: string, races: Heat['races'], teamIds: number[], extra: Partial<Heat> = {}) =>
+    heat(id, teamIds, races, { label, raceRoundStage: 2, orderIndex: id, ...extra });
+  const finalsSession = (heats: Heat[], extra: Partial<Session> = {}) => session(2, heats, { name: 'Seniors finals', orderIndex: 2, ...extra });
+  const standings = [standing(1, 10), standing(2, 8), standing(3, 6)];
+
+  it('has no finals until a final heat has results', () => {
+    const list = buildToplist(standings, [qualifier, finalsSession([finalHeat(2, 'A Final', [race(2)], [1, 2, 3])])], [], SECTION, null);
+    expect(list.finals).toEqual([]);
+    expect(list.detail.get(1)!.final).toBeNull();
+  });
+
+  it('orders a final by points, shares places between ties and adds the qualifying position', () => {
+    const decided = finalsSession([finalHeat(2, 'A Final', [scored(2, [3, 5], [1, 5], [2, 2])], [1, 2, 3])]);
+    const [group] = buildToplist(standings, [qualifier, decided], [], SECTION, null).finals;
+    expect(group.label).toBe('A Final');
+    expect(group.rows.map((r) => [r.teamId, r.place, r.points, r.qualifyingPosition])).toEqual([[1, 1, 5, 1], [3, 1, 5, 3], [2, 3, 2, 2]]);
+  });
+
+  it('adds up several races, keeps teams with no result last and lists finals in running order', () => {
+    const a = finalHeat(5, 'B Final', [scored(5, [4, 2]), scored(6, [4, 3])], [4, 5]);
+    const b = finalHeat(2, 'A Final', [scored(2, [1, 4])], [1, 2]);
+    const list = buildToplist(standings, [qualifier, finalsSession([a, b])], [], SECTION, null);
+    expect(list.finals.map((g) => g.label)).toEqual(['A Final', 'B Final']);
+    expect(list.finals[0].rows.map((r) => [r.teamId, r.place, r.points])).toEqual([[1, 1, 4], [2, null, null]]);
+    expect(list.finals[1].rows).toEqual([{ teamId: 4, teamName: 'Team 4', place: 1, points: 5, qualifyingPosition: null }, { teamId: 5, teamName: 'Team 5', place: null, points: null, qualifyingPosition: null }]);
+    expect(list.finals[1].races.get(4)!.map((r) => [r.name, r.points])).toEqual([['Race 5', 2], ['Race 6', 3]]);
+  });
+
+  it('labels a final from its session when the heat label has no final wording', () => {
+    const named = session(2, [heat(2, [1], [scored(2, [1, 4])], { label: 'Heat 1' }), heat(3, [2], [scored(3, [2, 4])])], { name: 'Seniors final', orderIndex: 2 });
+    expect(buildToplist(standings, [qualifier, named], [], SECTION, null).finals.map((g) => g.label)).toEqual(['Seniors final · Heat 1', 'Seniors final']);
+  });
+
+  it('ranks qualifying without the finals points and not at all before anyone has scored', () => {
+    const decided = finalsSession([finalHeat(2, 'A Final', [scored(2, [2, 9])], [2])]);
+    const list = buildToplist([standing(2, 11), standing(1, 3)], [qualifier, decided], [], SECTION, null);
+    expect(list.detail.get(2)).toMatchObject({ qualifyingPosition: 2, qualifyingPoints: 2 });
+    expect(list.detail.get(1)).toMatchObject({ qualifyingPosition: 1, qualifyingPoints: 3 });
+    const empty = buildToplist(standings, [session(1, [heat(1, [1], [race(1)])])], [], SECTION, null);
+    expect(empty.detail.get(1)).toMatchObject({ qualifyingPosition: null, qualifyingPoints: 0 });
+  });
+
+  it('breaks a team down by finals first, then each session with its races, and notes who did not ride', () => {
+    const second = session(3, [heat(3, [2], [race(3)], { label: 'Heat 2' })], { orderIndex: 3 });
+    const decided = finalsSession([finalHeat(4, 'A Final', [scored(4, [1, 6], [2, 4])], [1, 2])]);
+    const { detail } = buildToplist(standings, [qualifier, second, decided], [], SECTION, null);
+    const one = detail.get(1)!;
+    expect(one.final).toEqual({ label: 'A Final', place: 1, points: 6 });
+    expect(one.blocks.map((b) => [b.kind, b.label, b.points, b.note])).toEqual([['final', 'A Final', 6, 'not carried over'], ['session', 'Session 1 · Heat 1', 3, null], ['session', 'Session 2', null, null]]);
+    expect(one.blocks[0].races).toEqual([{ id: 11, name: 'Race 4', placing: 1, eliminated: false, points: 6 }]);
+    expect(one.blocks[1].races.map((r) => [r.name, r.placing, r.points])).toEqual([['Race 1', 1, 3]]);
+    const two = detail.get(2)!;
+    expect(two.blocks[2]).toMatchObject({ label: 'Session 2 · Heat 2', points: 0, races: [] });
+  });
+
+  it('includes finalists that are not in the standings', () => {
+    const decided = finalsSession([finalHeat(2, 'A Final', [scored(2, [8, 3])], [8])]);
+    expect(buildToplist(standings, [qualifier, decided], [], SECTION, null).detail.get(8)).toMatchObject({ teamName: 'Team 8', qualifyingPosition: null, final: { points: 3 } });
+  });
+});
+
 describe('toplistNote', () => {
   it('prefers the run-off, then what is needed, then races left', () => {
     expect(toplistNote(row({ runoff: true, position: 3, needed: 2, racesLeft: 4 }))).toBe('Joint 3rd · run-off');

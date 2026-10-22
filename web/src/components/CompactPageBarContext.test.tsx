@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
-import { expect, it } from 'vitest';
-import { CompactPageBarProvider, useCompactPageBar, useCompactPageBarState, type CompactPageBarConfig } from './CompactPageBarContext';
+import { act, render, screen } from '@testing-library/react';
+import { expect, it, vi } from 'vitest';
+import { CompactPageBarProvider, useCompactPageBar, useCompactPageBarState, usePageHeader, type CompactPageBarConfig } from './CompactPageBarContext';
 
 const first: CompactPageBarConfig = { backTo: '/one', title: 'Spring Games', subtitle: 'Seniors heats · Main Arena', badge: 'live' };
 const second: CompactPageBarConfig = { backTo: '/two', title: 'Autumn Games', subtitle: 'Juniors heats · Arena Two', badge: 'next' };
@@ -33,4 +33,37 @@ it('does not let an older page cleanup clear the current page bar', () => {
 
 it('fails clearly when a compact page tries to publish outside the app provider', () => {
   expect(() => render(<Publish config={first} />)).toThrow('useCompactPageBarState must be used within CompactPageBarProvider');
+});
+
+function Header({ onRefresh, title = 'Timetable' }: { onRefresh?: () => void; title?: string }) {
+  usePageHeader({ title, subtitle: 'Spring Games · 10:54', onRefresh, refreshLabel: 'Refresh timetable' });
+  return null;
+}
+
+function ReadHeader() {
+  const { header } = useCompactPageBarState();
+  return <output data-testid="page-header">{header ? `${header.title}|${header.subtitle}|${header.refreshLabel}|${header.refresh ? 'refresh' : 'none'}` : 'none'}</output>;
+}
+
+it('publishes a page header with a refresh that always calls the latest callback, and clears it on unmount', () => {
+  const first = vi.fn();
+  const second = vi.fn();
+  const view = (show: boolean, cb: () => void) => <CompactPageBarProvider><ReadHeader />{show && <Header onRefresh={cb} />}</CompactPageBarProvider>;
+  const { rerender } = render(view(true, first));
+  expect(screen.getByTestId('page-header')).toHaveTextContent('Timetable|Spring Games · 10:54|Refresh timetable|refresh');
+  rerender(view(true, second));
+  // The same header stays published; only the callback it runs changes.
+  function Probe() { const { header } = useCompactPageBarState(); return <button onClick={header?.refresh}>go</button>; }
+  rerender(<CompactPageBarProvider><Probe /><Header onRefresh={second} /></CompactPageBarProvider>);
+  act(() => screen.getByText('go').click());
+  expect(second).toHaveBeenCalledOnce();
+  expect(first).not.toHaveBeenCalled();
+  rerender(view(false, second));
+  expect(screen.getByTestId('page-header')).toHaveTextContent('none');
+});
+
+it('leaves out the refresh button when the page has none, and ignores usePageHeader outside the provider', () => {
+  render(<CompactPageBarProvider><ReadHeader /><Header /></CompactPageBarProvider>);
+  expect(screen.getByTestId('page-header')).toHaveTextContent('|none');
+  expect(() => render(<Header />)).not.toThrow();
 });

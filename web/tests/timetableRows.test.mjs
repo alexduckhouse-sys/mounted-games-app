@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hiddenFinishedKeys, groupRowsBySession, sessionOrdinals, timetableRows, timetableStatus } from '../src/lib/timetableRows.ts';
+import { groupMaxDelay, groupRowsBySession, isGroupFinished, sessionOrdinals, timetableRows, timetableStatus } from '../src/lib/timetableRows.ts';
 
 const scheduled = new Date('2026-06-01T09:00:00Z');
 const delayed = new Date('2026-06-01T09:12:00Z');
@@ -54,17 +54,14 @@ test('numbers sessions within each age group and groups rows by session in time 
   assert.deepEqual(groups.map((group) => [group.session.id, group.race, group.rows.length]), [[1, true, 2], [2, true, 1], [3, false, 1], [4, true, 1]]);
 });
 
-test('keeps only the most recent finished group visible', () => {
-  const row = (status, ms) => ({ status, effective: new Date(ms) });
-  const groups = [
-    { key: 'a', rows: [row('finished', 1000)] },
-    { key: 'b', rows: [row('finished', 2000)] },
-    { key: 'c', rows: [row('finished', 3000), row('live', 3500)] },
-    { key: 'd', rows: [row('on-time', 4000)] },
-  ];
-  assert.deepEqual([...hiddenFinishedKeys(groups)], ['a']);
-  assert.equal(hiddenFinishedKeys([groups[0]]).size, 0);
-  assert.equal(hiddenFinishedKeys([]).size, 0);
+test('a group is finished only when every row is, and its delay ignores finished rows', () => {
+  const row = (status, delayMinutes) => ({ status, delayMinutes });
+  assert.equal(isGroupFinished([row('finished', 0), row('finished', 5)]), true);
+  assert.equal(isGroupFinished([row('finished', 0), row('live', 0)]), false);
+  assert.equal(isGroupFinished([]), false);
+  assert.equal(groupMaxDelay([row('finished', 9), row('live', 4), row('late', 6)]), 6);
+  assert.equal(groupMaxDelay([row('finished', 9)]), 0);
+  assert.equal(groupMaxDelay([]), 0);
 });
 
 test('status pills say what is happening in a few words', async () => {
