@@ -120,8 +120,8 @@ function CommerceOrdersContent() {
           <>
             <OutcomeState payment={payment} />
             <RefineFoot column>
-              {payment.status !== 0 && <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>{payment.status === 1 ? 'Try again' : 'Pay now'}</button>}
-              <button type="button" className={`rf-btn ${payment.status === 0 ? 'rf-btn-primary' : 'rf-btn-text'}`} onClick={() => setPaying(false)}>Back to order</button>
+              {payment.status === 1 && <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>Try again</button>}
+              <button type="button" className={`rf-btn ${payment.status === 1 ? 'rf-btn-text' : 'rf-btn-primary'}`} onClick={() => setPaying(false)}>Back to order</button>
             </RefineFoot>
           </>
         )}

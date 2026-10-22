@@ -121,6 +121,31 @@ describe('OperationsPage', () => {
     expect(checkbox).toBeChecked();
   });
 
+  it('clears an old save error when the checks are reloaded', async () => {
+    vi.mocked(api.put).mockRejectedValueOnce({ response: { status: 409 } });
+    const user = userEvent.setup();
+    render(<MemoryRouter><OperationsPage /></MemoryRouter>);
+    await user.click(screen.getByRole('tab', { name: 'Equipment' }));
+    await user.click(await screen.findByRole('checkbox', { name: /4 × Pole/i }));
+    await user.click(screen.getByRole('button', { name: 'Save checklist' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The checklist changed on another device');
+
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
+    await user.click(screen.getByRole('button', { name: /Recheck/ }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+
+  it('shows a failed refresh on the equipment view too, not only when nothing has loaded', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter><OperationsPage /></MemoryRouter>);
+    await user.click(screen.getByRole('tab', { name: 'Equipment' }));
+    await screen.findByRole('checkbox', { name: /4 × Pole/i });
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
+    await user.click(screen.getByRole('button', { name: /Recheck/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t refresh the readiness checks');
+  });
+
   it('previews and applies a deterministic draw', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);

@@ -135,10 +135,12 @@ function EventShopContent() {
         order={order}
         onChanged={(next) => {
           setOrder(next);
+          // A cancelled order can't be paid or replayed, so the next attempt must start a fresh order.
+          if (next.status === 4) orderAttempt.current = null;
           if (next.status === 2) { orderAttempt.current = null; setBasket({}); void load(); }
         }}
         variant="page"
-        context={`${itemsText(basketCount)} · ${pounds(order.totalMinor)}`}
+        context={`${itemsText(order.lines.reduce((total, line) => total + line.quantity, 0) || basketCount)} · ${pounds(order.totalMinor)}`}
         onBack={() => setView('basket')}
         backLabel="Back to basket"
         approvedTitle="Order confirmed"
@@ -275,10 +277,9 @@ function ShopOutcome({ order, payment, retry, onShop }: { order: EventOrder; pay
   }
   return (
     <>
-      <OutcomeState payment={payment} title="Payment cancelled" detail={`Nothing was charged. Order #${order.id} is saved unpaid; you can pay or cancel it from Your orders.`} />
-      <RefineFoot column>
-        <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>Pay now</button>
-        <button type="button" className="rf-btn rf-btn-text" onClick={onShop}>Back to shop</button>
+      <OutcomeState payment={payment} title="Payment cancelled" detail={`Order #${order.id} was cancelled and nothing was charged. Your basket is kept.`} />
+      <RefineFoot>
+        <button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={onShop}>Back to shop</button>
       </RefineFoot>
     </>
   );

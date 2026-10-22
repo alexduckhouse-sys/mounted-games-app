@@ -68,6 +68,7 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
     setLoadingReadiness(true);
     setLoadError(null);
     setChecklistSaved(false);
+    setSaveError(null);
     try {
       const { data } = await api.get<CompetitionReadiness>(
         `/competitions/${competition.id}/operations/readiness`,
@@ -235,7 +236,7 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
       <RefineHeader back={back} backLabel="Back to event" context={context} actions={actions} title={title} subtitle={subtitle} tabs={tabs} tabsLabel="Event tools" tabsKind="tablist" />
 
       {!canWrite && <RefineNote>Switch on Edit mode to save checklist changes or apply a draw.</RefineNote>}
-      {loadError && !readiness && <p role="alert" className="mg-notice ops-alert">{loadError} <button type="button" className="rf-btn rf-btn-text" onClick={() => void loadReadiness()}>Try again</button></p>}
+      {loadError && (!readiness || shownView !== 'checks') && <p role="alert" className="mg-notice ops-alert">{loadError} <button type="button" className="rf-btn rf-btn-text" onClick={() => void loadReadiness()}>Try again</button></p>}
       {saveError && <p role="alert" className="mg-notice ops-alert">{saveError}</p>}
       {loadingReadiness && !readiness && <p role="status" className="rf-note">Checking competition details…</p>}
 
@@ -280,7 +281,7 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
           <span className="rf-t2">Replaces lane assignments in unscored sessions. Publishing is a separate step.</span>
           <div className="rf-actions">
             <button type="button" className="rf-btn" onClick={() => { setPreview(null); setDrawMessage(null); setDrawError(null); }}>Discard</button>
-            <button type="button" className="rf-btn rf-btn-primary rf-grow" onClick={() => void applyDraw()} disabled={applying || !canWrite || !preview.fairness.everyTeamAppearsOncePerSession}>
+            <button type="button" className="rf-btn rf-btn-primary rf-grow" onClick={() => void applyDraw()} disabled={applying || previewing || !canWrite || !preview.fairness.everyTeamAppearsOncePerSession}>
               {applying ? 'Applying…' : 'Apply draw'}
             </button>
           </div>

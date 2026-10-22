@@ -146,6 +146,8 @@ export function RefineSheet({ title, onClose, children }: SheetProps) {
       if (items.length === 0) return;
       const first = items[0];
       const last = items[items.length - 1];
+      // Focus can fall out of the sheet (a button disabled or removed); pull it back in.
+      if (!sheet?.contains(document.activeElement)) { event.preventDefault(); first.focus(); return; }
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };

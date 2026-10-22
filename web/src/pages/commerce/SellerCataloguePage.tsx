@@ -184,7 +184,7 @@ function SellerCatalogueContent() {
   if (active) {
     const itemListings = listingsByItem.get(active.id) ?? [];
     const offered = new Set(itemListings.filter((listing) => listing.status === 0 || listing.status === 1).map((listing) => listing.competitionId));
-    const others = competitions.filter((competition) => !offered.has(competition.id) && !itemListings.some((listing) => listing.competitionId === competition.id && listing.status === 2));
+    const others = competitions.filter((competition) => !offered.has(competition.id));
     const nameOf = (id: number) => competitions.find((competition) => competition.id === id);
     return (
       <RefinePage>

@@ -206,14 +206,23 @@ describe('EventShopPage', () => {
       expect(screen.getByText('Weekend camping')).toBeInTheDocument();
     });
 
-    it('says the order is saved unpaid when the buyer cancels', async () => {
+    it('says the order was cancelled, keeps the basket, and starts a fresh order next time', async () => {
       await toPayment();
-      post.mockResolvedValueOnce({ data: { order: { ...demoOrder, testPayments: [testPayment(2)] }, payment: testPayment(2) } } as never);
+      post.mockResolvedValueOnce({ data: { order: { ...demoOrder, status: 4, testPayments: [testPayment(2)] }, payment: testPayment(2) } } as never);
       await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(await screen.findByRole('heading', { name: /Checkout cancelled/ }, { timeout: 4000 })).toBeInTheDocument();
-      expect(screen.getByText(/Order #34 is saved unpaid/)).toBeInTheDocument();
+      expect(screen.getByText(/Order #34 was cancelled and nothing was charged/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pay now' })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Back to shop' }));
-      expect(screen.getByRole('heading', { name: 'Shop' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Basket summary' })).toBeInTheDocument();
+
+      post.mockResolvedValueOnce({ data: { ...demoOrder, id: 35 } } as never);
+      await userEvent.click(screen.getByRole('button', { name: 'Review' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Continue to payment' }));
+      expect(await screen.findByRole('heading', { name: /Payment/ })).toBeInTheDocument();
+      const firstKey = (post.mock.calls[0][1] as { idempotencyKey: string }).idempotencyKey;
+      const secondCall = post.mock.calls.find((call) => call[0] === '/commerce/competitions/5/orders' && call !== post.mock.calls[0]);
+      expect((secondCall![1] as { idempotencyKey: string }).idempotencyKey).not.toBe(firstKey);
     });
   });
 
@@ -317,6 +326,19 @@ describe('SellerCataloguePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Lead rope' }));
     await userEvent.click(screen.getByText('Declined'));
     expect(screen.getByText('Organiser: “Food sellers only at this venue.”')).toBeInTheDocument();
+  });
+
+  it('lets a seller ask again at an event that declined the item', async () => {
+    catalogueGet([mug], [{
+      id: 1, competitionId: 5, catalogueItemId: 20, sellerUserId: 'buyer', status: 2, reviewNote: 'Food only.', reviewedAt: null,
+      item: mug, createdAt: '', updatedAt: '',
+    }]);
+    post.mockResolvedValue({ data: {} } as never);
+    render(<MemoryRouter><SellerCataloguePage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: 'Event mug' }));
+    await userEvent.click(screen.getByText('Offer at another event'));
+    await userEvent.click(screen.getByRole('button', { name: 'Request Autumn Games' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/competitions/5/listings', { catalogueItemId: 20 }));
   });
 
   it('sends the loaded catalogue version when editing stock and details', async () => {
