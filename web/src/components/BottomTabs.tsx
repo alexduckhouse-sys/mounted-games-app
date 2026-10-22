@@ -34,7 +34,7 @@ export function BottomTabs({ competitionId, me }: { competitionId: number; me?: 
         {me && (
           <Link to="/me" className="mg-tab" aria-current={onProfile ? 'page' : undefined}>
             <span className="relative inline-flex">
-              <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-[10px] font-bold leading-none text-white">{me.initials}</span>
+              <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-[10px] font-bold leading-none text-[rgb(var(--mg-surface))]">{me.initials}</span>
               {me.count > 0 && (
                 <span aria-hidden="true" className="absolute -right-1.5 -top-[3px] box-content flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-[rgb(var(--mg-surface))] bg-[rgb(var(--mg-red))] px-0.5 text-[10px] font-bold leading-none text-white">{me.count}</span>
               )}

@@ -64,9 +64,9 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 pt-4">
+    <div className="flex flex-col gap-6">
       <div className="mg-band flex items-center gap-3.5 py-4">
-        <div className="mg-display flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-[22px] font-bold leading-none text-white" aria-hidden="true">
+        <div className="mg-display flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-[22px] font-bold leading-none text-[rgb(var(--mg-surface))]" aria-hidden="true">
           {initialsOf(user.fullName, user.email)}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1">

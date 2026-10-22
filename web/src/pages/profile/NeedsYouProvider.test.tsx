@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, type StoredAuth } from '../../api';
@@ -11,11 +12,13 @@ vi.mock('../../api', async (importOriginal) => ({
 }));
 
 const request = { userId: 'a b', fullName: 'Sam Lee', email: 'sam@example.com', clubName: null, requestedAt: '2026-10-20T09:00:00Z' };
-let seen: NeedsYouValue;
+const latest: { value: NeedsYouValue | null } = { value: null };
+const seen = () => latest.value!;
 
 function Probe() {
-  seen = useNeedsYou();
-  return <span data-testid="count">{seen.count}</span>;
+  const value = useNeedsYou();
+  useEffect(() => { latest.value = value; });
+  return <span data-testid="count">{value.count}</span>;
 }
 
 function mount(roles: string[] | null) {
@@ -38,7 +41,7 @@ describe('NeedsYouProvider', () => {
   it('counts the trainer requests an admin has to look at', async () => {
     mount(['Admin']);
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
-    expect(seen.requests).toEqual([request]);
+    expect(seen().requests).toEqual([request]);
   });
 
   it('asks nothing of anyone else', () => {
@@ -77,7 +80,7 @@ describe('NeedsYouProvider', () => {
     mount(['Admin']);
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
     let ok = false;
-    await act(async () => { ok = await seen.review(request, 'approve'); });
+    await act(async () => { ok = await seen().review(request, 'approve'); });
     expect(ok).toBe(true);
     expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/a%20b/approve');
     expect(screen.getByTestId('count')).toHaveTextContent('0');
@@ -88,7 +91,7 @@ describe('NeedsYouProvider', () => {
     mount(['Admin']);
     await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
     let ok = true;
-    await act(async () => { ok = await seen.review(request, 'decline'); });
+    await act(async () => { ok = await seen().review(request, 'decline'); });
     expect(ok).toBe(false);
     expect(screen.getByTestId('count')).toHaveTextContent('1');
   });
@@ -96,6 +99,6 @@ describe('NeedsYouProvider', () => {
   it('does nothing when used outside the provider', async () => {
     render(<Probe />);
     expect(screen.getByTestId('count')).toHaveTextContent('0');
-    expect(await seen.review(request, 'approve')).toBe(false);
+    expect(await seen().review(request, 'approve')).toBe(false);
   });
 });
