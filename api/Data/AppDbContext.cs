@@ -227,6 +227,13 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
+        // Rider privacy choices: both off unless the rider (or their trainer) ticks them.
+        foreach (var privacy in new[] { typeof(SavedRider), typeof(RiderEntry), typeof(SectionSignup) })
+        {
+            b.Entity(privacy).Property(nameof(RiderEntry.UseInitialOnly)).HasDefaultValue(false);
+            b.Entity(privacy).Property(nameof(RiderEntry.NoFilming)).HasDefaultValue(false);
+        }
+
         b.Entity<RiderEntry>(e =>
         {
             e.Property(r => r.FullName).HasMaxLength(200).IsRequired();

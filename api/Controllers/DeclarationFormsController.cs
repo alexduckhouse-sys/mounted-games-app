@@ -45,7 +45,9 @@ public class DeclarationFormsController : ControllerBase
         if (teamId.HasValue)
             q = q.Where(d => d.TeamId == teamId);
 
-        return (await q.OrderByDescending(d => d.SubmittedAt).ToListAsync()).Select(d => d.ToDto(CanReadPrivate(d)));
+        var forms = await q.OrderByDescending(d => d.SubmittedAt).ToListAsync();
+        var teamOf = await CompetitionsWhereOnTeamAsync();
+        return forms.Select(d => d.ToDto(CanReadPrivate(d), teamOf.Contains(d.Team?.CompetitionId ?? 0)));
     }
 
     [HttpGet("{id:int}")]
@@ -57,7 +59,15 @@ public class DeclarationFormsController : ControllerBase
             .Include(d => d.Riders)
             .FirstOrDefaultAsync(d => d.Id == id);
         if (d is null || (!d.IsLocked && !CanReadPrivate(d))) return NotFound();
-        return d.ToDto(CanReadPrivate(d));
+        return d.ToDto(CanReadPrivate(d), (await CompetitionsWhereOnTeamAsync()).Contains(d.Team?.CompetitionId ?? 0));
+    }
+
+    /// <summary>Competitions where the caller is on the team; they see full rider names there even if a rider asked for an initial.</summary>
+    private async Task<HashSet<int>> CompetitionsWhereOnTeamAsync()
+    {
+        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(uid)) return new HashSet<int>();
+        return (await _db.CompetitionCollaborators.Where(k => k.UserId == uid).Select(k => k.CompetitionId).ToListAsync()).ToHashSet();
     }
 
     private bool CanReadPrivate(DeclarationForm form)
@@ -116,7 +126,9 @@ public class DeclarationFormsController : ControllerBase
                 BibColour = string.IsNullOrWhiteSpace(r.BibColour) ? null : r.BibColour.Trim(),
                 IsCaptain = r.IsCaptain,
                 IsReserve = r.IsReserve,
-                OrderIndex = r.OrderIndex == 0 ? order : r.OrderIndex
+                OrderIndex = r.OrderIndex == 0 ? order : r.OrderIndex,
+                UseInitialOnly = r.UseInitialOnly,
+                NoFilming = r.NoFilming
             });
             order++;
         }
@@ -136,13 +148,17 @@ public class DeclarationFormsController : ControllerBase
                         CreatedByUserId = userId,
                         FullName = r.FullName,
                         DateOfBirth = r.DateOfBirth,
-                        HorseName = r.HorseName
+                        HorseName = r.HorseName,
+                        UseInitialOnly = r.UseInitialOnly,
+                        NoFilming = r.NoFilming
                     });
                 }
                 else
                 {
                     existing.DateOfBirth ??= r.DateOfBirth;
                     existing.HorseName ??= r.HorseName;
+                    existing.UseInitialOnly = r.UseInitialOnly;
+                    existing.NoFilming = r.NoFilming;
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
             }
