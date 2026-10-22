@@ -484,3 +484,24 @@ export interface StartStreamRequest extends PublishRequest { arenaName: string; 
 export interface PublishResponse { streamId: number; attempt: number; sdpAnswer: string }
 export interface ReadyRequest { attempt: number }
 export interface UpdateStreamRequest { status?: 0 | 1; audioMuted?: boolean; caption?: string | null }
+
+/** 0 ticker, 1 lower bar, 2 alert. */
+export type OverlayBannerStyle = 0 | 1 | 2;
+/** 0 auto (follows the timetable or results), 1 always on, 2 off. */
+export type OverlayMode = 0 | 1 | 2;
+
+/** What viewers see over a competition's live video (`/competitions/{id}/overlays`). */
+export interface StreamOverlay {
+  bannerText: string | null;
+  bannerStyle: OverlayBannerStyle;
+  /** Arenas the banner shows in; empty means every arena. */
+  bannerArenas: string[];
+  stripMode: OverlayMode;
+  scoreCardMode: OverlayMode;
+  scoreCardDelaySeconds: number;
+  scoreCardSeconds: number;
+  /** The event's look, stored as the web app's own JSON. Read it with `parseLook`. */
+  look: unknown;
+  revision: number;
+  updatedAt: string | null;
+}

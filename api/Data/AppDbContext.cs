@@ -22,6 +22,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<RiderEntry> RiderEntries => Set<RiderEntry>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<LiveStream> LiveStreams => Set<LiveStream>();
+    public DbSet<StreamOverlay> StreamOverlays => Set<StreamOverlay>();
     public DbSet<TrainerNote> TrainerNotes => Set<TrainerNote>();
     public DbSet<IpBlock> IpBlocks => Set<IpBlock>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
@@ -37,6 +38,14 @@ public class AppDbContext : IdentityDbContext<AppUser>
         base.OnModelCreating(b);
         b.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
+        b.Entity<StreamOverlay>(e =>
+        {
+            e.HasKey(o => o.CompetitionId);
+            e.HasOne(o => o.Competition).WithOne().HasForeignKey<StreamOverlay>(o => o.CompetitionId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(o => o.BannerText).HasMaxLength(140);
+            e.Property(o => o.BannerArenas).HasMaxLength(1000).IsRequired();
+            e.Property(o => o.LookJson).HasMaxLength(4000).IsRequired();
+        });
         b.Entity<LiveStream>(e =>
         {
             e.Property(s => s.ArenaName).HasMaxLength(80).IsRequired();

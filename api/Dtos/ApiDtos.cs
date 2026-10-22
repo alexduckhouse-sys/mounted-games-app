@@ -343,3 +343,24 @@ public record IceServer(object Urls,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Credential = null);
 public record IceServersResponse(IReadOnlyList<IceServer> IceServers);
 public record WatchStreamResponse(string WatchId, string SdpOffer, int Generation, IReadOnlyList<IceServer> IceServers);
+
+// ---- Stream overlays ----
+
+/// <summary>Overlay settings every viewer of a competition's video receives. <c>Look</c> is the web's own JSON.</summary>
+public record StreamOverlayDto(
+    string? BannerText, OverlayBannerStyle BannerStyle, IReadOnlyList<string> BannerArenas,
+    OverlayMode StripMode, OverlayMode ScoreCardMode, int ScoreCardDelaySeconds, int ScoreCardSeconds,
+    System.Text.Json.JsonElement Look, int Revision, DateTime? UpdatedAt);
+
+/// <summary>Replaces the overlay settings. Send the revision you last saw; a newer one on the server returns 409.</summary>
+public record UpdateStreamOverlayRequest(
+    [StringLength(140)] string? BannerText,
+    OverlayBannerStyle BannerStyle,
+    IReadOnlyList<string>? BannerArenas,
+    OverlayMode StripMode,
+    OverlayMode ScoreCardMode,
+    [Range(0, 30)] int ScoreCardDelaySeconds,
+    [Range(3, 60)] int ScoreCardSeconds,
+    System.Text.Json.JsonElement? Look,
+    int? ExpectedRevision);
+

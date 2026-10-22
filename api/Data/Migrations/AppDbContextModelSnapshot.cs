@@ -1940,6 +1940,54 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("ShopReports");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.StreamOverlay", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BannerArenas")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("BannerStyle")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BannerText")
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)");
+
+                    b.Property<string>("LookJson")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ScoreCardDelaySeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ScoreCardMode")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ScoreCardSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StripMode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("CompetitionId");
+
+                    b.ToTable("StreamOverlays");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Team", b =>
                 {
                     b.Property<int>("Id")
@@ -2636,6 +2684,17 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Post");
 
                     b.Navigation("Reporter");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.StreamOverlay", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
+                        .WithOne()
+                        .HasForeignKey("MountedGames.Api.Entities.StreamOverlay", "CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Competition");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Team", b =>

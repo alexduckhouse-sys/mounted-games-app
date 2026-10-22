@@ -14,7 +14,7 @@ const publisher = vi.hoisted(() => ({
   capture: vi.fn(), devices: vi.fn(), switchCamera: vi.fn(), start: vi.fn(), stop: vi.fn(), dispose: vi.fn(), mute: vi.fn(), pause: vi.fn(), caption: vi.fn(), viewers: vi.fn(),
 }));
 vi.mock('../../live/streamPublisher', () => ({ browserPublisherDependencies: () => ({}), createStreamPublisher: () => publisher }));
-vi.mock('./context', () => ({ useCompetition: () => ({ competition: competition({ sessions: [session(1, { arenaName: 'Main Arena' }), session(2, { arenaName: 'Second Arena' })] }), streamingEnabled: state.enabled, streams: state.streams, streamMessages: [] }) }));
+vi.mock('./context', async (importOriginal) => ({ ...(await importOriginal<typeof import('./context')>()), useCompetition: () => ({ competition: competition({ sessions: [session(1, { arenaName: 'Main Arena' }), session(2, { arenaName: 'Second Arena' })] }), streamingEnabled: state.enabled, streams: state.streams, streamMessages: [] }) }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => state.organiser }) }));
 vi.mock('../../pwa', () => ({ setBroadcasting: vi.fn() }));
 const update = (patch: Partial<PublisherSnapshot>) => { state.snapshot = { ...state.snapshot, ...patch }; state.listener(); };

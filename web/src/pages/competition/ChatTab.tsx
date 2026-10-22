@@ -349,6 +349,7 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
       {canEditStream ? <button ref={changeRef} type="button" className="staff-stream-change" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>Change</button>
         : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>Change</Link> : null}
     </div>
+    {canBroadcast && <Link className="mg-text-link self-start text-sm" to={`/competitions/${competitionId}/produce`}>Banners and overlays</Link>}
     {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
   </div>;
 }

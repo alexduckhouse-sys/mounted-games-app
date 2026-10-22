@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import type { StreamInvoke } from '../../live/streamRuntime';
-import type { CompetitionDetail, LiveStream, ChatMessage } from '../../types';
+import type { CompetitionDetail, LiveStream, ChatMessage, StreamOverlay } from '../../types';
+import type { OverlaySaveResult } from '../../hooks/useStreamOverlay';
 
 export interface CompetitionCtx {
   competition: CompetitionDetail;
@@ -14,6 +15,10 @@ export interface CompetitionCtx {
   updatedAt?: Date | null;
   /** A saved response or a disconnected live feed must not be labelled live. */
   isStale?: boolean;
+  /** Overlays drawn over the live video; defaults when the API has none. */
+  overlay?: StreamOverlay;
+  /** Change the overlays (broadcasters only); see `useStreamOverlay`. */
+  saveOverlay?: (change: (overlay: StreamOverlay) => StreamOverlay) => Promise<OverlaySaveResult>;
 }
 
 export const CompetitionContext = createContext<CompetitionCtx | null>(null);
