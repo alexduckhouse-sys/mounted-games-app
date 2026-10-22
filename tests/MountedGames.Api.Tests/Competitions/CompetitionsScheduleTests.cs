@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Competitions;
@@ -617,6 +618,65 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
         replaceExisting = replace,
         sectionIds,
     };
+
+    // ---- auto-timetable order by age ----
+
+    [Theory]
+    [InlineData("Open", 0)]
+    [InlineData("Seniors", 0)]
+    [InlineData("Under 18", 1)]
+    [InlineData("U17", 1)]
+    [InlineData("Under 15", 2)]
+    [InlineData("Intermediate", 2)]
+    [InlineData("Under 14", 3)]
+    [InlineData("u-12", 4)]
+    [InlineData("Juniors", 4)]
+    [InlineData("Under 10", 5)]
+    [InlineData("Novices", 5)]
+    [InlineData("Lead Rein", 6)]
+    [InlineData("Lead-rein Under 10", 6)]
+    [InlineData("Mystery", SectionAgeOrder.Unclassified)]
+    [InlineData("", SectionAgeOrder.Unclassified)]
+    [InlineData(null, SectionAgeOrder.Unclassified)]
+    public void SectionAgeOrder_PlacesAgeGroupsOldestFirst(string? text, int rank)
+        => Assert.Equal(rank, SectionAgeOrder.Rank(text));
+
+    [Fact]
+    public void SectionAgeOrder_FallsBackToTheDisplayName_WhenTheAgeGroupIsNoHelp()
+    {
+        var section = new CompetitionSection { AgeGroup = "Mixed", DisplayName = "Teams Under 14" };
+        Assert.Equal(3, SectionAgeOrder.Rank(section));
+        Assert.Equal(4, SectionAgeOrder.Rank(new CompetitionSection { AgeGroup = "Under 12", DisplayName = "Teams Open" }));
+    }
+
+    [Fact]
+    public async Task AutoTimetable_SchedulesOldestAgeGroupFirst_ThenUnclassifiedByName()
+    {
+        var comp = await _f.SeedCompetitionAsync(start: new DateTime(2032, 3, 10, 14, 30, 0, DateTimeKind.Utc));
+        var club = await _f.SeedClubAsync();
+        // Created youngest-first and in a jumbled order; names chosen so the alphabetical order differs too.
+        var names = new[] { "Zebra Cup", "Lead Rein", "Under 10", "Junior", "Under 14", "Under 15", "Under 17", "Open", "Alpha Cup" };
+        foreach (var name in names)
+        {
+            var section = await _f.WithDbAsync(async db =>
+            {
+                var s = new CompetitionSection { CompetitionId = comp, Format = SectionFormat.Teams, AgeGroup = name, DisplayName = name };
+                db.CompetitionSections.Add(s);
+                await db.SaveChangesAsync();
+                return s.Id;
+            });
+            await _f.SeedTeamAsync(comp, section, club, $"Team {name}");
+        }
+        var admin = await _f.AdminAsync();
+
+        var detail = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/auto-timetable", Auto())).ReadAsync<CompetitionDetail>();
+
+        var ordered = detail.Sessions.OrderBy(s => s.OrderIndex).ToList();
+        Assert.Equal(
+            new[] { "Open", "Under 17", "Under 15", "Under 14", "Junior", "Under 10", "Lead Rein", "Alpha Cup", "Zebra Cup" },
+            ordered.Select(s => s.Name));
+        Assert.Equal(ordered.Select(s => s.ScheduledStart), ordered.Select(s => s.ScheduledStart).OrderBy(x => x));
+    }
 
     [Fact]
     public async Task AutoTimetable_Returns401_WhenAnonymous()

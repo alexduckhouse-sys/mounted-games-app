@@ -763,7 +763,9 @@ public class CompetitionsController : ControllerBase
         var sectionIds = req.SectionIds?.ToHashSet();
         var sections = comp.Sections
             .Where(s => sectionIds == null || sectionIds.Contains(s.Id))
-            .OrderBy(s => s.DisplayName)
+            // Oldest age group first; sections we can't place follow, then ties by name as before.
+            .OrderBy(s => SectionAgeOrder.Rank(s))
+            .ThenBy(s => s.DisplayName)
             .ToList();
         if (sections.Count == 0) return BadRequest("No sections to schedule.");
 
