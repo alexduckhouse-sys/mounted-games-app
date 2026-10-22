@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Trophy,
   Hammer, Check, ChevronDown, ChevronUp, Lock, Unlock, Sparkles, Download,
@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { competitionDateText } from '../../lib/competitionDates';
-import { DemoEntryPayment } from '../commerce/DemoEntryPayment';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
@@ -68,7 +67,7 @@ export function DetailsTab() {
 
   function exportAllSignupsCsv() {
     if (allSignups.length === 0) return;
-    const csv = signupsToCsv(allSignups);
+    const csv = signupsToCsv(allSignups, { test: !!competition.isDemo });
     downloadCsv(`${safeFilename(competition.name)}_signups.csv`, csv);
   }
 
@@ -199,6 +198,7 @@ export function DetailsTab() {
                 section={sec}
                 allSignups={allSignups}
                 signupsLocked={!!competition.signupsLocked}
+                isDemo={!!competition.isDemo}
                 paymentDestination={competition.paymentDestination ?? null}
                 competitionName={competition.name}
                 onChanged={() => { refreshSignups(); reload(); }}
@@ -217,13 +217,15 @@ export function DetailsTab() {
 
 function SectionSignupCard({
   competitionId, section, allSignups, signupsLocked,
-  competitionName,
+  competitionName, isDemo,
   onChanged, canManage, hideJoin,
 }: {
   competitionId: number;
   section: CompetitionSection;
   allSignups: SectionSignup[];
   signupsLocked: boolean;
+  /** A demo event: a paid entry goes on to the test payment page. */
+  isDemo: boolean;
   paymentDestination: string | null;
   competitionName: string;
   onChanged: () => void;
@@ -232,7 +234,7 @@ function SectionSignupCard({
   hideJoin: boolean;
 }) {
   const { user } = useAuth();
-  const [createdSignup, setCreatedSignup] = useState<SectionSignup | null>(null);
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [ponyClub, setPonyClub] = useState('');
@@ -263,10 +265,11 @@ function SectionSignupCard({
       });
       setFullName(''); setPonyClub(''); setContact(''); setTeamCode('');
       setPrivacy({ useInitialOnly: false, noFilming: false });
-      setCreatedSignup(signup);
       setDone(signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.');
       onChanged();
       setOpen(false);
+      // Demo events only: straight on to the clearly labelled test payment page.
+      if (isDemo && signup.status === 0 && signup.amountMinor > 0) navigate(`/me/signups/${signup.id}/test-payment`);
     } catch (e) {
       const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
       setErr(typeof msg === 'string' ? msg : msg?.message ?? 'Could not sign up.');
@@ -279,7 +282,7 @@ function SectionSignupCard({
     if (signups.length === 0) return;
     downloadCsv(
       `${safeFilename(competitionName)}_${safeFilename(section.displayName)}_signups.csv`,
-      signupsToCsv(signups),
+      signupsToCsv(signups, { test: isDemo }),
     );
   }
 
@@ -331,7 +334,9 @@ function SectionSignupCard({
             <button type="button" onClick={() => setOpen(false)} className="mg-btn mg-btn-secondary !min-h-11">Cancel</button>
           </div>
           <p className="rf-note !p-0">
-            Paid entries stay pending until the organiser confirms payment. Demo events offer a test checkout after entry.
+            {isDemo
+              ? 'This is a demo event. After you confirm, you will see a test payment page. No money is taken.'
+              : 'Paid entries stay pending until the organiser confirms payment.'}
           </p>
         </div>
       )}
@@ -340,15 +345,6 @@ function SectionSignupCard({
         <p role="status" className="m-0 flex items-center gap-1 text-sm font-semibold text-[rgb(var(--mg-ok))]">
           <Check className="h-4 w-4" aria-hidden="true" /> {done}
         </p>
-      )}
-      {createdSignup && (
-        <DemoEntryPayment
-          key={createdSignup.id}
-          signupId={createdSignup.id}
-          amountMinor={createdSignup.amountMinor}
-          signupStatus={createdSignup.status}
-          onChanged={onChanged}
-        />
       )}
       {canManage && signups.length > 0 && (
         <details className="text-sm">
@@ -366,7 +362,7 @@ function SectionSignupCard({
           </summary>
           <ul className="m-0 flex list-none flex-col p-0">
             {signups.map((s) => (
-              <SignupRow key={s.id} signup={s} onChanged={onChanged} />
+              <SignupRow key={s.id} signup={s} isDemo={isDemo} onChanged={onChanged} />
             ))}
           </ul>
         </details>
@@ -375,7 +371,7 @@ function SectionSignupCard({
   );
 }
 
-function SignupRow({ signup, onChanged }: { signup: SectionSignup; onChanged: () => void }) {
+function SignupRow({ signup, isDemo, onChanged }: { signup: SectionSignup; isDemo: boolean; onChanged: () => void }) {
   const status = SIGNUP_STATUS[signup.status];
   async function setStatus(next: SignupPaymentStatus) {
     await api.put(`/signups/${signup.id}/status`, { status: next });
@@ -392,18 +388,19 @@ function SignupRow({ signup, onChanged }: { signup: SectionSignup; onChanged: ()
         <span className={`block truncate font-semibold ${status.struck ? 'line-through' : ''}`}>{signup.fullName}</span>
         {signup.ponyClubName && <span className="rf-t2 truncate">{signup.ponyClubName}</span>}
       </span>
-      <RefineStatus tone={status.tone}>{status.label}</RefineStatus>
-      {signup.status !== 1 && signup.status !== 3 && (
+      <RefineStatus tone={status.tone}>{isDemo && signup.amountMinor > 0 && signup.status !== 0 ? `${status.label} (test)` : status.label}</RefineStatus>
+      {/* Demo entries are paid through the test payment page only; the server refuses manual changes. */}
+      {!isDemo && signup.status !== 1 && signup.status !== 3 && (
         <button type="button" onClick={() => setStatus(1)} className="mg-icon-btn" title="Mark paid" aria-label={`Mark ${signup.fullName} paid`}>
           <Check className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
-      {signup.status === 1 && (
+      {!isDemo && signup.status === 1 && (
         <button type="button" onClick={() => setStatus(2)} className="mg-icon-btn" title="Mark refunded" aria-label={`Mark ${signup.fullName} refunded`}>
           <RotateCcw className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
-      {signup.status !== 3 && (
+      {!isDemo && signup.status !== 3 && (
         <button type="button" onClick={() => setStatus(3)} className="mg-icon-btn" title="Cancel signup (keeps the record)" aria-label={`Cancel signup for ${signup.fullName}`}>
           <Ban className="h-4 w-4" aria-hidden="true" />
         </button>

@@ -102,6 +102,8 @@ export interface CompetitionPickerItem {
   location?: string | null;
   ageGroupCount?: number;
   live?: { sectionName?: string | null; heatLabel: string; arenaName?: string | null } | null;
+  /** A sample event: its payments are tests only. */
+  isDemo?: boolean;
 }
 
 export interface CompetitionPickerPage {
@@ -250,6 +252,8 @@ export interface CompetitionDetail {
   signupsLocked?: boolean;
   /** Explicit capability from APIs that keep trainer messages private. Missing means unavailable. */
   staffChatEnabled?: boolean;
+  /** A sample event: its payments are tests only. */
+  isDemo?: boolean;
 }
 
 export interface MySignup {

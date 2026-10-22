@@ -53,6 +53,7 @@ const EventToolsPage = lazy(() => import('./pages/eventTools/EventToolsPage'));
 const PrintEventPage = lazy(() => import('./pages/eventTools/PrintEventPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then((module) => ({ default: module.PrivacyPage })));
 const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({ default: module.AccountPage })));
+const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymentPage').then((module) => ({ default: module.TestEntryPaymentPage })));
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 
 export default function App() {
@@ -132,6 +133,9 @@ export default function App() {
               <Route path="me/account"element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
               <Route path="me/signups" element={
                 <ProtectedRoute><MySignupsPage /></ProtectedRoute>
+              } />
+              <Route path="me/signups/:signupId/test-payment" element={
+                <ProtectedRoute><TestEntryPaymentPage /></ProtectedRoute>
               } />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

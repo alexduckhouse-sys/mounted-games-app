@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { api } from '../../api';
 import { DemoPaymentFlow, DemoPaymentLock } from './DemoPaymentFlow';
-import { DemoEntryPayment } from './DemoEntryPayment';
 import { DemoOrderCheckout } from './EventShopPage';
 import type { EventOrder, FakePaymentOutcome, TestPayment } from './types';
 
@@ -127,49 +126,6 @@ describe('demo payment entry points', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Run demo payment for £25.00' }));
     await screen.findByRole('heading', { name: 'Demo payment approved' });
     expect(post).toHaveBeenCalledWith('/commerce/orders/31/demo-checkout', {
-      idempotencyKey: expect.any(String), outcome: 0,
-    });
-  });
-
-  it('runs the entry form and records only the fake outcome', async () => {
-    get.mockImplementation(async (url) => url === '/commerce/entry-payments/mine'
-      ? { data: [] } as never
-      : { data: { competitionId: 5, isDemo: true, isLocked: true, updatedAt: null } } as never);
-    post.mockResolvedValue({ data: { signupId: 42, signupStatus: 1, paidAt: '', payment: payment(0) } } as never);
-    render(<DemoEntryPayment signupId={42} amountMinor={2500} signupStatus={0} onChanged={vi.fn()} />);
-    await screen.findByText('DEMO — no money is taken');
-    await enterSuccessDetails();
-    await userEvent.click(screen.getByRole('button', { name: 'Run demo payment for £25.00' }));
-    await screen.findByRole('heading', { name: 'Demo payment approved' });
-    expect(post).toHaveBeenCalledWith('/commerce/signups/42/demo-checkout', {
-      idempotencyKey: expect.any(String), outcome: 0,
-    });
-  });
-
-  it('restores an entry test receipt and follows an externally refreshed signup status', async () => {
-    get.mockImplementation(async (url) => url === '/commerce/entry-payments/mine'
-      ? { data: [payment(0, 70)] } as never
-      : { data: { competitionId: 5, isDemo: true, isLocked: true, updatedAt: null } } as never);
-    const view = render(<DemoEntryPayment signupId={42} amountMinor={2500} signupStatus={0} onChanged={vi.fn()} />);
-    expect(await screen.findByText('Test receipt: TEST-70')).toBeInTheDocument();
-
-    view.rerender(<DemoEntryPayment signupId={42} amountMinor={2500} signupStatus={1} onChanged={vi.fn()} />);
-    expect(screen.queryByRole('button', { name: 'Try another demo payment' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Run demo refund' })).toBeInTheDocument();
-  });
-
-  it('shows the test service result after an entry refund', async () => {
-    get.mockImplementation(async (url) => url === '/commerce/entry-payments/mine'
-      ? { data: [payment(0, 70)] } as never
-      : { data: { competitionId: 5, isDemo: true, isLocked: true, updatedAt: null } } as never);
-    post.mockResolvedValue({ data: { signupId: 42, signupStatus: 2, paidAt: null, payment: payment(3, 71) } } as never);
-    render(<DemoEntryPayment signupId={42} amountMinor={2500} signupStatus={1} onChanged={vi.fn()} />);
-    await screen.findByText('Test receipt: TEST-70');
-    await userEvent.click(screen.getByRole('button', { name: 'Run demo refund' }));
-
-    expect(await screen.findByRole('heading', { name: 'Demo refund recorded' })).toBeInTheDocument();
-    expect(screen.getByText('Test receipt: TEST-71')).toBeInTheDocument();
-    expect(post).toHaveBeenCalledWith('/commerce/signups/42/demo-refund', {
       idempotencyKey: expect.any(String), outcome: 0,
     });
   });

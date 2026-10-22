@@ -55,9 +55,10 @@ interface SignupRow {
  * CSV of signups for a single competition. Columns kept narrow so it opens
  * cleanly in Excel / Google Sheets without horizontal scroll.
  */
-export function signupsToCsv(signups: ReadonlyArray<SignupRow>): string {
+export function signupsToCsv(signups: ReadonlyArray<SignupRow>, options: { test?: boolean } = {}): string {
+  // A demo event's payments are tests: say so in the file, so nobody adds them up as money received.
   const header = [
-    'Section', 'Name', 'Pony Club', 'Contact', 'Amount (GBP)',
+    'Section', 'Name', 'Pony Club', 'Contact', options.test ? 'Test amount (GBP - no money taken)' : 'Amount (GBP)',
     'Status', 'Paid at', 'Signed up at',
   ];
   const rows = signups.map((s) => [
@@ -66,7 +67,9 @@ export function signupsToCsv(signups: ReadonlyArray<SignupRow>): string {
     s.ponyClubName ?? '',
     s.contactInfo ?? '',
     (s.amountMinor / 100).toFixed(2),
-    STATUS_LABEL[s.status] ?? String(s.status),
+    options.test && s.amountMinor > 0 && s.status !== 0
+      ? `${STATUS_LABEL[s.status] ?? s.status} (test)`
+      : STATUS_LABEL[s.status] ?? String(s.status),
     s.paidAt ?? '',
     s.createdAt,
   ]);
