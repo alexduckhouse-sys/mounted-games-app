@@ -129,7 +129,7 @@ export function DetailsTab() {
         {linkRow('../rulebooks', 'Rulebooks')}
         {linkRow(`/event-tools/${competition.id}/print/draw`, 'Print draw')}
         {linkRow(`/event-tools/${competition.id}/print/results`, 'Print results')}
-        {mayOrganise && linkRow(`/event-tools/${competition.id}`, 'Import, duplicate & print')}
+        {(hasRole('Admin') || (hasRole('Trainer') && competition.createdByUserId === user?.id)) && linkRow(`/event-tools/${competition.id}`, 'Import, duplicate & print')}
         {mayEntries && linkRow('../shop/manage', 'Manage event shop')}
         {mayOrganise && linkRow('../operations', 'Readiness & draw')}
       </RefineList>
