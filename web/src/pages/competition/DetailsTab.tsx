@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Trophy,
   Hammer, Check, ChevronDown, ChevronUp, Lock, Unlock, Sparkles, Download,
-  X, RotateCcw, Ban,
+  X, RotateCcw, Ban, CalendarPlus,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { competitionDateText } from '../../lib/competitionDates';
+import { competitionCalendarUrl } from '../../lib/sharing';
 import { DemoEntryPayment } from '../commerce/DemoEntryPayment';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
@@ -127,8 +128,15 @@ export function DetailsTab() {
       <RefineList label="Event links">
         {linkRow('../shop', 'Event shop')}
         {linkRow('../rulebooks', 'Rulebooks')}
+        <li>
+          <a className="rf-row" href={competitionCalendarUrl(competition.id, window.location.origin)}>
+            <span className="rf-grow rf-t1">Add to calendar</span>
+            <CalendarPlus className="h-5 w-5 rf-chev" aria-hidden="true" />
+          </a>
+        </li>
         {linkRow(`/event-tools/${competition.id}/print/draw`, 'Print draw')}
         {linkRow(`/event-tools/${competition.id}/print/results`, 'Print results')}
+        {mayOrganise && linkRow(`/event-tools/${competition.id}/print/poster`, 'Print venue poster')}
         {(hasRole('Admin') || (hasRole('Trainer') && competition.createdByUserId === user?.id)) && linkRow(`/event-tools/${competition.id}`, 'Import, duplicate & print')}
         {mayEntries && linkRow('../shop/manage', 'Manage event shop')}
         {mayOrganise && linkRow('../operations', 'Readiness & draw')}

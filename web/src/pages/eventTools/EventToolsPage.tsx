@@ -131,6 +131,7 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
     { to: 'draw', title: 'Draw and lanes', detail: 'Sessions, heats, lanes and race order' },
     { to: 'score-sheets', title: 'Score sheets', detail: 'Blank placing, elimination and points columns' },
     { to: 'results', title: 'Results', detail: 'Current section standings, marked provisional when unfinished' },
+    { to: 'poster', title: 'Venue poster', detail: 'Name, date, venue and a QR code to this event’s page' },
   ];
 
   return <RefinePage className="tools-page">

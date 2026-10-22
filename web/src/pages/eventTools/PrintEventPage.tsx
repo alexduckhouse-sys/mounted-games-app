@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ChevronLeft, Printer } from 'lucide-react';
 import { api } from '../../api';
 import type { PrintableDraw, PrintableResults, PrintableScoreSheets } from './eventToolsTypes';
+import { PosterPage } from './PosterPage';
 import './printEvent.css';
 
 type View = 'draw' | 'score-sheets' | 'results';
@@ -22,6 +23,7 @@ function message(error: unknown) {
 
 export default function PrintEventPage() {
   const { competitionId = '', view: rawView = 'draw' } = useParams();
+  if (rawView === 'poster') return <PosterPage key={competitionId} competitionId={competitionId} />;
   const view = (['draw', 'score-sheets', 'results'].includes(rawView) ? rawView : 'draw') as View;
   return <PrintView key={`${competitionId}:${view}`} competitionId={competitionId} view={view} />;
 }

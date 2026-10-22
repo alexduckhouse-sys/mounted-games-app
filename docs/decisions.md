@@ -9,6 +9,13 @@
 - Files: `api/Auth/CompetitionAccessAttribute.cs`, `api/Auth/Roles.cs`, organiser controller actions and frontend organiser controls.
 - Source: AI Control Centre security-review chat, 15 October 2026.
 
+## 2026-10-22: Sharing links, calendars and QR codes
+- Why: shared links showed a blank preview, and organisers and parents had no way to put heat times in a calendar or scan into an event or a team.
+- Rule: link previews are answered by `web/middleware.ts` for preview crawlers only (not search engines), from public share cards, with every value escaped. A team's calendar feed is one link per team, managed by the team's trainer, the competition's owner and admins; only a hash of its token is stored, regenerating replaces it, and it lists public timetable facts only. QR codes are generated in the browser. Followers don't get their own feed links; the trainer shares the team's link.
+- Rejected: per-user feed tokens (a second table and revoke flow for little gain); signed-in-only feeds (calendar apps send no credentials); a QR web service (leaks the join key); the shareable team results card (not included for now).
+- Files: `web/middleware.ts`, `web/src/lib/shareCard.ts`, `api/Controllers/CalendarController.cs`, `api/Controllers/ShareController.cs`, `api/Services/Calendar/`, `web/src/pages/eventTools/PosterPage.tsx`, `web/src/pages/TeamSharing.tsx`.
+- Source: competitive-gaps point 6, decided 22 October 2026.
+
 ## 2026-10-22: Owners and their competition team run the day
 - Why: events are run by the organiser and helpers (co-organisers, ring scorers, line judges, commentators, stream producers), not by global admins. This was decided by the user in the 22 October review.
 - Rule: scoring, sessions, finals and timetable endpoints are open to the competition's owner (a Trainer whose ID is the stored `CreatedByUserId`), to people on that competition's team (`CompetitionCollaborators`, any account type), and to admins. They're gated by the `CompetitionStaff` policy (Admin, Trainer, or on at least one team) plus `[CompetitionAccess]`, which checks the particular competition and returns 404 otherwise. Only the owner or an admin changes the team; a helper can leave.

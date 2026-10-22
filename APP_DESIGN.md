@@ -152,6 +152,11 @@ Full spec: `docs/specs/live-stream.md`. Design: `docs/designs/live-stream-propos
 - **Supporter flow:** any authenticated user lands on `/teams` (route opened up beyond Trainer/Admin). A **Join a team** card at the top accepts a key. The request becomes a Pending row; the trainer accepts; the supporter then sees the team in their own My Teams list with a `Supporter` badge and gets the team's heat schedule and dec forms.
 - Endpoints: `POST/DELETE /api/teams/:id/supporter-key`, `GET /api/teams/:id/supporters`, `POST /api/teams/join`, `PUT /api/team-supporters/:id/accept`, `DELETE /api/team-supporters/:id`. The `/api/trainer/my-teams` response now annotates each team with `relationship: "trainer" | "supporter"` and (trainer-only) `supporterJoinKey`.
 
+## Sharing links, calendars and QR codes (22 October 2026)
+- **Link previews:** a shared competition link (any tab), team profile link, the home page and the competitions list show a title, description and branded image in WhatsApp, Facebook, iMessage and similar. Crawlers don't run JavaScript, so `web/middleware.ts` answers them with a tags-only page built from the public `/api/share/*` cards (competition name, date, venue, team count; team profile name, club, event count). Nothing staff-only or personal. Search engines get the normal app.
+- **Add to calendar:** the Details tab has an **Add to calendar** download (`.ics`) for the event. Trainers can make a **team calendar** link on My Teams: a subscribable feed of that team's heats, in the phone's own time zone, that moves when the timetable moves. The link holds a private token; it's shown once, making a new one stops the old one, and anyone with it can see the team's heat times and nothing else.
+- **QR codes:** organisers (owner, helpers and admins) can print a **venue poster** (name, date, venue, big QR to the event page) from the Details tab or Event tools. Trainers see a QR for each team's supporter join key under Supporters; scanning opens My Teams with the key filled in, after sign-in.
+
 ## Trainer / supporter notifications
 - **Foreground-only** browser notifications via the Web Notification API. Hook: `useTeamNotifications` (`web/src/hooks/`). Toggle lives in the My Teams header.
 - Fires when:

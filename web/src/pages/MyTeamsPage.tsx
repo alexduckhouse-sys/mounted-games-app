@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Users, FileText, Clock, Activity, CheckCircle2, KeyRound, UserPlus, X, RefreshCw, Copy, Check, Bell, BellOff, Sparkles } from 'lucide-react';
 import { api } from '../api';
 import type { CompetitionDetail, Heat, Session, Team, TeamSupporter, TrainerNote } from '../types';
@@ -7,6 +7,8 @@ import { bibAccent, bibLabel } from '../lib/bib';
 import { displaySectionName } from '../lib/section';
 import { computeTimings, formatTime, roundTo5Min } from '../lib/time';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
+import { joinKeyFromSearch } from '../lib/sharing';
+import { JoinQr, TeamCalendarFeed } from './TeamSharing';
 
 interface TeamHeatRow {
   competitionId: number;
@@ -260,7 +262,9 @@ function NotificationToggle({
 }
 
 function JoinTeamCard({ onJoined }: { onJoined: () => void }) {
-  const [key, setKey] = useState('');
+  // A scanned team QR code opens this page with the key in the address (/teams?join=KEY).
+  const { search } = useLocation();
+  const [key, setKey] = useState(() => joinKeyFromSearch(search));
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -473,6 +477,8 @@ function SupportersBlock({ team, onTeamUpdated }: { team: Team; onTeamUpdated: (
               )}
             </div>
           )}
+          {!editing && <JoinQr team={team} />}
+          <TeamCalendarFeed team={team} />
           {supporters.length > 0 && (
             <ul className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs">
               {supporters.map((s) => (
