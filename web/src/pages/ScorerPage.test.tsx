@@ -27,9 +27,14 @@ const outbox = () => JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]'
 async function tapTeams(user: ReturnType<typeof userEvent.setup>, names: string[]) {
   for (const [index, name] of names.entries()) {
     const label = new RegExp(`Save ${index + 1} result`);
-    for (let attempt = 0; attempt < 3 && !screen.queryByRole('button', { name: label }); attempt += 1) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       await user.click(screen.getByText(name));
-      await waitFor(() => undefined, { timeout: 50 });
+      try {
+        await screen.findByRole('button', { name: label }, { timeout: 1500 });
+        break;
+      } catch {
+        // The tap never registered (nothing changed), so tapping again can't undo it.
+      }
     }
     await screen.findByRole('button', { name: label });
   }
