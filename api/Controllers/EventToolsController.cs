@@ -14,7 +14,7 @@ namespace MountedGames.Api.Controllers;
 public sealed class EventToolsController(AppDbContext db) : ControllerBase
 {
     [HttpPost("team-import/preview")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [RequestSizeLimit(CsvTeamImportService.MaxBytes + 4096)]
     public async Task<ActionResult<CsvTeamImportPreviewDto>> PreviewTeamImport(
         int competitionId, CsvTeamImportRequest request, CancellationToken ct)
@@ -25,7 +25,7 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("team-import/apply")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     [RequestSizeLimit(CsvTeamImportService.MaxBytes + 4096)]
     public async Task<ActionResult<CsvTeamImportResultDto>> ApplyTeamImport(
         int competitionId, ApplyCsvTeamImportRequest request, CancellationToken ct)
@@ -78,12 +78,6 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
         return result is null ? NotFound() : result;
     }
 
-    private async Task<bool> CanManageCompetitionAsync(int competitionId, CancellationToken ct)
-    {
-        var ownerId = await db.Competitions.AsNoTracking().Where(x => x.Id == competitionId)
-            .Select(x => x.CreatedByUserId).SingleOrDefaultAsync(ct);
-        if (User.IsInRole(Roles.Admin)) return await db.Competitions.AnyAsync(x => x.Id == competitionId, ct);
-        return User.IsInRole(Roles.Trainer) && ownerId is not null
-            && ownerId == User.FindFirstValue(ClaimTypes.NameIdentifier);
-    }
+    private Task<bool> CanManageCompetitionAsync(int competitionId, CancellationToken ct) =>
+        db.CanManageAsync(User, competitionId, ct);
 }

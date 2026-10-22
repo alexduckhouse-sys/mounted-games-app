@@ -39,13 +39,15 @@ public class DeclarationFormsController : ControllerBase
         // Public declarations omit private details; drafts are visible only to their owners.
         if (!isAdmin)
             q = q.Where(d => d.IsLocked || (uid != null && (d.SubmittedByUserId == uid || d.Team!.TrainerUserId == uid
-                || (User.IsInRole(Roles.Trainer) && d.Team.Competition!.CreatedByUserId == uid))));
+                || (User.IsInRole(Roles.Trainer) && d.Team.Competition!.CreatedByUserId == uid)
+                || _db.CompetitionCollaborators.Any(k => k.CompetitionId == d.Team.CompetitionId && k.UserId == uid))));
         if (competitionId.HasValue)
             q = q.Where(d => d.Team!.CompetitionId == competitionId);
         if (teamId.HasValue)
             q = q.Where(d => d.TeamId == teamId);
 
-        return (await q.OrderByDescending(d => d.SubmittedAt).ToListAsync()).Select(d => d.ToDto(CanReadPrivate(d)));
+        var helping = await HelpingAsync(uid);
+        return (await q.OrderByDescending(d => d.SubmittedAt).ToListAsync()).Select(d => d.ToDto(CanReadPrivate(d, helping)));
     }
 
     [HttpGet("{id:int}")]
@@ -56,16 +58,23 @@ public class DeclarationFormsController : ControllerBase
             .Include(d => d.SubmittedBy)
             .Include(d => d.Riders)
             .FirstOrDefaultAsync(d => d.Id == id);
-        if (d is null || (!d.IsLocked && !CanReadPrivate(d))) return NotFound();
-        return d.ToDto(CanReadPrivate(d));
+        if (d is null) return NotFound();
+        var canRead = CanReadPrivate(d, await HelpingAsync(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value));
+        if (!d.IsLocked && !canRead) return NotFound();
+        return d.ToDto(canRead);
     }
 
-    private bool CanReadPrivate(DeclarationForm form)
+    /// <summary>The competitions this user is a competition admin of.</summary>
+    private async Task<HashSet<int>> HelpingAsync(string? uid) => string.IsNullOrEmpty(uid) ? []
+        : (await _db.CompetitionCollaborators.AsNoTracking().Where(k => k.UserId == uid).Select(k => k.CompetitionId).ToListAsync()).ToHashSet();
+
+    private bool CanReadPrivate(DeclarationForm form, HashSet<int> helping)
     {
         var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         return User.IsInRole(Roles.Admin) || (!string.IsNullOrEmpty(uid)
             && (form.SubmittedByUserId == uid || form.Team?.TrainerUserId == uid
-                || (User.IsInRole(Roles.Trainer) && form.Team?.Competition?.CreatedByUserId == uid)));
+                || (User.IsInRole(Roles.Trainer) && form.Team?.Competition?.CreatedByUserId == uid)
+                || (form.Team is not null && helping.Contains(form.Team.CompetitionId))));
     }
 
     [HttpPost]
@@ -116,7 +125,9 @@ public class DeclarationFormsController : ControllerBase
                 BibColour = string.IsNullOrWhiteSpace(r.BibColour) ? null : r.BibColour.Trim(),
                 IsCaptain = r.IsCaptain,
                 IsReserve = r.IsReserve,
-                OrderIndex = r.OrderIndex == 0 ? order : r.OrderIndex
+                OrderIndex = r.OrderIndex == 0 ? order : r.OrderIndex,
+                UseInitialOnly = r.UseInitialOnly,
+                NoFilming = r.NoFilming
             });
             order++;
         }
@@ -136,13 +147,17 @@ public class DeclarationFormsController : ControllerBase
                         CreatedByUserId = userId,
                         FullName = r.FullName,
                         DateOfBirth = r.DateOfBirth,
-                        HorseName = r.HorseName
+                        HorseName = r.HorseName,
+                        UseInitialOnly = r.UseInitialOnly,
+                        NoFilming = r.NoFilming
                     });
                 }
                 else
                 {
                     existing.DateOfBirth ??= r.DateOfBirth;
                     existing.HorseName ??= r.HorseName;
+                    existing.UseInitialOnly = r.UseInitialOnly;
+                    existing.NoFilming = r.NoFilming;
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
             }

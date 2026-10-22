@@ -6,6 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { DeclarationForm, SavedRider, Team } from '../../types';
 import { toCsv, downloadCsv, safeFilename } from '../../lib/csv';
+import { RiderPrivacyFields } from '../../components/RiderPrivacyFields';
 
 interface RiderDraft {
   savedRiderId?: number | null;
@@ -14,6 +15,8 @@ interface RiderDraft {
   bibColour: string;
   isCaptain: boolean;
   isReserve: boolean;
+  useInitialOnly: boolean;
+  noFilming: boolean;
 }
 
 const BIB_COLOURS = ['Red', 'Yellow', 'Blue', 'Green', 'White'];
@@ -101,7 +104,7 @@ export function DeclarationsTab() {
 
   function startNew(team: Team) {
     setDraftTeam(team);
-    setRiders([{ fullName: '', horseName: '', bibColour: 'Red', isCaptain: true, isReserve: false }]);
+    setRiders([{ fullName: '', horseName: '', bibColour: 'Red', isCaptain: true, isReserve: false, useInitialOnly: false, noFilming: false }]);
     setNotes('');
     // Pre-fill phone from prior submission by this trainer if any
     const prior = forms.find((f) => f.submittedByUserId === user?.id && f.submittedByPhone);
@@ -113,7 +116,7 @@ export function DeclarationsTab() {
 
   function addRider() {
     const nextBib = BIB_COLOURS[riders.length % BIB_COLOURS.length];
-    setRiders((r) => [...r, { fullName: '', horseName: '', bibColour: nextBib, isCaptain: false, isReserve: false }]);
+    setRiders((r) => [...r, { fullName: '', horseName: '', bibColour: nextBib, isCaptain: false, isReserve: false, useInitialOnly: false, noFilming: false }]);
   }
 
   function updateRider(i: number, patch: Partial<RiderDraft>) {
@@ -131,6 +134,8 @@ export function DeclarationsTab() {
       savedRiderId: sr.id,
       fullName: sr.fullName,
       horseName: sr.horseName ?? '',
+      useInitialOnly: sr.useInitialOnly ?? false,
+      noFilming: sr.noFilming ?? false,
     });
   }
 
@@ -152,6 +157,8 @@ export function DeclarationsTab() {
             bibColour: r.bibColour.trim() || null,
             isCaptain: r.isCaptain,
             isReserve: r.isReserve,
+            useInitialOnly: r.useInitialOnly,
+            noFilming: r.noFilming,
             orderIndex: i,
             dateOfBirth: null,
           })),
@@ -306,6 +313,7 @@ export function DeclarationsTab() {
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
+                  <RiderPrivacyFields className="col-span-12" value={r} onChange={(patch) => updateRider(i, patch)} />
                 </div>
               </div>
             ))}

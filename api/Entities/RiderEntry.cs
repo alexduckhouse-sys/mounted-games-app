@@ -16,4 +16,9 @@ public class RiderEntry
     public bool IsCaptain { get; set; }
     public bool IsReserve { get; set; }
     public int OrderIndex { get; set; }
+
+    /// <summary>Show only the surname's initial on public pages ("Oliver S.").</summary>
+    public bool UseInitialOnly { get; set; }
+    /// <summary>Opt out of close-up filming and photography; shown to stream staff only.</summary>
+    public bool NoFilming { get; set; }
 }

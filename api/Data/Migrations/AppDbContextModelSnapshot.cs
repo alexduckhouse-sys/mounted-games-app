@@ -1422,11 +1422,21 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<bool>("IsReserve")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("NoFilming")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
                     b.Property<int?>("SavedRiderId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("UseInitialOnly")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.HasKey("Id");
 
@@ -1465,11 +1475,21 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("HorseName")
                         .HasColumnType("text");
 
+                    b.Property<bool>("NoFilming")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("UseInitialOnly")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.HasKey("Id");
 
@@ -1824,6 +1844,11 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<bool>("NoFilming")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1835,6 +1860,11 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int?>("TeamId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("UseInitialOnly")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("UserId")
                         .HasColumnType("text");

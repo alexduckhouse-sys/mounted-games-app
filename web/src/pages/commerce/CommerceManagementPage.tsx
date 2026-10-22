@@ -18,7 +18,7 @@ export function CommerceManagementPage() {
 
 function CommerceManagementContent() {
   const { competition } = useCompetition();
-  const { canEdit, canManageEntries, hasRole } = useAuth();
+  const { canEdit, canOrganise, hasRole } = useAuth();
   const [listings, setListings] = useState<CompetitionListing[] | null>(null);
   const [orders, setOrders] = useState<EventOrder[] | null>(null);
   const [settings, setSettings] = useState<EventCommerceSettings | null>(null);
@@ -28,7 +28,7 @@ function CommerceManagementContent() {
   const canMutate = !hasRole('Admin') || canEdit();
 
   const load = useCallback(() => {
-    if (!canManageEntries(competition)) return Promise.resolve();
+    if (!canOrganise(competition)) return Promise.resolve();
     return Promise.all([
         api.get<CompetitionListing[]>(`/commerce/competitions/${competition.id}/listings/manage`),
         api.get<EventOrder[]>(`/commerce/competitions/${competition.id}/orders`),
@@ -43,7 +43,7 @@ function CommerceManagementContent() {
       .catch((requestError: unknown) => {
       setError(errorMessage(requestError, 'Couldn’t load the shop controls.'));
       });
-  }, [canManageEntries, competition]);
+  }, [canOrganise, competition]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -89,7 +89,7 @@ function CommerceManagementContent() {
     }
   }
 
-  if (!canManageEntries(competition)) return <div className="skin mg-card p-5">Only this competition’s organiser can manage its shop.</div>;
+  if (!canOrganise(competition)) return <div className="skin mg-card p-5">Only this competition’s organiser can manage its shop.</div>;
 
   const pending = listings?.filter((listing) => listing.status === 0) ?? [];
   const reviewed = listings?.filter((listing) => listing.status !== 0) ?? [];

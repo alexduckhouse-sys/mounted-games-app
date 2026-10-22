@@ -253,7 +253,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
     [HttpGet("competitions/{competitionId:int}/listings/manage")]
     [Authorize(Policy = CompetitionStaff.Policy)]
-    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<IReadOnlyList<CompetitionListingDto>>> ManageListings(
         int competitionId,
         CancellationToken cancellationToken)
@@ -268,7 +268,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("listings/{id:int}/approval")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     public async Task<ActionResult<CompetitionListingDto>> ReviewListing(
         int id,
         UpdateCompetitionListingApprovalRequest request,
@@ -306,7 +306,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
     [HttpPut("competitions/{competitionId:int}/settings")]
     [Authorize(Policy = CompetitionStaff.Policy)]
-    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<EventCommerceSettingsDto>> UpdateSettings(
         int competitionId,
         UpdateEventCommerceSettingsRequest request,
@@ -407,7 +407,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
     [HttpGet("competitions/{competitionId:int}/orders")]
     [Authorize(Policy = CompetitionStaff.Policy)]
-    [CompetitionAccess("competitionId", CoOrganisersOnly = true)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<IReadOnlyList<EventOrderDto>>> CompetitionOrders(
         int competitionId,
         CancellationToken cancellationToken)
@@ -584,7 +584,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("orders/{id:int}/manual-payment")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     public async Task<ActionResult<EventOrderDto>> ConfirmManualPayment(
         int id,
         ConfirmManualPaymentRequest request,
@@ -610,7 +610,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("orders/{id:int}/manual-refund")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
     public async Task<ActionResult<EventOrderDto>> ConfirmManualRefund(
         int id,
         ConfirmManualPaymentRequest request,
@@ -823,14 +823,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
         });
     }
 
-    private async Task<bool> CanManageCompetitionAsync(int competitionId, CancellationToken cancellationToken)
-    {
-        if (User.IsInRole(Roles.Admin))
-            return await db.Competitions.AnyAsync(x => x.Id == competitionId, cancellationToken);
-        var userId = CurrentUserId();
-        return User.IsInRole(Roles.Trainer) && userId is not null &&
-            await db.Competitions.AnyAsync(x => x.Id == competitionId && x.CreatedByUserId == userId, cancellationToken);
-    }
+    private Task<bool> CanManageCompetitionAsync(int competitionId, CancellationToken cancellationToken) =>
+        db.CanManageAsync(User, competitionId, cancellationToken);
 
     private Task<bool> IsDemoAsync(int competitionId, CancellationToken cancellationToken) =>
         db.Set<EventCommerceSettings>().AnyAsync(x => x.CompetitionId == competitionId && x.IsDemo, cancellationToken);

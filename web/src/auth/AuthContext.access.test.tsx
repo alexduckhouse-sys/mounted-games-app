@@ -27,22 +27,22 @@ function serve(list: unknown) {
 }
 
 const access = [
-  { competitionId: 7, owner: true, role: null },
-  { competitionId: 8, owner: false, role: 1 },
+  { competitionId: 7, owner: true },
+  { competitionId: 8, owner: false },
 ];
 const comp = { id: 5, createdByUserId: 'someone-else' };
 
 beforeEach(() => { serve([]); });
 
 describe('competition access', () => {
-  it('loads the list once signed in and describes the role on each competition', async () => {
+  it('loads the list once signed in and knows which competitions they run', async () => {
     signIn();
     serve(access);
     const { result } = mount();
-    await waitFor(() => expect(result.current.competitionRole(8)).toBe(1));
+    await waitFor(() => expect(result.current.canOrganise({ id: 8 })).toBe(true));
     expect(get).toHaveBeenCalledWith('/competitions/access');
-    expect(result.current.competitionRole(7)).toBe('owner');
-    expect(result.current.competitionRole(9)).toBeNull();
+    expect(result.current.canOrganise({ id: 7 })).toBe(true);
+    expect(result.current.canOrganise({ id: 9 })).toBe(false);
   });
 
   it('does not ask while signed out', () => {
@@ -55,9 +55,9 @@ describe('competition access', () => {
     post.mockResolvedValue({ data: stored() });
     const { result } = mount();
     await act(async () => { await result.current.login('ann@example.com', 'pw'); });
-    await waitFor(() => expect(result.current.competitionRole(8)).toBe(1));
+    await waitFor(() => expect(result.current.canOrganise({ id: 8 })).toBe(true));
     act(() => result.current.logout());
-    expect(result.current.competitionRole(8)).toBeNull();
+    expect(result.current.canOrganise({ id: 8 })).toBe(false);
     expect(result.current.canOrganise({ id: 8 })).toBe(false);
   });
 
@@ -65,12 +65,12 @@ describe('competition access', () => {
     signIn();
     serve(access);
     const { result } = mount();
-    await waitFor(() => expect(result.current.competitionRole(8)).toBe(1));
+    await waitFor(() => expect(result.current.canOrganise({ id: 8 })).toBe(true));
     act(() => result.current.logout());
     serve([]);
     post.mockResolvedValue({ data: stored(['Member'], 'u2') });
     await act(async () => { await result.current.login('bob@example.com', 'pw'); });
-    expect(result.current.competitionRole(8)).toBeNull();
+    expect(result.current.canOrganise({ id: 8 })).toBe(false);
   });
 
   it.each([
@@ -82,42 +82,42 @@ describe('competition access', () => {
     const { result } = mount();
     await waitFor(() => expect(get).toHaveBeenCalledWith('/competitions/access'));
     await act(async () => { await Promise.resolve(); });
-    expect(result.current.competitionRole(8)).toBeNull();
+    expect(result.current.canOrganise({ id: 8 })).toBe(false);
   });
 
   it('drops malformed entries but keeps the good ones', async () => {
     signIn();
     serve([
       access[1], null,
-      { competitionId: '9', owner: false, role: 1 },
-      { competitionId: 10, owner: false, role: 9 },
-      { competitionId: 11, owner: 'yes', role: null },
+      { competitionId: '9', owner: false },
+      { competitionId: 10, owner: null },
+      { competitionId: 11, owner: 'yes' },
     ]);
     const { result } = mount();
-    await waitFor(() => expect(result.current.competitionRole(8)).toBe(1));
-    expect(result.current.competitionRole(9)).toBeNull();
-    expect(result.current.competitionRole(10)).toBeNull();
-    expect(result.current.competitionRole(11)).toBeNull();
+    await waitFor(() => expect(result.current.canOrganise({ id: 8 })).toBe(true));
+    expect(result.current.canOrganise({ id: 9 })).toBe(false);
+    expect(result.current.canOrganise({ id: 10 })).toBe(false);
+    expect(result.current.canOrganise({ id: 11 })).toBe(false);
   });
 
   it('keeps the last good list when a refresh fails', async () => {
     signIn();
     serve(access);
     const { result } = mount();
-    await waitFor(() => expect(result.current.competitionRole(8)).toBe(1));
+    await waitFor(() => expect(result.current.canOrganise({ id: 8 })).toBe(true));
     get.mockRejectedValue(new Error('offline'));
     await act(async () => { await result.current.refreshAccess(); });
-    expect(result.current.competitionRole(8)).toBe(1);
+    expect(result.current.canOrganise({ id: 8 })).toBe(true);
   });
 
   it('refreshes on request, picking up a change', async () => {
     signIn();
     serve(access);
     const { result } = mount();
-    await waitFor(() => expect(result.current.competitionRole(8)).toBe(1));
+    await waitFor(() => expect(result.current.canOrganise({ id: 8 })).toBe(true));
     serve([]);
     await act(async () => { await result.current.refreshAccess(); });
-    expect(result.current.competitionRole(8)).toBeNull();
+    expect(result.current.canOrganise({ id: 8 })).toBe(false);
   });
 
   it('has nothing to refresh while signed out', async () => {
@@ -136,14 +136,14 @@ describe('competition access', () => {
     await waitFor(() => expect(get).toHaveBeenCalledWith('/competitions/access'));
     unmount();
     await act(async () => { finish({ data: access }); });
-    expect(result.current.competitionRole(8)).toBeNull();
+    expect(result.current.canOrganise({ id: 8 })).toBe(false);
   });
 });
 
 describe('organising and managing one competition', () => {
-  it('lets a helper with an ordinary Member account organise and manage only that competition', async () => {
+  it('lets a competition admin with an ordinary Member account organise and manage only that competition', async () => {
     signIn(['Member']);
-    serve([{ competitionId: 5, owner: false, role: 0 }]);
+    serve([{ competitionId: 5, owner: false }]);
     const { result } = mount();
     expect(result.current.canOrganise(comp)).toBe(false);
     await waitFor(() => expect(result.current.canOrganise(comp)).toBe(true));
@@ -152,9 +152,9 @@ describe('organising and managing one competition', () => {
     expect(result.current.canManage({ id: 6, createdByUserId: 'someone-else' })).toBe(false);
   });
 
-  it('leaves the no-argument answer alone for a helper', async () => {
+  it('leaves the no-argument answer alone for a competition admin', async () => {
     signIn(['Member']);
-    serve([{ competitionId: 5, owner: false, role: 0 }]);
+    serve([{ competitionId: 5, owner: false }]);
     const { result } = mount();
     await waitFor(() => expect(result.current.canOrganise(comp)).toBe(true));
     expect(result.current.canOrganise()).toBe(false);
@@ -168,9 +168,9 @@ describe('organising and managing one competition', () => {
     expect(result.current.canManage()).toBe(true);
   });
 
-  it('lets a trainer who helps on someone else’s competition manage it', async () => {
+  it('lets a trainer who is a competition admin on someone else’s competition manage it', async () => {
     signIn(['Trainer']);
-    serve([{ competitionId: 5, owner: false, role: 1 }]);
+    serve([{ competitionId: 5, owner: false }]);
     const { result } = mount();
     await waitFor(() => expect(result.current.canManage(comp)).toBe(true));
   });
@@ -186,11 +186,12 @@ describe('organising and managing one competition', () => {
     expect(result.current.canManage(comp)).toBe(false);
   });
 
-  it('holds an admin who is also a helper to Edit mode', async () => {
+  it('holds an admin who is also a competition admin to Edit mode', async () => {
     signIn(['Admin']);
-    serve([{ competitionId: 5, owner: false, role: 0 }]);
+    serve([{ competitionId: 5, owner: false }]);
     const { result } = mount();
-    await waitFor(() => expect(result.current.competitionRole(5)).toBe(0));
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/competitions/access'));
+    await act(async () => { await Promise.resolve(); });
     expect(result.current.canManage(comp)).toBe(false);
   });
 
@@ -201,53 +202,9 @@ describe('organising and managing one competition', () => {
     expect(result.current.canManage()).toBe(false);
   });
 
-  it('gives an ordinary member no access to a competition they do not help on', () => {
+  it('gives an ordinary member no access to a competition they are not on the team of', () => {
     signIn(['Member']);
     const { result } = mount();
     expect(result.current.canManage(comp)).toBe(false);
-  });
-});
-
-describe('managing entries and the shop', () => {
-  it.each([
-    [0, true], [1, false], [2, false], [3, false], [4, false],
-  ])('lets a helper with role %i manage entries: %s', async (role, expected) => {
-    signIn(['Member']);
-    serve([{ competitionId: 5, owner: false, role }]);
-    const { result } = mount();
-    await waitFor(() => expect(result.current.canOrganise(comp)).toBe(true));
-    expect(result.current.canManageEntries(comp)).toBe(expected);
-  });
-
-  it('never extends a co-organiser’s entry access to another competition', async () => {
-    signIn(['Member']);
-    serve([{ competitionId: 5, owner: false, role: 0 }]);
-    const { result } = mount();
-    await waitFor(() => expect(result.current.canOrganise(comp)).toBe(true));
-    expect(result.current.canManageEntries({ id: 6, createdByUserId: 'someone-else' })).toBe(false);
-  });
-
-  it('lets the owner in, from the competition or from the access list', async () => {
-    signIn(['Trainer']);
-    serve([{ competitionId: 9, owner: true, role: null }]);
-    const { result } = mount();
-    expect(result.current.canManageEntries({ id: 5, createdByUserId: 'u1' })).toBe(true);
-    expect(result.current.canManageEntries({ id: 5, createdByUserId: 'u2' })).toBe(false);
-    await waitFor(() => expect(result.current.canManageEntries({ id: 9, createdByUserId: 'u2' })).toBe(true));
-  });
-
-  it('lets an admin in whether or not Edit mode is on, and a trainer with no competition in question', () => {
-    signIn(['Admin']);
-    expect(mount().result.current.canManageEntries(comp)).toBe(true);
-    signIn(['Trainer']);
-    expect(mount().result.current.canManageEntries()).toBe(true);
-  });
-
-  it('keeps out ordinary members, other accounts and signed-out visitors', () => {
-    signIn(['Member']);
-    expect(mount().result.current.canManageEntries(comp)).toBe(false);
-    expect(mount().result.current.canManageEntries()).toBe(false);
-    localStorage.clear();
-    expect(mount().result.current.canManageEntries(comp)).toBe(false);
   });
 });
