@@ -446,7 +446,8 @@ public class CompetitionsController : ControllerBase
             t.Results.Count,
             t.Results.Count(r => r.Placing == 1 && !r.Eliminated),
             t.Results.Count(r => r.Eliminated),
-            tiers.TierOf(t.Id)))
+            tiers.TierOf(t.Id),
+            t.EntryStatus != TeamEntryStatus.Active))
         .OrderBy(r => r.FinalTier ?? FinalsTiers.NotInFinals)
         .ThenByDescending(r => r.TotalPoints)
         .ThenByDescending(r => r.Wins)
@@ -486,7 +487,7 @@ public class CompetitionsController : ControllerBase
         if (topN < 1) return BadRequest(new { message = "topN must be >= 1." });
         var teamsQ = _db.Teams
             .Include(t => t.Results)
-            .Where(t => t.CompetitionId == id && !t.IsHorsConcours);
+            .Where(t => t.CompetitionId == id && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active);
         if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
 
         var teams = await teamsQ.ToListAsync();
@@ -535,7 +536,7 @@ public class CompetitionsController : ControllerBase
 
         var teamsQ = _db.Teams
             .Include(t => t.Results)
-            .Where(t => t.CompetitionId == id && !t.IsHorsConcours);
+            .Where(t => t.CompetitionId == id && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active);
         if (req.CompetitionSectionId.HasValue)
             teamsQ = teamsQ.Where(t => t.CompetitionSectionId == req.CompetitionSectionId.Value);
 
@@ -708,7 +709,7 @@ public class CompetitionsController : ControllerBase
 
         var teamsQ = _db.Teams
             .Include(t => t.Results)
-            .Where(t => t.CompetitionId == id && !t.IsHorsConcours);
+            .Where(t => t.CompetitionId == id && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active);
         if (session.CompetitionSectionId.HasValue)
             teamsQ = teamsQ.Where(t => t.CompetitionSectionId == session.CompetitionSectionId.Value);
         var teams = await teamsQ.ToListAsync();

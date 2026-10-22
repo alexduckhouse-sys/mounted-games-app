@@ -21,7 +21,8 @@ public class CompetitionReadinessService(AppDbContext db, EquipmentCalculator eq
         if (!exists) throw new KeyNotFoundException("Competition not found.");
 
         var teams = await db.Teams.AsNoTracking()
-            .Where(t => t.CompetitionId == competitionId)
+            // A withdrawn or no-show team owes nothing more: no declaration, no riders.
+            .Where(t => t.CompetitionId == competitionId && t.EntryStatus == TeamEntryStatus.Active)
             .Include(t => t.Section)
             .Include(t => t.DeclarationForms).ThenInclude(d => d.Riders)
             .OrderBy(t => t.Id)

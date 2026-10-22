@@ -152,7 +152,9 @@ public record TeamDto(
     /// accepted supporter, null otherwise. Set by the my-teams endpoint.</summary>
     string? Relationship = null,
     /// <summary>Join key — exposed only to the trainer; null for everyone else.</summary>
-    string? SupporterJoinKey = null);
+    string? SupporterJoinKey = null,
+    /// <summary>Withdrawn or no-show. Public on purpose; the reason is organiser-only.</summary>
+    bool IsWithdrawn = false);
 
 public record CreateTeamRequest(
     int CompetitionSectionId, int ClubId, string Suffix,
@@ -274,7 +276,8 @@ public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated);
 /// </param>
 public record StandingRow(
     int TeamId, string TeamName, string ClubName, string? BibColour,
-    int TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null);
+    int TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null,
+    bool Withdrawn = false);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,

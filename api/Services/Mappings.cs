@@ -57,7 +57,8 @@ public static class Mappings
         t.ClubId, t.Club?.Name ?? string.Empty,
         t.Suffix, t.DisplayName, t.BibColour,
         t.TrainerUserId, t.Trainer?.FullName,
-        t.IsHorsConcours);
+        t.IsHorsConcours,
+        IsWithdrawn: t.EntryStatus != TeamEntryStatus.Active);
 
     /// <summary>
     /// Same as ToDto but populates the viewer-specific Relationship and
@@ -76,7 +77,8 @@ public static class Mappings
             t.TrainerUserId, t.Trainer?.FullName,
             t.IsHorsConcours,
             Relationship: isTrainer ? "trainer" : isSupporter ? "supporter" : null,
-            SupporterJoinKey: isTrainer ? t.SupporterJoinKey : null);
+            SupporterJoinKey: isTrainer ? t.SupporterJoinKey : null,
+            IsWithdrawn: t.EntryStatus != TeamEntryStatus.Active);
     }
 
     public static TeamSupporterDto ToDto(this TeamSupporter s) => new(
