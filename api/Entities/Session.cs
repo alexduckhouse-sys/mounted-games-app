@@ -28,6 +28,8 @@ public class Session
     public int? LanesPerHeat { get; set; }
     public int? MinutesPerHeat { get; set; }
     public bool RaceOrderAlternating { get; set; }
+    /// <summary>Lane change after each race. Defaults to moving up one, as every session did before this was a choice.</summary>
+    public LaneRotationMode LaneRotationMode { get; set; } = LaneRotationMode.MoveUp;
 
     public ICollection<Heat> Heats { get; set; } = new List<Heat>();
 }

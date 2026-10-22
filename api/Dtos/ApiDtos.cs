@@ -184,9 +184,11 @@ public record SessionDto(
     SessionKind Kind, string? Location,
     string? StreamUrl, int? LanesPerHeat,
     int? MinutesPerHeat, bool RaceOrderAlternating,
-    IReadOnlyList<HeatDto> Heats);
+    IReadOnlyList<HeatDto> Heats,
+    LaneRotationMode LaneRotationMode = LaneRotationMode.MoveUp);
 
-public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating);
+public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating,
+    LaneRotationMode? LaneRotationMode = null);
 
 public record HeatAssignmentEntry(string Label, IReadOnlyList<int> TeamIds);
 public record UpdateHeatAssignmentsRequest(IReadOnlyList<HeatAssignmentEntry> Assignments);
@@ -262,7 +264,7 @@ public record RaceClockRequest(DateTime? At);
 
 public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex);
 
-public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points);
+public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points, bool IsSitOut = false);
 
 public record CreateHeatRequest(
     string? Label, int OrderIndex,

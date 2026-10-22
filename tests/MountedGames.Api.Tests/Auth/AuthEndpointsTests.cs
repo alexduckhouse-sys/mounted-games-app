@@ -131,7 +131,7 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Theory]
-    [InlineData("Manager", new[] { Roles.Member, Roles.ManagerRequest })]
+    [InlineData("Manager", new[] { Roles.ManagerRequest, Roles.Member })]
     [InlineData("member", new[] { Roles.Member })]
     [InlineData("Trainer", new[] { Roles.Member, Roles.TrainerRequest })]
     [InlineData(" trainer ", new[] { Roles.Member, Roles.TrainerRequest })]

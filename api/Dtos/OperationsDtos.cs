@@ -15,7 +15,7 @@ public record DrawFairnessDto(
 public record DrawPreviewDto(int SectionId, int Seed, string Fingerprint,
     IReadOnlyList<DrawSessionDto> Sessions, DrawFairnessDto Fairness);
 
-public record ScorePlaceDto(int TeamId, int Place, bool Eliminated, int Points);
+public record ScorePlaceDto(int TeamId, int Place, bool Eliminated, int Points, bool IsSitOut = false);
 public record UpdateRaceScoreRequest(
     IReadOnlyList<FinishingPlaceDto>? Places, int ExpectedRevision,
     string RequestId, string? Reason);

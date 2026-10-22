@@ -98,7 +98,7 @@ public static class Mappings
     public static ResultDto ToDto(this Result r) => new(
         r.Id, r.TeamId,
         r.Team?.DisplayName ?? string.Empty,
-        r.Placing, r.Eliminated, r.Points);
+        r.Placing, r.Eliminated, r.Points, r.IsSitOut);
 
     public static RaceDto ToDto(this Race r) => new(
         r.Id, r.HeatId, r.Name, r.OrderIndex, r.IsComplete,
@@ -120,7 +120,8 @@ public static class Mappings
         s.Kind, s.Location,
         s.StreamUrl, s.LanesPerHeat,
         s.MinutesPerHeat, s.RaceOrderAlternating,
-        s.Heats.OrderBy(h => h.OrderIndex).Select(h => h.ToDto()).ToList());
+        s.Heats.OrderBy(h => h.OrderIndex).Select(h => h.ToDto()).ToList(),
+        s.LaneRotationMode);
 
     public static RiderEntryDto ToDto(this RiderEntry r) => new(
         r.Id, r.SavedRiderId, r.FullName, r.DateOfBirth, r.HorseName, r.BibColour,

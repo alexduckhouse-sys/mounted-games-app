@@ -418,6 +418,15 @@ public class SessionsController : ControllerBase
 
         s.MinutesPerHeat = req.MinutesPerHeat is > 0 ? req.MinutesPerHeat : null;
         if (req.RaceOrderAlternating.HasValue) s.RaceOrderAlternating = req.RaceOrderAlternating.Value;
+        if (req.LaneRotationMode.HasValue)
+        {
+            if (!Enum.IsDefined(req.LaneRotationMode.Value)) return BadRequest(new { message = "Unknown lane rotation." });
+            // Teams that stay in their lane can't share fewer lanes: the ones past the last lane would never race.
+            if (req.LaneRotationMode.Value == LaneRotationMode.Stay && s.LanesPerHeat is > 0
+                && s.Heats.Any(h => h.Entries.Count > s.LanesPerHeat))
+                return BadRequest(new { message = "A heat has more teams than lanes, so teams need to change lane between races." });
+            s.LaneRotationMode = req.LaneRotationMode.Value;
+        }
         await _db.SaveChangesAsync();
 
         var dto = s.ToDto();
