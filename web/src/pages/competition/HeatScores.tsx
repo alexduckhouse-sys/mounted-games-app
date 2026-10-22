@@ -7,6 +7,7 @@ import { computeTimings } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { timetableRows } from '../../lib/timetableRows';
 import { useCompactPageBar } from '../../components/CompactPageBarContext';
+import { RaceRulesButton } from '../../components/RaceRulesButton';
 import './heat.css';
 
 interface Cell { points: number; eliminated: boolean }
@@ -125,6 +126,19 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
               </table>
             </div>
           )}
+        </section>
+      )}
+
+      {heat && races.length > 0 && (
+        <section aria-label="Races in this heat" className="mg-card px-3">
+          <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+            {races.map((race, i) => (
+              <li key={race.id} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate py-2">{race.name}{i === runningIndex && <span className="mg-meta"> · running</span>}</span>
+                <RaceRulesButton raceName={race.name} className="!h-11 !w-11" />
+              </li>
+            ))}
+          </ol>
         </section>
       )}
 

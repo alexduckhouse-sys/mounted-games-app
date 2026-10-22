@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -38,6 +39,7 @@ public class CompetitionsController : ControllerBase
 
     [HttpGet("/api/geocode")]
     [AllowAnonymous]
+    [EnableRateLimiting("geocode")]
     public async Task<ActionResult<GeocodeResult>> Geocode(
         [FromQuery] string? postcode = null,
         [FromQuery] string? w3w = null,
@@ -435,14 +437,18 @@ public class CompetitionsController : ControllerBase
         if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
 
         var teams = await teamsQ.ToListAsync();
+        var tiers = await FinalsTiers.LoadAsync(_db, id);
 
+        // Once finals exist, the final a team is in decides its place before points do.
         var rows = teams.Select(t => new StandingRow(
             t.Id, t.DisplayName, t.Club?.Name ?? string.Empty, t.BibColour,
             t.Results.Sum(r => r.Points),
             t.Results.Count,
             t.Results.Count(r => r.Placing == 1 && !r.Eliminated),
-            t.Results.Count(r => r.Eliminated)))
-        .OrderByDescending(r => r.TotalPoints)
+            t.Results.Count(r => r.Eliminated),
+            tiers.TierOf(t.Id)))
+        .OrderBy(r => r.FinalTier ?? FinalsTiers.NotInFinals)
+        .ThenByDescending(r => r.TotalPoints)
         .ThenByDescending(r => r.Wins)
         .ToList();
 
@@ -570,7 +576,7 @@ public class CompetitionsController : ControllerBase
         _db.Sessions.Add(session);
         await _db.SaveChangesAsync();
 
-        var groups = SplitIntoBalancedGroups(top, maxHeatSize);
+        var groups = SplitIntoRankedGroups(top, maxHeatSize);
         for (var gi = 0; gi < groups.Count; gi++)
         {
             // Finals are labelled A Final, B Final, C Final, etc. (top group first).
@@ -615,6 +621,16 @@ public class CompetitionsController : ControllerBase
         for (var i = 0; i < shuffled.Count; i++)
             groups[i % groupCount].Add(shuffled[i]);
         return groups;
+    }
+
+    /// <summary>
+    /// Cuts the ranked team ids into consecutive blocks: ranks 1..n for the A Final, the
+    /// next n for the B Final, and so on. The last block holds whatever is left.
+    /// </summary>
+    private static List<List<int>> SplitIntoRankedGroups(IReadOnlyList<int> rankedTeamIds, int maxPerGroup)
+    {
+        var size = Math.Max(1, maxPerGroup);
+        return rankedTeamIds.Chunk(size).Select(chunk => chunk.ToList()).ToList();
     }
 
     [HttpPost("{id:int}/finals/scaffold")]
@@ -749,7 +765,9 @@ public class CompetitionsController : ControllerBase
         var sectionIds = req.SectionIds?.ToHashSet();
         var sections = comp.Sections
             .Where(s => sectionIds == null || sectionIds.Contains(s.Id))
-            .OrderBy(s => s.DisplayName)
+            // Oldest age group first; sections we can't place follow, then ties by name as before.
+            .OrderBy(s => SectionAgeOrder.Rank(s))
+            .ThenBy(s => s.DisplayName)
             .ToList();
         if (sections.Count == 0) return BadRequest("No sections to schedule.");
 

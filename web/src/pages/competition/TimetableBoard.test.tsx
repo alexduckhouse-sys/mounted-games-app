@@ -17,7 +17,7 @@ beforeEach(() => {
   const sessions = [
     session(1, { status: 1, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, heats: [mainHeat] }),
     session(2, { status: 0, arenaName: 'Arena Two', scheduledStart: `${day}T11:00:00`, heats: [secondHeat] }),
-    session(3, { status: 2, arenaName: 'Finished Arena', scheduledStart: `${day}T08:00:00`, heats: [heat(33, { sessionId: 3, label: 'Heat 3', finishedAt: `${day}T08:30:00` })] }),
+    session(3, { status: 2, arenaName: 'Finished Arena', scheduledStart: `${day}T12:00:00`, heats: [heat(33, { sessionId: 3, label: 'Heat 3', finishedAt: `${day}T12:30:00` })] }),
   ];
   state.value = { competition: competition({ startDate: day, endDate: day, sessions }), reload: vi.fn(), updatedAt: null };
 });

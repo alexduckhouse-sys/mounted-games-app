@@ -39,8 +39,8 @@ public class GeocodingService
 
     public async Task<(double? lat, double? lon)> ResolvePostcodeAsync(string postcode, CancellationToken ct = default)
     {
+        // ResolveAsync, the only caller, already skips blank postcodes; a blank one would fail the lookup anyway.
         var trimmed = postcode.Trim();
-        if (trimmed.Length == 0) return (null, null);
         try
         {
             var url = $"https://api.postcodes.io/postcodes/{Uri.EscapeDataString(trimmed)}";

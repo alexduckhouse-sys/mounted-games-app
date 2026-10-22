@@ -87,8 +87,10 @@ public class DeclarationFormsController : ControllerBase
 
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var isAdmin = User.IsInRole(Roles.Admin);
-        // Trainers may submit for any team unless it's already assigned to a *different* trainer.
-        if (!isAdmin && team.TrainerUserId is not null && team.TrainerUserId != userId)
+        // Only the team's own trainer, or someone who organises its competition, may submit or overwrite a
+        // declaration. An unclaimed team is not open to everyone.
+        if (!isAdmin && !(userId is not null && team.TrainerUserId == userId)
+            && !await _db.CanManageAsync(User, team.CompetitionId))
             return Forbid();
 
         var savedIds = req.Riders.Where(r => r.SavedRiderId.HasValue).Select(r => r.SavedRiderId!.Value).Distinct().ToArray();

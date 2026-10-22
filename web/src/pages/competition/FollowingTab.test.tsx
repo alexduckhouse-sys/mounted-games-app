@@ -12,8 +12,8 @@ const data = competition({ teams: [team(1, { displayName: 'Example Blue' }), tea
     race(1, { isComplete: true, results: [result(1, 1, { points: 4 })] }), race(2),
   ] })] }),
 ] });
-function mount(extra: Partial<CompetitionCtx> = {}) {
-  return render(<MemoryRouter initialEntries={['/competitions/1/following']}><CompetitionContext.Provider value={{ competition: data, reload: vi.fn(), updatedAt: new Date('2026-07-01T10:00:00Z'), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [], ...extra }}><Routes><Route path="/competitions/:id"><Route path="following" element={<FollowingTab />} /></Route></Routes></CompetitionContext.Provider></MemoryRouter>);
+function mount(extra: Partial<CompetitionCtx> = {}, comp = data) {
+  return render(<MemoryRouter initialEntries={['/competitions/1/following']}><CompetitionContext.Provider value={{ competition: comp, reload: vi.fn(), updatedAt: new Date('2026-07-01T10:00:00Z'), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [], ...extra }}><Routes><Route path="/competitions/:id"><Route path="following" element={<FollowingTab />} /></Route></Routes></CompetitionContext.Provider></MemoryRouter>);
 }
 describe('FollowingTab', () => {
   it('lets a signed-out visitor search, star and unstar a team', async () => {
@@ -25,7 +25,7 @@ describe('FollowingTab', () => {
     expect(screen.getByRole('heading', { name: 'Next heats' })).toBeInTheDocument();
     expect(screen.getByText('On now')).toBeInTheDocument();
     expect(screen.getByText('4 pts · 1 race')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /starting lane 2/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=1');
+    expect(screen.getByRole('link', { name: /Lane 2/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=1');
     await userEvent.click(screen.getByRole('button', { name: 'Unfollow Example Blue' }));
     expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();
   });
@@ -51,5 +51,39 @@ describe('FollowingTab', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Follow Example Blue' }));
     expect(screen.getByRole('alert')).toHaveTextContent('couldn’t be saved');
     expect(screen.getByRole('button', { name: 'Follow Example Blue' })).toHaveAttribute('aria-pressed', 'false');
+  });
+  it('names the arena on each heat only when the event has more than one', () => {
+    localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1}]');
+    const entries = [{ id: 1, teamId: 1, teamName: 'Example Blue', laneIndex: 3 }];
+    const single = competition({ teams: data.teams, sessions: [session(1, { arenaName: 'Main Arena', heats: [heat(1, { entries })] })] });
+    const first = mount({}, single);
+    expect(screen.getByRole('link', { name: /Lane 3/ })).not.toHaveTextContent('Main Arena');
+    first.unmount();
+    const multi = competition({ teams: data.teams, sessions: [session(1, { arenaName: 'Main Arena', heats: [heat(1, { entries })] }), session(2, { arenaName: 'Ring 2' })] });
+    mount({}, multi);
+    expect(screen.getByRole('link', { name: /Lane 3/ })).toHaveTextContent('Main Arena');
+  });
+  it('follows and unfollows every entry from a club in one tap', async () => {
+    const club = (id: number, clubId: number, clubName: string, displayName: string, sectionName: string) => team(id, { clubId, clubName, displayName, sectionName });
+    const multi = competition({ teams: [club(1, 7, 'Hill Pony Club', 'Hill A', 'Seniors'), club(2, 7, 'Hill Pony Club', 'Hill Pair', 'Pairs'), club(3, 7, 'Hill Pony Club', 'Hill Solo', 'Individual'), club(4, 8, 'Vale Pony Club', 'Vale A', 'Seniors')] });
+    mount({}, multi);
+    expect(screen.getByRole('list', { name: 'Clubs' }).querySelectorAll('li')).toHaveLength(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Follow club Hill Pony Club' }));
+    expect(JSON.parse(localStorage.getItem(FAVOURITES_KEY)!)).toEqual([1, 2, 3].map((teamId) => ({ competitionId: 1, teamId })));
+    expect(screen.getByRole('button', { name: 'Unfollow Hill Pair' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add teams' }));
+    expect(screen.getByRole('button', { name: 'Follow club Vale Pony Club' })).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(screen.getByRole('button', { name: 'Unfollow club Hill Pony Club' }));
+    expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();
+    await userEvent.type(screen.getByRole('searchbox'), 'vale');
+    expect(screen.queryByRole('button', { name: 'Follow club Hill Pony Club' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Follow Vale A' })).toBeInTheDocument();
+  });
+  it('tells the visitor when a club would take them over the follow limit', async () => {
+    localStorage.setItem(FAVOURITES_KEY, JSON.stringify(Array.from({ length: 99 }, (_, i) => ({ competitionId: 9, teamId: i + 1 }))));
+    const multi = competition({ teams: [team(1, { clubName: 'Hill Pony Club' }), team(2, { clubName: 'Hill Pony Club' })] });
+    mount({}, multi);
+    await userEvent.click(screen.getByRole('button', { name: 'Follow club Hill Pony Club' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('over 100 teams');
   });
 });

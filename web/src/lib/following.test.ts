@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { competition, heat, race, result, session, team } from '../test/factories';
-import { followedHeats } from './following';
+import { arenaNames, arenaToShow, followedHeats } from './following';
 
 describe('followedHeats', () => {
   const entry = (teamId: number) => ({ id: teamId, teamId, teamName: `Example ${teamId}`, laneIndex: teamId });
@@ -25,5 +25,16 @@ describe('followedHeats', () => {
     const [row] = followedHeats(data, new Set([1]));
     expect(row.effective?.toISOString()).toBe('2026-07-01T11:00:00.000Z');
     expect(row.scores[0]).toMatchObject({ points: 4, racesRun: 2 });
+  });
+});
+
+describe('arenaNames and arenaToShow', () => {
+  it('lists distinct arenas and only names one when there are several', () => {
+    const sessions = [session(1, { arenaName: ' Main ' }), session(2, { arenaName: 'Main' }), session(3, { arenaName: '  ' }), session(4, { arenaName: null }), session(5, { arenaName: 'Ring 2' })];
+    expect(arenaNames(sessions)).toEqual(['Main', 'Ring 2']);
+    expect(arenaToShow(sessions[0], ['Main', 'Ring 2'])).toBe('Main');
+    expect(arenaToShow(sessions[2], ['Main', 'Ring 2'])).toBeNull();
+    expect(arenaToShow(sessions[0], ['Main'])).toBeNull();
+    expect(arenaToShow(sessions[0], [])).toBeNull();
   });
 });
