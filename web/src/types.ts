@@ -16,6 +16,39 @@ export interface UserProfile {
   roles: Role[];
 }
 
+/** What a helper does on one competition: 0 co-organiser, 1 ring scorer, 2 line judge, 3 commentator, 4 stream producer. */
+export type CompetitionHelperRole = 0 | 1 | 2 | 3 | 4;
+
+export const COMPETITION_HELPER_ROLES: { value: CompetitionHelperRole; label: string }[] = [
+  { value: 0, label: 'Co-organiser' },
+  { value: 1, label: 'Ring scorer' },
+  { value: 2, label: 'Line judge' },
+  { value: 3, label: 'Commentator' },
+  { value: 4, label: 'Stream producer' },
+];
+
+/** One competition the signed-in user owns (`owner`, no role) or helps on. */
+export interface CompetitionAccess {
+  competitionId: number;
+  owner: boolean;
+  role: CompetitionHelperRole | null;
+}
+
+export interface CompetitionHelper {
+  userId: string;
+  name: string;
+  /** Only given to the owner or an admin. */
+  email: string | null;
+  role: CompetitionHelperRole;
+  addedAt: string;
+}
+
+export interface CompetitionTeam {
+  canManageTeam: boolean;
+  owner: { userId: string; name: string } | null;
+  helpers: CompetitionHelper[];
+}
+
 export interface AuthResponse {
   token: string;
   expiresAt: string;

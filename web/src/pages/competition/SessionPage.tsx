@@ -59,7 +59,7 @@ export function SessionPage() {
   const requestedHeat = Number(searchParams.get('heat'));
   const sid = sessionId ? parseInt(sessionId, 10) : null;
   const { competition, reload } = useCompetition();
-  const { canEdit } = useAuth();
+  const { canManage } = useAuth();
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const session = useMemo<Session | null>(
@@ -287,11 +287,11 @@ export function SessionPage() {
   return (
     <div className="space-y-3">
       {saveError && <p role="alert" className="mg-notice">{saveError}</p>}
-      {canEdit() && <div className="flex items-center justify-between gap-2 pt-4">
+      {canManage(competition) && <div className="flex items-center justify-between gap-2 pt-4">
         <Link to=".." className="btn-ghost !py-1.5 !px-2.5 text-xs">
           <ChevronLeft className="w-3.5 h-3.5" /> Sessions
         </Link>
-        {canEdit() && (
+        {canManage(competition) && (
           <div className="flex gap-1.5">
             <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
               <Wand2 className="w-3.5 h-3.5" /> Set up heats
@@ -300,7 +300,7 @@ export function SessionPage() {
         )}
       </div>}
 
-      {canEdit() ? (
+      {canManage(competition) ? (
         <>
           <HeatTabs
             session={session}
@@ -338,7 +338,7 @@ export function SessionPage() {
         <HeatScores session={session} heats={orderedHeats} activeHeatId={activeHeatId} />
       )}
 
-      {canEdit() && activeRace && !outbox.some((item) => item.raceId === activeRace.id) && (
+      {canManage(competition) && activeRace && !outbox.some((item) => item.raceId === activeRace.id) && (
         <ScoreAuditPanel raceId={activeRace.id} onChanged={reload} />
       )}
       <AnimatePresence>

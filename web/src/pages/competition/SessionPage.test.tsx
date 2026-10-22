@@ -9,8 +9,10 @@ import { CompetitionContext } from './context';
 import { SessionPage } from './SessionPage';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
+vi.mock('./HeatScores', () => ({ HeatScores: () => <p>Public results</p> }));
+const auth = vi.hoisted(() => ({ manage: true }));
 vi.mock('../../auth/AuthContext', () => ({
-  useAuth: () => ({ canEdit: () => true, canOrganise: () => true, hasRole: () => true, user: null }),
+  useAuth: () => ({ canManage: () => auth.manage, canEdit: () => true, canOrganise: () => true, hasRole: () => true, user: null }),
 }));
 
 const form = (teamId: number): DeclarationForm => ({
@@ -37,8 +39,29 @@ function mount(data: CompetitionDetail, forms: DeclarationForm[] = []) {
 const teams = [team(1, { displayName: 'Oak A' }), team(2, { displayName: 'Beech B' }), team(3, { displayName: 'Ash C' })];
 
 describe('SessionPage', () => {
-  beforeEach(() => { vi.mocked(api.get).mockResolvedValue({ data: [] }); });
+  beforeEach(() => { auth.manage = true; vi.mocked(api.get).mockResolvedValue({ data: [] }); });
   afterEach(() => { vi.useRealTimers(); });
+
+  describe('who may score', () => {
+    const open = () => competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { races: [race(1, { name: 'Bending' })] })] })] });
+
+    it('shows the scoring view, heat set-up and score record to someone who can manage this competition', async () => {
+      mount(open());
+      expect(screen.getByRole('heading', { name: /Scoring · Bending/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /Sessions/ })).toBeInTheDocument();
+      await waitFor(() => expect(api.get).toHaveBeenCalledWith('/races/1/score'));
+    });
+
+    it('shows only the results to everyone else', () => {
+      auth.manage = false;
+      mount(open());
+      expect(screen.queryByRole('heading', { name: /Scoring · Bending/ })).not.toBeInTheDocument();
+      expect(screen.getByText('Public results')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Set up heats/ })).not.toBeInTheDocument();
+      expect(api.get).not.toHaveBeenCalledWith('/races/1/score');
+    });
+  });
 
   it('selects the first unfinished heat when none is requested', () => {
     const done = heat(1, { label: 'Heat 1', orderIndex: 0, races: [race(1, { isComplete: true })] });

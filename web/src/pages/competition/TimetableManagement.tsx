@@ -98,7 +98,7 @@ function TimeChip({ scheduled, effective, shifted, big }: TimeChipProps) {
 
 export function TimetableManagement() {
   const { competition, reload } = useCompetition();
-  const { canEdit } = useAuth();
+  const { canManage } = useAuth();
   const [addKind, setAddKind] = useState<AddKind | null>(null);
   const [autoBusy, setAutoBusy] = useState(false);
   const [autoOpen, setAutoOpen] = useState(false);
@@ -192,7 +192,7 @@ export function TimetableManagement() {
           <Download className="w-3.5 h-3.5" /> CSV
         </button>
         <div className="ml-auto" />
-        {canEdit() && (
+        {canManage(competition) && (
           <>
           <button className="btn-primary !py-1.5 !px-2.5 text-xs" onClick={() => setAutoOpen((v) => !v)} disabled={autoBusy}>
             <Wand2 className="w-3.5 h-3.5" /> Auto-generate
@@ -221,7 +221,7 @@ export function TimetableManagement() {
         )}
       </div>
 
-      {autoOpen && canEdit() && (
+      {autoOpen && canManage(competition) && (
         <div className="card p-3 space-y-2">
           <p className="text-xs text-slate-600 dark:text-slate-200">
             One session per section with balanced heats. Replaces existing race sessions.
@@ -257,7 +257,7 @@ export function TimetableManagement() {
         </div>
       )}
 
-      {addKind && canEdit() && (
+      {addKind && canManage(competition) && (
         <AddEntryForm kind={addKind} onCancel={() => setAddKind(null)} onSaved={() => { setAddKind(null); reload(); }} />
       )}
 
@@ -280,7 +280,7 @@ export function TimetableManagement() {
         onUpdated={reload}
       />
 
-      {canEdit() && hasAnyHeats && (
+      {canManage(competition) && hasAnyHeats && (
         <FinalsCta onOpen={() => setFinalsOpen(true)} />
       )}
 
@@ -303,11 +303,12 @@ function SessionHeatRows({
   timing: SessionTiming | undefined;
   onUpdated: () => void;
 }) {
-  const { canEdit, canOrganise } = useAuth();
-  const isAdmin = canEdit();
+  const { competition } = useCompetition();
+  const { canManage, canOrganise } = useAuth();
+  const isAdmin = canManage(competition);
   // Organisers (admin + trainer + manager) see the full Q1/Q2/Final
   // breakdown of race-finals heats; public viewers see one row per race.
-  const showFullBreakdown = canOrganise();
+  const showFullBreakdown = canOrganise(competition);
   const allHeats = orderedHeats(session);
   const heats = visibleHeats(session, showFullBreakdown);
   const title = sessionTitle(session);

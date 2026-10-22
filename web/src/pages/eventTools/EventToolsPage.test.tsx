@@ -24,7 +24,7 @@ beforeEach(() => {
   vi.mocked(useAuth).mockReturnValue({
     user: { id: 'owner' },
     canOrganise: () => true,
-    hasRole: () => false,
+    hasRole: (role: Role) => role === 'Trainer',
     canEdit: () => false,
   } as unknown as ReturnType<typeof useAuth>);
   get.mockResolvedValue({ data: { id: 12, name: 'Spring event', startDate: '2031-05-04T09:00:00Z', endDate: null, createdByUserId: 'owner' } });
@@ -32,6 +32,14 @@ beforeEach(() => {
 });
 
 describe('EventToolsPage', () => {
+  it('turns away a competition helper, since the tools are for the owner and admins', async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'helper' }, canOrganise: () => true, hasRole: (role: Role) => role === 'Member', canEdit: () => false,
+    } as unknown as ReturnType<typeof useAuth>);
+    renderPage();
+    expect(await screen.findByText('These tools are available to this competition’s organiser.')).toBeInTheDocument();
+  });
+
   it('previews CSV rows before applying the same fingerprint', async () => {
     post.mockImplementation(async (url) => {
       if (String(url).endsWith('/preview')) return { data: { previewVersion: 1, fingerprint: 'ABC', totalRows: 1, validRows: 1, rows: [{ rowNumber: 2, clubId: 4, club: 'North Club', suffix: 'A', competitionSectionId: 8, section: 'Under 12', teamName: 'North Club A', errors: [] }] } };

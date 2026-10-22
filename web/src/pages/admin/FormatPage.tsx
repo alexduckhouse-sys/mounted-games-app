@@ -21,7 +21,7 @@ import type {
 export function FormatPage() {
   const { id } = useParams<{ id: string }>();
   const editingId = id ? parseInt(id, 10) : null;
-  const { canOrganise } = useAuth();
+  const { canManageEntries } = useAuth();
   const navigate = useNavigate();
 
   const [comp, setComp] = useState<CompetitionDetail | null>(null);
@@ -34,12 +34,12 @@ export function FormatPage() {
     try {
       const { data: c } = await api.get<CompetitionDetail>(`/competitions/${editingId}`);
       setComp(c);
-      if (canOrganise(c)) {
+      if (canManageEntries(c)) {
         const { data } = await api.get<SectionSignup[]>(`/competitions/${editingId}/signups`);
         setSignups(data);
       } else setSignups([]);
     } catch { setError('Could not load organiser details. Please try again.'); }
-  }, [editingId, canOrganise]);
+  }, [editingId, canManageEntries]);
 
   // Initial load. The same steps as reload(), kept inline so state is only set once a response
   // has arrived, and so a response for a competition we have since left is ignored.
@@ -51,14 +51,14 @@ export function FormatPage() {
         const { data: c } = await api.get<CompetitionDetail>(`/competitions/${editingId}`);
         if (cancelled) return;
         setComp(c);
-        if (canOrganise(c)) {
+        if (canManageEntries(c)) {
           const { data } = await api.get<SectionSignup[]>(`/competitions/${editingId}/signups`);
           if (!cancelled) setSignups(data);
         } else setSignups([]);
       } catch { if (!cancelled) setError('Could not load organiser details. Please try again.'); }
     })();
     return () => { cancelled = true; };
-  }, [editingId, canOrganise]);
+  }, [editingId, canManageEntries]);
 
   async function toggleLock() {
     if (!comp || busy) return;
@@ -73,10 +73,10 @@ export function FormatPage() {
 
   if (!comp) return <div className="card p-4 text-sm text-slate-500">{error ?? 'Loading…'}</div>;
 
-  if (!canOrganise(comp)) {
+  if (!canManageEntries(comp)) {
     return (
       <div className="card p-4 text-sm">
-        Organiser tools are restricted to admins and trainers who created the competition.
+        Only admins, the person who runs this competition and its co-organisers can use these tools.
         <Link to={`/competitions/${comp.id}`} className="ml-2 btn-primary !py-1 !px-3 text-xs">Back to comp</Link>
       </div>
     );

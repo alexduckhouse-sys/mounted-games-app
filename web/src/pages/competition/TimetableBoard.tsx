@@ -26,7 +26,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const { competition, reload, updatedAt } = useCompetition();
   const { canOrganise } = useAuth();
   const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
-  const showQualifiers = canOrganise();
+  const showQualifiers = canOrganise(competition);
   const rows = useMemo(
     () => timetableRows(competition.sessions, timings, showQualifiers).filter((row) => sectionId == null || row.session.competitionSectionId === sectionId),
     [competition.sessions, timings, showQualifiers, sectionId],

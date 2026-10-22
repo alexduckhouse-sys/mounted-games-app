@@ -10,6 +10,7 @@ import { competitionDateText } from '../../lib/competitionDates';
 import { DemoEntryPayment } from '../commerce/DemoEntryPayment';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { CompetitionTeamCard } from './CompetitionTeamCard';
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
@@ -28,15 +29,17 @@ const SIGNUP_STATUS: Record<SignupPaymentStatus, { label: string; tone: StatusTo
 
 export function DetailsTab() {
   const { competition, reload } = useCompetition();
-  const { canEdit, canOrganise, hasRole, user } = useAuth();
+  const { canEdit, canManage, canManageEntries, canOrganise, hasRole, user } = useAuth();
   const [signupResult, setSignupResult] = useState<{ key: string; items: SectionSignup[] } | null>(null);
   const signupKey = `${competition.id}:${user?.id ?? ''}`;
   const mayOrganise = canOrganise(competition);
-  const allSignups = mayOrganise && signupResult?.key === signupKey ? signupResult.items : [];
+  // Entrants and the shop are for co-organisers; other helpers would be refused.
+  const mayEntries = canManageEntries(competition);
+  const allSignups = mayEntries && signupResult?.key === signupKey ? signupResult.items : [];
   const [lockBusy, setLockBusy] = useState(false);
 
   async function refreshSignups() {
-    if (!canOrganise(competition)) return;
+    if (!mayEntries) return;
     try {
       const r = await api.get<SectionSignup[]>(`/competitions/${competition.id}/signups`);
       setSignupResult({ key: signupKey, items: r.data });
@@ -45,13 +48,13 @@ export function DetailsTab() {
 
   useEffect(() => {
     let cancelled = false;
-    if (mayOrganise) {
+    if (mayEntries) {
       api.get<SectionSignup[]>(`/competitions/${competition.id}/signups`)
         .then(({ data }) => { if (!cancelled) setSignupResult({ key: signupKey, items: data }); })
         .catch(() => { if (!cancelled) setSignupResult({ key: signupKey, items: [] }); });
     }
     return () => { cancelled = true; };
-  }, [competition.id, mayOrganise, signupKey]);
+  }, [competition.id, mayEntries, signupKey]);
 
   async function toggleLock() {
     if (lockBusy) return;
@@ -126,13 +129,13 @@ export function DetailsTab() {
         {linkRow('../rulebooks', 'Rulebooks')}
         {linkRow(`/event-tools/${competition.id}/print/draw`, 'Print draw')}
         {linkRow(`/event-tools/${competition.id}/print/results`, 'Print results')}
-        {mayOrganise && linkRow(`/event-tools/${competition.id}`, 'Import, duplicate & print')}
-        {mayOrganise && linkRow('../shop/manage', 'Manage event shop')}
+        {(hasRole('Admin') || (hasRole('Trainer') && competition.createdByUserId === user?.id)) && linkRow(`/event-tools/${competition.id}`, 'Import, duplicate & print')}
+        {mayEntries && linkRow('../shop/manage', 'Manage event shop')}
         {mayOrganise && linkRow('../operations', 'Readiness & draw')}
       </RefineList>
 
-      {/* Organiser controls: lock signups, jump to the format wizard, CSV export. */}
-      {(canOrganise(competition) || hasRole('Admin')) && competition.sections.length > 0 && (
+      {/* Entry controls (co-organisers and admins): lock signups, jump to the format wizard, CSV export. */}
+      {mayEntries && competition.sections.length > 0 && (
         <>
           <RefineSection title="Organiser tools" />
           <div className="rf-list flex flex-col gap-2 p-3">
@@ -175,6 +178,11 @@ export function DetailsTab() {
         </>
       )}
 
+      {/* Owner, helpers and admins see who runs the event; the owner (or an admin in Edit mode) manages it. */}
+      {user && (mayOrganise || hasRole('Admin')) && (
+        <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
+      )}
+
       {/* Signup by section: signed-in users only; the public can't enter. */}
       {user && competition.sections.length > 0 && (
         <>
@@ -195,7 +203,7 @@ export function DetailsTab() {
                 paymentDestination={competition.paymentDestination ?? null}
                 competitionName={competition.name}
                 onChanged={() => { refreshSignups(); reload(); }}
-                canManage={canEdit() || canOrganise(competition)}
+                canManage={canEdit() || mayEntries}
                 hideJoin={hasRole('Admin')}
               />
             ))}
