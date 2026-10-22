@@ -167,6 +167,23 @@ public class ClubHierarchyTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task ClubManager_CannotPutAnotherClubsTrainerInChargeOfTheirTeam()
+    {
+        var club = NewClubName();
+        var (manager, _) = await _f.ApprovedManagerAsync(club);
+        var (_, foreign) = await _f.SignupAsync("Trainer", NewClubName());
+        await (await _f.AdminAsync()).PostAsync($"{Requests}/{foreign.User.Id}/approve", null);
+        var (comp, section) = await NewCompetitionAsync();
+        var teamId = await _f.SeedTeamAsync(comp, section, await ClubIdAsync(club));
+
+        var refused = await manager.PutAsJsonAsync($"/api/teams/{teamId}/trainer", new UpdateTeamRequest(TrainerUserId: foreign.User.Id));
+        var byAdmin = await (await _f.AdminAsync()).PutAsJsonAsync($"/api/teams/{teamId}/trainer", new UpdateTeamRequest(TrainerUserId: foreign.User.Id));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, byAdmin.StatusCode);
+    }
+
+    [Fact]
     public async Task OrganiserUpdate_CanAssignATrainer_AndRejectsANonTrainer()
     {
         var (comp, section) = await NewCompetitionAsync();

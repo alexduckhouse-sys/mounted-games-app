@@ -14,7 +14,7 @@ ASP.NET Core 10, EF Core (Npgsql in production, SQLite locally and in tests), Si
 - **Season**: a points league over competition sections (`SeasonRound`, `SeasonPlacePoints`, `BestResultsToCount`). Results are published as versioned snapshots (`SeasonRoundPublication`).
 - **Operations**: rulebook, score state and audit (`RaceScoreState`, `RaceScoreEvent`), draw, readiness checks and equipment acknowledgements. **Event tools**: clone, CSV team import, printable pack.
 - **Shop** (`ShopPost`, `ShopComment`, `ShopReport`): marketplace posts. **Commerce**: event shops with listings and orders.
-- **Roles** (`Auth/Roles.cs`): Admin, Trainer, TrainerRequest (signed up, awaiting approval), Manager, Member, Rider. "Steward" and "spectator" are product words with no role behind them.
+- **Roles** (`Auth/Roles.cs`): Admin, Trainer, TrainerRequest and ManagerRequest (signed up, awaiting approval), Manager, Member, Rider. "Steward" and "spectator" are product words with no role behind them.
 
 ## Recipes
 

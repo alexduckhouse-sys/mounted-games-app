@@ -323,7 +323,7 @@ public record ChatMessageDto(
     string Body, ChatMessageType Type, string? Tag, DateTime CreatedAt, bool AdminOnly,
     string? RecipientUserId = null);
 
-public record PostChatMessageRequest(string Body, string? ReplyToUserId = null);
+public record PostChatMessageRequest([StringLength(2000)] string Body, string? ReplyToUserId = null);
 
 public record AnnouncementRequest(string Body, string? Tag);
 

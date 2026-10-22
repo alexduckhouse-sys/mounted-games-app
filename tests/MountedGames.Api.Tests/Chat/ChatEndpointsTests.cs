@@ -248,6 +248,17 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
     }
 
+    [Fact]
+    public async Task Post_Returns400_WhenTheMessageIsLongerThan2000Characters()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var (client, _) = await _f.SignupAsync("Member");
+
+        var r = await client.PostAsJsonAsync(Url(a), new PostChatMessageRequest(new string('x', 2001)));
+
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

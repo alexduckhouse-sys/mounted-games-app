@@ -102,14 +102,16 @@ public class TeamsController : ControllerBase
         if (t is null) return NotFound();
         // 404, not 403, for people who can't see the team's management.
         if (!await CanManageTeamAsync(t)) return NotFound();
-        var problem = await ApplyTrainerAndBibAsync(t, req.TrainerUserId, req.BibDescription);
+        // A club's manager can only pick trainers of that club; an organiser or admin can pick a visiting trainer.
+        var clubOnly = !User.IsInRole(Roles.Admin) && !await _db.CanManageAsync(User, t.CompetitionId);
+        var problem = await ApplyTrainerAndBibAsync(t, req.TrainerUserId, req.BibDescription, clubOnly);
         if (problem is not null) return problem;
         await _db.SaveChangesAsync();
         return t.ToDto();
     }
 
     /// <summary>Applies the trainer and bib description of an update. Returns an error result, or null when fine.</summary>
-    private async Task<ActionResult?> ApplyTrainerAndBibAsync(Team t, string? trainerUserId, string? bibDescription)
+    private async Task<ActionResult?> ApplyTrainerAndBibAsync(Team t, string? trainerUserId, string? bibDescription, bool clubOnly = false)
     {
         if (bibDescription is not null)
             t.BibDescription = string.IsNullOrWhiteSpace(bibDescription) ? null : bibDescription.Trim();
@@ -126,6 +128,8 @@ public class TeamsController : ControllerBase
                                where userRole.UserId == trainerId && role.Name == Roles.Trainer
                                select userRole.UserId).AnyAsync();
         if (!isTrainer) return BadRequest(new { message = "That person isn't an approved trainer." });
+        if (clubOnly && !await _db.Users.AnyAsync(u => u.Id == trainerId && u.ClubId == t.ClubId))
+            return BadRequest(new { message = "Choose a trainer from this club." });
         t.TrainerUserId = trainerId;
         t.Trainer = await _db.Users.FindAsync(trainerId);
         return null;
