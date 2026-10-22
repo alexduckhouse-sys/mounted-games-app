@@ -3,8 +3,8 @@ import type { Session } from '../types';
 import { heat, race, session } from '../test/factories';
 import { computeTimings, type SessionTiming } from './time';
 import {
-  groupRowsBySession, hiddenFinishedKeys, sessionOrdinals, sessionTitle, statusLabel, timetableRows, timetableStatus,
-  type TimetableRow, type TimetableStatus,
+  groupMaxDelay, groupRowsBySession, isGroupFinished, sessionOrdinals, sessionTitle, statusLabel, timetableRows, timetableStatus,
+  type TimetableStatus,
 } from './timetableRows';
 
 const scheduled = new Date('2026-06-01T09:00:00Z');
@@ -172,28 +172,19 @@ describe('groupRowsBySession', () => {
   });
 });
 
-describe('hiddenFinishedKeys', () => {
-  const row = (status: TimetableStatus, time: number | null) => ({ status, effective: time == null ? null : new Date(time) }) as TimetableRow;
+describe('isGroupFinished and groupMaxDelay', () => {
+  const row = (status: TimetableStatus, delayMinutes: number) => ({ status, delayMinutes });
 
-  it('keeps only the most recent finished group', () => {
-    const groups = [
-      { key: 'a', rows: [row('finished', 1000)] },
-      { key: 'b', rows: [row('finished', 2000)] },
-      { key: 'c', rows: [row('finished', 3000), row('live', 3500)] },
-      { key: 'd', rows: [row('on-time', 4000)] },
-    ];
-    expect([...hiddenFinishedKeys(groups)]).toEqual(['a']);
+  it('is finished only when every row is, and never for an empty group', () => {
+    expect(isGroupFinished([row('finished', 0), row('finished', 5)])).toBe(true);
+    expect(isGroupFinished([row('finished', 0), row('live', 0)])).toBe(false);
+    expect(isGroupFinished([])).toBe(false);
   });
 
-  it('hides nothing when at most one group has finished', () => {
-    expect(hiddenFinishedKeys([{ key: 'a', rows: [row('finished', 1)] }]).size).toBe(0);
-    expect(hiddenFinishedKeys([]).size).toBe(0);
-    expect(hiddenFinishedKeys([{ key: 'a', rows: [] }]).size).toBe(0);
-  });
-
-  it('keeps the later group when two finish at the same time, and copes with undated rows', () => {
-    const groups = [{ key: 'a', rows: [row('finished', 5)] }, { key: 'b', rows: [row('finished', 5)] }, { key: 'c', rows: [row('finished', null)] }];
-    expect([...hiddenFinishedKeys(groups)].sort()).toEqual(['a', 'c']);
+  it('takes the longest delay of the unfinished rows only', () => {
+    expect(groupMaxDelay([row('finished', 9), row('live', 4), row('late', 6)])).toBe(6);
+    expect(groupMaxDelay([row('finished', 9)])).toBe(0);
+    expect(groupMaxDelay([])).toBe(0);
   });
 });
 

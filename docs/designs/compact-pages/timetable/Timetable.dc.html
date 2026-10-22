@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="../support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet"><style>body{margin:0;background:#EFEFEF;font-family:'Barlow',system-ui,sans-serif}a{color:#17385F}a:hover{color:#0F2A4A}button{font:inherit;border:0;background:none;padding:0;cursor:pointer}</style></helmet>
+<div data-screen-label="Timetable" style="width:100%;max-width:560px;height:100vh;margin:0 auto;box-sizing:border-box;border-left:1px solid #DADADA;border-right:1px solid #DADADA;display:flex;flex-direction:column;background:#F7F7F7"><header style="background:#17385F;color:#fff;display:flex;align-items:center;gap:10px;padding:12px 12px 12px 16px;flex:none"><span style="width:32px;height:32px;border-radius:6px;background:#E12A39;display:flex;align-items:center;justify-content:center;font:700 15px/1 'Barlow Condensed',sans-serif;flex:none">MG</span><button style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left;color:#fff"><span style="font:700 22px/1 'Barlow Condensed',sans-serif">Timetable</span><span style="display:flex;align-items:center;gap:4px;font-size:13px;line-height:1.2;color:#C9D4E3;white-space:nowrap;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis">Hartpury Area Festival · 10:54</span><span style="flex:none;width:12px;height:12px;background:#C9D4E3;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-down.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-down.svg) center/contain no-repeat"></span></span></button><span style="width:44px;height:44px;border-radius:10px;border:1px solid #3B5577;display:flex;align-items:center;justify-content:center;flex:none"><span style="width:18px;height:18px;background:#fff;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/rotate-cw.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/rotate-cw.svg) center/contain no-repeat"></span></span><span style="width:44px;height:44px;border-radius:10px;border:1px solid #3B5577;display:flex;align-items:center;justify-content:center;flex:none"><span style="width:20px;height:20px;background:#fff;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/menu.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/menu.svg) center/contain no-repeat"></span></span></header>
+<div style="background:#17385F;padding:0 12px 10px 16px;display:flex;align-items:center;gap:8px;flex:none">
+<div style="display:flex;padding:3px;gap:2px;border-radius:8px;background:rgba(255,255,255,.1)"><sc-for list="{{ tt.days }}" as="d" hint-placeholder-count="2"><button onClick="{{ d.onClick }}" style="min-height:30px;padding:0 12px;border-radius:6px;background:{{ d.pillBg }};color:{{ d.pillFg }};font:600 13px/1 'Barlow',sans-serif">{{ d.short }}</button></sc-for></div>
+<label style="flex:1;min-width:0;position:relative;display:flex;align-items:center;min-height:36px;border-radius:8px;border:1px solid #3B5577;padding:0 30px 0 10px;color:#fff;font:600 13px/1 'Barlow',sans-serif"><span style="flex:none;width:14px;height:14px;background:#C9D4E3;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/map-pin.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/map-pin.svg) center/contain no-repeat"></span><span style="margin-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ tt.arenaLabel }}</span><span style="position:absolute;right:10px;top:11px"><span style="flex:none;width:14px;height:14px;background:#fff;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-down.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-down.svg) center/contain no-repeat"></span></span><select onChange="{{ tt.onSelect }}" aria-label="Arena" style="position:absolute;inset:0;opacity:0;cursor:pointer"><option value="">All arenas</option><option value="Main arena">Main arena</option><option value="Arena 2">Arena 2 · on now</option></select></label>
+</div><div style="background:#0F2A4A;color:#fff;display:flex;align-items:stretch;min-height:44px;flex:none"><span style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding-left:16px;font:500 14px/1.2 'Barlow',sans-serif"><span style="flex:none;display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:4px;background:#E12A39;font:700 11px/1 'Barlow',sans-serif;letter-spacing:.06em">LIVE</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Under 17 · Session 1 — Heat 3 is on now</span></span><span style="width:48px;border-left:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center"><span style="width:18px;height:18px;background:#fff;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-down.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-down.svg) center/contain no-repeat"></span></span></div>
+<div style="flex:1;overflow-y:auto;padding:10px 12px 20px;display:flex;flex-direction:column;gap:10px">
+<sc-for list="{{ tt.groups }}" as="g" hint-placeholder-count="4">
+<sc-if value="{{ g.isDay }}"><div style="flex:none;position:sticky;top:-10px;z-index:2;margin:0 -12px;padding:10px 14px 6px;background:#F7F7F7;display:flex;align-items:baseline;gap:8px;border-bottom:1px solid #DADADA"><span style="flex:1;font:700 16px/1 'Barlow Condensed',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#212121">{{ g.dayLabel }}</span><span style="font:700 11px/1 'Barlow',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#E12A39">{{ g.dayMeta }}</span></div></sc-if><sc-if value="{{ g.isDivider }}"><div style="flex:none;display:flex;align-items:center;gap:10px;margin-top:8px;font:700 12px/1 'Barlow',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#5A6270"><span>{{ g.label }}</span><span style="flex:1;height:1px;background:#DADADA"></span></div></sc-if><sc-if value="{{ g.isGroup }}"><section style="flex:none;display:flex;flex-direction:column;gap:4px">
+<sc-if value="{{ g.collapsed }}"><button onClick="{{ g.toggle }}" style="display:flex;align-items:center;gap:8px;min-height:36px;padding:0 10px;border-radius:8px;border:1px dashed #C4C9D1;color:#6E7480;font:500 13px/1 'Barlow',sans-serif;text-align:left"><span style="width:8px;height:8px;border-radius:50%;background:#A3A39B"></span><span style="flex:1"><strong style="font-weight:600;color:#4A505A">{{ g.label }}</strong> · {{ g.count }} finished</span><span style="font:600 14px/1 'Barlow Condensed',sans-serif">{{ g.range }}</span><span style="width:14px;height:14px;background:#6E7480;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-down.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-down.svg) center/contain no-repeat"></span></button></sc-if>
+<sc-if value="{{ g.expanded }}">
+<sc-if value="{{ g.hasTitle }}"><button onClick="{{ g.toggle }}" style="display:flex;align-items:baseline;gap:8px;padding:0 2px 3px;border-bottom:1.5px solid #17385F;text-align:left"><h2 style="flex:1;margin:0;font:700 14px/1.1 'Barlow Condensed',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#17385F">{{ g.title }}</h2><span style="font:500 12px/1 'Barlow',sans-serif;color:{{ g.summaryColor }}">{{ g.summary }}</span></button></sc-if>
+<div style="background:#fff;border:1px solid #DADADA;border-radius:10px;overflow:hidden">
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:44px minmax(0,1fr) 8px 14px;align-items:center;column-gap:10px;min-height:{{ r.h }};padding:0 10px 0 12px;box-sizing:border-box;background:{{ r.bg }};border-top:{{ r.bt }};box-shadow:{{ r.liveBar }}">
+<span style="font:700 19px/1 'Barlow Condensed',sans-serif;font-variant-numeric:tabular-nums;color:{{ r.timeColor }}">{{ r.time }}</span>
+<span style="display:flex;align-items:baseline;gap:6px;min-width:0;white-space:nowrap;overflow:hidden"><strong style="font-size:15px;font-weight:600;color:{{ r.nameColor }}">{{ r.name }}</strong><sc-if value="{{ r.hasSub }}"><span style="font-size:12px;color:#5A6270;overflow:hidden;text-overflow:ellipsis">{{ r.sub }}</span></sc-if><sc-if value="{{ r.hasPlanned }}"><span style="font-size:12px;color:#8A5A00">+{{ r.delay }} · <s>{{ r.planned }}</s></span></sc-if><sc-if value="{{ r.live }}"><span style="font:700 10px/1 'Barlow',sans-serif;letter-spacing:.06em;color:#E12A39">ON NOW</span></sc-if></span>
+<span style="width:8px;height:8px;border-radius:50%;background:{{ r.colour }}"></span>
+<sc-if value="{{ r.race }}"><span style="width:14px;height:14px;background:#6E7480;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-right.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-right.svg) center/contain no-repeat"></span></sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</section></sc-if>
+</sc-for>
+<ul style="display:flex;flex-wrap:wrap;gap:4px 12px;list-style:none;padding:0;margin:2px 0 0;font-size:12px;color:#5A6270"><li style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#2E8B4F"></span>On time</li><li style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#C08308"></span>Late</li><li style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#2563EB"></span>On now</li><li style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#A3A39B"></span>Finished</li></ul>
+</div>
+<nav style="flex:none;background:#fff;border-top:1px solid #DADADA;padding:6px 4px 10px;display:grid;grid-template-columns:repeat(4,1fr)"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4"><span style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;font:{{ t.weight }} 12px/1 'Barlow',sans-serif;color:{{ t.color }}"><span style="width:22px;height:22px;background:{{ t.color }};-webkit-mask:url({{ t.icon }}) center/contain no-repeat;mask:url({{ t.icon }}) center/contain no-repeat"></span>{{ t.label }}</span></sc-for></nav></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+const C = { 'on-time': '#2E8B4F', late: '#C08308', live: '#2563EB', finished: '#A3A39B' };
+const IC = (n) => `https://unpkg.com/lucide-static@0.460.0/icons/${n}.svg`;
+const H = (p) => [['Heat 1', 'H1'], ['Heat 2', 'H2'], ['Heat 3', 'H3'], ['Heat 4', 'H4']].map(([n, s], i) => [p[i][0], p[i][1], n, p[i][2], 'race', s]);
+const GROUPS = [
+  { key: 'j1', title: 'Junior · Session 1', arena: 'Main arena', noun: 'heats', rows: H([['08:30', 0, 'finished'], ['08:40', 0, 'finished'], ['08:50', 0, 'finished'], ['09:00', 0, 'finished']]) },
+  { key: 'o1', title: 'Open · Session 1', arena: 'Arena 2', noun: 'heats', rows: H([['08:45', 0, 'finished'], ['08:57', 0, 'finished'], ['09:09', 0, 'finished'], ['09:21', 0, 'finished']]) },
+  { key: 'o2', title: 'Open · Session 2', arena: 'Arena 2', noun: 'heats', rows: H([['10:30', 0, 'finished'], ['10:42', 4, 'live'], ['10:54', 6, 'late'], ['11:06', 6, 'late']]) },
+  { key: 'j2', title: 'Junior · Session 2', arena: 'Main arena', noun: 'heats', rows: H([['11:00', 0, 'on-time'], ['11:10', 0, 'on-time'], ['11:20', 0, 'on-time'], ['11:30', 0, 'on-time']]) },
+  { key: 'brk', title: null, arena: '', rows: [['12:00', 0, 'Lunch', 'on-time', 'break'], ['12:30', 0, "Team managers' meeting", 'on-time', 'briefing', '', "Secretary's tent"]] },
+  { key: 'u1', title: 'Under 17 · Session 1', arena: 'Main arena', noun: 'heats', rows: H([['13:15', 0, 'on-time'], ['13:27', 0, 'on-time'], ['13:39', 0, 'on-time'], ['13:51', 0, 'on-time']]) },
+  { key: 'jf', title: 'Junior · Finals', arena: 'Main arena', noun: 'finals', rows: [['15:00', 0, 'A Final', 'on-time', 'race', 'A Final'], ['15:15', 0, 'B Final', 'on-time', 'race', 'B Final']] },
+  { key: 'of', title: 'Open · Finals', arena: 'Arena 2', noun: 'finals', rows: [['15:30', 0, 'A Final', 'on-time', 'race', 'A Final'], ['15:45', 0, 'B Final', 'on-time', 'race', 'B Final']] },
+];
+const SUN = [
+  { key: 's-j3', title: 'Junior · Session 3', arena: 'Main arena', noun: 'heats', rows: H([['09:00', 0, 'on-time'], ['09:10', 0, 'on-time'], ['09:20', 0, 'on-time'], ['09:30', 0, 'on-time']]) },
+  { key: 's-o3', title: 'Open · Session 3', arena: 'Arena 2', noun: 'heats', rows: H([['09:15', 0, 'on-time'], ['09:27', 0, 'on-time'], ['09:39', 0, 'on-time'], ['09:51', 0, 'on-time']]) },
+  { key: 's-u2', title: 'Under 17 · Session 2', arena: 'Main arena', noun: 'heats', rows: H([['11:00', 0, 'on-time'], ['11:12', 0, 'on-time'], ['11:24', 0, 'on-time'], ['11:36', 0, 'on-time']]) },
+  { key: 's-uf', title: 'Under 17 · Finals', arena: 'Main arena', noun: 'finals', rows: [['14:00', 0, 'A Final', 'on-time', 'race', 'A Final'], ['14:15', 0, 'B Final', 'on-time', 'race', 'B Final']] },
+];
+const LATE_DONE = new Set(['j1', 'o1', 'o2', 'j2', 'brk']);
+const LATE = GROUPS.map((g) => LATE_DONE.has(g.key)
+  ? { ...g, rows: g.rows.map((r) => { const x = [...r]; x[3] = 'finished'; x[1] = 0; return x; }) }
+  : g.key === 'u1' ? { ...g, rows: g.rows.map((r, i) => { const x = [...r]; x[3] = i < 2 ? 'finished' : i === 2 ? 'live' : 'late'; x[1] = i >= 2 ? 3 : 0; return x; }) } : g);
+const ARENAS = ['Main arena', 'Arena 2'];
+const DAYS = [['sat', 'Sat', 'Saturday 24 Oct', 'Today'], ['sun', 'Sun', 'Sunday 25 Oct', '']];
+const add = (t, m) => { const [h, mm] = t.split(':').map(Number); const x = h * 60 + mm + m; return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`; };
+
+class Component extends DCLogic {
+  state = { open: {}, opt: {} };
+  option(p, srcSat) {
+    const o = this.state.opt[p] || { day: 'sat', arena: '' };
+    const set = (patch) => this.setState((s) => ({ opt: { ...s.opt, [p]: { ...o, ...patch } } }));
+    const pick = (on) => ({ on, fg: on ? '#17385F' : '#5A6270', weight: on ? 700 : 500, line: on ? '#17385F' : 'transparent', pillBg: on ? '#fff' : 'transparent', pillFg: on ? '#17385F' : '#fff', radio: on ? '6px solid #17385F' : '2px solid #C4C9D1', rowBg: on ? '#E3E7EC' : '#fff' });
+    const days = DAYS.map(([k, short, long, meta]) => ({ ...pick(o.day === k), short, long, meta, onClick: () => set({ day: k }) }));
+    const arenas = ['', ...ARENAS].map((name) => ({ ...pick(o.arena === name), label: name || 'All arenas', short: name ? name.replace(' arena', '') : 'All', live: o.day === 'sat' && name === 'Arena 2', onClick: () => set({ arena: name }) }));
+    const src = o.day === 'sat' ? (srcSat || GROUPS) : SUN;
+    const groups = src.filter((g) => !o.arena || !g.arena || g.arena === o.arena).map((g) => this.build(g, !o.arena, p));
+    const d = DAYS.find((x) => x[0] === o.day);
+    return { days, arenas, groups, dayShort: d[1], dayLong: d[2], arenaLabel: o.arena || 'All arenas', onSelect: (e) => set({ arena: e.target.value }), filtered: !!o.arena };
+  }
+  build(g, showArena, p) {
+    const open = this.state.open;
+    const ok = p + g.key;
+    const toggleOpen = () => this.setState((s) => ({ open: { ...s.open, [ok]: !s.open[ok] } }));
+    const rows = g.rows.map(([planned, delay, name, status, kind, shortName, loc], i) => {
+      const race = kind === 'race';
+      const label = kind === 'break' ? 'Break' : kind === 'briefing' ? ['Briefing', loc].filter(Boolean).join(' · ') : '';
+      const sub = [label, showArena && !g.title ? g.arena : ''].filter(Boolean).join(' · ');
+      const fin = status === 'finished';
+      return { time: add(planned, delay), planned, delay, hasPlanned: delay > 0 && status !== 'live', name, sub, hasSub: !!sub, colour: C[status], race, live: status === 'live', bg: status === 'live' ? '#FDF1F2' : '#fff', bt: i ? '1px solid #EBEBEB' : '0', timeColor: status === 'late' ? '#8A5A00' : fin ? '#6E7480' : '#17385F', nameColor: fin ? '#4A505A' : '#212121', h: fin ? '36px' : '44px', liveBar: status === 'live' ? 'inset 3px 0 0 #E12A39' : 'none' };
+    });
+    const done = g.rows.every((r) => r[3] === 'finished');
+    const maxLate = Math.max(0, ...g.rows.filter((r) => r[3] !== 'finished').map((r) => r[1]));
+    const count = `${g.rows.length} ${g.noun || ''}`.trim();
+    const isOpen = !!open[ok];
+    return { isGroup: true, done, title: g.title, hasTitle: !!g.title, label: g.title || g.rows[0][2], rows, count: g.rows.length, range: `${g.rows[0][0]}–${g.rows[g.rows.length - 1][0]}`,
+      summary: [showArena ? g.arena : '', maxLate ? `${maxLate} min late` : count].filter(Boolean).join(' · '), summaryColor: maxLate ? '#8A5A00' : '#5A6270',
+      collapsed: done && !isOpen, expanded: !(done && !isOpen), toggle: done ? toggleOpen : undefined };
+  }
+  renderVals() {
+    const tt = this.option('tt', LATE);
+    const fin = tt.groups.filter((g) => g.done), active = tt.groups.filter((g) => !g.done);
+    if (fin.length) tt.groups = [...active, { isDivider: true, label: `Finished today · ${fin.length}` }, ...fin];
+    const tabs = [['Timetable', 'clock'], ['Toplists', 'trophy'], ['Live & stream', 'message-square'], ['Details', 'info']].map(([label, icon], i) => ({ label, icon: IC(icon), color: i ? '#5A6270' : '#17385F', weight: i ? 500 : 700 }));
+    return { tt, tabs };
+  }
+}
+</script>
+</body>
+</html>
