@@ -8,7 +8,7 @@ The cross-chat to-do list, confirmed product specifications, code-verified bugs,
 
 Check this before taking an item, and add yourself here when you start one.
 
-- **Chat 99b776bf:** BUG-01, 02, 04, 06, 08, 09, 10, 11, 12, 13, 19, 20. Merged #79 (multi-arena). Open: #80 (finals, standings, equipment, heat edits), #81 (rider clash, tidy-ups), and `fix/scoring-page-bugs` (no PR yet).
+- **Chat 99b776bf:** BUG-01, 02, 04, 06, 08, 09, 10, 11, 12, 13, 19, 20. Merged #79 (multi-arena), #80 (finals, standings, equipment, heat edits) and #81 (rider clash, tidy-ups). Still open: `fix/scoring-page-bugs`.
 - **Chat 11a9436f:** BUG-03, 05, 07, 14–18, 22–26 (issues #67, #69, #72–#75, #77, #78 and the boundary-tie part of #68), including the product decisions they need (lane rotation and sit-outs, heat-heat-final, club hierarchy, bib description, guest riders). Branch `fix/bugs-md`; overlapping early work parked on `wip/bugs-md-overlap`.
 - **Chat a29f41a2 (copy `-d7`, fork 9f48b569):** scorer links, sharing links (#82) and the sign-up terms tick, then the competitor-gap stages in `docs/competitive-gaps.md`.
 - **BUG-21** (VAPID keys and UK times) was fixed in #57.
@@ -16,7 +16,7 @@ Check this before taking an item, and add yourself here when you start one.
 
 ## Where things stand
 
-- **Merged:** PRs #1–#65 and #79. Since 21 October:
+- **Merged:** PRs #1–#65 and #79–#81. Since 21 October:
   - #38 live feed sign-in fix, #40 demo reseed, #41 lint in CI;
   - #43 and #47 API on Vercel;
   - low signal: #45 connection pill and adaptive checks, #48 fast first view, #46 server weather cache, #49 lite mode and lazy images, #52 CSP allows https images;
@@ -24,7 +24,7 @@ Check this before taking an item, and add yourself here when you start one.
   - roadmap section 1: #57 VAPID keys from settings and UK reminder times, #58 Redis backplane for SignalR, #59 shared viewer counts and rate limits;
   - roadmap section 2: #60–#62 one competition admin role per event (the per-role design below was replaced by this);
   - roadmap section 3: #63 rider privacy (initials only, filming opt-out), #64 privacy hardening (declaration access, geocode limit, IP scrubbing, account deletion, `/privacy`);
-  - #65 arena and lane on followed heats, follow a club, race rules; #79 multi-arena timing.
+  - #65 arena and lane on followed heats, follow a club, race rules; #79 multi-arena timing; #80 finals seeding, standings by tier, equipment and heat edits; #81 rider clash warning and tidy-ups.
 - **Sections 1–3 below are done** apart from: the privacy page contact email (placeholder until there is an address), the anonymous per-IP stream cap (off; check how the hub sees client IPs first), the club-scoped role hierarchy and private admin replies (now BUG-14 and BUG-18), and section 1's cron item (still open: per-minute Vercel cron needs the Pro plan, so the schedulers can sleep when the API scales to zero).
 - **Live API is confirmed:** the live headers show `cle1` in `x-vercel-id`, and the overlays, first-view and weather endpoints answer.
 - **Hosting:** the website is on Vercel (project `mounted-games-app`, root `web/`). On 21 October the API moved from Render to its own Vercel project, `mounted-games-api`. It's a container built from `Dockerfile.vercel` at the repo root and runs in `cle1`, next to Neon in AWS us-east-2. The website rewrites `/api` there, and the live hub connects to it directly.
