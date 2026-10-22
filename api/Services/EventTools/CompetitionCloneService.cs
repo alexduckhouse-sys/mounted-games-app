@@ -49,6 +49,7 @@ public sealed class CompetitionCloneService(AppDbContext db)
             Description = source.Description,
             What3Words = source.What3Words,
             AppleMapsUrl = source.AppleMapsUrl,
+            TermsText = source.TermsText,
             CreatedByUserId = creatorUserId,
         };
         db.Competitions.Add(clone);

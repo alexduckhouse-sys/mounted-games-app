@@ -250,6 +250,8 @@ export interface CompetitionDetail {
   signupsLocked?: boolean;
   /** Explicit capability from APIs that keep trainer messages private. Missing means unavailable. */
   staffChatEnabled?: boolean;
+  /** The organiser's terms and conditions as plain text; empty means the sign-up form shows a placeholder. */
+  termsText?: string | null;
 }
 
 export interface MySignup {

@@ -185,12 +185,12 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
         var (entrant, _) = await _f.SignupAsync();
         var url = $"/api/competitions/{section.CompetitionId}/sections/{section.Id}/signups";
 
-        var dto = await (await entrant.PostAsJsonAsync(url, new CreateSectionSignupRequest("Oliver Smith", null, null, null, true, true)))
+        var dto = await (await entrant.PostAsJsonAsync(url, new CreateSectionSignupRequest("Oliver Smith", null, null, null, true, true, true, SignupTerms.WordingVersion)))
             .ReadAsync<SectionSignupDto>();
         Assert.True(dto.UseInitialOnly);
         Assert.True(dto.NoFilming);
 
-        var plain = await (await entrant.PostAsJsonAsync(url, new CreateSectionSignupRequest("Ava Bell", null, null)))
+        var plain = await (await entrant.PostAsJsonAsync(url, new CreateSectionSignupRequest("Ava Bell", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion)))
             .ReadAsync<SectionSignupDto>();
         Assert.False(plain.UseInitialOnly);
         Assert.False(plain.NoFilming);

@@ -15,7 +15,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     private static string Url(CompetitionSection s) => $"/api/competitions/{s.CompetitionId}/sections/{s.Id}/signups";
 
     private static CreateSectionSignupRequest Entry(string name = "Rider One", string? club = null, string? code = null)
-        => new(name, club, "rider@example.com", code);
+        => new(name, club, "rider@example.com", code, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion);
 
     [Fact]
     public async Task Create_RecordsPendingSignupAtSectionPrice()

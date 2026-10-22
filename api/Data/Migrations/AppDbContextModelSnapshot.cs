@@ -717,6 +717,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("StreamUrl")
                         .HasColumnType("text");
 
+                    b.Property<string>("TermsText")
+                        .HasColumnType("text");
+
                     b.Property<string>("What3Words")
                         .HasColumnType("text");
 
@@ -1804,6 +1807,21 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int?>("TeamId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("TermsAccepted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("TermsAcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TermsAcceptedByName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TermsAcceptedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TermsWordingVersion")
+                        .HasColumnType("text");
 
                     b.Property<bool>("UseInitialOnly")
                         .ValueGeneratedOnAdd()

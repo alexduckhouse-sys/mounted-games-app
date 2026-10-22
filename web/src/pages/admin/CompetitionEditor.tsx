@@ -9,6 +9,7 @@ import { CompetitionIcon } from '../../competition/CompetitionIcon';
 import { EMOJI_COMPETITION_ICONS, FLAG_COMPETITION_ICONS } from '../../competition/icons';
 import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionDetail, CompetitionSection } from '../../types';
+import { MAX_TERMS_LENGTH } from '../../lib/termsTick';
 
 type Format = 1 | 2 | 3;
 const FORMAT_LABEL: Record<Format, string> = { 1: 'Pairs', 2: 'Teams', 3: 'Individual' };
@@ -165,6 +166,7 @@ interface PersistedDraft {
   description: string;
   organiserName?: string;
   paymentDestination?: string;
+  termsText?: string;
   sections: SectionDraft[];
   teams: TeamDraft[];
 }
@@ -288,6 +290,7 @@ export function CompetitionEditor() {
   const [description, setDescription] = useState(persisted?.description ?? '');
   const [organiserName, setOrganiserName] = useState(persisted?.organiserName ?? '');
   const [paymentDestination, setPaymentDestination] = useState(persisted?.paymentDestination ?? '');
+  const [termsText, setTermsText] = useState(persisted?.termsText ?? '');
 
   // Sections + races
   const [sections, setSections] = useState<SectionDraft[]>(
@@ -306,14 +309,14 @@ export function CompetitionEditor() {
       startDate, startTime, endDate, endTime,
       what3Words, postcode, appleMapsUrl, lat, lon,
       description,
-      organiserName, paymentDestination,
+      organiserName, paymentDestination, termsText,
       sections,
       teams: [],
     };
     try { window.localStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* quota */ }
   }, [storageKey, step, name, location, icon, startDate, startTime, endDate, endTime,
       what3Words, postcode, appleMapsUrl, lat, lon, description,
-      organiserName, paymentDestination, sections]);
+      organiserName, paymentDestination, termsText, sections]);
 
   useEffect(() => {
     // Skip the server fetch on edit if we already have a local draft — the user
@@ -336,6 +339,7 @@ export function CompetitionEditor() {
         setLat(c.latitude != null ? String(c.latitude) : '');
         setLon(c.longitude != null ? String(c.longitude) : '');
         setDescription(c.description ?? '');
+        setTermsText(c.termsText ?? '');
         setSections(c.sections.length > 0 ? c.sections.map((s) => existingToDraft(s, c)) : [defaultSection()]);
       })
       .catch(() => setError('Could not load competition.'))
@@ -530,6 +534,7 @@ export function CompetitionEditor() {
       appleMapsUrl: appleMapsUrl.trim() || null,
       organiserName: organiserName.trim() || null,
       paymentDestination: paymentDestination.trim() || null,
+      termsText: termsText.trim() || null,
       startDate: combinedStartIso(),
       endDate: endDate || endTime
         ? new Date(`${endDate || startDate}T${endTime || '17:00'}`).toISOString()
@@ -587,6 +592,7 @@ export function CompetitionEditor() {
             description={description} setDescription={setDescription}
             organiserName={organiserName} setOrganiserName={setOrganiserName}
             paymentDestination={paymentDestination} setPaymentDestination={setPaymentDestination}
+            termsText={termsText} setTermsText={setTermsText}
           />
         )}
         {step === 'Sections' && (
@@ -736,6 +742,7 @@ interface BasicsProps {
   description: string; setDescription: (s: string) => void;
   organiserName: string; setOrganiserName: (s: string) => void;
   paymentDestination: string; setPaymentDestination: (s: string) => void;
+  termsText: string; setTermsText: (s: string) => void;
 }
 
 function BasicsStep(p: BasicsProps) {
@@ -806,6 +813,21 @@ function BasicsStep(p: BasicsProps) {
           </span>
         </label>
       </div>
+      <label className="block">
+        <span className="text-sm font-semibold">Terms and conditions (optional)</span>
+        <textarea
+          className="input mt-1"
+          rows={6}
+          maxLength={MAX_TERMS_LENGTH}
+          placeholder="Paste or type your event terms. Plain text only."
+          value={p.termsText}
+          onChange={(e) => p.setTermsText(e.target.value)}
+        />
+        <span className="text-[10px] text-slate-500">
+          Shown next to the tick box on the sign-up form. If you leave this empty, entrants see a short placeholder
+          instead, so add your own before entries open.
+        </span>
+      </label>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <label className="block">
           <span className="text-sm font-semibold flex items-center gap-1"><CalendarDays className="w-4 h-4" /> Start date</span>

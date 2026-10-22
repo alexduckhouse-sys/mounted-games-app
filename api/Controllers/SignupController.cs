@@ -41,6 +41,10 @@ public class SignupController : ControllerBase
             return StatusCode(403, new { message = "Signups are closed for this competition." });
         var name = req.FullName?.Trim();
         if (string.IsNullOrEmpty(name)) return BadRequest(new { message = "Full name required." });
+        if (!req.AcceptTerms)
+            return BadRequest(new { message = "Please tick the box to confirm parental consent and that you accept the event terms." });
+        if (req.ConsentVersion != SignupTerms.WordingVersion)
+            return BadRequest(new { message = "The wording next to the tick box has changed. Please reload the page and read it again." });
 
         // Honour the section's signup cap, counting Paid + Pending only.
         if (section.MaxParticipants.HasValue)
@@ -84,6 +88,11 @@ public class SignupController : ControllerBase
             ContactInfo = req.ContactInfo?.Trim(),
             UseInitialOnly = req.UseInitialOnly,
             NoFilming = req.NoFilming,
+            TermsAccepted = true,
+            TermsAcceptedAt = DateTime.UtcNow,
+            TermsAcceptedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
+            TermsAcceptedByName = name.Length > 200 ? name[..200] : name,
+            TermsWordingVersion = SignupTerms.VersionFor(section.Competition!),
             AmountMinor = section.PriceMinor,
             TeamId = teamId,
             Status = isFree ? SignupPaymentStatus.Paid : SignupPaymentStatus.Pending,
