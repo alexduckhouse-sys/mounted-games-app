@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MountedGames.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261022200730_AddBugListFixes")]
+    [Migration("20261022202539_AddBugListFixes")]
     partial class AddBugListFixes
     {
         /// <inheritdoc />
@@ -1890,6 +1890,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("QualifiersPerHeat")
                         .HasColumnType("integer");
 
                     b.Property<bool>("RaceOrderAlternating")

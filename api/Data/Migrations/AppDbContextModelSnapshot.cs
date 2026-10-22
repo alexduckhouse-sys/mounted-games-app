@@ -1889,6 +1889,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("QualifiersPerHeat")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("RaceOrderAlternating")
                         .HasColumnType("boolean");
 

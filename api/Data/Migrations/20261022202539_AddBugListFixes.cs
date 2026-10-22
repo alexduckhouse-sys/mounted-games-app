@@ -23,6 +23,12 @@ namespace MountedGames.Api.Data.Migrations
                 nullable: false,
                 defaultValue: 0);
 
+            migrationBuilder.AddColumn<int>(
+                name: "QualifiersPerHeat",
+                table: "Sessions",
+                type: "integer",
+                nullable: true);
+
             migrationBuilder.AddColumn<bool>(
                 name: "IsWholeTeam",
                 table: "SectionSignups",
@@ -66,6 +72,10 @@ namespace MountedGames.Api.Data.Migrations
 
             migrationBuilder.DropColumn(
                 name: "LaneRotationMode",
+                table: "Sessions");
+
+            migrationBuilder.DropColumn(
+                name: "QualifiersPerHeat",
                 table: "Sessions");
 
             migrationBuilder.DropColumn(

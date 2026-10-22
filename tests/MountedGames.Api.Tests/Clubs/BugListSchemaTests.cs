@@ -14,7 +14,7 @@ public class BugListSchemaTests : IClassFixture<ApiFactory>
 
     private static readonly (string Table, string Column)[] NewColumns =
     [
-        ("Sessions", "LaneRotationMode"), ("Results", "IsSitOut"), ("Teams", "BibDescription"),
+        ("Sessions", "LaneRotationMode"), ("Sessions", "QualifiersPerHeat"), ("Results", "IsSitOut"), ("Teams", "BibDescription"),
         ("RiderEntries", "IsGuestRider"), ("SectionSignups", "TeamName"), ("SectionSignups", "IsWholeTeam"),
         ("ChatMessages", "RecipientUserId"),
     ];
