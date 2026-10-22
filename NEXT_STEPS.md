@@ -142,8 +142,7 @@ All items below have been reviewed and confirmed for upcoming implementation:
     - Filter `next` and `nextRealSession` by the **same arena (`s.arenaName === finishedSession.arenaName`)** so finishing a session in Arena 1 never accidentally starts or navigates to Arena 2's session.
   - **Fix Draft Restore on `SessionPage.tsx` (`SessionPage.tsx:94-171`):**
     - Stop the race-change seed effect from overwriting the hydrated `localStorage` scoring draft.
-- **Non-Destructive Heat & Lane Editing (`SessionsController.UpdateHeatAssignments` & `TimetableManagement.tsx`):**
-  - Update `UpdateHeatAssignments` (`SessionsController.cs:320-364`) so editing heat or lane assignments **only updates the heats/lanes that actually changed** and never wipes results from already-scored heats.
+- **Lane Editing in Manage Heats (`TimetableManagement.tsx`):** non-destructive heat edits landed in #80.
   - Allow the Admin to edit **lane numbers (`Lane 1..6`)** directly in the Manage Heats modal.
 - **3-Way Lane Rotation Setting Inside a Heat (`LaneRotationMode`):**
   - Replace the hardcoded `+1` lane rotation in `SessionPage.tsx:19` (`displayLaneFor`) with a configurable per-session `LaneRotationMode`:
@@ -183,10 +182,8 @@ All items below have been reviewed and confirmed for upcoming implementation:
 - **Post-Session Point Editing & Public "Report a Score Issue" (#7).**
 
 ### 6. Timetable Generation, Multi-Arena Support, Live Notifications & Following Whole Clubs
-- **Older Age Groups Scheduled Earlier in `AutoTimetable` (`CompetitionsController.cs:744`):**
-  - Sort sections from **oldest age group to youngest** (`Open / Senior → U18 / U17 → U15 / Intermediate → U14 → U12 / Junior → U10 / Novice → Lead Rein`) when generating the timetable.
-- **Same-Rider Clash Avoidance & Readiness Warning (`CompetitionReadinessService.cs` & `AutoTimetable`):**
-  - Check declared **Rider names** across sections and warn (or avoid when auto-scheduling a multi-arena timetable) if the **same Rider** is scheduled in two arenas at overlapping times. *(Do not check Trainers or Pony names.)*
+- **Same-Rider Clash Avoidance in `AutoTimetable`:** the readiness warning landed in #81.
+  - When auto-scheduling a multi-arena timetable, avoid putting the **same Rider** in two arenas at overlapping times. *(Do not check Trainers or Pony names.)*
 - **Independent Multi-Arena Timing, Arena Selector on Breaks/Briefings & Multi-Arena Ring Crew Switcher:**
   - **Running Early & Cutting Breaks When Late + Live Mid-Session Drift (`≥ 5 Min` Threshold):**
     - Cascade early offsets forward when running ahead of time, allow breaks to be compressed when running late, and estimate live drift mid-session race-by-race (showing the shift indicator only when **`≥ 5 minutes`** early or late).
@@ -239,7 +236,6 @@ All items below have been reviewed and confirmed for upcoming implementation:
 2. **BUG in `SessionPage.tsx` (Lines 19–22) — Hardcoded `+1` Lane Rotation After Every Race (`displayLaneFor`):**
    - Replace with the 3-way `LaneRotationMode` (`Stay`, `MoveUp`, `MoveDown`) plus the **Sit-Out / Bye Lane (`Position 7`, cell `"S"`)** mechanic when `TeamsInHeat > LanesPerHeat`.
 3. **CRITICAL BUG in `CompetitionsController.CreateFinals` (Lines 570–615), `PopulateFinals` (Lines 709–717) & `FinalsBoundary` (Lines 501–511):**
-   - `CreateFinals` calls `SplitIntoBalancedGroups(top, maxHeatSize)` which **randomly shuffles** all top qualifiers across `A Final`, `B Final`, `C Final` instead of grouping `1st–6th` into `A Final` and `7th–12th` into `B Final`!
    - Both `CreateFinals` and `PopulateFinals` hardcode `A Final` into `heats[0]` instead of letting the Admin choose `C → B → A` (A-Final last) or `A → B → C` and lane seeding mode.
    - `FinalsBoundary` only checks `ordered[topN - 1]` vs `ordered[topN]` (ignoring ties at the `A Final / B Final` cut-off, e.g. `6th` vs `7th` when `topN = 12`) and silently breaks point ties by heat race `Wins` instead of flagging all **Total Points** ties at every Final tier boundary (`6th/7th`, `12th/13th`, `18th/19th`) so the Admin can pick their tie-break rule (Run-Off, Most 1sts, Last Race, or Manual).
 4. **BUG in `ScoringService.cs` (Lines 26–33 & 220–230) & `HeatScores.tsx` — Heat-Heat-Final (`Race-Finals`) Scoring, Elimination & Display:**
@@ -248,18 +244,12 @@ All items below have been reviewed and confirmed for upcoming implementation:
    - Auto-populate each race's `Final` heat on `SessionPage.tsx` as soon as `Q1` and `Q2` complete, and render `HeatScores.tsx` as **1 unified table of all teams × all races**.
 5. **BUG in `web/src/lib/time.ts` (Lines 52–116), `SessionEndTransition.tsx` (Lines 38–45), `ArenaPage.tsx` (Lines 18–30) & `TimetableManagement.tsx` (Line 910) — Multi-Arena Bugs:**
    - `SessionEndTransition` advances to `orderIndex + 1` even if that session is in a different arena.
-6. **BUG in `EquipmentCalculator.cs` (Lines 64–75) — Sums Reusable Poles & Cones Across All Races in a Session:**
-   - Take the `MAX` per race in an arena instead of summing across all races in the session.
 7. **BUG in `CompetitionEditor.tsx` (Lines 48–54 & 82–86) — Duplicate Consecutive Races in `ZONE_PAIRS` and `AREA_PAIRS`:**
    - Remove the duplicate `'Litter', 'Litter'` entries that misread `(x2)` in the Pony Club Pairs race list.
 8. **BUG in `DeclarationsTab.tsx` (`Lines 19, 91–95, 102–112, 141–159, 251–273`), `DeclarationFormsController.cs` (`Lines 86–88, 100–124, 165`), `ClubsController.SavedRiders` (`Line 37`) & `DbInitializer.cs` (`Lines 626–639`):**
    - Replace the 5 per-rider dropdown colours with a single plain-text `BibDescription` field on the Team / Declaration, and add `IsGuestRider` per rider.
    - `DeclarationsTab.tsx:94` shows `"New for {team}"` for every unassigned team across **all clubs** instead of scoping to the user's `ClubId`, and clicking a team that already has a declaration starts a blank form and inserts a **duplicate `DeclarationForm` row** (`DeclarationFormsController.cs:123`) instead of editing/replacing the team's existing declaration!
    - `ClubsController.SavedRiders:37` and `DeclarationFormsController.cs:87` filter `SavedRiders` by `r.CreatedByUserId == uid` instead of `user.ClubId == id`, preventing a Club's Trainers and Team Manager from sharing the same club's saved riders.
-9. **CRITICAL BUG in `CompetitionsController.Standings` (Lines 439–447), `web/src/lib/toplist.ts` (Line 77), `PrintableEventService.ResultsAsync` (Line 64) & `SeasonPublicationService.cs` (Lines 43–55) — B-Final & C-Final Teams Can Overtake A-Final Teams in Overall & Season Standings:**
-   - Group overall section standings (and Season League round publication) by Final tier first (`A Final` = 1st–6th, `B Final` = 7th–12th, `C Final` = 13th–18th, Non-Finalists below), and sort by points within each Final tier.
-10. **BUG in `SessionsController.UpdateHeatAssignments` (Lines 338–357) — Editing Any Heat Assignment Wipes All Existing Race Scores in the Session:**
-    - Only update the heats/lanes that changed, preserve results in already-scored heats, and allow editing lane numbers (`Lane 1..6`).
 11. **BUG in `Roles.cs` (`Line 23`), `AuthController.SignupTrainer` (`Lines 95–126`), `TeamsController.MyTeams` (`Lines 110–116`), `UpdateTeamRequest` (`ApiDtos.cs:161-163`), `SignupController.FormTeams` (`Lines 308–317`) & `DetailsTab.tsx` (`Lines 35 & 238–242`):**
     - `LoginPage.tsx:156` and `AuthController.cs:100-108` treat `ClubName` / `ClubId` as optional instead of requiring every user role to belong to a Club.
     - `Roles.Organiser` (`Roles.cs:23`) and `TeamsController.MyTeams` (`Lines 113–114`) exclude `Roles.Manager` (Team Manager), and `MyTeams` only checks `t.TrainerUserId == userId` instead of letting a Club's **Team Manager** see and control all teams belonging to their `ClubId`.
