@@ -29,9 +29,42 @@ function computeTarget(sessions: Session[]): { session: Session; heat: Heat; hea
   return null;
 }
 
+const isRaceSession = (s: Session) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0;
+const arenaOf = (s: Session) => s.arenaName?.trim() ?? '';
+const arenaStorageKey = (competitionId: number) => `mg.arena.page.${competitionId}`;
+
+function storedArena(competitionId: number): string {
+  try { return localStorage.getItem(arenaStorageKey(competitionId)) ?? ''; } catch { return ''; }
+}
+
+/** Sticky pill bar for choosing which arena's heat to show; only drawn when there is more than one arena. */
+function ArenaBar({ arenas, selected, onChoose }: { arenas: string[]; selected: string; onChoose: (name: string) => void }) {
+  return (
+    <div className="sticky z-20 -mx-4 px-4 py-2 border-b" style={{ top: 'var(--mg-shell-h, 0px)', background: 'rgb(var(--mg-surface))', borderColor: 'rgb(var(--mg-control))' }}>
+      <div className="mg-chips" role="group" aria-label="Choose arena">
+        {arenas.map((name) => (
+          <button key={name} type="button" className="mg-chip" aria-pressed={selected === name} onClick={() => onChoose(name)}>{name}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ArenaPage() {
   const { competition } = useCompetition();
   const [templates, setTemplates] = useState<RaceTemplate[]>([]);
+  const arenas = useMemo(
+    () => [...new Set(competition.sessions.filter(isRaceSession).map(arenaOf).filter(Boolean))],
+    [competition.sessions],
+  );
+  const [pickedArena, setPickedArena] = useState(() => storedArena(competition.id));
+  // A stale or missing choice falls back to the first arena; with one arena (or none) there is nothing to choose.
+  const selectedArena = arenas.length > 1 ? (arenas.includes(pickedArena) ? pickedArena : arenas[0]) : '';
+  function chooseArena(name: string) {
+    setPickedArena(name);
+    try { localStorage.setItem(arenaStorageKey(competition.id), name); } catch { /* storage blocked */ }
+  }
+  const arenaBar = arenas.length > 1 ? <ArenaBar arenas={arenas} selected={selectedArena} onChoose={chooseArena} /> : null;
 
   useEffect(() => {
     api.get<RaceTemplate[]>('/race-templates').then((r) => setTemplates(r.data)).catch(() => {});
@@ -45,7 +78,10 @@ export function ArenaPage() {
 
   // Pick the heat that's most "now": the first not-complete heat in the first session
   // whose status is In Arena (1) or — failing that — the next not-complete heat anywhere.
-  const target = computeTarget(competition.sessions);
+  // With several arenas, only that arena's sessions (plus any shared "all arenas" ones) are considered.
+  const target = computeTarget(selectedArena
+    ? competition.sessions.filter((s) => !arenaOf(s) || arenaOf(s) === selectedArena)
+    : competition.sessions);
   const orderedRaces = target
     ? target.heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex)
     : [];
@@ -75,6 +111,7 @@ export function ArenaPage() {
         <Link to=".." className="btn-ghost !py-1.5 !px-2.5 text-sm">
           <ChevronLeft className="w-4 h-4" /> Back
         </Link>
+        {arenaBar}
         <div className="card p-6 text-center">
           <Activity className="w-10 h-10 mx-auto text-slate-300 mb-2" />
           <p className="text-sm text-slate-500">Nothing currently in the arena.</p>
@@ -98,6 +135,7 @@ export function ArenaPage() {
           <Activity className="w-5 h-5 text-arena-live" /> Arena setup
         </h1>
       </div>
+      {arenaBar}
 
       <div className="card p-3 flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0">

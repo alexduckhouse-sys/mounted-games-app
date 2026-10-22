@@ -894,6 +894,12 @@ function AddEntryForm({ kind, onCancel, onSaved }: AddEntryFormProps) {
   const [scheduledStart, setScheduledStart] = useState('');
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
+  // The arenas already in use. With more than one, the item can be for a single arena or for all of them ('').
+  const arenas = useMemo(
+    () => [...new Set(competition.sessions.map((s) => s.arenaName?.trim() ?? '').filter(Boolean))],
+    [competition.sessions],
+  );
+  const [arenaName, setArenaName] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function submit(e: FormEvent) {
@@ -908,7 +914,7 @@ function AddEntryForm({ kind, onCancel, onSaved }: AddEntryFormProps) {
       await api.post(`/competitions/${competition.id}/sessions`, {
         competitionSectionId: null,
         name: name.trim() || (kind === 'briefing' ? 'Briefing' : kind === 'break' ? 'Break' : 'Item'),
-        arenaName: null,
+        arenaName: arenas.length > 1 && arenas.includes(arenaName) ? arenaName : null,
         scheduledStart: scheduledStart ? new Date(scheduledStart).toISOString() : null,
         orderIndex: maxOrder + 1,
         notes: notes.trim() || null,
@@ -960,6 +966,16 @@ function AddEntryForm({ kind, onCancel, onSaved }: AddEntryFormProps) {
           />
         </label>
       </div>
+
+      {arenas.length > 1 && (
+        <label className="block">
+          <span className="text-[11px] text-slate-500 dark:text-slate-300">Arena</span>
+          <select className="input mt-1 text-sm" value={arenaName} onChange={(e) => setArenaName(e.target.value)}>
+            <option value="">All arenas</option>
+            {arenas.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+        </label>
+      )}
 
       {kind === 'briefing' && (
         <label className="block">

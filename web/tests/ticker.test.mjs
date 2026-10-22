@@ -131,9 +131,10 @@ test('falls back to the competition name when there is nothing else to say', () 
 
 test(`never more than ${MAX_TICKER_ITEMS} lines`, () => {
   const sessions = [
-    session([heat(1, { finishedAt: at(-5), races: [race(1, 'Bending', 5, 'Ashdown')] }), heat(2), heat(3)], { status: 1, arenaName: 'Main', scheduledStart: at(-60), startedAt: at(-40) }),
-    session([heat(4), heat(5)], { id: 2, name: 'Juniors', sectionName: 'Teams Juniors', competitionSectionId: 6, orderIndex: 2, status: 1, arenaName: 'Two', scheduledStart: at(-30), startedAt: at(-30) }),
-    pause({ scheduledStart: at(20) }),
+    session([heat(1, { finishedAt: at(-5), races: [race(1, 'Bending', 5, 'Ashdown')] }), heat(2, { durationMinutes: 10 }), heat(3, { durationMinutes: 10 })], { status: 1, arenaName: 'Main', scheduledStart: at(-60), startedAt: at(-40) }),
+    session([heat(4, { durationMinutes: 10 }), heat(5, { durationMinutes: 10 })], { id: 2, name: 'Juniors', sectionName: 'Teams Juniors', competitionSectionId: 6, orderIndex: 2, status: 1, arenaName: 'Two', scheduledStart: at(-30), startedAt: at(-30) }),
+    // A whole-event break takes the biggest arena delay (Main is 20 minutes late), so 0 becomes +20.
+    pause({ scheduledStart: at(0) }),
   ];
   const items = tickerItems(sessions, [note(1, 'x', 1), note(2, 'y', 2), note(3, 'z', 3)], now);
   assert.equal(items.length, MAX_TICKER_ITEMS);

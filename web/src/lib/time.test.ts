@@ -155,6 +155,98 @@ describe('computeTimings', () => {
     expect(timings.get(2)!.heats.map((h) => h.heatId)).toEqual([4, 5]);
   });
 
+  describe('with more than one arena', () => {
+    it('keeps a delay in one arena out of the other', () => {
+      const timings = computeTimings([
+        session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), startedAt: at(20), heats: [heat(1)] }),
+        session(2, { orderIndex: 2, arenaName: 'Arena 2', scheduledStart: at(0), heats: [heat(2)] }),
+        session(3, { orderIndex: 3, arenaName: 'Arena 1', scheduledStart: at(60), heats: [heat(3)] }),
+        session(4, { orderIndex: 4, arenaName: 'Arena 2', scheduledStart: at(60), heats: [heat(4)] }),
+      ]);
+      expect(timeOf(timings.get(3)!.effective)).toBe(ms(80));
+      expect(timings.get(3)!.shifted).toBe(true);
+      expect(timeOf(timings.get(2)!.effective)).toBe(ms(0));
+      expect(timeOf(timings.get(4)!.effective)).toBe(ms(60));
+      expect(timings.get(4)!.shifted).toBe(false);
+      expect(timings.get(4)!.heats[0].shifted).toBe(false);
+    });
+
+    it('lets each arena run early on its own', () => {
+      const timings = computeTimings([
+        session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), startedAt: at(-10), heats: [heat(1)] }),
+        session(2, { orderIndex: 2, arenaName: 'Arena 2', scheduledStart: at(0), startedAt: at(15), heats: [heat(2)] }),
+        session(3, { orderIndex: 3, arenaName: 'Arena 1', scheduledStart: at(60), heats: [heat(3)] }),
+        session(4, { orderIndex: 4, arenaName: 'Arena 2', scheduledStart: at(60), heats: [heat(4)] }),
+      ]);
+      expect(timeOf(timings.get(3)!.effective)).toBe(ms(50));
+      expect(timeOf(timings.get(4)!.effective)).toBe(ms(75));
+    });
+
+    it('holds an early session back only until the previous one in its own arena has ended', () => {
+      const timings = computeTimings([
+        session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), startedAt: at(-10), heats: [heat(1, { durationMinutes: 60 })] }),
+        session(2, { orderIndex: 2, arenaName: 'Arena 2', scheduledStart: at(0), heats: [heat(2, { durationMinutes: 60 })] }),
+        session(3, { orderIndex: 3, arenaName: 'Arena 1', scheduledStart: at(30), heats: [heat(3)] }),
+        session(4, { orderIndex: 4, arenaName: 'Arena 2', scheduledStart: at(60), heats: [heat(4)] }),
+      ]);
+      expect(timeOf(timings.get(3)!.effective)).toBe(ms(50));
+      expect(timeOf(timings.get(4)!.effective)).toBe(ms(60));
+    });
+
+    it('treats arena names with stray spacing as the same arena', () => {
+      const timings = computeTimings([
+        session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), startedAt: at(10), heats: [heat(1)] }),
+        session(2, { orderIndex: 2, arenaName: ' Arena 1 ', scheduledStart: at(60), heats: [heat(2)] }),
+      ]);
+      expect(timeOf(timings.get(2)!.effective)).toBe(ms(70));
+    });
+
+    it('moves a whole-event break by the biggest arena delay, without holding other arenas back', () => {
+      const timings = computeTimings([
+        session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), startedAt: at(20), heats: [heat(1)] }),
+        session(2, { orderIndex: 2, arenaName: 'Arena 2', scheduledStart: at(0), startedAt: at(10), heats: [heat(2)] }),
+        session(3, { orderIndex: 3, kind: 1, isBreak: true, durationMinutes: 30, scheduledStart: at(60) }),
+        session(4, { orderIndex: 4, arenaName: 'Arena 2', scheduledStart: at(90), heats: [heat(4)] }),
+        session(5, { orderIndex: 5, arenaName: 'Arena 1', scheduledStart: at(90), heats: [heat(5)] }),
+      ]);
+      expect(timeOf(timings.get(3)!.effective)).toBe(ms(80));
+      expect(timeOf(timings.get(3)!.effectiveEnd)).toBe(ms(110));
+      expect(timings.get(3)!.shifted).toBe(true);
+      expect(timeOf(timings.get(4)!.effective)).toBe(ms(100));
+      expect(timeOf(timings.get(5)!.effective)).toBe(ms(110));
+    });
+
+    it('keeps a whole-event break on schedule when every arena is early or on time', () => {
+      const timings = computeTimings([
+        session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), startedAt: at(-10), heats: [heat(1)] }),
+        session(2, { orderIndex: 2, arenaName: 'Arena 2', scheduledStart: at(0), heats: [heat(2)] }),
+        session(3, { orderIndex: 3, kind: 2, durationMinutes: 15, scheduledStart: at(60) }),
+      ]);
+      expect(timeOf(timings.get(3)!.effective)).toBe(ms(60));
+      expect(timings.get(3)!.shifted).toBe(false);
+    });
+
+    it('anchors a started whole-event item on its real start without moving the arenas', () => {
+      const timings = computeTimings([
+        session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), heats: [heat(1, { durationMinutes: 90 })] }),
+        session(2, { orderIndex: 2, arenaName: 'Arena 2', scheduledStart: at(0), heats: [heat(2, { durationMinutes: 30 })] }),
+        session(3, { orderIndex: 3, kind: 1, isBreak: true, durationMinutes: 20, startedAt: at(100), scheduledStart: at(60) }),
+        session(4, { orderIndex: 4, arenaName: 'Arena 2', scheduledStart: at(120), heats: [heat(4)] }),
+      ]);
+      expect(timeOf(timings.get(3)!.effective)).toBe(ms(100));
+      expect(timeOf(timings.get(4)!.effective)).toBe(ms(120));
+    });
+
+    it('places an unscheduled whole-event item after the latest arena session', () => {
+      const timings = computeTimings([
+        session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), heats: [heat(1, { durationMinutes: 45 })] }),
+        session(2, { orderIndex: 2, arenaName: 'Arena 2', scheduledStart: at(0), heats: [heat(2, { durationMinutes: 20 })] }),
+        session(3, { orderIndex: 3, kind: 2, durationMinutes: 10 }),
+      ]);
+      expect(timeOf(timings.get(3)!.effective)).toBe(ms(45));
+    });
+  });
+
   describe('session length for the next session', () => {
     const next = (first: Partial<Session>) => {
       const timings = computeTimings([
