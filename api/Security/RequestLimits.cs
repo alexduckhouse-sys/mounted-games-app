@@ -16,10 +16,12 @@ public static class RequestLimits
     {
         var authPermits = configuration.GetValue("RateLimits:AuthPerMinute", 10);
         var writePermits = configuration.GetValue("RateLimits:WritesPerMinute", 60);
-        return services.AddRateLimiter(options => Configure(options, authPermits, writePermits));
+        // Volunteers at one venue often share an address, so scorer-link saves get a roomier per-IP allowance.
+        var scorerPermits = configuration.GetValue("RateLimits:ScorerWritesPerMinute", 240);
+        return services.AddRateLimiter(options => Configure(options, authPermits, writePermits, scorerPermits));
     }
 
-    private static void Configure(RateLimiterOptions options, int authPermits, int writePermits)
+    private static void Configure(RateLimiterOptions options, int authPermits, int writePermits, int scorerPermits)
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         options.AddPolicy("auth", context => Partition(context, $"auth:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", authPermits));
@@ -27,7 +29,9 @@ public static class RequestLimits
             !context.Request.Path.StartsWithSegments("/api") || HttpMethods.IsGet(context.Request.Method)
                 || HttpMethods.IsHead(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method)
                 ? RateLimitPartition.GetNoLimiter("read")
-                : Partition(context, $"write:{WritePartition(context)}", writePermits));
+                : context.Request.Path.StartsWithSegments("/api/scorer")
+                    ? Partition(context, $"scorer:{context.Connection.RemoteIpAddress}", scorerPermits)
+                    : Partition(context, $"write:{WritePartition(context)}", writePermits));
         options.OnRejected = (context, _) =>
         {
             context.HttpContext.Response.Headers.RetryAfter = "60";

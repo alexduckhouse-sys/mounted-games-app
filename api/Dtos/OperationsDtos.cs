@@ -25,7 +25,7 @@ public record RaceScoreDto(int RaceId, int Revision, bool IsSignedOff,
     bool IdempotentReplay = false);
 public record RaceScoreHistoryDto(int Revision, RaceScoreEventKind Kind,
     IReadOnlyList<ScorePlaceDto> Before, IReadOnlyList<ScorePlaceDto> After,
-    string? ActorUserId, string Reason, DateTime CreatedAt);
+    string? ActorUserId, string Reason, DateTime CreatedAt, string? ActorLabel = null);
 
 public record MissingDeclarationDto(int TeamId, string TeamName, int SectionId, string SectionName);
 public record UnpaidSignupDto(int SignupId, int SectionId, string SectionName, int AmountMinor);

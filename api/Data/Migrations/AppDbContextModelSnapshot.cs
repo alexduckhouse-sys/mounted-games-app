@@ -1072,6 +1072,10 @@ namespace MountedGames.Api.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("ActorLabel")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
                     b.Property<string>("ActorUserId")
                         .HasColumnType("text");
 
@@ -1472,6 +1476,58 @@ namespace MountedGames.Api.Data.Migrations
                     b.HasIndex("ClubId");
 
                     b.ToTable("SavedRiders");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.ScorerLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ArenaName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("ScorerLinks");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Seasons.EventTeamProfileLink", b =>
@@ -2550,6 +2606,17 @@ namespace MountedGames.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Club");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.ScorerLink", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Competition");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Seasons.EventTeamProfileLink", b =>

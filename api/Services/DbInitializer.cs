@@ -270,6 +270,26 @@ public static class DbInitializer
         ");
 
         await Operations.OperationsSqliteSchema.EnsureAsync(db);
+        await EnsureColumnAsync(db, "RaceScoreEvent", "ActorLabel", "TEXT NULL");
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "ScorerLinks" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_ScorerLinks" PRIMARY KEY AUTOINCREMENT,
+                "CompetitionId" INTEGER NOT NULL,
+                "Label" TEXT NOT NULL,
+                "ArenaName" TEXT NOT NULL,
+                "TokenHash" TEXT NOT NULL,
+                "CreatedByUserId" TEXT NOT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "ExpiresAt" TEXT NOT NULL,
+                "RevokedAt" TEXT NULL,
+                "LastUsedAt" TEXT NULL,
+                CONSTRAINT "FK_ScorerLinks_Competitions_CompetitionId" FOREIGN KEY ("CompetitionId")
+                    REFERENCES "Competitions" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ScorerLinks_TokenHash" ON "ScorerLinks" ("TokenHash");
+            CREATE INDEX IF NOT EXISTS "IX_ScorerLinks_CompetitionId" ON "ScorerLinks" ("CompetitionId");
+            """);
 
         await Commerce.CommerceSqliteSchema.EnsureAsync(db);
 
