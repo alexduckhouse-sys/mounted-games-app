@@ -40,6 +40,10 @@ const STATUS_LABEL: Record<number, string> = {
   0: 'pending', 1: 'paid', 2: 'refunded', 3: 'cancelled',
 };
 
+const EMAIL_LABEL: Record<number, string> = {
+  0: 'not sent', 1: 'sent', 2: 'failed', 3: 'not sent (email off)',
+};
+
 interface SignupRow {
   sectionName: string;
   fullName: string;
@@ -49,6 +53,8 @@ interface SignupRow {
   status: number;
   paidAt?: string | null;
   createdAt: string;
+  contactEmail?: string | null;
+  confirmationEmailStatus?: number;
 }
 
 /**
@@ -58,7 +64,7 @@ interface SignupRow {
 export function signupsToCsv(signups: ReadonlyArray<SignupRow>): string {
   const header = [
     'Section', 'Name', 'Pony Club', 'Contact', 'Amount (GBP)',
-    'Status', 'Paid at', 'Signed up at',
+    'Status', 'Paid at', 'Signed up at', 'Email', 'Confirmation email',
   ];
   const rows = signups.map((s) => [
     s.sectionName,
@@ -69,6 +75,8 @@ export function signupsToCsv(signups: ReadonlyArray<SignupRow>): string {
     STATUS_LABEL[s.status] ?? String(s.status),
     s.paidAt ?? '',
     s.createdAt,
+    s.contactEmail ?? '',
+    s.contactEmail ? (EMAIL_LABEL[s.confirmationEmailStatus ?? 0] ?? '') : '',
   ]);
   return toCsv(header, rows);
 }
