@@ -1,12 +1,20 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Clock, Info, MessageSquare, Trophy } from 'lucide-react';
 
-/** Timetable, toplists, live feed and details: the four places spectators move between inside a competition. */
-export function BottomTabs({ competitionId }: { competitionId: number }) {
+/** The signed-in person's tab: their initials, and how many things are waiting on them. */
+export interface MeTab { initials: string; count: number }
+
+/**
+ * Timetable, toplists, live feed and details: the four places spectators move between inside a competition.
+ * Signed-in people get a fifth tab, Me, which opens their profile.
+ */
+export function BottomTabs({ competitionId, me }: { competitionId: number; me?: MeTab }) {
   const { pathname } = useLocation();
   const base = `/competitions/${competitionId}`;
-  const rest = pathname.slice(base.length).replace(/^\/|\/$/g, '');
-  const section = rest.split('/')[0];
+  const onProfile = pathname === '/me' || pathname === '/me/';
+  const inside = pathname === base || pathname.startsWith(`${base}/`);
+  const rest = inside ? pathname.slice(base.length).replace(/^\/|\/$/g, '') : null;
+  const section = rest?.split('/')[0];
   const tabs = [
     // Heats and age-group timetables are reached from the timetable, so they keep it highlighted.
     { to: base, label: 'Timetable', icon: Clock, active: section === '' || section === 'session' || section === 'scoring' },
@@ -16,13 +24,25 @@ export function BottomTabs({ competitionId }: { competitionId: number }) {
   ];
   return (
     <nav aria-label="Competition" className="mg-tabs">
-      <div className="mx-auto grid max-w-xl grid-cols-4">
+      <div className={`mx-auto grid max-w-xl ${me ? 'grid-cols-5' : 'grid-cols-4'}`}>
         {tabs.map((tab) => (
           <Link key={tab.label} to={tab.to} className="mg-tab" aria-current={tab.active ? 'page' : undefined}>
             <tab.icon className="h-[22px] w-[22px]" strokeWidth={tab.active ? 2.25 : 2} aria-hidden="true" />
             {tab.label}
           </Link>
         ))}
+        {me && (
+          <Link to="/me" className="mg-tab" aria-current={onProfile ? 'page' : undefined}>
+            <span className="relative inline-flex">
+              <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-[10px] font-bold leading-none text-white">{me.initials}</span>
+              {me.count > 0 && (
+                <span aria-hidden="true" className="absolute -right-1.5 -top-[3px] box-content flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-[rgb(var(--mg-surface))] bg-[rgb(var(--mg-red))] px-0.5 text-[10px] font-bold leading-none text-white">{me.count}</span>
+              )}
+            </span>
+            Me
+            {me.count > 0 && <span className="sr-only">, {me.count} to do</span>}
+          </Link>
+        )}
       </div>
     </nav>
   );
