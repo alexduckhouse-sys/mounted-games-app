@@ -3,7 +3,7 @@ import { TimetableBoard } from './TimetableBoard';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Trophy, Sparkles, X, AlertTriangle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trophy, Sparkles, X, AlertTriangle } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
@@ -11,9 +11,35 @@ import type { StandingRow } from '../../types';
 import { buildToplist } from '../../lib/toplist';
 import { ToplistView } from './ToplistView';
 import { ToplistRowsSkeleton } from '../../components/Skeletons';
+import { usePageHeader } from '../../components/CompactPageBarContext';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../../offline/savedCopies';
 
 const NO_ROWS: StandingRow[] = [];
+
+/** Puts the toplist's title and refresh button in the app header while the standalone page is showing. */
+function ToplistHeader({ subtitle, onRefresh }: { subtitle: string; onRefresh: () => void }) {
+  usePageHeader({ title: 'Toplist', subtitle, onRefresh, refreshLabel: 'Refresh toplist' });
+  return null;
+}
+
+/** The age group menu: a styled control with a native select laid over it, so phones use their own picker. */
+function AgeGroupSelect({ sections, value, teamCount, onChange }: { sections: { id: number; displayName: string }[]; value: number | null; teamCount: number; onChange: (id: number) => void }) {
+  const current = sections.find((s) => s.id === value);
+  return (
+    <div className="mg-band-header pb-2.5">
+      <label className="relative flex min-h-10 cursor-pointer items-stretch overflow-hidden rounded-lg border border-[rgb(var(--mg-header-line))] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-white">
+        <span className="mg-display flex min-w-0 flex-1 items-baseline gap-2 self-center px-3 text-base font-bold uppercase leading-none tracking-[0.04em]">
+          <span className="truncate">{displaySectionName(current?.displayName)}</span>
+          <span className="shrink-0 text-xs font-medium normal-case tracking-normal text-[rgb(var(--mg-header-sub))]">{teamCount} {teamCount === 1 ? 'team' : 'teams'}</span>
+        </span>
+        <span aria-hidden="true" className="flex w-11 shrink-0 items-center justify-center border-l border-[rgb(var(--mg-header-line))] bg-white/10"><ChevronDown className="h-[18px] w-[18px]" /></span>
+        <select aria-label="Age group" value={value ?? ''} onChange={(event) => onChange(Number(event.target.value))} className="absolute inset-0 h-full w-full cursor-pointer opacity-0">
+          {sections.map((sec) => <option key={sec.id} value={sec.id}>{displaySectionName(sec.displayName)}</option>)}
+        </select>
+      </label>
+    </div>
+  );
+}
 
 export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const { competition, reload } = useCompetition();
@@ -70,22 +96,35 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const progress = list.sessionsTotal === 0 ? null
     : list.sessionsDone === list.sessionsTotal ? (list.sessionsTotal === 1 ? 'After session 1' : `After all ${list.sessionsTotal} sessions`)
     : list.sessionsDone > 0 ? `After session ${list.sessionsDone} of ${list.sessionsTotal}` : null;
+  const chooseSection = (id: number) => setSearchParams({ section: String(id) }, { replace: true });
   const chips = competition.sections.length > 1 && (
     <div className="mg-chips" role="group" aria-label="Age group">
       {competition.sections.map((sec) => (
-        <button key={sec.id} type="button" className="mg-chip" aria-pressed={sec.id === sectionId} onClick={() => setSearchParams({ section: String(sec.id) }, { replace: true })}>
+        <button key={sec.id} type="button" className="mg-chip" aria-pressed={sec.id === sectionId} onClick={() => chooseSection(sec.id)}>
           {displaySectionName(sec.displayName)}
         </button>
       ))}
     </div>
   );
-  const toplist = (
-    <section aria-label={`Toplist${sectionName ? `, ${sectionName}` : ''}`} className="flex flex-col gap-2.5">
+  const notices = (
+    <>
       {standingsResult?.sectionId === sectionId && standingsResult.savedCopy && <p role="status" className="mg-notice">Showing saved results. Positions may have changed.</p>}
       {standingsLoading && !savedStandings && <ToplistRowsSkeleton />}
       {standingsError && <div role="alert" className="mg-card flex flex-col items-start gap-3 p-4"><p>Couldn’t load results. Check your connection and try again.</p><button className="mg-btn mg-btn-secondary" onClick={() => { setStandingsResult(null); setRetry((n) => n + 1); }}>Try again</button></div>}
       {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No results yet.</p>}
-      {standings.length > 0 && <ToplistView list={list} section={section} />}
+    </>
+  );
+  const sectionLabel = `Toplist${sectionName ? `, ${sectionName}` : ''}`;
+  // The page version draws its own tab band edge to edge, so its notices sit in their own column above it.
+  const toplist = toplistOnly ? (
+    <section aria-label={sectionLabel} className="flex flex-col">
+      <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
+      {standings.length > 0 && <ToplistView key={sectionId} list={list} section={section} standalone />}
+    </section>
+  ) : (
+    <section aria-label={sectionLabel} className="flex flex-col gap-2.5">
+      {notices}
+      {standings.length > 0 && <ToplistView key={sectionId} list={list} section={section} />}
     </section>
   );
   const finalsButton = canManage(competition) && sectionId != null && (
@@ -106,25 +145,16 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   );
 
   if (toplistOnly || sectionId == null) {
+    const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
     return (
-      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-4">
-        <div className="mg-band flex flex-col gap-3 pb-3.5 pt-3">
-          <div className="flex items-baseline gap-2.5">
-            <h1 className="mg-h1 mg-h1-sm flex-1">{toplistOnly ? 'Toplist' : 'Age groups'}</h1>
-            {progress && <span className="mg-meta shrink-0 font-medium">{progress}</span>}
-          </div>
-          {competition.sections.length > 1 && (
-            <div className="mg-seg" role="group" aria-label="Age group">
-              {competition.sections.map((sec) => (
-                <button key={sec.id} type="button" aria-pressed={sec.id === sectionId} onClick={() => setSearchParams({ section: String(sec.id) }, { replace: true })}>
-                  {displaySectionName(sec.displayName)}
-                </button>
-              ))}
-            </div>
-          )}
+      <div className="mx-auto flex w-full max-w-[560px] flex-col">
+        {toplistOnly && <ToplistHeader subtitle={[competition.name, progress].filter(Boolean).join(' · ')} onRefresh={() => setRetry((n) => n + 1)} />}
+        {!toplistOnly && <h1 className="mg-h1 mg-h1-sm py-3">Age groups</h1>}
+        {competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} onChange={chooseSection} />}
+        <div className="flex flex-col gap-3">
+          {sectionId == null ? <p className="mg-card mt-3 p-4 text-[rgb(var(--mg-muted))]">No age groups yet.</p> : toplist}
+          {finalsButton && <div className="pt-1">{finalsButton}</div>}
         </div>
-        {sectionId == null ? <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No age groups yet.</p> : toplist}
-        {finalsButton}
         {finalsModal}
       </div>
     );

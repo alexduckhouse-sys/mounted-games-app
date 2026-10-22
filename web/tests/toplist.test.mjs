@@ -74,3 +74,12 @@ test('finals points get their own column so the session columns add up to the to
   assert.deepEqual(list.bySession.sessions.map((s) => s.label), ['S1', 'F']);
   assert.deepEqual(list.bySession.cells.get(1), [3, 2]);
 });
+
+test('a final with results becomes a group ordered by points, with the qualifying position of each team', () => {
+  const qualifier = session(1, [heat(1, [1, 2], [race(1, true, [{ id: 1, teamId: 1, teamName: 'Team 1', placing: 1, eliminated: false, points: 3 }, { id: 2, teamId: 2, teamName: 'Team 2', placing: 2, eliminated: false, points: 2 }])], { label: 'Heat 1' })], { status: 2 });
+  const finals = session(2, [heat(2, [1, 2], [race(2, true, [{ id: 3, teamId: 1, teamName: 'Team 1', placing: 2, eliminated: false, points: 4 }, { id: 4, teamId: 2, teamName: 'Team 2', placing: 1, eliminated: false, points: 6 }])], { label: 'A Final', raceRoundStage: 2 })], { name: 'Seniors finals' });
+  const list = buildToplist([standing(1, 7), standing(2, 8)], [qualifier, finals], [], 9, null);
+  assert.deepEqual(list.finals.map((g) => g.label), ['A Final']);
+  assert.deepEqual(list.finals[0].rows.map((r) => [r.teamId, r.place, r.points, r.qualifyingPosition]), [[2, 1, 6, 2], [1, 2, 4, 1]]);
+  assert.deepEqual(list.detail.get(2).blocks.map((b) => [b.kind, b.points]), [['final', 6], ['session', 2]]);
+});

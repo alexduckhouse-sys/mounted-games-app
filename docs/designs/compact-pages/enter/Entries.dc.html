@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="../support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet"><style>body{margin:0;background:#F7F7F7;font-family:'Barlow',system-ui,sans-serif}a{color:#17385F;text-decoration:none}a:hover{color:#0F2A4A}button{font:inherit;border:0;background:none;padding:0;cursor:pointer;color:inherit}input,textarea{font:inherit}input::placeholder,textarea::placeholder{color:#8A909B}input:focus,textarea:focus{border-color:#17385F !important}</style></helmet>
+<div ref="{{ rootRef }}" data-screen-label="Entries" style="min-height:100vh;display:flex;flex-direction:column;background:#F7F7F7;color:#212121">
+
+<header style="flex:none;background:#17385F;color:#fff">
+<div style="max-width:{{ L.max }};margin:0 auto;display:flex;align-items:center;gap:10px;padding:12px 12px 12px 16px;box-sizing:border-box">
+<a href="#" aria-label="Mounted Games home" style="flex:none;width:32px;height:32px;border-radius:6px;background:#E12A39;color:#fff;display:flex;align-items:center;justify-content:center;font:700 15px/1 'Barlow Condensed',sans-serif">MG</a>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font:700 22px/1 'Barlow Condensed',sans-serif">Entries</span><span style="font-size:13px;line-height:1.2;color:#C9D4E3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Hartpury Area Festival · entries close Fri 16 Oct</span></div>
+<sc-if value="{{ L.wide }}"><nav style="display:flex;gap:4px"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4"><a href="#" style="min-height:40px;padding:0 12px;border-radius:8px;display:flex;align-items:center;font:600 14px/1 'Barlow',sans-serif;color:#fff;background:{{ t.topBg }}">{{ t.label }}</a></sc-for></nav></sc-if>
+<button aria-label="Open menu" style="flex:none;width:44px;height:44px;border-radius:10px;border:1px solid #3B5577;display:flex;align-items:center;justify-content:center"><span style="width:20px;height:20px;background:#fff;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/menu.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/menu.svg) center/contain no-repeat"></span></button>
+</div></header>
+
+<sc-if value="{{ form }}">
+<div style="flex:none;background:#fff;border-bottom:1px solid #DADADA">
+<div style="max-width:{{ L.max }};margin:0 auto;display:flex;align-items:center;gap:6px;padding:0 12px 0 8px;min-height:52px;box-sizing:border-box;overflow-x:auto">
+<button onClick="{{ back }}" style="flex:none;display:flex;align-items:center;gap:2px;min-height:44px;padding:0 6px 0 4px;font:600 14px/1 'Barlow',sans-serif;color:#17385F"><span style="width:18px;height:18px;background:#17385F;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-left.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-left.svg) center/contain no-repeat"></span>{{ backLabel }}</button>
+<span style="flex:1"></span>
+<sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="3"><button onClick="{{ c.go }}" style="flex:none;display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:16px;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.line }};font:600 13px/1 'Barlow',sans-serif;white-space:nowrap"><span style="font:700 12px/1 'Barlow Condensed',sans-serif;opacity:.7">{{ c.n }}</span>{{ c.label }}</button></sc-for>
+</div></div>
+
+<div style="flex:1;width:100%;max-width:{{ L.max }};margin:0 auto;box-sizing:border-box;padding:{{ L.pad }};display:grid;grid-template-columns:{{ L.cols }};gap:24px;align-items:start">
+<main style="min-width:0;display:flex;flex-direction:column;gap:14px">
+
+<sc-if value="{{ s1 }}">
+<div style="display:flex;flex-direction:column;gap:4px"><h1 style="margin:0;font:700 26px/1 'Barlow Condensed',sans-serif;color:#17385F">Choose your entry</h1><p style="margin:0;font:400 15px/1.4 'Barlow',sans-serif;color:#5A6270">Places are limited per age group and section. Tap one to fill in the declaration form.</p></div>
+<div style="display:grid;grid-template-columns:{{ L.groupCols }};gap:12px;align-items:start">
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="6"><section style="background:#fff;border:1px solid #DADADA;border-radius:12px;overflow:hidden">
+<div style="display:flex;align-items:baseline;gap:8px;padding:12px 14px 10px;border-bottom:1.5px solid #17385F"><h2 style="flex:1;margin:0;font:700 19px/1 'Barlow Condensed',sans-serif;letter-spacing:.03em;text-transform:uppercase;color:#17385F">{{ g.name }}</h2><span style="font:500 12px/1 'Barlow',sans-serif;color:#5A6270">{{ g.meta }}</span></div>
+<sc-for list="{{ g.sections }}" as="s" hint-placeholder-count="3"><button onClick="{{ s.pick }}" disabled="{{ s.full }}" style="width:100%;display:grid;grid-template-columns:34px minmax(0,1fr) auto 14px;align-items:center;column-gap:10px;min-height:60px;padding:8px 12px 8px 12px;border-top:{{ s.bt }};background:{{ s.bg }};text-align:left;opacity:{{ s.opacity }};cursor:{{ s.cursor }};box-sizing:border-box">
+<span style="width:34px;height:34px;border-radius:8px;background:#E3E7EC;display:flex;align-items:center;justify-content:center"><span style="width:18px;height:18px;background:#17385F;-webkit-mask:url({{ s.icon }}) center/contain no-repeat;mask:url({{ s.icon }}) center/contain no-repeat"></span></span>
+<span style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font:600 15px/1 'Barlow',sans-serif;color:#212121">{{ s.label }}</span><span style="display:flex;align-items:center;gap:8px"><span style="flex:none;width:56px;height:4px;border-radius:2px;background:#E3E7EC;overflow:hidden;display:block"><span style="display:block;height:100%;width:{{ s.fill }};background:{{ s.fillColor }}"></span></span><span style="font:500 12px/1 'Barlow',sans-serif;color:{{ s.metaColor }};white-space:nowrap">{{ s.meta }}</span></span></span>
+<span style="font:700 19px/1 'Barlow Condensed',sans-serif;color:#212121">{{ s.price }}</span>
+<sc-if value="{{ s.open }}"><span style="flex:none;width:14px;height:14px;background:#A3A9B3;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-right.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/chevron-right.svg) center/contain no-repeat"></span></sc-if><sc-if value="{{ s.full }}"><span></span></sc-if>
+</button></sc-for></section></sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ s2 }}">
+<div style="display:flex;flex-direction:column;gap:4px"><h1 style="margin:0;font:700 26px/1 'Barlow Condensed',sans-serif;color:#17385F">How are you entering?</h1><p style="margin:0;font:400 15px/1.4 'Barlow',sans-serif;color:#5A6270">{{ ag }} · tap one to carry on.</p></div>
+<div style="display:grid;grid-template-columns:{{ L.typeCols }};gap:10px">
+<sc-for list="{{ types }}" as="t" hint-placeholder-count="3"><button onClick="{{ t.pick }}" style="display:flex;flex-direction:{{ L.typeDir }};align-items:{{ L.typeAlign }};gap:12px;min-height:76px;padding:14px;background:#fff;border:{{ t.border }};border-radius:12px;text-align:left;box-sizing:border-box">
+<span style="flex:none;width:44px;height:44px;border-radius:10px;background:#E3E7EC;display:flex;align-items:center;justify-content:center"><span style="width:22px;height:22px;background:#17385F;-webkit-mask:url({{ t.icon }}) center/contain no-repeat;mask:url({{ t.icon }}) center/contain no-repeat"></span></span>
+<span style="flex:1;display:flex;flex-direction:column;gap:5px"><span style="font:700 20px/1 'Barlow Condensed',sans-serif;letter-spacing:.03em;text-transform:uppercase;color:#17385F">{{ t.label }}</span><span style="font:500 13px/1.3 'Barlow',sans-serif;color:#5A6270">{{ t.sub }}</span></span>
+<span style="font:700 22px/1 'Barlow Condensed',sans-serif;color:#212121">{{ t.price }}</span></button></sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ s3 }}">
+<div style="display:flex;flex-direction:column;gap:4px"><h1 style="margin:0;font:700 26px/1 'Barlow Condensed',sans-serif;color:#17385F">Declaration form</h1><p style="margin:0;font:400 15px/1.4 'Barlow',sans-serif;color:#5A6270">{{ formSub }}</p></div>
+
+<section style="background:#fff;border:1px solid #DADADA;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0;font:700 15px/1 'Barlow Condensed',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#17385F">Entry</h2>
+<div style="display:grid;grid-template-columns:{{ L.fieldCols }};gap:14px 16px">
+<sc-for list="{{ entryFields }}" as="fl" hint-placeholder-count="4"><label style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font:600 13px/1 'Barlow',sans-serif;color:#212121">{{ fl.label }}</span><input type="{{ fl.type }}" value="{{ fl.value }}" placeholder="{{ fl.ph }}" onChange="{{ fl.on }}" style="min-height:46px;padding:0 12px;border-radius:10px;border:1.5px solid {{ fl.line }};background:#fff;font:400 16px/1.2 'Barlow',sans-serif;color:#212121;outline:none;box-sizing:border-box;width:100%;min-width:0"><sc-if value="{{ fl.err }}"><span style="font:500 12px/1 'Barlow',sans-serif;color:#C8202F">{{ fl.errText }}</span></sc-if></label></sc-for>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:baseline;gap:8px;padding:4px 2px 4px;border-bottom:1.5px solid #17385F"><h2 style="flex:1;margin:0;font:700 15px/1 'Barlow Condensed',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#17385F">Riders</h2><span style="font:500 13px/1 'Barlow',sans-serif;color:#5A6270">{{ riderCount }}</span></div>
+<sc-if value="{{ L.rowWide }}"><div style="display:grid;grid-template-columns:{{ L.riderCols }};gap:8px;padding:0 14px;font:600 12px/1 'Barlow',sans-serif;color:#5A6270"><span></span><span>Rider's full name</span><span>Pony / horse</span><span>Height (hh)</span><span>Date of birth</span><span></span></div></sc-if>
+<sc-for list="{{ riders }}" as="r" hint-placeholder-count="5">
+<div style="background:#fff;border:1px solid {{ r.cardLine }};border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:{{ L.riderCols }};gap:8px;align-items:center">
+<span style="grid-column:{{ L.riderHeadSpan }};display:flex;align-items:center;gap:8px;min-height:24px"><span style="flex:1;font:700 15px/1 'Barlow Condensed',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:{{ r.titleColor }}">{{ r.title }}</span><sc-if value="{{ r.showRemoveTop }}"><button onClick="{{ r.remove }}" aria-label="Remove reserve" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center"><span style="width:16px;height:16px;background:#C8202F;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/trash-2.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/trash-2.svg) center/contain no-repeat"></span></button></sc-if></span>
+<input value="{{ r.name }}" onChange="{{ r.onName }}" placeholder="Rider's full name" aria-label="Rider's full name" style="grid-column:{{ L.nameSpan }};min-height:46px;padding:0 12px;border-radius:10px;border:1.5px solid {{ r.nameLine }};background:#fff;font:400 16px/1.2 'Barlow',sans-serif;color:#212121;outline:none;box-sizing:border-box;width:100%;min-width:0">
+<sc-if value="{{ r.rides }}"><input value="{{ r.horse }}" onChange="{{ r.onHorse }}" placeholder="Pony / horse name" aria-label="Pony / horse name" style="grid-column:{{ L.horseSpan }};min-height:46px;padding:0 12px;border-radius:10px;border:1.5px solid #C4C9D1;background:#fff;font:400 16px/1.2 'Barlow',sans-serif;color:#212121;outline:none;box-sizing:border-box;width:100%;min-width:0">
+<input value="{{ r.height }}" onChange="{{ r.onHeight }}" placeholder="e.g. 13.2" inputmode="decimal" aria-label="Height in hands" style="grid-column:{{ L.heightSpan }};min-height:46px;padding:0 12px;border-radius:10px;border:1.5px solid #C4C9D1;background:#fff;font:400 16px/1.2 'Barlow',sans-serif;color:#212121;outline:none;box-sizing:border-box;width:100%;min-width:0"></sc-if><sc-if value="{{ r.noHorse }}"><span style="grid-column:{{ L.noHorseSpan }};font:500 13px/1.3 'Barlow',sans-serif;color:#5A6270">No pony — doesn't ride</span></sc-if>
+<sc-if value="{{ L.rowNarrow }}"><span style="grid-column:1 / 2;font:500 13px/1 'Barlow',sans-serif;color:#5A6270">Date of birth</span></sc-if>
+<input type="date" value="{{ r.dob }}" onChange="{{ r.onDob }}" aria-label="Date of birth" style="grid-column:{{ L.dobSpan }};min-height:46px;padding:0 10px;border-radius:10px;border:1.5px solid #C4C9D1;background:#fff;font:400 15px/1.2 'Barlow',sans-serif;color:#212121;outline:none;box-sizing:border-box;width:100%;min-width:0">
+<sc-if value="{{ L.rowWide }}"><span style="display:flex;justify-content:center"><sc-if value="{{ r.removable }}"><button onClick="{{ r.remove }}" aria-label="Remove reserve" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center"><span style="width:16px;height:16px;background:#C8202F;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/trash-2.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/trash-2.svg) center/contain no-repeat"></span></button></sc-if></span></sc-if>
+<sc-if value="{{ r.err }}"><span style="grid-column:1 / -1;font:500 12px/1 'Barlow',sans-serif;color:#C8202F">Add the rider's name</span></sc-if>
+</div>
+</sc-for>
+<sc-if value="{{ canAdd }}"><button onClick="{{ addRider }}" style="min-height:48px;border-radius:12px;border:1.5px dashed #C4C9D1;background:transparent;color:#17385F;display:flex;align-items:center;justify-content:center;gap:8px;font:600 15px/1 'Barlow',sans-serif"><span style="width:16px;height:16px;background:#17385F;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/plus.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/plus.svg) center/contain no-repeat"></span>Add a non-riding reserve (6th rider)</button></sc-if>
+</section>
+
+<section style="background:#fff;border:1px solid #DADADA;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<label style="display:flex;flex-direction:column;gap:6px"><span style="font:600 13px/1 'Barlow',sans-serif;color:#212121">Notes <span style="font-weight:400;color:#5A6270">(optional)</span></span><textarea value="{{ notes }}" onChange="{{ onNotes }}" rows="3" placeholder="e.g. Stabling needed Friday night" style="padding:10px 12px;border-radius:10px;border:1.5px solid #C4C9D1;background:#fff;font:400 15px/1.4 'Barlow',sans-serif;color:#212121;outline:none;resize:vertical;box-sizing:border-box;width:100%"></textarea></label>
+<label style="display:flex;align-items:center;gap:10px;min-height:32px;font:500 15px/1.2 'Barlow',sans-serif;color:#212121;cursor:pointer"><input type="checkbox" checked="{{ save }}" onChange="{{ toggleSave }}" style="width:20px;height:20px;margin:0;accent-color:#17385F">Save these riders to my club roster</label>
+</section>
+</sc-if>
+</main>
+
+<sc-if value="{{ showSide }}">
+<aside style="position:sticky;top:16px;background:#fff;border:1px solid #DADADA;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0;font:700 15px/1 'Barlow Condensed',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#17385F">Your entry</h2>
+<div style="display:flex;flex-direction:column"><sc-for list="{{ summary }}" as="x" hint-placeholder-count="4"><div style="display:flex;align-items:baseline;gap:10px;padding:8px 0;border-top:{{ x.bt }}"><span style="width:84px;font:500 13px/1.2 'Barlow',sans-serif;color:#5A6270">{{ x.k }}</span><span style="flex:1;font:600 15px/1.25 'Barlow',sans-serif;color:#212121">{{ x.v }}</span></div></sc-for></div>
+<div style="display:flex;align-items:baseline;gap:8px;padding-top:10px;border-top:1.5px solid #17385F"><span style="flex:1;font:700 15px/1 'Barlow Condensed',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#17385F">Total</span><span style="font:700 26px/1 'Barlow Condensed',sans-serif;color:#17385F">{{ priceOr }}</span></div>
+<sc-if value="{{ s3 }}"><span style="font:500 13px/1.35 'Barlow',sans-serif;color:{{ sumColor }}">{{ sumSub }}</span><button onClick="{{ submit }}" style="min-height:50px;border-radius:10px;background:{{ btnBg }};color:#fff;font:600 16px/1 'Barlow',sans-serif">Submit declaration</button></sc-if>
+<p style="margin:0;font:400 12px/1.4 'Barlow',sans-serif;color:#5A6270">You'll get the bank details after submitting. Online payment isn't live yet.</p>
+</aside>
+</sc-if>
+</div>
+
+<sc-if value="{{ mobileBar }}"><div style="flex:none;position:sticky;bottom:{{ L.barBottom }};background:#fff;border-top:1px solid #DADADA;padding:10px 12px;display:flex;align-items:center;gap:12px;z-index:5">
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><span style="font:700 16px/1 'Barlow Condensed',sans-serif;letter-spacing:.03em;text-transform:uppercase;color:#17385F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sumTitle }}</span><span style="font:500 12px/1.2 'Barlow',sans-serif;color:{{ sumColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sumSub }}</span></div>
+<button onClick="{{ submit }}" style="flex:none;min-height:48px;padding:0 20px;border-radius:10px;background:{{ btnBg }};color:#fff;font:600 16px/1 'Barlow',sans-serif">Submit</button></div></sc-if>
+</sc-if>
+
+<sc-if value="{{ done }}">
+<div style="flex:1;width:100%;max-width:560px;margin:0 auto;box-sizing:border-box;padding:32px 16px 24px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><span style="width:60px;height:60px;border-radius:50%;background:#2E8B4F;display:flex;align-items:center;justify-content:center"><span style="width:32px;height:32px;background:#fff;-webkit-mask:url(https://unpkg.com/lucide-static@0.460.0/icons/check.svg) center/contain no-repeat;mask:url(https://unpkg.com/lucide-static@0.460.0/icons/check.svg) center/contain no-repeat"></span></span><h1 style="margin:0;font:700 30px/1 'Barlow Condensed',sans-serif;color:#17385F">You're in</h1><p style="margin:0;font:400 16px/1.4 'Barlow',sans-serif;color:#4A505A">{{ doneLine }}</p></div>
+<div style="border-radius:12px;background:#E3E7EC;padding:16px;display:flex;flex-direction:column;gap:10px;color:#17385F">
+<span style="font:700 15px/1 'Barlow',sans-serif">Pay {{ priceOr }} by bank transfer</span>
+<div style="display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px 12px;font:500 14px/1.2 'Barlow',sans-serif"><sc-for list="{{ bank }}" as="b" hint-placeholder-count="4"><span style="color:#5A6270">{{ b.k }}</span><span style="font-family:{{ b.font }}">{{ b.v }}</span><sc-if value="{{ b.copy }}"><button style="font:600 13px/1 'Barlow',sans-serif;color:#17385F">Copy</button></sc-if><sc-if value="{{ b.noCopy }}"><span></span></sc-if></sc-for></div>
+<span style="font:400 13px/1.4 'Barlow',sans-serif;color:#4A505A">The organiser marks you as paid when the money arrives.</span></div>
+<div style="display:grid;grid-template-columns:{{ L.doneCols }};gap:8px"><button onClick="{{ again }}" style="min-height:50px;border-radius:10px;background:#17385F;color:#fff;font:600 16px/1 'Barlow',sans-serif">Enter another</button><button onClick="{{ again }}" style="min-height:50px;border-radius:10px;border:1.5px solid #C4C9D1;background:#fff;color:#17385F;font:600 16px/1 'Barlow',sans-serif">Back to details</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ L.narrow }}"><nav style="flex:none;position:sticky;bottom:0;z-index:6;background:#fff;border-top:1px solid #DADADA;padding:6px 4px 10px;display:grid;grid-template-columns:repeat(4,1fr)"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4"><a href="#" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;font:{{ t.weight }} 12px/1 'Barlow',sans-serif;color:{{ t.color }}"><span style="width:22px;height:22px;background:{{ t.color }};-webkit-mask:url({{ t.icon }}) center/contain no-repeat;mask:url({{ t.icon }}) center/contain no-repeat"></span>{{ t.label }}</a></sc-for></nav></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const PLACES = { 'Under 10': [[6, 10], [4, 6], [3, 4]], 'Under 12': [[10, 10], [6, 6], [4, 4]], 'Under 14': [[7, 10], [5, 6], [2, 4]], 'Under 17': [[4, 8], [6, 6], [3, 4]], Open: [[9, 12], [3, 6], [4, 6]], Veterans: [[5, 0], [2, 0], [1, 0]] };
+const SECTIONS = [['Under 10', 4500, 12, 16], ['Under 12', 4500, 18, 18], ['Under 14', 4500, 14, 18], ['Under 17', 4500, 12, 18], ['Open', 5000, 16, 24], ['Veterans', 5000, 9, null]];
+const TYPES = [['ind', 'Individual', 'user', 1, 'One rider, placed in a team by the organiser', 1], ['pairs', 'Pairs', 'users', 2, 'Two riders riding together', 1.8], ['team', 'Team', 'shield', 5, 'Five riders, plus an optional non-riding reserve', 4]];
+const IC = (n) => `https://unpkg.com/lucide-static@0.460.0/icons/${n}.svg`;
+const rider = (reserve = false) => ({ name: '', horse: '', height: '', dob: '', reserve });
+const BLANK = { step: 1, ag: null, type: null, club: '', trainer: '', phone: '', bibDesc: '', notes: '', save: true, riders: [], tried: false, done: false };
+
+class Component extends DCLogic {
+  state = { ...BLANK, w: typeof window !== 'undefined' ? window.innerWidth : 390 };
+  rootRef = React.createRef();
+  componentDidMount() {
+    const el = this.rootRef.current;
+    const measure = () => { const w = el ? el.clientWidth : window.innerWidth; if (Math.abs(w - this.state.w) > 1) this.setState({ w }); };
+    measure();
+    this.ro = typeof ResizeObserver !== 'undefined' && el ? new ResizeObserver(measure) : null;
+    if (this.ro) this.ro.observe(el); else window.addEventListener('resize', measure);
+    this.measure = measure;
+  }
+  componentWillUnmount() { if (this.ro) this.ro.disconnect(); else window.removeEventListener('resize', this.measure); }
+  renderVals() {
+    const st = this.state;
+    const set = (p) => this.setState(p);
+    const wide = st.w >= 900;
+    const mid = st.w >= 620;
+    const rowWide = st.w >= 1100;
+    const L = {
+      wide, narrow: !wide, max: wide ? '1120px' : '640px',
+      pad: wide ? '28px 24px 48px' : '16px 12px 24px',
+      cols: wide && st.step === 3 ? 'minmax(0,1fr) 320px' : 'minmax(0,1fr)',
+      groupCols: wide ? 'repeat(3,minmax(0,1fr))' : mid ? 'repeat(2,minmax(0,1fr))' : 'minmax(0,1fr)', tileCols: wide ? 'repeat(3,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))',
+      typeCols: wide ? 'repeat(3,minmax(0,1fr))' : 'minmax(0,1fr)', typeDir: wide ? 'column' : 'row', typeAlign: wide ? 'flex-start' : 'center',
+      fieldCols: mid ? 'repeat(2,minmax(0,1fr))' : 'minmax(0,1fr)',
+      rowWide, rowNarrow: !rowWide, riderCols: rowWide ? '120px minmax(0,1.6fr) minmax(0,1.3fr) 96px 150px 32px' : 'minmax(0,1fr) 120px',
+      riderHeadSpan: rowWide ? 'auto' : '1 / -1', nameSpan: rowWide ? 'auto' : '1 / -1', horseSpan: rowWide ? 'auto' : '1 / 2', heightSpan: rowWide ? 'auto' : '2 / 3', dobSpan: rowWide ? 'auto' : '2 / 3', noHorseSpan: rowWide ? 'span 2' : '1 / -1',
+      barBottom: '69px', doneCols: mid ? '1fr 1fr' : '1fr',
+    };
+    const sec = SECTIONS.find((x) => x[0] === st.ag);
+    const base = sec ? sec[1] / 100 : 45;
+    const ty = TYPES.find((t) => t[0] === st.type);
+    const price = ty ? `£${Math.round(base * ty[5])}` : '';
+    const ages = SECTIONS.map(([name, pm, paid, max]) => { const left = max ? Math.max(0, max - paid) : null; const full = left === 0; const on = st.ag === name;
+      return { name, full, from: `from £${pm / 100}`, pick: () => !full && set({ ag: name, step: 2 }), meta: full ? 'Full' : max ? `${left} of ${max} places left` : 'No limit',
+        metaColor: full ? '#6E7480' : left != null && left <= 4 ? '#8A5A00' : '#5A6270', fill: max ? `${Math.round((paid / max) * 100)}%` : '30%',
+        fillColor: full ? '#A3A9B3' : left != null && left <= 4 ? '#C08308' : '#17385F', border: on ? '2px solid #17385F' : '1px solid #DADADA', opacity: full ? 0.55 : 1, cursor: full ? 'not-allowed' : 'pointer' }; });
+    const types = TYPES.map(([id, label, icon, n, sub, mult]) => ({ label, icon: IC(icon), sub, price: `£${Math.round(base * mult)}`, border: st.type === id ? '2px solid #17385F' : '1px solid #DADADA',
+      pick: () => { const keep = st.type === id && st.riders.length; set({ type: id, step: 3, riders: keep ? st.riders : Array.from({ length: n }, () => rider()), tried: false }); } }));
+    const groups = SECTIONS.map(([name, pm]) => { const pl = PLACES[name]; let openCount = 0;
+      const sections = TYPES.map(([id, label, icon, n, sub, mult], i) => { const [paid, max] = pl[i]; const left = max ? Math.max(0, max - paid) : null; const full = left === 0; if (!full) openCount++;
+        const on = st.ag === name && st.type === id; const unit = id === 'ind' ? 'place' : id === 'pairs' ? 'pair' : 'team';
+        return { label, icon: IC(icon), price: `£${Math.round((pm / 100) * mult)}`, full, open: !full, bt: i ? '1px solid #EBEBEB' : '0', bg: on ? '#E3E7EC' : '#fff', opacity: full ? 0.55 : 1, cursor: full ? 'not-allowed' : 'pointer',
+          meta: full ? 'Full' : max ? `${left} ${unit}${left === 1 ? '' : 's'} left of ${max}` : 'No limit', metaColor: full ? '#6E7480' : left != null && left <= 2 ? '#8A5A00' : '#5A6270',
+          fill: max ? `${Math.round((paid / max) * 100)}%` : '20%', fillColor: full ? '#A3A9B3' : left != null && left <= 2 ? '#C08308' : '#17385F',
+          pick: () => { if (full) return; const keep = st.ag === name && st.type === id && st.riders.length; set({ ag: name, type: id, step: 3, riders: keep ? st.riders : Array.from({ length: n }, () => rider()), tried: false }); } }; });
+      return { name, sections, meta: openCount ? `${openCount} of 3 open` : 'Full' }; });
+    const upd = (i, p) => set({ riders: st.riders.map((r, j) => (j === i ? { ...r, ...p } : r)) });
+    const riders = st.riders.map((r, i) => ({ ...r, title: r.reserve ? 'Non-riding reserve' : `Rider ${i + 1}`, titleColor: r.reserve ? '#5A6270' : '#17385F',
+      cardLine: r.reserve ? '#C4C9D1' : '#DADADA', removable: r.reserve, showRemoveTop: r.reserve && !rowWide,
+      remove: () => set({ riders: st.riders.filter((_, j) => j !== i) }),
+      rides: !r.reserve, noHorse: r.reserve, onName: (e) => upd(i, { name: e.target.value }), onHorse: (e) => upd(i, { horse: e.target.value }), onHeight: (e) => upd(i, { height: e.target.value }), onDob: (e) => upd(i, { dob: e.target.value }),
+      nameLine: st.tried && !r.name.trim() ? '#C8202F' : '#C4C9D1', err: st.tried && !r.name.trim() }));
+    const req = [['club', 'Pony Club', 'e.g. Severn Vale', 'text', true], ['trainer', 'Trainer name', 'e.g. Sarah Hughes', 'text', true], ['phone', 'Trainer number', 'e.g. 07700 900123', 'tel', true], ['bibDesc', 'Bib description', 'e.g. Navy with gold stripe, number on back', 'text', false]];
+    const entryFields = req.map(([key, label, ph, type, must]) => { const bad = must && st.tried && !st[key].trim();
+      return { label, ph, type, value: st[key], on: (e) => set({ [key]: e.target.value }), line: bad ? '#C8202F' : '#C4C9D1', err: bad, errText: `Add the ${label.toLowerCase()}` }; });
+    const missing = [!st.club.trim() && 'Pony Club', !st.trainer.trim() && 'trainer name', !st.phone.trim() && 'trainer number', st.riders.some((r) => !r.name.trim()) && 'rider names'].filter(Boolean);
+    const ok = st.step === 3 && missing.length === 0 && st.riders.every((r) => r.name.trim());
+    const crumb = (n, label, step, on) => ({ n, label, go: () => set({ step }), bg: on ? '#17385F' : '#fff', fg: on ? '#fff' : '#17385F', line: on ? '#17385F' : '#C4C9D1' });
+    const crumbs = [crumb(1, st.ag && ty ? `${st.ag} · ${ty[1]}` : 'Entry', 1, st.step === 1)];
+    if (ty) crumbs.push(crumb(2, 'Dec form', 3, st.step === 3));
+    const riderN = st.riders.filter((r) => !r.reserve).length;
+    const tabs = [['Timetable', 'clock'], ['Toplists', 'trophy'], ['Live & stream', 'message-square'], ['Details', 'info']].map(([label, icon], i) => ({ label, icon: IC(icon), color: i === 3 ? '#17385F' : '#5A6270', weight: i === 3 ? 700 : 500, topBg: i === 3 ? 'rgba(255,255,255,.14)' : 'transparent' }));
+    const doneName = st.type === 'ind' ? ((st.riders[0] && st.riders[0].name.trim()) || 'Your rider') : (st.club.trim() || 'Your team');
+    return { rootRef: this.rootRef, L, tabs, form: !st.done, done: st.done, s1: st.step === 1, s2: st.step === 2, s3: st.step === 3,
+      ag: st.ag || '', ages, types, groups, riders, crumbs, entryFields,
+      backLabel: st.step > 1 ? 'Back' : 'Details', back: () => st.step > 1 && set({ step: 1 }),
+      formSub: ty ? `${st.ag} · ${ty[1]} · ${ty[3]} ${ty[3] === 1 ? 'rider' : 'riders'}${st.type === 'team' ? ', plus an optional non-riding reserve' : ''}` : '',
+      riderCount: st.type === 'team' ? `${riderN} riding${st.riders.length > riderN ? ' + reserve' : ''}` : `${riderN} ${riderN === 1 ? 'rider' : 'riders'}`,
+      canAdd: st.type === 'team' && st.riders.length < 6, addRider: () => set({ riders: [...st.riders, rider(true)] }),
+      notes: st.notes, onNotes: (e) => set({ notes: e.target.value }), save: st.save, toggleSave: () => set({ save: !st.save }),
+      showSide: wide && st.step === 3, mobileBar: !wide && st.step === 3,
+      summary: [['Age group', st.ag || '—'], ['Entry', ty ? ty[1] : '—'], ['Pony Club', st.club.trim() || '—'], ['Riders', `${riderN}${st.riders.length > riderN ? ' + reserve' : ''}`]].map(([k, v], i) => ({ k, v, bt: i ? '1px solid #EBEBEB' : '0' })),
+      priceOr: price || '—', sumTitle: ty ? `${st.ag} · ${ty[1]} · ${price}` : '',
+      sumSub: missing.length ? `Still needed: ${missing.join(', ')}` : 'Ready to submit', sumColor: missing.length ? '#5A6270' : '#2E8B4F',
+      btnBg: ok ? '#17385F' : '#A3A9B3', submit: () => (ok ? set({ done: true }) : set({ tried: true })),
+      doneLine: `${doneName} is entered in ${st.ag || ''} (${ty ? ty[1].toLowerCase() : ''}).`,
+      bank: [['Name', 'Severn Vale PC', false], ['Sort code', '20-45-77', true], ['Account', '12345678', true], ['Reference', `HAF-${doneName.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8)}`, false]].map(([k, v, copy]) => ({ k, v, copy, noCopy: !copy, font: k === 'Name' ? "'Barlow',sans-serif" : 'ui-monospace,Menlo,monospace' })),
+      again: () => this.setState({ ...BLANK }) };
+  }
+}
+</script>
+</body>
+</html>

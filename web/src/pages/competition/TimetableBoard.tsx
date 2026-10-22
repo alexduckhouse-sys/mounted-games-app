@@ -1,20 +1,21 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, MapPin, RotateCw, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, MapPin } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
+import { usePageHeader } from '../../components/CompactPageBarContext';
 import { computeTimings, formatTime } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
-import { groupRowsBySession, hiddenFinishedKeys, sessionOrdinals, statusLabel, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
+import { groupMaxDelay, groupRowsBySession, isGroupFinished, sessionOrdinals, statusLabel, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
 import './timetable.css';
 
 const STATUS_KEY: ReadonlyArray<[TimetableStatus, string]> = [['on-time', 'On time'], ['late', 'Late'], ['live', 'On now'], ['finished', 'Finished']];
 
 /**
- * The public timetable: a white band with the title, last update and day/arena choices, then one card per
- * session and per age group's finals. `bandExtra`, `lead` and `footer` let a page add its own controls.
+ * The public timetable: a compact day/arena strip under the app header, then one block per session and per
+ * age group's finals. Finished blocks fold into one line below the active ones. The page title, competition
+ * name, update time and refresh button live in the app header. `bandExtra`, `lead` and `footer` let a page add its own controls.
  */
 export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtra, lead, footer }: {
   sectionId?: number | null;
@@ -34,11 +35,18 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const ordinals = useMemo(() => sessionOrdinals(competition.sessions), [competition.sessions]);
   const [pickedDay, setPickedDay] = useState<string | null>(null);
   const arenaKey = `mg.tt.arena.${competition.id}`;
-  const [showAll, setShowAll] = useState(false);
+  const [openDone, setOpenDone] = useState<ReadonlySet<string>>(new Set());
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
   function chooseArena(name: string) {
     setArena(name);
     try { if (name) localStorage.setItem(arenaKey, name); else localStorage.removeItem(arenaKey); } catch { /* storage blocked */ }
+  }
+  function toggleDone(key: string) {
+    setOpenDone((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   }
   const today = dayKey(new Date());
   const startDay = dayKey(new Date(competition.startDate));
@@ -66,45 +74,67 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   }));
   const finalGroups = finalsByAgeGroup(visibleRows).map((group) => ({ ...group, noun: ['final', 'finals'] as const }));
   const groups = [...sessionGroups, ...finalGroups];
-  const hiddenKeys = showAll ? new Set<string>() : hiddenFinishedKeys(groups);
-  const hasCompleted = hiddenFinishedKeys(groups).size > 0;
+  const activeGroups = groups.filter((group) => !isGroupFinished(group.rows));
+  const finishedGroups = groups.filter((group) => isGroupFinished(group.rows));
   const updated = updatedAt ? updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
+  usePageHeader({ title, subtitle: updated ? `${competition.name} · ${updated}` : competition.name, onRefresh: reload, refreshLabel: 'Refresh timetable' });
+
+  function renderGroup(group: typeof groups[number]) {
+    const done = isGroupFinished(group.rows);
+    const collapsed = done && !openDone.has(group.key);
+    const heading = group.title ?? group.rows[0]?.session.name;
+    if (collapsed) {
+      const range = `${formatTime(group.rows[0].effective)}–${formatTime(group.rows[group.rows.length - 1].effective)}`;
+      return <section key={group.key} aria-label={heading}>
+        <button type="button" className="tt-collapsed" aria-expanded="false" onClick={() => toggleDone(group.key)}>
+          <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS.finished }} aria-hidden="true" />
+          <span className="tt-collapsed-copy"><strong>{heading}</strong> · {group.rows.length} finished</span>
+          <span className="tt-collapsed-range">{range}</span>
+          <ChevronDown className="tt-collapsed-chevron" size={14} aria-hidden="true" />
+        </button>
+      </section>;
+    }
+    const groupArenas = [...new Set(group.rows.map((row) => row.session.arenaName?.trim() ?? ''))];
+    const sharedArena = groupArenas.length === 1 ? groupArenas[0] : '';
+    const maxLate = groupMaxDelay(group.rows);
+    const count = `${group.rows.length} ${group.rows.length === 1 ? group.noun[0] : group.noun[1]}`;
+    const summary = maxLate > 0 ? [sharedArena, `${maxLate} min late`] : [sharedArena, count];
+    const titleRow = group.title && <>
+      <h2>{group.title}</h2>
+      <span className={maxLate > 0 ? 'tt-summary-late' : undefined}>{summary.filter(Boolean).join(' · ')}</span>
+    </>;
+    return <section key={group.key} aria-label={heading} className="tt-group">
+      {group.title && (done
+        ? <button type="button" className="tt-group-title" aria-expanded="true" onClick={() => toggleDone(group.key)}>{titleRow}</button>
+        : <div className="tt-group-title">{titleRow}</div>)}
+      <div className="tt-card">
+        {group.rows.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena && !sharedArena} />)}
+      </div>
+    </section>;
+  }
 
   return (
     <div className="timetable-board">
-      <div className={`tt-head ${arenas.length > 1 ? 'tt-band-joined' : 'mg-band'}`}>
-        <div className="flex items-center gap-3">
-          <h1 className="mg-h1 mg-h1-sm min-w-0 flex-1">{title}</h1>
-          {updated && <span className="mg-meta shrink-0 font-medium">Updated {updated}</span>}
-          <button type="button" className="mg-icon-btn" aria-label="Refresh timetable" onClick={reload}><RotateCw className="h-[18px] w-[18px]" /></button>
+      {(days.length > 1 || arenas.length > 1) && (
+        <div className="tt-strip">
+          {days.length > 1 && (
+            <div className="tt-days" role="group" aria-label="Choose day">
+              {days.map((day, index) => <button key={day} type="button" className="tt-day" aria-pressed={selectedDay === day} aria-label={`Day ${index + 1}, ${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${day === today ? ', today' : ''}`} onClick={() => setPickedDay(day)}>
+                {new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}
+              </button>)}
+            </div>
+          )}
+          {arenas.length > 1 && <ArenaSelect arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />}
         </div>
-        {bandExtra}
-        {days.length > 1 && (
-          <div className="mg-chips" role="group" aria-label="Choose day">
-            {days.map((day, index) => <button key={day} type="button" className="mg-chip" aria-pressed={selectedDay === day} aria-label={`Day ${index + 1}, ${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${day === today ? ', today' : ''}`} onClick={() => setPickedDay(day)}>
-              {new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })} · Day {index + 1}
-            </button>)}
-          </div>
-        )}
-      </div>
-      {arenas.length > 1 && (
-        <ArenaPicker arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />
       )}
+      {bandExtra && <div className="tt-extra mg-band">{bandExtra}</div>}
       <div className="tt-body">
         {lead}
-        {groups.filter((group) => !hiddenKeys.has(group.key)).map((group) => {
-          const done = group.rows.every((row) => row.status === 'finished');
-          const groupArenas = [...new Set(group.rows.map((row) => row.session.arenaName?.trim() ?? ''))];
-          const sharedArena = groupArenas.length === 1 ? groupArenas[0] : '';
-          const count = `${group.rows.length} ${group.rows.length === 1 ? group.noun[0] : group.noun[1]}`;
-          return <section key={group.key} aria-label={group.title ?? group.rows[0]?.session.name} className={`tt-group ${done ? 'tt-group-done' : ''}`}>
-            {group.title && <div className="mg-section-head"><h2>{group.title}</h2><span>{[sharedArena, count].filter(Boolean).join(' · ')}</span></div>}
-            <div className="mg-card mg-list">
-              {group.rows.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena && !sharedArena} />)}
-            </div>
-          </section>;
-        })}
-        {(hasCompleted || showAll) && <button type="button" className="mg-btn mg-btn-secondary w-full" aria-pressed={showAll} onClick={() => setShowAll((v) => !v)}>{showAll ? 'Hide completed sessions' : 'View complete timetable'}</button>}
+        {activeGroups.map(renderGroup)}
+        {finishedGroups.length > 0 && (
+          <h2 className="tt-divider">{selectedDay === today ? 'Finished today' : 'Finished'} · {finishedGroups.length}<span aria-hidden="true" /></h2>
+        )}
+        {finishedGroups.map(renderGroup)}
         {visibleRows.length > 0 && (
           <ul className="tt-key" aria-label="Status colours">
             {STATUS_KEY.map(([status, label]) => <li key={status}><span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />{label}</li>)}
@@ -117,99 +147,26 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   );
 }
 
-function ArenaPicker({ arenas, selectedArena, dayRows, onChoose }: {
+/** A native arena menu dressed as a compact control: "All arenas", then each arena (with "on now" when one is running). */
+function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
   arenas: string[];
   selectedArena: string;
   dayRows: TimetableRow[];
   onChoose: (name: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const pickerRef = useRef<HTMLButtonElement>(null);
-  const sheetRef = useRef<HTMLDivElement>(null);
-  const selectedRows = selectedArena ? dayRows.filter((row) => row.session.arenaName?.trim() === selectedArena) : dayRows;
-  const selectedLive = selectedRows.some((row) => row.status === 'live');
-
-  function close() {
-    setOpen(false);
-    window.setTimeout(() => pickerRef.current?.focus(), 0);
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const selected = sheetRef.current?.querySelector<HTMLButtonElement>('.tt-arena-option[aria-pressed="true"]');
-    (selected ?? sheetRef.current?.querySelector<HTMLButtonElement>('button'))?.focus();
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') { event.preventDefault(); close(); return; }
-      if (event.key !== 'Tab') return;
-      const focusable = [...(sheetRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])') ?? [])];
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
-
-  const options = ['', ...arenas];
-  return <>
-    <div className="tt-arena-picker-band mg-band">
-      <button ref={pickerRef} type="button" className="tt-arena-picker" aria-label={`Arena: ${selectedArena || 'All arenas'}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
-        <MapPin aria-hidden="true" className="tt-arena-picker-icon" />
-        <span className="tt-arena-picker-copy"><span>Arena</span><strong>{selectedArena || 'All arenas'}</strong></span>
-        {selectedLive && <span className="mg-badge mg-badge-live">Live</span>}
-        <ChevronDown aria-hidden="true" className="tt-arena-picker-chevron" />
-      </button>
-    </div>
-    {open && createPortal(
-      <div className="tt-arena-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-        <div ref={sheetRef} role="dialog" aria-modal="true" aria-label="Choose arena" className="tt-arena-sheet">
-          <span className="tt-arena-handle" aria-hidden="true" />
-          <div className="tt-arena-sheet-head">
-            <h2>Choose arena</h2>
-            <button type="button" className="mg-icon-btn" aria-label="Close arena picker" onClick={close}><X aria-hidden="true" className="h-5 w-5" /></button>
-          </div>
-          <div className="tt-arena-options">
-            {options.map((name) => {
-              const optionRows = name ? dayRows.filter((row) => row.session.arenaName?.trim() === name) : dayRows;
-              const live = optionRows.some((row) => row.status === 'live');
-              const finished = !!name && optionRows.length > 0 && optionRows.every((row) => row.status === 'finished');
-              const summary = name ? arenaSummary(optionRows) : 'Everything, in running order';
-              return <button key={name || 'all'} type="button" className="tt-arena-option" aria-label={`${name || 'All arenas'}. ${summary}`} aria-pressed={selectedArena === name} onClick={() => { onChoose(name); close(); }}>
-                <span className="tt-arena-radio" aria-hidden="true" />
-                <span className="tt-arena-option-copy"><strong>{name || 'All arenas'}</strong><span>{summary}</span></span>
-                {name && !finished && <span className={`mg-badge ${live ? 'mg-badge-live' : 'mg-badge-outline'}`}>{live ? 'Live' : 'Later'}</span>}
-              </button>;
-            })}
-          </div>
-          <p className="tt-arena-note">We’ll remember your arena on this phone.</p>
-        </div>
-      </div>,
-      document.body,
-    )}
-  </>;
-}
-
-function arenaSummary(rows: TimetableRow[]) {
-  const live = rows.find((row) => row.status === 'live');
-  if (live) return `On now: ${timetableRowName(live)}${live.delayMinutes > 0 ? ` · running ${live.delayMinutes} min late` : ''}`;
-  const upcoming = rows.find((row) => row.status !== 'finished');
-  if (upcoming) return `Starts ${formatArenaTime(upcoming.effective)} · ${timetableRowName(upcoming)}`;
-  return 'Finished';
-}
-
-function timetableRowName(row: TimetableRow) {
-  return row.heat?.label || (row.heat ? `Heat ${row.heatIndex + 1}` : row.session.name);
-}
-
-function formatArenaTime(value: Date | null) {
-  return value?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) ?? '—';
+  const isLive = (name: string) => dayRows.some((row) => row.status === 'live' && (!name || row.session.arenaName?.trim() === name));
+  return (
+    <label className="tt-arena">
+      <MapPin aria-hidden="true" className="tt-arena-pin" size={14} />
+      <span className="tt-arena-text" aria-hidden="true">{selectedArena || 'All arenas'}</span>
+      {isLive(selectedArena) && <span className="tt-arena-live" aria-hidden="true" />}
+      <ChevronDown aria-hidden="true" className="tt-arena-chevron" size={14} />
+      <select aria-label="Arena" value={selectedArena} onChange={(event) => onChoose(event.target.value)}>
+        <option value="">All arenas</option>
+        {arenas.map((name) => <option key={name} value={name}>{name}{isLive(name) ? ' · on now' : ''}</option>)}
+      </select>
+    </label>
+  );
 }
 
 /** Final heats, one block per age group (in running order), after all the sessions. */
@@ -224,7 +181,7 @@ function finalsByAgeGroup(rows: TimetableRow[]) {
   return [...groups.values()];
 }
 
-/** One timetable line: time (with the planned time struck through when late), name, status colour dot. */
+/** One timetable line: time, name with a small sub-line, "+N · planned time" when late, status colour dot. */
 function TimetableEvent({ row, competitionId, showArena }: { row: TimetableRow; competitionId: number; showArena: boolean }) {
   const { session, heat, status, delayMinutes } = row;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
@@ -232,15 +189,18 @@ function TimetableEvent({ row, competitionId, showArena }: { row: TimetableRow; 
   const name = race ? heatName : session.name;
   const label = race ? '' : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
   const sub = [label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
+  const moved = delayMinutes > 0 && !!row.scheduled;
   const content = <>
-    <span className="tt-time">
-      {delayMinutes > 0 && row.scheduled && <s><span className="sr-only">Planned </span>{formatTime(row.scheduled)}</s>}
-      <span>{delayMinutes > 0 && row.scheduled && <span className="sr-only">, now </span>}{formatTime(row.effective)}</span>
+    <span className="tt-time">{moved && <span className="sr-only">Planned {formatTime(row.scheduled)}, now </span>}{formatTime(row.effective)}</span>
+    <span className="tt-event">
+      <strong>{name}</strong>
+      {sub && <span className="tt-sub">{sub}</span>}
+      {status === 'late' && moved && <span className="tt-planned" aria-hidden="true">+{delayMinutes} · <s>{formatTime(row.scheduled)}</s></span>}
+      {status === 'live' && <span className="tt-onnow" aria-hidden="true">ON NOW</span>}
     </span>
-    <span className="tt-event"><strong>{name}</strong>{sub && <span>{sub}</span>}</span>
     <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
     <span className="sr-only">{statusLabel(status, delayMinutes)}</span>
-    {race ? <ChevronRight className="tt-chevron" size={16} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
+    {race ? <ChevronRight className="tt-chevron" size={14} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
   </>;
   const className = `tt-row tt-${status}`;
   return race ? <Link className={className} to={`/competitions/${competitionId}/session/${session.id}${heat ? `?heat=${heat.id}` : ''}`}>{content}</Link> : <div className={className}>{content}</div>;
