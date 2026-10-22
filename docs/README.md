@@ -8,6 +8,7 @@ What each document is for and how far to trust it. When a doc and the code disag
 | --- | --- | --- |
 | `../APP_DESIGN.md` | Goals, scope and agreed behaviour. Read before changing behaviour, and update it when a decision lands | Current (2026-10-17) |
 | `../NEXT_STEPS.md` | The cross-chat to-do list. Update or remove items as they ship | Current; edited often |
+| `competitive-gaps.md` | Competitor research and ranked gaps for selling the app; all points decided; built as one PR per stage | New (2026-10-22) |
 | `decisions.md` | Settled decisions (trainer ownership, trainer approval, Cloudflare SFU video). Check before reopening a question, and add new ones here | Current |
 | `../PRODUCT_DETAILS.md` | Competition lifecycle from entries to standings, by role | Mostly current (2026-10-16) |
 
