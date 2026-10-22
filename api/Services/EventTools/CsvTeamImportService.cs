@@ -24,19 +24,26 @@ public sealed class CsvTeamImportService(AppDbContext db)
         if (headerCells.GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase).Any(x => x.Count() > 1))
             throw new EventToolsException("CSV header contains a duplicate column.", 400);
         var header = headerCells.ToDictionary(x => x.Name, x => x.Index, StringComparer.OrdinalIgnoreCase);
+        // Club and section are needed; the suffix is optional (a club with one team has none), and an
+        // optional team/name column gives the team a custom name such as "Welsh Dragons".
         if (!header.TryGetValue("club", out var clubColumn)
-            || !header.TryGetValue("suffix", out var suffixColumn)
             || !header.TryGetValue("section", out var sectionColumn))
-            throw new EventToolsException("CSV header must contain club, suffix and section columns.", 400);
-        var maxColumn = Math.Max(clubColumn, Math.Max(suffixColumn, sectionColumn));
+            throw new EventToolsException("CSV header must contain club and section columns (suffix is optional).", 400);
+        var suffixColumn = header.TryGetValue("suffix", out var s) ? s : -1;
+        var nameColumn = header.TryGetValue("team", out var t) ? t : header.TryGetValue("name", out var n) ? n : -1;
+        var maxColumn = new[] { clubColumn, sectionColumn, suffixColumn, nameColumn }.Max();
         var dataRows = parsed.Skip(1).Where(x => x.Cells.Any(y => !string.IsNullOrWhiteSpace(y))).ToList();
         if (dataRows.Count > MaxRows) throw new EventToolsException($"CSV cannot contain more than {MaxRows} team rows.", 413);
 
         var sections = await db.CompetitionSections.AsNoTracking().Where(x => x.CompetitionId == competitionId).ToListAsync(ct);
         var clubs = await db.Clubs.AsNoTracking().ToListAsync(ct);
         var existing = await db.Teams.AsNoTracking().Where(x => x.CompetitionId == competitionId)
-            .Select(x => new { x.ClubId, x.CompetitionSectionId, x.Suffix }).ToListAsync(ct);
-        var existingKeys = existing.Select(x => Key(x.ClubId, x.CompetitionSectionId, x.Suffix)).ToHashSet();
+            .Select(x => new { x.ClubId, x.CompetitionSectionId, x.Suffix, x.DisplayName, ClubName = x.Club!.Name }).ToListAsync(ct);
+        // An existing team clashes on club + suffix, or, for a custom-named team, on its name.
+        var existingKeys = existing.Select(x => Key(x.ClubId, x.CompetitionSectionId, x.Suffix, null))
+            .Concat(existing.Select(x => Key(x.ClubId, x.CompetitionSectionId, x.Suffix,
+                string.Equals(x.DisplayName, string.IsNullOrWhiteSpace(x.Suffix) ? x.ClubName : $"{x.ClubName} {x.Suffix}", StringComparison.OrdinalIgnoreCase) ? null : x.DisplayName)))
+            .ToHashSet();
         var inputKeys = new HashSet<string>();
         var rows = new List<CsvTeamImportRowDto>();
 
@@ -50,27 +57,34 @@ public sealed class CsvTeamImportService(AppDbContext db)
                 continue;
             }
             var clubName = parsedRow.Cells[clubColumn].Trim();
-            var suffix = parsedRow.Cells[suffixColumn].Trim();
+            var suffix = suffixColumn < 0 ? string.Empty : parsedRow.Cells[suffixColumn].Trim();
+            var customName = nameColumn < 0 ? string.Empty : parsedRow.Cells[nameColumn].Trim();
             var sectionName = parsedRow.Cells[sectionColumn].Trim();
             if (clubName.Length is < 1 or > 150) errors.Add("Club is required and must be at most 150 characters.");
-            if (suffix.Length is < 1 or > 10) errors.Add("Suffix is required and must be at most 10 characters.");
+            if (suffix.Length > 10) errors.Add("Suffix must be at most 10 characters.");
+            if (customName.Length > 200) errors.Add("Team name must be at most 200 characters.");
             if (sectionName.Length is < 1 or > 150) errors.Add("Section is required and must be at most 150 characters.");
-            if (IsFormula(clubName) || IsFormula(suffix) || IsFormula(sectionName)) errors.Add("Spreadsheet formulas are not allowed.");
+            if (IsFormula(clubName) || IsFormula(suffix) || IsFormula(sectionName) || IsFormula(customName)) errors.Add("Spreadsheet formulas are not allowed.");
 
+            // A club that isn't on the list yet is created when the teams are imported.
             var matchingClubs = clubs.Where(x => string.Equals(x.Name.Trim(), clubName, StringComparison.OrdinalIgnoreCase)).ToArray();
             var matchingSections = sections.Where(x => string.Equals(x.DisplayName.Trim(), sectionName, StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (matchingClubs.Length != 1) errors.Add(matchingClubs.Length == 0 ? "Unknown club." : "Club name is ambiguous.");
+            if (matchingClubs.Length > 1) errors.Add("Club name is ambiguous.");
             if (matchingSections.Length != 1) errors.Add(matchingSections.Length == 0 ? "Unknown section." : "Section name is ambiguous.");
 
             var clubId = matchingClubs.Length == 1 ? matchingClubs[0].Id : (int?)null;
             var sectionId = matchingSections.Length == 1 ? matchingSections[0].Id : (int?)null;
-            if (clubId.HasValue && sectionId.HasValue && suffix.Length > 0)
+            var teamName = customName.Length > 0 ? customName
+                : clubName.Length == 0 ? suffix : string.IsNullOrWhiteSpace(suffix) ? clubName : $"{clubName} {suffix}";
+            if (sectionId.HasValue && clubName.Length > 0 && matchingClubs.Length <= 1)
             {
-                var key = Key(clubId.Value, sectionId.Value, suffix);
+                // The same club and suffix may repeat when teams have their own names; the name must be unique.
+                var key = clubId.HasValue
+                    ? Key(clubId.Value, sectionId.Value, suffix, customName)
+                    : $"new:{clubName.ToUpperInvariant()}:{sectionId.Value}:{suffix.ToUpperInvariant()}:{customName.ToUpperInvariant()}";
                 if (!inputKeys.Add(key)) errors.Add("Duplicate team in this CSV.");
-                if (existingKeys.Contains(key)) errors.Add("Team already exists in this competition section.");
+                if (clubId.HasValue && existingKeys.Contains(key)) errors.Add("Team already exists in this competition section.");
             }
-            var teamName = clubName.Length == 0 ? suffix : string.IsNullOrWhiteSpace(suffix) ? clubName : $"{clubName} {suffix}";
             rows.Add(new CsvTeamImportRowDto(parsedRow.RowNumber, clubId, clubName, suffix, sectionId, sectionName, teamName, errors));
         }
 
@@ -96,11 +110,17 @@ public sealed class CsvTeamImportService(AppDbContext db)
                 if (preview.Rows.Any(x => x.Errors.Count > 0))
                     throw new EventToolsException("The import has validation errors. Correct them and preview again.", 400);
 
+                // Clubs named in the file that aren't on the list yet are created once each.
+                var newClubs = preview.Rows.Where(x => x.ClubId is null)
+                    .Select(x => x.Club).Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(name => name, name => new Club { Name = name, Region = "Custom" }, StringComparer.OrdinalIgnoreCase);
+                db.Clubs.AddRange(newClubs.Values);
                 var teams = preview.Rows.Select(x => new Team
                 {
                     CompetitionId = competitionId,
                     CompetitionSectionId = x.CompetitionSectionId!.Value,
-                    ClubId = x.ClubId!.Value,
+                    ClubId = x.ClubId ?? 0,
+                    Club = x.ClubId is null ? newClubs[x.Club] : null,
                     Suffix = x.Suffix,
                     DisplayName = x.TeamName,
                 }).ToList();
@@ -197,8 +217,8 @@ public sealed class CsvTeamImportService(AppDbContext db)
             || (first == '-' && value.Length > 1 && char.IsDigit(value[1]));
     }
 
-    private static string Key(int clubId, int sectionId, string suffix)
-        => $"{clubId}:{sectionId}:{suffix.Trim().ToUpperInvariant()}";
+    private static string Key(int clubId, int sectionId, string suffix, string? customName)
+        => $"{clubId}:{sectionId}:{suffix.Trim().ToUpperInvariant()}:{(customName ?? string.Empty).Trim().ToUpperInvariant()}";
 
     private sealed record ParsedRow(int RowNumber, IReadOnlyList<string> Cells);
 }

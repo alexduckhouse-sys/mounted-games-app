@@ -15,6 +15,8 @@ public class RiderEntry
     public string? BibColour { get; set; }
     public bool IsCaptain { get; set; }
     public bool IsReserve { get; set; }
+    /// <summary>A guest rider borrowed from outside the team.</summary>
+    public bool IsGuestRider { get; set; }
     public int OrderIndex { get; set; }
 
     /// <summary>Show only the surname's initial on public pages ("Oliver S.").</summary>

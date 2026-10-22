@@ -37,7 +37,7 @@ export function LoginPage() {
       if (tab === 'trainer') {
         await login(email, password);
       } else if (tab === 'signup') {
-        await signupTrainer(signupUser, signupPw, signupRole, signupClub.trim() || undefined);
+        await signupTrainer(signupUser, signupPw, signupRole, signupClub.trim());
       } else {
         await loginWithAdminKey(adminKey);
       }
@@ -153,9 +153,10 @@ export function LoginPage() {
               </span>
             </label>
             <label className="block mb-3">
-              <span className="text-sm font-medium">Pony Club <span className="text-slate-400 font-normal">(optional)</span></span>
+              <span className="text-sm font-medium">Pony Club or team</span>
               <input
                 type="text"
+                required
                 className="input mt-1"
                 list="signup-clubs"
                 placeholder="Start typing to autocomplete…"
@@ -168,7 +169,7 @@ export function LoginPage() {
                 ))}
               </datalist>
               <span className="text-xs text-slate-500 mt-1 block">
-                Links your account to your club so you can see its teams + dec forms.
+                Links your account to your club so you can see its teams and declarations. If yours isn't listed, type its name and we'll add it.
               </span>
             </label>
             <label className="block mb-4">

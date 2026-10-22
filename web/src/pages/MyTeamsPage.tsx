@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, FileText, Clock, Activity, CheckCircle2, KeyRound, UserPlus, X, RefreshCw, Copy, Check, Bell, BellOff, Sparkles } from 'lucide-react';
 import { api } from '../api';
+import { useAuth } from '../auth/AuthContext';
+import { TrainerRequestsSection } from './admin/TrainerRequestsSection';
 import type { CompetitionDetail, Heat, Session, Team, TeamSupporter, TrainerNote } from '../types';
 import { bibAccent, bibLabel } from '../lib/bib';
 import { displaySectionName } from '../lib/section';
@@ -25,6 +27,7 @@ interface TeamHeatRow {
 }
 
 export function MyTeamsPage() {
+  const { hasRole } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [notes, setNotes] = useState<TrainerNote[]>([]);
   const [draft, setDraft] = useState({ title: '', body: '' });
@@ -50,8 +53,10 @@ export function MyTeamsPage() {
     for (const team of teams) {
       const comp = comps.get(team.competitionId);
       if (!comp) { out.set(team.id, []); continue; }
+      // Time every session, breaks and briefings included, so a lunch break pushes the afternoon heats
+      // later; only then keep the races.
+      const timings = computeTimings(comp.sessions);
       const sessions: Session[] = comp.sessions.filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0);
-      const timings = computeTimings(sessions);
       const arenas = arenaNames(sessions);
       const rows: TeamHeatRow[] = [];
       for (const sess of sessions) {
@@ -134,6 +139,11 @@ export function MyTeamsPage() {
                 <div className="flex-1 min-w-0">
                   <h2 className="font-semibold text-sm truncate flex items-center gap-1.5">
                     {t.displayName}
+                    {t.relationship === 'manager' && (
+                      <span className="text-[9px] uppercase font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
+                        Your club
+                      </span>
+                    )}
                     {t.relationship === 'supporter' && (
                       <span className="text-[9px] uppercase font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200">
                         Supporter
@@ -143,7 +153,7 @@ export function MyTeamsPage() {
                   <p className="text-xs text-slate-500 dark:text-slate-300 truncate">
                     {displaySectionName(t.sectionName)}
                   </p>
-                  <p className="text-[10px] text-slate-400 truncate">Bibs: {bibLabel(t.bibColour)}</p>
+                  <p className="text-[10px] text-slate-400 truncate">Bibs: {t.bibDescription || bibLabel(t.bibColour)}</p>
                 </div>
                 {next && (
                   <div className="text-right shrink-0">
@@ -193,7 +203,13 @@ export function MyTeamsPage() {
                 )}
               </div>
 
-              {t.relationship === 'trainer' && (
+              {t.relationship === 'manager' && (
+                <ManageTeamBlock team={t} onSaved={() => {
+                  api.get<Team[]>('/trainer/my-teams').then((r) => setTeams(r.data)).catch(() => {});
+                }} />
+              )}
+
+              {(t.relationship === 'trainer' || t.relationship === 'manager') && (
                 <SupportersBlock team={t} onTeamUpdated={() => {
                   api.get<Team[]>('/trainer/my-teams').then((r) => setTeams(r.data)).catch(() => {});
                 }} />
@@ -203,10 +219,12 @@ export function MyTeamsPage() {
         })}
         {teams.length === 0 && (
           <div className="card p-3 text-sm text-slate-500 dark:text-slate-300">
-            No teams assigned to you yet. An organiser must add you as the trainer of a team.
+            No teams assigned to you yet. An organiser, or your club's team manager, can make you the trainer of a team.
           </div>
         )}
       </div>
+
+      {hasRole('Manager') && <TrainerRequestsSection canReview />}
 
       <div className="card p-5">
         <h2 className="font-semibold flex items-center gap-2 mb-3">
@@ -511,6 +529,55 @@ function SupportersBlock({ team, onTeamUpdated }: { team: Team; onTeamUpdated: (
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** For a club's Team Manager: who trains the team, and what its bibs look like. */
+function ManageTeamBlock({ team, onSaved }: { team: Team; onSaved: () => void }) {
+  const [trainers, setTrainers] = useState<{ userId: string; fullName: string }[]>([]);
+  const [trainerId, setTrainerId] = useState(team.trainerUserId ?? '');
+  const [bibs, setBibs] = useState(team.bibDescription ?? '');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<{ userId: string; fullName: string }[]>(`/clubs/${team.clubId}/trainers`)
+      .then((r) => setTrainers(r.data))
+      .catch(() => setTrainers([]));
+  }, [team.clubId]);
+
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api.put(`/teams/${team.id}/trainer`, { trainerUserId: trainerId, bibDescription: bibs });
+      setMessage('Saved.');
+      onSaved();
+    } catch {
+      setMessage('Could not save. Check your connection and try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border-t border-slate-100 dark:border-slate-700 pt-2 space-y-2">
+      <label className="block text-xs">
+        <span className="text-slate-500 dark:text-slate-300">Trainer</span>
+        <select className="input mt-1 text-sm" value={trainerId} onChange={(e) => setTrainerId(e.target.value)}>
+          <option value="">— no trainer yet —</option>
+          {trainers.map((tr) => <option key={tr.userId} value={tr.userId}>{tr.fullName}</option>)}
+        </select>
+      </label>
+      <label className="block text-xs">
+        <span className="text-slate-500 dark:text-slate-300">Bibs</span>
+        <input className="input mt-1 text-sm" maxLength={200} placeholder="e.g. Red bibs, numbered 1 to 5" value={bibs} onChange={(e) => setBibs(e.target.value)} />
+      </label>
+      <div className="flex items-center gap-2">
+        <button type="button" className="btn-primary !py-1.5 !px-3 text-xs" disabled={busy} onClick={save}>Save team details</button>
+        {message && <span role="status" className="text-xs text-slate-600 dark:text-slate-200">{message}</span>}
+      </div>
     </div>
   );
 }

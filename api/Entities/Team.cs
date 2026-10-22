@@ -15,6 +15,8 @@ public class Team
     public string Suffix { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string? BibColour { get; set; }
+    /// <summary>What the team's bibs look like, in plain words ("red bibs, numbers 1 to 5"); one description for the whole team.</summary>
+    public string? BibDescription { get; set; }
 
     public string? TrainerUserId { get; set; }
     public AppUser? Trainer { get; set; }

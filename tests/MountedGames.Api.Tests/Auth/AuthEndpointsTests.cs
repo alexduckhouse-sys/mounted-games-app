@@ -90,7 +90,7 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     {
         var name = Unique();
 
-        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(name, "Passw0rd!x"));
+        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(name, "Passw0rd!x", null, "Auth Test Club"));
 
         var user = (await r.ReadAsync<AuthResponse>()).User;
         Assert.Equal(($"{name}@trainer.mg.local", name), (user.Email, user.FullName));
@@ -101,7 +101,7 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     public async Task SignupTrainer_SanitisesUsernameIntoEmail()
     {
         var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer",
-            new SignupTrainerRequest($"  Jo Bloggs!#{Unique()}  ", "Passw0rd!x"));
+            new SignupTrainerRequest($"  Jo Bloggs!#{Unique()}  ", "Passw0rd!x", null, "Auth Test Club"));
 
         var email = (await r.ReadAsync<AuthResponse>()).User.Email;
         Assert.Matches(@"^jobloggs[a-z0-9]+@trainer\.mg\.local$", email);
@@ -111,8 +111,8 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     public async Task SignupTrainer_FallsBackToGenericName_WhenUsernameHasNoUsableCharacters()
     {
         // Distinct per run via the second sign-up colliding on the same synthesised address.
-        var first = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest("!!!", "Passw0rd!x"));
-        var second = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest("???", "Passw0rd!x"));
+        var first = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest("!!!", "Passw0rd!x", null, "Auth Test Club"));
+        var second = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest("???", "Passw0rd!x", null, "Auth Test Club"));
 
         Assert.Equal(
             ("user@trainer.mg.local", HttpStatusCode.Conflict),
@@ -124,14 +124,14 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     {
         var local = Unique();
 
-        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest($"{local}@Example.com", "Passw0rd!x"));
+        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest($"{local}@Example.com", "Passw0rd!x", null, "Auth Test Club"));
 
         var user = (await r.ReadAsync<AuthResponse>()).User;
         Assert.Equal(($"{local}@example.com", local), (user.Email, user.FullName));
     }
 
     [Theory]
-    [InlineData("Manager", new[] { Roles.Manager })]
+    [InlineData("Manager", new[] { Roles.Member, Roles.ManagerRequest })]
     [InlineData("member", new[] { Roles.Member })]
     [InlineData("Trainer", new[] { Roles.Member, Roles.TrainerRequest })]
     [InlineData(" trainer ", new[] { Roles.Member, Roles.TrainerRequest })]
@@ -140,7 +140,7 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     [InlineData("TrainerRequest", new[] { Roles.Member, Roles.TrainerRequest })]
     public async Task SignupTrainer_MapsRequestedRole_NeverGrantingAdmin(string requested, string[] expected)
     {
-        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(Unique(), "Passw0rd!x", requested));
+        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(Unique(), "Passw0rd!x", requested, "Auth Test Club"));
 
         Assert.Equal(expected, (await r.ReadAsync<AuthResponse>()).User.Roles.Order());
     }
@@ -158,12 +158,23 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task SignupTrainer_LeavesClubEmpty_WhenNameUnknown()
+    public async Task SignupTrainer_CreatesTheClub_WhenNameUnknown()
     {
+        var unknown = $"No Such Club {Guid.NewGuid():N}";
         var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer",
-            new SignupTrainerRequest(Unique(), "Passw0rd!x", null, "No Such Club"));
+            new SignupTrainerRequest(Unique(), "Passw0rd!x", null, unknown));
 
-        Assert.Null((await r.ReadAsync<AuthResponse>()).User.ClubId);
+        var user = (await r.ReadAsync<AuthResponse>()).User;
+        Assert.NotNull(user.ClubId);
+        Assert.Equal(unknown, user.ClubName);
+    }
+
+    [Fact]
+    public async Task SignupTrainer_Returns400_WhenNoClubGiven()
+    {
+        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(Unique(), "Passw0rd!x"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
     [Theory]
@@ -172,7 +183,7 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     [InlineData("someone", "")]
     public async Task SignupTrainer_Returns400_WhenUsernameOrPasswordMissing(string username, string password)
     {
-        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(username, password));
+        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(username, password, null, "Auth Test Club"));
 
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
@@ -181,9 +192,9 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     public async Task SignupTrainer_Returns409_WhenUsernameTaken()
     {
         var name = Unique();
-        await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(name, "Passw0rd!x"));
+        await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(name, "Passw0rd!x", null, "Auth Test Club"));
 
-        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(name, "Passw0rd!x"));
+        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(name, "Passw0rd!x", null, "Auth Test Club"));
 
         Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
     }
@@ -191,7 +202,7 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task SignupTrainer_Returns400_WithErrors_WhenPasswordTooWeak()
     {
-        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(Unique(), "weak"));
+        var r = await Anon.PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(Unique(), "weak", null, "Auth Test Club"));
 
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
         Assert.Contains("errors", await r.Content.ReadAsStringAsync());

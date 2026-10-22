@@ -58,13 +58,13 @@ public static class Mappings
         t.ClubId, t.Club?.Name ?? string.Empty,
         t.Suffix, t.DisplayName, t.BibColour,
         t.TrainerUserId, t.Trainer?.FullName,
-        t.IsHorsConcours);
+        t.IsHorsConcours, BibDescription: t.BibDescription);
 
     /// <summary>
     /// Same as ToDto but populates the viewer-specific Relationship and
     /// SupporterJoinKey fields used by the my-teams endpoint.
     /// </summary>
-    public static TeamDto ToDtoFor(this Team t, string? viewerUserId)
+    public static TeamDto ToDtoFor(this Team t, string? viewerUserId, bool viewerManagesClub = false)
     {
         var isTrainer = viewerUserId != null && t.TrainerUserId == viewerUserId;
         var isSupporter = viewerUserId != null
@@ -76,8 +76,9 @@ public static class Mappings
             t.Suffix, t.DisplayName, t.BibColour,
             t.TrainerUserId, t.Trainer?.FullName,
             t.IsHorsConcours,
-            Relationship: isTrainer ? "trainer" : isSupporter ? "supporter" : null,
-            SupporterJoinKey: isTrainer ? t.SupporterJoinKey : null);
+            Relationship: isTrainer ? "trainer" : viewerManagesClub ? "manager" : isSupporter ? "supporter" : null,
+            SupporterJoinKey: isTrainer || viewerManagesClub ? t.SupporterJoinKey : null,
+            BibDescription: t.BibDescription);
     }
 
     public static TeamSupporterDto ToDto(this TeamSupporter s) => new(
@@ -123,7 +124,7 @@ public static class Mappings
 
     public static RiderEntryDto ToDto(this RiderEntry r) => new(
         r.Id, r.SavedRiderId, r.FullName, r.DateOfBirth, r.HorseName, r.BibColour,
-        r.IsCaptain, r.IsReserve, r.OrderIndex, r.UseInitialOnly, r.NoFilming);
+        r.IsCaptain, r.IsReserve, r.OrderIndex, r.UseInitialOnly, r.NoFilming, r.IsGuestRider);
 
     /// <summary>
     /// The rider as a public viewer sees them: the surname shortened when the rider asked for that, and the
@@ -144,7 +145,8 @@ public static class Mappings
         includePrivate ? d.SubmittedByUserId : null, d.SubmittedBy?.FullName,
         includePrivate ? d.SubmittedBy?.PhoneNumber : null,
         d.SubmittedAt, includePrivate ? d.Notes : null, d.IsLocked,
-        d.Riders.OrderBy(r => r.OrderIndex).Select(r => includePrivate ? r.ToDto() : r.ToPublicDto()).ToList());
+        d.Riders.OrderBy(r => r.OrderIndex).Select(r => includePrivate ? r.ToDto() : r.ToPublicDto()).ToList(),
+        d.Team?.BibDescription);
 
     public static SavedRiderDto ToDto(this SavedRider r) =>
         new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes, r.UseInitialOnly, r.NoFilming);

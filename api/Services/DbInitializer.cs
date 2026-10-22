@@ -158,6 +158,8 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "ChatMessages", "IpAddress", "TEXT NULL");
         await EnsureColumnAsync(db, "ChatMessages", "AdminOnly", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "ChatMessages", "RecipientUserId", "TEXT NULL");
+        await EnsureColumnAsync(db, "Teams", "BibDescription", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "IsGuestRider", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SectionSignups", "TeamName", "TEXT NULL");
         await EnsureColumnAsync(db, "SectionSignups", "IsWholeTeam", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Competitions", "StreamUrl", "TEXT NULL");
@@ -650,7 +652,7 @@ public static class DbInitializer
                 SubmittedByUserId = trainer1!.Id,
                 Notes = "All set for Spring Open."
             };
-            var bibs = new[] { "Red", "Yellow", "Blue", "Green", "White" };
+            warwickshireA.BibDescription = "Red bibs, numbered 1 to 5";
             var idx = 0;
             foreach (var sr in savedW)
             {
@@ -659,7 +661,6 @@ public static class DbInitializer
                     SavedRiderId = sr.Id,
                     FullName = sr.FullName,
                     HorseName = sr.HorseName,
-                    BibColour = bibs[idx % bibs.Length],
                     OrderIndex = idx,
                     IsCaptain = idx == 0,
                     IsReserve = idx == 4

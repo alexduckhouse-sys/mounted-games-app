@@ -26,7 +26,7 @@ export function TrainerRequestsSection({ canReview }: { canReview: boolean }) {
   }, []);
 
   async function review(request: TrainerRequest, action: 'approve' | 'decline') {
-    if (action === 'decline' && !window.confirm(`Decline the trainer request from ${request.fullName}? Their account will stay a member.`)) return;
+    if (action === 'decline' && !window.confirm(`Decline the request from ${request.fullName}? Their account will stay a member.`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -66,7 +66,7 @@ export function TrainerRequestsSection({ canReview }: { canReview: boolean }) {
             {requests.map((request) => (
               <li key={request.userId} className="py-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0 break-words">
-                  <p className="font-medium">{request.fullName}</p>
+                  <p className="font-medium">{request.fullName}{request.requestedRole === 'Manager' && <span className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-violet-800">Team manager</span>}</p>
                   <p className="text-sm">{request.email}</p>
                   <p className="text-sm text-slate-500">{request.clubName ?? 'No club given'}</p>
                   <p className="text-xs text-slate-500">Requested <time dateTime={request.requestedAt}>{new Date(request.requestedAt).toLocaleString('en-GB')}</time></p>

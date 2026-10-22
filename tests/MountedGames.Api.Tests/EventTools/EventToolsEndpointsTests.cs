@@ -75,8 +75,16 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(4, preview.TotalRows);
         Assert.Contains("Duplicate team in this CSV.", preview.Rows[1].Errors);
         Assert.Contains("Spreadsheet formulas are not allowed.", preview.Rows[2].Errors);
-        Assert.Contains("Unknown club.", preview.Rows[3].Errors);
+        // A club that isn't listed is no error: it is created on import.
+        Assert.DoesNotContain("Unknown club.", preview.Rows[3].Errors);
+        Assert.Null(preview.Rows[3].ClubId);
         Assert.Contains("Unknown section.", preview.Rows[3].Errors);
+
+        // The suffix column is optional.
+        var noSuffix = await (await trainer.PostAsJsonAsync($"/api/event-tools/competitions/{competitionId}/team-import/preview",
+            new CsvTeamImportRequest($"club,section\n{club},U12"))).ReadAsync<CsvTeamImportPreviewDto>();
+        Assert.Empty(noSuffix.Rows[0].Errors);
+        Assert.Equal(club, noSuffix.Rows[0].TeamName);
 
         var malformed = await trainer.PostAsJsonAsync($"/api/event-tools/competitions/{competitionId}/team-import/preview",
             new CsvTeamImportRequest("club,suffix,section\n\"unfinished,A,U12"));
@@ -224,6 +232,54 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
         Assert.DoesNotContain("trainer", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("contact", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("declaration", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PrintedDrawAndScoreSheets_TimeEveryHeat_SkipNonRaceItems_AndCarryLanesAndBibs()
+    {
+        var ownerId = await _f.TrainerIdAsync();
+        var competitionId = await _f.SeedCompetitionAsync(ownerUserId: ownerId);
+        var sectionId = await _f.SeedSectionAsync(competitionId, "Print section");
+        var clubId = await _f.SeedClubAsync();
+        var teamId = await _f.SeedTeamAsync(competitionId, sectionId, clubId, "Print team");
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Teams.SingleAsync(t => t.Id == teamId)).BibDescription = "Green bibs";
+            var start = new DateTime(2037, 6, 6, 9, 0, 0, DateTimeKind.Utc);
+            // The auto-timetable sets only the session's start; heats have no time of their own.
+            var race = new Session { CompetitionId = competitionId, CompetitionSectionId = sectionId, Name = "Racing", OrderIndex = 1,
+                ScheduledStart = start, MinutesPerHeat = 10 };
+            var briefing = new Session { CompetitionId = competitionId, Name = "Riders briefing", OrderIndex = 2, Kind = SessionKind.Briefing };
+            db.AddRange(race, briefing);
+            await db.SaveChangesAsync();
+            for (var i = 1; i <= 2; i++)
+            {
+                var heat = new Heat { SessionId = race.Id, Label = $"Heat {i}", OrderIndex = i };
+                db.Add(heat);
+                await db.SaveChangesAsync();
+                db.Add(new HeatEntry { HeatId = heat.Id, TeamId = teamId, LaneIndex = 3 });
+                var r = new Race { HeatId = heat.Id, Name = "Bending", OrderIndex = 1, IsComplete = i == 1 };
+                var r2 = new Race { HeatId = heat.Id, Name = "Mug", OrderIndex = 2 };
+                db.AddRange(r, r2);
+                await db.SaveChangesAsync();
+                if (i == 1) db.Add(new Result { RaceId = r.Id, TeamId = teamId, Placing = 1, Points = 4 });
+            }
+            await db.SaveChangesAsync();
+        });
+        var anonymous = _f.CreateClient();
+
+        var draw = await (await anonymous.GetAsync($"/api/event-tools/competitions/{competitionId}/print/draw")).ReadAsync<PrintableDrawDto>();
+        var score = await (await anonymous.GetAsync($"/api/event-tools/competitions/{competitionId}/print/score-sheets")).ReadAsync<PrintableScoreSheetsDto>();
+
+        var session = Assert.Single(draw.Sessions);
+        Assert.Equal("Racing", session.SessionName);
+        var nine = new DateTime(2037, 6, 6, 9, 0, 0, DateTimeKind.Utc);
+        // Heats are timed from the session start: 10 minutes per race, two races each.
+        Assert.Equal(new DateTime?[] { nine, nine.AddMinutes(20) }, session.Heats.Select(h => h.ScheduledStart));
+        Assert.Equal(new DateTime?[] { nine, nine.AddMinutes(20) }, score.Heats.Select(h => h.ScheduledStart));
+        var firstCell = score.Heats[0].Races[0].Teams.Single();
+        Assert.Equal((3, "Green bibs", 4), (firstCell.Lane, firstCell.Bib, firstCell.Points));
+        Assert.Null(score.Heats[1].Races[0].Teams.Single().Points);
     }
 
     [Fact]

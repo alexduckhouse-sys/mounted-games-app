@@ -1,6 +1,6 @@
-export type Role = 'Admin' | 'Trainer' | 'TrainerRequest' | 'Manager' | 'Member' | 'Rider';
+export type Role = 'Admin' | 'Trainer' | 'TrainerRequest' | 'ManagerRequest' | 'Manager' | 'Member' | 'Rider';
 
-/** Self-service signup choices. Trainer accounts need admin approval. */
+/** Self-service signup choices. Trainer accounts need approval from an admin or their club's manager; team managers from an admin. */
 export const SIGNUP_ROLES: { value: 'Trainer' | 'Manager' | 'Member'; label: string; description: string }[] = [
   { value: 'Trainer', label: 'Trainer', description: 'Coach your pony club\'s teams; submit dec forms.' },
   { value: 'Manager', label: 'Team manager', description: 'Run the team\'s admin side: dec forms, contact, signups.' },
@@ -47,6 +47,8 @@ export interface TrainerRequest {
   email: string | null;
   clubName: string | null;
   requestedAt: string;
+  /** The role they asked for. */
+  requestedRole?: 'Trainer' | 'Manager';
 }
 
 export interface Club {
@@ -141,10 +143,12 @@ export interface Team {
   trainerUserId?: string | null;
   trainerName?: string | null;
   isHorsConcours: boolean;
-  /** "trainer", "supporter" or null — only set on /trainer/my-teams. */
-  relationship?: 'trainer' | 'supporter' | null;
-  /** Join key — set only when the viewer is the trainer of this team. */
+  /** "trainer", "manager" (of the team's club), "supporter" or null — only set on /trainer/my-teams. */
+  relationship?: 'trainer' | 'manager' | 'supporter' | null;
+  /** Join key — set only when the viewer is the trainer or the club's manager. */
   supporterJoinKey?: string | null;
+  /** What the team's bibs look like, in plain words. One description for the whole team. */
+  bibDescription?: string | null;
 }
 
 export type TeamSupporterStatus = 0 | 1; // Pending / Accepted
@@ -380,6 +384,8 @@ export interface RiderEntry {
   bibColour?: string | null;
   isCaptain: boolean;
   isReserve: boolean;
+  /** A guest rider borrowed from outside the team. */
+  isGuestRider?: boolean;
   orderIndex: number;
   /** Public pages get the name already shortened; staff and the owning trainer see the choice. */
   useInitialOnly?: boolean;
@@ -417,6 +423,8 @@ export interface DeclarationForm {
   notes?: string | null;
   isLocked: boolean;
   riders: RiderEntry[];
+  /** The team's bib description, shown with the declaration. */
+  bibDescription?: string | null;
 }
 
 export interface SavedRider {

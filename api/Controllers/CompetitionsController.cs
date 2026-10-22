@@ -492,9 +492,10 @@ public class CompetitionsController : ControllerBase
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]
     public async Task<ActionResult<object>> FinalsBoundary(int id,
-        [FromQuery] int topN, [FromQuery] int? sectionId = null)
+        [FromQuery] int topN, [FromQuery] int? sectionId = null, [FromQuery] int lanesPerHeat = 6)
     {
         if (topN < 1) return BadRequest(new { message = "topN must be >= 1." });
+        lanesPerHeat = Math.Clamp(lanesPerHeat, 1, 50);
         var teamsQ = _db.Teams
             .Include(t => t.Results)
             .Where(t => t.CompetitionId == id && !t.IsHorsConcours);
@@ -515,20 +516,29 @@ public class CompetitionsController : ControllerBase
         if (ordered.Count <= topN)
             return new { tied = false, message = "All teams qualify; no boundary tie." };
 
-        // Tie sits at the cutoff if the team just inside (position topN-1) shares total+wins
-        // with the team just outside (position topN).
-        var lastIn = ordered[topN - 1];
-        var firstOut = ordered[topN];
-        if (lastIn.Total == firstOut.Total && lastIn.Wins == firstOut.Wins)
+        // Every cut between finals (A/B, B/C, ... and the last place that goes through) can be tied.
+        // A tie is teams level on points: finishing more races first doesn't settle it, so it is
+        // flagged for the organiser to decide (a run-off, a countback on wins, or by hand).
+        var cutoffs = Enumerable.Range(1, topN / lanesPerHeat).Select(k => k * lanesPerHeat).Append(topN).Distinct().OrderBy(c => c).ToList();
+        var boundaries = new List<BoundaryTie>();
+        foreach (var cutoff in cutoffs)
         {
+            if (cutoff >= ordered.Count) continue;
+            var lastIn = ordered[cutoff - 1];
+            if (lastIn.Total != ordered[cutoff].Total) continue;
             var tied = ordered
-                .Where(o => o.Total == lastIn.Total && o.Wins == lastIn.Wins)
+                .Where(o => o.Total == lastIn.Total)
                 .Select(o => new { o.Id, o.Name, o.Total, o.Wins })
-                .ToList();
-            return new { tied = true, cutoff = topN, totalAtCutoff = lastIn.Total, winsAtCutoff = lastIn.Wins, teams = tied };
+                .ToList<object>();
+            boundaries.Add(new BoundaryTie(cutoff, lastIn.Total, lastIn.Wins, tied));
         }
-        return new { tied = false };
+        if (boundaries.Count == 0) return new { tied = false };
+        // The first tied cut is reported at the top level, as before; every tied cut is in `boundaries`.
+        var first = boundaries[0];
+        return new { tied = true, cutoff = first.Cutoff, totalAtCutoff = first.TotalAtCutoff, winsAtCutoff = first.WinsAtCutoff, teams = first.Teams, boundaries };
     }
+
+    private sealed record BoundaryTie(int Cutoff, int TotalAtCutoff, int WinsAtCutoff, IReadOnlyList<object> Teams);
 
     [HttpPost("{id:int}/finals")]
     [Authorize(Policy = CompetitionStaff.Policy)]
