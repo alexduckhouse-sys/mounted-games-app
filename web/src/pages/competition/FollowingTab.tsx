@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import { useFavourites } from '../../hooks/useFavourites';
-import { followedHeats } from '../../lib/following';
+import { arenaNames, arenaToShow, followedHeats } from '../../lib/following';
 import { displaySectionName } from '../../lib/section';
 import { formatTime } from '../../lib/time';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
@@ -18,6 +18,7 @@ export function FollowingTab() {
   const teams = competition.teams.filter((team) => ids.has(team.id));
   const missing = [...ids].filter((id) => !competition.teams.some((team) => team.id === id));
   const rows = useMemo(() => followedHeats(competition, ids), [competition, ids]);
+  const arenas = useMemo(() => arenaNames(competition.sessions), [competition.sessions]);
   const days = [...new Set(rows.flatMap((row) => row.effective ? [dayKey(row.effective)] : []))].sort();
   const day = days.includes(selectedDay) ? selectedDay : defaultTimetableDay(days, dayKey(new Date()));
   const today = rows.filter((row) => !row.effective || dayKey(row.effective) === day);
@@ -70,8 +71,8 @@ export function FollowingTab() {
             <div className="flex flex-wrap items-center gap-2"><h3 className="font-bold">{displaySectionName(row.session.sectionName || row.session.name)} · {row.heat!.label || `Heat ${row.heatIndex + 1}`}</h3>
               {row.status === 'live' && <span className={`mg-badge ${isStale ? '' : 'mg-badge-live'}`}>{isStale ? 'Was in arena' : 'On now'}</span>}
             </div>
-            <p className="mg-meta mt-1">{row.session.name}{row.session.arenaName && ` · ${row.session.arenaName}`}</p>
-            {row.scores.map((score) => <p key={score.team.id} className="mt-1 text-sm font-medium">{score.team.displayName} · starting lane {score.lane}</p>)}
+            <p className="mg-meta mt-1">{row.session.name}{arenaToShow(row.session, arenas) && ` · ${arenaToShow(row.session, arenas)}`}</p>
+            {row.scores.map((score) => <p key={score.team.id} className="mt-1 text-sm font-medium">{score.team.displayName} · Lane {score.lane}</p>)}
           </Link>
         </li>)}</ol>
         {upcoming.length > 0 && <p className="mg-meta">Heat times are estimates. Check the timetable and listen for the collecting ring call.</p>}

@@ -12,8 +12,8 @@ const data = competition({ teams: [team(1, { displayName: 'Example Blue' }), tea
     race(1, { isComplete: true, results: [result(1, 1, { points: 4 })] }), race(2),
   ] })] }),
 ] });
-function mount(extra: Partial<CompetitionCtx> = {}) {
-  return render(<MemoryRouter initialEntries={['/competitions/1/following']}><CompetitionContext.Provider value={{ competition: data, reload: vi.fn(), updatedAt: new Date('2026-07-01T10:00:00Z'), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [], ...extra }}><Routes><Route path="/competitions/:id"><Route path="following" element={<FollowingTab />} /></Route></Routes></CompetitionContext.Provider></MemoryRouter>);
+function mount(extra: Partial<CompetitionCtx> = {}, comp = data) {
+  return render(<MemoryRouter initialEntries={['/competitions/1/following']}><CompetitionContext.Provider value={{ competition: comp, reload: vi.fn(), updatedAt: new Date('2026-07-01T10:00:00Z'), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [], ...extra }}><Routes><Route path="/competitions/:id"><Route path="following" element={<FollowingTab />} /></Route></Routes></CompetitionContext.Provider></MemoryRouter>);
 }
 describe('FollowingTab', () => {
   it('lets a signed-out visitor search, star and unstar a team', async () => {
@@ -25,7 +25,7 @@ describe('FollowingTab', () => {
     expect(screen.getByRole('heading', { name: 'Next heats' })).toBeInTheDocument();
     expect(screen.getByText('On now')).toBeInTheDocument();
     expect(screen.getByText('4 pts · 1 race')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /starting lane 2/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=1');
+    expect(screen.getByRole('link', { name: /Lane 2/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=1');
     await userEvent.click(screen.getByRole('button', { name: 'Unfollow Example Blue' }));
     expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();
   });
@@ -51,5 +51,16 @@ describe('FollowingTab', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Follow Example Blue' }));
     expect(screen.getByRole('alert')).toHaveTextContent('couldn’t be saved');
     expect(screen.getByRole('button', { name: 'Follow Example Blue' })).toHaveAttribute('aria-pressed', 'false');
+  });
+  it('names the arena on each heat only when the event has more than one', () => {
+    localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1}]');
+    const entries = [{ id: 1, teamId: 1, teamName: 'Example Blue', laneIndex: 3 }];
+    const single = competition({ teams: data.teams, sessions: [session(1, { arenaName: 'Main Arena', heats: [heat(1, { entries })] })] });
+    const first = mount({}, single);
+    expect(screen.getByRole('link', { name: /Lane 3/ })).not.toHaveTextContent('Main Arena');
+    first.unmount();
+    const multi = competition({ teams: data.teams, sessions: [session(1, { arenaName: 'Main Arena', heats: [heat(1, { entries })] }), session(2, { arenaName: 'Ring 2' })] });
+    mount({}, multi);
+    expect(screen.getByRole('link', { name: /Lane 3/ })).toHaveTextContent('Main Arena');
   });
 });
