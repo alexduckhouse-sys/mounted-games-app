@@ -7,6 +7,7 @@ import { bibAccent, bibLabel } from '../lib/bib';
 import { displaySectionName } from '../lib/section';
 import { computeTimings, formatTime, roundTo5Min } from '../lib/time';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
+import { arenaNames, arenaToShow } from '../lib/following';
 
 interface TeamHeatRow {
   competitionId: number;
@@ -14,6 +15,9 @@ interface TeamHeatRow {
   heatId: number;
   label: string;
   sessionName: string;
+  /** Only set when the competition runs more than one arena. */
+  arenaName: string | null;
+  lane: number | null;
   scheduled: Date | null;
   effective: Date | null;
   shifted: boolean;
@@ -48,12 +52,14 @@ export function MyTeamsPage() {
       if (!comp) { out.set(team.id, []); continue; }
       const sessions: Session[] = comp.sessions.filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0);
       const timings = computeTimings(sessions);
+      const arenas = arenaNames(sessions);
       const rows: TeamHeatRow[] = [];
       for (const sess of sessions) {
         const heatsInOrder: Heat[] = sess.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
         const sessTiming = timings.get(sess.id);
         heatsInOrder.forEach((h, idx) => {
-          if (!h.entries.some((e) => e.teamId === team.id)) return;
+          const entry = h.entries.find((e) => e.teamId === team.id);
+          if (!entry) return;
           const t = sessTiming?.heats[idx];
           const allDone = h.races.length > 0 && h.races.every((r) => r.isComplete);
           const live = sess.status === 1 && !allDone
@@ -64,6 +70,8 @@ export function MyTeamsPage() {
             heatId: h.id,
             label: h.label ?? `Heat ${idx + 1}`,
             sessionName: sess.name,
+            arenaName: arenaToShow(sess, arenas),
+            lane: entry.laneIndex,
             scheduled: t?.scheduled ?? null,
             effective: t?.effective ?? null,
             shifted: t?.shifted ?? false,
@@ -164,7 +172,11 @@ export function MyTeamsPage() {
                         </span>
                         <span className="flex-1 min-w-0 truncate">
                           {displaySectionName(r.sessionName)} · {r.label}
+                          {r.arenaName && ` · ${r.arenaName}`}
                         </span>
+                        {r.lane != null && (
+                          <span className="shrink-0 text-[11px] text-slate-500 dark:text-slate-300">Lane {r.lane}</span>
+                        )}
                         {r.status === 'live' && (
                           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-arena-live text-yellow-900 text-[9px] font-bold uppercase tracking-wide">
                             <Activity className="w-2.5 h-2.5" /> In arena
