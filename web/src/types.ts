@@ -300,6 +300,8 @@ export interface SectionSignup {
   paidAt?: string | null;
   teamId?: number | null;
   createdAt: string;
+  useInitialOnly?: boolean;
+  noFilming?: boolean;
 }
 
 export interface ShopPost {
@@ -369,6 +371,27 @@ export interface RiderEntry {
   isCaptain: boolean;
   isReserve: boolean;
   orderIndex: number;
+  /** Public pages get the name already shortened; staff and the owning trainer see the choice. */
+  useInitialOnly?: boolean;
+  /** Only sent to the owning trainer and staff. */
+  noFilming?: boolean;
+}
+
+/** A heat holding a rider who opted out of close-up filming. Staff only. */
+export interface FilmingOptOut {
+  heatId: number;
+  sessionId: number;
+  sessionName: string;
+  arenaName?: string | null;
+  heatLabel: string;
+  teamId: number;
+  teamName: string;
+  lane: number;
+  riderName: string;
+  isReserve: boolean;
+  heatFinished: boolean;
+  sessionOrder: number;
+  heatOrder: number;
 }
 
 export interface DeclarationForm {
@@ -393,6 +416,8 @@ export interface SavedRider {
   dateOfBirth?: string | null;
   horseName?: string | null;
   notes?: string | null;
+  useInitialOnly?: boolean;
+  noFilming?: boolean;
 }
 
 export interface TrainerNote {

@@ -82,6 +82,8 @@ public class SignupController : ControllerBase
             FullName = name.Length > 200 ? name[..200] : name,
             PonyClubName = req.PonyClubName?.Trim(),
             ContactInfo = req.ContactInfo?.Trim(),
+            UseInitialOnly = req.UseInitialOnly,
+            NoFilming = req.NoFilming,
             AmountMinor = section.PriceMinor,
             TeamId = teamId,
             Status = isFree ? SignupPaymentStatus.Paid : SignupPaymentStatus.Pending,

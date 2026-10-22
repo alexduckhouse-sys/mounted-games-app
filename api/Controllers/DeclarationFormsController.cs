@@ -125,7 +125,9 @@ public class DeclarationFormsController : ControllerBase
                 BibColour = string.IsNullOrWhiteSpace(r.BibColour) ? null : r.BibColour.Trim(),
                 IsCaptain = r.IsCaptain,
                 IsReserve = r.IsReserve,
-                OrderIndex = r.OrderIndex == 0 ? order : r.OrderIndex
+                OrderIndex = r.OrderIndex == 0 ? order : r.OrderIndex,
+                UseInitialOnly = r.UseInitialOnly,
+                NoFilming = r.NoFilming
             });
             order++;
         }
@@ -145,13 +147,17 @@ public class DeclarationFormsController : ControllerBase
                         CreatedByUserId = userId,
                         FullName = r.FullName,
                         DateOfBirth = r.DateOfBirth,
-                        HorseName = r.HorseName
+                        HorseName = r.HorseName,
+                        UseInitialOnly = r.UseInitialOnly,
+                        NoFilming = r.NoFilming
                     });
                 }
                 else
                 {
                     existing.DateOfBirth ??= r.DateOfBirth;
                     existing.HorseName ??= r.HorseName;
+                    existing.UseInitialOnly = r.UseInitialOnly;
+                    existing.NoFilming = r.NoFilming;
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
             }

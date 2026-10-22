@@ -198,6 +198,11 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Competitions", "SignupsLocked", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "PriceMinor", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "MaxParticipants", "INTEGER NULL");
+        foreach (var table in new[] { "SavedRiders", "RiderEntries" })
+        {
+            await EnsureColumnAsync(db, table, "UseInitialOnly", "INTEGER NOT NULL DEFAULT 0");
+            await EnsureColumnAsync(db, table, "NoFilming", "INTEGER NOT NULL DEFAULT 0");
+        }
         await db.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS ""SectionSignups"" (
                 ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_SectionSignups"" PRIMARY KEY AUTOINCREMENT,
@@ -268,6 +273,8 @@ public static class DbInitializer
                     FOREIGN KEY (""ReporterUserId"") REFERENCES ""AspNetUsers"" (""Id"") ON DELETE SET NULL
             );
         ");
+        await EnsureColumnAsync(db, "SectionSignups", "UseInitialOnly", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "SectionSignups", "NoFilming", "INTEGER NOT NULL DEFAULT 0");
 
         await Operations.OperationsSqliteSchema.EnsureAsync(db);
 
