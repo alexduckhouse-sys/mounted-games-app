@@ -21,7 +21,7 @@ import type {
 export function FormatPage() {
   const { id } = useParams<{ id: string }>();
   const editingId = id ? parseInt(id, 10) : null;
-  const { canManageEntries } = useAuth();
+  const { canOrganise } = useAuth();
   const navigate = useNavigate();
 
   const [comp, setComp] = useState<CompetitionDetail | null>(null);
@@ -34,12 +34,12 @@ export function FormatPage() {
     try {
       const { data: c } = await api.get<CompetitionDetail>(`/competitions/${editingId}`);
       setComp(c);
-      if (canManageEntries(c)) {
+      if (canOrganise(c)) {
         const { data } = await api.get<SectionSignup[]>(`/competitions/${editingId}/signups`);
         setSignups(data);
       } else setSignups([]);
     } catch { setError('Could not load organiser details. Please try again.'); }
-  }, [editingId, canManageEntries]);
+  }, [editingId, canOrganise]);
 
   // Initial load. The same steps as reload(), kept inline so state is only set once a response
   // has arrived, and so a response for a competition we have since left is ignored.
@@ -51,14 +51,14 @@ export function FormatPage() {
         const { data: c } = await api.get<CompetitionDetail>(`/competitions/${editingId}`);
         if (cancelled) return;
         setComp(c);
-        if (canManageEntries(c)) {
+        if (canOrganise(c)) {
           const { data } = await api.get<SectionSignup[]>(`/competitions/${editingId}/signups`);
           if (!cancelled) setSignups(data);
         } else setSignups([]);
       } catch { if (!cancelled) setError('Could not load organiser details. Please try again.'); }
     })();
     return () => { cancelled = true; };
-  }, [editingId, canManageEntries]);
+  }, [editingId, canOrganise]);
 
   async function toggleLock() {
     if (!comp || busy) return;
@@ -73,7 +73,7 @@ export function FormatPage() {
 
   if (!comp) return <div className="card p-4 text-sm text-slate-500">{error ?? 'Loading…'}</div>;
 
-  if (!canManageEntries(comp)) {
+  if (!canOrganise(comp)) {
     return (
       <div className="card p-4 text-sm">
         Only admins, the person who runs this competition and its co-organisers can use these tools.
