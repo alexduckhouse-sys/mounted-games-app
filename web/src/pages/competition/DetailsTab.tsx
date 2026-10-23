@@ -11,6 +11,7 @@ import { competitionCalendarUrl } from '../../lib/sharing';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
+import { EmbedCard } from './EmbedCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { SponsorsCard } from './SponsorsCard';
 import { SponsorStrip } from '../../components/SponsorStrip';
@@ -212,6 +213,8 @@ export function DetailsTab() {
       )}
 
       {mayOrganise && <SponsorsCard competitionId={competition.id} />}
+      {/* Owner, competition admins and site admins can put live results on their own website. */}
+      {mayOrganise && <EmbedCard kind="competition" competitionId={competition.id} name={competition.name} sections={competition.sections} />}
 
       <SponsorStrip placement="Details" />
 

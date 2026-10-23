@@ -237,15 +237,85 @@ public class SecurityTests
         Assert.DoesNotContain("Fake internal detail", await failure.Content.ReadAsStringAsync());
     }
 
+    private static Dictionary<string, string> VercelHeaders(JsonDocument document, string source) =>
+        document.RootElement.GetProperty("headers").EnumerateArray()
+            .Single(h => h.GetProperty("source").GetString() == source).GetProperty("headers")
+            .EnumerateArray().ToDictionary(h => h.GetProperty("key").GetString()!, h => h.GetProperty("value").GetString()!);
+
+    private const string VercelStrictSource = "/((?!embed/).*)";
+    private const string VercelEmbedSource = "/embed/(.*)";
+
     [Fact]
     public async Task HeadersMatchVercel()
     {
         var repo = FindRepo();
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(repo, "web/vercel.json")));
-        var headers = document.RootElement.GetProperty("headers").EnumerateArray()
-            .Single(h => h.GetProperty("source").GetString() == "/(.*)").GetProperty("headers")
-            .EnumerateArray().ToDictionary(h => h.GetProperty("key").GetString()!, h => h.GetProperty("value").GetString());
-        foreach (var (key, value) in SecurityHeadersMiddleware.Headers) Assert.Equal(value, headers[key]);
+        var strict = VercelHeaders(document, VercelStrictSource);
+        Assert.Equal(SecurityHeadersMiddleware.Headers.OrderBy(h => h.Key), strict.OrderBy(h => h.Key));
+        var embed = VercelHeaders(document, VercelEmbedSource);
+        Assert.Equal(SecurityHeadersMiddleware.EmbedHeaders.OrderBy(h => h.Key), embed.OrderBy(h => h.Key));
+    }
+
+    [Theory]
+    [InlineData("/embed/competitions/1/standings", true)]
+    [InlineData("/embed/seasons/abc/standings", true)]
+    [InlineData("/embed/", true)]
+    [InlineData("/embed", false)]
+    [InlineData("/embedded/x", false)]
+    [InlineData("/Embed/competitions/1/standings", false)]
+    [InlineData("/competitions/embed/x", false)]
+    [InlineData("/", false)]
+    [InlineData("/api/embed/x", false)]
+    public void VercelHeaderRulesSplitEmbedPathsFromEverythingElse(string path, bool embed)
+    {
+        // Vercel matches with path-to-regexp; both sources here are plain regular expressions, so the
+        // same match tells us which of the two rules a path would receive. Exactly one rule may apply.
+        var strictRule = new System.Text.RegularExpressions.Regex("^" + VercelStrictSource + "$");
+        var embedRule = new System.Text.RegularExpressions.Regex("^" + VercelEmbedSource + "$");
+        Assert.Equal(embed, embedRule.IsMatch(path));
+        Assert.Equal(!embed, strictRule.IsMatch(path));
+        Assert.Equal(embed, SecurityHeadersMiddleware.IsEmbedPath(path));
+    }
+
+    [Fact]
+    public void EmbedPoliciesDifferFromTheStrictOnesOnlyWhereTheyShould()
+    {
+        var strict = SecurityHeadersMiddleware.Headers;
+        var embed = SecurityHeadersMiddleware.EmbedHeaders;
+        Assert.DoesNotContain("X-Frame-Options", embed.Keys);
+        Assert.Equal(strict.Keys.Where(k => k != "X-Frame-Options").OrderBy(k => k), embed.Keys.OrderBy(k => k));
+        foreach (var key in embed.Keys.Where(k => k is not ("Content-Security-Policy" or "Cross-Origin-Resource-Policy" or "Permissions-Policy")))
+            Assert.Equal(strict[key], embed[key]);
+        // Only frame-ancestors changes in the policy, and it names https pages, never a wildcard.
+        Assert.Equal(
+            SecurityHeadersMiddleware.EmbedContentSecurityPolicy,
+            SecurityHeadersMiddleware.ContentSecurityPolicy.Replace("frame-ancestors 'none'", "frame-ancestors https:"));
+        Assert.DoesNotContain("unsafe-eval", SecurityHeadersMiddleware.EmbedContentSecurityPolicy);
+        Assert.DoesNotContain("*", SecurityHeadersMiddleware.EmbedContentSecurityPolicy);
+        Assert.Equal("camera=(), microphone=(), geolocation=(), payment=(), browsing-topics=()", embed["Permissions-Policy"]);
+    }
+
+    [Fact]
+    public async Task OnlyEmbedPathsMayBeFramed()
+    {
+        await using var server = await SecurityServer.Start();
+        foreach (var path in new[] { "/embed/competitions/1/standings", "/embed/seasons/abc/standings", "/embed/anything-else" })
+        {
+            using var response = await server.Client.GetAsync(path);
+            Assert.False(response.Headers.Contains("X-Frame-Options"), path);
+            foreach (var (key, value) in SecurityHeadersMiddleware.EmbedHeaders)
+                Assert.Equal(value, response.Headers.GetValues(key).Single());
+            Assert.Contains("frame-ancestors https:;", response.Headers.GetValues("Content-Security-Policy").Single());
+        }
+        // The sign-in, admin and ordinary pages, near-misses of the prefix and the API all stay unframeable.
+        foreach (var path in new[] { "/", "/login", "/admin", "/competitions/1", "/embed", "/embedded/x", "/Embed/competitions/1/standings", "/competitions/1/embed/x", "/api/competitions/1", "/api/missing", "/fail" })
+        {
+            using var response = await server.Client.GetAsync(path);
+            Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
+            Assert.Contains("frame-ancestors 'none';", response.Headers.GetValues("Content-Security-Policy").Single());
+            foreach (var (key, value) in SecurityHeadersMiddleware.Headers)
+                Assert.Equal(value, response.Headers.GetValues(key).Single());
+        }
     }
 
     [Theory]
@@ -274,7 +344,8 @@ public class SecurityTests
         Assert.Equal("frame-ancestors 'none'", directives["frame-ancestors"]);
         Assert.Equal("object-src 'none'", directives["object-src"]);
         Assert.Equal("base-uri 'none'", directives["base-uri"]);
-        Assert.Equal("frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv", directives["frame-src"]);
+        // 'self' lets the organiser's embed preview load; every other page refuses framing, so only /embed/ pages can be shown.
+        Assert.Equal("frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv", directives["frame-src"]);
         Assert.Equal("camera=(self), microphone=(self), geolocation=(), payment=(), browsing-topics=()",
             SecurityHeadersMiddleware.Headers["Permissions-Policy"]);
         Assert.DoesNotContain("unsafe-eval", SecurityHeadersMiddleware.ContentSecurityPolicy);
