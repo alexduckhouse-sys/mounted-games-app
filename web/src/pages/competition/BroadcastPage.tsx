@@ -117,7 +117,7 @@ function BroadcastStudio() {
       {confirmEnd && <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-[rgb(var(--mg-header-deep)/0.8)]"><div role="alertdialog" aria-modal="true" aria-labelledby="end-stream-title" className="mg-stream-glass mx-4 max-w-sm space-y-3 border border-[rgb(var(--mg-header-line))] p-5"><h2 id="end-stream-title" className="text-2xl font-bold">End the stream?</h2><p>Viewers will see that it has finished.</p><div className="flex gap-3"><button autoFocus className="mg-stream-control !rounded-xl px-3" onClick={() => setConfirmEnd(false)}>Keep going</button><button disabled={ending} className="mg-stream-control !rounded-xl !bg-[rgb(var(--mg-red))] px-3" onClick={end}>End stream</button></div></div></div>}
     </OverlayLayer>
   </div>, document.body);
-  return <div className="mx-auto flex max-w-xl flex-col gap-4 pb-6">
+  return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-6">
     <Link className="mg-text-link" to={`/competitions/${competition.id}/chat`}>‹ Live &amp; stream</Link><h1 className="mg-h1">Go live</h1>
     {error || snapshot.error ? <p role="alert" className="mg-notice">{error || snapshot.error}</p> : null}
     <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
