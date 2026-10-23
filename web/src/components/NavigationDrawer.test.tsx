@@ -125,6 +125,13 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/past');
   });
 
+  it('links to rider and team stats', async () => {
+    mount();
+    await userEvent.click(screen.getByRole('link', { name: 'Rider and team stats' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('probe')).toHaveTextContent('/stats');
+  });
+
   it('closes from its close button, Escape and a tap on the backdrop, but not from a tap inside', async () => {
     mount();
     await userEvent.click(screen.getByRole('button', { name: 'Close menu' }));

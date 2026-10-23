@@ -1,0 +1,148 @@
+import { useState } from 'react';
+import { Search } from 'lucide-react';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../auth/AuthContext';
+import { StatsGamesView } from '../../components/stats/StatsGamesView';
+import { StatsSummaryView } from '../../components/stats/StatsSummaryView';
+import { useStatsProfile, useStatsSearch } from '../../hooks/useStats';
+import {
+  STATS_KIND_LABELS, STATS_MAX_QUERY, STATS_PATHS, finalLabel, formatPercent, isSearchableQuery, ordinalPlace, plural,
+  pointsOf, statsKindFromPath, statsProfileHref,
+} from '../../lib/stats';
+import { SectionFormatLabel, StatsSubjectKind, type StatsEntry, type StatsHit, type StatsProfile, type StatsSearch } from '../../types';
+import { Chevron, RefineDisclosure, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
+
+/** `/stats` searches; `/stats/:kind?name=` shows one rider, pony, team or club. */
+export function StatsPage() {
+  const { kind: segment } = useParams();
+  if (segment === undefined) return <StatsSearchView />;
+  return <StatsProfileRoute segment={segment} />;
+}
+
+const GROUPS: { title: string; list: keyof Pick<StatsSearch, 'riders' | 'ponies' | 'teams' | 'clubs'> }[] = [
+  { title: 'Riders', list: 'riders' },
+  { title: 'Ponies', list: 'ponies' },
+  { title: 'Teams', list: 'teams' },
+  { title: 'Clubs', list: 'clubs' },
+];
+
+function StatsSearchView() {
+  const [params, setParams] = useSearchParams();
+  const [text, setText] = useState(() => params.get('q') ?? '');
+  const search = useStatsSearch(text);
+
+  function change(value: string) {
+    setText(value);
+    // Keep the words in the address, so going back from a profile returns to the same results.
+    setParams(value.trim() ? { q: value } : {}, { replace: true });
+  }
+
+  return <RefinePage>
+    <RefineHeader context="Across every competition" title="Rider and team stats" subtitle="Search for a rider, pony, team or club." />
+    <form role="search" className="pt-3" onSubmit={(event) => event.preventDefault()}>
+      <label className="rf-fld">
+        <span>Name</span>
+        <span className="relative flex items-center">
+          <Search aria-hidden="true" className="pointer-events-none absolute left-3 h-4 w-4 text-[rgb(var(--mg-muted))]" />
+          <input type="search" value={text} onChange={(event) => change(event.target.value)} maxLength={STATS_MAX_QUERY}
+            placeholder="Rider, pony, team or club" autoComplete="off" enterKeyHint="search" className="!pl-9" />
+        </span>
+      </label>
+    </form>
+    {search.status === 'idle' && <RefineNote>{text.trim() ? 'Type at least two letters.' : 'Only finished competitions count. Riders who asked to be shown by their surname initial appear that way here too.'}</RefineNote>}
+    {search.status === 'loading' && <p role="status" className="rf-note">Searching…</p>}
+    {search.status === 'error' && <div role="alert" className="mg-notice mt-3">{search.message}</div>}
+    {search.status === 'ready' && <SearchResults search={search.data} />}
+  </RefinePage>;
+}
+
+function SearchResults({ search }: { search: StatsSearch }) {
+  const groups = GROUPS.filter((group) => search[group.list].length > 0);
+  if (groups.length === 0) return <div className="py-6 text-[rgb(var(--mg-muted))]" role="status">
+    <h2 className="m-0 mb-1 font-['Barlow_Condensed',sans-serif] text-xl font-bold text-[rgb(var(--mg-heading))]">No matches</h2>
+    <p className="m-0">Nothing in a finished competition matches “{search.query}”. Check the spelling or try part of the name.</p>
+  </div>;
+  return <>{groups.map((group) => <section key={group.list} aria-label={group.title}>
+    <RefineSection title={group.title} meta={search[group.list].length} />
+    <RefineList label={group.title}>{search[group.list].map((hit) => <HitRow key={hit.key} hit={hit} />)}</RefineList>
+  </section>)}</>;
+}
+
+function HitRow({ hit }: { hit: StatsHit }) {
+  return <li><Link to={statsProfileHref(hit.kind, hit.key)} className="rf-row">
+    <span className="rf-grow"><span className="rf-t1">{hit.name}</span><span className="rf-t2">{STATS_KIND_LABELS[hit.kind]} · {plural(hit.competitions, 'competition')}</span></span>
+    <Chevron />
+  </Link></li>;
+}
+
+function StatsProfileRoute({ segment }: { segment: string }) {
+  const kind = statsKindFromPath(segment);
+  const [params] = useSearchParams();
+  const name = params.get('name') ?? '';
+  const { user } = useAuth();
+  const valid = kind !== null && isSearchableQuery(name);
+  const load = useStatsProfile(valid ? `/stats/${STATS_PATHS[kind]}?name=${encodeURIComponent(name)}` : null, user?.id ?? 'public');
+  const label = kind === null ? 'Stats' : `${STATS_KIND_LABELS[kind]} stats`;
+  const back = <RefineHeader back="/stats" backLabel="Back to search" context={label} title={load.status === 'ready' ? load.data.name : name || 'Not found'} />;
+
+  if (!valid || load.status === 'missing') return <RefinePage>{back}
+    <div className="py-6 text-[rgb(var(--mg-muted))]"><h2 className="m-0 mb-1 font-['Barlow_Condensed',sans-serif] text-xl font-bold text-[rgb(var(--mg-heading))]">No statistics found</h2>
+      <p className="m-0">There are no finished competitions under this name. <Link to="/stats" className="font-semibold text-[rgb(var(--mg-heading))]">Search again</Link></p></div>
+  </RefinePage>;
+  if (load.status === 'error') return <RefinePage>{back}<div role="alert" className="mg-notice mt-3">{load.message}</div></RefinePage>;
+  if (load.status !== 'ready') return <RefinePage>{back}<p role="status" className="rf-note">Loading statistics…</p></RefinePage>;
+  return <RefinePage>{back}<ProfileBody profile={load.data} /></RefinePage>;
+}
+
+const PARTNER_TITLES: Record<StatsSubjectKind, string> = { 0: 'Ponies ridden', 1: 'Riders', 2: 'Riders and ponies', 3: 'Riders and ponies' };
+
+/** The profile itself, shared with nothing else: summary for everyone, then the detail a signed-in viewer gets. */
+function ProfileBody({ profile }: { profile: StatsProfile }) {
+  const location = useLocation();
+  const { summary } = profile;
+  return <>
+    <StatsSummaryView summary={summary} raceFiguresAllFormats={profile.raceFiguresAllFormats} />
+    {!profile.detailed ? <div className="mt-3 rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3">
+      <p className="m-0 text-sm">Sign in to see each game, every competition and the rider and pony partnerships.</p>
+      <Link to="/login" state={{ from: location.pathname + location.search }} className="rf-btn rf-btn-primary mt-2">Sign in</Link>
+    </div> : <>
+      <RefineSection title={profile.raceFiguresAllFormats ? 'Games' : 'Games in individual and pairs'} meta={profile.games?.length ?? 0} />
+      <StatsGamesView games={profile.games ?? []} best={profile.bestGames ?? []} worst={profile.worstGames ?? []}
+        emptyText={profile.raceFiguresAllFormats ? 'No races to show yet.' : 'No individual or pairs races yet. Team competitions are listed below.'} />
+      <RefineSection title="Competitions" meta={profile.entries?.length ?? 0} />
+      {profile.entries?.length ? <RefineList as="div" label="Competitions">{profile.entries.map((entry) => <EntryRow key={`${entry.teamId}`} entry={entry} />)}</RefineList>
+        : <RefineNote>No finished competitions yet.</RefineNote>}
+      <RefineSection title={PARTNER_TITLES[profile.kind]} meta={profile.partnerships?.length ?? 0} />
+      {profile.partnerships?.length ? <RefineList label={PARTNER_TITLES[profile.kind]}>{profile.partnerships.map((pair) => <li key={`${pair.riderName}|${pair.ponyName}`} className="rf-row">
+        <span className="rf-grow"><span className="rf-t1">{profile.kind === StatsSubjectKind.Rider ? pair.ponyName : profile.kind === StatsSubjectKind.Pony ? pair.riderName : `${pair.riderName} on ${pair.ponyName}`}</span>
+          <span className="rf-t2">{plural(pair.entries, 'entry', 'entries')} · {plural(pair.competitions, 'competition')}</span></span>
+      </li>)}</RefineList> : <RefineNote>No ponies were named on the declaration forms.</RefineNote>}
+      <RefineNote>Places come from each age group’s final standings. Hors concours teams have no place.</RefineNote>
+    </>}
+  </>;
+}
+
+function EntryRow({ entry }: { entry: StatsEntry }) {
+  const final = finalLabel(entry.finalTier);
+  const place = entry.isHorsConcours ? 'HC' : entry.place == null ? '—' : ordinalPlace(entry.place);
+  const who = [entry.riderName && `with ${entry.riderName}`, entry.ponyName && `on ${entry.ponyName}`].filter(Boolean).join(' ');
+  const date = new Date(entry.startDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return <RefineDisclosure
+    title={entry.competitionName}
+    sub={`${date} · ${entry.sectionName} (${SectionFormatLabel[entry.format]}) · ${entry.teamName}${who ? ` ${who}` : ''}`}
+    trailing={<span className="text-right"><span className="rf-num block">{place}</span>{!entry.isHorsConcours && entry.teamsPlaced > 0 && <span className="rf-t2">of {entry.teamsPlaced}</span>}</span>}
+  >
+    <div className="flex flex-col gap-1 px-4 pb-3 text-sm">
+      <p className="m-0">{final ? `${final}. ` : ''}Point quota {formatPercent(entry.pointQuotaPercent)} ({pointsOf(entry.points, entry.maxPoints)} over {plural(entry.races, 'race')}).</p>
+      {entry.sessions.length > 0 && <table className="w-full text-left text-sm">
+        <caption className="sr-only">Sessions at {entry.competitionName}</caption>
+        <thead><tr className="text-xs uppercase text-[rgb(var(--mg-muted))]"><th scope="col" className="py-1 font-bold">Session</th><th scope="col" className="py-1 font-bold">Points</th><th scope="col" className="py-1 text-right font-bold">Place</th></tr></thead>
+        <tbody>{entry.sessions.map((session) => <tr key={session.sessionId} className="border-t border-[rgb(var(--mg-rule-soft))]">
+          <td className="py-1.5">{session.name}</td>
+          <td className="py-1.5 tabular-nums">{session.points} of {session.maxPoints}</td>
+          <td className="py-1.5 text-right tabular-nums">{session.rank == null ? 'HC' : `${ordinalPlace(session.rank)} of ${session.teams}`}</td>
+        </tr>)}</tbody>
+      </table>}
+    </div>
+  </RefineDisclosure>;
+}

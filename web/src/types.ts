@@ -678,3 +678,120 @@ export interface SponsorAdmin extends Sponsor {
   views: number;
   seconds: number;
 }
+
+/** What a statistics profile is about: 0 rider, 1 pony, 2 team, 3 club (`StatsSubjectKind` in the API). */
+export type StatsSubjectKind = 0 | 1 | 2 | 3;
+export const StatsSubjectKind = {
+  Rider: 0 as StatsSubjectKind,
+  Pony: 1 as StatsSubjectKind,
+  Team: 2 as StatsSubjectKind,
+  Club: 3 as StatsSubjectKind,
+};
+
+/** A search result. `key` is what the profile endpoint takes as `name`. */
+export interface StatsHit {
+  kind: StatsSubjectKind;
+  name: string;
+  key: string;
+  /** Finished competitions that count towards the profile. */
+  competitions: number;
+}
+
+export interface StatsSearch {
+  query: string;
+  riders: StatsHit[];
+  ponies: StatsHit[];
+  teams: StatsHit[];
+  clubs: StatsHit[];
+}
+
+export interface StatsSummary {
+  competitions: number;
+  entries: number;
+  /** Entries with a final place (hors concours teams have none). */
+  placedEntries: number;
+  firsts: number;
+  seconds: number;
+  thirds: number;
+  averagePlace: number | null;
+  /** Placed entries in an age group that ran lettered finals. */
+  entriesWithFinals: number;
+  finalsReached: number;
+  aFinals: number;
+  aFinalPercent: number | null;
+  races: number;
+  wins: number;
+  winPercent: number | null;
+  points: number;
+  maxPoints: number;
+  pointQuotaPercent: number | null;
+}
+
+export interface StatsGame {
+  name: string;
+  races: number;
+  wins: number;
+  winPercent: number | null;
+  /** Eliminated, did not start, did not finish or retired. */
+  nonFinishes: number;
+  points: number;
+  maxPoints: number;
+  pointQuotaPercent: number | null;
+}
+
+export interface StatsSession {
+  sessionId: number;
+  name: string;
+  points: number;
+  maxPoints: number;
+  /** Null for a hors concours team. */
+  rank: number | null;
+  teams: number;
+}
+
+export interface StatsEntry {
+  competitionId: number;
+  competitionName: string;
+  startDate: string;
+  sectionId: number;
+  sectionName: string;
+  format: SectionFormat;
+  teamId: number;
+  teamName: string;
+  clubName: string;
+  isHorsConcours: boolean;
+  riderName: string | null;
+  ponyName: string | null;
+  place: number | null;
+  teamsPlaced: number;
+  /** 0 for the A Final, 1 for the B Final, and so on. */
+  finalTier: number | null;
+  races: number;
+  points: number;
+  maxPoints: number;
+  pointQuotaPercent: number | null;
+  sessions: StatsSession[];
+}
+
+export interface StatsPartnership {
+  riderName: string;
+  ponyName: string;
+  entries: number;
+  competitions: number;
+}
+
+/** Everyone gets `summary`; the lists are null unless the viewer is signed in (`detailed`). */
+export interface StatsProfile {
+  kind: StatsSubjectKind;
+  name: string;
+  key: string;
+  detailed: boolean;
+  /** False for riders and ponies: their race and game figures come from individual and pairs competitions only. */
+  raceFiguresAllFormats: boolean;
+  summary: StatsSummary;
+  games: StatsGame[] | null;
+  bestGames: string[] | null;
+  worstGames: string[] | null;
+  entries: StatsEntry[] | null;
+  partnerships: StatsPartnership[] | null;
+}
