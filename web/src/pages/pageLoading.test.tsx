@@ -191,7 +191,7 @@ describe('FormatPage', () => {
     serve((url) => (url === '/competitions/4' ? detail : []));
     mount();
     expect(screen.getByText('Loading…')).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { level: 1, name: 'Format' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'On the day' })).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/competitions/4/signups');
   });
 
@@ -205,7 +205,7 @@ describe('FormatPage', () => {
     serve((url) => (url === '/competitions/4' ? detail : []));
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     mount();
-    await screen.findByRole('heading', { level: 1, name: 'Format' });
+    await screen.findByRole('heading', { level: 1, name: 'On the day' });
     const before = vi.mocked(api.get).mock.calls.length;
     await userEvent.click(screen.getByRole('button', { name: 'Close signups now' }));
     expect(api.post).toHaveBeenCalledWith('/competitions/4/signups-locked', { locked: true });

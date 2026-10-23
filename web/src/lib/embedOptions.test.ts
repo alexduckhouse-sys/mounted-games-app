@@ -49,7 +49,7 @@ describe('heat titles and ordering edge cases', () => {
 
   it('falls back to a numbered label and to the session name when there is no section name', () => {
     const [only] = recentHeatResults([session(1, { sectionName: null, name: 'Teams Juniors', heats: [heat(1, { label: '  ', races: [scored(1, [[1, 1]])] })] })], null);
-    expect(only.title).toBe('Juniors · Session 1 · Heat 1');
+    expect(only.title).toBe('Junior Teams · Session 1 · Heat 1');
   });
 
   it('titles finals by stage, label or session name, newest first', () => {
@@ -58,7 +58,7 @@ describe('heat titles and ordering edge cases', () => {
       session(2, { name: 'Finals', heats: [heat(2, { label: 'A', races: [scored(2, [[1, 1]])] })] }),
       session(3, { heats: [heat(3, { raceRoundStage: 2, label: 'Gold', races: [scored(3, [[1, 1]])] }), heat(4, { label: 'Grand Final', races: [scored(4, [[1, 1]])] })] }),
     ];
-    expect(recentHeatResults(sessions, null).map((r) => r.title)).toEqual(['Seniors · Grand Final', 'Seniors · Final · Gold', 'Seniors · Final · A', 'Seniors · Session 1 · Heat 1']);
+    expect(recentHeatResults(sessions, null).map((r) => r.title)).toEqual(['Senior Teams · Grand Final', 'Senior Teams · Final · Gold', 'Senior Teams · Final · A', 'Senior Teams · Session 1 · Heat 1']);
   });
 
   it('orders heats within a session by running order, newest first', () => {
@@ -68,7 +68,7 @@ describe('heat titles and ordering edge cases', () => {
 
   it('titles a timetable group with no section name, with or without an ordinal', () => {
     const group = { key: 'g', session: session(1, { sectionName: null, name: 'Teams Juniors' }), race: true, rows: [{ group: 'Heats' }] } as unknown as Parameters<typeof timetableGroupTitle>[0];
-    expect(timetableGroupTitle(group, new Map())).toBe('Juniors · Session 1');
-    expect(timetableGroupTitle(group, new Map([[1, 3]]))).toBe('Juniors · Session 3');
+    expect(timetableGroupTitle(group, new Map())).toBe('Junior Teams · Session 1');
+    expect(timetableGroupTitle(group, new Map([[1, 3]]))).toBe('Junior Teams · Session 3');
   });
 });

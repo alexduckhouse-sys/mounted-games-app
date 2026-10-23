@@ -110,8 +110,16 @@ describe('DeclarationsTab with a set-up dec form', () => {
     expect(within(slot).getByText(/This will be flagged for the organisers/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('checkbox'));
+    expect(screen.getByRole('button', { name: 'Submit dec form' })).toBeDisabled();
+    await user.type(screen.getByLabelText('Phone number'), '12345');
+    expect(screen.getByText('Enter a UK or Irish number, like 07123 456789.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Submit dec form' })).toBeDisabled();
+    await user.clear(screen.getByLabelText('Phone number'));
+    await user.type(screen.getByLabelText('Phone number'), '+44 7123 456789');
     await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
     await waitFor(() => expect(state.post).toHaveBeenCalled());
+    expect(state.post.mock.calls[0][1]).toMatchObject({ trainerPhone: '+44 7123 456789', bibDescription: '' });
+    expect(screen.queryByLabelText('Bibs')).not.toBeInTheDocument();
     expect(state.post.mock.calls[0][1].riders[0]).toMatchObject({
       fullName: 'Ella Hughes', weightKg: 31.5, ponyPassportNumber: 'GB123', customValues: { girth: '95' }, dateOfBirth: null, ponyHeightHands: null,
     });

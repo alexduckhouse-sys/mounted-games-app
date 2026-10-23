@@ -71,7 +71,10 @@ public class SessionsController : ControllerBase
             IsBreak = kind == SessionKind.Break,
             DurationMinutes = req.DurationMinutes,
             Kind = kind,
-            Location = req.Location
+            Location = req.Location,
+            LanesPerHeat = req.LanesPerHeat,
+            MinutesPerHeat = req.MinutesPerHeat,
+            PlannedRaces = kind == SessionKind.Race ? PlannedRaceList.Write(req.PlannedRaces) : null
         };
         _db.Sessions.Add(s);
         await _db.SaveChangesAsync();
@@ -96,6 +99,17 @@ public class SessionsController : ControllerBase
         if (req.ArenaName is not null)
             s.ArenaName = string.IsNullOrWhiteSpace(req.ArenaName) ? null : req.ArenaName.Trim();
         if (req.ScheduledStart.HasValue) s.ScheduledStart = req.ScheduledStart.Value;
+        if (req.MinutesPerHeat.HasValue) s.MinutesPerHeat = req.MinutesPerHeat.Value;
+        if (req.DurationMinutes.HasValue && s.Heats.Count == 0) s.DurationMinutes = req.DurationMinutes.Value;
+        if (req.LanesPerHeat.HasValue || req.PlannedRaces is not null)
+        {
+            // Heat size and the race list are structure: they can't change once the session has started or been scored.
+            if (HasScores(s) && ((req.LanesPerHeat.HasValue && req.LanesPerHeat != s.LanesPerHeat)
+                || (req.PlannedRaces is not null && PlannedRaceList.Write(req.PlannedRaces) != s.PlannedRaces)))
+                return Conflict(new { message = "This session has started or has scores, so its structure can't change." });
+            if (req.LanesPerHeat.HasValue) s.LanesPerHeat = req.LanesPerHeat.Value;
+            if (req.PlannedRaces is not null) s.PlannedRaces = PlannedRaceList.Write(req.PlannedRaces);
+        }
         await _db.SaveChangesAsync();
 
         var dto = s.ToDto();
@@ -146,12 +160,19 @@ public class SessionsController : ControllerBase
     [CompetitionAccess("competitionId")]
     public async Task<IActionResult> Delete(int competitionId, int id)
     {
-        var s = await _db.Sessions.FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        var s = await _db.Sessions.Include(s => s.Heats).ThenInclude(h => h.Races)
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        if (HasScores(s))
+            return Conflict(new { message = "This session has started or has scores, so it can't be removed." });
         _db.Sessions.Remove(s);
         await _db.SaveChangesAsync();
         return NoContent();
     }
+
+    /// <summary>Started, finished or with a race marked complete. Needs heats and races loaded.</summary>
+    private static bool HasScores(Session s) =>
+        s.Status != SessionStatus.Upcoming || s.Heats.Any(h => h.Races.Any(r => r.IsComplete));
 
     [HttpPost("{id:int}/heats")]
     [Authorize(Policy = CompetitionStaff.Policy)]

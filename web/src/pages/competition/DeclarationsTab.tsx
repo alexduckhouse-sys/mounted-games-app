@@ -111,7 +111,7 @@ export function DeclarationsTab() {
           heightText(r.ponyHeightHands),
           f.bibDescription ?? '',
           f.trainerName ?? f.submittedByName ?? '',
-          f.submittedByPhone ?? '',
+          f.trainerPhone ?? f.submittedByPhone ?? '',
           f.submittedByName ?? '',
           f.termsAcceptedAt ? new Date(f.termsAcceptedAt).toLocaleString() : '',
           new Date(f.submittedAt).toLocaleString(),
@@ -206,7 +206,7 @@ function DecFormCard({ f, config, onDelete, canDelete }: CardProps) {
           )}
           <p className="text-[11px] text-[rgb(var(--mg-muted))]">
             Trainer: <span className="font-medium text-[rgb(var(--mg-ink))]">{f.trainerName ?? f.submittedByName ?? '—'}</span>
-            {f.submittedByPhone && <span className="ml-1"> · {f.submittedByPhone}</span>}
+            {(f.trainerPhone ?? f.submittedByPhone) && <span className="ml-1"> · {f.trainerPhone ?? f.submittedByPhone}</span>}
           </p>
           <p className="text-[10px] text-[rgb(var(--mg-faint))]">
             Submitted {new Date(f.submittedAt).toLocaleString()}

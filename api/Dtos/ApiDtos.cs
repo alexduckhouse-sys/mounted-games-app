@@ -10,7 +10,8 @@ public record CreateClubRequest(string Name, string? Region = null, string? BibC
 
 public record CompetitionSummary(
     int Id, string Name, string? Location, DateTime StartDate, DateTime? EndDate,
-    bool IsActive, bool IsArchived, int SectionCount, int TeamCount, int SessionCount);
+    bool IsActive, bool IsArchived, int SectionCount, int TeamCount, int SessionCount,
+    int HeatedSessionCount = 0);
 
 public record PickerLiveHeat(string? SectionName, string HeatLabel, string? ArenaName);
 public record CompetitionPickerItem(
@@ -47,7 +48,8 @@ public record CompetitionDetail(
     bool StaffChatEnabled = true,
     bool IsDemo = false,
     string? TermsText = null,
-    PayoutsToDto? PayoutsTo = null);
+    PayoutsToDto? PayoutsTo = null,
+    IReadOnlyList<string>? LaneHatbands = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -59,7 +61,8 @@ public record CreateCompetitionRequest(
     string? OrganiserName = null,
     string? PaymentDestination = null,
     [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null,
-    [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null);
+    [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null,
+    IReadOnlyList<string>? LaneHatbands = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -72,7 +75,9 @@ public record UpdateCompetitionRequest(
     string? OrganiserName = null,
     string? PaymentDestination = null,
     [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null,
-    [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null);
+    [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null,
+    /// <summary>Null leaves the hatbands as they are; an empty list clears them.</summary>
+    IReadOnlyList<string>? LaneHatbands = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 
@@ -222,7 +227,8 @@ public record SessionDto(
     int? MinutesPerHeat, bool RaceOrderAlternating,
     IReadOnlyList<HeatDto> Heats,
     LaneRotationMode LaneRotationMode = LaneRotationMode.MoveUp,
-    int? QualifiersPerHeat = null);
+    int? QualifiersPerHeat = null,
+    IReadOnlyList<string>? PlannedRaces = null);
 
 public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating,
     LaneRotationMode? LaneRotationMode = null, [Range(1, 20)] int? QualifiersPerHeat = null);
@@ -234,10 +240,18 @@ public record CreateSessionRequest(
     int? CompetitionSectionId, string Name, string? ArenaName,
     DateTime? ScheduledStart, int OrderIndex, string? Notes,
     bool IsBreak, int? DurationMinutes,
-    SessionKind? Kind, string? Location);
+    SessionKind? Kind, string? Location,
+    [Range(1, 20)] int? LanesPerHeat = null, [Range(1, 180)] int? MinutesPerHeat = null,
+    IReadOnlyList<string>? PlannedRaces = null);
 
-/// <summary>Null leaves a field as it is; an empty arena name clears the arena.</summary>
-public record UpdateSessionRequest([StringLength(120)] string? Name = null, [StringLength(80)] string? ArenaName = null, DateTime? ScheduledStart = null);
+/// <summary>
+/// Null leaves a field as it is; an empty arena name clears the arena. <c>PlannedRaces</c> replaces the planned list
+/// (an empty list clears it). Heat size and the planned races are structure: they are refused once the session has
+/// started or any race in it is scored.
+/// </summary>
+public record UpdateSessionRequest([StringLength(120)] string? Name = null, [StringLength(80)] string? ArenaName = null, DateTime? ScheduledStart = null,
+    [Range(1, 20)] int? LanesPerHeat = null, [Range(1, 180)] int? MinutesPerHeat = null, [Range(1, 1440)] int? DurationMinutes = null,
+    IReadOnlyList<string>? PlannedRaces = null);
 
 public record UpdateSessionStatusRequest(SessionStatus Status);
 
@@ -346,7 +360,9 @@ public record DeclarationFormDto(
     // The team name the entrant gave when entering, from the entries that formed this team; public like the team's own name.
     string? EntryTeamName = null,
     // How many riders on the form were flagged for a broken rule. Staff and the submitter only; 0 for everyone else.
-    int FlagCount = 0);
+    int FlagCount = 0,
+    // The coach's phone number for this team. Staff and the submitter only.
+    string? TrainerPhone = null);
 
 public record RiderEntryDto(
     int Id, int? SavedRiderId, string FullName, DateTime? DateOfBirth,

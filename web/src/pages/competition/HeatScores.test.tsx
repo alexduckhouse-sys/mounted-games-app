@@ -21,9 +21,9 @@ it('moves the live heat identity into the score table and publishes the compact 
   const shownSession = session(1, { sectionName: 'Teams Under 12', arenaName: 'Main Arena', status: 1, scheduledStart: '2026-10-16T10:00:00', heats: [shownHeat] });
   state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
   render(<CompactPageBarProvider><MemoryRouter><BarProbe /><HeatScores session={shownSession} heats={[shownHeat]} activeHeatId={1} /></MemoryRouter></CompactPageBarProvider>);
-  expect(screen.getByRole('heading', { name: 'Under 12 Heat 2 scores' })).toHaveClass('sr-only');
-  expect(screen.getByRole('columnheader', { name: /Under 12Heat 2Race 1 of 1 · Bending Team/ })).toBeVisible();
-  expect(screen.getByTestId('bar')).toHaveTextContent('Autumn Games|Under 12 heats · Main Arena|live');
+  expect(screen.getByRole('heading', { name: 'Under 12 Teams Heat 2 scores' })).toHaveClass('sr-only');
+  expect(screen.getByRole('columnheader', { name: /Under 12 TeamsHeat 2Race 1 of 1 · Bending Team/ })).toBeVisible();
+  expect(screen.getByTestId('bar')).toHaveTextContent('Autumn Games|Under 12 Teams heats · Main Arena|live');
   expect(screen.queryByText('Timetable')).toBeNull();
 });
 

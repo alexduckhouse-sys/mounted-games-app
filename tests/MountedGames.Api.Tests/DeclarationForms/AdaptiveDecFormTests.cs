@@ -49,7 +49,7 @@ public class AdaptiveDecFormTests : IClassFixture<ApiFactory>
             ponyAge, member, contact, phone, medical, custom);
 
     private static SubmitDeclarationFormRequest Form(int teamId, params RiderEntryInput[] riders)
-        => new(teamId, null, riders, false, null, AcceptTerms: true);
+        => new(teamId, null, riders, false, "07123 456-789", AcceptTerms: true);
 
     private async Task<HttpResponseMessage> SubmitAsync(Setup s, params RiderEntryInput[] riders)
         => await (await _f.TrainerAsync()).PostAsJsonAsync(Forms, Form(s.TeamId, riders));
@@ -96,6 +96,101 @@ public class AdaptiveDecFormTests : IClassFixture<ApiFactory>
         Assert.Equal(DobFormat.YearOnly, dto.Config.DobFormat);
         Assert.Equal(WeightUnit.StonePounds, dto.Config.WeightUnit);
         Assert.Equal(("Girth", "cm", 90m), (dto.Config.CustomFields[0].Label, dto.Config.CustomFields[0].Unit, dto.Config.CustomFields[0].Max));
+    }
+
+    [Fact]
+    public async Task NewCompetitions_StartWithTheBasicForm()
+    {
+        var trainer = await _f.TrainerAsync();
+
+        var created = await trainer.PostAsJsonAsync("/api/competitions", new CreateCompetitionRequest(
+            $"New {Guid.NewGuid():N}", null, null, null, null, null, null, DateTime.UtcNow.AddDays(30), null));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (await created.ReadAsync<CompetitionSummary>()).Id;
+
+        var dto = await (await trainer.GetAsync(ConfigUrl(id))).ReadAsync<DecFormConfigDto>();
+        Assert.False(dto.IsStandard);
+        Assert.Equal((FieldRequirement.Off, FieldRequirement.Off, FieldRequirement.Off, FieldRequirement.Required, FieldRequirement.Off),
+            (dto.Config.Dob, dto.Config.PonyHeight, dto.Config.Weight, dto.Config.TrainerPhone, dto.Config.Bib));
+    }
+
+    [Theory]
+    [InlineData("07123 456 789", "07123456789")]
+    [InlineData("(07123) 456-789", "07123456789")]
+    [InlineData("+44 7123 456789", "+447123456789")]
+    [InlineData("+44 (0)7123 456789", "+447123456789")]
+    [InlineData("0044 7123 456789", "+447123456789")]
+    [InlineData("+353 87 123 4567", "+353871234567")]
+    [InlineData("087 123 4567", "0871234567")]
+    [InlineData("020 7946 0958", "02079460958")]
+    public void Phone_IsAcceptedAndTidied(string typed, string expected)
+    {
+        Assert.True(PhoneNumbers.TryNormalise(typed, out var normalised));
+        Assert.Equal(expected, normalised);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("  ")]
+    [InlineData("12345")]
+    [InlineData("7123456789")]
+    [InlineData("+1 202 555 0143")]
+    [InlineData("07123 abc 789")]
+    [InlineData("+44 12")]
+    [InlineData("0123456789012")]
+    public void Phone_IsRefusedWhenItIsNotUkOrIrish(string? typed) => Assert.False(PhoneNumbers.TryNormalise(typed, out _));
+
+    [Fact]
+    public async Task TrainerPhone_IsRequiredOnTheBasicForm_NormalisedAndPrivate()
+    {
+        var s = await NewSetupAsync();
+        await SetConfigAsync(s.CompetitionId, Basic());
+        var trainer = await _f.TrainerAsync();
+        SubmitDeclarationFormRequest WithPhone(string? phone) => new(s.TeamId, null, [Rider("Alice")], false, phone, AcceptTerms: true);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(Forms, WithPhone(null))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(Forms, WithPhone("12345"))).StatusCode);
+        var ok = await trainer.PostAsJsonAsync(Forms, WithPhone("+44 7123 456789"));
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        Assert.Equal("+447123456789", (await ok.ReadAsync<DeclarationFormDto>()).TrainerPhone);
+
+        var publicBody = await (await _f.CreateClient().GetAsync($"{Forms}?teamId={s.TeamId}")).Content.ReadAsStringAsync();
+        Assert.DoesNotContain("447123456789", publicBody);
+        var publicForm = Assert.Single(System.Text.Json.JsonSerializer.Deserialize<List<DeclarationFormDto>>(publicBody,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!);
+        Assert.Null(publicForm.TrainerPhone);
+        var staff = Assert.Single(await (await (await _f.AdminAsync()).GetAsync($"{Forms}?teamId={s.TeamId}")).ReadAsync<List<DeclarationFormDto>>());
+        Assert.Equal("+447123456789", staff.TrainerPhone);
+    }
+
+    [Fact]
+    public async Task TrainerPhone_OffIsNeverStored_AndOptionalMayBeLeftOut()
+    {
+        var s = await NewSetupAsync();
+        var trainer = await _f.TrainerAsync();
+        await SetConfigAsync(s.CompetitionId, Basic(c => c with { TrainerPhone = FieldRequirement.Off }));
+        var off = await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(s.TeamId, null, [Rider("A")], false, "07123 456789", AcceptTerms: true));
+        Assert.Null((await off.ReadAsync<DeclarationFormDto>()).TrainerPhone);
+
+        await SetConfigAsync(s.CompetitionId, Basic(c => c with { TrainerPhone = FieldRequirement.Optional }));
+        var none = await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(s.TeamId, null, [Rider("A")], false, null, AcceptTerms: true));
+        Assert.Equal(HttpStatusCode.OK, none.StatusCode);
+    }
+
+    [Fact]
+    public async Task Bib_FollowsTheSetup()
+    {
+        var s = await NewSetupAsync();
+        var trainer = await _f.TrainerAsync();
+        SubmitDeclarationFormRequest WithBib(string? bib) => new(s.TeamId, null, [Rider("A")], false, "07123 456789", BibDescription: bib, AcceptTerms: true);
+        await SetConfigAsync(s.CompetitionId, Basic());
+        await trainer.PostAsJsonAsync(Forms, WithBib("Red"));
+        Assert.Null(await _f.InDbAsync(db => db.Teams.Where(t => t.Id == s.TeamId).Select(t => t.BibDescription).SingleAsync()));
+
+        await SetConfigAsync(s.CompetitionId, Basic(c => c with { Bib = FieldRequirement.Required }));
+        Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(Forms, WithBib(" "))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await trainer.PostAsJsonAsync(Forms, WithBib("Red"))).StatusCode);
+        Assert.Equal("Red", await _f.InDbAsync(db => db.Teams.Where(t => t.Id == s.TeamId).Select(t => t.BibDescription).SingleAsync()));
     }
 
     [Fact]
@@ -394,7 +489,7 @@ public class AdaptiveDecFormTests : IClassFixture<ApiFactory>
 
     private static void AssertNothingPersonal(string body, string marker)
     {
-        foreach (var secret in new[] { $"Medical{marker}", $"Contact{marker}", $"PASS{marker}", $"MEM{marker}", $"Custom{marker}", "07700900123" })
+        foreach (var secret in new[] { $"Medical{marker}", $"Contact{marker}", $"PASS{marker}", $"MEM{marker}", $"Custom{marker}", "07700900123", "07123456789" })
             Assert.DoesNotContain(secret, body);
     }
 

@@ -20,13 +20,13 @@ test('bib labels preserve meaningful text and explain missing values', () => {
   for (const value of [undefined, null, '', '  ']) assert.equal(bibLabel(value), 'No bib set');
 });
 
-test('section names drop the word Teams wherever it sits', () => {
-  assert.equal(displaySectionName('Teams Under 12'), 'Under 12');
-  assert.equal(displaySectionName('Senior Teams'), 'Senior');
-  assert.equal(displaySectionName('TEAMS Seniors'), 'Seniors');
-  assert.equal(displaySectionName('Pairs Under 12'), 'Pairs Under 12');
-  assert.equal(displaySectionName('Individual Under 12'), 'Individual Under 12');
+test('section names put the age group first and the format last', () => {
+  assert.equal(displaySectionName('Teams Under 12'), 'Under 12 Teams');
+  assert.equal(displaySectionName('Senior Teams'), 'Senior Teams');
+  assert.equal(displaySectionName('TEAMS Seniors'), 'Senior Teams');
+  assert.equal(displaySectionName('Pairs Under 12'), 'Under 12 Pairs');
+  assert.equal(displaySectionName('Individual Juniors'), 'Junior Individuals');
   assert.equal(displaySectionName('Teams'), 'Teams');
-  assert.equal(displaySectionName('Teams '), 'Teams ');
+  assert.equal(displaySectionName('Teams '), 'Teams');
   for (const value of [undefined, null, '']) assert.equal(displaySectionName(value), '');
 });

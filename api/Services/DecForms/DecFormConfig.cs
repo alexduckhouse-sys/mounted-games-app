@@ -27,18 +27,21 @@ public record DecFormConfig(
     FieldRequirement Weight, WeightUnit WeightUnit,
     FieldRequirement PonyHeight, FieldRequirement PonyPassport, FieldRequirement PonyAge,
     FieldRequirement MembershipNumber, FieldRequirement EmergencyContact, FieldRequirement MedicalNotes,
-    IReadOnlyList<DecFormCustomField> CustomFields)
+    IReadOnlyList<DecFormCustomField> CustomFields,
+    FieldRequirement TrainerPhone = FieldRequirement.Off, FieldRequirement Bib = FieldRequirement.Off)
 {
     /// <summary>Today's form: date of birth, pony height and nothing else added. Kept exactly for competitions that never set one up.</summary>
     public static readonly DecFormConfig Standard = new(
         FieldRequirement.Required, DobFormat.Full, FieldRequirement.Off, WeightUnit.Kg,
         FieldRequirement.Required, FieldRequirement.Off, FieldRequirement.Off,
-        FieldRequirement.Off, FieldRequirement.Off, FieldRequirement.Off, []);
+        FieldRequirement.Off, FieldRequirement.Off, FieldRequirement.Off, [],
+        FieldRequirement.Optional, FieldRequirement.Optional);
 
     /// <summary>The bare base form, the starting point when an organiser chooses their own.</summary>
     public static readonly DecFormConfig Basic = Standard with
     {
         Dob = FieldRequirement.Off, PonyHeight = FieldRequirement.Off,
+        TrainerPhone = FieldRequirement.Required, Bib = FieldRequirement.Off,
     };
 
     public const int MaxCustomFields = 12;
@@ -62,7 +65,7 @@ public record DecFormConfig(
     {
         if (!Enum.IsDefined(Dob) || !Enum.IsDefined(DobFormat) || !Enum.IsDefined(Weight) || !Enum.IsDefined(WeightUnit)
             || !Enum.IsDefined(PonyHeight) || !Enum.IsDefined(PonyPassport) || !Enum.IsDefined(PonyAge)
-            || !Enum.IsDefined(MembershipNumber) || !Enum.IsDefined(EmergencyContact) || !Enum.IsDefined(MedicalNotes))
+            || !Enum.IsDefined(TrainerPhone) || !Enum.IsDefined(Bib) || !Enum.IsDefined(MembershipNumber) || !Enum.IsDefined(EmergencyContact) || !Enum.IsDefined(MedicalNotes))
             return "One of the dec form settings isn't recognised.";
         var fields = CustomFields ?? [];
         if (fields.Count > MaxCustomFields) return $"A dec form can have up to {MaxCustomFields} extra fields.";

@@ -32,10 +32,10 @@ public sealed class RaceFinalService(AppDbContext db)
             .ToListAsync(ct);
         if (siblings.Count < 2) return "Both qualifier heats must exist before populating the final.";
 
-        // A team that has since withdrawn keeps its result but doesn't go through to the final.
+        // A team that has since withdrawn, or is hors concours, keeps its result but doesn't go through to the final.
         var resultTeamIds = siblings.SelectMany(h => h.Races).SelectMany(r => r.Results).Select(r => r.TeamId).Distinct().ToList();
         var outIds = (await db.Teams
-            .Where(t => resultTeamIds.Contains(t.Id) && t.EntryStatus != TeamEntryStatus.Active)
+            .Where(t => resultTeamIds.Contains(t.Id) && (t.EntryStatus != TeamEntryStatus.Active || t.IsHorsConcours))
             .Select(t => t.Id).ToListAsync(ct)).ToHashSet();
 
         int?[] TopPlacings(Heat h) => h.Races

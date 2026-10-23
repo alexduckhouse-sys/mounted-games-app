@@ -40,6 +40,10 @@ export interface DecFormConfig {
   emergencyContact: Requirement;
   medicalNotes: Requirement;
   customFields: CustomField[];
+  /** The coach's phone number, once per team. */
+  trainerPhone: Requirement;
+  /** The team's bib or number description. */
+  bib: Requirement;
 }
 
 /** What the API sends for `GET /competitions/:id/dec-form-config`. */
@@ -55,10 +59,11 @@ export interface DecFormConfigResponse {
 export const STANDARD_CONFIG: DecFormConfig = {
   dob: REQUIRED, dobFormat: 0, weight: OFF, weightUnit: 0, ponyHeight: REQUIRED, ponyPassport: OFF, ponyAge: OFF,
   membershipNumber: OFF, emergencyContact: OFF, medicalNotes: OFF, customFields: [],
+  trainerPhone: OPTIONAL, bib: OPTIONAL,
 };
 
 /** The bare base form: the starting point when an organiser builds their own. */
-export const BASIC_CONFIG: DecFormConfig = { ...STANDARD_CONFIG, dob: OFF, ponyHeight: OFF };
+export const BASIC_CONFIG: DecFormConfig = { ...STANDARD_CONFIG, dob: OFF, ponyHeight: OFF, trainerPhone: REQUIRED, bib: OFF };
 
 export const MAX_CUSTOM_FIELDS = 12;
 
@@ -83,6 +88,8 @@ export function parseConfigResponse(data: unknown): DecFormConfigResponse | null
     membershipNumber: requirement(raw.membershipNumber, OFF),
     emergencyContact: requirement(raw.emergencyContact, OFF),
     medicalNotes: requirement(raw.medicalNotes, OFF),
+    trainerPhone: requirement(raw.trainerPhone, STANDARD_CONFIG.trainerPhone),
+    bib: requirement(raw.bib, STANDARD_CONFIG.bib),
     customFields: fields.filter((f): f is CustomField => !!f && typeof f.id === 'string' && typeof f.label === 'string')
       .map((f) => ({ id: f.id, label: f.label, type: f.type === 1 ? 1 : 0, required: !!f.required, min: f.min ?? null, max: f.max ?? null, unit: f.unit ?? null })),
   };
@@ -284,6 +291,24 @@ export function extrasFromEntry(entry: {
     custom,
   };
 }
+
+/**
+ * A UK or Irish phone number tidied the way the API does it ("+44 (0)7123 456-789" becomes "+447123456789"), or null if it
+ * doesn't look like one. Friendly rather than strict: it checks the shape, not that the number exists.
+ */
+export function normalisePhone(text: string): string | null {
+  let value = text.trim().replace('(0)', '').replace(/[\s\-.()]/g, '');
+  if (value.startsWith('00')) value = `+${value.slice(2)}`;
+  if (!/^\+?\d+$/.test(value)) return null;
+  if (!value.startsWith('+')) return value.startsWith('0') && value.length >= 9 && value.length <= 11 ? value : null;
+  const prefix = value.startsWith('+44') ? '+44' : value.startsWith('+353') ? '+353' : null;
+  if (!prefix) return null;
+  let digits = value.slice(prefix.length);
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  return digits.length >= 7 && digits.length <= 10 ? prefix + digits : null;
+}
+
+export const PHONE_HELP = 'Enter a UK or Irish number, like 07123 456789.';
 
 /** The words for a requirement, for the organiser's pickers. */
 export const REQUIREMENT_LABELS: Record<Requirement, string> = { 0: 'Off', 1: 'Optional', 2: 'Required' };

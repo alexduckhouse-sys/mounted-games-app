@@ -6,10 +6,10 @@ import { apiErrorMessage } from '../../../lib/apiError';
 import { competitionDateText } from '../../../lib/competitionDates';
 import {
   blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, panelTitle, riderFromSaved,
-  riderReady, ridersRequired, savedChoices, slotFlagged, slotLabel, slotMeta, slotsFromForm, statusText, subtitleOf, teamIsFull,
+  phoneProblem, riderReady, ridersRequired, savedChoices, slotFlagged, slotLabel, slotMeta, slotsFromForm, statusText, subtitleOf, teamIsFull,
   type DecFormDraft, type DecRider, type Slot,
 } from '../../../lib/decForm';
-import { STANDARD_CONFIG, type DecFormConfig } from '../../../lib/decFormConfig';
+import { asked, STANDARD_CONFIG, type DecFormConfig } from '../../../lib/decFormConfig';
 import type { CompetitionDetail, DeclarationForm, SavedRider, Team } from '../../../types';
 import { Field } from '../../auth/Field';
 import { RiderPanel } from './RiderPanel';
@@ -44,7 +44,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const [teamName, setTeamName] = useState(draft?.teamName ?? team.displayName);
   const [bibs, setBibs] = useState(draft?.bibs ?? existing?.bibDescription ?? team.bibDescription ?? '');
   const [trainerName, setTrainerName] = useState(draft?.trainerName ?? existing?.trainerName ?? existing?.submittedByName ?? user?.fullName ?? '');
-  const [phone, setPhone] = useState(draft?.phone ?? existing?.submittedByPhone ?? priorPhone ?? '');
+  const [phone, setPhone] = useState(draft?.phone ?? existing?.trainerPhone ?? existing?.submittedByPhone ?? priorPhone ?? '');
   const [notes, setNotes] = useState(draft?.notes ?? existing?.notes ?? '');
   const [agreed, setAgreed] = useState(false);
   const [submitted, setSubmitted] = useState(!!existing && !draft);
@@ -76,7 +76,8 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const reserve = active != null && isReserveSlot(slots, active);
   const editing = active != null && !!slots[active];
   const full = teamIsFull(slots);
-  const ready = canSubmit(slots, agreed, teamName);
+  const phoneIssue = phoneProblem(phone, config);
+  const ready = canSubmit(slots, agreed, teamName, phoneIssue === null);
   const entryName = existing?.entryTeamName ?? null;
   const when = competition.startDate ? competitionDateText(competition.startDate, competition.endDate) : '';
 
@@ -155,15 +156,19 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             <Field label="Team name" className="lg:col-span-2">
               {({ id }) => <div className="mg-field"><input id={id} value={teamName} placeholder="e.g. Stockport C" maxLength={150} onChange={(e) => changed(setTeamName)(e.target.value)} /></div>}
             </Field>
-            <Field label="Bibs" className="lg:col-span-2">
-              {({ id }) => <div className="mg-field"><input id={id} value={bibs} placeholder="e.g. Yellow with navy stars" maxLength={200} onChange={(e) => changed(setBibs)(e.target.value)} /></div>}
-            </Field>
+            {asked(config.bib) && (
+              <Field label="Bibs" className="lg:col-span-2">
+                {({ id }) => <div className="mg-field"><input id={id} value={bibs} placeholder="e.g. Yellow with navy stars" maxLength={200} onChange={(e) => changed(setBibs)(e.target.value)} /></div>}
+              </Field>
+            )}
             <Field label="Trainer name">
               {({ id }) => <div className="mg-field"><input id={id} value={trainerName} autoComplete="name" maxLength={200} onChange={(e) => changed(setTrainerName)(e.target.value)} /></div>}
             </Field>
-            <Field label="Phone number">
-              {({ id }) => <div className="mg-field"><input id={id} type="tel" value={phone} autoComplete="tel" onChange={(e) => changed(setPhone)(e.target.value)} /></div>}
-            </Field>
+            {asked(config.trainerPhone) && (
+              <Field label="Phone number" error={phone.trim() === '' ? null : phoneIssue}>
+                {({ id, invalid }) => <div className="mg-field" data-invalid={invalid}><input id={id} type="tel" value={phone} autoComplete="tel" aria-invalid={invalid} onChange={(e) => changed(setPhone)(e.target.value)} /></div>}
+              </Field>
+            )}
           </div>
 
           <ol aria-label="Riders" className="mg-card mg-list m-0 list-none p-0">

@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MountedGames.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261023181123_AddAdaptiveDecForms")]
+    [Migration("20261023182915_AddAdaptiveDecForms")]
     partial class AddAdaptiveDecForms
     {
         /// <inheritdoc />
@@ -855,6 +855,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<bool>("IsArchived")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("LaneHatbands")
+                        .HasColumnType("text");
+
                     b.Property<double?>("Latitude")
                         .HasColumnType("double precision");
 
@@ -1016,6 +1019,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("TrainerName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("TrainerPhone")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -2483,6 +2489,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
+
+                    b.Property<string>("PlannedRaces")
+                        .HasColumnType("text");
 
                     b.Property<int?>("QualifiersPerHeat")
                         .HasColumnType("integer");

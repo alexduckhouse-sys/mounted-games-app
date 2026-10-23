@@ -138,10 +138,28 @@ public class DeclarationFormsController : ControllerBase
             && r.ClubId == team.ClubId && (sharesRoster || (userId != null && r.CreatedByUserId == userId)));
         if (permittedSavedCount != savedIds.Length) return BadRequest(new { message = "A saved rider is not available to this account." });
 
-        var submitter = userId is null ? null : await _users.FindByIdAsync(userId);
-        if (!string.IsNullOrWhiteSpace(req.TrainerPhone) && submitter is not null && submitter.PhoneNumber != req.TrainerPhone)
+        // The coach's phone and the bib follow the setup too. A competition with no setup keeps the standard form, which refuses nothing new.
+        var phoneText = req.TrainerPhone?.Trim();
+        string? trainerPhone = null;
+        if (config.TrainerPhone != FieldRequirement.Off)
         {
-            submitter.PhoneNumber = req.TrainerPhone.Trim();
+            if (string.IsNullOrEmpty(phoneText))
+            {
+                if (config.TrainerPhone == FieldRequirement.Required && explicitConfig is not null)
+                    return BadRequest(new { message = "The trainer's phone number is needed." });
+            }
+            else if (explicitConfig is null) trainerPhone = phoneText.Length > 40 ? phoneText[..40] : phoneText; // the standard form keeps what was typed, as before
+            else if (PhoneNumbers.TryNormalise(phoneText, out var phone)) trainerPhone = phone;
+            else
+                return BadRequest(new { message = "Enter the trainer's phone number as a UK or Irish number, like 07123 456789." });
+        }
+        if (config.Bib == FieldRequirement.Required && explicitConfig is not null && string.IsNullOrWhiteSpace(req.BibDescription))
+            return BadRequest(new { message = "The bib or number is needed." });
+
+        var submitter = userId is null ? null : await _users.FindByIdAsync(userId);
+        if (trainerPhone is not null && submitter is not null && submitter.PhoneNumber != trainerPhone)
+        {
+            submitter.PhoneNumber = trainerPhone;
             await _users.UpdateAsync(submitter);
         }
 
@@ -149,7 +167,7 @@ public class DeclarationFormsController : ControllerBase
         var teamName = req.TeamName?.Trim();
         if (!string.IsNullOrEmpty(teamName)) team.DisplayName = teamName;
 
-        if (req.BibDescription is not null)
+        if (req.BibDescription is not null && config.Bib != FieldRequirement.Off)
             team.BibDescription = string.IsNullOrWhiteSpace(req.BibDescription) ? null : req.BibDescription.Trim();
 
         // One declaration per team: submitting again updates it instead of adding a second form.
@@ -172,6 +190,7 @@ public class DeclarationFormsController : ControllerBase
         form.SubmittedAt = DateTime.UtcNow;
         form.Notes = req.Notes;
         form.IsLocked = true;
+        form.TrainerPhone = trainerPhone;
         form.TrainerName = string.IsNullOrWhiteSpace(req.TrainerName) ? submitter?.FullName : req.TrainerName.Trim();
         form.TermsAcceptedAt = form.SubmittedAt;
         form.TermsAcceptedByUserId = userId;

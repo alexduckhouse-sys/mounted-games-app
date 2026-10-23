@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Check, ChevronDown, ChevronRight, Lock, Plus, Trash2, Unlock } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Lock, Trash2, Unlock } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { competitionDateText } from '../../lib/competitionDates';
 import { defaultRaceList } from '../../lib/defaultRaces';
 import { defaultEventStart, describeHeats, heatSizes, planTimetable, type PlanRow } from '../../lib/formatPlan';
-import { readRaceDrafts, writeRaceDraft } from '../../lib/raceDrafts';
 import { loadRaceTemplates } from '../../lib/raceTemplates';
+import { displaySectionName } from '../../lib/section';
 import { formatTime } from '../../lib/time';
 import type { CompetitionDetail, CompetitionSection, FormTeamsResult, SectionSignup, Session } from '../../types';
-import { SectionFormatLabel, SessionKind } from '../../types';
-import { FieldDrop, PartHead } from './LaptopParts';
+import { SessionKind } from '../../types';
+import { BreakForm } from './creator/BreakForm';
+import { HatbandList } from './creator/Hatbands';
+import { Pill } from './creator/parts';
+import { PartHead } from './LaptopParts';
 import { RaceListDialog } from './RaceListDialog';
 import { NumberField } from '../../components/NumberField';
 import { DecFormConfigEditor } from './DecFormConfig';
@@ -28,8 +31,9 @@ const isRace = (s: Session) => (s.kind ?? (s.isBreak ? SessionKind.Break : Sessi
 const hasScores = (s: Session) => s.status !== 0 || s.heats.some((h) => h.races.some((r) => r.isComplete));
 
 /**
- * Format, after entries close: close signups, form teams, then set up each age group's sessions (arena, races, minutes)
- * and generate the timetable. Start times come from Generate. Breaks and briefings are kept on the timetable itself.
+ * On the day: what is left once the competition has been set up in the creator. Close signups, form teams, settle each
+ * session's race list, then generate the exact timetable. Structure (sessions, heat, heat, final, minutes, arena) is set
+ * in the creator, not here. Breaks and briefings are kept on the timetable and survive generating it.
  */
 export function FormatPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,14 +43,10 @@ export function FormatPage() {
   const [comp, setComp] = useState<CompetitionDetail | null>(null);
   const [signups, setSignups] = useState<SectionSignup[]>([]);
   const [templates, setTemplates] = useState<string[]>([]);
-  const [drafts, setDrafts] = useState<Record<number, string[]>>(() => (editingId ? readRaceDrafts(editingId) : {}));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
-  const [preview, setPreview] = useState(false);
-  const [minutes, setMinutes] = useState<Record<number, string>>({});
-  const [finalists, setFinalists] = useState<Record<number, string>>({});
 
   const reload = useCallback(async () => {
     if (!editingId) return;
@@ -116,13 +116,14 @@ export function FormatPage() {
   const competition = comp;
   const sectionOf = (s: Session) => competition.sections.find((sec) => sec.id === s.competitionSectionId);
   const activeTeams = (section: CompetitionSection) => competition.teams.filter((t) => t.competitionSectionId === section.id && !t.isWithdrawn);
-  const minutesFor = (section: CompetitionSection) => {
-    const first = raceSessions.find((s) => s.competitionSectionId === section.id && s.minutesPerHeat);
-    return first?.minutesPerHeat ?? DEFAULT_MINUTES;
-  };
+  const minutesFor = (s: Session) => s.minutesPerHeat ?? DEFAULT_MINUTES;
+  /** The race list for a session: what it was planned with, else what its heats run, else the standard list. */
   const racesFor = (s: Session): string[] => {
+    if (s.plannedRaces?.length) return s.plannedRaces;
+    if (s.heats.length > 0 && sectionOf(s)?.usesRaceFinals) return [...new Set(s.heats.flatMap((h) => h.races.map((r) => r.name)))];
+    if (s.heats[0]?.races.length) return s.heats[0].races.map((r) => r.name);
     const section = sectionOf(s);
-    return drafts[s.id] ?? (s.heats[0]?.races.length ? s.heats[0].races.map((r) => r.name) : defaultRaceList('Zone', section?.format ?? 2, section?.ageGroup ?? ''));
+    return defaultRaceList('Zone', section?.format ?? 2, section?.ageGroup ?? '');
   };
 
   const paidBySection = new Map<number, number>();
@@ -131,11 +132,12 @@ export function FormatPage() {
   const totalPending = signups.filter((s) => s.status === 0).length;
   const generated = raceSessions.length > 0 && raceSessions.every((s) => s.heats.length > 0);
   const teamsFormed = competition.teams.length > 0;
+  const racesSet = raceSessions.length > 0 && raceSessions.every((s) => (s.plannedRaces?.length ?? 0) > 0 || s.heats.length > 0);
   const steps = [
     { title: 'Close signups', meta: competition.signupsLocked ? 'Closed' : 'Open', done: !!competition.signupsLocked },
     { title: 'Form teams', meta: teamsFormed ? `${competition.teams.length} ${competition.teams.length === 1 ? 'team' : 'teams'}` : '', done: teamsFormed },
-    { title: 'Sessions', meta: raceSessions.length ? `${raceSessions.filter((s) => s.heats.length > 0).length} of ${raceSessions.length} generated` : '', done: generated },
-    { title: 'Ready to run', meta: '', done: false },
+    { title: 'Race lists', meta: raceSessions.length ? `${raceSessions.filter((s) => (s.plannedRaces?.length ?? 0) > 0 || s.heats.length > 0).length} of ${raceSessions.length} set` : '', done: racesSet },
+    { title: 'Timetable', meta: raceSessions.length ? (generated ? 'Exact' : 'Provisional') : '', done: generated },
   ];
   const current = steps.findIndex((s) => !s.done);
 
@@ -146,8 +148,8 @@ export function FormatPage() {
       const section = sectionOf(s);
       return {
         id: s.id, name: s.name, arena: s.arenaName?.trim() ?? '', orderIndex: s.orderIndex, raceCount: racesFor(s).length,
-        minutesPerHeat: s.minutesPerHeat ?? (section ? minutesFor(section) : DEFAULT_MINUTES), lanes: s.lanesPerHeat ?? lanesFor(section?.format ?? 2),
-        teamCount: section ? activeTeams(section).length : 0,
+        minutesPerHeat: minutesFor(s), lanes: s.lanesPerHeat ?? lanesFor(section?.format ?? 2),
+        teamCount: section ? activeTeams(section).length : 0, raceFinals: !!section?.usesRaceFinals,
       };
     }),
     fixed: fixedItems.flatMap((s) => {
@@ -159,71 +161,32 @@ export function FormatPage() {
   const planOf = new Map(plan.map((row) => [row.id, row]));
 
   // ----- changes -----
-  const saveSection = (section: CompetitionSection, patch: { usesRaceFinals?: boolean; runoffRaceName?: string | null; finalistCount?: number | null }) =>
-    run(() => api.put(`/competitions/${competition.id}/sections/${section.id}`, {
-      runoffRaceName: patch.runoffRaceName !== undefined ? patch.runoffRaceName : section.runoffRaceName ?? null,
-      usesRaceFinals: patch.usesRaceFinals ?? section.usesRaceFinals ?? false,
-      finalistCount: patch.finalistCount !== undefined ? patch.finalistCount : section.finalistCount ?? null,
-    }), 'Could not save that age group.');
-
-  const commitFinalists = (section: CompetitionSection) => {
-    const text = (finalists[section.id] ?? '').trim();
-    if (text === String(section.finalistCount ?? '')) return;
-    const n = parseInt(text, 10);
-    if (text && (!Number.isFinite(n) || n < 1 || n > 50)) { setError('Teams in finals must be a number from 1 to 50.'); return; }
-    void saveSection(section, { finalistCount: text ? n : null });
-  };
-
-  const commitMinutes = (section: CompetitionSection) => {
-    const text = (minutes[section.id] ?? '').trim();
-    if (!text || text === String(minutesFor(section))) return;
-    const n = parseInt(text, 10);
-    if (!Number.isFinite(n) || n < 1 || n > 180) { setError('Minutes per heat must be a number from 1 to 180.'); return; }
-    void run(async () => {
-      for (const s of raceSessions.filter((x) => x.competitionSectionId === section.id)) {
-        await api.put(`/competitions/${competition.id}/sessions/${s.id}/settings`, { minutesPerHeat: n });
-      }
-    }, 'Could not save the minutes per heat.');
-  };
-
-  const addSession = (section: CompetitionSection) => {
-    const mine = raceSessions.filter((s) => s.competitionSectionId === section.id);
-    const name = mine.length === 0 ? section.displayName : `${section.displayName} · Session ${mine.length + 1}`;
-    const arena = mine.at(-1)?.arenaName?.trim() || arenas[0] || MAIN_ARENA;
-    const order = competition.sessions.reduce((m, s) => Math.max(m, s.orderIndex), 0) + 1;
-    return run(async () => {
-      const { data } = await api.post<Session>(`/competitions/${competition.id}/sessions`, {
-        competitionSectionId: section.id, name, arenaName: arena, scheduledStart: null, orderIndex: order, notes: null, isBreak: false,
-        durationMinutes: null, kind: SessionKind.Race, location: null,
-      });
-      await api.put(`/competitions/${competition.id}/sessions/${data.id}/settings`, { minutesPerHeat: minutesFor(section) });
-    }, 'Could not add the session.');
-  };
-
-  const updateSession = (s: Session, patch: { name?: string; arenaName?: string }) =>
-    run(() => api.put(`/competitions/${competition.id}/sessions/${s.id}`, patch), 'Could not save that session.');
-
-  const removeSession = (s: Session) => {
-    if (!window.confirm(`Remove ${s.name}${s.heats.length ? ` and its ${s.heats.length} ${s.heats.length === 1 ? 'heat' : 'heats'}` : ''}?`)) return;
-    void run(async () => {
-      await api.delete(`/competitions/${competition.id}/sessions/${s.id}`);
-      setDrafts(writeRaceDraft(competition.id, s.id, null));
-    }, 'Could not remove the session.');
-  };
+  const toggleLock = () => run(() => api.post(`/competitions/${competition.id}/signups-locked`, { locked: !competition.signupsLocked }), 'Could not change signups.');
 
   const saveRaces = (s: Session, races: string[]) => {
-    setDrafts(writeRaceDraft(competition.id, s.id, races));
     setEditing(null);
-    setNotice(`Race list saved for ${s.name}. It applies when you generate the timetable.`);
+    void run(() => api.put(`/competitions/${competition.id}/sessions/${s.id}`, { plannedRaces: races }), 'Could not save the race list.',
+      `Race list saved for ${s.name}. It applies when you generate the timetable.`);
   };
 
-  const toggleLock = () => run(() => api.post(`/competitions/${competition.id}/signups-locked`, { locked: !competition.signupsLocked }), 'Could not change signups.');
+  const addBreak = (b: { kind: 1 | 2; name: string; date: string; time: string; minutes: string; arena: string }) => {
+    const order = competition.sessions.reduce((m, s) => Math.max(m, s.orderIndex), 0) + 1;
+    return run(() => api.post(`/competitions/${competition.id}/sessions`, {
+      competitionSectionId: null, name: b.name, arenaName: b.arena || null, scheduledStart: new Date(`${b.date}T${b.time}`).toISOString(), orderIndex: order,
+      notes: null, isBreak: b.kind === 1, durationMinutes: parseInt(b.minutes, 10), kind: b.kind, location: null,
+    }), 'Could not add that.', `${b.name} added to the timetable.`);
+  };
+
+  const removeBreak = (s: Session) => {
+    if (!window.confirm(`Remove ${s.name}?`)) return;
+    void run(() => api.delete(`/competitions/${competition.id}/sessions/${s.id}`), 'Could not remove that.');
+  };
 
   async function generate() {
     const targets = raceSessions.filter((s) => !hasScores(s));
     const skipped = raceSessions.filter(hasScores);
     const withTeams = targets.filter((s) => { const section = sectionOf(s); return section && activeTeams(section).length > 0; });
-    if (withTeams.length === 0) { setError('There are no teams to put in heats yet. Form teams first, and add a session for each age group.'); return; }
+    if (withTeams.length === 0) { setError('There are no teams to put in heats yet. Form teams first.'); return; }
     const replacing = withTeams.filter((s) => s.heats.length > 0).length;
     if (!window.confirm(`Generate heats and start times for ${withTeams.length} ${withTeams.length === 1 ? 'session' : 'sessions'}?${replacing ? ` The ${replacing} that already have heats will get new ones.` : ''}${skipped.length ? ` ${skipped.length} already started or scored and will be left alone.` : ''}`)) return;
     const ok = await run(async () => {
@@ -231,35 +194,53 @@ export function FormatPage() {
         const section = sectionOf(s)!;
         const row = planOf.get(s.id)!;
         await api.put(`/competitions/${competition.id}/sessions/${s.id}`, { scheduledStart: row.start.toISOString() });
-        await api.post(`/competitions/${competition.id}/sessions/${s.id}/generate-heats`, {
+        await api.post(`/competitions/${competition.id}/sessions/${s.id}/${section.usesRaceFinals ? 'generate-race-finals' : 'generate-heats'}`, {
           teamIds: activeTeams(section).map((t) => t.id), raceNames: racesFor(s), lanesPerHeat: s.lanesPerHeat ?? lanesFor(section.format), replaceExisting: true,
         });
-        setDrafts(writeRaceDraft(competition.id, s.id, null));
       }
     }, 'Could not generate the timetable.');
     if (ok) setNotice(`Timetable generated for ${withTeams.length} ${withTeams.length === 1 ? 'session' : 'sessions'}.${skipped.length ? ` ${skipped.length} left alone because they had started.` : ''}`);
   }
 
+  const heatsText = (s: Session) => {
+    if (s.heats.length > 0) return sectionOf(s)?.usesRaceFinals ? `${s.heats.length} heats, qualifiers and finals` : describeHeats(s.heats.map((h) => h.entries.length));
+    const section = sectionOf(s);
+    return section ? describeHeats(heatSizes(activeTeams(section).length, s.lanesPerHeat ?? lanesFor(section.format))) : 'not generated yet';
+  };
   const startText = (s: Session) => {
     if (s.heats.length > 0 && s.scheduledStart) return `starts ${formatTime(new Date(s.scheduledStart))}`;
     const row = planOf.get(s.id);
     return s.heats.length > 0 ? 'no start time' : row && row.minutes > 0 ? `would start ${formatTime(row.start)}` : 'not generated yet';
   };
-  const heatsText = (s: Session) => {
-    if (s.heats.length > 0) return describeHeats(s.heats.map((h) => h.entries.length));
-    const section = sectionOf(s);
-    return section ? describeHeats(heatSizes(activeTeams(section).length, s.lanesPerHeat ?? lanesFor(section.format))) : 'not generated yet';
-  };
+
+  // The timetable as it stands: exact for sessions with heats, an estimate for the rest, and the breaks in between.
+  const lines = [
+    ...raceSessions.map((s) => {
+      const exact = s.heats.length > 0 && !!s.scheduledStart;
+      const row = planOf.get(s.id);
+      const start = exact ? new Date(s.scheduledStart!) : row && row.minutes > 0 ? row.start : null;
+      return { key: `s${s.id}`, start, title: s.name, sub: [s.arenaName?.trim() || MAIN_ARENA, heatsText(s)].join(' · '), minutes: exact ? null : row?.minutes ?? 0, exact };
+    }),
+    ...fixedItems.map((b) => ({
+      key: `b${b.id}`, start: b.scheduledStart ? new Date(b.scheduledStart) : null, title: b.name,
+      sub: [b.kind === SessionKind.Briefing ? 'Briefing' : 'Break', b.arenaName?.trim() || 'All arenas'].join(' · '), minutes: b.durationMinutes ?? 0, exact: true,
+    })),
+  ].sort((a, b) => (a.start?.getTime() ?? Infinity) - (b.start?.getTime() ?? Infinity));
 
   const editingSession = raceSessions.find((s) => s.id === editing) ?? null;
   const editingSection = editingSession ? sectionOf(editingSession) : undefined;
   const subtitle = [competition.name, competitionDateText(competition.startDate, competition.endDate), competition.location?.trim()].filter(Boolean).join(' · ');
+  const breakDate = (() => { const d = defaultEventStart(new Date(competition.startDate)); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
 
   return (
     <div className="skin mx-auto flex w-full max-w-[880px] flex-col gap-9 pb-40 pt-6 sm:pt-10">
       <div className="flex flex-col gap-2.5">
-        <h1 className="mg-display text-[44px] font-bold leading-none text-[rgb(var(--mg-heading))]">Format</h1>
+        <h1 className="mg-display text-[44px] font-bold leading-none text-[rgb(var(--mg-heading))]">On the day</h1>
         <p className="text-[15px] text-[rgb(var(--mg-muted))]">{subtitle}</p>
+        <p className="text-sm text-[rgb(var(--mg-muted))]">
+          Sessions, timing and heat, heat, final are set in the creator.{' '}
+          <Link to={`/admin/competitions/${competition.id}`} className="font-semibold underline">Change the structure</Link>
+        </p>
       </div>
 
       <ol aria-label="Steps" className="m-0 grid list-none grid-cols-2 gap-2 p-0 lg:grid-cols-4">
@@ -298,7 +279,7 @@ export function FormatPage() {
 
       <Panel id="fm-teams" title="Form teams" done={teamsFormed} meta={teamsFormed ? `${competition.teams.length} formed` : undefined}>
         {competition.sections.length === 0 ? (
-          <p className="text-sm text-[rgb(var(--mg-muted))]">No age groups yet. Add at least one in Edit details before forming teams.</p>
+          <p className="text-sm text-[rgb(var(--mg-muted))]">No age groups yet. Add at least one in the creator before forming teams.</p>
         ) : (
           <div className="flex flex-col gap-3">
             {teamsFormed && <p className="text-sm text-[rgb(var(--mg-body))]">Forming teams only creates teams from signups that aren’t in a team yet. Unused teams are replaced if you leave that box ticked.</p>}
@@ -309,88 +290,67 @@ export function FormatPage() {
         )}
       </Panel>
 
-      {competition.sections.map((section) => {
-        const mine = raceSessions.filter((s) => s.competitionSectionId === section.id);
-        const hhf = !!section.usesRaceFinals;
-        const teamCount = activeTeams(section).length;
-        return (
-          <section key={section.id} aria-labelledby={`fm-sec-${section.id}`} className="flex flex-col gap-4">
-            <PartHead id={`fm-sec-${section.id}`} title={section.displayName} meta={`${teamCount} ${SectionFormatLabel[section.format].toLowerCase()}`.replace(/^(\d+) individual$/, '$1 individuals')} />
-            <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[200px_minmax(0,1fr)_150px_150px]">
-              <div className="flex flex-col gap-2 text-[15px] font-medium">
-                <span>Structure</span>
-                <div role="radiogroup" aria-label={`Structure for ${section.displayName}`} className="flex min-h-12 gap-0.5 rounded-[10px] bg-[rgb(var(--mg-done-bg))] p-[3px]">
-                  {([['Standard', false, undefined], ['HHF', true, 'Heat, heat, final']] as const).map(([label, value, aria]) => (
-                    <button key={label} type="button" role="radio" aria-checked={hhf === value} aria-label={aria} disabled={busy} onClick={() => { if (hhf !== value) void saveSection(section, { usesRaceFinals: value }); }}
-                      className={`flex-1 rounded-lg text-sm font-semibold ${hhf === value ? 'bg-[rgb(var(--mg-button))] text-white' : 'text-[rgb(var(--mg-body))]'}`}>{label}</button>
-                  ))}
-                </div>
+      <Panel id="fm-races" title="Race lists" done={racesSet} keepOpen meta={steps[2].meta || undefined}>
+        <p className="text-sm text-[rgb(var(--mg-body))]">The races each heat runs. Anything you chose in the creator is already here; settle the rest, or change a list, up to the day.</p>
+        {competition.sections.map((section) => {
+          const mine = raceSessions.filter((s) => s.competitionSectionId === section.id);
+          return (
+            <section key={section.id} aria-label={displaySectionName(section.displayName)} className="mg-card overflow-visible">
+              <div className="flex items-baseline gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-4 py-2.5">
+                <strong className="min-w-0 flex-1 truncate text-[15px]">{displaySectionName(section.displayName)}</strong>
+                <span className="text-xs text-[rgb(var(--mg-muted))]">{activeTeams(section).length} {activeTeams(section).length === 1 ? 'team' : 'teams'}{section.usesRaceFinals ? ' · heat, heat, final' : ''}</span>
               </div>
-              <div className="flex min-w-0 flex-col gap-2 text-[15px] font-medium">
-                <span>Run-off race</span>
-                <FieldDrop label={`Run-off race for ${section.displayName}`} value={section.runoffRaceName ?? ''} onChange={(value) => void saveSection(section, { runoffRaceName: value || null })}
-                  options={[{ value: '', label: 'None' }, ...(section.runoffRaceName && !templates.includes(section.runoffRaceName) ? [{ value: section.runoffRaceName, label: section.runoffRaceName }] : []), ...templates.map((name) => ({ value: name, label: name }))]} />
-              </div>
-              <label className="flex flex-col gap-2 text-[15px] font-medium">Teams in finals
-                <span className="mg-field !min-h-12"><input inputMode="numeric" value={finalists[section.id] ?? String(section.finalistCount ?? '')} onChange={(e) => setFinalists({ ...finalists, [section.id]: e.target.value })} onBlur={() => commitFinalists(section)} /></span>
-              </label>
-              <label className="flex flex-col gap-2 text-[15px] font-medium">Minutes per heat
-                <span className="mg-field !min-h-12"><input inputMode="numeric" value={minutes[section.id] ?? String(minutesFor(section))} onChange={(e) => setMinutes({ ...minutes, [section.id]: e.target.value })} onBlur={() => commitMinutes(section)} /><span className="text-sm text-[rgb(var(--mg-muted))]">min</span></span>
-              </label>
-            </div>
-
-            <div className="mg-card overflow-visible">
-              <div aria-hidden="true" className="hidden grid-cols-[minmax(0,1fr)_200px_260px_40px] items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] py-2.5 pl-4 pr-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-[rgb(var(--mg-muted))] lg:grid">
-                <span>Session</span><span>Arena</span><span>Races</span><span />
-              </div>
-              {mine.length === 0 && <p className="px-4 py-3 text-sm text-[rgb(var(--mg-muted))]">No sessions yet. Add one to give this age group a race list.</p>}
+              {mine.length === 0 && <p className="px-4 py-3 text-sm text-[rgb(var(--mg-muted))]">No sessions yet. Add them in the creator.</p>}
               <ul>
                 {mine.map((s, i) => {
                   const races = racesFor(s);
+                  const chosen = (s.plannedRaces?.length ?? 0) > 0 || s.heats.length > 0;
                   return (
-                    <li key={s.id} className={`grid min-h-[60px] grid-cols-[minmax(0,1fr)_40px] items-center gap-x-3 gap-y-2 py-1.5 pl-4 pr-3 lg:grid-cols-[minmax(0,1fr)_200px_260px_40px] ${i ? 'border-t border-[rgb(var(--mg-rule-soft))]' : ''}`}>
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <SessionName key={`${s.id}-${s.name}`} session={s} disabled={busy} onCommit={(name) => void updateSession(s, { name })} />
+                    <li key={s.id} className={`flex min-h-[60px] items-center gap-3 px-4 py-1.5 ${i ? 'border-t border-[rgb(var(--mg-rule-soft))]' : ''}`}>
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <strong className="truncate text-[15px] font-semibold">{s.name}</strong>
                         <span className="text-xs text-[rgb(var(--mg-muted))]">{heatsText(s)} · {startText(s)}</span>
                       </span>
-                      <button type="button" aria-label={`Remove ${s.name}`} disabled={busy} onClick={() => removeSession(s)} className="flex h-11 w-10 items-center justify-center text-[rgb(var(--mg-muted))] lg:order-last"><Trash2 className="h-[18px] w-[18px]" aria-hidden="true" /></button>
-                      <FieldDrop label={`Arena for ${s.name}`} value={s.arenaName?.trim() || MAIN_ARENA} onChange={(arenaName) => void updateSession(s, { arenaName })} className="col-span-2 lg:col-span-1"
-                        options={[...new Set([s.arenaName?.trim() || MAIN_ARENA, ...arenas, MAIN_ARENA, `Arena ${arenas.length + 1}`])].map((name) => ({ value: name, label: name }))} />
-                      <button type="button" onClick={() => setEditing(s.id)} className="col-span-2 flex min-h-11 min-w-0 items-center gap-1.5 rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] px-2.5 text-left lg:col-span-1" aria-label={`Races for ${s.name}: ${races.length} races`}>
-                        <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="truncate text-sm font-semibold">{races.slice(0, 2).join(', ')}{races.length > 2 ? '…' : ''}</span><span className="text-[11px] text-[rgb(var(--mg-muted))]">{races.length} races{drafts[s.id] ? ' · not generated yet' : ''}</span></span>
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-                      </button>
+                      {hasScores(s) ? <span className="text-xs text-[rgb(var(--mg-muted))]">Started</span> : (
+                        <button type="button" onClick={() => setEditing(s.id)} aria-label={`Races for ${s.name}: ${races.length} races`}
+                          className="flex min-h-11 min-w-0 max-w-[55%] items-center gap-1.5 rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] px-2.5 text-left">
+                          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <span className="truncate text-sm font-semibold">{races.slice(0, 2).join(', ')}{races.length > 2 ? '…' : ''}</span>
+                            <span className="text-[11px] text-[rgb(var(--mg-muted))]">{races.length} races{chosen ? '' : ' · standard list'}</span>
+                          </span>
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
+                        </button>
+                      )}
                     </li>
                   );
                 })}
               </ul>
-              {hhf && (
-                <div className="flex min-h-[52px] items-center gap-2.5 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-4 py-1 text-sm text-[rgb(var(--mg-body))]">
-                  <strong className="font-semibold text-[rgb(var(--mg-ink))]">Final</strong>after each race, from the top of each heat
-                </div>
-              )}
-              <button type="button" onClick={() => void addSession(section)} disabled={busy || (hhf && mine.length >= 1)} title={hhf && mine.length >= 1 ? 'Heat, heat, final uses one session' : undefined}
-                className="flex min-h-[52px] w-full items-center gap-2.5 border-t border-[rgb(var(--mg-rule-soft))] px-4 text-left text-[15px] font-semibold text-[rgb(var(--mg-heading))] disabled:opacity-50">
-                <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />Add a session
-              </button>
-            </div>
-          </section>
-        );
-      })}
+            </section>
+          );
+        })}
+      </Panel>
 
-      {preview && (
-        <section aria-labelledby="fm-preview" className="flex flex-col gap-4">
-          <PartHead id="fm-preview" title="Timetable preview" meta="Nothing is saved until you generate" />
-          <ul className="mg-card mg-list">
-            {plan.length === 0 && <li className="p-4 text-sm text-[rgb(var(--mg-muted))]">No sessions yet.</li>}
-            {[...plan].sort((a, b) => a.start.getTime() - b.start.getTime()).map((row) => (
-              <li key={row.id} className="grid min-h-14 grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 py-1 pl-4 pr-3">
-                <span className="mg-line-time">{row.minutes > 0 ? formatTime(row.start) : '–'}</span>
-                <span className="flex min-w-0 flex-col gap-0.5"><strong className="truncate text-[15px] font-semibold">{row.name}</strong><span className="text-xs text-[rgb(var(--mg-muted))]">{row.arena || MAIN_ARENA} · {describeHeats(row.sizes)}</span></span>
-                <span className="text-[13px] text-[rgb(var(--mg-muted))]">{row.minutes > 0 ? `${row.minutes} min` : ''}</span>
-              </li>
-            ))}
-          </ul>
+      <section aria-labelledby="fm-timetable" className="flex flex-col gap-4">
+        <PartHead id="fm-timetable" title="Timetable" meta={raceSessions.length === 0 ? undefined : <Pill tone={generated ? 'plain' : 'provisional'}>{generated ? 'Exact' : 'Provisional'}</Pill>} />
+        {!generated && raceSessions.length > 0 && (
+          <p className="text-sm text-[rgb(var(--mg-muted))]">An estimate from the structure{teamsFormed ? ' and the teams formed so far' : ''}. Generating makes it exact. Breaks and briefings stay where you put them.</p>
+        )}
+        <ul className="mg-card mg-list" aria-label="Timetable so far">
+          {lines.length === 0 && <li className="p-4 text-sm text-[rgb(var(--mg-muted))]">No sessions yet.</li>}
+          {lines.map((line) => (
+            <li key={line.key} className="grid min-h-14 grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 py-1 pl-4 pr-3">
+              <span className="mg-line-time">{line.start ? formatTime(line.start) : '–'}</span>
+              <span className="flex min-w-0 flex-col gap-0.5"><strong className="truncate text-[15px] font-semibold">{line.title}</strong><span className="text-xs text-[rgb(var(--mg-muted))]">{line.sub}</span></span>
+              <span className="text-[13px] text-[rgb(var(--mg-muted))]">{line.minutes ? `${line.minutes} min` : ''}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {competition.laneHatbands && competition.laneHatbands.length > 0 && (
+        <section aria-labelledby="fm-hatbands" className="flex flex-col gap-4">
+          <PartHead id="fm-hatbands" title="Hatbands by lane" />
+          <HatbandList hatbands={competition.laneHatbands} />
         </section>
       )}
 
@@ -404,14 +364,11 @@ export function FormatPage() {
                 <span className="mg-line-time">{b.scheduledStart ? formatTime(new Date(b.scheduledStart)) : '–'}</span>
                 <span className="flex min-w-0 flex-col gap-0.5"><strong className="truncate text-[15px] font-semibold">{b.name}</strong><span className="text-xs text-[rgb(var(--mg-muted))]">{[b.arenaName?.trim() || 'All arenas', b.location?.trim()].filter(Boolean).join(' · ')}</span></span>
                 <span className="text-[13px] text-[rgb(var(--mg-muted))]">{b.durationMinutes ? `${b.durationMinutes} min` : ''}</span>
-                <button type="button" aria-label={`Remove ${b.name}`} disabled={busy} onClick={() => removeSession(b)} className="flex h-11 w-10 items-center justify-center text-[rgb(var(--mg-muted))]"><Trash2 className="h-[18px] w-[18px]" aria-hidden="true" /></button>
+                <button type="button" aria-label={`Remove ${b.name}`} disabled={busy} onClick={() => removeBreak(b)} className="flex h-11 w-10 items-center justify-center text-[rgb(var(--mg-muted))]"><Trash2 className="h-[18px] w-[18px]" aria-hidden="true" /></button>
               </li>
             ))}
           </ul>
-          <Link to={`/competitions/${competition.id}`} className="flex min-h-[52px] items-center gap-2.5 border-t border-[rgb(var(--mg-rule-soft))] px-4 text-[15px] font-semibold !text-[rgb(var(--mg-heading))]">
-            <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />Add a break or briefing
-            <span className="ml-auto text-xs font-medium text-[rgb(var(--mg-muted))]">on the timetable</span>
-          </Link>
+          <BreakForm date={breakDate} arenas={arenas} busy={busy} onAdd={(b) => void addBreak(b)} />
         </div>
       </section>
 
@@ -425,8 +382,7 @@ export function FormatPage() {
       <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
         <div className="mx-auto max-w-5xl px-3 sm:px-4">
           <div className="mx-auto flex max-w-[880px] flex-wrap items-center gap-3 py-4">
-            <span className="min-w-40 flex-1 text-sm font-medium text-[rgb(var(--mg-muted))]">Start times come from Generate</span>
-            <button type="button" onClick={() => setPreview(!preview)} aria-pressed={preview} className="mg-btn mg-btn-secondary !min-h-[50px] !rounded-[10px] !px-[18px] !text-base">Preview timetable</button>
+            <span className="min-w-40 flex-1 text-sm font-medium text-[rgb(var(--mg-muted))]">Exact start times come from Generate</span>
             <button type="button" onClick={() => void generate()} disabled={busy} className="mg-btn mg-btn-primary !min-h-[50px] !rounded-[10px] !px-[18px] !text-base">{busy ? 'Working…' : 'Generate timetable'}</button>
           </div>
         </div>
@@ -441,8 +397,8 @@ export function FormatPage() {
 }
 
 /** A step of the format: its title with a tick when done, and what to do. Done steps start folded away. */
-function Panel({ id, title, done, meta, children }: { id: string; title: string; done: boolean; meta?: string; children: ReactNode }) {
-  const [open, setOpen] = useState(!done);
+function Panel({ id, title, done, meta, keepOpen, children }: { id: string; title: string; done: boolean; meta?: string; keepOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(keepOpen || !done);
   return (
     <section aria-labelledby={id} className="flex flex-col gap-4">
       <div className="flex items-baseline gap-3 border-b-2 border-[rgb(var(--mg-heading))] pb-2">
@@ -457,15 +413,6 @@ function Panel({ id, title, done, meta, children }: { id: string; title: string;
   );
 }
 
-/** The session's name, editable in place; saved when the person leaves the box. */
-function SessionName({ session, disabled, onCommit }: { session: Session; disabled: boolean; onCommit: (name: string) => void }) {
-  const [value, setValue] = useState(session.name);
-  return (
-    <input aria-label={`Name of ${session.name}`} value={value} disabled={disabled} maxLength={120} onChange={(e) => setValue(e.target.value)}
-      onBlur={() => { const next = value.trim(); if (next && next !== session.name) onCommit(next); else setValue(session.name); }}
-      className="min-h-9 w-full min-w-0 rounded-md border border-transparent bg-transparent px-1 text-[15px] font-semibold hover:border-[rgb(var(--mg-rule))] focus:border-[rgb(var(--mg-heading))] focus:outline-none" />
-  );
-}
 
 function FormTeamsSectionCard({
   competitionId, section, paidCount, onChanged, setError,

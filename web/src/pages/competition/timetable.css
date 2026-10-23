@@ -59,6 +59,7 @@ a.tt-row:focus-visible { outline-offset: -2px; }
 .tt-sub { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-muted)); }
 .tt-planned { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-late-time)); }
 .tt-onnow { color: rgb(var(--mg-red)); font: 700 10px/1 'Barlow', sans-serif; letter-spacing: .06em; }
+.tt-provisional-note { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 500 14px/1.35 'Barlow', sans-serif; }
 .tt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .tt-live .tt-dot { animation: tt-pulse 1.6s ease-in-out infinite; }
 .tt-key { display: flex; flex-wrap: wrap; gap: 4px 12px; list-style: none; padding: 0; margin: 2px 0 0; font-size: 12px; color: rgb(var(--mg-muted)); }

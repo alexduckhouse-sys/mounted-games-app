@@ -1,6 +1,6 @@
 import type { DeclarationForm, RiderEntry, SavedRider, SectionFormat } from '../types';
 import {
-  asked, blankExtras, breach, extraIssues, extrasBody, extrasFromEntry, extrasReady, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers,
+  asked, blankExtras, normalisePhone, PHONE_HELP, breach, extraIssues, extrasBody, extrasFromEntry, extrasReady, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers,
 } from './decFormConfig';
 
 /**
@@ -191,8 +191,15 @@ export function statusText(slots: readonly Slot[], agreed: boolean, submitted: b
   return `${ridersAdded(slots)} of ${slots.length - 1} riders added`;
 }
 
-export function canSubmit(slots: readonly Slot[], agreed: boolean, teamName: string): boolean {
-  return teamIsFull(slots) && agreed && teamName.trim() !== '';
+export function canSubmit(slots: readonly Slot[], agreed: boolean, teamName: string, phoneOk = true): boolean {
+  return teamIsFull(slots) && agreed && teamName.trim() !== '' && phoneOk;
+}
+
+/** What is wrong with the trainer's phone number, in friendly words, or null when it is fine (or not asked for). */
+export function phoneProblem(phone: string, config: DecFormConfig): string | null {
+  if (!asked(config.trainerPhone)) return null;
+  if (phone.trim() === '') return config.trainerPhone === 2 ? 'Add a phone number for the trainer.' : null;
+  return normalisePhone(phone) === null ? PHONE_HELP : null;
 }
 
 export interface DecFormFields {
@@ -228,9 +235,9 @@ export function buildSubmitBody(fields: DecFormFields, slots: readonly Slot[], c
   return {
     teamId: fields.teamId,
     teamName: fields.teamName.trim(),
-    bibDescription: fields.bibs.trim(),
+    bibDescription: asked(config.bib) ? fields.bibs.trim() : '',
     trainerName: fields.trainerName.trim() || null,
-    trainerPhone: fields.phone.trim() || null,
+    trainerPhone: asked(config.trainerPhone) ? fields.phone.trim() || null : null,
     notes: fields.notes.trim() || null,
     // New riders go on the club's roster so they can be picked next time.
     saveToRoster: true,

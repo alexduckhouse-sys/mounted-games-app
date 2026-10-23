@@ -32,6 +32,8 @@ export interface PlanSession {
   minutesPerHeat: number;
   lanes: number;
   teamCount: number;
+  /** Heat, heat, final: every race is two qualifier heats and a final, so three heats of one race each. */
+  raceFinals?: boolean;
 }
 
 /** A break or briefing that is already on the timetable. An empty arena means everyone stops. */
@@ -66,7 +68,9 @@ export function planTimetable({ sessions, fixed, eventStart, gapMinutes = 10 }: 
   for (const session of [...sessions].sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id)) {
     const key = arenaKey(session.arena);
     const sizes = heatSizes(session.teamCount, session.lanes);
-    const minutes = sizes.length * session.raceCount * session.minutesPerHeat;
+    const minutes = sizes.length === 0 ? 0
+      : session.raceFinals ? 3 * session.raceCount * session.minutesPerHeat
+        : sizes.length * session.raceCount * session.minutesPerHeat;
     let start = cursors.get(key) ?? eventStart.getTime();
     if (minutes > 0) {
       let moved = true;

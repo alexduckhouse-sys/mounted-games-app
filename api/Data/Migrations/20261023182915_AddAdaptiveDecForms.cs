@@ -85,6 +85,12 @@ namespace MountedGames.Api.Data.Migrations
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
+                name: "TrainerPhone",
+                table: "DeclarationForms",
+                type: "text",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
                 name: "DecFormConfigJson",
                 table: "Competitions",
                 type: "text",
@@ -137,6 +143,10 @@ namespace MountedGames.Api.Data.Migrations
             migrationBuilder.DropColumn(
                 name: "WeightKg",
                 table: "RiderEntries");
+
+            migrationBuilder.DropColumn(
+                name: "TrainerPhone",
+                table: "DeclarationForms");
 
             migrationBuilder.DropColumn(
                 name: "DecFormConfigJson",

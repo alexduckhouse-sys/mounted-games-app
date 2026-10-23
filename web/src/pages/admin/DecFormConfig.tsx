@@ -16,11 +16,18 @@ const REQUIREMENT_OPTIONS = [
   { value: '2', label: 'Required' },
 ];
 
-type PartKey = 'dob' | 'weight' | 'ponyHeight' | 'ponyPassport' | 'ponyAge' | 'membershipNumber' | 'emergencyContact' | 'medicalNotes';
+type PartKey = 'trainerPhone' | 'bib' | 'dob' | 'weight' | 'ponyHeight' | 'ponyPassport' | 'ponyAge' | 'membershipNumber' | 'emergencyContact' | 'medicalNotes';
 
 interface Part { key: PartKey; label: string; hint: string }
 
 const GROUPS: { title: string; parts: Part[] }[] = [
+  {
+    title: 'The team',
+    parts: [
+      { key: 'trainerPhone', label: 'Trainer’s phone number', hint: 'One per team. A UK or Irish number.' },
+      { key: 'bib', label: 'Bibs or numbers', hint: 'A note of what the team’s bibs look like.' },
+    ],
+  },
   {
     title: 'The rider',
     parts: [
@@ -117,11 +124,11 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1.5 text-[15px] text-[rgb(var(--mg-body))]">
         <p>
-          Every dec form asks for the rider’s name, the pony’s name, the bib or number and the trainer’s name. Add anything else you need below.
-          {saved.isStandard && ' You haven’t changed anything yet, so trainers see the standard form: age, pony height and bibs.'}
+          Every dec form asks for the rider’s name, the pony’s name and the trainer’s name. Switch on anything else you need below.
+          {saved.isStandard && ' You haven’t changed anything yet, so trainers see the standard form: age, pony height, bibs and a phone number.'}
         </p>
         <p className="text-sm text-[rgb(var(--mg-muted))]">
-          Weight, age, medical notes and emergency contacts are only seen by you, the other organisers and the trainer who sent the form. They never show on public pages.
+          Weight, age, medical notes, emergency contacts and the trainer’s phone number are only seen by you, the other organisers and the trainer who sent the form. They never show on public pages.
         </p>
       </div>
 

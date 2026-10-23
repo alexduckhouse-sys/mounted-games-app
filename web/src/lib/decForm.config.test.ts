@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DeclarationForm, RiderEntry } from '../types';
-import { blankRider, buildSubmitBody, emptySlots, parseDraft, riderIssues, riderReady, slotFlagged, slotMeta, slotsFromForm, type DecRider } from './decForm';
+import { blankRider, buildSubmitBody, canSubmit, phoneProblem, emptySlots, parseDraft, riderIssues, riderReady, slotFlagged, slotMeta, slotsFromForm, type DecRider } from './decForm';
 import { BASIC_CONFIG, blankExtras, STANDARD_CONFIG, type DecFormConfig } from './decFormConfig';
 
 const rider = (extra: Partial<DecRider> = {}): DecRider => ({ ...blankRider(), fullName: 'Ella Hughes', pony: 'Pickle', ...extra });
@@ -89,5 +89,30 @@ describe('slotsFromForm and drafts carry the extras', () => {
     expect(draft?.slots[0]?.extra).toEqual(blankExtras());
     const withExtras = JSON.stringify({ teamId: 7, teamName: 'T', bibs: '', trainerName: '', phone: '', notes: '', slots: [{ fullName: 'Ella', extra: { weight: '30' } }, null] });
     expect(parseDraft(withExtras, 1)?.slots[0]?.extra).toMatchObject({ weight: '30', medicalNotes: '' });
+  });
+});
+
+describe('the trainer’s phone and the bib', () => {
+  it('judges the phone by the setup', () => {
+    expect(phoneProblem('', BASIC_CONFIG)).toBe('Add a phone number for the trainer.');
+    expect(phoneProblem('07123 456789', BASIC_CONFIG)).toBeNull();
+    expect(phoneProblem('nope', BASIC_CONFIG)).toContain('UK or Irish');
+    expect(phoneProblem('', STANDARD_CONFIG)).toBeNull();
+    expect(phoneProblem('nope', config({ trainerPhone: 0 }))).toBeNull();
+  });
+
+  it('holds the submit button back for a bad phone', () => {
+    const slots = emptySlots(1);
+    slots[0] = rider();
+    expect(canSubmit(slots, true, 'T')).toBe(true);
+    expect(canSubmit(slots, true, 'T', false)).toBe(false);
+  });
+
+  it('leaves the phone and bib out of the request when they are off', () => {
+    const slots = emptySlots(1);
+    slots[0] = rider();
+    const fields = { teamId: 7, teamName: 'T', bibs: 'Red', trainerName: '', phone: '07123 456789', notes: '' };
+    expect(buildSubmitBody(fields, slots, config({ trainerPhone: 0, bib: 0 }))).toMatchObject({ trainerPhone: null, bibDescription: '' });
+    expect(buildSubmitBody(fields, slots, config({ trainerPhone: 1, bib: 1 }))).toMatchObject({ trainerPhone: '07123 456789', bibDescription: 'Red' });
   });
 });

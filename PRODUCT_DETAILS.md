@@ -26,16 +26,17 @@ scoring to post-event standings — on phones in a field.
 
 ```
  ┌─ Organiser ─────────────────────────────────────────────────────────────┐
- │ 1. Create comp: name, dates, venue, organiser, payment destination,    │
- │    sections + per-section prices.                                       │
+ │ 1. Create comp in the stepped creator: details, age groups, structure  │
+ │    and timing (sessions, HHF, minutes, arena), races (optional).       │
+ │    The comp gets a provisional timetable straight away.                │
  │ 2. Share the comp link. Public sees Details tab with a Pay £X button   │
  │    per section.                                                         │
  │ 3. Mark signups Paid as money lands (Refund / Cancel also one-click).  │
- │ 4. When entries close → Format page:                                   │
+ │ 4. When entries close → On the day page (`/format`):                   │
  │      a. Close signups (public form disappears)                          │
  │      b. Auto-bin paid signups into teams (Pony Club, A/B/C)             │
- │      c. Open editor wizard to pick sessions / races / lanes             │
- │      d. Heats are generated; equipment list auto-computes               │
+ │      c. Settle race lists (anything chosen in the creator is there)     │
+ │      d. Heats are generated around breaks; the timetable turns exact    │
  │ 5. Day-of: heat status, scoring, live feed, weather.                   │
  │ 6. Finals: create-and-populate or scaffold-and-populate-from-standings.│
  └────────────────────────────────────────────────────────────────────────┘
@@ -56,8 +57,9 @@ scoring to post-event standings — on phones in a field.
   payment status, comp date and (once formed) which team they're on.
 
 ### Format-after-signups (v2)
-- `/admin/competitions/:id/format` walks the organiser through close-signups →
-  preview team bin → commit → hand-off to the editor wizard.
+- `/admin/competitions/:id/format` (titled "On the day") walks the organiser
+  through close-signups → preview team bin → commit → race lists → generating
+  the exact timetable. Structure is set in the creator (`docs/specs/creator-wizard.md`).
 - Auto-formation rule: paid signups are grouped by Pony Club (free-text match
   against the canonical list, "Unaffiliated" as fallback) then split into
   teams of N (default 4 for Teams, 2 for Pairs, 1 for Individual). Extras

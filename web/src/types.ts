@@ -129,6 +129,8 @@ export interface CompetitionSummary {
   sectionCount: number;
   teamCount: number;
   sessionCount: number;
+  /** Sessions that have heats: the timetable is exact for these. Older API responses leave it out. */
+  heatedSessionCount?: number;
 }
 
 export interface CompetitionPickerItem {
@@ -282,6 +284,8 @@ export interface Session {
   laneRotationMode?: 0 | 1 | 2;
   /** Heat-heat-final: how many teams go through from each qualifier to the final (3 when unset). */
   qualifiersPerHeat?: number | null;
+  /** The races chosen for each heat before any heat exists (the competition creator); null when not chosen. */
+  plannedRaces?: string[] | null;
   heats: Heat[];
 }
 
@@ -314,6 +318,8 @@ export interface CompetitionDetail {
   isDemo?: boolean;
   /** The organiser's terms and conditions as plain text; empty means the sign-up form shows a placeholder. */
   termsText?: string | null;
+  /** The hatband colour in each lane, index 0 being lane 1; set when the competition is created. Null when not set. */
+  laneHatbands?: string[] | null;
   /** Where entry fees are paid out: the organiser's club and its masked account. Public, no personal data. */
   payoutsTo?: PayoutsTo | null;
 }
@@ -645,6 +651,8 @@ export interface DeclarationForm {
   termsAcceptedAt?: string | null;
   /** The team name the entrant gave when entering, so the form is clearly the one for that entry. Public, like the team's name. */
   entryTeamName?: string | null;
+  /** The coach's phone number for this team. Staff and the submitter only. */
+  trainerPhone?: string | null;
   /** How many riders on the form broke a rule. Staff and the submitter only; 0 for everyone else. */
   flagCount?: number;
 }

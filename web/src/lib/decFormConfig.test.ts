@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BASIC_CONFIG, blankExtras, breach, breaches, breachWarning, configProblem, extraIssues, extrasBody, extrasFromEntry, extrasReady,
-  isNumberText, limitText, MAX_CUSTOM_FIELDS, newFieldId, parseConfigResponse, STANDARD_CONFIG, weightFields, weightKg,
+  isNumberText, limitText, normalisePhone, MAX_CUSTOM_FIELDS, newFieldId, parseConfigResponse, STANDARD_CONFIG, weightFields, weightKg,
   type CustomField, type DecFormConfig, type ExtraAnswers,
 } from './decFormConfig';
 
@@ -207,5 +207,21 @@ describe('extrasFromEntry', () => {
       .toEqual({ birthYear: '2014', ageGroup: 'U12', weightStone: '5', weight: '4', ponyPassport: 'P1', ponyAge: '9', membershipNumber: 'M1',
         emergencyName: 'Mum', emergencyPhone: '07700', medicalNotes: 'asthma', custom: { girth: '50' } });
     expect(extrasFromEntry({}, 0)).toEqual(blankExtras());
+  });
+});
+
+describe('normalisePhone', () => {
+  it('tidies UK and Irish numbers', () => {
+    expect(normalisePhone('07123 456 789')).toBe('07123456789');
+    expect(normalisePhone('(07123) 456-789')).toBe('07123456789');
+    expect(normalisePhone('+44 (0)7123 456789')).toBe('+447123456789');
+    expect(normalisePhone('0044 7123 456789')).toBe('+447123456789');
+    expect(normalisePhone('+44 07123 456789')).toBe('+447123456789');
+    expect(normalisePhone('+353 87 123 4567')).toBe('+353871234567');
+    expect(normalisePhone('087 123 4567')).toBe('0871234567');
+  });
+
+  it('refuses anything else', () => {
+    for (const bad of ['', '12345', '7123456789', '+1 202 555 0143', '07123 abc 789', '+44 12', '0123456789012']) expect(normalisePhone(bad)).toBeNull();
   });
 });
