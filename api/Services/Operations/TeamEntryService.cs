@@ -138,6 +138,7 @@ public class TeamEntryService(AppDbContext db)
     {
         var entries = await db.HeatEntries
             .Include(e => e.Heat).ThenInclude(h => h!.Session)
+            .Include(e => e.Heat).ThenInclude(h => h!.Entries)
             .Include(e => e.Heat).ThenInclude(h => h!.Races).ThenInclude(r => r.Results)
             .Where(e => e.TeamId == team.Id && e.Heat!.Session!.CompetitionId == team.CompetitionId)
             .ToListAsync(ct);
@@ -150,6 +151,13 @@ public class TeamEntryService(AppDbContext db)
             if (HeatProtection.IsProtected(heat, heat.Session!, signedOff)) continue;
             removed.Add(new RemovedPlace(heat.Id, heat.SessionId, entry.LaneIndex));
             db.HeatEntries.Remove(entry);
+            var remaining = heat.Entries
+                .Where(e => e.Id != entry.Id && e.TeamId != team.Id)
+                .OrderBy(e => e.LaneIndex)
+                .ThenBy(e => e.Id)
+                .ToList();
+            for (var i = 0; i < remaining.Count; i++)
+                remaining[i].LaneIndex = i + 1;
         }
         return removed;
     }
@@ -176,10 +184,11 @@ public class TeamEntryService(AppDbContext db)
             var heat = heats.FirstOrDefault(h => h.Id == place.HeatId);
             if (heat is null || HeatProtection.IsProtected(heat, heat.Session!, signedOff)) continue;
             if (heat.Entries.Any(e => e.TeamId == team.Id)) continue;
-            var lane = heat.Entries.Any(e => e.LaneIndex == place.LaneIndex)
-                ? heat.Entries.Select(e => e.LaneIndex).DefaultIfEmpty(0).Max() + 1
-                : place.LaneIndex;
-            db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = team.Id, LaneIndex = lane });
+            var ordered = heat.Entries.OrderBy(e => e.LaneIndex).ThenBy(e => e.Id).ToList();
+            var targetLane = Math.Clamp(place.LaneIndex, 1, ordered.Count + 1);
+            foreach (var existing in ordered.Where(e => e.LaneIndex >= targetLane))
+                existing.LaneIndex++;
+            db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = team.Id, LaneIndex = targetLane });
             restoredSessions.Add(heat.SessionId);
         }
         return restoredSessions;

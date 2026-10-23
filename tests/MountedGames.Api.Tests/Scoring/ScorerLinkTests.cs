@@ -275,7 +275,8 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         Assert.Equal("Sam", session!.Label);
         Assert.Equal("Main", session.ArenaName);
         Assert.Equal(w.Arena.CompetitionId, session.CompetitionId);
-        var main = Assert.Single(session.Sessions);
+        Assert.Equal(2, session.Sessions.Count);
+        var main = session.Sessions[0];
         Assert.Equal(w.Arena.SessionId, main.Id);
         Assert.Equal(w.MainRaces, main.Heats.Single().Races.Select(r => r.Id).ToArray());
     }
@@ -369,28 +370,31 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         Assert.DoesNotContain("protest", read);
         Assert.Contains("\"status\":1", read);
 
-        // The link corrects the race (team 3 turns out to be a DNS), and tries to write a note of its own.
+        // The link corrects the race (team 3 turns out to be a DNS) and records an elimination reason note,
+        // while leaving team 1's existing staff note intact when null is sent.
         var corrected = await scorer.PutAsJsonAsync(Score(race), new UpdateRaceScoreRequest(new[]
         {
-            new FinishingPlaceDto(ids[0], 1, false, null, "scorer tries to overwrite"),
-            new FinishingPlaceDto(ids[1], 2, false), new FinishingPlaceDto(ids[2], 0, true, ResultStatus.DidNotStart),
+            new FinishingPlaceDto(ids[0], 1, false, null, null),
+            new FinishingPlaceDto(ids[1], 2, false), new FinishingPlaceDto(ids[2], 0, true, ResultStatus.DidNotStart, "Missed equipment"),
         }, 1, "link-1", "Team 3 never started"));
         Assert.Equal(HttpStatusCode.OK, corrected.StatusCode);
         Assert.DoesNotContain("protest", await corrected.Content.ReadAsStringAsync());
+        Assert.DoesNotContain("Missed equipment", await corrected.Content.ReadAsStringAsync());
 
         var stored = await _f.WithDbAsync(db => db.Results.AsNoTracking().Where(r => r.RaceId == race).OrderBy(r => r.TeamId).ToListAsync());
         Assert.Equal("Staff note: protest lodged", stored.Single(r => r.TeamId == ids[0]).RefereeNote);
+        Assert.Equal("Missed equipment", stored.Single(r => r.TeamId == ids[2]).RefereeNote);
         Assert.Equal(ResultStatus.DidNotStart, stored.Single(r => r.TeamId == ids[2]).Status);
 
-        // The outbox's legacy save works the same way.
+        // The outbox's legacy save also records the elimination reason note without returning it.
         var legacy = await scorer.PostAsJsonAsync($"/api/scorer/races/{w.MainRaces[1]}/results", new SubmitRaceResultsRequest(new[]
         {
-            new FinishingPlaceDto(ids[0], 1, false, null, "ignored note"), new FinishingPlaceDto(ids[1], 0, true, ResultStatus.Retired),
+            new FinishingPlaceDto(ids[0], 1, false), new FinishingPlaceDto(ids[1], 0, true, ResultStatus.Retired, "Unruly pony"),
             new FinishingPlaceDto(ids[2], 2, false),
         }));
         Assert.Equal(HttpStatusCode.OK, legacy.StatusCode);
         var second = await _f.WithDbAsync(db => db.Results.AsNoTracking().Where(r => r.RaceId == w.MainRaces[1]).ToListAsync());
-        Assert.All(second, r => Assert.Null(r.RefereeNote));
+        Assert.Equal("Unruly pony", second.Single(r => r.TeamId == ids[1]).RefereeNote);
         Assert.Equal(ResultStatus.Retired, second.Single(r => r.TeamId == ids[1]).Status);
     }
 
@@ -456,13 +460,16 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         var (token, _) = await CreateLinkAsync(w, "Main");
         var scorer = Scorer(token);
 
-        foreach (var race in new[] { w.SideRaces[0], other.MainRaces[0], 999999 })
+        // Any arena in the same competition is accessible to the competition's scorer link.
+        Assert.Equal(HttpStatusCode.OK, (await scorer.GetAsync(Score(w.SideRaces[0]))).StatusCode);
+
+        foreach (var race in new[] { other.MainRaces[0], 999999 })
         {
             Assert.Equal(HttpStatusCode.NotFound, (await scorer.GetAsync(Score(race))).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await scorer.PutAsJsonAsync(Score(race), Put(w, 0, "x"))).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await scorer.PostAsJsonAsync($"/api/scorer/races/{race}/results", new SubmitRaceResultsRequest([], null))).StatusCode);
         }
-        Assert.Empty(await _f.WithDbAsync(db => db.Set<RaceScoreEvent>().Where(e => e.RaceId == w.SideRaces[0] || e.RaceId == other.MainRaces[0]).ToListAsync()));
+        Assert.Empty(await _f.WithDbAsync(db => db.Set<RaceScoreEvent>().Where(e => e.RaceId == other.MainRaces[0]).ToListAsync()));
     }
 
     [Fact]
@@ -477,8 +484,8 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         });
         var scorer = Scorer(token);
 
-        Assert.Empty((await scorer.GetFromJsonAsync<ScorerSessionDto>("/api/scorer/session", TestClients.Json))!.Sessions);
-        Assert.Equal(HttpStatusCode.NotFound, (await scorer.GetAsync(Score(w.MainRaces[0]))).StatusCode);
+        Assert.Equal(2, (await scorer.GetFromJsonAsync<ScorerSessionDto>("/api/scorer/session", TestClients.Json))!.Sessions.Count);
+        Assert.Equal(HttpStatusCode.OK, (await scorer.GetAsync(Score(w.MainRaces[0]))).StatusCode);
     }
 
     // ---- the token -------------------------------------------------------------------------------

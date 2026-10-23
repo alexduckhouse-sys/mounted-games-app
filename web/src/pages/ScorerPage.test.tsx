@@ -145,15 +145,20 @@ describe('ScorerPage', () => {
     expect(rows[2]).toMatch(/Team 1.*Red bib/);
   });
 
-  it('does not ask why a team is out, because a link cannot write referee notes, and has no HC button', async () => {
+  it('asks why an eliminated team is out and records the reason, while having no HC button', async () => {
     const user = userEvent.setup();
     open();
     await opened('Bending');
     await tapTeams(user, ['Team 1']);
     await user.click(screen.getByRole('button', { name: 'Eliminate Team 2' }));
     await user.click(screen.getByRole('button', { name: 'Race complete' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(outbox()[0].places).toEqual([{ teamId: 1, place: 1, eliminated: false }, { teamId: 2, place: 0, eliminated: true }]);
+    const sheet = await screen.findByRole('dialog', { name: 'Why were teams eliminated?' });
+    await user.click(within(sheet).getByRole('button', { name: 'Did not start' }));
+    await user.click(within(sheet).getByRole('button', { name: 'Save race' }));
+    expect(outbox()[0].places).toEqual([
+      { teamId: 1, place: 1, eliminated: false },
+      { teamId: 2, place: 0, eliminated: true, status: 2, refereeNote: 'Did not start' },
+    ]);
     expect(screen.queryByRole('button', { name: /hors concours/i })).not.toBeInTheDocument();
   });
 
