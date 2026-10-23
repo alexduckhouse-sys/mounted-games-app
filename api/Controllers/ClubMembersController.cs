@@ -74,8 +74,14 @@ public class ClubMembersController(AppDbContext db, UserManager<AppUser> users) 
     /// themselves: that files a request for an admin and changes nothing yet.
     /// </summary>
     [HttpPut("{userId}/role")]
-    public async Task<ActionResult<ChangeMemberRoleResponse>> ChangeRole(int clubId, string userId, ChangeMemberRoleRequest req, CancellationToken ct)
+    public Task<ActionResult<ChangeMemberRoleResponse>> ChangeRole(int clubId, string userId, ChangeMemberRoleRequest req, CancellationToken ct)
+        => db.Database.CreateExecutionStrategy().ExecuteAsync(() => ChangeRoleOnceAsync(clubId, userId, req, ct));
+
+    // Postgres runs with a retrying execution strategy, which refuses a transaction started outside it. Run the whole
+    // change inside the strategy, starting from a clean change tracker in case it is retried.
+    private async Task<ActionResult<ChangeMemberRoleResponse>> ChangeRoleOnceAsync(int clubId, string userId, ChangeMemberRoleRequest req, CancellationToken ct)
     {
+        db.ChangeTracker.Clear();
         var club = await ScopeAsync(clubId, ct);
         if (club is null) return NotFound();
         var wanted = RankedRoles.FirstOrDefault(r => string.Equals(r, req.Role?.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -121,8 +127,14 @@ public class ClubMembersController(AppDbContext db, UserManager<AppUser> users) 
     /// stay on the club's roster, and the teams they looked after have no trainer until the manager picks one.
     /// </summary>
     [HttpDelete("{userId}")]
-    public async Task<IActionResult> Remove(int clubId, string userId, CancellationToken ct)
+    public Task<IActionResult> Remove(int clubId, string userId, CancellationToken ct)
+        => db.Database.CreateExecutionStrategy().ExecuteAsync(() => RemoveOnceAsync(clubId, userId, ct));
+
+    // Postgres runs with a retrying execution strategy, which refuses a transaction started outside it. Run the whole
+    // removal inside the strategy, starting from a clean change tracker in case it is retried.
+    private async Task<IActionResult> RemoveOnceAsync(int clubId, string userId, CancellationToken ct)
     {
+        db.ChangeTracker.Clear();
         var club = await ScopeAsync(clubId, ct);
         if (club is null) return NotFound();
 
