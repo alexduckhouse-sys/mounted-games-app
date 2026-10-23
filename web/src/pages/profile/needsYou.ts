@@ -12,6 +12,8 @@ export interface NeedsYouValue {
   count: number;
   /** Approves or declines one request; false when the server said no. */
   review: (request: TrainerRequest, action: 'approve' | 'decline') => Promise<boolean>;
+  /** Why the last approve or decline failed (the server's message when it sent one); null when it didn't. */
+  reviewError?: string | null;
 }
 
 export const NeedsYouContext = createContext<NeedsYouValue>({ requests: [], teams: null, decForms: [], count: 0, review: async () => false });

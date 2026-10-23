@@ -32,7 +32,7 @@ export type SharePage =
 
 const COMPETITION_PATH = /^\/competitions\/(\d{1,9})(?:\/[A-Za-z0-9/_-]*)?$/;
 const TEAM_PROFILE_PATH = /^\/team-profiles\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
-const GENERIC_PATHS = new Set(['/', '/competitions', '/competitions/past']);
+const GENERIC_PATHS = new Set(['/', '/events', '/competitions', '/competitions/past']);
 
 /** Which share card a page path should show, or null for pages that get no special handling. */
 export function sharePageFor(pathname: string): SharePage | null {

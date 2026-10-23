@@ -156,6 +156,41 @@ describe('CurrentCompetitionProvider: remembering', () => {
   });
 });
 
+describe('CurrentCompetitionProvider: forgetting', () => {
+  it('drops a remembered competition, its cookie and the choice', () => {
+    document.cookie = cookieFor(spring);
+    const { result } = mount();
+    act(() => result.current.forget());
+    expect(result.current).toMatchObject({ current: null, rememberChoice: 'ask' });
+    expect(document.cookie).not.toContain('mg.competition');
+  });
+
+  it('drops a competition kept for this visit', () => {
+    sessionStorage.setItem('mg.competitionVisit', JSON.stringify(spring));
+    const { result } = mount();
+    act(() => result.current.forget());
+    expect(result.current).toMatchObject({ current: null, rememberChoice: 'ask' });
+    expect(sessionStorage.getItem('mg.competitionVisit')).toBeNull();
+  });
+
+  it('lets the next competition be chosen afresh', () => {
+    document.cookie = cookieFor(spring);
+    const { result } = mount();
+    act(() => result.current.forget());
+    act(() => result.current.setCurrent(autumn));
+    expect(result.current).toMatchObject({ current: autumn, rememberChoice: 'ask' });
+    expect(document.cookie).not.toContain('mg.competition');
+  });
+
+  it('still forgets when the browser will not let it touch storage', () => {
+    const { result } = mount();
+    act(() => result.current.setCurrent(spring));
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('blocked'); });
+    act(() => result.current.forget());
+    expect(result.current.current).toBeNull();
+  });
+});
+
 describe('useCurrentCompetition', () => {
   it('must be used inside the provider', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});

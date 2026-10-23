@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
+import { apiErrorMessage } from '../../lib/apiError';
 import { initialsOf } from '../../lib/profile';
 import type { TrainerRequest } from '../../types';
 import { PartHead } from './LaptopParts';
 
-export function TrainerRequestsSection({ canReview }: { canReview: boolean }) {
+export function TrainerRequestsSection() {
   const [requests, setRequests] = useState<TrainerRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -34,8 +35,8 @@ export function TrainerRequestsSection({ canReview }: { canReview: boolean }) {
     try {
       await api.post(`/admin/trainer-requests/${encodeURIComponent(request.userId)}/${action}`);
       await load();
-    } catch {
-      setError('Could not update trainer requests. Refresh the list and try again.');
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Could not update trainer requests. Refresh the list and try again.'));
     } finally {
       setBusy(false);
     }
@@ -63,7 +64,6 @@ export function TrainerRequestsSection({ canReview }: { canReview: boolean }) {
       {loading ? <p role="status" className="mg-meta">Loading trainer requests…</p> : (
         <>
           {!error && requests.length === 0 && <p className="mg-card p-4 text-sm text-[rgb(var(--mg-muted))]">No trainer requests.</p>}
-          {requests.length > 0 && !canReview && <p className="mg-meta">Switch to edit mode to approve or decline requests.</p>}
           {requests.length > 0 && (
             <ul className="mg-card mg-list">
               {requests.map((request) => (
@@ -74,10 +74,10 @@ export function TrainerRequestsSection({ canReview }: { canReview: boolean }) {
                     <span className="text-[13px] text-[rgb(var(--mg-muted))]">{request.requestedRole === 'Manager' ? 'Team manager' : 'Trainer'} · <span>{request.clubName ?? 'No club given'}</span></span>
                     <span className="text-xs text-[rgb(var(--mg-muted))]">{request.email && <span>{request.email}</span>}{request.email && ' · '}Requested <time dateTime={request.requestedAt}>{new Date(request.requestedAt).toLocaleString('en-GB')}</time></span>
                   </div>
-                  {canReview && <div className="col-span-2 grid grid-cols-2 gap-2 sm:col-span-1">
+                  <div className="col-span-2 grid grid-cols-2 gap-2 sm:col-span-1">
                     <button type="button" className="mg-btn mg-btn-primary !min-h-11 !rounded-[10px]" disabled={busy || !!error} onClick={() => review(request, 'approve')}>Approve</button>
                     <button type="button" className="mg-btn mg-btn-secondary !min-h-11 !rounded-[10px]" disabled={busy || !!error} onClick={() => review(request, 'decline')}>Decline</button>
-                  </div>}
+                  </div>
                 </li>
               ))}
             </ul>

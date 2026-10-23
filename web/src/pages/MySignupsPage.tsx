@@ -68,7 +68,7 @@ function SignupList() {
       {signups && signups.length === 0 && (
         <div className="mg-card space-y-3 p-5">
           <p className="mg-lede">You haven't signed up to any competitions yet.</p>
-          <Link to="/competitions" className="mg-btn mg-btn-primary !min-h-11 !px-4 !text-[15px]">Browse competitions</Link>
+          <Link to="/events" className="mg-btn mg-btn-primary !min-h-11 !px-4 !text-[15px]">Browse competitions</Link>
         </div>
       )}
 

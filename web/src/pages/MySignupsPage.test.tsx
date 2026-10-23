@@ -39,7 +39,7 @@ describe('MySignupsPage', () => {
 
   it('offers to browse competitions when the person has no entries', async () => {
     mount();
-    expect(await screen.findByRole('link', { name: 'Browse competitions' })).toHaveAttribute('href', '/competitions');
+    expect(await screen.findByRole('link', { name: 'Browse competitions' })).toHaveAttribute('href', '/events');
   });
 
   it('groups entries into coming up and past, with the price and status of each', async () => {

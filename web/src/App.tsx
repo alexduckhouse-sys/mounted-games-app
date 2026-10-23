@@ -17,7 +17,7 @@ import { AppShell } from './components/AppShell';
 import { CompactPageBarProvider } from './components/CompactPageBarContext';
 import { StartPage } from './pages/StartPage';
 import { CompetitionPage } from './pages/CompetitionPage';
-import { SessionsTab } from './pages/competition/SessionsTab';
+import { AfterDrawOnly, CompetitionHome } from './pages/competition/CompetitionHome';
 import './App.css';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
@@ -33,13 +33,13 @@ const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab')
 const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').then((module) => ({ default: module.BroadcastPage })));
 const ProducePage = lazy(() => import('./pages/competition/ProducePage').then((module) => ({ default: module.ProducePage })));
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
+const EntryPage = lazy(() => import('./pages/competition/EntryPage').then((module) => ({ default: module.EntryPage })));
 const DetailsTab = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.DetailsTab })));
 const FollowingPage = lazy(() => import('./pages/FollowingPage').then((module) => ({ default: module.FollowingPage })));
 const SponsorsPage = lazy(() => import('./pages/competition/SponsorsPage').then((module) => ({ default: module.SponsorsPage })));
 const FollowingTab = lazy(() => import('./pages/competition/FollowingTab').then((module) => ({ default: module.FollowingTab })));
 const MyTeamsPage = lazy(() => import('./pages/MyTeamsPage').then((module) => ({ default: module.MyTeamsPage })));
 const DeclarationsIndexPage = lazy(() => import('./pages/DeclarationsIndexPage').then((module) => ({ default: module.DeclarationsIndexPage })));
-const ChatIndexPage = lazy(() => import('./pages/ChatIndexPage').then((module) => ({ default: module.ChatIndexPage })));
 const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })));
 const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
@@ -90,13 +90,15 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route index element={<StartPage />} />
               <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="events" element={<CompetitionsPage />} />
               <Route path="competitions" element={<CompetitionsPage />} />
               <Route path="competitions/past" element={<CompetitionsPage past />} />
               <Route path="competitions/:id" element={<CompetitionPage />}>
-                <Route index element={<SessionsTab />} />
-                <Route path="scoring" element={<ScoringTab />} />
-                <Route path="toplists" element={<ScoringTab key="toplists" toplistOnly />} />
-                <Route path="session/:sessionId" element={<SessionPage />} />
+                <Route index element={<CompetitionHome />} />
+                <Route path="enter" element={<EntryPage />} />
+                <Route path="scoring" element={<AfterDrawOnly><ScoringTab /></AfterDrawOnly>} />
+                <Route path="toplists" element={<AfterDrawOnly><ScoringTab key="toplists" toplistOnly /></AfterDrawOnly>} />
+                <Route path="session/:sessionId" element={<AfterDrawOnly><SessionPage /></AfterDrawOnly>} />
                 <Route path="arena" element={<ArenaPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="teams" element={<TeamsTab />} />
@@ -108,7 +110,7 @@ export default function App() {
                 <Route path="declarations" element={<DeclarationsTab />} />
                 <Route path="broadcast" element={<ProtectedRoute roles={['Admin', 'Trainer']}><BroadcastPage /></ProtectedRoute>} />
                 <Route path="produce" element={<ProtectedRoute roles={['Admin', 'Trainer']}><ProducePage /></ProtectedRoute>} />
-                <Route path="chat" element={<ChatTab />} />
+                <Route path="chat" element={<AfterDrawOnly><ChatTab /></AfterDrawOnly>} />
                 <Route path="details" element={<DetailsTab />} />
                 <Route path="sponsors" element={<SponsorsPage />} />
                 <Route path="live" element={<Navigate to="../chat" replace />} />
@@ -125,7 +127,7 @@ export default function App() {
               <Route path="stats/:kind" element={<StatsPage />} />
               <Route path="event-tools/:competitionId" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EventToolsPage /></ProtectedRoute>} />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
-              <Route path="chat" element={<ChatIndexPage />} />
+              <Route path="chat" element={<Navigate to="/events" replace />} />
               <Route path="shop" element={<ShopPage />} />
               <Route path="me" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="me/members" element={<ProtectedRoute roles={['Manager', 'Admin']}><MembersPage /></ProtectedRoute>} />

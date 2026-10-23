@@ -14,9 +14,9 @@ const NO_TEAMS: Team[] = [];
 
 /** Who I am, what needs me, my club and my account, in one place (the Me tab). */
 export function ProfilePage() {
-  const { user, hasRole, canEdit, logout } = useAuth();
+  const { user, hasRole, logout } = useAuth();
   const { current } = useCurrentCompetition();
-  const { requests, decForms: missing, teams, count, review } = useNeedsYou();
+  const { requests, decForms: missing, teams, count, review, reviewError } = useNeedsYou();
   const navigate = useNavigate();
   const notify = useTeamNotifications(NO_TEAMS);
   const [savedRiders, setSavedRiders] = useState<number | null>(null);
@@ -46,8 +46,6 @@ export function ProfilePage() {
 
   const isAdmin = hasRole('Admin');
   const runsClub = isAdmin || hasRole('Manager');
-  // The admin lock on edit mode guards the admin's own changes; a team manager has no such switch.
-  const locked = isAdmin && !canEdit();
   const showClub = isAdmin || clubId != null || hasRole('Trainer') || hasRole('Manager') || (teams?.length ?? 0) > 0;
   const showTeams = !isAdmin || (teams?.length ?? 0) > 0;
   const teamsHere = competitionId == null ? [] : (teams ?? NO_TEAMS).filter((t) => t.competitionId === competitionId);
@@ -89,12 +87,12 @@ export function ProfilePage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button type="button" className="mg-btn mg-btn-primary !min-h-11 flex-1 !text-[15px]" disabled={locked} title={locked ? 'Switch to edit mode' : undefined}
+                <button type="button" className="mg-btn mg-btn-primary !min-h-11 flex-1 !text-[15px]"
                   onClick={() => decide(request, 'approve')}>Approve</button>
-                <button type="button" className="mg-btn mg-btn-secondary !min-h-11 flex-1 !text-[15px]" disabled={locked} title={locked ? 'Switch to edit mode' : undefined}
+                <button type="button" className="mg-btn mg-btn-secondary !min-h-11 flex-1 !text-[15px]"
                   onClick={() => decide(request, 'decline')}>Decline</button>
               </div>
-              {failed === request.userId && <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">Could not update this request. Try again.</p>}
+              {failed === request.userId && <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">{reviewError ?? 'Could not update this request. Try again.'}</p>}
             </div>
           ))}
           {missing.map((t) => (
