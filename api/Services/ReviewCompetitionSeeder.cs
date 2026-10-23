@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Entities.Operations;
+using MountedGames.Api.Entities.Seasons;
 
 namespace MountedGames.Api.Services;
 
@@ -28,16 +30,36 @@ public static class ReviewCompetitionSeeder
         return groups.Select(g => g.ToArray()).ToList();
     }
 
-    // Explicit command only. Never run from normal application startup.
-    public static async Task<int> SeedAsync(AppDbContext db, DateTime todayUtc)
+    private const int MinutesPerHeat = 35;
+    private const int ChangeoverMinutes = 5;
+
+    // The eight demo events: name, icon and day offset from the seed date. Offset 0 is the live one.
+    private static readonly (string Name, string Icon, int Offset)[] Events =
     {
-        var events = new[]
-        {
-            ("Demo Meadow Cup", "gb", 0), ("Demo Clover Challenge", "ie", 3),
-            ("Demo River Games", "fr", 7), ("Demo Forest Trophy", "de", 14),
-            ("Demo Windmill Open", "nl", 21), ("Demo World Festival", "world", 28),
-            ("Demo Valley Finals", "trophy", -7), ("Demo Lakeside Games", "flag", -21),
-        };
+        ("Demo Meadow Cup", "gb", 0), ("Demo Clover Challenge", "ie", 3),
+        ("Demo River Games", "fr", 7), ("Demo Forest Trophy", "de", 14),
+        ("Demo Windmill Open", "nl", 21), ("Demo World Festival", "world", 28),
+        ("Demo Valley Finals", "trophy", -7), ("Demo Lakeside Games", "flag", -21),
+    };
+
+    private static DateTime RoundDownTo5Minutes(DateTime t)
+        => new(t.Year, t.Month, t.Day, t.Hour, t.Minute / 5 * 5, 0, DateTimeKind.Utc);
+
+    private static DateTime RoundUpTo5Minutes(DateTime t)
+    {
+        var down = RoundDownTo5Minutes(t);
+        return down < t ? down.AddMinutes(5) : down;
+    }
+
+    /// <summary>
+    /// Explicit command only. Never run from normal application startup. With <paramref name="nowUtc"/>, today's
+    /// event (offset 0) is timed from that moment: its running session started about 30 minutes before it, the
+    /// finished one ran before that, and every upcoming session in an arena follows the running one.
+    /// </summary>
+    public static async Task<int> SeedAsync(AppDbContext db, DateTime todayUtc, DateTime? nowUtc = null, bool markExistingAsDemo = true)
+    {
+        var events = Events;
+        var now = nowUtc.HasValue ? DateTime.SpecifyKind(nowUtc.Value, DateTimeKind.Utc) : (DateTime?)null;
         return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             db.ChangeTracker.Clear();
@@ -51,7 +73,7 @@ public static class ReviewCompetitionSeeder
                 if (existingId.HasValue)
                 {
                     // Events made before the demo mark existed gain it; an existing choice is never changed.
-                    if (!await db.Set<EventCommerceSettings>().AnyAsync(x => x.CompetitionId == existingId.Value))
+                    if (markExistingAsDemo && !await db.Set<EventCommerceSettings>().AnyAsync(x => x.CompetitionId == existingId.Value))
                     {
                         db.Set<EventCommerceSettings>().Add(new EventCommerceSettings { CompetitionId = existingId.Value, IsDemo = true });
                         await db.SaveChangesAsync();
@@ -74,6 +96,11 @@ public static class ReviewCompetitionSeeder
                     Description = "Sample competition for trying the app. All teams and results are fictional.",
                 };
                 var sessionOrder = 0;
+                // Today's event, timed from the real clock: when each arena is next free, and the latest end.
+                var anchored = offset == 0 && now.HasValue;
+                var runningStart = anchored ? RoundDownTo5Minutes(now!.Value.AddMinutes(-30)) : default;
+                var arenaFree = new Dictionary<string, DateTime>();
+                var latestEnd = default(DateTime);
                 var ageGroups = new[] { "Seniors", "Juniors", "Novices" };
                 for (var ageIndex = 0; ageIndex < ageGroups.Length; ageIndex++)
                 {
@@ -119,28 +146,42 @@ public static class ReviewCompetitionSeeder
 
                         for (var round = 0; round < 2; round++)
                         {
-                            var start = day.AddHours(9).AddMinutes(sessionOrder * 80);
                             var finished = offset < 0 || (offset == 0 && sessionOrder == 0);
                             var running = offset == 0 && sessionOrder == 1;
+                            var arenaName = round == 0 ? "Demo main arena" : "Demo final arena";
+                            // Heats: balanced groups of at most 6. Finals: one heat of the top 6.
+                            var groups = round == 0
+                                ? SplitBalanced(teams, LanesPerHeat)
+                                : new List<Team[]> { teams.Take(LanesPerHeat).ToArray() };
+                            var duration = groups.Count * MinutesPerHeat;
+                            DateTime start;
+                            if (!anchored) start = day.AddHours(9).AddMinutes(sessionOrder * 80);
+                            else
+                            {
+                                // Each arena runs its sessions in order: finished, then running, then the upcoming
+                                // ones from the next free slot (never before now).
+                                if (!arenaFree.TryGetValue(arenaName, out var free)) free = RoundUpTo5Minutes(now!.Value);
+                                if (finished) start = runningStart.AddMinutes(-duration);
+                                else if (running) start = runningStart;
+                                else start = free;
+                                if (!finished) arenaFree[arenaName] = new[] { free, start.AddMinutes(duration + ChangeoverMinutes) }.Max();
+                                if (start.AddMinutes(duration) > latestEnd) latestEnd = start.AddMinutes(duration);
+                            }
                             var session = new Session
                             {
                                 Competition = competition,
                                 Section = section,
                                 Name = $"{sectionName} {(round == 0 ? "heats" : "finals")}",
-                                ArenaName = round == 0 ? "Demo main arena" : "Demo final arena",
+                                ArenaName = arenaName,
                                 ScheduledStart = start,
                                 OrderIndex = ++sessionOrder,
-                                MinutesPerHeat = 35,
+                                MinutesPerHeat = MinutesPerHeat,
                                 LanesPerHeat = LanesPerHeat,
                                 Status = finished ? SessionStatus.Finished : running ? SessionStatus.InArena : SessionStatus.Upcoming,
                                 StartedAt = finished || running ? start : null,
-                                FinishedAt = finished ? start.AddMinutes(70) : null,
+                                FinishedAt = finished ? start.AddMinutes(anchored ? duration : 70) : null,
                             };
                             competition.Sessions.Add(session);
-                            // Heats: balanced groups of at most 6. Finals: one heat of the top 6.
-                            var groups = round == 0
-                                ? SplitBalanced(teams, LanesPerHeat)
-                                : new List<Team[]> { teams.Take(LanesPerHeat).ToArray() };
                             for (var heatNumber = 0; heatNumber < groups.Count; heatNumber++)
                             {
                                 var entrants = groups[heatNumber];
@@ -149,10 +190,10 @@ public static class ReviewCompetitionSeeder
                                     Session = session,
                                     Label = round == 0 ? $"Heat {heatNumber + 1}" : "Final",
                                     OrderIndex = heatNumber + 1,
-                                    DurationMinutes = 35,
-                                    ScheduledStart = start.AddMinutes(heatNumber * 35),
-                                    StartedAt = finished || running ? start.AddMinutes(heatNumber * 35) : null,
-                                    FinishedAt = finished ? start.AddMinutes((heatNumber + 1) * 35) : null,
+                                    DurationMinutes = MinutesPerHeat,
+                                    ScheduledStart = start.AddMinutes(heatNumber * MinutesPerHeat),
+                                    StartedAt = finished || running ? start.AddMinutes(heatNumber * MinutesPerHeat) : null,
+                                    FinishedAt = finished ? start.AddMinutes((heatNumber + 1) * MinutesPerHeat) : null,
                                 };
                                 session.Heats.Add(heat);
                                 for (var lane = 0; lane < entrants.Length; lane++)
@@ -162,7 +203,7 @@ public static class ReviewCompetitionSeeder
                                 {
                                     // A running session is halfway: the first half of every heat's races are scored.
                                     var complete = finished || (running && raceNumber < raceNames.Length / 2);
-                                    var raceStart = start.AddMinutes(heatNumber * 35 + raceNumber * 4);
+                                    var raceStart = start.AddMinutes(heatNumber * MinutesPerHeat + raceNumber * 4);
                                     var race = new Race
                                     {
                                         Heat = heat,
@@ -191,6 +232,13 @@ public static class ReviewCompetitionSeeder
                         }
                     }
                 }
+                if (anchored)
+                {
+                    // A day that starts before the clock allows, or runs past the planned finish, still holds the event.
+                    var firstStart = competition.Sessions.Min(x => x.ScheduledStart!.Value);
+                    if (firstStart < competition.StartDate) competition.StartDate = firstStart;
+                    if (latestEnd.AddMinutes(30) > competition.EndDate) competition.EndDate = latestEnd.AddMinutes(30);
+                }
                 db.Competitions.Add(competition);
                 // The same mark an organiser sets under "Demo" in the event shop settings.
                 db.Set<EventCommerceSettings>().Add(new EventCommerceSettings { Competition = competition, IsDemo = true });
@@ -199,6 +247,114 @@ public static class ReviewCompetitionSeeder
             }
             await transaction.CommitAsync();
             return created;
+        });
+    }
+
+    /// <summary>What <see cref="ReseedAsync"/> did. <c>Skipped</c> lists seeder-named events left alone because they lack the demo mark.</summary>
+    public sealed record ReseedResult(int Removed, int Created, IReadOnlyList<string> Skipped);
+
+    /// <summary>
+    /// The fresh reseed: removes the marked demo events, then seeds all eight again timed from <paramref name="nowUtc"/>.
+    /// A same-named event without the demo mark is neither removed nor marked (<c>markExistingAsDemo: false</c>), so it
+    /// is reported and the matching new demo event is not made.
+    /// </summary>
+    public static async Task<ReseedResult> ReseedAsync(AppDbContext db, DateTime nowUtc)
+    {
+        var removed = await RemoveReviewCompetitionsAsync(db);
+        var names = Events.Select(e => e.Name).ToArray();
+        var skipped = await db.Competitions.Where(c => names.Contains(c.Name)).Select(c => c.Name).OrderBy(n => n).ToListAsync();
+        var created = await SeedAsync(db, nowUtc, nowUtc, markExistingAsDemo: false);
+        return new ReseedResult(removed, created, skipped);
+    }
+
+    /// <summary>
+    /// Deletes the review demo events so <see cref="SeedAsync"/> can make them again from today. Safety rule: a
+    /// competition goes only if its name is one of the eight seeder names AND it carries the demo mark
+    /// (<see cref="EventCommerceSettings.IsDemo"/>). Everything else, including a same-named event without the mark,
+    /// is left alone. Each event's whole graph is removed bottom-up in one transaction, without relying on database
+    /// cascades (SQLite tables made by the startup guards may not have them). Returns the number of events removed.
+    /// </summary>
+    public static async Task<int> RemoveReviewCompetitionsAsync(AppDbContext db)
+    {
+        var names = Events.Select(e => e.Name).ToArray();
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            db.ChangeTracker.Clear();
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            var ids = await db.Competitions
+                .Where(c => names.Contains(c.Name)
+                    && db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == c.Id && x.IsDemo))
+                .Select(c => c.Id)
+                .ToListAsync();
+            if (ids.Count == 0) return 0;
+
+            // A season round points at its event with a restricting key. Removing it would change a league, so stop.
+            if (await db.Set<SeasonRound>().AnyAsync(r => ids.Contains(r.CompetitionId)))
+                throw new InvalidOperationException("A demo event is part of a season. Remove it from the season, then run this again.");
+
+            var sessionIds = db.Sessions.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+            var heatIds = db.Heats.Where(x => sessionIds.Contains(x.SessionId)).Select(x => x.Id);
+            var raceIds = db.Races.Where(x => heatIds.Contains(x.HeatId)).Select(x => x.Id);
+            var teamIds = db.Teams.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+            var sectionIds = db.CompetitionSections.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+            var formIds = db.DeclarationForms.Where(x => teamIds.Contains(x.TeamId)).Select(x => x.Id);
+            var orderIds = db.Set<EventOrder>().Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+
+            // Orders that still hold stock give it back to the seller's catalogue item first.
+            var reserved = await db.Set<EventOrderLine>()
+                .Where(l => orderIds.Contains(l.EventOrderId) && l.ReservedStockQuantity > 0
+                    && db.Set<EventOrder>().Any(o => o.Id == l.EventOrderId && o.HasStockReservation))
+                .Select(l => new { l.CatalogueItemId, l.ReservedStockQuantity })
+                .ToListAsync();
+            foreach (var line in reserved)
+                await db.Set<CatalogueItem>()
+                    .Where(x => x.Id == line.CatalogueItemId && x.StockQuantity != null)
+                    .ExecuteUpdateAsync(set => set
+                        .SetProperty(x => x.StockQuantity, x => x.StockQuantity + line.ReservedStockQuantity)
+                        .SetProperty(x => x.Version, x => x.Version + 1)
+                        .SetProperty(x => x.UpdatedAt, DateTime.UtcNow));
+
+            // Shop: payments, order lines, orders, listings, the demo mark.
+            await db.Set<TestPaymentRecord>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.Set<EventOrderLine>().Where(x => orderIds.Contains(x.EventOrderId)).ExecuteDeleteAsync();
+            await db.Set<EventOrder>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.Set<CompetitionListing>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.Set<EventCommerceSettings>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+
+            // Timetable and scoring, deepest first.
+            await db.Set<RaceScoreEvent>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
+            await db.Set<RaceScoreState>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
+            await db.Results.Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
+            await db.Races.Where(x => heatIds.Contains(x.HeatId)).ExecuteDeleteAsync();
+            await db.Set<CalendarHeatVersion>().Where(x => heatIds.Contains(x.HeatId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+            await db.HeatEntries.Where(x => heatIds.Contains(x.HeatId)).ExecuteDeleteAsync();
+            await db.Heats.Where(x => sessionIds.Contains(x.SessionId)).ExecuteDeleteAsync();
+            await db.Sessions.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+
+            // Entries, teams and declarations.
+            await db.Set<RiderSwapEvent>().Where(x => ids.Contains(x.CompetitionId) || formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
+            await db.RiderEntries.Where(x => formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
+            await db.DeclarationForms.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+            await db.Set<TeamStatusEvent>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+            await db.TeamSupporters.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+            await db.Set<EventTeamProfileLink>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+            await db.SectionSignups.Where(x => sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
+            await db.Teams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.Set<DrawChange>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.CompetitionSections.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+
+            // Everything else that hangs off the event itself.
+            await db.ChatMessages.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.LiveStreams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.StreamOverlays.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.CompetitionCollaborators.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.ScorerLinks.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.Set<Rulebook>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.Set<EquipmentAcknowledgement>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+            await db.Competitions.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync();
+
+            await transaction.CommitAsync();
+            return ids.Count;
         });
     }
 }

@@ -16,7 +16,9 @@ The deployment uses the eight Neon demo competitions. The owner confirmed that t
 
 The demo events have separate sections, teams, timetables and results. Six were seeded for today or later and two are past events. The picker requests only IDs, names, dates and icons. Past events are requested when their page opens from the sidebar; competition details load after selection. Organisers can choose a flag or symbol under **Competition icon** when editing an event.
 
-The explicit `npm run db:seed-review` command creates missing demo events without changing existing ones, except that it gives any of the eight events that has no event shop settings row the demo mark (so test payments work and the "Demo event" badge shows); a row the organiser already set is never touched. New events get £15.00 entry prices so the test payment page can be shown; existing events keep their prices, so set a price on a section to demonstrate it. It never runs during normal API startup. Dates are relative to the day the events are first created.
+The explicit `npm run db:seed-review` command creates missing demo events without changing existing ones, except that it gives any of the eight events that has no event shop settings row the demo mark (so test payments work and the "Demo event" badge shows); a row the organiser already set is never touched. New events get £15.00 entry prices so the test payment page can be shown; existing events keep their prices, so set a price on a section to demonstrate it. It never runs during normal API startup. Dates are relative to the day the events are first created. Today's event is timed from the moment the command runs, so its running session is live now.
+
+To refresh stale demo data, run `npm run db:reseed-review`. It deletes the eight seeder-named events ("Demo Meadow Cup" and so on) with everything under them, but only those that carry the demo mark; any other event, including one that merely shares a name, is left alone and reported. It then creates all eight again from the current time. Back up or branch the database first if you are unsure; the deletes run in one transaction.
 
 ## Run locally
 
