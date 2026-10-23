@@ -61,12 +61,82 @@ public sealed class SeasonPublicationService(AppDbContext db)
         var links = await db.Set<EventTeamProfileLink>()
             .Where(x => x.CompetitionId == round.CompetitionId && teamIds.Contains(x.TeamId))
             .ToDictionaryAsync(x => x.TeamId, ct);
-        var missing = totals.Where(x => !links.ContainsKey(x.TeamId)).Select(x => x.Team.DisplayName).ToArray();
+
+        var isPairs = (round.CompetitionSection?.Format ?? round.Season?.Format) == SectionFormat.Pairs;
+        var declarationsByTeam = new Dictionary<int, List<RiderEntry>>();
+        if (isPairs)
+        {
+            var forms = await db.DeclarationForms
+                .Include(x => x.Riders)
+                .Where(x => teamIds.Contains(x.TeamId))
+                .OrderByDescending(x => x.SubmittedAt)
+                .ThenByDescending(x => x.Id)
+                .ToListAsync(ct);
+            foreach (var form in forms)
+            {
+                if (declarationsByTeam.ContainsKey(form.TeamId)) continue;
+                var activeRiders = form.Riders
+                    .Where(r => !r.IsReserve && !string.IsNullOrWhiteSpace(r.FullName))
+                    .OrderBy(r => r.OrderIndex)
+                    .ThenBy(r => r.Id)
+                    .ToList();
+                if (activeRiders.Count > 0)
+                    declarationsByTeam[form.TeamId] = activeRiders;
+            }
+        }
+
+        var missing = totals
+            .Where(x => !declarationsByTeam.ContainsKey(x.TeamId) && !links.ContainsKey(x.TeamId))
+            .Select(x => x.Team.DisplayName)
+            .ToArray();
         if (missing.Length > 0)
             throw new SeasonPublicationException($"Every placed team needs an explicit team profile link. Missing: {string.Join(", ", missing)}.", 409);
 
+        var riderProfilesByTeam = new Dictionary<int, List<TeamProfile>>();
+        if (declarationsByTeam.Count > 0)
+        {
+            var existingProfiles = await db.Set<TeamProfile>()
+                .Include(x => x.Club)
+                .ToListAsync(ct);
+            var addedAny = false;
+            foreach (var total in totals)
+            {
+                if (!declarationsByTeam.TryGetValue(total.TeamId, out var riders)) continue;
+                var list = new List<TeamProfile>();
+                foreach (var rider in riders)
+                {
+                    var riderName = rider.FullName.Trim();
+                    var profile = existingProfiles.FirstOrDefault(p =>
+                            p.ClubId == total.Team.ClubId
+                            && string.Equals(p.DisplayName.Trim(), riderName, StringComparison.OrdinalIgnoreCase))
+                        ?? existingProfiles.FirstOrDefault(p =>
+                            string.Equals(p.DisplayName.Trim(), riderName, StringComparison.OrdinalIgnoreCase));
+                    if (profile is null)
+                    {
+                        profile = new TeamProfile
+                        {
+                            OwnerUserId = round.Season!.OwnerUserId,
+                            ClubId = total.Team.ClubId,
+                            Suffix = string.Empty,
+                            DisplayName = riderName,
+                        };
+                        db.Set<TeamProfile>().Add(profile);
+                        existingProfiles.Add(profile);
+                        addedAny = true;
+                    }
+                    if (list.All(p => p.Id != profile.Id))
+                        list.Add(profile);
+                }
+                riderProfilesByTeam[total.TeamId] = list;
+            }
+            if (addedAny)
+                await db.SaveChangesAsync(ct);
+        }
+
         var points = round.Season!.PlacePoints.ToDictionary(x => x.Place, x => x.Points);
+        var multiplier = round.PointsMultiplier > 0 ? round.PointsMultiplier : 1.0;
         var rows = new List<SeasonPublicationPreviewRow>();
+        var seenProfileIds = new HashSet<Guid>();
         (int Tier, double Points)? previous = null;
         var rank = 0;
         for (var index = 0; index < totals.Count; index++)
@@ -75,17 +145,39 @@ public sealed class SeasonPublicationService(AppDbContext db)
             // Teams only tie on the same points within the same final.
             if (previous != (total.Tier, total.Points)) rank = index + 1;
             previous = (total.Tier, total.Points);
-            rows.Add(new SeasonPublicationPreviewRow(
-                links[total.TeamId].TeamProfileId,
-                total.TeamId,
-                total.Team.DisplayName,
-                total.Team.Club?.Name ?? string.Empty,
-                rank,
-                total.Points,
-                points.GetValueOrDefault(rank)));
+            var basePoints = points.GetValueOrDefault(rank);
+            var seasonPoints = (int)Math.Round(basePoints * multiplier, MidpointRounding.AwayFromZero);
+            if (riderProfilesByTeam.TryGetValue(total.TeamId, out var riderProfiles))
+            {
+                foreach (var riderProfile in riderProfiles)
+                {
+                    if (!seenProfileIds.Add(riderProfile.Id)) continue;
+                    rows.Add(new SeasonPublicationPreviewRow(
+                        riderProfile.Id,
+                        total.TeamId,
+                        riderProfile.DisplayName,
+                        total.Team.Club?.Name ?? string.Empty,
+                        rank,
+                        total.Points,
+                        seasonPoints));
+                }
+            }
+            else
+            {
+                var profileId = links[total.TeamId].TeamProfileId;
+                if (!seenProfileIds.Add(profileId)) continue;
+                rows.Add(new SeasonPublicationPreviewRow(
+                    profileId,
+                    total.TeamId,
+                    total.Team.DisplayName,
+                    total.Team.Club?.Name ?? string.Empty,
+                    rank,
+                    total.Points,
+                    seasonPoints));
+            }
         }
 
-        var fingerprint = Fingerprint(round.Season, races, links);
+        var fingerprint = Fingerprint(round.Season, races, links, multiplier, riderProfilesByTeam);
         var nextVersion = round.Publications.Select(x => x.Version).DefaultIfEmpty(0).Max() + 1;
         return new SeasonPublicationPreviewDto(
             seasonId, roundId, round.CompetitionId, round.CompetitionSectionId,
@@ -157,10 +249,14 @@ public sealed class SeasonPublicationService(AppDbContext db)
     private static string Fingerprint(
         Season season,
         IReadOnlyList<Race> races,
-        IReadOnlyDictionary<int, EventTeamProfileLink> links)
+        IReadOnlyDictionary<int, EventTeamProfileLink> links,
+        double multiplier,
+        IReadOnlyDictionary<int, List<TeamProfile>> riderProfilesByTeam)
     {
         var value = new StringBuilder()
             .Append(season.Id).Append('|').Append(season.Format).Append('|').Append(season.AgeGroup).Append('|');
+        if (Math.Abs(multiplier - 1.0) > 1e-6)
+            value.Append("M:").Append(multiplier).Append('|');
         foreach (var rule in season.PlacePoints.OrderBy(x => x.Place))
             value.Append(rule.Place).Append(':').Append(rule.Points).Append('|');
         foreach (var race in races.OrderBy(x => x.Id))
@@ -168,12 +264,15 @@ public sealed class SeasonPublicationService(AppDbContext db)
             value.Append('R').Append(race.Id).Append(':').Append(race.IsComplete).Append('|');
             foreach (var result in race.Results.OrderBy(x => x.TeamId))
             {
+                var identity = riderProfilesByTeam.TryGetValue(result.TeamId, out var riders) && riders.Count > 0
+                    ? string.Join(",", riders.Select(p => $"{p.Id}:{p.DisplayName}"))
+                    : links.GetValueOrDefault(result.TeamId)?.TeamProfileId.ToString();
                 value.Append(result.TeamId).Append(':')
                     .Append(result.Placing).Append(':').Append(result.Eliminated).Append(':').Append(PointValues.Format(result.Points)).Append(':')
                     .Append(result.Team?.IsHorsConcours).Append(':')
                     .Append(result.Team?.DisplayName).Append(':')
                     .Append(result.Team?.Club?.Name).Append(':')
-                    .Append(links.GetValueOrDefault(result.TeamId)?.TeamProfileId).Append('|');
+                    .Append(identity).Append('|');
             }
         }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.ToString())));

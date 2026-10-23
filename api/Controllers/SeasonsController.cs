@@ -15,6 +15,8 @@ namespace MountedGames.Api.Controllers;
 [Route("api/seasons")]
 public sealed class SeasonsController(AppDbContext db) : ControllerBase
 {
+    private const string SeasonOrganiserRoles = Roles.Organiser + "," + Roles.Manager;
+
     [HttpGet]
     [AllowAnonymous]
     public async Task<ActionResult<IReadOnlyList<SeasonDto>>> List(CancellationToken ct)
@@ -52,14 +54,14 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
 
     [HttpGet("{id:guid}/standings")]
     [AllowAnonymous]
-    public async Task<ActionResult<SeasonStandingsDto>> Standings(Guid id, CancellationToken ct)
+    public async Task<ActionResult<SeasonStandingsDto>> Standings(Guid id, [FromQuery] string? ageGroup = null, CancellationToken ct = default)
     {
-        var standings = await SeasonStandingsCalculator.CalculateAsync(db, id, ct);
+        var standings = await SeasonStandingsCalculator.CalculateAsync(db, id, ct, ageGroup);
         return standings is null ? NotFound() : standings;
     }
 
     [HttpPost]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Roles = SeasonOrganiserRoles)]
     public async Task<ActionResult<SeasonDto>> Create(CreateSeasonRequest request, CancellationToken ct)
     {
         var validation = Validate(request.Title, request.Year, request.Format, request.AgeGroup, request.BestResultsToCount, request.PlacePoints);
@@ -67,25 +69,56 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
 
+        var ageGroup = string.IsNullOrWhiteSpace(request.AgeGroup) ? "All age groups" : request.AgeGroup.Trim();
         var season = new Season
         {
             OwnerUserId = userId,
             Title = request.Title.Trim(),
             Year = request.Year,
             Format = request.Format,
-            AgeGroup = request.AgeGroup.Trim(),
+            AgeGroup = ageGroup,
             BestResultsToCount = request.BestResultsToCount,
             PlacePoints = request.PlacePoints.OrderBy(x => x.Place)
                 .Select(x => new SeasonPlacePoints { Place = x.Place, Points = x.Points }).ToList(),
         };
         db.Set<Season>().Add(season);
         await db.SaveChangesAsync(ct);
+
+        var compIds = request.CompetitionIds?.Where(x => x > 0).Distinct().ToArray() ?? [];
+        var secIds = request.CompetitionSectionIds?.Where(x => x > 0).Distinct().ToArray() ?? [];
+        if (compIds.Length > 0 || secIds.Length > 0)
+        {
+            var candidateSections = await db.CompetitionSections
+                .Include(x => x.Competition)
+                .Where(x => compIds.Contains(x.CompetitionId) || secIds.Contains(x.Id))
+                .ToListAsync(ct);
+            var orderedSections = candidateSections
+                .Where(x => x.Competition is not null && CanManageCompetition(x.Competition.CreatedByUserId))
+                .OrderBy(x => x.Competition!.StartDate)
+                .ThenBy(x => x.CompetitionId)
+                .ThenBy(x => x.Id)
+                .ToList();
+            var nextOrder = 1;
+            foreach (var sec in orderedSections)
+            {
+                db.Set<SeasonRound>().Add(new SeasonRound
+                {
+                    SeasonId = season.Id,
+                    CompetitionId = sec.CompetitionId,
+                    CompetitionSectionId = sec.Id,
+                    OrderIndex = nextOrder++,
+                });
+            }
+            if (orderedSections.Count > 0)
+                await db.SaveChangesAsync(ct);
+        }
+
         var loaded = await LoadSeasonAsync(season.Id, ct) ?? season;
         return CreatedAtAction(nameof(Get), new { id = season.Id }, await ToDtoAsync(loaded, ct));
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Roles = SeasonOrganiserRoles)]
     public async Task<ActionResult<SeasonDto>> Update(Guid id, UpdateSeasonRequest request, CancellationToken ct)
     {
         var validation = Validate(request.Title, request.Year, request.Format, request.AgeGroup, request.BestResultsToCount, request.PlacePoints);
@@ -95,14 +128,11 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
             .Include(x => x.Rounds).ThenInclude(x => x.CompetitionSection)
             .SingleOrDefaultAsync(x => x.Id == id, ct);
         if (season is null || !CanManage(season.OwnerUserId)) return NotFound();
-        if (season.Rounds.Any(x => x.CompetitionSection?.Format != request.Format
-                || !string.Equals(x.CompetitionSection.AgeGroup.Trim(), request.AgeGroup.Trim(), StringComparison.OrdinalIgnoreCase)))
-            return Conflict(new ProblemDetails { Status = 409, Title = "Season division cannot change", Detail = "Remove incompatible rounds before changing the format or age group." });
 
         season.Title = request.Title.Trim();
         season.Year = request.Year;
         season.Format = request.Format;
-        season.AgeGroup = request.AgeGroup.Trim();
+        season.AgeGroup = string.IsNullOrWhiteSpace(request.AgeGroup) ? "All age groups" : request.AgeGroup.Trim();
         season.BestResultsToCount = request.BestResultsToCount;
         season.UpdatedAt = DateTime.UtcNow;
         db.Set<SeasonPlacePoints>().RemoveRange(season.PlacePoints);
@@ -113,7 +143,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/rounds")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Roles = SeasonOrganiserRoles)]
     public async Task<ActionResult<SeasonRoundDto>> AddRound(Guid id, AddSeasonRoundRequest request, CancellationToken ct)
     {
         var season = await db.Set<Season>().Include(x => x.Rounds).SingleOrDefaultAsync(x => x.Id == id, ct);
@@ -121,10 +151,12 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
         var section = await db.CompetitionSections.Include(x => x.Competition)
             .SingleOrDefaultAsync(x => x.Id == request.CompetitionSectionId, ct);
         if (section?.Competition is null || !CanManageCompetition(section.Competition.CreatedByUserId)) return NotFound();
-        if (section.Format != season.Format || !string.Equals(section.AgeGroup.Trim(), season.AgeGroup.Trim(), StringComparison.OrdinalIgnoreCase))
-            return Conflict(new ProblemDetails { Status = 409, Title = "Round division does not match", Detail = "The event section must use the season's format and age group." });
         if (season.Rounds.Any(x => x.CompetitionSectionId == section.Id))
             return Conflict(new ProblemDetails { Status = 409, Title = "Round already linked" });
+
+        var multiplier = request.PointsMultiplier ?? 1.0;
+        if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier is <= 0 or > 10)
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Points multiplier must be between 0.1 and 10" });
 
         var orderIndex = request.OrderIndex ?? season.Rounds.Select(x => x.OrderIndex).DefaultIfEmpty(0).Max() + 1;
         if (orderIndex < 1) return BadRequest(new ProblemDetails { Status = 400, Title = "Order must be at least 1" });
@@ -136,6 +168,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
             CompetitionId = section.CompetitionId,
             CompetitionSectionId = section.Id,
             OrderIndex = orderIndex,
+            PointsMultiplier = multiplier,
         };
         db.Set<SeasonRound>().Add(round);
         await db.SaveChangesAsync(ct);
@@ -145,7 +178,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("{id:guid}/rounds/{roundId:guid}/included")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Roles = SeasonOrganiserRoles)]
     public async Task<ActionResult<SeasonRoundDto>> SetRoundIncluded(
         Guid id, Guid roundId, SetSeasonRoundIncludedRequest request, CancellationToken ct)
     {
@@ -156,14 +189,44 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
             .Include(x => x.Publications)
             .SingleOrDefaultAsync(x => x.Id == roundId && x.SeasonId == id, ct);
         if (round?.Season is null || !CanManage(round.Season.OwnerUserId)) return NotFound();
+
+        if (request.PointsMultiplier is { } multiplier)
+        {
+            if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier is <= 0 or > 10)
+                return BadRequest(new ProblemDetails { Status = 400, Title = "Points multiplier must be between 0.1 and 10" });
+            round.PointsMultiplier = multiplier;
+
+        }
         round.IsIncluded = request.IsIncluded;
         round.Season.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return await ToRoundDtoAsync(round, ct);
     }
 
+    [HttpPut("{id:guid}/rounds/{roundId:guid}/multiplier")]
+    [Authorize(Roles = SeasonOrganiserRoles)]
+    public async Task<ActionResult<SeasonRoundDto>> SetRoundMultiplier(
+        Guid id, Guid roundId, SetSeasonRoundMultiplierRequest request, CancellationToken ct)
+    {
+        var multiplier = request.PointsMultiplier;
+        if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier is <= 0 or > 10)
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Points multiplier must be between 0.1 and 10" });
+        var round = await db.Set<SeasonRound>()
+            .Include(x => x.Season)
+            .Include(x => x.Competition)
+            .Include(x => x.CompetitionSection)
+            .Include(x => x.Publications)
+            .SingleOrDefaultAsync(x => x.Id == roundId && x.SeasonId == id, ct);
+        if (round?.Season is null || !CanManage(round.Season.OwnerUserId)) return NotFound();
+        round.PointsMultiplier = multiplier;
+        round.Season.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        return await ToRoundDtoAsync(round, ct);
+    }
+
     [HttpGet("{id:guid}/rounds/{roundId:guid}/publication-preview")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Roles = SeasonOrganiserRoles)]
     public async Task<ActionResult<SeasonPublicationPreviewDto>> PreviewPublication(Guid id, Guid roundId, CancellationToken ct)
     {
         var round = await AuthorisedRoundAsync(id, roundId, ct);
@@ -173,7 +236,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("{id:guid}/rounds/{roundId:guid}/publications")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Roles = SeasonOrganiserRoles)]
     public async Task<ActionResult<SeasonRoundPublicationDto>> Publish(
         Guid id, Guid roundId, PublishSeasonRoundRequest request, CancellationToken ct)
     {
@@ -221,6 +284,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
 
     private async Task<SeasonDto> ToDtoAsync(Season season, CancellationToken ct)
     {
+
         var rounds = new List<SeasonRoundDto>();
         foreach (var round in season.Rounds.OrderBy(x => x.OrderIndex)) rounds.Add(await ToRoundDtoAsync(round, ct));
         return new SeasonDto(
@@ -247,10 +311,13 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
             round.Id, round.CompetitionId, round.Competition?.Name ?? string.Empty,
             round.Competition?.StartDate ?? default,
             round.CompetitionSectionId, round.CompetitionSection?.DisplayName ?? string.Empty,
-            round.OrderIndex, round.IsIncluded, latest?.Version, latest?.PublishedAt, current);
+            round.OrderIndex, round.IsIncluded, latest?.Version, latest?.PublishedAt, current,
+            round.CompetitionSection?.AgeGroup ?? string.Empty,
+            round.CompetitionSection?.Format ?? SectionFormat.Teams,
+            round.PointsMultiplier > 0 ? round.PointsMultiplier : 1.0);
     }
 
-    private ActionResult? Validate(string title, int year, MountedGames.Api.Entities.SectionFormat format, string ageGroup, int? bestResults, IReadOnlyList<SeasonPointsRule>? rules)
+    private ActionResult? Validate(string title, int year, MountedGames.Api.Entities.SectionFormat format, string? ageGroup, int? bestResults, IReadOnlyList<SeasonPointsRule>? rules)
     {
         if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 200)
             return BadRequest(new ProblemDetails { Status = 400, Title = "Title is required and must be at most 200 characters" });
@@ -258,8 +325,8 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
             return BadRequest(new ProblemDetails { Status = 400, Title = "Year must be between 2000 and 2200" });
         if (!Enum.IsDefined(format))
             return BadRequest(new ProblemDetails { Status = 400, Title = "Choose a valid competition format" });
-        if (string.IsNullOrWhiteSpace(ageGroup) || ageGroup.Trim().Length > 50)
-            return BadRequest(new ProblemDetails { Status = 400, Title = "Age group is required" });
+        if (ageGroup is not null && ageGroup.Trim().Length > 50)
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Age group must be at most 50 characters" });
         if (bestResults is <= 0 or > 1000)
             return BadRequest(new ProblemDetails { Status = 400, Title = "Best results to count must be between 1 and 1000" });
         if (rules is null || rules.Count is < 1 or > 100)
@@ -275,11 +342,13 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
 
     private bool CanManage(string ownerUserId)
         => User.IsInRole(Roles.Admin)
-            || (User.IsInRole(Roles.Trainer) && User.FindFirstValue(ClaimTypes.NameIdentifier) == ownerUserId);
+            || ((User.IsInRole(Roles.Trainer) || User.IsInRole(Roles.Manager))
+                && User.FindFirstValue(ClaimTypes.NameIdentifier) == ownerUserId);
 
     private bool CanManageCompetition(string? ownerUserId)
         => User.IsInRole(Roles.Admin)
-            || (User.IsInRole(Roles.Trainer) && ownerUserId is not null
+            || ((User.IsInRole(Roles.Trainer) || User.IsInRole(Roles.Manager))
+                && ownerUserId is not null
                 && User.FindFirstValue(ClaimTypes.NameIdentifier) == ownerUserId);
 }
 
@@ -339,8 +408,10 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
             current);
     }
 
+    private const string SeasonOrganiserRoles = Roles.Organiser + "," + Roles.Manager;
+
     [HttpPost]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Roles = SeasonOrganiserRoles)]
     public async Task<ActionResult<TeamProfileDto>> Create(CreateTeamProfileRequest request, CancellationToken ct)
     {
         var error = Validate(request.ClubId, request.ClubName, request.Suffix, request.DisplayName);
@@ -363,7 +434,7 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Roles = SeasonOrganiserRoles)]
     public async Task<ActionResult<TeamProfileDto>> Update(Guid id, UpdateTeamProfileRequest request, CancellationToken ct)
     {
         var error = Validate(request.ClubId, request.ClubName, request.Suffix, request.DisplayName);
@@ -392,7 +463,7 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("/api/competitions/{competitionId:int}/team-profile-links")]
-    [Authorize(Roles = Roles.Organiser)]
+    [Authorize(Roles = SeasonOrganiserRoles)]
     public async Task<ActionResult<EventTeamProfileLinkDto>> Link(int competitionId, LinkEventTeamRequest request, CancellationToken ct)
     {
         var competition = await db.Competitions.SingleOrDefaultAsync(x => x.Id == competitionId, ct);
@@ -447,11 +518,13 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
 
     private bool CanManage(string ownerUserId)
         => User.IsInRole(Roles.Admin)
-            || (User.IsInRole(Roles.Trainer) && User.FindFirstValue(ClaimTypes.NameIdentifier) == ownerUserId);
+            || ((User.IsInRole(Roles.Trainer) || User.IsInRole(Roles.Manager))
+                && User.FindFirstValue(ClaimTypes.NameIdentifier) == ownerUserId);
 
     private bool CanManageCompetition(string? ownerUserId)
         => User.IsInRole(Roles.Admin)
-            || (User.IsInRole(Roles.Trainer) && ownerUserId is not null
+            || ((User.IsInRole(Roles.Trainer) || User.IsInRole(Roles.Manager))
+                && ownerUserId is not null
                 && User.FindFirstValue(ClaimTypes.NameIdentifier) == ownerUserId);
 
     private TeamProfileDto ToDto(TeamProfile x)

@@ -30,20 +30,24 @@ public record TeamProfileHistoryDto(
 
 public record CreateSeasonRequest(
     string Title, int Year, SectionFormat Format, string AgeGroup,
-    int? BestResultsToCount, IReadOnlyList<SeasonPointsRule> PlacePoints);
+    int? BestResultsToCount, IReadOnlyList<SeasonPointsRule> PlacePoints,
+    IReadOnlyList<int>? CompetitionIds = null,
+    IReadOnlyList<int>? CompetitionSectionIds = null);
 
 public record UpdateSeasonRequest(
     string Title, int Year, SectionFormat Format, string AgeGroup,
     int? BestResultsToCount, IReadOnlyList<SeasonPointsRule> PlacePoints);
 
-public record AddSeasonRoundRequest(int CompetitionSectionId, int? OrderIndex = null);
-public record SetSeasonRoundIncludedRequest(bool IsIncluded);
+public record AddSeasonRoundRequest(int CompetitionSectionId, int? OrderIndex = null, double? PointsMultiplier = null);
+public record SetSeasonRoundIncludedRequest(bool IsIncluded, double? PointsMultiplier = null);
+public record SetSeasonRoundMultiplierRequest(double PointsMultiplier);
 
 public record SeasonLinkDto(Guid Id, string Title, int Year);
 public record SeasonRoundDto(
     Guid Id, int CompetitionId, string CompetitionName, DateTime CompetitionDate,
     int CompetitionSectionId, string SectionName, int OrderIndex, bool IsIncluded,
-    int? PublishedVersion, DateTime? PublishedAt, bool PublicationIsCurrent);
+    int? PublishedVersion, DateTime? PublishedAt, bool PublicationIsCurrent,
+    string AgeGroup = "", SectionFormat Format = SectionFormat.Teams, double PointsMultiplier = 1.0);
 
 public record SeasonDto(
     Guid Id, string Title, int Year, SectionFormat Format, string AgeGroup,
@@ -68,7 +72,8 @@ public record SeasonRoundPublicationDto(
 
 public record SeasonStandingRoundDto(
     Guid RoundId, string CompetitionName, DateTime CompetitionDate,
-    int EventRank, int SeasonPoints, bool Counted);
+    int EventRank, int SeasonPoints, bool Counted,
+    string AgeGroup = "", string SectionName = "", double PointsMultiplier = 1.0);
 
 public record SeasonStandingDto(
     int Rank, Guid TeamProfileId, string TeamName, string ClubName,

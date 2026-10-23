@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lastPublishedRound, ordinal, positionLabels, roundStatus } from './seasonModel';
+import { filterStandingsByDivision, lastPublishedRound, ordinal, positionLabels, roundStatus, seasonDivisions } from './seasonModel';
 import { buildRows, seasonChoices } from './teamHistoryModel';
 import type { SeasonRoundView, SeasonView, StandingView } from './seasonViewTypes';
 import type { TeamProfileHistoryResult } from './teamProfileTypes';
@@ -48,5 +48,27 @@ describe('team history rows', () => {
     const season = { rounds: [round({ id: 'a', orderIndex: 1, publishedVersion: 1 }), round({ id: 'b', orderIndex: 2, publishedVersion: 1 }), round({ id: 'c', orderIndex: 3 }), round({ id: 'd', orderIndex: 4, publishedVersion: 1, isIncluded: false })] } as SeasonView;
     const rows = buildRows([result('s', 2026, 'a')], { season, standing: null });
     expect(rows.map((row) => [row.key, row.place])).toEqual([['b', null], ['a', 1]]);
+  });
+});
+
+describe('multi-division standings', () => {
+  it('extracts divisions and filters standings per age group with tie-break by wins', () => {
+    const rounds = [
+      round({ id: 'r1', orderIndex: 1, sectionName: 'Under 12', ageGroup: 'Under 12', publishedVersion: 1 }),
+      round({ id: 'r2', orderIndex: 2, sectionName: 'Seniors', ageGroup: 'Seniors', publishedVersion: 1 }),
+      round({ id: 'r3', orderIndex: 3, sectionName: 'Seniors', ageGroup: 'Seniors', publishedVersion: 1 }),
+    ];
+    expect(seasonDivisions(rounds, 'All age groups')).toEqual(['Under 12', 'Seniors']);
+    const season = { id: 's', title: 'League', year: 2026, format: 2, ageGroup: 'All age groups', bestResultsToCount: 2, placePoints: [], rounds, canManage: false } as SeasonView;
+    const standings: StandingView[] = [
+      { rank: 1, teamProfileId: 'u12-team', teamName: 'Young Stars', clubName: 'Club', totalPoints: 10, rounds: [{ roundId: 'r1', eventRank: 1, seasonPoints: 10, counted: true }] },
+      { rank: 2, teamProfileId: 'sen-alpha', teamName: 'Alpha', clubName: 'Club', totalPoints: 16, rounds: [{ roundId: 'r2', eventRank: 2, seasonPoints: 8, counted: true }, { roundId: 'r3', eventRank: 2, seasonPoints: 8, counted: true }] },
+      { rank: 2, teamProfileId: 'sen-zeta', teamName: 'Zeta', clubName: 'Club', totalPoints: 16, rounds: [{ roundId: 'r2', eventRank: 1, seasonPoints: 10, counted: true }, { roundId: 'r3', eventRank: 3, seasonPoints: 6, counted: true }] },
+    ];
+    const seniors = filterStandingsByDivision(season, standings, 'Seniors');
+    expect(seniors.map((r) => [r.teamName, r.rank, r.totalPoints])).toEqual([
+      ['Zeta', 1, 16],
+      ['Alpha', 2, 16],
+    ]);
   });
 });
