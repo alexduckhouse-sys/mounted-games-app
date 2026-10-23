@@ -1136,6 +1136,7 @@ function CreateFinalsModal({
   const [lanes, setLanes] = useState(6);
   const [name, setName] = useState('');
   const [raceNames, setRaceNames] = useState('Litter Lifter\nFlag\nBottle\nMug\nBall and Cone');
+  const [lowestFinalFirst, setLowestFinalFirst] = useState(true);
   const [scaffoldOnly, setScaffoldOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1170,6 +1171,7 @@ function CreateFinalsModal({
           lanesPerHeat: lanes,
           numHeats,
           name: name.trim() || null,
+          lowestFinalFirst,
         });
       } else {
         await api.post(`/competitions/${competitionId}/finals`, {
@@ -1178,6 +1180,7 @@ function CreateFinalsModal({
           raceNames: races,
           lanesPerHeat: lanes,
           name: name.trim() || null,
+          lowestFinalFirst,
         });
       }
       onCreated();
@@ -1242,6 +1245,18 @@ function CreateFinalsModal({
               />
             </label>
           </div>
+
+          <label className="block">
+            <span className="text-xs font-semibold">Running order</span>
+            <SelectField
+              className="input mt-1 text-sm"
+              value={lowestFinalFirst ? 'lowest' : 'top'}
+              onChange={(e) => setLowestFinalFirst(e.target.value === 'lowest')}
+            >
+              <option value="lowest">Lowest final first (C → B → A)</option>
+              <option value="top">Top final first (A → B → C)</option>
+            </SelectField>
+          </label>
 
           <label className="block">
             <span className="text-xs font-semibold">Name (optional)</span>

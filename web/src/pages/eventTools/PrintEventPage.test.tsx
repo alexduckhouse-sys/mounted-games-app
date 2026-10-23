@@ -72,4 +72,41 @@ describe('PrintEventPage', () => {
     expect(await screen.findByText('No races have been added to this heat.')).toBeInTheDocument();
     expect(screen.getByText('Time TBC')).toBeInTheDocument();
   });
+
+  it('prints the draw as a unified table with session and heat start time, lane, team, club, individual race columns and total', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: {
+      competition: { id: 12, name: 'Spring event', location: 'Field Lane', startDate: '2031-05-04T09:00:00Z', endDate: null },
+      sessions: [{
+        sessionId: 1,
+        sectionName: 'Under 12',
+        sessionName: 'Morning',
+        arenaName: 'Arena 1',
+        orderIndex: 1,
+        heats: [{
+          heatId: 3,
+          label: 'Heat 1',
+          scheduledStart: '2031-05-04T09:30:00Z',
+          teams: [
+            { teamId: 5, teamName: 'South B', clubName: 'South', suffix: 'B', lane: 2 },
+            { teamId: 4, teamName: 'North A', clubName: 'North', suffix: 'A', lane: 1 },
+          ],
+          races: [
+            { raceId: 7, name: 'Bending', orderIndex: 1 },
+            { raceId: 8, name: 'Mug', orderIndex: 2 },
+          ],
+        }],
+      }],
+    } });
+    render(<MemoryRouter initialEntries={['/event-tools/12/print/draw']}><Routes><Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} /></Routes></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: 'Under 12 · Morning' })).toBeInTheDocument();
+    expect(screen.getByText('Arena: Arena 1')).toBeInTheDocument();
+    const headers = screen.getAllByRole('columnheader').map((cell) => cell.textContent);
+    expect(headers).toEqual(['Lane', 'Team', 'Club', '1. Bending', '2. Mug', 'Total']);
+    const rows = screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent));
+    expect(rows).toEqual([
+      ['1', 'North A', 'North', '', '', ''],
+      ['2', 'South B', 'South', '', '', ''],
+    ]);
+  });
 });

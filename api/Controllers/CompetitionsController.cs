@@ -647,15 +647,17 @@ public class CompetitionsController : ControllerBase
         await _db.SaveChangesAsync();
 
         var groups = SplitIntoRankedGroups(top, maxHeatSize);
+        var lowestFirst = req.LowestFinalFirst != false;
         for (var gi = 0; gi < groups.Count; gi++)
         {
-            // Finals are labelled A Final, B Final, C Final, etc. (top group first).
+            // Finals are labelled A Final, B Final, C Final, etc. (top group is A Final).
+            // By default (LowestFinalFirst != false), the lowest final runs first (C → B → A).
             var letter = (char)('A' + gi);
             var heat = new Heat
             {
                 SessionId = session.Id,
                 Label = $"{letter} Final",
-                OrderIndex = gi + 1
+                OrderIndex = lowestFirst ? groups.Count - gi : gi + 1
             };
             _db.Heats.Add(heat);
             await _db.SaveChangesAsync();
@@ -738,6 +740,7 @@ public class CompetitionsController : ControllerBase
         _db.Sessions.Add(session);
         await _db.SaveChangesAsync();
 
+        var lowestFirst = req.LowestFinalFirst != false;
         for (var gi = 0; gi < req.NumHeats; gi++)
         {
             var letter = (char)('A' + gi);
@@ -745,7 +748,7 @@ public class CompetitionsController : ControllerBase
             {
                 SessionId = session.Id,
                 Label = $"{letter} Final",
-                OrderIndex = gi + 1
+                OrderIndex = lowestFirst ? req.NumHeats - gi : gi + 1
             };
             _db.Heats.Add(heat);
             await _db.SaveChangesAsync();
@@ -771,7 +774,10 @@ public class CompetitionsController : ControllerBase
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.CompetitionId == id);
         if (session is null) return NotFound();
-        var heats = session.Heats.OrderBy(h => h.OrderIndex).ToList();
+        var heats = session.Heats
+            .OrderBy(h => FinalsTiers.ParseLabel(h.Label) ?? int.MaxValue)
+            .ThenBy(h => h.OrderIndex)
+            .ToList();
         if (heats.Count == 0) return BadRequest(new { message = "Session has no heats to populate." });
         if (heats.Any(h => h.Entries.Count > 0))
             return BadRequest(new { message = "Heats already have teams. Clear them first via heat assignments." });

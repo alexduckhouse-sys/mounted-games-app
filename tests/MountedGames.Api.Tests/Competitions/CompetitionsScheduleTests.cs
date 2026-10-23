@@ -292,10 +292,16 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
         var s = await r.ReadAsync<SessionDto>();
         Assert.Equal("Finals · Seniors", s.Name);
         Assert.Equal(section, s.CompetitionSectionId);
-        Assert.Equal(new[] { "A Final", "B Final", "C Final" }, s.Heats.Select(h => h.Label));
+        Assert.Equal(new[] { "C Final", "B Final", "A Final" }, s.Heats.Select(h => h.Label));
         Assert.Equal(5, s.Heats.Sum(h => h.Entries.Count));
         Assert.All(s.Heats, h => Assert.InRange(h.Entries.Count, 1, 2));
         Assert.Equal(2, s.LanesPerHeat);
+
+        var topFirst = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals", new
+        {
+            competitionSectionId = section, topN = 5, raceNames = new[] { "R" }, lanesPerHeat = 2, lowestFinalFirst = false,
+        })).ReadAsync<SessionDto>();
+        Assert.Equal(new[] { "A Final", "B Final", "C Final" }, topFirst.Heats.Select(h => h.Label));
     }
 
     [Fact]
@@ -317,10 +323,10 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
                 competitionSectionId = section, topN = 5, raceNames = new[] { "R" }, lanesPerHeat = 2,
             })).ReadAsync<SessionDto>();
 
-            Assert.Equal(new[] { "A Final", "B Final", "C Final" }, s.Heats.Select(h => h.Label));
-            Assert.Equal(new[] { t[2], t[4] }, s.Heats[0].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
+            Assert.Equal(new[] { "C Final", "B Final", "A Final" }, s.Heats.Select(h => h.Label));
+            Assert.Equal(new[] { t[1] }, s.Heats[0].Entries.Select(e => e.TeamId));
             Assert.Equal(new[] { t[0], t[3] }, s.Heats[1].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
-            Assert.Equal(new[] { t[1] }, s.Heats[2].Entries.Select(e => e.TeamId));
+            Assert.Equal(new[] { t[2], t[4] }, s.Heats[2].Entries.OrderBy(e => e.LaneIndex).Select(e => e.TeamId));
         }
     }
 
@@ -404,7 +410,7 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     // ---- scaffold finals ----
 
     private static object Scaffold(int heats = 2, int lanes = 4, string[]? races = null, int? sectionId = null,
-        string? name = null, int? minutes = null, DateTime? start = null) => new
+        string? name = null, int? minutes = null, DateTime? start = null, bool? lowestFinalFirst = null) => new
     {
         competitionSectionId = sectionId,
         raceNames = races ?? new[] { "Bending", "Relay" },
@@ -413,6 +419,7 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
         name,
         minutesPerHeat = minutes,
         scheduledStart = start,
+        lowestFinalFirst,
     };
 
     [Fact]
@@ -491,8 +498,12 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
         Assert.Equal(5, s.LanesPerHeat);
         Assert.Equal(12, s.MinutesPerHeat);
         Assert.Equal(start, s.ScheduledStart);
-        Assert.Equal(new[] { "A Final", "B Final", "C Final" }, s.Heats.Select(h => h.Label));
+        Assert.Equal(new[] { "C Final", "B Final", "A Final" }, s.Heats.Select(h => h.Label));
         Assert.All(s.Heats, h => { Assert.Empty(h.Entries); Assert.Equal(2, h.Races.Count); });
+
+        var topFirst = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals/scaffold",
+            Scaffold(heats: 3, lanes: 5, lowestFinalFirst: false))).ReadAsync<SessionDto>();
+        Assert.Equal(new[] { "A Final", "B Final", "C Final" }, topFirst.Heats.Select(h => h.Label));
     }
 
     [Fact]
@@ -616,8 +627,9 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var s = await r.ReadAsync<SessionDto>();
-        Assert.Equal(new[] { t[1], t[2] }, s.Heats[0].Entries.Select(e => e.TeamId));
-        Assert.Equal(new[] { t[0] }, s.Heats[1].Entries.Select(e => e.TeamId));
+        Assert.Equal(new[] { "B Final", "A Final" }, s.Heats.Select(h => h.Label));
+        Assert.Equal(new[] { t[0] }, s.Heats.Single(h => h.Label == "B Final").Entries.Select(e => e.TeamId));
+        Assert.Equal(new[] { t[1], t[2] }, s.Heats.Single(h => h.Label == "A Final").Entries.Select(e => e.TeamId));
     }
 
     [Fact]
