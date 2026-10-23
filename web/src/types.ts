@@ -107,6 +107,15 @@ export const SessionKind = {
   Custom: 3 as SessionKind,
 };
 
+/** How an age group settles teams level on points at a finals cut-off or on the podium. 0 Countback, 1 LastRace, 2 RunOff, 3 Manual. */
+export type TieBreakRule = 0 | 1 | 2 | 3;
+export const TieBreakRule = {
+  Countback: 0 as TieBreakRule,
+  LastRace: 1 as TieBreakRule,
+  RunOff: 2 as TieBreakRule,
+  Manual: 3 as TieBreakRule,
+};
+
 export type ChatMessageType = 0 | 1 | 2;
 
 export interface CompetitionSummary {
@@ -147,6 +156,8 @@ export interface CompetitionSection {
   ageGroup: string;
   displayName: string;
   runoffRaceName?: string | null;
+  /** How teams level on points are settled; missing means countback. */
+  tieBreakRule?: TieBreakRule;
   /** How many teams go through to the final, set by the organiser; null when not set. */
   finalistCount?: number | null;
   usesRaceFinals?: boolean;
