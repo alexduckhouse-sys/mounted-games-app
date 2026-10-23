@@ -7,6 +7,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { Club, DeclarationForm, Team } from '../../types';
 import { displaySectionName } from '../../lib/section';
+import { SelectField } from '../../components/SelectField';
 
 export function TeamsTab() {
   const { competition, reload } = useCompetition();
@@ -112,7 +113,7 @@ export function TeamsTab() {
         <form onSubmit={submit} className="card p-5 grid sm:grid-cols-12 gap-3">
           <label className="sm:col-span-5">
             <span className="text-xs text-slate-500">Section</span>
-            <select
+            <SelectField
               className="input mt-1"
               value={form.competitionSectionId}
               onChange={(e) => setDraft({ ...form, competitionSectionId: parseInt(e.target.value, 10) })}
@@ -121,11 +122,11 @@ export function TeamsTab() {
               {competition.sections.map((s) => (
                 <option key={s.id} value={s.id}>{s.displayName}</option>
               ))}
-            </select>
+            </SelectField>
           </label>
           <label className="sm:col-span-5">
             <span className="text-xs text-slate-500">Club</span>
-            <select
+            <SelectField
               className="input mt-1"
               value={form.clubId}
               onChange={(e) => setDraft({ ...form, clubId: parseInt(e.target.value, 10) })}
@@ -135,7 +136,7 @@ export function TeamsTab() {
               {clubs.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
-            </select>
+            </SelectField>
           </label>
           <label className="sm:col-span-2">
             <span className="text-xs text-slate-500">Suffix</span>
@@ -247,7 +248,7 @@ function TrainerPicker({ competitionId, team, onSaved }: { competitionId: number
   return (
     <label className="block text-[10px] text-slate-400">
       <span className="sr-only">Trainer for {team.displayName}</span>
-      <select
+      <SelectField
         className="input !min-h-0 !py-0.5 text-[11px]"
         aria-label={`Trainer for ${team.displayName}`}
         value={team.trainerUserId ?? ''}
@@ -255,7 +256,7 @@ function TrainerPicker({ competitionId, team, onSaved }: { competitionId: number
       >
         <option value="">No trainer assigned</option>
         {options.map((t) => <option key={t.userId} value={t.userId}>{t.fullName}</option>)}
-      </select>
+      </SelectField>
       {error && <span role="alert" className="text-rose-600"> Could not change the trainer.</span>}
     </label>
   );

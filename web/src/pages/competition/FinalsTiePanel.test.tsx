@@ -5,6 +5,7 @@ import { api } from '../../api';
 import { TieBreakRule, type CompetitionSection } from '../../types';
 import { TieSettlement, type BoundaryTie, type FinalsBoundary } from '../../lib/tieBreak';
 import { FinalsTiePanel } from './FinalsTiePanel';
+import { chooseOption } from '../../test/select';
 
 vi.mock('../../api', () => ({ api: { put: vi.fn(), delete: vi.fn() } }));
 
@@ -53,7 +54,7 @@ describe('FinalsTiePanel', () => {
     const user = userEvent.setup();
     const { onChanged, onRuleChange } = mount();
 
-    await user.selectOptions(screen.getByLabelText(/Teams level on points/), String(TieBreakRule.LastRace));
+    chooseOption(screen.getByLabelText(/Teams level on points/), String(TieBreakRule.LastRace));
 
     expect(put).toHaveBeenCalledWith('/competitions/12/sections/5', { runoffRaceName: '2 Flag', finalistCount: 6, tieBreakRule: TieBreakRule.LastRace });
     await waitFor(() => expect(onRuleChange).toHaveBeenCalledWith(5, TieBreakRule.LastRace));
@@ -68,7 +69,7 @@ describe('FinalsTiePanel', () => {
 
     await user.click(screen.getByRole('button', { name: 'Save this order' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Order every team on 20 points');
-    await user.selectOptions(screen.getByLabelText(/Teams level on points/), String(TieBreakRule.Manual));
+    chooseOption(screen.getByLabelText(/Teams level on points/), String(TieBreakRule.Manual));
     await waitFor(() => expect(screen.getAllByRole('alert').map((a) => a.textContent)).toContain('Nope'));
     expect(onRuleChange).not.toHaveBeenCalled();
   });

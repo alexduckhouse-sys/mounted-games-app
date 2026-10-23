@@ -13,6 +13,8 @@ import { readMessages, writeMessages } from '../../lib/overlayMessages';
 import { ScoreCardQueue } from './ScoreCardQueue';
 import { SavedLooks } from './SavedLooks';
 import { FilmingBanner } from '../../components/FilmingBanner';
+import { SelectField } from '../../components/SelectField';
+import { NumberField } from '../../components/NumberField';
 
 const STYLES: { value: OverlayBannerStyle; label: string }[] = [{ value: 0, label: 'Ticker' }, { value: 1, label: 'Lower bar' }, { value: 2, label: 'Alert' }];
 const MODES: { value: OverlayMode; label: string }[] = [{ value: 0, label: 'Auto' }, { value: 1, label: 'On' }, { value: 2, label: 'Off' }];
@@ -203,10 +205,10 @@ function Producer() {
           <span className="w-32 text-sm">Score cards</span>
           <Segmented label="Score cards" options={MODES.filter((m) => m.value !== 1)} value={draft.scoreCardMode === 1 ? 0 : draft.scoreCardMode} onChange={(scoreCardMode) => edit({ scoreCardMode })} />
           <label className="flex items-center gap-1 text-sm">Show after
-            <input className="w-14 rounded border px-1" type="number" min={0} max={30} value={draft.scoreCardDelaySeconds}
+            <NumberField className="w-14 rounded border px-1"  min={0} max={30} value={draft.scoreCardDelaySeconds}
               onChange={(event) => edit({ scoreCardDelaySeconds: Math.min(30, Math.max(0, Number(event.target.value) || 0)) })} /> s</label>
           <label className="flex items-center gap-1 text-sm">for
-            <input className="w-14 rounded border px-1" type="number" min={3} max={60} value={draft.scoreCardSeconds}
+            <NumberField className="w-14 rounded border px-1"  min={3} max={60} value={draft.scoreCardSeconds}
               onChange={(event) => edit({ scoreCardSeconds: Math.min(60, Math.max(3, Number(event.target.value) || 3)) })} /> s</label>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -227,9 +229,9 @@ function Producer() {
                 <th scope="row" className="py-1 text-left font-normal">{label}</th>
                 <td><input type="checkbox" aria-label={`Show ${label.toLowerCase()}`} checked={draft.look.elements[key].show} onChange={(event) => editElement(key, { show: event.target.checked })} /></td>
                 <td>
-                  <select aria-label={`Where to show ${label.toLowerCase()}`} value={draft.look.elements[key].place} onChange={(event) => editElement(key, { place: event.target.value as OverlayPlace })}>
+                  <SelectField aria-label={`Where to show ${label.toLowerCase()}`} value={draft.look.elements[key].place} onChange={(event) => editElement(key, { place: event.target.value as OverlayPlace })}>
                     {ELEMENT_PLACES[key].map((place) => <option key={place} value={place}>{PLACE_LABELS[place]}</option>)}
-                  </select>
+                  </SelectField>
                 </td>
               </tr>
             ))}
