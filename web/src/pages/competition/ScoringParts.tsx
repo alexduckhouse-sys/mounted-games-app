@@ -1,9 +1,10 @@
 import { motion, type PanInfo } from 'framer-motion';
 import { useState, type ReactNode } from 'react';
-import { BibSwatch } from '../../components/BibSwatch';
+import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
+import { teamBoxStyle } from '../../lib/teamColours';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { ELIM_REASONS, OTHER_REASON, noteFor, reasonKeyOf, statusFor } from '../../lib/elimReasons';
-import { inLaneOrder } from '../../lib/laneOrder';
+import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import type { NextLanes } from '../../lib/nextRoundLanes';
 import type { PendingPlace } from '../../lib/raceScoring';
 import type { RaceSummary } from '../../lib/raceSummary';
@@ -16,10 +17,11 @@ import './scoring.css';
 
 /** One team in the race being scored. A tap places it, a swipe down eliminates it; the Out and HC buttons are for everyone who can't swipe. */
 export function ScoreRow({
-  entry, lane, state, sitting, hc, canScore, canMarkHc, onTap, onSwipeEliminate, onToggleElim, onHc,
+  entry, lane, hatband, state, sitting, hc, canScore, canMarkHc, onTap, onSwipeEliminate, onToggleElim, onHc,
 }: {
   entry: HeatEntry;
   lane: string;
+  hatband?: string | null;
   state?: PendingPlace;
   sitting: boolean;
   hc: boolean;
@@ -40,7 +42,7 @@ export function ScoreRow({
     : state?.place ? <span className="sc-badge" aria-label={`Place ${state.place}`}>{state.place}</span>
     : null;
   return (
-    <li className={`sc-row ${eliminated ? 'sc-row-out' : ''} ${sitting ? 'sc-row-sit' : ''}`}>
+    <li className={`sc-row ${eliminated ? 'sc-row-out' : ''} ${sitting ? 'sc-row-sit' : ''}`} style={teamBoxStyle(entry.bibColour)}>
       <motion.button
         type="button"
         className="sc-main-btn"
@@ -58,6 +60,7 @@ export function ScoreRow({
         <span className="sc-who">
           <span className="sc-name">{entry.teamName} {hc && <span className="sc-tag sc-tag-hc">HC</span>}</span>
           <BibSwatch colour={entry.bibColour} />
+          <HatbandSwatch colour={hatband} />
         </span>
         {badge}
       </motion.button>
@@ -157,7 +160,7 @@ export function EliminationSheet({ places, names, onSave, onSkip, onCancel }: {
 }
 
 /** The current race's lanes, in order. Sits beside the races on a wide screen and after them on a phone. */
-export function LaneView({ heat, raceIndex, raceName, rules }: { heat: Heat; raceIndex: number; raceName: string; rules: LaneRules }) {
+export function LaneView({ heat, raceIndex, raceName, rules, hatbands }: { heat: Heat; raceIndex: number; raceName: string; rules: LaneRules; hatbands?: string[] | null }) {
   if (heat.entries.length === 0) return null;
   const rotated = raceIndex > 0 && rules.mode !== 1;
   return (
@@ -168,7 +171,7 @@ export function LaneView({ heat, raceIndex, raceName, rules }: { heat: Heat; rac
         {inLaneOrder(heat, raceIndex, rules).map((e) => (
           <li key={e.id} className="sc-lane-item">
             <span className="sc-lane">{displayLaneFor(heat, e, raceIndex, rules)}</span>
-            <span className="sc-who"><span className="sc-name">{e.teamName}</span><BibSwatch colour={e.bibColour} /></span>
+            <span className="sc-who"><span className="sc-name">{e.teamName}</span><BibSwatch colour={e.bibColour} /><HatbandSwatch colour={hatbandFor(hatbands, displayLaneFor(heat, e, raceIndex, rules))} /></span>
           </li>
         ))}
       </ol>

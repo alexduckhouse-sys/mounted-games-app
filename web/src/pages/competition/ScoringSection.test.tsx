@@ -31,9 +31,10 @@ interface Extra {
   onUndo?: () => void;
   initial?: PendingPlace[];
   lanes?: number | null;
+  hatbands?: string[] | null;
 }
 
-function Harness({ activeIdx = 1, heatOverride = h, queued = [], onSubmit = () => {}, allowReasons, onSetHc, hcTeamIds, onUndo, initial = [], lanes = null }: Extra) {
+function Harness({ activeIdx = 1, heatOverride = h, queued = [], onSubmit = () => {}, allowReasons, onSetHc, hcTeamIds, onUndo, initial = [], lanes = null, hatbands }: Extra) {
   const rules = { lanesPerHeat: lanes, mode: LaneRotationMode.MoveUp };
   const [pending, setPending] = useState<PendingPlace[]>(initial);
   return (
@@ -42,7 +43,7 @@ function Harness({ activeIdx = 1, heatOverride = h, queued = [], onSubmit = () =
       laneRules={rules} qualifiers={3} pending={pending} canScore queued={queued}
       onClickTeam={(teamId) => setPending((p) => [...p, { teamId, place: p.length + 1, eliminated: false }])}
       onToggleElim={(teamId) => setPending((p) => [...p.filter((x) => x.teamId !== teamId), { teamId, place: 0, eliminated: true }])}
-      onReset={() => setPending([])} onSubmit={onSubmit} onUndo={onUndo} allowReasons={allowReasons} onSetHc={onSetHc} hcTeamIds={hcTeamIds}
+      onReset={() => setPending([])} onSubmit={onSubmit} onUndo={onUndo} allowReasons={allowReasons} onSetHc={onSetHc} hcTeamIds={hcTeamIds} laneHatbands={hatbands}
       correctionReason="" onCorrectionReason={() => {}}
     />
   );
@@ -257,5 +258,26 @@ describe('eliminating without a swipe', () => {
     render(<Harness />);
     await user.click(screen.getByRole('button', { name: 'Eliminate Bravo' }));
     expect(within(screen.getByRole('region', { name: /^Scoring/ })).getByLabelText('Eliminated')).toBeInTheDocument();
+  });
+});
+
+describe('team colours and hatbands', () => {
+  it('paints each row in the team’s own colour and keeps the colour name', () => {
+    render(<Harness />);
+    const alpha = screen.getByRole('button', { name: /^Alpha, lane/ }).closest('li') as HTMLElement;
+    expect(alpha.style.boxShadow).toContain('inset');
+    expect(alpha).toHaveTextContent('Red bib');
+    const charlie = screen.getByRole('button', { name: /^Charlie, lane/ }).closest('li') as HTMLElement;
+    expect(charlie.style.background).toBe('');
+  });
+
+  it('shows the hatband colour for each lane, in the rows and the lane view, and nothing without them', () => {
+    const { unmount } = render(<Harness hatbands={['Red', 'Blue', 'Green']} />);
+    // Race 2 moves up one lane: Alpha has lane 1.
+    expect(within(screen.getByRole('button', { name: /^Alpha, lane/ })).getByText('Red hatband')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Lane view' })).getByText('Blue hatband')).toBeInTheDocument();
+    unmount();
+    render(<Harness hatbands={null} />);
+    expect(screen.queryByText(/hatband/)).toBeNull();
   });
 });

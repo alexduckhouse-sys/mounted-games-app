@@ -369,6 +369,7 @@ export function SessionPage() {
               tieRule={competition.sections.find((s) => s.id === session.competitionSectionId)?.tieBreakRule}
               notes={summaryNotes}
               nextLanes={nextLanes}
+              laneHatbands={competition.laneHatbands}
               correctionReason={activeRace ? correctionReasons[activeRace.id] ?? '' : ''}
               onCorrectionReason={(reason) => { if (activeRace) setCorrectionReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
             />

@@ -478,7 +478,7 @@ describe('SessionPage', () => {
       const qualifier = (id: number, order: number, names: string[]) => heat(id, {
         orderIndex: order, raceRoundId: 5, raceRoundStage: 1, label: `Q${order}`,
         entries: names.map((n, i) => ({ id: id * 10 + i, teamId: id * 10 + i, teamName: n, laneIndex: i + 1 })),
-        races: [race(id, { name: `Qualifier ${order}`, isComplete: true, results: names.map((n, i) => result(id * 10 + i, i + 1, { points: 1 })) })],
+        races: [race(id, { name: `Qualifier ${order}`, isComplete: true, results: names.map((_, i) => result(id * 10 + i, i + 1, { points: 1 })) })],
       });
       const data = (finalEntries: HeatEntry[]) => competition({
         teams, sessions: [session(1, { status: 1, qualifiersPerHeat: 2, lanesPerHeat: 4, heats: [

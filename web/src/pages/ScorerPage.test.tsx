@@ -164,7 +164,6 @@ describe('ScorerPage', () => {
     await tapTeams(user, ['Team 2', 'Team 1']);
     await user.click(screen.getByRole('button', { name: /Undo/ }));
     await waitFor(() => expect(placed()).toBe(1));
-    await tapTeams(user, ['Team 2']);
     await user.click(screen.getByRole('button', { name: 'Race complete' }));
     await opened('Flag');
     expect(outbox()).toHaveLength(1);

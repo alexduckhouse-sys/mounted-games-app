@@ -26,3 +26,9 @@ export function bibName(colour: string | null | undefined): string {
   const text = colour?.trim();
   return text ? `${text} bib` : 'No bib colour';
 }
+
+/** The hatband colour for a lane label ("1", "2"...), or nothing for S or when none are set. */
+export function hatbandFor(hatbands: string[] | null | undefined, lane: string): string | null {
+  const n = Number(lane);
+  return Number.isInteger(n) && n > 0 ? hatbands?.[n - 1] ?? null : null;
+}

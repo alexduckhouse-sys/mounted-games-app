@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { CloudOff, Flag, Trash2, Undo2 } from 'lucide-react';
-import { bibName, inLaneOrder } from '../../lib/laneOrder';
+import { bibName, hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import { describePlacings, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
 import type { NextLanes } from '../../lib/nextRoundLanes';
 import type { PendingPlace } from '../../lib/raceScoring';
@@ -45,6 +45,8 @@ interface ScoringProps {
   notes?: Record<number, string>;
   /** The lanes for the next part of the day (the final, or the next heat). */
   nextLanes?: NextLanes | null;
+  /** Hatband colour per lane (lane 1 first), when the competition sets them. */
+  laneHatbands?: string[] | null;
 }
 
 const NO_TEAMS: ReadonlySet<number> = new Set();
@@ -52,7 +54,7 @@ const NO_TEAMS: ReadonlySet<number> = new Set();
 export function ScoringSection({
   heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued,
   onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason,
-  onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null,
+  onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null,
 }: ScoringProps) {
   const [sheet, setSheet] = useState(false);
   const [hcFor, setHcFor] = useState<{ teamId: number; name: string; isHc: boolean } | null>(null);
@@ -89,7 +91,7 @@ export function ScoringSection({
     <section className="space-y-3">
       <div className="sc-layout">
         <aside className="sc-lanes">
-          {races.length > 0 && <LaneView heat={heat} raceIndex={laneIdx} raceName={races[laneIdx]?.name ?? ''} rules={laneRules} />}
+          {races.length > 0 && <LaneView heat={heat} raceIndex={laneIdx} raceName={races[laneIdx]?.name ?? ''} rules={laneRules} hatbands={laneHatbands} />}
         </aside>
 
         <div className="sc-main">
@@ -113,6 +115,7 @@ export function ScoringSection({
                       key={e.id}
                       entry={e}
                       lane={displayLaneFor(heat, e, laneIdx, laneRules)}
+                      hatband={hatbandFor(laneHatbands, displayLaneFor(heat, e, laneIdx, laneRules))}
                       state={pendingByTeam.get(e.teamId)}
                       sitting={sitsOutOf(heat, e, laneIdx, laneRules)}
                       hc={hcTeamIds.has(e.teamId)}
