@@ -99,7 +99,7 @@ public class SignupTests : IClassFixture<ApiFactory>
         var trainer = await _f.TrainerAsync();
 
         var longName = await trainer.PostAsJsonAsync(Url(section), Entry(new string('x', 121)));
-        var longClub = await trainer.PostAsJsonAsync(Url(section), Entry("Rider", club: new string('c', 161)));
+        var longClub = await trainer.PostAsJsonAsync(Url(section), Entry("Rider", club: new string('c', 151)));
         var longContact = await trainer.PostAsJsonAsync(Url(section),
             new CreateSectionSignupRequest("Rider", "Club", new string('p', 201), AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion));
         var longTeam = await trainer.PostAsJsonAsync(Url(section),
@@ -209,6 +209,23 @@ public class SignupTests : IClassFixture<ApiFactory>
         var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry(code: " joinme-1 "));
 
         Assert.Equal(teamId, (await resp.ReadAsync<SectionSignupDto>()).TeamId);
+    }
+
+    [Fact]
+    public async Task Create_DoesNotLinkAPublicCodeFromAnotherSection()
+    {
+        var section = await _f.NewSectionAsync();
+        await ArrangeTeamAsync(section, "SYNTHETIC-CROSS-SECTION");
+        var other = await _f.WithDbAsync(async db =>
+        {
+            var second = new CompetitionSection { CompetitionId = section.CompetitionId, Format = SectionFormat.Teams, AgeGroup = "Synthetic", DisplayName = "Synthetic second section" };
+            db.Add(second);
+            await db.SaveChangesAsync();
+            return second;
+        });
+        var response = await (await _f.TrainerAsync()).PostAsJsonAsync(Url(other), Entry(code: "SYNTHETIC-CROSS-SECTION"));
+        response.EnsureSuccessStatusCode();
+        Assert.Null((await response.ReadAsync<SectionSignupDto>()).TeamId);
     }
 
     [Fact]
@@ -650,6 +667,193 @@ public class SignupTests : IClassFixture<ApiFactory>
             new CreateSectionSignupRequest("M", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true))).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await member.PostAsJsonAsync(Url(teams),
             new CreateSectionSignupRequest("M", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true, TeamName: "X"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task FormTeams_PairsAndIndividual_UseRiderNamesWithoutSuffixA()
+    {
+        var pairsSection = await _f.NewSectionAsync(SectionFormat.Pairs);
+        await SignUpAsync(pairsSection, "Alice Rider", "Stockport");
+        await SignUpAsync(pairsSection, "Bob Rider", "Stockport");
+        var indSection = await _f.NewSectionAsync(SectionFormat.Individual);
+        await SignUpAsync(indSection, "Solo Sam", "Stockport");
+
+        var admin = await _f.AdminAsync();
+        var pairsResult = await (await admin.PostAsJsonAsync(FormUrl(pairsSection), new FormTeamsFromSignupsRequest(null, false, false)))
+            .ReadAsync<FormTeamsResult>();
+        var indResult = await (await admin.PostAsJsonAsync(FormUrl(indSection), new FormTeamsFromSignupsRequest(null, false, false)))
+            .ReadAsync<FormTeamsResult>();
+
+        var pairTeam = Assert.Single(pairsResult.Created);
+        Assert.Equal("Alice Rider & Bob Rider", pairTeam.DisplayName);
+        Assert.Equal("", pairTeam.Suffix);
+
+        var indTeam = Assert.Single(indResult.Created);
+        Assert.Equal("Solo Sam", indTeam.DisplayName);
+        Assert.Equal("", indTeam.Suffix);
+    }
+
+    [Fact]
+    public async Task LookingForPair_ChargesHalfPrice_AndMutualAcceptFormsPairTeam()
+    {
+        var pairsSection = await _f.NewSectionAsync(SectionFormat.Pairs, priceMinor: 2000);
+        var (rider1, _) = await _f.SignupAsync("Rider");
+        var (rider2, _) = await _f.SignupAsync("Rider");
+
+        var r1 = await rider1.PostAsJsonAsync(Url(pairsSection), new
+        {
+            fullName = "Alice Half",
+            ponyClubName = "Cheshire PC",
+            acceptTerms = true,
+            consentVersion = SignupTerms.WordingVersion,
+            lookingForPair = true,
+        });
+        r1.EnsureSuccessStatusCode();
+        var dto1 = await r1.ReadAsync<SectionSignupDto>();
+        Assert.Equal(1000, dto1.AmountMinor);
+
+        var r2 = await rider2.PostAsJsonAsync(Url(pairsSection), new
+        {
+            fullName = "Beth Half",
+            ponyClubName = "Cheshire PC",
+            acceptTerms = true,
+            consentVersion = SignupTerms.WordingVersion,
+            lookingForPair = true,
+        });
+        r2.EnsureSuccessStatusCode();
+        var dto2 = await r2.ReadAsync<SectionSignupDto>();
+        Assert.Equal(1000, dto2.AmountMinor);
+
+        var reqResp = await rider1.PostAsJsonAsync($"/api/my/signups/{dto1.Id}/pair-request", new { targetSignupId = dto2.Id });
+        reqResp.EnsureSuccessStatusCode();
+
+        var acceptResp = await rider2.PostAsJsonAsync($"/api/my/signups/{dto2.Id}/pair-respond", new { accept = true });
+        acceptResp.EnsureSuccessStatusCode();
+        var accepted = await acceptResp.ReadAsync<MySignupDto>();
+
+        Assert.NotNull(accepted.TeamId);
+        Assert.Equal("Alice Half & Beth Half", accepted.TeamName);
+    }
+
+    [Fact]
+    public async Task GuestWaiting_CannotDiscountAWholeTeam_AndPublicCapacityExcludesWaiters()
+    {
+        var section = await _f.NewSectionAsync(SectionFormat.Teams, priceMinor: 4000, max: 1);
+        var admin = await _f.AdminAsync();
+        var invalid = await admin.PostAsJsonAsync(Url(section), new
+        {
+            fullName = "Test Team Contact", teamName = "Example Team", wholeTeam = true,
+            waitingForGuestSpot = true, acceptTerms = true, consentVersion = SignupTerms.WordingVersion,
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        var waiting = await admin.PostAsJsonAsync(Url(section), new
+        {
+            fullName = "Test Guest", waitingForGuestSpot = true,
+            acceptTerms = true, consentVersion = SignupTerms.WordingVersion,
+        });
+        waiting.EnsureSuccessStatusCode();
+        var detail = await (await _f.CreateClient().GetAsync($"/api/competitions/{section.CompetitionId}")).ReadAsync<CompetitionDetail>();
+        Assert.Equal(0, detail.Sections.Single(s => s.Id == section.Id).ActiveSignupsCount);
+    }
+
+    [Fact]
+    public async Task PairRequests_PreservePrivacy_RejectOverwritingAndRepeatedAcceptance()
+    {
+        var section = await _f.NewSectionAsync(SectionFormat.Pairs, priceMinor: 2000);
+        var entrants = new List<(HttpClient Client, SectionSignupDto Signup)>();
+        foreach (var name in new[] { "Test Alpha", "Test Beta", "Test Gamma" })
+        {
+            var (client, _) = await _f.SignupAsync("Member");
+            var response = await client.PostAsJsonAsync(Url(section), new
+            {
+                fullName = name, lookingForPair = true, useInitialOnly = true,
+                acceptTerms = true, consentVersion = SignupTerms.WordingVersion,
+            });
+            response.EnsureSuccessStatusCode();
+            entrants.Add((client, await response.ReadAsync<SectionSignupDto>()));
+        }
+        var first = entrants[0]; var second = entrants[1]; var third = entrants[2];
+        (await first.Client.PostAsJsonAsync($"/api/my/signups/{first.Signup.Id}/pair-request", new { targetSignupId = second.Signup.Id })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await third.Client.PostAsJsonAsync($"/api/my/signups/{third.Signup.Id}/pair-request", new { targetSignupId = second.Signup.Id })).StatusCode);
+        var publicListing = await _f.CreateClient().GetStringAsync($"/api/competitions/{section.CompetitionId}/matchmaking");
+        Assert.DoesNotContain("Test Alpha", publicListing);
+        Assert.Contains("Test A.", publicListing);
+        var accepted = await (await second.Client.PostAsJsonAsync($"/api/my/signups/{second.Signup.Id}/pair-respond", new { accept = true })).ReadAsync<MySignupDto>();
+        Assert.Equal("Test A. & Test B.", accepted.TeamName);
+        Assert.Equal(HttpStatusCode.BadRequest, (await second.Client.PostAsJsonAsync($"/api/my/signups/{second.Signup.Id}/pair-respond", new { accept = true })).StatusCode);
+    }
+
+    [Fact]
+    public async Task PairRequests_RequireTheEntryOwnerAndAllowDecliningWithoutGrantingAccess()
+    {
+        var section = await _f.NewSectionAsync(SectionFormat.Pairs, priceMinor: 0);
+        var (first, firstAuth) = await _f.SignupAsync("Member");
+        var (second, secondAuth) = await _f.SignupAsync("Member");
+        var ids = await _f.WithDbAsync(async db =>
+        {
+            var a = new SectionSignup { CompetitionSectionId = section.Id, UserId = firstAuth.User.Id, FullName = "Synthetic Alpha", Status = SignupPaymentStatus.Paid };
+            var b = new SectionSignup { CompetitionSectionId = section.Id, UserId = secondAuth.User.Id, FullName = "Synthetic Beta", Status = SignupPaymentStatus.Paid };
+            db.AddRange(a, b);
+            await db.SaveChangesAsync();
+            db.AddRange(new SignupMatchmaking { SignupId = a.Id, LookingForPair = true }, new SignupMatchmaking { SignupId = b.Id, LookingForPair = true });
+            await db.SaveChangesAsync();
+            return new[] { a.Id, b.Id };
+        });
+        var requestUrl = $"/api/my/signups/{ids[0]}/pair-request";
+        var responseUrl = $"/api/my/signups/{ids[1]}/pair-respond";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PostAsJsonAsync(requestUrl, new { targetSignupId = ids[1] })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await second.PostAsJsonAsync(requestUrl, new { targetSignupId = ids[1] })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await first.PostAsJsonAsync(requestUrl, new { targetSignupId = ids[0] })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await first.PostAsJsonAsync(requestUrl, new { targetSignupId = -1 })).StatusCode);
+        (await first.PostAsJsonAsync(requestUrl, new { targetSignupId = ids[1] })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PostAsJsonAsync(responseUrl, new { accept = true })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await first.PostAsJsonAsync(responseUrl, new { accept = true })).StatusCode);
+        (await second.PostAsJsonAsync(responseUrl, new { accept = false })).EnsureSuccessStatusCode();
+        await _f.WithDbAsync(async db =>
+        {
+            var metadata = await db.Set<SignupMatchmaking>().Where(m => ids.Contains(m.SignupId)).ToListAsync();
+            Assert.All(metadata, m => { Assert.Null(m.PairRequestStatus); Assert.Null(m.PairRequestFromSignupId); Assert.Null(m.PairRequestToSignupId); Assert.False(m.DeclarationAccessGranted); });
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, (await second.PostAsJsonAsync(responseUrl, new { accept = true })).StatusCode);
+        (await first.PostAsJsonAsync(requestUrl, new { targetSignupId = ids[1] })).EnsureSuccessStatusCode();
+        var admin = await _f.AdminAsync();
+        (await admin.PutAsJsonAsync($"/api/signups/{ids[0]}/status", new UpdateSignupStatusRequest(SignupPaymentStatus.Cancelled))).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.BadRequest, (await first.PostAsJsonAsync(requestUrl, new { targetSignupId = ids[1] })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await second.PostAsJsonAsync(responseUrl, new { accept = true })).StatusCode);
+        (await admin.PutAsJsonAsync($"/api/signups/{ids[0]}/status", new UpdateSignupStatusRequest(SignupPaymentStatus.Paid))).EnsureSuccessStatusCode();
+        (await second.PostAsJsonAsync($"/api/my/signups/{ids[1]}/pair-request", new { targetSignupId = ids[0] })).EnsureSuccessStatusCode();
+        (await admin.DeleteAsync($"/api/signups/{ids[0]}")).EnsureSuccessStatusCode();
+        await _f.WithDbAsync(async db =>
+        {
+            var survivor = await db.Set<SignupMatchmaking>().SingleAsync(m => m.SignupId == ids[1]);
+            Assert.Null(survivor.PairRequestStatus);
+            Assert.Null(survivor.PairRequestToSignupId);
+        });
+    }
+
+    [Fact]
+    public async Task WaitingForGuestSpot_IsFree_AndDoesNotConsumeCap()
+    {
+        var teamsSection = await _f.NewSectionAsync(SectionFormat.Teams, priceMinor: 4000, max: 1);
+        var (rider, _) = await _f.SignupAsync("Rider");
+
+        var waitResp = await rider.PostAsJsonAsync(Url(teamsSection), new
+        {
+            fullName = "Guest Waiter",
+            ponyClubName = "Unaffiliated",
+            acceptTerms = true,
+            consentVersion = SignupTerms.WordingVersion,
+            waitingForGuestSpot = true,
+        });
+        waitResp.EnsureSuccessStatusCode();
+        var waitDto = await waitResp.ReadAsync<SectionSignupDto>();
+        Assert.Equal(0, waitDto.AmountMinor);
+        Assert.Equal(SignupPaymentStatus.Paid, waitDto.Status);
+
+        // A paid entry can still take the 1 available cap slot because the waiting list entry is free and does not consume cap.
+        var trainer = await _f.TrainerAsync();
+        var paidResp = await trainer.PostAsJsonAsync(Url(teamsSection), Entry("Paid Team"));
+        Assert.Equal(HttpStatusCode.OK, paidResp.StatusCode);
     }
 
     [Fact]

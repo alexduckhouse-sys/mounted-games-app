@@ -72,6 +72,7 @@ it('shows a read-only latest-three feed, pinned banner and all-announcements she
 it('keeps trainer posts private through the existing chat endpoint', async () => {
   context.roles = ['Trainer'];
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  fireEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
   fireEvent.change(screen.getByPlaceholderText('Message the organisers…'), { target: { value: 'Can we move our briefing?' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send' })); await act(flush);
   expect(api.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'Can we move our briefing?' });
@@ -97,6 +98,7 @@ it('shows send and unpin failures without leaving rejected action promises', asy
   context.roles = ['Trainer'];
   vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
   const { unmount } = render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  fireEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
   fireEvent.change(screen.getByPlaceholderText('Message the organisers…'), { target: { value: 'Is the briefing moving?' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t send that post');
