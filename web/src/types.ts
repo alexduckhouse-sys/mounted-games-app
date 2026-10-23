@@ -422,6 +422,81 @@ export interface StandingRow {
   finalTier?: number | null;
   /** Scored points stand, but the team is out of the rest of the event. */
   withdrawn?: boolean;
+  /** Tack check bonus points, already included in `totalPoints`. */
+  bonusPoints?: number;
+}
+
+/** Matches `TackCheckMode`: 0 pass or fail only, 1 a separate Tack & Turnout table, 2 bonus points in the standings. */
+export type TackCheckMode = 0 | 1 | 2;
+
+export interface TackCheckSector { id: number; name: string }
+export interface TackCheckMark { sectorId: number; passed: boolean | null; points: number | null }
+
+export interface TackCheckTeam {
+  teamId: number;
+  teamName: string;
+  clubName: string;
+  isHorsConcours: boolean;
+  withdrawn: boolean;
+  marks: TackCheckMark[];
+  total: number;
+  passed: number;
+  failed: number;
+}
+
+export interface TackCheckSection {
+  sectionId: number;
+  sectionName: string;
+  /** False until the organiser saves a set-up; the sectors are then the defaults, with id 0. */
+  configured: boolean;
+  isEnabled: boolean;
+  mode: TackCheckMode;
+  maxPoints: number;
+  sectors: TackCheckSector[];
+  teams: TackCheckTeam[];
+}
+
+export interface TackCheckBoard { competitionId: number; sections: TackCheckSection[] }
+
+export interface TackLeaderboardRow {
+  /** Shared by teams level on points; null for hors concours teams, listed last. */
+  rank: number | null;
+  teamId: number;
+  teamName: string;
+  clubName: string;
+  points: (number | null)[];
+  total: number;
+  isHorsConcours: boolean;
+}
+
+export interface TackLeaderboardSection {
+  sectionId: number;
+  sectionName: string;
+  mode: TackCheckMode;
+  maxPoints: number;
+  sectors: string[];
+  rows: TackLeaderboardRow[];
+}
+
+export interface TackLeaderboard { sections: TackLeaderboardSection[] }
+
+export interface PassportCheckPony { ponyName: string; riders: string[]; checkedAt: string | null; checkedByName: string | null }
+
+export interface PassportCheckTeam {
+  teamId: number;
+  teamName: string;
+  clubName: string;
+  withdrawn: boolean;
+  isHorsConcours: boolean;
+  hasDeclaration: boolean;
+  ponies: PassportCheckPony[];
+}
+
+export interface PassportCheckBoard {
+  enabled: boolean;
+  checked: number;
+  total: number;
+  sections: { sectionId: number; sectionName: string; teams: PassportCheckTeam[] }[];
 }
 
 export interface ChatMessage {

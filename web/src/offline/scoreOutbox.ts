@@ -1,5 +1,5 @@
 import type { Heat, ResultRow } from '../types';
-import { effectiveStatus, statusLetter } from '../lib/resultStatus';
+import { effectiveStatus, statusLetter } from '../lib/resultStatus.ts';
 
 /**
  * Race results saved on a scorer's phone, sent in order whenever there's

@@ -39,7 +39,7 @@ test('a conflict keeps both sets of results; "use mine" resends against theirs',
     { id: 2, teamId: 10, teamName: 'Red', placing: null, eliminated: true, points: 0 }];
   const [conflicted] = settle([item(1)], item(1), { kind: 'conflict', sessionId: 2, heat: heatWith(1, theirs) });
   assert.equal(conflicted.state, 'conflict');
-  assert.deepEqual(conflicted.theirs, [{ teamId: 11, place: 1, eliminated: false }, { teamId: 10, place: 0, eliminated: true }]);
+  assert.deepEqual(conflicted.theirs, [{ teamId: 11, place: 1, eliminated: false }, { teamId: 10, place: 0, eliminated: true, status: 1 }]);
   const [resend] = overrule([conflicted], 1);
   assert.equal(resend.state, 'waiting');
   assert.deepEqual(resend.expected, conflicted.theirs);

@@ -349,6 +349,8 @@ public static class DbInitializer
         await Sponsors.SponsorsSqliteSchema.EnsureAsync(db);
         await ResultsSqliteSchema.EnsureAsync(db);
 
+        await TackCheck.TackCheckSqliteSchema.EnsureAsync(db);
+
     }
 
     private static async Task SeedReferenceDataAsync(AppDbContext db, RoleManager<IdentityRole> roles)

@@ -265,6 +265,10 @@ public class ReviewSeedFreshTests
             order.Lines.Add(new EventOrderLine { CatalogueItemId = item.Id, SellerUserId = seller.Id, TitleSnapshot = "Hay", Quantity = 2, UnitPriceMinorSnapshot = 500, LineTotalMinor = 1000, ReservedStockQuantity = 2 });
             order.TestPayments.Add(new TestPaymentRecord { CompetitionId = competition.Id, OwnerUserId = user.Id, IdempotencyKey = Guid.NewGuid().ToString(), AmountMinor = 1000 });
             db.Set<EventOrder>().Add(order);
+            var tack = new TackCheckSection { Competition = competition, Section = section, IsEnabled = true, Mode = TackCheckMode.BonusPoints };
+            tack.Sectors.Add(new TackCheckSector { Name = "Bit", Marks = { new TackCheckMark { Team = team, Points = 4 } } });
+            db.Add(tack);
+            db.Add(new PassportCheck { Competition = competition, Team = team, PonyName = "Bramble", PonyKey = "bramble" });
             await db.SaveChangesAsync();
             db.Set<RiderSwapEvent>().Add(new RiderSwapEvent { CompetitionId = competition.Id, DeclarationFormId = form.Id, TeamId = team.Id, OutRiderEntryId = 1, InRiderEntryId = 2, RequestId = Guid.NewGuid().ToString() });
             await db.SaveChangesAsync();
@@ -304,6 +308,10 @@ public class ReviewSeedFreshTests
         Assert.Empty(await db.Set<RaceScoreEvent>().ToListAsync());
         Assert.Empty(await db.Set<CalendarHeatVersion>().ToListAsync());
         Assert.Empty(await db.Set<RiderSwapEvent>().ToListAsync());
+        Assert.Empty(await db.Set<TackCheckMark>().ToListAsync());
+        Assert.Empty(await db.Set<TackCheckSector>().ToListAsync());
+        Assert.Empty(await db.Set<TackCheckSection>().ToListAsync());
+        Assert.Empty(await db.Set<PassportCheck>().ToListAsync());
         // Rulebooks are shared by every competition, so a reseed leaves them alone.
         Assert.Equal("Rules", (await db.Set<Rulebook>().SingleAsync()).Title);
         Assert.Empty(await db.Set<EquipmentAcknowledgement>().ToListAsync());

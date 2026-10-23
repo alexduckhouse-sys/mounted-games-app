@@ -531,7 +531,10 @@ public class CompetitionsController : ControllerBase
         if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
         var teams = await teamsQ.ToListAsync(HttpContext.RequestAborted);
         var ties = await TieBreaker.LoadAsync(_db, competitionId, HttpContext.RequestAborted);
-        return (ties, ties.Rank(teams.Select(ties.Facts)), teams.ToDictionary(t => t.Id, t => t.DisplayName));
+        // Tack check bonus points count here as they do in the standings, so finals are seeded from the table people see.
+        var bonus = await Services.TackCheck.TackCheckBonus.ForCompetitionAsync(_db, competitionId, HttpContext.RequestAborted);
+        var facts = teams.Select(t => ties.Facts(t.Id, t.CompetitionSectionId, t.Results, t.Results.Sum(r => r.Points) + bonus.GetValueOrDefault(t.Id)));
+        return (ties, ties.Rank(facts), teams.ToDictionary(t => t.Id, t => t.DisplayName));
     }
 
     /// <summary>
@@ -546,10 +549,14 @@ public class CompetitionsController : ControllerBase
         var teamIds = req.TeamIds ?? [];
         if (teamIds.Count < 2 || teamIds.Distinct().Count() != teamIds.Count)
             return BadRequest(new { message = "List at least two different teams, best first." });
-        var teams = await _db.Teams.AsNoTracking()
+        // Totals as the standings count them, tack check bonus included.
+        var bonus = await Services.TackCheck.TackCheckBonus.ForCompetitionAsync(_db, id, HttpContext.RequestAborted);
+        var teams = (await _db.Teams.AsNoTracking()
             .Where(t => t.CompetitionId == id && teamIds.Contains(t.Id))
-            .Select(t => new { t.Id, t.CompetitionSectionId, t.IsHorsConcours, t.EntryStatus, Total = t.Results.Sum(r => r.Points) })
-            .ToListAsync();
+            .Select(t => new { t.Id, t.CompetitionSectionId, t.IsHorsConcours, t.EntryStatus, Points = t.Results.Sum(r => r.Points) })
+            .ToListAsync())
+            .Select(t => new { t.Id, t.CompetitionSectionId, t.IsHorsConcours, t.EntryStatus, Total = t.Points + bonus.GetValueOrDefault(t.Id) })
+            .ToList();
         if (teams.Count != teamIds.Count) return BadRequest(new { message = "Every team must be in this competition." });
         if (teams.Any(t => t.IsHorsConcours || t.EntryStatus != TeamEntryStatus.Active))
             return BadRequest(new { message = "Hors concours and withdrawn teams don't take part in ties." });
@@ -560,12 +567,14 @@ public class CompetitionsController : ControllerBase
         if (teams.Any(t => t.Total != total))
             return Conflict(new { message = "These teams are no longer level on points. Check the standings and try again." });
 
-        var levelIds = await _db.Teams.AsNoTracking()
+        var levelIds = (await _db.Teams.AsNoTracking()
             .Where(t => t.CompetitionId == id && t.CompetitionSectionId == sectionId
-                && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active
-                && t.Results.Sum(r => r.Points) == total)
+                && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active)
+            .Select(t => new { t.Id, Points = t.Results.Sum(r => r.Points) })
+            .ToListAsync())
+            .Where(t => t.Points + bonus.GetValueOrDefault(t.Id) == total)
             .Select(t => t.Id)
-            .ToListAsync();
+            .ToList();
         if (!levelIds.ToHashSet().SetEquals(teamIds))
             return Conflict(new { message = $"Order every team on {total} points in this age group together.", teamIds = levelIds });
 

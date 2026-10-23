@@ -102,6 +102,8 @@ export interface PrintableResultRow {
   racesRun: number;
   wins: number;
   eliminations: number;
+  /** Tack check bonus points, already in `totalPoints`. */
+  bonusPoints?: number;
 }
 export interface PrintableSectionResults {
   competitionSectionId: number;

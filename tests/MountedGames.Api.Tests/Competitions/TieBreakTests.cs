@@ -242,6 +242,54 @@ public class TieBreakTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, clear.StatusCode);
     }
 
+    // ---- tack check bonus ----
+
+    private Task BonusAsync(int comp, int section, int team, int points)
+        => _f.WithDbAsync(async db =>
+        {
+            var tack = new TackCheckSection { CompetitionId = comp, CompetitionSectionId = section, IsEnabled = true, Mode = TackCheckMode.BonusPoints };
+            var sector = new TackCheckSector { TackCheckSection = tack, Name = "Turnout" };
+            db.Add(new TackCheckMark { Sector = sector, TeamId = team, Points = points });
+            await db.SaveChangesAsync();
+        });
+
+    [Fact]
+    public async Task TackBonus_CountsForFinalsSeeding_AndForWhoIsLevel()
+    {
+        var (comp, section, t) = await CompAsync(3, TieBreakRule.Manual);
+        await RaceAsync(comp, section, 1, (t[0], 1, 5), (t[1], 2, 4), (t[2], 3, 1));
+        // T1's 2 bonus points take it to 6 against T0's 5, so it leads outright.
+        await BonusAsync(comp, section, t[1], 2);
+        var admin = await _f.AdminAsync();
+
+        var clean = await Json(await admin.GetAsync($"/api/competitions/{comp}/finals/boundary?topN=1&sectionId={section}"));
+        var finals = await Json(await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals",
+            new { competitionSectionId = section, topN = 1, raceNames = new[] { "Flag" }, lanesPerHeat = 1 }));
+        // Ordering T0 and T1 as a tie is refused: with the bonus they aren't level.
+        var notLevel = await admin.PutAsJsonAsync($"/api/competitions/{comp}/finals/tie-order", new { teamIds = new[] { t[0], t[1] } });
+
+        Assert.False(clean.GetProperty("tied").GetBoolean());
+        Assert.Equal(t[1], Assert.Single(finals.GetProperty("heats")[0].GetProperty("entries").EnumerateArray()).GetProperty("teamId").GetInt32());
+        Assert.Equal(HttpStatusCode.Conflict, notLevel.StatusCode);
+    }
+
+    [Fact]
+    public async Task TackBonus_CanMakeATie_ThatTheOrganiserThenOrders()
+    {
+        var (comp, section, t) = await CompAsync(3, TieBreakRule.Manual);
+        await RaceAsync(comp, section, 1, (t[0], 1, 5), (t[1], 2, 3), (t[2], 3, 1));
+        await BonusAsync(comp, section, t[1], 2);
+        var admin = await _f.AdminAsync();
+
+        var tied = await Json(await admin.GetAsync($"/api/competitions/{comp}/finals/boundary?topN=1&sectionId={section}"));
+        var put = await admin.PutAsJsonAsync($"/api/competitions/{comp}/finals/tie-order", new { teamIds = new[] { t[1], t[0] } });
+
+        Assert.Equal(5, OnlyBoundary(tied).GetProperty("totalAtCutoff").GetInt32());
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+        var standings = await Json(await admin.GetAsync($"/api/competitions/{comp}/standings?sectionId={section}"));
+        Assert.Equal(new[] { t[1], t[0], t[2] }, standings.EnumerateArray().Select(r => r.GetProperty("teamId").GetInt32()));
+    }
+
     // ---- the section setting ----
 
     [Fact]

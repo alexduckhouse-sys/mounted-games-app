@@ -52,6 +52,7 @@ public sealed class PrintableEventService(AppDbContext db)
         var competition = await LoadAsync(competitionId, ct);
         if (competition is null) return null;
         var tiers = FinalsTiers.From(competition.Sessions);
+        var bonus = await TackCheck.TackCheckBonus.ForCompetitionAsync(db, competitionId, ct);
         var sections = competition.Sections.OrderBy(x => x.DisplayName).Select(section =>
         {
             var rows = section.Teams.Where(x => !x.IsHorsConcours).Select(team =>
@@ -61,7 +62,8 @@ public sealed class PrintableEventService(AppDbContext db)
                 {
                     Team = team,
                     Tier = tiers.SortKey(team.Id),
-                    Total = results.Sum(x => x.Points),
+                    Total = results.Sum(x => x.Points) + bonus.GetValueOrDefault(team.Id),
+                    Bonus = bonus.GetValueOrDefault(team.Id),
                     Run = results.Length,
                     Wins = results.Count(x => x.Placing == 1 && !x.Eliminated),
                     Eliminations = results.Count(x => x.Eliminated && ResultStatuses.Of(x) == ResultStatus.Eliminated),
@@ -76,7 +78,7 @@ public sealed class PrintableEventService(AppDbContext db)
                 if (previous != (rows[i].Tier, rows[i].Total)) rank = i + 1;
                 previous = (rows[i].Tier, rows[i].Total);
                 result.Add(new PrintableResultRowDto(rank, rows[i].Team.Id, rows[i].Team.DisplayName,
-                    rows[i].Team.Club?.Name ?? string.Empty, rows[i].Total, rows[i].Run, rows[i].Wins, rows[i].Eliminations));
+                    rows[i].Team.Club?.Name ?? string.Empty, rows[i].Total, rows[i].Run, rows[i].Wins, rows[i].Eliminations, rows[i].Bonus));
             }
             return new PrintableSectionResultsDto(section.Id, section.DisplayName, result);
         }).ToArray();

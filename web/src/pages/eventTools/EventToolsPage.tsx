@@ -6,6 +6,8 @@ import { useAuth } from '../../auth/AuthContext';
 import { Chevron, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
 import type { CloneCompetitionResult, CsvTeamImportPreview } from './eventToolsTypes';
 import { ResultsBookTab } from './ResultsBookTab';
+import { TackCheckTab } from './TackCheckTab';
+import { PassportCheckTab } from './PassportCheckTab';
 import './eventTools.css';
 
 interface CompetitionForTools {
@@ -16,7 +18,7 @@ interface CompetitionForTools {
   createdByUserId: string | null;
 }
 
-type ToolTab = 'import' | 'duplicate' | 'print' | 'results';
+type ToolTab = 'import' | 'duplicate' | 'print' | 'results' | 'tack' | 'passport';
 
 function message(error: unknown, fallback: string) {
   const candidate = error as { response?: { data?: { detail?: string; title?: string } } };
@@ -128,12 +130,15 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
     ...(mayDuplicate ? [{ id: 'duplicate' as const, label: 'Duplicate event' }] : []),
     { id: 'print', label: 'Print sheets' },
     { id: 'results', label: 'Results book' },
+    { id: 'tack', label: 'Tack check' },
+    { id: 'passport', label: 'Passport check' },
   ];
   const printSheets = [
     { to: 'entries', title: 'Entry list', detail: 'Every team with its riders and ponies, to check before the day' },
     { to: 'draw', title: 'Draw and lanes', detail: 'Sessions, heats, lanes and race order' },
     { to: 'score-sheets', title: 'Score sheets', detail: 'Blank placing, elimination and points columns' },
     { to: 'results', title: 'Results', detail: 'Current section standings, marked provisional when unfinished' },
+    { to: 'tack-check', title: 'Tack check forms', detail: 'One form per age group, with each team’s riders, ponies and a column per sector' },
     { to: 'poster', title: 'Venue poster', detail: 'Name, date, venue and a QR code to this event’s page' },
   ];
 
@@ -216,5 +221,7 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
       </RefineList></nav>
     </section>}
     {tab === 'results' && <ResultsBookTab competitionId={competitionId} />}
+    {tab === 'tack' && <TackCheckTab competitionId={competitionId} />}
+    {tab === 'passport' && <PassportCheckTab competitionId={competitionId} />}
   </RefinePage>;
 }
