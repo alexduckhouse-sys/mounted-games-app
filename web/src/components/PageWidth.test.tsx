@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { PAGE_WIDTH_CLASS, PageWidthProvider, usePageWidth, usePageWidthValue, type PageWidth } from './PageWidth';
+import { PageWidthProvider } from './PageWidth';
+import { PAGE_WIDTH_CLASS, usePageWidth, usePageWidthValue, type PageWidth } from './pageWidthState';
 
 function Shown() {
   return <p>{usePageWidthValue()}</p>;

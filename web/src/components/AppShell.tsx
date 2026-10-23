@@ -6,7 +6,8 @@ import { useCurrentCompetition } from '../competition/CurrentCompetitionContext'
 import { RememberCompetitionDialog } from '../competition/RememberCompetitionDialog';
 import { competitionDateText } from '../lib/competitionDates';
 import { competitionIdFromPath, hasGlobalTabs } from '../lib/routes';
-import { PageWidthProvider, PAGE_WIDTH_CLASS, type PageWidth } from './PageWidth';
+import { PageWidthProvider } from './PageWidth';
+import { PAGE_WIDTH_CLASS, type PageWidth } from './pageWidthState';
 import { PageLoadBoundary } from './PageLoadBoundary';
 import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';

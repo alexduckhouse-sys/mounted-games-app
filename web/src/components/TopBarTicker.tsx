@@ -4,7 +4,7 @@ import { ChevronDown, Video } from 'lucide-react';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { tickerFocusAfterChange, type TickerItem, type TickerKind } from '../lib/ticker';
 import { useTicker } from './TickerContext';
-import { PAGE_WIDTH_CLASS, usePageWidthValue } from './PageWidth';
+import { PAGE_WIDTH_CLASS, usePageWidthValue } from './pageWidthState';
 
 const ROTATE_MS = 4500;
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
