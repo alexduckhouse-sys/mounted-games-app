@@ -175,24 +175,20 @@ describe('organising and managing one competition', () => {
     await waitFor(() => expect(result.current.canManage(comp)).toBe(true));
   });
 
-  it('asks an admin to turn Edit mode on before managing, though they can organise anything', () => {
+  it('lets an admin manage any competition without a switch', () => {
     signIn(['Admin']);
     const { result } = mount();
     expect(result.current.canOrganise(comp)).toBe(true);
-    expect(result.current.canManage(comp)).toBe(false);
-    act(() => result.current.setEditorMode(true));
     expect(result.current.canManage(comp)).toBe(true);
-    act(() => result.current.setEditorMode(false));
-    expect(result.current.canManage(comp)).toBe(false);
   });
 
-  it('holds an admin who is also a competition admin to Edit mode', async () => {
+  it('still lets an admin manage when they are also on the competition team', async () => {
     signIn(['Admin']);
     serve([{ competitionId: 5, owner: false }]);
     const { result } = mount();
     await waitFor(() => expect(get).toHaveBeenCalledWith('/competitions/access'));
     await act(async () => { await Promise.resolve(); });
-    expect(result.current.canManage(comp)).toBe(false);
+    expect(result.current.canManage(comp)).toBe(true);
   });
 
   it('never lets a signed-out visitor organise or manage', () => {

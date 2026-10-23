@@ -6,6 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { initialsOf } from '../../lib/profile';
 import type { CompetitionPickerItem, PayoutsTo, SectionSignup, TrainerRequest } from '../../types';
 import { useNeedsYou } from '../profile/needsYou';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 interface Attention {
   /** Events with entries still waiting to be paid or confirmed. */
@@ -59,7 +60,7 @@ export function NeedsYouPanel({ events = [] }: { events?: CompetitionPickerItem[
 
   async function decide(request: TrainerRequest, action: 'approve' | 'decline') {
     setFailed(null);
-    if (action === 'decline' && !window.confirm(`Decline the request from ${request.fullName}? Their account will stay a member.`)) return;
+    if (action === 'decline' && !(await confirmDialog({ title: 'Decline this request?', message: `Decline the request from ${request.fullName}? Their account will stay a member.`, confirmLabel: 'Decline request', destructive: true }))) return;
     if (!(await review(request, action))) setFailed(request.userId);
   }
 

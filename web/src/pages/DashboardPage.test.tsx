@@ -9,7 +9,7 @@ import { NeedsYouContext } from './profile/needsYou';
 
 vi.mock('../api', () => ({ api: { get: vi.fn() } }));
 const auth = vi.hoisted(() => ({ user: null as null | { id: string; fullName: string; clubName: string | null; roles: string[] }, roles: [] as string[] }));
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: auth.user, hasRole: (role: string) => auth.roles.includes(role) }) }));
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: auth.user, hasRole: (role: string) => auth.roles.includes(role), canOrganise: () => auth.roles.includes('Admin') || auth.roles.includes('Trainer') }) }));
 const current = vi.hoisted(() => ({ value: null as null | { id: number; name: string } }));
 vi.mock('../competition/CurrentCompetitionContext', () => ({ useCurrentCompetition: () => ({ current: current.value }) }));
 
@@ -87,22 +87,20 @@ describe('DashboardPage', () => {
     expect(screen.getByRole('link', { name: /My teams/ })).toHaveAttribute('href', '/teams');
   });
 
-  it('lists what needs the person: a missing dec form, an unpaid entry, and trainer requests for an admin', async () => {
-    auth.roles = ['Admin'];
+  it('lists what needs the person: a missing dec form and an unpaid entry', async () => {
     myTeams = [team(1, { displayName: 'Stockport A', competitionId: 1, relationship: 'trainer' }), team(2, { displayName: 'Stockport B', competitionId: 1, relationship: 'trainer' })];
     forms = [{ id: 1, teamId: 1 }];
     signups = [signup(), signup({ id: 10, status: 1 })];
-    mount([{ userId: 'r1', fullName: 'Pat Newtrainer', clubName: 'Wirral PC', email: null, requestedAt: '2026-10-01' }]);
+    mount();
     const needs = await screen.findByRole('region', { name: 'Needs you' });
-    await waitFor(() => expect(within(needs).getAllByRole('link')).toHaveLength(3));
+    await waitFor(() => expect(within(needs).getAllByRole('link')).toHaveLength(2));
     const links = within(needs).getAllByRole('link');
     expect(links[0]).toHaveTextContent('Dec form needed: Stockport B');
     expect(links[0]).toHaveTextContent('Hartpury Area Festival');
     expect(links[0]).toHaveAttribute('href', '/competitions/1/declarations');
     expect(links[1]).toHaveTextContent('Entry awaiting payment');
     expect(links[1]).toHaveTextContent('Bicton Arena Individuals · £18.00');
-    expect(links[2]).toHaveTextContent('Trainer request: Pat Newtrainer');
-    expect(needs).toHaveTextContent('3');
+    expect(needs).toHaveTextContent('2');
   });
 
   it('lists the heats still to run today for the person’s teams, with any delay', async () => {
@@ -115,7 +113,7 @@ describe('DashboardPage', () => {
     expect(section).toHaveTextContent('Junior · Heat 3 · +8 min');
   });
 
-  it('counts dec forms and entries in the shortcuts, and hides My signups for an admin', async () => {
+  it('counts dec forms and entries in the shortcuts, gives a trainer quick actions, and sends an admin to Me', async () => {
     myTeams = [team(1, { competitionId: 1, relationship: 'trainer' }), team(2, { competitionId: 1, relationship: 'manager' }), team(3, { competitionId: 1, relationship: 'supporter' })];
     forms = [{ id: 1, teamId: 1 }];
     signups = [signup(), signup({ id: 10 })];
@@ -124,15 +122,16 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(shortcuts).toHaveTextContent('1 of 2 in'));
     expect(shortcuts).toHaveTextContent('3 teams');
     await waitFor(() => expect(within(shortcuts).getByRole('link', { name: /My signups/ })).toHaveTextContent('2'));
-    expect(within(shortcuts).getByRole('link', { name: /Create a competition/ })).toHaveAttribute('href', '/admin/competitions/new');
+    const quick = screen.getByRole('region', { name: 'Quick actions' });
+    expect(within(quick).getByRole('link', { name: /Create competition/ })).toHaveAttribute('href', '/admin/competitions/new');
+    expect(within(quick).getByRole('link', { name: /Score now/ })).toHaveAttribute('href', '/competitions/1/scoring');
+    expect(within(shortcuts).queryByRole('link', { name: /Create a competition/ })).not.toBeInTheDocument();
     expect(within(shortcuts).getByRole('link', { name: 'Shop' })).toHaveAttribute('href', '/shop');
     expect(within(shortcuts).queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument();
     view.unmount();
     auth.roles = ['Admin'];
     mount();
-    const adminShortcuts = await screen.findByRole('region', { name: 'Shortcuts' });
-    expect(within(adminShortcuts).queryByRole('link', { name: /My signups/ })).not.toBeInTheDocument();
-    expect(within(adminShortcuts).getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Shortcuts' })).not.toBeInTheDocument());
   });
 
   it('shows a visitor the event and a way to sign in, with nothing private', async () => {
@@ -141,7 +140,11 @@ describe('DashboardPage', () => {
     mount();
     expect(await screen.findByText('LIVE')).toBeInTheDocument();
     const shortcuts = screen.getByRole('region', { name: 'Shortcuts' });
-    expect(within(shortcuts).getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    const signIn = screen.getByRole('link', { name: 'Sign in' });
+    expect(signIn).toHaveAttribute('href', '/login');
+    expect(signIn).toHaveClass('mg-btn-primary');
+    expect(shortcuts).not.toContainElement(signIn);
+    expect(screen.getByRole('region', { name: 'Shortcuts' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(within(shortcuts).queryByRole('link', { name: /My teams/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Needs you' })).not.toBeInTheDocument();
     expect(api.get).not.toHaveBeenCalledWith('/me/signups');

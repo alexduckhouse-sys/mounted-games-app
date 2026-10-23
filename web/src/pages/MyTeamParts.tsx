@@ -6,6 +6,7 @@ import { joinKeyFromSearch } from '../lib/sharing';
 import type { Team, TeamSupporter } from '../types';
 import { JoinQr, TeamCalendarFeed } from './TeamSharing';
 import { SelectField } from '../components/SelectField';
+import { confirmDialog } from '../components/ConfirmDialog';
 
 const messageOf = (e: unknown, fallback: string) => {
   const data = (e as { response?: { data?: { message?: string } | string } }).response?.data;
@@ -93,8 +94,8 @@ export function CodeRow({ team, onTeamUpdated }: { team: Team; onTeamUpdated: ()
     return run(() => api.put(`/teams/${team.id}/team-code`, { code }), () => { setEditing(false); setCodeInput(''); });
   };
   const random = () => run(() => api.post(`/teams/${team.id}/supporter-key`), () => setEditing(false));
-  const revoke = () => {
-    if (!confirm('Turn this code off? Existing supporters stay, but no one new can join until you set a new code.')) return;
+  const revoke = async () => {
+    if (!(await confirmDialog({ title: 'Turn this code off?', message: 'Turn this code off? Existing supporters stay, but no one new can join until you set a new code.', confirmLabel: 'Turn code off', destructive: true }))) return;
     return run(() => api.delete(`/teams/${team.id}/supporter-key`), () => setEditing(false));
   };
 
@@ -149,7 +150,7 @@ export function SupportersBlock({ team }: { team: Team }) {
     load();
   }
   async function kick(s: TeamSupporter) {
-    if (!confirm(`Remove ${s.userName} as supporter?`)) return;
+    if (!(await confirmDialog({ title: 'Remove supporter?', message: `Remove ${s.userName} as supporter?`, confirmLabel: 'Remove supporter', destructive: true }))) return;
     await api.delete(`/team-supporters/${s.id}`);
     load();
   }

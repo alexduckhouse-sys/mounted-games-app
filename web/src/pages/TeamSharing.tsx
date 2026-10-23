@@ -4,6 +4,7 @@ import { api } from '../api';
 import { QrCode } from '../components/QrCode';
 import { feedLinks, joinTeamLink, type FeedLinks } from '../lib/sharing';
 import type { Team } from '../types';
+import { confirmDialog } from '../components/ConfirmDialog';
 
 /** A QR code for a team's join key, so supporters can scan it instead of typing the key. */
 export function JoinQr({ team }: { team: Pick<Team, 'displayName' | 'supporterJoinKey'> }) {
@@ -50,7 +51,7 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
   }, [team.id]);
 
   async function make() {
-    if (status?.enabled && !confirm('Make a new link? The old one will stop working, so anyone using it will need the new one.')) return;
+    if (status?.enabled && !(await confirmDialog({ title: 'Make a new link?', message: 'Make a new link? The old one will stop working, so anyone using it will need the new one.', confirmLabel: 'Make new link', destructive: true }))) return;
     setBusy(true);
     setError(null);
     try {
@@ -66,7 +67,7 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
   }
 
   async function turnOff() {
-    if (!confirm('Turn the calendar link off? It will stop working for everyone using it.')) return;
+    if (!(await confirmDialog({ title: 'Turn the link off?', message: 'Turn the calendar link off? It will stop working for everyone using it.', confirmLabel: 'Turn link off', destructive: true }))) return;
     setBusy(true);
     setError(null);
     try {

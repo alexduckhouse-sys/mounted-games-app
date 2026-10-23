@@ -7,6 +7,7 @@ import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSta
 import type { Rulebook, RulebookSummary } from './types';
 import { apiMessage } from './types';
 import './operations.css';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 interface RulebookDraft {
   id: number | null;
@@ -122,7 +123,8 @@ function GlobalRulebooks() {
   }
 
   async function remove(rulebook: Rulebook) {
-    if (busy || !canWrite || !window.confirm(`Delete “${rulebook.title}”?`)) return;
+    if (busy || !canWrite) return;
+    if (!(await confirmDialog({ title: 'Delete this rulebook?', message: `Delete “${rulebook.title}”?`, confirmLabel: 'Delete rulebook', destructive: true }))) return;
     setBusy(true);
     setError(null);
     try {

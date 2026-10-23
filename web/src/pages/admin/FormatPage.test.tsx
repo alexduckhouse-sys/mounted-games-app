@@ -8,6 +8,7 @@ import { competition, heat, race, session, team } from '../../test/factories';
 import type { CompetitionDetail, CompetitionSection } from '../../types';
 import { FormatPage } from './FormatPage';
 
+import { autoConfirm } from '../../test/confirm';
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 const auth = vi.hoisted(() => ({ organise: true }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => auth.organise }) }));
@@ -147,7 +148,7 @@ describe('On the day: breaks and briefings', () => {
     })));
     expect(await screen.findByText('Riders briefing added to the timetable.')).toBeInTheDocument();
 
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true);
+    const confirm = autoConfirm([false, true]);
     await userEvent.click(within(breaks).getByRole('button', { name: 'Remove Lunch' }));
     expect(api.delete).not.toHaveBeenCalled();
     await userEvent.click(within(breaks).getByRole('button', { name: 'Remove Lunch' }));
@@ -227,7 +228,7 @@ describe('On the day: race lists', () => {
 
 describe('On the day: generating the exact timetable', () => {
   it('previews nothing but generates heats from the planned races with a start for each session, after asking', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true);
+    autoConfirm([false, true]);
     mount();
     await region('Open pairs');
     await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
@@ -250,7 +251,7 @@ describe('On the day: generating the exact timetable', () => {
       session(12, { kind: 1, isBreak: true, name: 'Lunch', orderIndex: 3, scheduledStart: at(9).toISOString(), durationMinutes: 45, arenaName: null }),
       session(13, { kind: 2, name: 'Briefing', orderIndex: 4, scheduledStart: at(8, 30).toISOString(), durationMinutes: 15, arenaName: 'Arena 2' }),
     ] });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    autoConfirm(true);
     mount();
     await region('Open pairs');
     await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
@@ -267,7 +268,7 @@ describe('On the day: generating the exact timetable', () => {
 
   it('leaves a session that has already started alone, and says so', async () => {
     comp = build({ sessions: build().sessions.map((s) => (s.id === 10 ? { ...s, status: 1 as const } : s)) });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    autoConfirm(true);
     mount();
     await region('Open pairs');
     await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
@@ -285,7 +286,7 @@ describe('On the day: generating the exact timetable', () => {
   });
 
   it('shows the server’s reason when generating fails', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    autoConfirm(true);
     vi.mocked(api.post).mockRejectedValue({ response: { data: { message: 'Some of those teams aren’t in this competition.' } } });
     mount();
     await region('Open pairs');

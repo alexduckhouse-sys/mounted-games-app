@@ -10,6 +10,7 @@ import { team } from '../test/factories';
 import { ProfilePage } from './ProfilePage';
 import { NeedsYouProvider } from './profile/NeedsYouProvider';
 
+import { autoConfirm } from '../test/confirm';
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: { get: vi.fn(), post: vi.fn() },
@@ -20,7 +21,6 @@ interface Options {
   roles?: string[];
   fullName?: string;
   clubName?: string | null;
-  editMode?: boolean;
   competition?: boolean;
 }
 
@@ -38,7 +38,6 @@ function mount(options: Options = {}) {
     user: { id: 'u1', email: 'alex@example.com', fullName: options.fullName ?? 'Alex Morgan', clubId: options.clubName === null ? null : 7, clubName: options.clubName === undefined ? 'Stockport PC' : options.clubName, roles },
   };
   localStorage.setItem('mg.auth', JSON.stringify(auth));
-  if (options.editMode) localStorage.setItem('mg.adminEditorMode', '1');
   if (options.competition) document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 4, name: 'Spring Games' }))}; Path=/`;
   return render(
     <MemoryRouter initialEntries={['/me']}>
@@ -230,7 +229,7 @@ describe('ProfilePage: needs you', () => {
   });
 
   it('shows an admin the trainer requests, with the count in the heading', async () => {
-    mount({ roles: ['Admin'], editMode: true });
+    mount({ roles: ['Admin'] });
     const needs = await needsSection();
     expect(await needs.findByText('Sam Lee')).toBeInTheDocument();
     expect(needs.getByText('Priya Shah')).toBeInTheDocument();
@@ -241,7 +240,7 @@ describe('ProfilePage: needs you', () => {
   });
 
   it('approves a request, and the card goes', async () => {
-    mount({ roles: ['Admin'], editMode: true });
+    mount({ roles: ['Admin'] });
     const needs = await needsSection();
     await needs.findByText('Sam Lee');
     await userEvent.click(needs.getAllByRole('button', { name: 'Approve' })[0]);
@@ -253,15 +252,17 @@ describe('ProfilePage: needs you', () => {
 
   it('declines a request, and the section goes with the last card', async () => {
     responses['/admin/trainer-requests'] = [requests[1]];
-    mount({ roles: ['Admin'], editMode: true });
+    const confirm = autoConfirm(true);
+    mount({ roles: ['Admin'] });
     await userEvent.click((await needsSection()).getByRole('button', { name: 'Decline' }));
+    expect(confirm).toHaveBeenCalledWith('Decline the request from Priya Shah? Their account will stay a member.');
     expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r2/decline');
     await vi.waitFor(() => expect(screen.queryByRole('region', { name: 'Needs you' })).not.toBeInTheDocument());
   });
 
   it('keeps the card and says so under it when the server refuses', async () => {
     vi.mocked(api.post).mockRejectedValue(new Error('conflict'));
-    mount({ roles: ['Admin'], editMode: true });
+    mount({ roles: ['Admin'] });
     const needs = await needsSection();
     await userEvent.click(needs.getAllByRole('button', { name: 'Approve' })[0]);
     expect(await needs.findByRole('alert')).toHaveTextContent('Could not approve this request. Check your connection and try again.');
@@ -270,14 +271,14 @@ describe('ProfilePage: needs you', () => {
 
   it("shows the server's own words when it refuses", async () => {
     vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { message: 'Could not approve this request. Refresh the list and try again.' } } });
-    mount({ roles: ['Admin'], editMode: false });
+    mount({ roles: ['Admin'] });
     const needs = await needsSection();
     await userEvent.click(needs.getAllByRole('button', { name: 'Approve' })[0]);
     expect(await needs.findByRole('alert')).toHaveTextContent('Refresh the list and try again.');
   });
 
-  it('lets an admin approve or decline without edit mode', async () => {
-    mount({ roles: ['Admin'], editMode: false });
+  it('lets an admin approve or decline with no edit mode to switch on', async () => {
+    mount({ roles: ['Admin'] });
     const needs = await needsSection();
     const approve = needs.getAllByRole('button', { name: 'Approve' })[0];
     expect(approve).toBeEnabled();
@@ -291,7 +292,7 @@ describe('ProfilePage: needs you', () => {
     expect(api.get).not.toHaveBeenCalledWith('/admin/trainer-requests');
   });
 
-  it('shows a team manager their club\'s trainer requests, and lets them answer without edit mode', async () => {
+  it('shows a team manager their club\'s trainer requests, and lets them answer', async () => {
     mount({ roles: ['Manager'] });
     const needs = await needsSection();
     await needs.findByText('Sam Lee');
@@ -304,7 +305,7 @@ describe('ProfilePage: needs you', () => {
 
   it('says when somebody wants to be a team manager', async () => {
     responses['/admin/trainer-requests'] = [{ ...requests[0], requestedRole: 'Manager' }, { ...requests[1], requestedRole: 'Trainer' }];
-    mount({ roles: ['Admin'], editMode: true });
+    mount({ roles: ['Admin'] });
     const needs = await needsSection();
     expect(await needs.findByText('Wants to join as a team manager')).toBeInTheDocument();
     expect(needs.getByText('Wants to join as a trainer')).toBeInTheDocument();

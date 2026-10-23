@@ -4,6 +4,7 @@ import { BookOpen } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import type { Club, CompetitionSummary } from '../../types';
+import { confirmDialog } from '../../components/ConfirmDialog';
 import { competitionDateText } from '../../lib/competitionDates';
 import { STAGE_LABEL, stageAction, stageCounts, stageOf, type Stage } from '../../lib/adminStage';
 import { bibAccent, bibLabel } from '../../lib/bib';
@@ -39,8 +40,8 @@ export function SiteAdmin() {
   const now = useMemo(() => new Date(), []);
 
   function load() {
-    api.get<CompetitionSummary[]>('/competitions', { params: { includeArchived: true } }).then((r) => setComps(r.data));
-    api.get<Club[]>('/clubs').then((r) => setClubs(r.data));
+    api.get<CompetitionSummary[]>('/competitions', { params: { includeArchived: true } }).then((r) => setComps(Array.isArray(r.data) ? r.data : [])).catch(() => setComps([]));
+    api.get<Club[]>('/clubs').then((r) => setClubs(Array.isArray(r.data) ? r.data : [])).catch(() => setClubs([]));
     api.get<IpBlock[]>('/ip-blocks').then((r) => setBlocks(r.data)).catch(() => setBlocks([]));
     api.get<{ ip: string }>('/ip-blocks/mine').then((r) => setMyIp(r.data.ip)).catch(() => setMyIp(null));
   }
@@ -74,25 +75,18 @@ export function SiteAdmin() {
   }
 
   async function deleteComp(c: CompetitionSummary) {
-    const prompt = `Delete "${c.name}" forever?\n\n` +
-      `This wipes ${c.teamCount} team${c.teamCount === 1 ? '' : 's'}, ` +
+    const message = `This wipes ${c.teamCount} team${c.teamCount === 1 ? '' : 's'}, ` +
       `${c.sectionCount} age group${c.sectionCount === 1 ? '' : 's'}, ` +
       `${c.sessionCount} session${c.sessionCount === 1 ? '' : 's'}, ` +
-      `every heat, race, result, dec form and chat message.\n\n` +
-      `There is no undo. Type the comp name to confirm.`;
-    const typed = window.prompt(prompt);
-    if (typed == null) return;
-    if (typed.trim() !== c.name) {
-      alert('Name did not match — nothing deleted.');
-      return;
-    }
+      `every heat, race, result, dec form and chat message. There is no undo.`;
+    if (!(await confirmDialog({ title: `Delete “${c.name}” forever?`, message, confirmLabel: 'Delete competition', destructive: true, requireText: c.name }))) return;
     try {
       await api.delete(`/competitions/${c.id}`);
       // Wipe any local wizard draft for this comp so it doesn't reappear on /admin/competitions/:id.
       try { window.localStorage.removeItem(`competitionEditor:edit:${c.id}`); } catch { /* ignore */ }
       load();
     } catch {
-      alert('Delete failed. Check the API logs.');
+      setNotice(`Couldn’t delete ${c.name}. Check the API logs.`);
     }
   }
 

@@ -6,6 +6,7 @@ import { api } from '../../api';
 import type { RaceTemplate } from '../../types';
 import { RulesPage } from './RulesPage';
 
+import { autoConfirm } from '../../test/confirm';
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 const auth = vi.hoisted(() => ({ edit: true }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canEdit: () => auth.edit }) }));
@@ -22,7 +23,7 @@ function mount() {
 
 beforeEach(() => {
   auth.edit = true;
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  autoConfirm(true);
   vi.mocked(api.get).mockResolvedValue({ data: races });
   vi.mocked(api.post).mockResolvedValue({ data: {} });
   vi.mocked(api.put).mockResolvedValue({ data: {} });
@@ -54,7 +55,7 @@ describe('RulesPage', () => {
     expect(await screen.findByText('No races yet.')).toBeInTheDocument();
   });
 
-  it('keeps the library read-only outside edit mode', async () => {
+  it('keeps the library read-only for someone who is not an admin', async () => {
     auth.edit = false;
     const user = userEvent.setup();
     mount();
@@ -62,7 +63,7 @@ describe('RulesPage', () => {
     expect(screen.getByText('Weave out and back.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /New race/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/Switch to edit mode/)).toBeInTheDocument();
+    expect(screen.queryByText(/edit mode/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Mystery/ }));
     expect(screen.getByText('No rules written yet.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Mystery/ }));
@@ -96,7 +97,7 @@ describe('RulesPage', () => {
     const user = userEvent.setup();
     mount();
     await user.click(await screen.findByRole('button', { name: /Flag Race/ }));
-    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    autoConfirm([false]);
     await user.click(screen.getByRole('button', { name: 'Delete' }));
     expect(api.delete).not.toHaveBeenCalled();
     vi.mocked(api.delete).mockRejectedValueOnce({ response: { data: { message: 'In use.' } } });

@@ -10,6 +10,7 @@ import { STATUS_CHOICES, effectiveStatus, statusLetter } from '../../lib/resultS
 import './operations.css';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 export function ScoreAuditPanel(props: { raceId: number; onChanged?: () => void }) {
   const { user } = useAuth();
@@ -90,7 +91,7 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
       setError('Add a reason for reopening these results.');
       return;
     }
-    if (!signOff && !window.confirm('Reopen these results for correction? The sign-off is removed until they are signed off again.')) return;
+    if (!signOff && !(await confirmDialog({ title: 'Reopen these results?', message: 'Reopen these results for correction? The sign-off is removed until they are signed off again.', confirmLabel: 'Reopen results', destructive: true }))) return;
     setBusy(true);
     setError(null);
     setMessage(null);

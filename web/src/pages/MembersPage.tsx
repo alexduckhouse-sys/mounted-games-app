@@ -11,6 +11,7 @@ import type { Club, ClubMembers, ClubRoleChange, MemberRole, TrainerRequest } fr
 import { Field } from './auth/Field';
 import { useNeedsYou } from './profile/needsYou';
 import { SelectField } from '../components/SelectField';
+import { confirmDialog } from '../components/ConfirmDialog';
 
 /**
  * The club's people, for its team manager (their own club) or an admin (any club): who is waiting to join,
@@ -83,7 +84,8 @@ export function MembersPage() {
   }
 
   async function remove(userId: string, name: string) {
-    if (clubId == null || busy || !window.confirm(`Remove ${name} from ${data?.clubName ?? 'the club'}?`)) return;
+    if (clubId == null || busy) return;
+    if (!(await confirmDialog({ title: 'Remove from club?', message: `Remove ${name} from ${data?.clubName ?? 'the club'}?`, confirmLabel: 'Remove from club', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {

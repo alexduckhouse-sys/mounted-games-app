@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionHelper, CompetitionTeam } from '../../types';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { apiMessage } from '../operations/types';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 /** Keeps a wrong or partial response from reaching the screen. */
 function parseTeam(data: unknown): CompetitionTeam | null {
@@ -68,7 +69,7 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
 
   async function remove(helper: CompetitionHelper) {
     if (busy) return;
-    if (!window.confirm(`Remove ${helper.name} from the team? They lose access to this competition.`)) return;
+    if (!(await confirmDialog({ title: 'Remove from the team?', message: `Remove ${helper.name} from the team? They lose access to this competition.`, confirmLabel: 'Remove from team', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {
@@ -84,7 +85,7 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
 
   async function leave(helper: CompetitionHelper) {
     if (busy) return;
-    if (!window.confirm('Leave this team? You will lose access to this competition.')) return;
+    if (!(await confirmDialog({ title: 'Leave this team?', message: 'Leave this team? You will lose access to this competition.', confirmLabel: 'Leave team', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {

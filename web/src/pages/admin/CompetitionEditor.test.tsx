@@ -9,6 +9,7 @@ import { resetRaceTemplates } from '../../lib/raceTemplates';
 import { competition, heat, race, session, team } from '../../test/factories';
 import { CompetitionEditor } from './CompetitionEditor';
 
+import { autoConfirm } from '../../test/confirm';
 vi.mock('../../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api')>()),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -485,7 +486,7 @@ describe('CompetitionEditor: the draft', () => {
     expect(stored().savedAt).not.toBe('2026-10-24T10:15:00');
     const reload = vi.fn();
     Object.defineProperty(window, 'location', { value: { ...window.location, reload }, configurable: true });
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    autoConfirm([false, true]);
     await userEvent.click(screen.getByText('Discard draft', { selector: 'button' }));
     expect(stored()).not.toBeNull();
     await userEvent.click(screen.getByText('Discard draft', { selector: 'button' }));

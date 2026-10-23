@@ -17,6 +17,7 @@ import { SectionsStep } from './creator/SectionsStep';
 import { StepNav } from './creator/StepNav';
 import { StructureStep } from './creator/StructureStep';
 import { WhenWhereStep } from './creator/WhenWhereStep';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 /** The competition creator: one stepped form for making a competition and for changing one that exists. */
 
@@ -166,8 +167,8 @@ export function CompetitionEditor() {
     setSavedAt(stamp);
   }
 
-  function discardDraft() {
-    if (!confirm('Discard this saved draft and start over?')) return;
+  async function discardDraft() {
+    if (!(await confirmDialog({ title: 'Discard this draft?', message: 'Discard this saved draft and start over?', confirmLabel: 'Discard draft', destructive: true }))) return;
     try { window.localStorage.removeItem(storageKey); } catch { /* ignore */ }
     window.location.reload();
   }

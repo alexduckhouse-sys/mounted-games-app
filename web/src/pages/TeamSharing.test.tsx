@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { JoinQr, TeamCalendarFeed } from './TeamSharing';
 
+import { autoConfirm } from '../test/confirm';
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 
 const TEAM = { id: 5, displayName: 'Cheshire A' };
@@ -13,7 +14,7 @@ const del = vi.mocked(api.delete);
 
 beforeEach(() => {
   get.mockResolvedValue({ data: { enabled: false, createdAt: null } });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  autoConfirm(true);
 });
 
 describe('JoinQr', () => {
@@ -57,14 +58,14 @@ describe('TeamCalendarFeed', () => {
     expect(await screen.findByText(/A calendar link is on, made 20 October 2026/)).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
 
-    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    autoConfirm([false]);
     await userEvent.click(screen.getByRole('button', { name: 'Make a new link' }));
     expect(post).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole('button', { name: 'Make a new link' }));
     expect(await screen.findByRole('textbox', { name: 'Calendar link' })).toHaveValue(`${window.location.origin}/api/calendar/teams/5/t2.ics`);
 
-    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    autoConfirm([false]);
     await userEvent.click(screen.getByRole('button', { name: 'Turn off' }));
     expect(del).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Turn off' }));

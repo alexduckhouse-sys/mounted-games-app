@@ -7,6 +7,7 @@ import type { RaceTemplate } from '../../types';
 import { RaceDiagram } from '../../components/RaceDiagram';
 import { DiagramEditor } from '../../components/DiagramEditor';
 import { FieldDrop, PartHead } from './LaptopParts';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 type DraftForm = {
   id: number | null;
@@ -103,7 +104,7 @@ export function RulesPage() {
   }
 
   async function remove(r: RaceTemplate) {
-    if (!confirm(`Delete "${r.name}"?`)) return;
+    if (!(await confirmDialog({ title: 'Delete this race?', message: `Delete "${r.name}" from the library? This can’t be undone.`, confirmLabel: 'Delete race', destructive: true }))) return;
     try {
       await api.delete(`/race-templates/${r.id}`);
       close();

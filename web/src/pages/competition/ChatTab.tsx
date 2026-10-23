@@ -6,9 +6,11 @@ import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import { useLiveHub } from '../../live/useLiveHub';
+import { useDialogFocus } from '../../components/useDialogFocus';
 import { LiveVideo } from '../../components/stream/LiveVideo';
 import type { ChatMessage, LiveStream } from '../../types';
 import './chat.css';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
 const BANNER_TAG = 'banner';
@@ -126,7 +128,7 @@ function ChatTabSession() {
 
   async function removeMessage(id: number, confirmFirst = true) {
     if (!canModerate) return;
-    if (confirmFirst && !confirm('Delete this announcement?')) return;
+    if (confirmFirst && !(await confirmDialog({ title: 'Delete this announcement?', message: 'Delete this announcement?', confirmLabel: 'Delete announcement', destructive: true }))) return;
     setActionError(null);
     try {
       await api.delete(`/competitions/${competition.id}/chat/${id}`);
@@ -139,7 +141,8 @@ function ChatTabSession() {
   }
 
   async function blockMessageAuthor(id: number) {
-    if (!canModerate || !confirm("Block this sender's IP from posting?")) return;
+    if (!canModerate) return;
+    if (!(await confirmDialog({ title: 'Block this sender?', message: "Block this sender's IP from posting?", confirmLabel: 'Block sender', destructive: true }))) return;
     try {
       const { data } = await api.post<{ alreadyBlocked: boolean; ipAddress: string }>(`/competitions/${competition.id}/chat/${id}/block-author`, {});
       alert(data.alreadyBlocked ? `IP ${data.ipAddress} was already blocked.` : `Blocked IP ${data.ipAddress}.`);
@@ -431,40 +434,3 @@ function CompStreamEditor({ competition, canEditStream, onSaved }: { competition
   </div>;
 }
 
-function useDialogFocus(dialogRef: RefObject<HTMLDivElement | null>, onClose: () => void, initialFocus: string, returnFocusRef?: RefObject<HTMLElement | null>) {
-  const closeRef = useRef(onClose);
-  useEffect(() => { closeRef.current = onClose; }, [onClose]);
-  useEffect(() => {
-    const restoreTo = returnFocusRef?.current ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    dialogRef.current?.querySelector<HTMLElement>(initialFocus)?.focus();
-    const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeRef.current();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      const focusable = [...dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', key);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', key);
-      if (restoreTo?.isConnected) restoreTo.focus();
-    };
-  }, [dialogRef, initialFocus, returnFocusRef]);
-}
