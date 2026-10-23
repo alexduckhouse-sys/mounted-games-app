@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My signups</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=Barlow+Condensed:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#EFEFEF;font-family:'Barlow',system-ui,sans-serif;color:#212121}
+a{color:#17385F}a:hover{color:#0F2A4A}
+button{font:inherit;border:0;background:none;padding:0;cursor:pointer;color:inherit}
+</style>
+</helmet>
+<div style="width:390px;height:844px;display:flex;flex-direction:column;background:#F7F7F7;font-family:'Barlow',system-ui,sans-serif;color:#212121;overflow:hidden">
+<header style="background:#17385F;color:#fff;display:flex;align-items:center;gap:10px;padding:12px 12px 12px 8px;flex:none">
+<a href="Dashboard.dc.html" aria-label="Back to Me" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex:none;color:#fff"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></a>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><h1 style="margin:0;font:700 22px/1 'Barlow Condensed',sans-serif">My signups</h1><span style="font-size:13px;line-height:1.2;color:#C9D4E3">1 waiting for payment</span></div>
+<button aria-label="Menu" style="width:44px;height:44px;border-radius:10px;border:1px solid #3B5577;display:flex;align-items:center;justify-content:center;flex:none;color:#fff"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></button>
+</header>
+<main style="flex:1;overflow-y:auto;padding:12px 12px 20px;display:flex;flex-direction:column;gap:16px">
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+<section style="display:flex;flex-direction:column;gap:6px">
+<h2 style="margin:0;padding:0 2px 3px;border-bottom:1.5px solid #17385F;font:700 14px/1.1 'Barlow Condensed',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#17385F">{{ g.title }}</h2>
+<div style="background:#fff;border:1px solid #DADADA;border-radius:10px;overflow:hidden">
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-top:{{ r.bt }};background:{{ r.bg }};box-shadow:{{ r.bar }}">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;align-items:start">
+<span style="display:flex;flex-direction:column;gap:3px;min-width:0"><strong style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.comp }}</strong><span style="font-size:12px;color:#5A6270">{{ r.what }}</span></span>
+<span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span style="font:700 18px/1 'Barlow Condensed',sans-serif;font-variant-numeric:tabular-nums;color:#17385F">{{ r.price }}</span><span style="padding:2px 7px;border-radius:4px;background:{{ r.chipBg }};color:{{ r.chipFg }};font-size:11px;font-weight:700">{{ r.status }}</span></span>
+</div>
+<sc-if value="{{ r.pay }}"><div style="display:flex;gap:8px"><a href="MySignups.dc.html" style="flex:1;display:flex;align-items:center;justify-content:center;min-height:44px;border-radius:8px;background:#17385F;color:#fff;font-weight:700;font-size:14px;text-decoration:none">How to pay</a><button style="min-height:44px;padding:0 14px;border-radius:8px;border:1px solid #C4C9D1;color:#A3202C;font-weight:600;font-size:14px">Cancel entry</button></div></sc-if>
+<sc-if value="{{ r.paid }}"><span style="font-size:12px;color:#5A6270">{{ r.paidAt }}</span></sc-if>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for></main>
+<nav aria-label="Main" style="flex:none;background:#fff;border-top:1px solid #DADADA;padding:6px 4px 10px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))">
+<a href="Main.dc.html" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;font:500 12px/1 'Barlow',sans-serif;color:#5A6270;text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path></svg>Events</a>
+<a href="Following.dc.html" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;font:500 12px/1 'Barlow',sans-serif;color:#5A6270;text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"></path></svg>Following</a>
+<a href="LiveFeeds.dc.html" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;font:500 12px/1 'Barlow',sans-serif;color:#5A6270;text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Live</a>
+<a href="Dashboard.dc.html" aria-current="page" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;font:700 12px/1 'Barlow',sans-serif;color:#17385F;text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0"></path></svg>Me</a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+const ST = { due: ['Awaiting payment', '#FFF4DC', '#8A5A00'], paid: ['Paid', '#E6F2EA', '#1E6B3A'], cancelled: ['Cancelled', '#ECEDEF', '#4A505A'], refunded: ['Refunded', '#E3E7EC', '#17385F'] };
+const GROUPS = [
+  { title: 'Coming up', rows: [
+    ['Bicton Arena Individuals', 'Individuals · Under 14 · Ellie Hart', '£18.00', 'due', ''],
+    ['Northern Winter League R1', 'Teams · Open · Stockport A', '£95.00', 'paid', 'Paid 12 Oct, bank transfer'],
+    ['Cheshire Halloween Pairs', 'Pairs · Junior · Ellie & Sam', '£36.00', 'paid', 'Paid 9 Oct, cash'],
+  ] },
+  { title: 'Past', rows: [
+    ['Kelsall Hill Pairs', 'Pairs · Junior · Ellie & Sam', '£36.00', 'refunded', ''],
+    ['Bicton Autumn Teams', 'Teams · Open · Stockport A', '£95.00', 'cancelled', ''],
+  ] },
+];
+class Component extends DCLogic {
+  renderVals() {
+    const groups = GROUPS.map((g) => ({ title: g.title, rows: g.rows.map(([comp, what, price, st, paidAt], i) => ({
+      comp, what, price, status: ST[st][0], chipBg: ST[st][1], chipFg: ST[st][2], pay: st === 'due', paid: st === 'paid', paidAt,
+      bt: i ? '1px solid #EBEBEB' : '0', bg: st === 'due' ? '#FFFBF0' : '#fff', bar: st === 'due' ? 'inset 3px 0 0 #C08308' : 'none',
+    })) }));
+    return { groups };
+  }
+}
+</script>
+</body>
+</html>
