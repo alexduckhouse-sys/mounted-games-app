@@ -11,6 +11,7 @@ Check this before taking an item, and add yourself here when you start one.
 - **Chat 99b776bf:** BUG-01, 02, 04, 06, 08, 09, 10, 11, 12, 13, 19, 20. Merged #79 (multi-arena), #80 (finals, standings, equipment, heat edits) and #81 (rider clash, tidy-ups). Still open: `fix/scoring-page-bugs`.
 - **Chat 11a9436f:** BUG-03, 05, 07, 14–18, 22–26 (issues #67, #69, #72–#75, #77, #78 and the boundary-tie part of #68), including the product decisions they need (lane rotation and sit-outs, heat-heat-final, club hierarchy, bib description, guest riders). Branch `fix/bugs-md`; overlapping early work parked on `wip/bugs-md-overlap`.
 - **Chat a29f41a2 (copy `-d7`, fork 9f48b569):** scorer links, sharing links (#82) and the sign-up terms tick, then the competitor-gap stages in `docs/competitive-gaps.md`.
+- **Chat 30324baf (23 October):** the NEXT_STEPS batch on `feat/next-steps-batch`: result statuses and referee notes (A3), the results book (A4), finals tie-breaks (A2), tack and passport checks, and `/stats`.
 - **BUG-21** (VAPID keys and UK times) was fixed in #57.
 - `SessionPage.tsx` is touched by `fix/scoring-page-bugs`, scorer links and several of 11a9436f's bugs: land `fix/scoring-page-bugs` first, then rebase the others.
 
@@ -98,13 +99,6 @@ All items below have been reviewed and confirmed for upcoming implementation:
 - **Main Club + Guest Riders (`RiderEntry.IsGuestRider`):**
   - Every team belongs to **one main `ClubId`** (no multi-club composite teams).
   - Borrowed riders from another club/branch are marked as **Guest Riders** (`IsGuestRider = true`, plus optional plain-text `GuestClubName`) on the declaration form.
-- **Printable & Optional Scored Tack Check + Toggleable Passport Check:**
-  - **Printable Tack Check Forms:** Add a 1-click printable Tack Check form pre-filled with each Section, Team, and Riders/Ponies.
-  - **Digital Tack Check Table & Optional Tack Check Points:** Allow the Admin to enable a **Tack Check** table per section (with customisable sectors/columns such as *Saddle/Girth, Bridle/Bit, Rider Hat/Boots, Turnout*), and choose whether Tack Check is:
-    1. Pass/Fail checklist only,
-    2. A standalone **Tack & Turnout** leaderboard table by section, or
-    3. Added into the main competition standings as **Tack Check Bonus Points**.
-  - **Toggleable Passport / Vaccination Check:** Add a per-competition toggle (`EnablePassportCheck`) so competitions that check equine passports on arrival can tick off ponies/teams. *(Do NOT flag duplicate pony names across declarations, as many ponies share common names.)*
 
 ### 5. Scoring, Manual Score Override, Penalty Adjustments, Automatic Scoring Page (`SessionPage.tsx`), Run-Offs & Finals Rules
 - **Manual Score Override & Overall Team Point Adjustment / Penalty (`+` / `-`):**
@@ -129,13 +123,6 @@ All items below have been reviewed and confirmed for upcoming implementation:
       3. **Heat-Heat-Final (`Race-Finals`):** Advances `Q1 → Q2 → (auto-populate Final) → Final` for each race.
   - **"Re-Run Race" Button on `SessionPage.tsx`:**
     - When a race is stopped and re-run (e.g. broken equipment or a fallen rider), tapping **"Re-Run Race"** clears the finish places (`1st, 2nd, 3rd…`) for the re-run while **keeping any already-eliminated team locked as `Eliminated (0 pts)`**, and broadcasts `"RE-RUN IN PROGRESS"` to the live status/overlay.
-  - **Finals Boundary Tie Detection & Admin-Selectable Tie-Break Options (`SessionPage.tsx` & `CompetitionsController.cs`):**
-    - **Only flag ties that cross a Final boundary** (e.g. `6th vs 7th` between `A Final` and `B Final`, `12th vs 13th` between `B Final` and `C Final`, `5–4–3–2–1` placement bonus spots, or podium ties at the end of a Final). Do not flag ties within the middle of the same Final when no bonus points are at stake.
-    - Give the Admin a choice of how to break any boundary tie:
-      1. **Run-Off Race (`section.runoffRaceName`)** — automatically spawned on `SessionPage.tsx` with tied teams in adjacent lanes next to each other.
-      2. **Most 1st Places (Countback on Wins)** (`1sts → 2nds → 3rds`).
-      3. **Best Result in the Last Race** (or a nominated race that has already happened).
-      4. **Manual Admin Order / Split Points** (for `5–4–3–2–1` bonus ties).
   - **End-of-Qualifiers → 1-Tap "Populate A / B / C Finals Now" on `SessionEndTransition.tsx`:**
     - When the last qualifier session for a section finishes on `SessionPage.tsx` (and any boundary tie is resolved), show the **Qualifier Cut-Off Summary** and a **1-tap "Populate A / B / C Finals Now"** button directly on `SessionEndTransition.tsx`.
   - **Fix Multi-Arena `SessionEndTransition.tsx` (`SessionEndTransition.tsx:38-45`):**
@@ -174,9 +161,7 @@ All items below have been reviewed and confirmed for upcoming implementation:
 - **Rulebook Emergency Substitution (`GR1.4–GR1.9`).**
 - **Finals Running Order, Lane Assignment, Two-Part Finals, Semi-Finals & Points Carryover.**
 - **A1 — Multi-session score carryover rules (`FinalsCarryoverMode`).**
-- **A2 — Tie-break detection, past-race tie-breaker & Admin choice on `5–4–3–2–1` bonus ties.**
-- **A3 — Granular non-finish statuses (`DNS`, `DNF`, `R`, `E`) & Private Referee Elimination Notes.**
-- **A4 — Official Post-Event Results Export (CSV + PDF Results Book), Special Awards & Pre-Event Printables.**
+- **A2 leftovers (tie-breaks shipped in `feat/next-steps-batch`):** a screen to order podium ties by hand (the standings already use the rule), splitting points on a bonus tie, and spawning a real run-off heat on `SessionPage.tsx` (today the organiser enters the run-off's finishing order).
 - **Ring Scoring #1 & #2 — "Tap-in-Order" Finish-Line Pad & Split Line-Judge / Arena-Referee Mode.**
 - **Standings #6 — Deeper "Cut-Off Line & Magic Number" Maths (`+4 pts safe`, `Needs X pts`, `Q` Qualified, `🏆` Clinched).**
 - **Post-Session Point Editing & Public "Report a Score Issue" (#7).**
@@ -200,12 +185,6 @@ All items below have been reviewed and confirmed for upcoming implementation:
 - **Format-Aware Equipment Counts & Junior (`JV`) Rule Variations (#6).**
 
 ### 8. Cross-Competition Statistics (#9), Season Leagues, Stream Score Cards, Commerce & Next-Level Features
-- **Cross-Competition Rider, Pony & Team Statistics Hub (`/stats` — Matching & Beating `mg-scoreboard.de`):**
-  - Type a **Rider name**, **Pony/Horse name**, or **Team/Club name** to view cross-competition statistics:
-    - **Rider Profile Rules:**
-      - For **Individual** and **Pairs** competitions: show the rider's **per-race game statistics** (best/worst games, win %, Point Quota % per game).
-      - For **Teams** competitions: only show **overall Team competition & session results** on the Rider's profile — per-race game statistics for a Team live on the **Team Profile** (`TeamProfilePage.tsx`).
-    - **Metrics:** Competitions entered, Finals reached (`A-Final %`), Podiums (`1st / 2nd / 3rd`), **Point Quota %** (`Points Won ÷ Max Possible Points in their heats`), average placing, and Pony partnerships.
 - **Season League Points & Tie-Breakers (`SeasonStandingsCalculator.cs`):**
   - Support Season League points following Individual riders in Pairs (`SeasonStandings`), and break Season League point ties by **most round wins (`1st` places) overall** across the season.
 - **Live Stream Score Cards (`ScoreCardOverlay` & `/produce`):**
@@ -237,7 +216,6 @@ All items below have been reviewed and confirmed for upcoming implementation:
    - Replace with the 3-way `LaneRotationMode` (`Stay`, `MoveUp`, `MoveDown`) plus the **Sit-Out / Bye Lane (`Position 7`, cell `"S"`)** mechanic when `TeamsInHeat > LanesPerHeat`.
 3. **CRITICAL BUG in `CompetitionsController.CreateFinals` (Lines 570–615), `PopulateFinals` (Lines 709–717) & `FinalsBoundary` (Lines 501–511):**
    - Both `CreateFinals` and `PopulateFinals` hardcode `A Final` into `heats[0]` instead of letting the Admin choose `C → B → A` (A-Final last) or `A → B → C` and lane seeding mode.
-   - `FinalsBoundary` only checks `ordered[topN - 1]` vs `ordered[topN]` (ignoring ties at the `A Final / B Final` cut-off, e.g. `6th` vs `7th` when `topN = 12`) and silently breaks point ties by heat race `Wins` instead of flagging all **Total Points** ties at every Final tier boundary (`6th/7th`, `12th/13th`, `18th/19th`) so the Admin can pick their tie-break rule (Run-Off, Most 1sts, Last Race, or Manual).
 4. **BUG in `ScoringService.cs` (Lines 26–33 & 220–230) & `HeatScores.tsx` — Heat-Heat-Final (`Race-Finals`) Scoring, Elimination & Display:**
    - In `Q1` and `Q2`, only require the scorer to click the qualifying teams (e.g. Top 3); auto-score remaining teams as `1 pt` (non-finalists) and treat any subsequent click on a remaining team as `Eliminated (0 pts)`.
    - Compute Finalist points from the Final heat's size so non-eliminated Finalists always score `2, 3, 4, 5…` (`2` for last place in the Final) and a Finalist eliminated in the Final scores `0` (with manual override support).
