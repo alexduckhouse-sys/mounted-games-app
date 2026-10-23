@@ -18,8 +18,8 @@ const clubs = [
 ];
 const profile = { id: 'u1', email: 'sam@example.com', fullName: 'sam', clubId: 1, clubName: 'Stockport Pony Club', roles: ['Member', 'TrainerRequest'] };
 
-function mount() {
-  return render(<AuthProvider><MemoryRouter initialEntries={['/signup']}><Routes>
+function mount(entry: string | { pathname: string; state: unknown } = '/signup') {
+  return render(<AuthProvider><MemoryRouter initialEntries={[entry]}><Routes>
     <Route path="/signup" element={<SignUpPage />} />
     <Route path="/login" element={<p>Sign in page</p>} />
     <Route path="/competitions" element={<p>Competitions page</p>} />
@@ -142,6 +142,14 @@ describe('SignUpPage', () => {
     expect(await screen.findByRole('link', { name: 'Follow a competition' })).toHaveAttribute('href', '/competitions');
     await user.click(screen.getByRole('link', { name: 'Go to my profile' }));
     expect(screen.getByText('Profile page')).toBeInTheDocument();
+  });
+
+  it('offers a way back to where they were headed, such as a competition\'s entry page', async () => {
+    const user = userEvent.setup();
+    mount({ pathname: '/signup', state: { from: '/competitions/25/enter' } });
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(await screen.findByRole('link', { name: 'Back to the competition' })).toHaveAttribute('href', '/competitions/25/enter');
   });
 
   it('puts an email that is already registered under the email field', async () => {

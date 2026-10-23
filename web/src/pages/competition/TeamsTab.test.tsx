@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { competition, team } from '../../test/factories';
 import { TeamsTab } from './TeamsTab';
+import { chooseOption, optionLabels } from '../../test/select';
 
 const state = vi.hoisted(() => ({ edit: true }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
@@ -34,8 +35,8 @@ describe('TeamsTab trainers', () => {
 
   it('lets an organiser put a club trainer in charge of a team', async () => {
     render(<MemoryRouter><TeamsTab /></MemoryRouter>);
-    await screen.findByRole('option', { name: 'Pat Trainer' }, { timeout: 5000 });
-    fireEvent.change(screen.getByLabelText('Trainer for Oak A'), { target: { value: 'tr-1' } });
+    await waitFor(() => expect(optionLabels(screen.getByLabelText('Trainer for Oak A'))).toContain('Pat Trainer'), { timeout: 5000 });
+    chooseOption(screen.getByLabelText('Trainer for Oak A'), 'tr-1');
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/1', { trainerUserId: 'tr-1' }));
   });
 
@@ -49,8 +50,8 @@ describe('TeamsTab trainers', () => {
   it('says so when the change cannot be saved', async () => {
     vi.mocked(api.put).mockRejectedValue(new Error('offline'));
     render(<MemoryRouter><TeamsTab /></MemoryRouter>);
-    await screen.findByRole('option', { name: 'Pat Trainer' }, { timeout: 5000 });
-    fireEvent.change(screen.getByLabelText('Trainer for Oak A'), { target: { value: 'tr-1' } });
+    await waitFor(() => expect(optionLabels(screen.getByLabelText('Trainer for Oak A'))).toContain('Pat Trainer'), { timeout: 5000 });
+    chooseOption(screen.getByLabelText('Trainer for Oak A'), 'tr-1');
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not change the trainer.');
   });
 });

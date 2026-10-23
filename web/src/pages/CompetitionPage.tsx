@@ -11,6 +11,7 @@ import { useTicker } from '../components/TickerContext';
 import { useLiveHub } from '../live/useLiveHub';
 import { useConnectionStatus } from '../live/ConnectionStatusContext';
 import { isFocusPage, pollIntervalMs } from '../live/connectionStatus';
+import { useDownSince } from '../live/useDownSince';
 import { HEAT_SAVED } from '../offline/useScoreOutbox';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
 import { applyResultsUpdate, replaceHeat, type ResultsUpdate } from '../lib/liveUpdates';
@@ -21,9 +22,10 @@ import { useNavExtras } from '../components/NavExtrasContext';
 import { useAgeGroups } from '../components/AgeGroupsContext';
 import { useCompetitionMeta } from '../components/competitionMeta';
 import { displaySectionName } from '../lib/section';
-import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
+import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
 import { DemoEventNotice } from '../components/DemoEventNotice';
+import { competitionPhase } from '../lib/competitionPhase';
 
 const BANNER_TAG = 'banner';
 
@@ -143,7 +145,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
 
   const { setMeta } = useCompetitionMeta();
   useEffect(() => {
-    if (data) setMeta({ id: data.id, name: data.name, startDate: data.startDate, endDate: data.endDate, location: data.location, live: data.sessions.some((s) => s.status === 1) });
+    if (data) setMeta({ id: data.id, name: data.name, startDate: data.startDate, endDate: data.endDate, location: data.location, live: data.sessions.some((s) => s.status === 1), entryPhase: competitionPhase(data) === 'entry', createdByUserId: data.createdByUserId });
   }, [data, setMeta]);
   useEffect(() => () => setMeta(null), [setMeta]);
 
@@ -287,13 +289,10 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   // Tell the header's connection pill what is happening.
   const retry = useCallback(() => { setRetrying(true); load(); reconnect(); }, [load, reconnect]);
   const { setStatus } = useConnectionStatus();
-  const downSince = useRef<number | null>(null);
-  const everConnected = useRef(false);
+  const { downSince, everConnected } = useDownSince(connected);
   useEffect(() => {
-    if (connected) { everConnected.current = true; downSince.current = null; }
-    else downSince.current ??= Date.now();
-    setStatus({ connected, online, failures, downSince: downSince.current, everConnected: everConnected.current, updatedAt, intervalMs, retrying, retry });
-  }, [connected, online, failures, updatedAt, intervalMs, retrying, retry, setStatus]);
+    setStatus({ connected, online, failures, downSince, everConnected, updatedAt, intervalMs, retrying, retry });
+  }, [connected, online, failures, downSince, everConnected, updatedAt, intervalMs, retrying, retry, setStatus]);
   useEffect(() => () => setStatus(null), [setStatus]);
 
   if (error && !data) return (
@@ -309,9 +308,9 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     if (/\/(?:toplists|scoring)\/?$/.test(pathname)) return <ToplistSkeleton />;
     return /\/competitions\/\d+\/?$/.test(pathname) ? <TimetableSkeleton /> : <PageSkeleton />;
   }
-  // A saved copy only needs a notice once the refresh is slow or has failed; a quick refresh just replaces it.
+  // A saved copy only needs a notice once it is noticeably old and the refresh is slow or has failed.
   const refreshing = settledAttempt !== attempt;
-  const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing);
+  const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing) && shouldNoticeSavedCopy(savedAt, !refreshing || savedAt === '', new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS);
 
   return (
     <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
@@ -324,7 +323,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         {showSavedNotice && (
           <div role="status" className="mg-notice mx-auto flex w-full max-w-xl flex-wrap items-center gap-2">
             <p className="flex-1">
-              {`Last updated ${savedAt && !Number.isNaN(Date.parse(savedAt)) ? new Date(savedAt).toLocaleString('en-GB') : 'earlier'}.${refreshing ? ' Checking for changes…' : ''}`}
+              {`${lastUpdatedText(savedAt)}. ${refreshing ? 'Checking for changes…' : 'We’ll refresh when you’re back online.'}`}
             </p>
             <button className="mg-btn mg-btn-secondary !min-h-11" onClick={load}>Refresh</button>
           </div>

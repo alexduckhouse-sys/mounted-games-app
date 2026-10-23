@@ -12,6 +12,7 @@ import {
   SPONSOR_PLACEMENTS, SPONSOR_TIERS, dateToEnd, dateToStart, datesText, endToDate, hasPlacement, isHttpsLink,
   parseSponsorAdmin, parseSponsorAdmins, shownText, startToDate, withPlacement,
 } from '../../lib/sponsors';
+import { SelectField } from '../../components/SelectField';
 
 /** What the form edits. Dates are `yyyy-mm-dd` boxes; `logo` is a chosen file waiting to be sent. */
 interface Draft {
@@ -239,9 +240,9 @@ export function SponsorsCard({ competitionId }: { competitionId: number }) {
                 <input type="url" inputMode="url" maxLength={300} placeholder="https://" value={draft.linkUrl} onChange={(event) => setDraft({ ...draft, linkUrl: event.target.value })} />
               </label>
               <label className="rf-fld">Tier
-                <select value={draft.tier} onChange={(event) => setDraft({ ...draft, tier: Number(event.target.value) as SponsorTier })}>
+                <SelectField value={draft.tier} onChange={(event) => setDraft({ ...draft, tier: Number(event.target.value) as SponsorTier })}>
                   {SPONSOR_TIERS.map((t) => <option key={t.tier} value={t.tier}>{t.label}</option>)}
-                </select>
+                </SelectField>
               </label>
               <fieldset className="flex flex-col gap-1">
                 <legend className="rf-fld">Show on</legend>

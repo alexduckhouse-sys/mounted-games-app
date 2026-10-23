@@ -292,81 +292,90 @@ public static class ReviewCompetitionSeeder
             if (await db.Set<SeasonRound>().AnyAsync(r => ids.Contains(r.CompetitionId)))
                 throw new InvalidOperationException("A demo event is part of a season. Remove it from the season, then run this again.");
 
-            var sessionIds = db.Sessions.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
-            var heatIds = db.Heats.Where(x => sessionIds.Contains(x.SessionId)).Select(x => x.Id);
-            var raceIds = db.Races.Where(x => heatIds.Contains(x.HeatId)).Select(x => x.Id);
-            var teamIds = db.Teams.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
-            var sectionIds = db.CompetitionSections.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
-            var formIds = db.DeclarationForms.Where(x => teamIds.Contains(x.TeamId)).Select(x => x.Id);
-            var orderIds = db.Set<EventOrder>().Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
-
-            // Orders that still hold stock give it back to the seller's catalogue item first.
-            var reserved = await db.Set<EventOrderLine>()
-                .Where(l => orderIds.Contains(l.EventOrderId) && l.ReservedStockQuantity > 0
-                    && db.Set<EventOrder>().Any(o => o.Id == l.EventOrderId && o.HasStockReservation))
-                .Select(l => new { l.CatalogueItemId, l.ReservedStockQuantity })
-                .ToListAsync();
-            foreach (var line in reserved)
-                await db.Set<CatalogueItem>()
-                    .Where(x => x.Id == line.CatalogueItemId && x.StockQuantity != null)
-                    .ExecuteUpdateAsync(set => set
-                        .SetProperty(x => x.StockQuantity, x => x.StockQuantity + line.ReservedStockQuantity)
-                        .SetProperty(x => x.Version, x => x.Version + 1)
-                        .SetProperty(x => x.UpdatedAt, DateTime.UtcNow));
-
-            // Shop: payments, order lines, orders, listings, the demo mark.
-            await db.Set<TestPaymentRecord>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.Set<EventOrderLine>().Where(x => orderIds.Contains(x.EventOrderId)).ExecuteDeleteAsync();
-            await db.Set<EventOrder>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.Set<CompetitionListing>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.Set<EventCommerceSettings>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-
-            // Timetable and scoring, deepest first.
-            await db.Set<RaceScoreEvent>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
-            await db.Set<RaceScoreState>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
-            await db.Results.Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
-            await db.Races.Where(x => heatIds.Contains(x.HeatId)).ExecuteDeleteAsync();
-            await db.Set<CalendarHeatVersion>().Where(x => heatIds.Contains(x.HeatId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
-            await db.HeatEntries.Where(x => heatIds.Contains(x.HeatId)).ExecuteDeleteAsync();
-            await db.Heats.Where(x => sessionIds.Contains(x.SessionId)).ExecuteDeleteAsync();
-            await db.Sessions.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-
-            // Tack check marks, sectors and set-ups, and passport ticks (they point at teams and sections).
-            var tackIds = db.Set<TackCheckSection>().Where(x => ids.Contains(x.CompetitionId) || sectionIds.Contains(x.CompetitionSectionId)).Select(x => x.Id);
-            var sectorIds = db.Set<TackCheckSector>().Where(x => tackIds.Contains(x.TackCheckSectionId)).Select(x => x.Id);
-            await db.Set<TackCheckMark>().Where(x => sectorIds.Contains(x.TackCheckSectorId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
-            await db.Set<TackCheckSector>().Where(x => tackIds.Contains(x.TackCheckSectionId)).ExecuteDeleteAsync();
-            await db.Set<TackCheckSection>().Where(x => ids.Contains(x.CompetitionId) || sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
-            await db.Set<PassportCheck>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
-
-            // Entries, teams and declarations.
-            await db.Set<RiderSwapEvent>().Where(x => ids.Contains(x.CompetitionId) || formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
-            await db.RiderEntries.Where(x => formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
-            await db.DeclarationForms.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
-            await db.Set<TeamStatusEvent>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
-            await db.TeamSupporters.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
-            await db.Set<EventTeamProfileLink>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
-            await db.FinalsTieOrders.Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
-            await db.SpecialAwards.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.SectionSignups.Where(x => sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
-            await db.Teams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.Set<DrawChange>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.CompetitionSections.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-
-            // Everything else that hangs off the event itself.
-            await db.ChatMessages.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.LiveStreams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.StreamOverlays.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            var sponsorIds = db.Sponsors.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
-            await db.SponsorExposures.Where(x => sponsorIds.Contains(x.SponsorId)).ExecuteDeleteAsync();
-            await db.Sponsors.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.CompetitionCollaborators.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.ScorerLinks.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.Set<EquipmentAcknowledgement>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.Competitions.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync();
+            await DeleteCompetitionGraphAsync(db, ids);
 
             await transaction.CommitAsync();
             return ids.Count;
         });
+    }
+
+    /// <summary>
+    /// Removes the whole graph of the given competitions bottom-up, without relying on database cascades. The caller
+    /// owns the transaction and has already decided these competitions may go. Shared with <see cref="HistorySeeder"/>.
+    /// </summary>
+    internal static async Task DeleteCompetitionGraphAsync(AppDbContext db, List<int> ids)
+    {
+    var sessionIds = db.Sessions.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+    var heatIds = db.Heats.Where(x => sessionIds.Contains(x.SessionId)).Select(x => x.Id);
+    var raceIds = db.Races.Where(x => heatIds.Contains(x.HeatId)).Select(x => x.Id);
+    var teamIds = db.Teams.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+    var sectionIds = db.CompetitionSections.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+    var formIds = db.DeclarationForms.Where(x => teamIds.Contains(x.TeamId)).Select(x => x.Id);
+    var orderIds = db.Set<EventOrder>().Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+
+    // Orders that still hold stock give it back to the seller's catalogue item first.
+    var reserved = await db.Set<EventOrderLine>()
+        .Where(l => orderIds.Contains(l.EventOrderId) && l.ReservedStockQuantity > 0
+            && db.Set<EventOrder>().Any(o => o.Id == l.EventOrderId && o.HasStockReservation))
+        .Select(l => new { l.CatalogueItemId, l.ReservedStockQuantity })
+        .ToListAsync();
+    foreach (var line in reserved)
+        await db.Set<CatalogueItem>()
+            .Where(x => x.Id == line.CatalogueItemId && x.StockQuantity != null)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.StockQuantity, x => x.StockQuantity + line.ReservedStockQuantity)
+                .SetProperty(x => x.Version, x => x.Version + 1)
+                .SetProperty(x => x.UpdatedAt, DateTime.UtcNow));
+
+    // Shop: payments, order lines, orders, listings, the demo mark.
+    await db.Set<TestPaymentRecord>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<EventOrderLine>().Where(x => orderIds.Contains(x.EventOrderId)).ExecuteDeleteAsync();
+    await db.Set<EventOrder>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<CompetitionListing>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<EventCommerceSettings>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+
+    // Timetable and scoring, deepest first.
+    await db.Set<RaceScoreEvent>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
+    await db.Set<RaceScoreState>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
+    await db.Results.Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
+    await db.Races.Where(x => heatIds.Contains(x.HeatId)).ExecuteDeleteAsync();
+    await db.Set<CalendarHeatVersion>().Where(x => heatIds.Contains(x.HeatId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+    await db.HeatEntries.Where(x => heatIds.Contains(x.HeatId)).ExecuteDeleteAsync();
+    await db.Heats.Where(x => sessionIds.Contains(x.SessionId)).ExecuteDeleteAsync();
+    await db.Sessions.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+
+    // Tack check marks, sectors and set-ups, and passport ticks (they point at teams and sections).
+    var tackIds = db.Set<TackCheckSection>().Where(x => ids.Contains(x.CompetitionId) || sectionIds.Contains(x.CompetitionSectionId)).Select(x => x.Id);
+    var sectorIds = db.Set<TackCheckSector>().Where(x => tackIds.Contains(x.TackCheckSectionId)).Select(x => x.Id);
+    await db.Set<TackCheckMark>().Where(x => sectorIds.Contains(x.TackCheckSectorId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+    await db.Set<TackCheckSector>().Where(x => tackIds.Contains(x.TackCheckSectionId)).ExecuteDeleteAsync();
+    await db.Set<TackCheckSection>().Where(x => ids.Contains(x.CompetitionId) || sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
+    await db.Set<PassportCheck>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+
+    // Entries, teams and declarations.
+    await db.Set<RiderSwapEvent>().Where(x => ids.Contains(x.CompetitionId) || formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
+    await db.RiderEntries.Where(x => formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
+    await db.DeclarationForms.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+    await db.Set<TeamStatusEvent>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+    await db.TeamSupporters.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+    await db.Set<EventTeamProfileLink>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+    await db.FinalsTieOrders.Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+    await db.SpecialAwards.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.SectionSignups.Where(x => sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
+    await db.Teams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<DrawChange>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.CompetitionSections.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+
+    // Everything else that hangs off the event itself.
+    await db.ChatMessages.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.LiveStreams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.StreamOverlays.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    var sponsorIds = db.Sponsors.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+    await db.SponsorExposures.Where(x => sponsorIds.Contains(x.SponsorId)).ExecuteDeleteAsync();
+    await db.Sponsors.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.CompetitionCollaborators.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.ScorerLinks.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<EquipmentAcknowledgement>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Competitions.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync();
     }
 }

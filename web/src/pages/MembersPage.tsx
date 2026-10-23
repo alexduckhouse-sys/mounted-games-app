@@ -10,6 +10,7 @@ import { initialsOf } from '../lib/profile';
 import type { Club, ClubMembers, ClubRoleChange, MemberRole, TrainerRequest } from '../types';
 import { Field } from './auth/Field';
 import { useNeedsYou } from './profile/needsYou';
+import { SelectField } from '../components/SelectField';
 
 /**
  * The club's people, for its team manager (their own club) or an admin (any club): who is waiting to join,
@@ -115,10 +116,10 @@ export function MembersPage() {
         <Field label="Club">
           {({ id }) => (
             <div className="mg-field">
-              <select id={id} value={clubId ?? ''} onChange={(e) => { setPicked(e.target.value ? Number(e.target.value) : null); setOpen(null); setNotice(null); }}>
+              <SelectField id={id} value={clubId ?? ''} onChange={(e) => { setPicked(e.target.value ? Number(e.target.value) : null); setOpen(null); setNotice(null); }}>
                 <option value="">Choose a club</option>
                 {clubs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              </SelectField>
             </div>
           )}
         </Field>

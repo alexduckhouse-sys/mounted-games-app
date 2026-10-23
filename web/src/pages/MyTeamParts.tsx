@@ -5,6 +5,7 @@ import { api } from '../api';
 import { joinKeyFromSearch } from '../lib/sharing';
 import type { Team, TeamSupporter } from '../types';
 import { JoinQr, TeamCalendarFeed } from './TeamSharing';
+import { SelectField } from '../components/SelectField';
 
 const messageOf = (e: unknown, fallback: string) => {
   const data = (e as { response?: { data?: { message?: string } | string } }).response?.data;
@@ -223,10 +224,10 @@ export function ManageTeamBlock({ team, onSaved }: { team: Team; onSaved: () => 
     <div className="space-y-2 border-t border-[rgb(var(--mg-rule-soft))] px-3.5 py-3">
       <label className="block text-xs">
         <span className="text-[rgb(var(--mg-muted))]">Trainer</span>
-        <select className="input mt-1 min-h-11 text-sm" value={trainerId} onChange={(e) => setTrainerId(e.target.value)}>
+        <SelectField className="input mt-1 min-h-11 text-sm" value={trainerId} onChange={(e) => setTrainerId(e.target.value)}>
           <option value="">— no trainer yet —</option>
           {trainers.map((tr) => <option key={tr.userId} value={tr.userId}>{tr.fullName}</option>)}
-        </select>
+        </SelectField>
       </label>
       <label className="block text-xs">
         <span className="text-[rgb(var(--mg-muted))]">Bibs</span>

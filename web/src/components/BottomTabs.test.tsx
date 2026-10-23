@@ -20,6 +20,32 @@ describe('BottomTabs', () => {
     ]);
   });
 
+  describe('while entries are the only thing to do', () => {
+    const entry = (path: string, me?: { initials: string; count: number }) => {
+      render(<MemoryRouter initialEntries={[path]}><BottomTabs competitionId={12} entryOnly me={me} /></MemoryRouter>);
+      return screen.getAllByRole('link');
+    };
+
+    it('offers just Enter and Details', () => {
+      expect(entry('/competitions/12').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+        ['Enter', '/competitions/12'],
+        ['Details', '/competitions/12/details'],
+      ]);
+    });
+
+    it('keeps the Me tab for someone signed in', () => {
+      expect(entry('/competitions/12', { initials: 'AM', count: 0 }).map((link) => link.textContent)).toEqual(['Enter', 'Details', 'AMMe']);
+    });
+
+    it.each([
+      ['/competitions/12', 'Enter'],
+      ['/competitions/12/enter', 'Enter'],
+      ['/competitions/12/details', 'Details'],
+    ])('highlights the right tab at %s', (path, tab) => {
+      expect(entry(path).filter((link) => link.getAttribute('aria-current') === 'page').map((link) => link.textContent)).toEqual([tab]);
+    });
+  });
+
   it.each([
     ['/competitions/12', 'Timetable'],
     ['/competitions/12/', 'Timetable'],

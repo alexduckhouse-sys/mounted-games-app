@@ -10,6 +10,7 @@ import { competition, session, sponsor } from '../../test/factories';
 import { liveStream } from '../../test/streamFakes';
 import { CompetitionContext, type CompetitionCtx } from './context';
 import { ProducePage } from './ProducePage';
+import { chooseOption } from '../../test/select';
 
 const auth = vi.hoisted(() => ({ organiser: true }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => auth.organiser }) }));
@@ -97,7 +98,7 @@ describe('ProducePage', () => {
     fireEvent.change(screen.getByLabelText('Background'), { target: { value: '#000000' } });
     fireEvent.change(screen.getByLabelText('Logo link (https)'), { target: { value: ' https://example.com/logo.png ' } });
     fireEvent.click(screen.getByLabelText('Show clock'));
-    fireEvent.change(screen.getByLabelText('Where to show clock'), { target: { value: 'bottom-right' } });
+    chooseOption(screen.getByLabelText('Where to show clock'), 'bottom-right');
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save for this event' })); });
 

@@ -15,6 +15,7 @@ const child = spawn('dotnet', [
   'run', '--no-launch-profile', '--project', 'api/MountedGames.Api.csproj', '--',
   ...(migrate ? ['--migrate-database'] : []),
   ...(process.argv.includes('--seed-review') ? ['--seed-review-competitions'] : []),
+  ...(process.argv.includes('--seed-history') ? ['--seed-history'] : []),
   ...(process.argv.includes('--reseed-review') ? ['--reseed-review-competitions'] : []),
 ], {
   stdio: 'inherit',

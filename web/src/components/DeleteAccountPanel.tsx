@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { signOutDestination } from '../auth/signOutDestination';
 import { useAuth } from '../auth/AuthContext';
 import { deletionErrorMessage } from '../lib/accountDeletion';
 
@@ -21,7 +22,7 @@ export function DeleteAccountPanel() {
     try {
       await api.delete('/auth/me', { data: { password } });
       logout();
-      navigate('/', { replace: true });
+      navigate(signOutDestination(), { replace: true });
     } catch (e) {
       setError(deletionErrorMessage(e));
       setBusy(false);

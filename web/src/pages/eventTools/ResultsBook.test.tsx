@@ -7,6 +7,7 @@ import * as csv from '../../lib/csv';
 import PrintEventPage from './PrintEventPage';
 import { ResultsBookTab } from './ResultsBookTab';
 import type { ResultsBook } from './resultsBookTypes';
+import { chooseOption } from '../../test/select';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn() } }));
 
@@ -142,7 +143,7 @@ describe('ResultsBookTab', () => {
     await user.type(within(groups[1]).getByLabelText('Award'), 'Spirit of the Games');
     await user.type(within(groups[1]).getByLabelText('Winner'), 'Everyone');
     await user.type(within(groups[1]).getByLabelText('Note (optional)'), 'Thank you');
-    await user.selectOptions(within(groups[1]).getByLabelText('Age group'), '5');
+    chooseOption(within(groups[1]).getByLabelText('Age group'), '5');
     await user.click(screen.getByRole('button', { name: 'Add an award' }));
     await user.click(screen.getByRole('button', { name: 'Remove award 3' }));
     await user.click(screen.getByRole('button', { name: 'Save awards' }));

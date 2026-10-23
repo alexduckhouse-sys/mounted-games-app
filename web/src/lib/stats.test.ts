@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StatsSummary } from '../types';
 import {
-  allHits, finalLabel, formatPercent, isSearchableQuery, isStatsProfile, isStatsSearch, ordinalPlace, plural, pointsOf,
+  STATS_TABS, finalLabel, formatPercent, isSearchableQuery, isStatsBrowse, isStatsProfile, ordinalPlace, plural, pointsOf,
   statsKindFromPath, statsProfileHref, summaryTiles, tidyStatsQuery,
 } from './stats';
 
@@ -72,15 +72,19 @@ describe('formatting', () => {
 
 describe('response guards', () => {
   const hit = { kind: 0, name: 'Oliver S.', key: 'oliver s.', competitions: 2 };
-  const search = { query: 'oli', riders: [hit], ponies: [], teams: [{ ...hit, kind: 2 }], clubs: [] };
+  const browse = { kind: 0, query: '', page: 1, pageSize: 24, total: 1, items: [hit] };
 
-  it('accepts a search and lists every hit', () => {
-    expect(isStatsSearch(search)).toBe(true);
-    expect(allHits(search as never).map((h) => h.kind)).toEqual([0, 2]);
+  it('accepts a browse page', () => {
+    expect(isStatsBrowse(browse)).toBe(true);
+    expect(isStatsBrowse({ ...browse, items: [] })).toBe(true);
   });
 
-  it.each([null, '<!doctype html>', {}, { ...search, clubs: null }, { ...search, riders: [{ name: 'x' }] }])('rejects a search shaped like %j', (value) => {
-    expect(isStatsSearch(value)).toBe(false);
+  it.each([null, '<!doctype html>', {}, { ...browse, items: null }, { ...browse, total: '1' }, { ...browse, page: undefined }, { ...browse, items: [{ name: 'x' }] }])('rejects a browse page shaped like %j', (value) => {
+    expect(isStatsBrowse(value)).toBe(false);
+  });
+
+  it('has one tab per kind, in the order the profile paths use', () => {
+    expect(STATS_TABS.map((tab) => [tab.kind, tab.plural])).toEqual([[0, 'riders'], [1, 'ponies'], [2, 'teams'], [3, 'clubs']]);
   });
 
   it('accepts a summary-only and a detailed profile, and rejects anything else', () => {

@@ -134,7 +134,7 @@ export function MyTeamsPage() {
         </button>
       )}
 
-      {hasRole('Manager') && <TrainerRequestsSection canReview />}
+      {hasRole('Manager') && <TrainerRequestsSection />}
     </div>
   );
 }

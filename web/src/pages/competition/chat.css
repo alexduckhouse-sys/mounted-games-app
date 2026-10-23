@@ -1,6 +1,6 @@
 .live-page {
   display: flex; height: calc(100dvh - var(--mg-shell-h, 104px) - 69px - env(safe-area-inset-bottom)); min-height: 0;
-  flex-direction: column; gap: 12px; overflow: hidden; padding-bottom: 8px; font-family: 'Barlow', system-ui, sans-serif;
+  flex-direction: column; gap: 12px; overflow: hidden; padding-block: 8px; font-family: 'Barlow', system-ui, sans-serif;
 }
 .live-page-band { display: flex; min-height: 50px; flex-shrink: 0; align-items: center; gap: 12px; }
 .live-page-band h1 { min-width: 0; flex: 1; }
@@ -91,4 +91,4 @@
 .live-all-dialog .live-announcement-list { flex: 1; }
 @keyframes live-dialog-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .live-all-dialog, .staff-stream-dialog { animation: none; } }
-@media (min-width: 700px) { .live-page { max-width: 560px; margin: 0 auto; } }
+@media (min-width: 700px) { .live-page { width: 100%; max-width: 560px; margin: 0 auto; } }

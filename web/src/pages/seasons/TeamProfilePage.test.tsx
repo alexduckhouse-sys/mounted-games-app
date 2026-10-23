@@ -7,6 +7,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { readFavourites } from '../../lib/favourites';
 import TeamProfilePage from './TeamProfilePage';
 import type { TeamProfileHistory } from './teamProfileTypes';
+import { chooseOption, optionLabels } from '../../test/select';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: vi.fn() }));
@@ -41,12 +42,12 @@ describe('TeamProfilePage', () => {
     renderPage();
     await user.click(await screen.findByRole('tab', { name: 'Link event' }));
     const competition = await screen.findByLabelText('Competition');
-    await user.selectOptions(competition, '12');
+    chooseOption(competition, '12');
     const team = await screen.findByLabelText('Event team');
-    expect(screen.queryByRole('option', { name: 'Wrong club A' })).not.toBeInTheDocument();
+    expect(optionLabels(team)).not.toContain('Wrong club A');
     // Any team of the profile's club can be linked, whatever its suffix.
-    expect(screen.getByRole('option', { name: 'North Club B' })).toBeInTheDocument();
-    await user.selectOptions(team, '41');
+    expect(optionLabels(team)).toContain('North Club B');
+    chooseOption(team, '41');
     await user.click(screen.getByRole('button', { name: 'Link event team' }));
 
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/12/team-profile-links', {
@@ -152,7 +153,7 @@ describe('TeamProfilePage', () => {
     render(<MemoryRouter initialEntries={['/team-profiles']}><Routes><Route path="/team-profiles" element={<TeamProfilePage />} /><Route path="/team-profiles/:profileId" element={<TeamProfilePage />} /></Routes></MemoryRouter>);
 
     await user.click(await screen.findByRole('button', { name: 'New profile' }));
-    await user.selectOptions(screen.getByLabelText('Club'), '3');
+    chooseOption(screen.getByLabelText('Club'), '3');
     await user.type(screen.getByLabelText('Suffix'), 'A');
     await user.type(screen.getByLabelText('Display name'), 'North Club A');
     await user.click(screen.getByRole('button', { name: 'Create profile' }));
@@ -167,7 +168,7 @@ describe('TeamProfilePage', () => {
     render(<MemoryRouter initialEntries={['/team-profiles']}><Routes><Route path="/team-profiles" element={<TeamProfilePage />} /><Route path="/team-profiles/:profileId" element={<TeamProfilePage />} /></Routes></MemoryRouter>);
 
     await user.click(await screen.findByRole('button', { name: 'New profile' }));
-    await user.selectOptions(screen.getByLabelText('Club'), 'new');
+    chooseOption(screen.getByLabelText('Club'), 'new');
     await user.type(screen.getByLabelText('New club name'), 'Welsh Dragons');
     await user.type(screen.getByLabelText('Display name'), 'Welsh Dragons');
     expect(screen.getByLabelText('Suffix')).not.toBeRequired();

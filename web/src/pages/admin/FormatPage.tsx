@@ -13,6 +13,7 @@ import type { CompetitionDetail, CompetitionSection, FormTeamsResult, SectionSig
 import { SectionFormatLabel, SessionKind } from '../../types';
 import { FieldDrop, PartHead } from './LaptopParts';
 import { RaceListDialog } from './RaceListDialog';
+import { NumberField } from '../../components/NumberField';
 
 const DEFAULT_MINUTES = 10;
 const MAIN_ARENA = 'Main arena';
@@ -521,8 +522,8 @@ function FormTeamsSectionCard({
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <label className="flex items-center gap-2">
           Riders per team
-          <input
-            type="number"
+          <NumberField
+            
             min={1} max={12}
             className="input !w-16 !py-1.5 text-sm"
             value={ridersPerTeam}

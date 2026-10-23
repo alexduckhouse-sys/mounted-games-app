@@ -22,7 +22,7 @@ public class SignupController : ControllerBase
     /// price at signup time so it can't drift if the organiser later edits it.
     /// Payment integration is deferred — Status starts at Pending and an
     /// organiser flips it to Paid once funds land in their PaymentDestination.
-    /// Entrants must be signed in; the public can't enter.
+    /// Entrants must be signed in; the public can't enter. Admins can enter too (for testing and for real club use).
     /// </summary>
     [HttpPost("api/competitions/{competitionId:int}/sections/{sectionId:int}/signups")]
     [Authorize]
@@ -30,11 +30,6 @@ public class SignupController : ControllerBase
         // Taken here, not in the constructor, so only entering a competition needs the email services.
         [FromServices] SignupConfirmationService confirmation, [FromServices] EmailOptInService optIns, [FromServices] TimeProvider clock)
     {
-        // Admin role runs comps — they explicitly shouldn't be entering them.
-        // Guard at the API layer too so a stray UI bug or curl can't slip through.
-        if (User.IsInRole(Roles.Admin))
-            return StatusCode(403, new { message = "Admins organise comps and can't sign up as entrants." });
-
         var section = await _db.CompetitionSections
             .Include(s => s.Competition)
             .Include(s => s.Signups)

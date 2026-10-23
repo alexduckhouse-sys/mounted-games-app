@@ -18,6 +18,8 @@ import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { displaySectionName } from '../../lib/section';
 import { WeatherNow, WeatherAt } from '../../components/WeatherChips';
 import { exportTimetableCsv } from '../../lib/timetableCsv';
+import { SelectField } from '../../components/SelectField';
+import { NumberField } from '../../components/NumberField';
 
 type AddKind = 'break' | 'briefing' | 'custom';
 
@@ -170,9 +172,9 @@ export function TimetableManagement() {
         <label className="flex min-h-12 items-center gap-2 text-sm font-medium">
           <CalendarDays className="h-5 w-5 text-brand-600" />
           <span className="sr-only">Timetable day</span>
-          <select className="input min-h-12" value={selectedDay} onChange={(e) => setPickedDay(e.target.value)}>
+          <SelectField className="input min-h-12" value={selectedDay} onChange={(e) => setPickedDay(e.target.value)}>
             {days.map((day) => <option key={day} value={day}>{day === today ? 'Today · ' : ''}{new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</option>)}
-          </select>
+          </SelectField>
         </label>
       </div>
       <div className="flex flex-wrap gap-1.5 items-start">
@@ -231,22 +233,22 @@ export function TimetableManagement() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
             <label className="flex flex-col">
               <span className="text-slate-500 dark:text-slate-300">Races per heat</span>
-              <input type="number" min={1} max={20} className="input !py-1 !px-2 text-sm"
+              <NumberField  min={1} max={20} className="input !py-1 !px-2 text-sm"
                 value={autoRaces} onChange={(e) => setAutoRaces(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             </label>
             <label className="flex flex-col">
               <span className="text-slate-500 dark:text-slate-300">Sessions / section</span>
-              <input type="number" min={1} max={10} className="input !py-1 !px-2 text-sm"
+              <NumberField  min={1} max={10} className="input !py-1 !px-2 text-sm"
                 value={autoSessions} onChange={(e) => setAutoSessions(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             </label>
             <label className="flex flex-col">
               <span className="text-slate-500 dark:text-slate-300">Max teams / heat</span>
-              <input type="number" min={1} max={20} className="input !py-1 !px-2 text-sm"
+              <NumberField  min={1} max={20} className="input !py-1 !px-2 text-sm"
                 value={autoLanes} onChange={(e) => setAutoLanes(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             </label>
             <label className="flex flex-col">
               <span className="text-slate-500 dark:text-slate-300">Mins / race</span>
-              <input type="number" min={1} max={60} className="input !py-1 !px-2 text-sm"
+              <NumberField  min={1} max={60} className="input !py-1 !px-2 text-sm"
                 value={autoMinutes} onChange={(e) => setAutoMinutes(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             </label>
           </div>
@@ -695,8 +697,8 @@ function PopulateRaceFinalButton({
     <span className="inline-flex items-center gap-1">
       <label className="inline-flex items-center gap-1 text-[11px] text-slate-500">
         Top
-        <input
-          type="number" min={1} max={20}
+        <NumberField
+           min={1} max={20}
           className="input !py-0.5 !px-1 text-[11px] w-12"
           value={topN}
           onChange={(e) => setTopN(Math.max(1, parseInt(e.target.value, 10) || 1))}
@@ -960,8 +962,8 @@ function AddEntryForm({ kind, onCancel, onSaved }: AddEntryFormProps) {
           <span className="text-[11px] text-slate-500 dark:text-slate-300">
             Duration (min) {kind === 'custom' ? '(optional)' : ''}
           </span>
-          <input
-            type="number" min={0} max={600}
+          <NumberField
+             min={0} max={600}
             className="input mt-1 text-sm"
             value={duration}
             onChange={(e) => setDuration(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
@@ -972,10 +974,10 @@ function AddEntryForm({ kind, onCancel, onSaved }: AddEntryFormProps) {
       {arenas.length > 1 && (
         <label className="block">
           <span className="text-[11px] text-slate-500 dark:text-slate-300">Arena</span>
-          <select className="input mt-1 text-sm" value={arenaName} onChange={(e) => setArenaName(e.target.value)}>
+          <SelectField className="input mt-1 text-sm" value={arenaName} onChange={(e) => setArenaName(e.target.value)}>
             <option value="">All arenas</option>
             {arenas.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
+          </SelectField>
         </label>
       )}
 
@@ -1094,13 +1096,13 @@ function HeatAssignmentEditor({
           <div key={t.id} className="flex items-center gap-2 px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-800/70">
             <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: bibAccent(t.bib) }} />
             <span className="text-xs flex-1 truncate">{t.name}</span>
-            <select
+            <SelectField
               value={picks[t.id] ?? t.label}
               onChange={(e) => setPicks((cur) => ({ ...cur, [t.id]: e.target.value }))}
               className="input !py-0.5 !px-1 text-xs w-24"
             >
               {labels.map((l) => (<option key={l} value={l}>{l}</option>))}
-            </select>
+            </SelectField>
           </div>
         ))}
         {teamsInSession.length === 0 && (
@@ -1207,7 +1209,7 @@ function CreateFinalsModal({
         <div className="p-3 space-y-3">
           <label className="block">
             <span className="text-xs font-semibold">Section</span>
-            <select
+            <SelectField
               className="input mt-1 text-sm"
               value={sectionId}
               onChange={(e) => setSectionId(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
@@ -1216,14 +1218,14 @@ function CreateFinalsModal({
               {sections.map((s) => (
                 <option key={s.id} value={s.id}>{s.displayName}</option>
               ))}
-            </select>
+            </SelectField>
           </label>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-xs font-semibold">Top N teams</span>
-              <input
-                type="number" min={1} max={64}
+              <NumberField
+                 min={1} max={64}
                 className="input mt-1 text-sm"
                 value={topN}
                 onChange={(e) => setTopN(Math.max(1, parseInt(e.target.value, 10) || 1))}
@@ -1231,8 +1233,8 @@ function CreateFinalsModal({
             </label>
             <label className="block">
               <span className="text-xs font-semibold">Max teams / heat</span>
-              <input
-                type="number" min={1} max={20}
+              <NumberField
+                 min={1} max={20}
                 className="input mt-1 text-sm"
                 value={lanes}
                 onChange={(e) => setLanes(Math.max(1, parseInt(e.target.value, 10) || 1))}

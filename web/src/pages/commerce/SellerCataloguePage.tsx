@@ -8,6 +8,7 @@ import { LoadError } from './commerceUi';
 import { CATEGORY_LABEL, errorMessage, pounds } from './commerceFormat';
 import type { CatalogueItem, CommerceItemCategory, CommerceListingStatus, CompetitionChoice, CompetitionChoicePage, CompetitionListing } from './types';
 import './commerce.css';
+import { SelectField } from '../../components/SelectField';
 
 interface ItemForm {
   title: string;
@@ -343,9 +344,9 @@ function ItemSheet({ title, form, setForm, busy, error, onClose, onSubmit, prima
         <div className="grid grid-cols-2 gap-2.5">
           <label className="rf-fld">Price (£)<input inputMode="decimal" placeholder="12.00" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></label>
           <label className="rf-fld">Category
-            <select value={form.category} onChange={(event) => setForm({ ...form, category: Number(event.target.value) as CommerceItemCategory })}>
+            <SelectField value={form.category} onChange={(event) => setForm({ ...form, category: Number(event.target.value) as CommerceItemCategory })}>
               {([0, 1, 2, 3] as CommerceItemCategory[]).map((category) => <option key={category} value={category}>{CATEGORY_LABEL[category]}</option>)}
-            </select>
+            </SelectField>
           </label>
         </div>
         <label className="rf-fld">Description<textarea rows={3} maxLength={4000} style={{ padding: 10 }} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>

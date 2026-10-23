@@ -140,11 +140,21 @@ describe('admin trainer requests', () => {
     expect(await screen.findByText('No trainer requests.')).toBeInTheDocument();
   });
 
-  it('lists requests in view mode with instructions to enable edit mode', async () => {
+  it('lets an admin approve a request without switching on edit mode, team manager requests included', async () => {
+    requests = [{ ...request, requestedRole: 'Manager' }];
     mount(['Admin'], false);
     expect(await screen.findByText(request.fullName)).toBeInTheDocument();
-    expect(screen.getByText('Switch to edit mode to approve or decline requests.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Team manager/)).toBeInTheDocument();
+    expect(screen.queryByText(/Switch to edit mode to approve/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(api.post).toHaveBeenCalledWith(`${path}/${encodeURIComponent(request.userId)}/approve`);
+  });
+
+  it("shows the server's message when approving fails", async () => {
+    vi.mocked(api.post).mockRejectedValue({ response: { status: 404, data: { message: 'That request has already been dealt with.' } } });
+    mount(['Admin'], false);
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('That request has already been dealt with.');
   });
 
   it('does not fetch or show trainer requests for a non-admin', async () => {
