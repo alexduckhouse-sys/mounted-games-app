@@ -118,8 +118,9 @@ export function PayoutsPage() {
         setChangingBank(false);
         go(5);
       } catch (err) {
-        setProblems(fieldErrors(err));
-        setNotice(apiErrorMessage(err, 'Could not save the bank account. Try again.'));
+        const errors = fieldErrors(err);
+        setProblems(errors);
+        setNotice(Object.keys(errors).length > 0 ? null : apiErrorMessage(err, 'Could not save the bank account. Try again.'));
       } finally {
         setBusy(false);
       }
@@ -136,8 +137,9 @@ export function PayoutsPage() {
       adopt(d);
       go(step + 1);
     } catch (err) {
-      setProblems(fieldErrors(err));
-      setNotice(apiErrorMessage(err, 'Could not save. Try again.'));
+      const errors = fieldErrors(err);
+      setProblems(errors);
+      setNotice(Object.keys(errors).length > 0 ? null : apiErrorMessage(err, 'Could not save. Try again.'));
     } finally {
       setBusy(false);
     }

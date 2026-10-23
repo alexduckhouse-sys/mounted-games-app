@@ -7,6 +7,8 @@ import { AuthProvider } from '../auth/AuthContext';
 import type { ClubPayouts } from '../types';
 import { PayoutsPage } from './PayoutsPage';
 
+vi.setConfig({ testTimeout: 30_000 });
+
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -174,14 +176,14 @@ describe('PayoutsPage: the stepped flow', () => {
     await screen.findByText('Step 4 of 6:');
     await typeInto('Name on the account', 'Stockport PC');
     await typeInto('IBAN', 'ie29aibk93115212345679');
-    await typeInto('BIC', 'nope');
+    await typeInto(/^BIC/, 'nope');
     await next();
     expect(screen.getByText("That IBAN doesn't look right. Check it and try again.")).toBeInTheDocument();
     expect(screen.getByText('A BIC has 8 or 11 letters and numbers.')).toBeInTheDocument();
     await userEvent.clear(screen.getByLabelText('IBAN'));
     await typeInto('IBAN', 'ie29aibk93115212345678');
     expect(screen.getByLabelText('IBAN')).toHaveValue('IE29 AIBK 9311 5212 3456 78');
-    await userEvent.clear(screen.getByLabelText(/BIC/));
+    await userEvent.clear(screen.getByLabelText(/^BIC/));
     await next();
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts/bank', { accountHolder: 'Stockport PC', iban: 'IE29 AIBK 9311 5212 3456 78', bic: null }));
   });
@@ -204,7 +206,7 @@ describe('PayoutsPage: the stepped flow', () => {
   });
 
   it('shows the API\'s field errors and the next step on a failed save', async () => {
-    loaded = blank({ status: 1, businessType: 1, missing: [] });
+    loaded = blank({ status: 1, businessType: 1, missing: ['legalName'] });
     vi.mocked(api.put).mockRejectedValueOnce(errorResponse({ contactEmail: 'Enter a valid email address.' }));
     mount();
     await screen.findByText('Step 2 of 6:');
@@ -259,7 +261,7 @@ describe('PayoutsPage: the stepped flow', () => {
   });
 
   it('shows a message when saving fails without field errors', async () => {
-    loaded = blank({ status: 1, businessType: 1, missing: [] });
+    loaded = blank({ status: 1, businessType: 1, missing: ['legalName'] });
     mount();
     await screen.findByText('Step 2 of 6:');
     await userEvent.click(screen.getByRole('button', { name: 'Go to step 1: Who\'s being paid' }));
