@@ -16,6 +16,12 @@ public class DeclarationForm
     /// <summary>The coach as typed on the form; it starts as the submitter's account name.</summary>
     public string? TrainerName { get; set; }
 
+    /// <summary>
+    /// The coach's phone number for this team, normalised (see <c>PhoneNumbers</c>). Personal data: staff and the submitter only,
+    /// never in a public DTO or a log. Null when the competition's dec form doesn't ask for it.
+    /// </summary>
+    public string? TrainerPhone { get; set; }
+
     /// <summary>When the submitter agreed to the terms and conditions, and who they were. Null on forms from before the tick existed.</summary>
     public DateTime? TermsAcceptedAt { get; set; }
     public string? TermsAcceptedByUserId { get; set; }

@@ -376,6 +376,20 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "DeclarationForms", "TrainerName", "TEXT NULL");
         await EnsureColumnAsync(db, "DeclarationForms", "TermsAcceptedAt", "TEXT NULL");
         await EnsureColumnAsync(db, "DeclarationForms", "TermsAcceptedByUserId", "TEXT NULL");
+        // Adaptive dec forms: the organiser's setup, and the extra rider answers it can ask for.
+        await EnsureColumnAsync(db, "Competitions", "DecFormConfigJson", "TEXT NULL");
+        await EnsureColumnAsync(db, "DeclarationForms", "TrainerPhone", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "BirthYear", "INTEGER NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "AgeGroup", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "WeightKg", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "PonyPassportNumber", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "PonyAge", "INTEGER NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "MembershipNumber", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "EmergencyContactName", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "EmergencyContactPhone", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "MedicalNotes", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "CustomValuesJson", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "FlagsJson", "TEXT NULL");
         await Operations.OperationsSqliteSchema.EnsureAsync(db);
         await EnsureColumnAsync(db, "RaceScoreEvent", "ActorLabel", "TEXT NULL");
 

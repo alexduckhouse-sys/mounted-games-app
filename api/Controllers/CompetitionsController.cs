@@ -259,6 +259,8 @@ public class CompetitionsController : ControllerBase
             OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
             TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim(),
+            // New competitions start with the basic dec form; older ones with no setup keep the standard form.
+            DecFormConfigJson = MountedGames.Api.Services.DecForms.DecFormConfig.Basic.ToJson(),
             LaneHatbands = PlannedRaceList.Write(req.LaneHatbands),
             StartDate = req.StartDate,
             EndDate = req.EndDate,

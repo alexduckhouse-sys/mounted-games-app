@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Users, Plus, Save, ClipboardList, Ban, Star } from 'lucide-react';
+import { Users, Plus, Save, ClipboardList, Ban, Star, Flag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFavourites } from '../../hooks/useFavourites';
 import { useCompetition } from './context';
@@ -19,6 +19,8 @@ export function TeamsTab() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [decFormTeamIds, setDecFormTeamIds] = useState<Set<number>>(new Set());
+  // Riders flagged for breaking an organiser's limit, per team. The API only sends the count to staff and the submitter.
+  const [flagged, setFlagged] = useState<Map<number, number>>(new Map());
 
   const [draft, setDraft] = useState({
     competitionSectionId: 0,
@@ -35,8 +37,11 @@ export function TeamsTab() {
   useEffect(() => {
     if (!hasRole('Admin') && !hasRole('Trainer')) return;
     api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id } })
-      .then((r) => setDecFormTeamIds(new Set(r.data.map((f) => f.teamId))))
-      .catch(() => setDecFormTeamIds(new Set()));
+      .then((r) => {
+        setDecFormTeamIds(new Set(r.data.map((f) => f.teamId)));
+        setFlagged(new Map(r.data.filter((f) => (f.flagCount ?? 0) > 0).map((f) => [f.teamId, f.flagCount ?? 0])));
+      })
+      .catch(() => { setDecFormTeamIds(new Set()); setFlagged(new Map()); });
   }, [competition.id, hasRole]);
 
   // A new team starts on the competition's first section and the trainer's own club. These
@@ -175,6 +180,11 @@ export function TeamsTab() {
                       {hasDec && (
                         <span title="Dec form submitted" className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200 text-[9px] font-semibold">
                           <ClipboardList className="w-2.5 h-2.5" /> DEC
+                        </span>
+                      )}
+                      {flagged.has(t.id) && (
+                        <span title="A dec form answer is outside the limits set for this event" className="mg-flag inline-flex items-center gap-0.5 !rounded-full !px-1.5 !py-0.5 !text-[9px]">
+                          <Flag className="w-2.5 h-2.5" aria-hidden="true" /> {flagged.get(t.id)} flagged
                         </span>
                       )}
                       {t.isWithdrawn && (

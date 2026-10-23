@@ -54,4 +54,12 @@ describe('TeamsTab trainers', () => {
     chooseOption(screen.getByLabelText('Trainer for Oak A'), 'tr-1');
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not change the trainer.');
   });
+
+  it('flags a team whose dec form broke an organiser’s limit', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({
+      data: url === '/declaration-forms' ? [{ id: 1, teamId: 1, flagCount: 2 }] : [],
+    }));
+    render(<MemoryRouter><TeamsTab /></MemoryRouter>);
+    expect(await screen.findByText('2 flagged')).toBeInTheDocument();
+  });
 });

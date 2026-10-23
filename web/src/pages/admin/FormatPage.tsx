@@ -17,6 +17,7 @@ import { Pill } from './creator/parts';
 import { PartHead } from './LaptopParts';
 import { RaceListDialog } from './RaceListDialog';
 import { NumberField } from '../../components/NumberField';
+import { DecFormConfigEditor } from './DecFormConfig';
 
 const DEFAULT_MINUTES = 10;
 const MAIN_ARENA = 'Main arena';
@@ -270,6 +271,10 @@ export function FormatPage() {
           {competition.signupsLocked ? <Unlock className="h-4 w-4" aria-hidden="true" /> : <Lock className="h-4 w-4" aria-hidden="true" />}
           {competition.signupsLocked ? 'Re-open signups' : 'Close signups now'}
         </button>
+      </Panel>
+
+      <Panel id="fm-dec" title="Dec form" done={false} meta="What trainers fill in">
+        <DecFormConfigEditor competitionId={competition.id} />
       </Panel>
 
       <Panel id="fm-teams" title="Form teams" done={teamsFormed} meta={teamsFormed ? `${competition.teams.length} formed` : undefined}>

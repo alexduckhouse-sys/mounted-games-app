@@ -50,6 +50,7 @@ public sealed class CompetitionCloneService(AppDbContext db)
             What3Words = source.What3Words,
             AppleMapsUrl = source.AppleMapsUrl,
             TermsText = source.TermsText,
+            DecFormConfigJson = source.DecFormConfigJson,
             CreatedByUserId = creatorUserId,
         };
         db.Competitions.Add(clone);

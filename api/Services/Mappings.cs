@@ -1,5 +1,6 @@
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services.DecForms;
 
 namespace MountedGames.Api.Services;
 
@@ -134,7 +135,10 @@ public static class Mappings
 
     public static RiderEntryDto ToDto(this RiderEntry r) => new(
         r.Id, r.SavedRiderId, r.FullName, r.DateOfBirth, r.HorseName, r.BibColour,
-        r.IsCaptain, r.IsReserve, r.OrderIndex, r.UseInitialOnly, r.NoFilming, r.IsGuestRider, r.PonyHeightHands);
+        r.IsCaptain, r.IsReserve, r.OrderIndex, r.UseInitialOnly, r.NoFilming, r.IsGuestRider, r.PonyHeightHands,
+        r.BirthYear, r.AgeGroup, r.WeightKg, r.PonyPassportNumber, r.PonyAge, r.MembershipNumber,
+        r.EmergencyContactName, r.EmergencyContactPhone, r.MedicalNotes,
+        DecFormRules.ReadCustomValues(r.CustomValuesJson), DecFormRules.ReadFlags(r.FlagsJson));
 
     /// <summary>
     /// The rider as a public viewer sees them: the surname shortened when the rider asked for that, and the
@@ -144,10 +148,14 @@ public static class Mappings
     {
         FullName = RiderNames.Display(r.FullName, r.UseInitialOnly, viewerSeesFullNames: false),
         DateOfBirth = null, SavedRiderId = null, NoFilming = false,
+        // Every adaptive dec form field is personal data about a child: none of it goes on a public page.
+        BirthYear = null, AgeGroup = null, WeightKg = null, PonyPassportNumber = null, PonyAge = null,
+        MembershipNumber = null, EmergencyContactName = null, EmergencyContactPhone = null, MedicalNotes = null,
+        CustomValues = null, Flags = null,
     };
 
     /// <param name="includePrivate">The viewer submitted the form, trains the team or runs the competition: contact details and full rider records.</param>
-    public static DeclarationFormDto ToDto(this DeclarationForm d, bool includePrivate = false) => new(
+    public static DeclarationFormDto ToDto(this DeclarationForm d, bool includePrivate = false, string? entryTeamName = null) => new(
         d.Id, d.TeamId,
         d.Team?.DisplayName ?? string.Empty,
         d.Team?.CompetitionId ?? 0,
@@ -158,7 +166,10 @@ public static class Mappings
         d.Riders.OrderBy(r => r.OrderIndex).Select(r => includePrivate ? r.ToDto() : r.ToPublicDto()).ToList(),
         d.Team?.BibDescription,
         includePrivate ? d.TrainerName : null,
-        includePrivate ? d.TermsAcceptedAt : null);
+        includePrivate ? d.TermsAcceptedAt : null,
+        entryTeamName,
+        includePrivate ? d.Riders.Count(r => !string.IsNullOrEmpty(r.FlagsJson) && r.FlagsJson != "[]") : 0,
+        includePrivate ? d.TrainerPhone : null);
 
     public static SavedRiderDto ToDto(this SavedRider r) =>
         new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes, r.UseInitialOnly, r.NoFilming, r.PonyHeightHands);
