@@ -244,6 +244,9 @@ public class ReviewSeedFreshTests
             db.ScorerLinks.Add(new ScorerLink { Competition = competition, Label = "Gate", ArenaName = "Demo main arena", TokenHash = Guid.NewGuid().ToString("N"), CreatedByUserId = user.Id, CreatedAt = Today, ExpiresAt = Today.AddDays(2) });
             db.Set<TeamStatusEvent>().Add(new TeamStatusEvent { CompetitionId = competition.Id, Team = team, Status = TeamEntryStatus.Withdrawn, Reason = "Lame horse" });
             db.ChatMessages.Add(new ChatMessage { Competition = competition, AuthorName = "Steward", Body = "Welcome" });
+            var sponsor = new Sponsor { Competition = competition, Name = "Acme Feeds", ShowOn = SponsorPlacement.Details, CreatedAt = Today, UpdatedAt = Today };
+            db.Sponsors.Add(sponsor);
+            db.SponsorExposures.Add(new SponsorExposure { Sponsor = sponsor, Day = Today, Placement = SponsorPlacement.Details, Views = 3 });
             db.CompetitionCollaborators.Add(new CompetitionCollaborator { Competition = competition, UserId = user.Id, AddedByUserId = user.Id, AddedAt = Today });
             db.TeamSupporters.Add(new TeamSupporter { Team = team, UserId = user.Id });
             db.Set<Rulebook>().Add(new Rulebook { Competition = competition, Title = "Rules" });
@@ -280,6 +283,8 @@ public class ReviewSeedFreshTests
         Assert.Empty(await db.DeclarationForms.ToListAsync());
         Assert.Empty(await db.RiderEntries.ToListAsync());
         Assert.Empty(await db.ScorerLinks.ToListAsync());
+        Assert.Empty(await db.Sponsors.ToListAsync());
+        Assert.Empty(await db.SponsorExposures.ToListAsync());
         Assert.Empty(await db.ChatMessages.ToListAsync());
         Assert.Empty(await db.CompetitionCollaborators.ToListAsync());
         Assert.Empty(await db.LiveStreams.ToListAsync());
