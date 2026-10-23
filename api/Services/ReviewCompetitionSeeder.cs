@@ -338,6 +338,8 @@ public static class ReviewCompetitionSeeder
             await db.Set<TeamStatusEvent>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
             await db.TeamSupporters.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
             await db.Set<EventTeamProfileLink>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+            await db.FinalsTieOrders.Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+            await db.SpecialAwards.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
             await db.SectionSignups.Where(x => sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
             await db.Teams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
             await db.Set<DrawChange>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();

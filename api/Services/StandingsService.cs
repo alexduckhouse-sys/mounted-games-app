@@ -7,7 +7,8 @@ namespace MountedGames.Api.Services;
 
 /// <summary>
 /// The overall standings of a competition or one section. Hors concours teams are left out. Once finals exist the
-/// final a team is in decides its place before points do; within a final teams go by total points, then wins.
+/// final a team is in decides its place before points do; within a final teams go by total points, then
+/// the age group's tie-break (<see cref="TieBreaker"/>).
 /// </summary>
 public sealed class StandingsService(AppDbContext db)
 {
@@ -21,8 +22,9 @@ public sealed class StandingsService(AppDbContext db)
 
         var teams = await teamsQ.ToListAsync(ct);
         var tiers = await FinalsTiers.LoadAsync(db, competitionId, ct);
+        var ties = await TieBreaker.LoadAsync(db, competitionId, ct);
 
-        return teams.Select(t => new StandingRow(
+        var rows = teams.Select(t => new StandingRow(
                 t.Id, t.DisplayName, t.Club?.Name ?? string.Empty, t.BibColour,
                 t.Results.Sum(r => r.Points),
                 t.Results.Count,
@@ -30,9 +32,20 @@ public sealed class StandingsService(AppDbContext db)
                 t.Results.Count(r => r.Eliminated && ResultStatuses.Of(r) == ResultStatus.Eliminated),
                 tiers.TierOf(t.Id),
                 t.EntryStatus != TeamEntryStatus.Active))
-            .OrderBy(r => r.FinalTier ?? FinalsTiers.NotInFinals)
-            .ThenByDescending(r => r.TotalPoints)
-            .ThenByDescending(r => r.Wins)
+            .ToList();
+        var facts = teams.ToDictionary(t => t.Id, t => ties.Facts(t));
+
+        // Within a final (or among non-finalists), teams level on points go in tie-break order: the age group's
+        // rule, or the organiser's order after a run-off.
+        return rows
+            .GroupBy(r => (Tier: r.FinalTier ?? FinalsTiers.NotInFinals, r.TotalPoints))
+            .OrderBy(g => g.Key.Tier)
+            .ThenByDescending(g => g.Key.TotalPoints)
+            .SelectMany(g =>
+            {
+                var byTeam = g.ToDictionary(r => r.TeamId);
+                return ties.OrderLevel(g.Select(r => facts[r.TeamId]).ToList()).Select(f => byTeam[f.TeamId]);
+            })
             .ToList();
     }
 }

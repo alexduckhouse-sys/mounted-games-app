@@ -175,6 +175,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Heats", "RaceRoundId", "INTEGER NULL");
         await EnsureColumnAsync(db, "Heats", "RaceRoundStage", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "RunoffRaceName", "TEXT NULL");
+        await EnsureColumnAsync(db, "CompetitionSections", "TieBreakRule", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "FinalistCount", "INTEGER NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "UsesRaceFinals", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Teams", "SupporterJoinKey", "TEXT NULL");
@@ -346,6 +347,7 @@ public static class DbInitializer
         await Email.EmailSqliteSchema.EnsureAsync(db);
 
         await Sponsors.SponsorsSqliteSchema.EnsureAsync(db);
+        await ResultsSqliteSchema.EnsureAsync(db);
 
     }
 

@@ -40,6 +40,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<ShopReport> ShopReports => Set<ShopReport>();
     public DbSet<CalendarHeatVersion> CalendarHeatVersions => Set<CalendarHeatVersion>();
     public DbSet<SpecialAward> SpecialAwards => Set<SpecialAward>();
+    public DbSet<FinalsTieOrder> FinalsTieOrders => Set<FinalsTieOrder>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {

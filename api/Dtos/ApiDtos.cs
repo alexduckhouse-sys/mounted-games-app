@@ -114,12 +114,18 @@ public record CompetitionSectionDto(
     int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName,
     string? RunoffRaceName, bool UsesRaceFinals, int PriceMinor,
     int? MaxParticipants = null, int? FinalistCount = null,
-    int ActiveSignupsCount = 0);
+    int ActiveSignupsCount = 0, TieBreakRule TieBreakRule = TieBreakRule.Countback);
 public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName,
     string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0,
-    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null);
+    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null,
+    [EnumDataType(typeof(TieBreakRule))] TieBreakRule TieBreakRule = TieBreakRule.Countback);
+/// <param name="TieBreakRule">Omitted leaves the rule as it is.</param>
 public record UpdateSectionRequest(string? RunoffRaceName, bool? UsesRaceFinals = null, int? PriceMinor = null,
-    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null);
+    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null,
+    [EnumDataType(typeof(TieBreakRule))] TieBreakRule? TieBreakRule = null);
+
+/// <summary>Teams level on points, best first: every active team in the age group on that total.</summary>
+public record SetTieOrderRequest(IReadOnlyList<int> TeamIds);
 
 public record SectionSignupDto(
     int Id, int CompetitionSectionId, string SectionName,

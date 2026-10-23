@@ -34,6 +34,22 @@ public enum LaneRotationMode
     MoveDown = 2
 }
 
+/// <summary>
+/// How an age group settles teams that are level on points where it matters: at a finals cut-off, or on the podium.
+/// Countback is 0 because it is closest to what happened before there was a choice (points, then wins).
+/// </summary>
+public enum TieBreakRule
+{
+    /// <summary>Most 1st places, then most 2nds, then most 3rds, and so on.</summary>
+    Countback = 0,
+    /// <summary>The better result in the most recent race, then the one before, and so on.</summary>
+    LastRace = 1,
+    /// <summary>A run-off race (the section's run-off race); the organiser enters its finishing order.</summary>
+    RunOff = 2,
+    /// <summary>The organiser decides the order.</summary>
+    Manual = 3
+}
+
 /// <summary>How a team's race ended. Anything but Finished scores 0 and shows its letter (E, DNS, DNF, R).</summary>
 public enum ResultStatus
 {
