@@ -54,24 +54,26 @@ beforeEach(() => {
 });
 
 describe('DashboardPage', () => {
-  it('names the focused competition once it has loaded, and falls back to the active one', async () => {
+  it('names the focused competition once it has loaded', async () => {
     setCurrent({ id: 7, name: 'Summer Show' });
-    serve((url) => (url === '/competitions' ? [] : { id: 7, name: 'Summer Show', isActive: true }));
+    serve((url) => (url === '/competitions/7' ? competition({ id: 7, name: 'Summer Show' }) : []));
     render(<MemoryRouter><DashboardPage /></MemoryRouter>);
-    expect(await screen.findByText('Summer Show is live today.')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Open Summer Show' })).toBeInTheDocument();
   });
 
-  it('says so when there is no competition to focus on', async () => {
+  it('shows no event band when there is no competition to focus on', async () => {
     render(<MemoryRouter><DashboardPage /></MemoryRouter>);
-    expect(await screen.findByText('No live competition right now.')).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/competitions/picker', expect.anything()));
+    expect(screen.queryByRole('link', { name: /^Open / })).not.toBeInTheDocument();
     expect(api.get).not.toHaveBeenCalledWith(expect.stringMatching(/^\/competitions\/\d+$/));
   });
 
   it('forgets the detail when the focused competition cannot be loaded', async () => {
     setCurrent({ id: 9, name: 'Winter Show' });
-    serve((url) => { if (url === '/competitions') return [{ id: 1, name: 'Active Show', isActive: true, isArchived: false }]; throw new Error('gone'); });
+    serve((url) => { if (url === '/competitions/9') throw new Error('gone'); return []; });
     render(<MemoryRouter><DashboardPage /></MemoryRouter>);
-    expect(await screen.findByText('Active Show is live today.')).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/competitions/9'));
+    expect(screen.queryByRole('link', { name: 'Open Winter Show' })).not.toBeInTheDocument();
   });
 });
 
@@ -188,7 +190,7 @@ describe('FormatPage', () => {
     serve((url) => (url === '/competitions/4' ? detail : []));
     mount();
     expect(screen.getByText('Loading…')).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: /Format competition/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Format' })).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/competitions/4/signups');
   });
 
@@ -202,7 +204,7 @@ describe('FormatPage', () => {
     serve((url) => (url === '/competitions/4' ? detail : []));
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     mount();
-    await screen.findByRole('heading', { name: /Format competition/ });
+    await screen.findByRole('heading', { level: 1, name: 'Format' });
     const before = vi.mocked(api.get).mock.calls.length;
     await userEvent.click(screen.getByRole('button', { name: 'Close signups now' }));
     expect(api.post).toHaveBeenCalledWith('/competitions/4/signups-locked', { locked: true });

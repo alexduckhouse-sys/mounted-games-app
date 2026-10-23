@@ -36,7 +36,7 @@ let forms: unknown[];
 let signups: MySignup[];
 
 function mount(requests: unknown[] = []) {
-  return render(<MemoryRouter><NeedsYouContext.Provider value={{ requests: requests as never, count: requests.length, review: async () => true }}><DashboardPage /></NeedsYouContext.Provider></MemoryRouter>);
+  return render(<MemoryRouter><NeedsYouContext.Provider value={{ requests: requests as never, teams: null, decForms: [], count: requests.length, review: async () => true }}><DashboardPage /></NeedsYouContext.Provider></MemoryRouter>);
 }
 
 beforeEach(() => {
