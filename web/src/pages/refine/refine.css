@@ -98,3 +98,10 @@ details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 .rf-state-mut { fill: rgb(var(--mg-tint)); }
 .rf-lockwrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 56px 24px 0; text-align: center; }
 .rf-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Screens outside the competition shell (stats, seasons, team profiles) sit in a plain <main> padded 12px on phones and 20px
+   at the top, not the 16px the header, tables and footer bleed assume. Pad the page to 16px so content lines up with the
+   rest of the app, and pull the header band up so it meets the app bar instead of floating below it. */
+@media (max-width: 639px) { main:not(.skin) .rf-page { padding-inline: 4px; } }
+main:not(.skin) .rf-page > .rf-hd:first-child { margin-top: -12px; }
+@media (min-width: 640px) { main:not(.skin) .rf-page > .rf-hd:first-child { margin-top: -20px; } }

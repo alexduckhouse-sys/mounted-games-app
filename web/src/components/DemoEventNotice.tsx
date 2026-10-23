@@ -10,7 +10,7 @@ export function DemoEventBadge({ className = '' }: { className?: string }) {
 /** Shown on every tab of a demo competition so nobody mistakes it for a real event. */
 export function DemoEventNotice() {
   return (
-    <div role="note" className="mx-auto w-full max-w-xl rounded-lg border-2 border-violet-400 bg-violet-50 p-3 text-violet-950">
+    <div role="note" className="mx-auto mt-3 w-full max-w-xl rounded-lg border-2 border-violet-400 bg-violet-50 p-3 text-violet-950">
       <p className="text-sm font-extrabold uppercase tracking-wide">Demo event</p>
       <p className="mt-1 text-sm">
         This is a sample competition for trying the app. The teams and results are made up.

@@ -122,7 +122,7 @@ function Producer() {
   };
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4 py-4">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 py-4">
       <div className="flex items-center gap-2">
         <Link to={`/competitions/${competition.id}/chat`} className="mg-nav-btn !px-0" aria-label="Back to Live & stream"><ChevronLeft className="h-5 w-5" /></Link>
         <h1 className="mg-h1 mg-h1-sm flex-1">Producer</h1>
