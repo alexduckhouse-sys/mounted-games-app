@@ -11,7 +11,7 @@ using MountedGames.Api.Services.Stats;
 namespace MountedGames.Api.Controllers;
 
 /// <summary>
-/// The statistics hub (<c>/stats</c> on the web). Anyone may search and see a profile's headline numbers; the
+/// The statistics hub (<c>/stats</c> on the web). Anyone may search, browse and see a profile's headline numbers; the
 /// per-game breakdown, the list of entries and the rider and pony partnerships are for signed-in viewers only.
 /// The service decides that from the caller, so the detail never leaves the API for an anonymous request.
 /// Every call is limited per user or address by the <c>stats</c> policy (<c>RateLimits:StatsPerMinute</c>).
@@ -30,6 +30,15 @@ public sealed class StatsController(AppDbContext db, StandingsService standings)
     [HttpGet("search")]
     public async Task<ActionResult<StatsSearchDto>> Search([FromQuery] string? q, CancellationToken ct)
         => await _stats.SearchAsync(q, Viewer, ct) is { } result ? result : BadQuery();
+
+    /// <summary>A page of every rider, pony, team or club (<c>kind</c> 0 to 3), optionally narrowed by <c>q</c>.</summary>
+    [HttpGet("browse")]
+    public async Task<ActionResult<StatsBrowseDto>> Browse([FromQuery] StatsSubjectKind? kind, [FromQuery] string? q, [FromQuery] int page = 1, CancellationToken ct = default)
+    {
+        if (kind is null || !Enum.IsDefined(kind.Value))
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid kind", detail: "Kind must be 0 (rider), 1 (pony), 2 (team) or 3 (club).");
+        return await _stats.BrowseAsync(kind.Value, q, page, Viewer, ct) is { } result ? result : BadQuery();
+    }
 
     [HttpGet("riders")]
     public Task<ActionResult<StatsProfileDto>> Rider([FromQuery] string? name, CancellationToken ct)

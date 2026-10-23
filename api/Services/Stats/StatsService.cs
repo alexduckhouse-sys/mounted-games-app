@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
-using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Entities.Seasons;
 
 namespace MountedGames.Api.Services.Stats;
@@ -15,7 +14,7 @@ public readonly record struct StatsViewer(bool SignedIn, bool SeesFullNames);
 /// The cross-competition statistics hub: riders, ponies, teams and clubs, matched by name (see
 /// <see cref="StatsNames"/>). It reads only what public pages already show:
 /// <list type="bullet">
-/// <item>finished competitions (archived, past their last day, or every race scored) that are not demo events;</item>
+/// <item>finished competitions (archived, past their last day, or every race scored). Demo events count like any other;</item>
 /// <item>riders and ponies from each team's latest locked declaration form, the one the public sees;</item>
 /// <item>results of completed races, never a referee's note; sit-outs are left out.</item>
 /// </list>
@@ -25,7 +24,9 @@ public readonly record struct StatsViewer(bool SignedIn, bool SeesFullNames);
 public sealed class StatsService(AppDbContext db, StandingsService standings)
 {
     public const int HitsPerKind = 8;
+    public const int BrowsePageSize = 24;
     private const int MaxSearchRows = 2000;
+    private const int MaxBrowseRows = 20000;
     private const int MaxProfileRows = 5000;
 
     private sealed record RiderRow(string FullName, bool UseInitialOnly, string? HorseName, bool IsReserve, int TeamId, int CompetitionId, SectionFormat Format);
@@ -69,16 +70,63 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
     }
 
     private static List<StatsHitDto> Hits(StatsSubjectKind kind, IEnumerable<NameRow> rows, string q, HashSet<int> counted)
+        => RankedHits(kind, rows, q, counted).Take(HitsPerKind).ToList();
+
+    /// <summary>Every subject matching <paramref name="q"/> (all of them when it is empty): exact name first, then most competitions, then name.</summary>
+    private static IEnumerable<StatsHitDto> RankedHits(StatsSubjectKind kind, IEnumerable<NameRow> rows, string q, HashSet<int> counted)
         => rows.Where(r => counted.Contains(r.CompetitionId))
             .Select(r => (Name: StatsNames.Tidy(r.Name), Key: StatsNames.Normalise(r.Name), r.CompetitionId))
             // The database filter is loose (words, dots trimmed); this is the real match, on the name the viewer may see.
-            .Where(r => r.Key.Contains(q, StringComparison.Ordinal))
+            .Where(r => r.Key.Length > 0 && r.Key.Contains(q, StringComparison.Ordinal))
             .GroupBy(r => r.Key)
             .Select(g => new StatsHitDto(kind, g.First().Name, g.Key, g.Select(x => x.CompetitionId).Distinct().Count()))
             .OrderByDescending(h => h.Key == q).ThenByDescending(h => h.Competitions)
             .ThenBy(h => h.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(HitsPerKind)
-            .ToList();
+            .ThenBy(h => h.Key, StringComparer.Ordinal);
+
+    // ----- browse -----
+
+    /// <summary>
+    /// One page of every rider, pony, team or club in the counted competitions, most competitions first, then by
+    /// name. A rider is listed under the name this viewer may see, exactly as in <see cref="SearchAsync"/>. Null when
+    /// <paramref name="query"/> is given but is too short, too long or has no letters.
+    /// </summary>
+    public async Task<StatsBrowseDto?> BrowseAsync(StatsSubjectKind kind, string? query, int page, StatsViewer viewer, CancellationToken ct = default)
+    {
+        var q = StatsNames.Normalise(query);
+        if (q.Length > 0 && !StatsNames.IsValidQuery(q)) return null;
+        var tokens = StatsNames.Tokens(q);
+        page = Math.Max(1, page);
+
+        var counted = await CountedCompetitionsAsync(null, ct);
+        var ids = counted.ToList();
+        List<NameRow> rows = [];
+        if (ids.Count > 0)
+        {
+            switch (kind)
+            {
+                case StatsSubjectKind.Rider:
+                case StatsSubjectKind.Pony:
+                    var source = kind == StatsSubjectKind.Rider ? RidersNamed(tokens) : PoniesNamed(tokens);
+                    var riderRows = await RiderRows(source.Where(r => ids.Contains(r.DeclarationForm!.Team!.CompetitionId)), MaxBrowseRows).ToListAsync(ct);
+                    rows = riderRows.Where(Counts).Select(r => new NameRow(
+                        kind == StatsSubjectKind.Rider ? RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames) : r.HorseName!,
+                        r.CompetitionId, r.TeamId)).ToList();
+                    break;
+                default:
+                    var teams = kind == StatsSubjectKind.Team ? TeamsNamed(tokens) : ClubsNamed(tokens);
+                    rows = await teams.Where(t => ids.Contains(t.CompetitionId))
+                        .OrderByDescending(t => t.Competition!.StartDate).Take(MaxBrowseRows)
+                        .Select(t => new NameRow(kind == StatsSubjectKind.Team ? t.DisplayName : t.Club!.Name, t.CompetitionId, t.Id))
+                        .ToListAsync(ct);
+                    break;
+            }
+        }
+
+        var all = RankedHits(kind, rows, q, counted).ToList();
+        var items = all.Skip((page - 1) * BrowsePageSize).Take(BrowsePageSize).ToList();
+        return new StatsBrowseDto(kind, StatsNames.Tidy(query), page, BrowsePageSize, all.Count, items);
+    }
 
     /// <summary>A reserve in an individual or pairs entry didn't ride, so the entry isn't theirs (or their pony's).</summary>
     private static bool Counts(RiderRow row) => !row.IsReserve || row.Format == SectionFormat.Teams;
@@ -305,11 +353,9 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             && r.DeclarationFormId == db.DeclarationForms
                 .Where(f => f.TeamId == r.DeclarationForm.TeamId && f.IsLocked)
                 .OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id)
-                .Select(f => f.Id).FirstOrDefault()
-            && !db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == r.DeclarationForm.Team!.CompetitionId && x.IsDemo));
+                .Select(f => f.Id).FirstOrDefault());
 
-    private IQueryable<Team> PublicTeams() => db.Teams.AsNoTracking()
-        .Where(t => !db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == t.CompetitionId && x.IsDemo));
+    private IQueryable<Team> PublicTeams() => db.Teams.AsNoTracking();
 
     // Each token is copied into its own local so every Where captures its own word.
     private IQueryable<RiderEntry> RidersNamed(IReadOnlyList<string> tokens)
@@ -347,16 +393,17 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             r.DeclarationForm!.TeamId, r.DeclarationForm.Team!.CompetitionId, r.DeclarationForm.Team.Section!.Format));
 
     /// <summary>
-    /// The competitions whose results count: not a demo event, at least one race scored, and either over (archived
-    /// or past its last day) or with every race scored. One query for any number of competitions.
+    /// The competitions whose results count: at least one race scored, and either over (archived or past its
+    /// last day) or with every race scored. Demo events count like any other. One query for any number of
+    /// competitions, or for all of them when <paramref name="competitionIds"/> is null.
     /// </summary>
-    private async Task<HashSet<int>> CountedCompetitionsAsync(IEnumerable<int> competitionIds, CancellationToken ct)
+    private async Task<HashSet<int>> CountedCompetitionsAsync(IEnumerable<int>? competitionIds, CancellationToken ct)
     {
-        var ids = competitionIds.Distinct().ToList();
-        if (ids.Count == 0) return [];
+        var ids = competitionIds?.Distinct().ToList();
+        if (ids is { Count: 0 }) return [];
         var today = DateTime.UtcNow.Date;
         var rows = await db.Competitions.AsNoTracking()
-            .Where(c => ids.Contains(c.Id) && !db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == c.Id && x.IsDemo))
+            .Where(c => ids == null || ids.Contains(c.Id))
             .Select(c => new
             {
                 c.Id,

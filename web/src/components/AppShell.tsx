@@ -6,7 +6,7 @@ import { useCurrentCompetition } from '../competition/CurrentCompetitionContext'
 import { CompetitionPickerDialog } from '../competition/CompetitionPicker';
 import { RememberCompetitionDialog } from '../competition/RememberCompetitionDialog';
 import { competitionDateText } from '../lib/competitionDates';
-import { competitionIdFromPath, hasGlobalTabs } from '../lib/routes';
+import { competitionIdFromPath, hasGlobalTabs, isStatsPath } from '../lib/routes';
 import { PageLoadBoundary } from './PageLoadBoundary';
 import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';
@@ -40,7 +40,8 @@ export function AppShell() {
   const competitionId = competitionIdFromPath(location.pathname);
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
   const globalTabs = hasGlobalTabs(location.pathname);
-  const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs || location.pathname === '/me/members';
+  // The stats pages draw their own header band, which needs the public wrapper's flush top edge.
+  const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs || isStatsPath(location.pathname) || location.pathname === '/me/members';
   // The tabs belong to a competition. The profile borrows the one being followed, if any.
   const tabsCompetitionId = competitionId ?? (onProfile ? current?.id ?? null : null);
   const shown = meta && meta.id === competitionId ? meta : null;

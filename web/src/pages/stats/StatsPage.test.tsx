@@ -52,39 +52,94 @@ beforeEach(() => {
   vi.mocked(useAuth).mockReturnValue({ user: null } as unknown as ReturnType<typeof useAuth>);
 });
 
-describe('StatsPage search', () => {
-  it('searches as you type and links each hit to its profile', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: {
-      query: 'oli', riders: [{ kind: 0, name: 'Oliver S.', key: 'oliver s.', competitions: 2 }], ponies: [],
-      teams: [{ kind: 2, name: 'Olinda A', key: 'olinda a', competitions: 1 }], clubs: [],
-    } });
+const hit = (kind: number, name: string, competitions = 2) => ({ kind, name, key: name.toLowerCase(), competitions });
+const browse = (kind: number, names: string[], overrides: Record<string, unknown> = {}) => ({
+  data: { kind, query: '', page: 1, pageSize: 24, total: names.length, items: names.map((name) => hit(kind, name)), ...overrides },
+});
+
+describe('StatsPage browse', () => {
+  it('lists riders straight away and links each to its profile', async () => {
+    vi.mocked(api.get).mockResolvedValue(browse(0, ['Oliver S.', 'Ann Jones']));
     renderAt('/stats');
-    expect(screen.getByText(/Only finished competitions count/)).toBeInTheDocument();
-    await userEvent.type(screen.getByRole('searchbox'), 'o');
-    expect(screen.getByText('Type at least two letters.')).toBeInTheDocument();
-    await userEvent.type(screen.getByRole('searchbox'), 'li');
-    expect(screen.getByRole('status')).toHaveTextContent('Searching…');
+    expect(screen.getByRole('status')).toHaveTextContent('Loading…');
     const link = await screen.findByRole('link', { name: /Oliver S\./ });
     expect(link).toHaveAttribute('href', '/stats/riders?name=oliver%20s.');
-    expect(link).toHaveTextContent('Rider · 2 competitions');
-    expect(within(screen.getByRole('region', { name: 'Teams' })).getByRole('link')).toHaveTextContent('Team · 1 competition');
-    expect(screen.queryByRole('region', { name: 'Ponies' })).not.toBeInTheDocument();
-    expect(api.get).toHaveBeenCalledWith('/stats/search', expect.objectContaining({ params: { q: 'oli' } }));
-  });
-
-  it('starts from the words in the address and says when nothing matches', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { query: 'zz', riders: [], ponies: [], teams: [], clubs: [] } });
-    renderAt('/stats?q=zz');
-    expect(screen.getByRole('searchbox')).toHaveValue('zz');
-    expect(await screen.findByText('No matches')).toBeInTheDocument();
-    await userEvent.clear(screen.getByRole('searchbox'));
+    expect(link).toHaveTextContent('2 competitions');
+    expect(screen.getByRole('tab', { name: 'Riders' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('list', { name: 'Riders' })).toBeInTheDocument();
     expect(screen.getByText(/Only finished competitions count/)).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith('/stats/browse', expect.objectContaining({ params: { kind: 0, q: undefined, page: 1 } }));
   });
 
-  it('shows the error when the search fails', async () => {
+  it('switches between riders, ponies, teams and clubs', async () => {
+    vi.mocked(api.get).mockImplementation(async (_url, config) => {
+      const kind = (config?.params as { kind: number }).kind;
+      return browse(kind, [['Rider One', 'Pony One', 'Team One', 'Club One'][kind]]);
+    });
+    renderAt('/stats');
+    expect(await screen.findByText('Rider One')).toBeInTheDocument();
+    for (const [label, name, href] of [['Ponies', 'Pony One', '/stats/ponies?name=pony%20one'], ['Teams', 'Team One', '/stats/teams?name=team%20one'], ['Clubs', 'Club One', '/stats/clubs?name=club%20one']]) {
+      await userEvent.click(screen.getByRole('tab', { name: label }));
+      expect(await screen.findByRole('link', { name: new RegExp(name) })).toHaveAttribute('href', href);
+      expect(screen.getByRole('tab', { name: label })).toHaveAttribute('aria-selected', 'true');
+    }
+    expect(screen.getByRole('searchbox')).toHaveAttribute('placeholder', 'Name of a club');
+    await userEvent.click(screen.getByRole('tab', { name: 'Riders' }));
+    expect(await screen.findByText('Rider One')).toBeInTheDocument();
+  });
+
+  it('narrows the list as you type', async () => {
+    vi.mocked(api.get).mockImplementation(async (_url, config) => {
+      const q = (config?.params as { q?: string }).q;
+      return browse(0, q ? ['Oliver S.'] : ['Oliver S.', 'Ann Jones'], { query: q ?? '' });
+    });
+    renderAt('/stats');
+    expect(await screen.findByText('Ann Jones')).toBeInTheDocument();
+    await userEvent.type(screen.getByRole('searchbox'), 'o');
+    expect(screen.getByText('Type at least two letters to narrow the list.')).toBeInTheDocument();
+    await userEvent.type(screen.getByRole('searchbox'), 'li');
+    expect(await screen.findByText('1 found')).toBeInTheDocument();
+    expect(screen.queryByText('Ann Jones')).not.toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith('/stats/browse', expect.objectContaining({ params: { kind: 0, q: 'oli', page: 1 } }));
+  });
+
+  it('starts from the tab and words in the address and says when nothing matches', async () => {
+    vi.mocked(api.get).mockResolvedValue(browse(1, []));
+    renderAt('/stats?kind=ponies&q=zz');
+    expect(screen.getByRole('searchbox')).toHaveValue('zz');
+    expect(screen.getByRole('tab', { name: 'Ponies' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByText('No matches')).toBeInTheDocument();
+    expect(screen.getByText(/No ponies in a finished competition match “zz”/)).toBeInTheDocument();
+  });
+
+  it('says so when there are no finished events yet', async () => {
+    vi.mocked(api.get).mockResolvedValue(browse(0, []));
+    renderAt('/stats');
+    expect(await screen.findByText('No finished events yet')).toBeInTheDocument();
+    expect(screen.getByText(/once a competition has finished/)).toBeInTheDocument();
+  });
+
+  it('shows more when the list runs past a page', async () => {
+    vi.mocked(api.get)
+      .mockResolvedValueOnce(browse(0, ['Ann', 'Bea'], { total: 3 }))
+      .mockResolvedValueOnce(browse(0, ['Cat'], { page: 2, total: 3 }));
+    renderAt('/stats');
+    await userEvent.click(await screen.findByRole('button', { name: 'Show more (1 left)' }));
+    expect(await screen.findByText('Cat')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Show more/ })).not.toBeInTheDocument();
+    expect(api.get).toHaveBeenLastCalledWith('/stats/browse', expect.objectContaining({ params: { kind: 0, q: undefined, page: 2 } }));
+  });
+
+  it('shows the error when the list fails', async () => {
     vi.mocked(api.get).mockRejectedValue(Object.assign(new Error('busy'), { response: { status: 429 } }));
     renderAt('/stats?q=oliver');
     expect(await screen.findByRole('alert')).toHaveTextContent('Too many searches');
+  });
+
+  it('goes back from a profile to the same tab', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: anonymous });
+    renderAt('/stats/ponies?name=bramble');
+    expect(await screen.findByRole('link', { name: 'Back to the list' })).toHaveAttribute('href', '/stats?kind=ponies');
   });
 });
 
