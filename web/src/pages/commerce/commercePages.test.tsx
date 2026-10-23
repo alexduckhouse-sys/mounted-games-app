@@ -80,27 +80,25 @@ function testPayment(status: 0 | 1 | 2 | 3) {
 }
 
 async function addCampingAndReview() {
-  await userEvent.click(await screen.findByRole('button', { name: 'Add Weekend camping' }));
-  await userEvent.click(screen.getByRole('button', { name: 'Review' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Add one Weekend camping' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Review order' }));
 }
 
 describe('EventShopPage', () => {
-  it('filters products and uses the server-confirmed total at checkout', async () => {
-    shopGet(manualSettings);
+  it('groups products by category and uses the server-confirmed total at checkout', async () => {
+    shopGet(manualSettings, [listing, { ...listing, id: 11, title: 'Event hoodie', category: 0 as const, stockQuantity: null, description: null }]);
     post.mockResolvedValue({ data: orderOf() } as never);
 
     render(<MemoryRouter><EventShopPage /></MemoryRouter>);
     expect(await screen.findByText('Weekend camping')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Shop' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Your orders' })).toHaveAttribute('href', '/me/orders');
-    expect(screen.getByText('One pitch beside the main arena.')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: 'Tickets' }));
-    expect(screen.getByText('There’s nothing in this category yet.')).toBeInTheDocument();
-    await userEvent.keyboard('{ArrowRight}');
-    expect(screen.getByRole('tab', { name: 'Camping' })).toHaveAttribute('aria-selected', 'true');
-    await userEvent.click(screen.getByRole('button', { name: 'Add Weekend camping' }));
+    expect(screen.getByText('One pitch beside the main arena. · 4 left')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Camping', 'Merchandise', 'Tack and equipment for sale']);
+    expect(screen.getByRole('list', { name: 'Camping for sale' })).toHaveTextContent('Weekend camping');
+    expect(screen.getByRole('list', { name: 'Merchandise for sale' })).toHaveTextContent('Event hoodie');
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Weekend camping' }));
     expect(screen.getByRole('region', { name: 'Basket summary' })).toHaveTextContent('1 item');
-    await userEvent.click(screen.getByRole('button', { name: 'Review' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review order' }));
     expect(screen.getByText(/Your total is confirmed when you place the order/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
 
@@ -116,7 +114,7 @@ describe('EventShopPage', () => {
     shopGet(manualSettings, [{ ...listing, stockQuantity: 0 }, { ...listing, id: 11, title: 'Pony hay', stockQuantity: 3, category: 0 }]);
     render(<MemoryRouter><EventShopPage /></MemoryRouter>);
     expect(await screen.findByText('Sold out')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Add Pony hay' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Pony hay' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add one Pony hay' }));
     expect(screen.getByRole('region', { name: 'Basket summary' })).toHaveTextContent('2 items');
     await userEvent.click(screen.getByRole('button', { name: 'Remove one Pony hay' }));
@@ -189,7 +187,7 @@ describe('EventShopPage', () => {
       expect(post).toHaveBeenLastCalledWith('/commerce/orders/34/demo-checkout', { idempotencyKey: expect.any(String), outcome: 0 });
       expect(screen.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', '/me/orders?order=34');
       await userEvent.click(screen.getByRole('button', { name: 'Shop' }));
-      expect(screen.getByRole('heading', { name: 'Shop' })).toBeInTheDocument();
+      expect(screen.getByText('Weekend camping')).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Basket summary' })).not.toBeInTheDocument();
     });
 
@@ -217,7 +215,7 @@ describe('EventShopPage', () => {
       expect(screen.getByRole('region', { name: 'Basket summary' })).toBeInTheDocument();
 
       post.mockResolvedValueOnce({ data: { ...demoOrder, id: 35 } } as never);
-      await userEvent.click(screen.getByRole('button', { name: 'Review' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Review order' }));
       await userEvent.click(screen.getByRole('button', { name: 'Continue to payment' }));
       expect(await screen.findByRole('heading', { name: /Payment/ })).toBeInTheDocument();
       const firstKey = (post.mock.calls[0][1] as { idempotencyKey: string }).idempotencyKey;
@@ -251,8 +249,8 @@ describe('EventShopPage', () => {
     });
 
     expect(screen.queryByText('Weekend camping')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Add New event camping' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Review' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add one New event camping' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review order' }));
     await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/competitions/6/orders',
       expect.objectContaining({ items: [{ listingId: 60, quantity: 1 }] })));

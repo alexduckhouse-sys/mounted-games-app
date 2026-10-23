@@ -299,6 +299,9 @@ a.mg-line:hover, button.mg-line:hover { background: rgb(var(--mg-subtle)); }
 .mg-line-title { overflow: hidden; font: 600 15px/1.25 'Barlow', sans-serif; text-overflow: ellipsis; white-space: nowrap; }
 .mg-line-sub { overflow: hidden; color: rgb(var(--mg-muted)); font: 400 12px/1.25 'Barlow', sans-serif; text-overflow: ellipsis; white-space: nowrap; }
 .mg-line-time { font: 700 19px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
+.mg-basket-bar { position: sticky; bottom: 66px; z-index: 20; display: flex; align-items: center; gap: 12px; margin-inline: -16px; padding: 10px 16px; background: rgb(var(--mg-header-deep)); color: #fff; }
+.mg-sell-bar { position: sticky; bottom: 78px; z-index: 20; display: flex; justify-content: center; pointer-events: none; }
+.mg-sell-btn { pointer-events: auto; display: inline-flex; min-height: 48px; align-items: center; gap: 8px; padding: 0 20px; border-radius: 24px; background: rgb(var(--mg-red)); color: #fff !important; font: 700 15px/1 'Barlow', sans-serif; box-shadow: 0 6px 18px rgb(15 42 74 / .3); }
 .mg-small-btn { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid rgb(var(--mg-control)); border-radius: 8px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 13px/1 'Barlow', sans-serif; }
 .mg-small-btn:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 .mg-tag { display: inline-flex; flex: none; align-items: center; padding: 2px 6px; border-radius: 4px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 600 12px/1.2 'Barlow', sans-serif; }
