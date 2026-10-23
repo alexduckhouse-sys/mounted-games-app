@@ -79,9 +79,17 @@ describe('FollowingTab', () => {
     mount({ isStale: true, updatedAt: null, reload });
     expect(screen.getByText('WAS IN ARENA')).toBeInTheDocument();
     expect(screen.queryByText('ON NOW')).not.toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Time unavailable');
+    expect(screen.getByRole('status')).toHaveTextContent('Last updated earlier. Times may have changed.');
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     expect(reload).toHaveBeenCalledOnce();
+  });
+  it('says nothing about a copy that is stale in flags only, until it is noticeably old', () => {
+    mount({ isStale: true, updatedAt: new Date(Date.now() - 2 * 60_000) });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+  it('says when the copy is old and not refreshing', () => {
+    mount({ isStale: true, updatedAt: new Date(Date.now() - 20 * 60_000) });
+    expect(screen.getByRole('status')).toHaveTextContent(/Last updated \d\d:\d\d\. Times may have changed\./);
   });
   it('lets a visitor remove a deleted team without knowing private records', async () => {
     localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":99}]');
