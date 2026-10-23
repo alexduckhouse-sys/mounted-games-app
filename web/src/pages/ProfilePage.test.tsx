@@ -114,6 +114,11 @@ describe('ProfilePage: my club', () => {
     expect(await section('My club').findByRole('link', { name: /Members/ })).toHaveAttribute('href', '/me/members');
   });
 
+  it('gives a team manager a Payouts row', async () => {
+    mount({ roles: ['Manager'] });
+    expect(await section('My club').findByRole('link', { name: /Payouts/ })).toHaveAttribute('href', '/me/payouts');
+  });
+
   it('shows an admin the Members row too', async () => {
     responses['/trainer/my-teams'] = [];
     mount({ roles: ['Admin'], clubName: null });

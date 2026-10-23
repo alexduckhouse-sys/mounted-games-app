@@ -112,6 +112,43 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "StreamOverlays", "SponsorMode", "INTEGER NOT NULL DEFAULT 0");
 
         await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "ClubPayoutAccounts" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_ClubPayoutAccounts" PRIMARY KEY AUTOINCREMENT,
+                "ClubId" INTEGER NOT NULL,
+                "Status" INTEGER NOT NULL DEFAULT 0,
+                "BusinessType" INTEGER NULL,
+                "Region" INTEGER NOT NULL DEFAULT 0,
+                "Currency" TEXT NOT NULL DEFAULT 'GBP',
+                "LegalName" TEXT NULL,
+                "TradingName" TEXT NULL,
+                "AddressLine1" TEXT NULL,
+                "AddressLine2" TEXT NULL,
+                "City" TEXT NULL,
+                "Postcode" TEXT NULL,
+                "ContactEmail" TEXT NULL,
+                "ContactPhone" TEXT NULL,
+                "RegistrationNumber" TEXT NULL,
+                "VatNumber" TEXT NULL,
+                "PersonFullName" TEXT NULL,
+                "PersonDateOfBirth" TEXT NULL,
+                "StatementDescriptor" TEXT NULL,
+                "Schedule" INTEGER NOT NULL DEFAULT 1,
+                "BankAccountHolder" TEXT NULL,
+                "BankName" TEXT NULL,
+                "SortCode" TEXT NULL,
+                "AccountLast4" TEXT NULL,
+                "IbanCountry" TEXT NULL,
+                "IbanLast4" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NOT NULL,
+                "UpdatedByUserId" TEXT NULL,
+                CONSTRAINT "FK_ClubPayoutAccounts_Clubs_ClubId" FOREIGN KEY ("ClubId")
+                    REFERENCES "Clubs" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ClubPayoutAccounts_ClubId" ON "ClubPayoutAccounts" ("ClubId");
+            """);
+
+        await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "OverlayLooks" (
                 "Id" INTEGER NOT NULL CONSTRAINT "PK_OverlayLooks" PRIMARY KEY AUTOINCREMENT,
                 "OwnerUserId" TEXT NOT NULL,
