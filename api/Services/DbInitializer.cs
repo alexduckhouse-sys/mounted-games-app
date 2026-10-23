@@ -309,6 +309,12 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "SectionSignups", "TermsWordingVersion", "TEXT NULL");
 
         await EnsureColumnAsync(db, "Teams", "EntryStatus", "INTEGER NOT NULL DEFAULT 0");
+        // Dec form: pony height (SQLite keeps decimals as TEXT), the coach's typed name and the terms tick.
+        await EnsureColumnAsync(db, "RiderEntries", "PonyHeightHands", "TEXT NULL");
+        await EnsureColumnAsync(db, "SavedRiders", "PonyHeightHands", "TEXT NULL");
+        await EnsureColumnAsync(db, "DeclarationForms", "TrainerName", "TEXT NULL");
+        await EnsureColumnAsync(db, "DeclarationForms", "TermsAcceptedAt", "TEXT NULL");
+        await EnsureColumnAsync(db, "DeclarationForms", "TermsAcceptedByUserId", "TEXT NULL");
         await Operations.OperationsSqliteSchema.EnsureAsync(db);
         await EnsureColumnAsync(db, "RaceScoreEvent", "ActorLabel", "TEXT NULL");
 

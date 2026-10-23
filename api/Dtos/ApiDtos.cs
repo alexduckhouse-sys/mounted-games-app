@@ -184,7 +184,9 @@ public record TeamDto(
     string? SupporterJoinKey = null,
     /// <summary>Withdrawn or no-show. Public on purpose; the reason is organiser-only.</summary>
     bool IsWithdrawn = false,
-    string? BibDescription = null);
+    string? BibDescription = null,
+    /// <summary>Set only on the my-teams list: the viewer looks after this team, its event hasn't finished, and it has no dec form yet.</summary>
+    bool? NeedsDeclaration = null);
 
 public record CreateTeamRequest(
     int CompetitionSectionId, int ClubId, string Suffix,
@@ -325,26 +327,37 @@ public record DeclarationFormDto(
     DateTime SubmittedAt,
     string? Notes, bool IsLocked,
     IReadOnlyList<RiderEntryDto> Riders,
-    string? BibDescription = null);
+    string? BibDescription = null,
+    string? TrainerName = null,
+    DateTime? TermsAcceptedAt = null);
 
 public record RiderEntryDto(
     int Id, int? SavedRiderId, string FullName, DateTime? DateOfBirth,
     string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex,
-    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false);
+    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false,
+    decimal? PonyHeightHands = null);
 
+/// <param name="AcceptTerms">The submitter ticked "I agree to the terms and conditions". A dec form is refused without it.</param>
+/// <param name="TrainerName">The coach's name as typed; it defaults to the submitter's account name.</param>
+/// <param name="TeamName">A new name for the team, or null to keep its name.</param>
 public record SubmitDeclarationFormRequest(
     int TeamId, string? Notes, IReadOnlyList<RiderEntryInput> Riders, bool SaveToRoster,
     string? TrainerPhone,
-    [StringLength(200)] string? BibDescription = null);
+    [StringLength(200)] string? BibDescription = null,
+    bool AcceptTerms = false,
+    [StringLength(200)] string? TrainerName = null,
+    [StringLength(150)] string? TeamName = null);
 
+/// <param name="PonyHeightHands">Hands as a decimal (13.2 is 13 hands 2 inches), between 5 and 20.</param>
 public record RiderEntryInput(
     int? SavedRiderId, string FullName, DateTime? DateOfBirth,
     string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex,
-    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false);
+    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false,
+    decimal? PonyHeightHands = null);
 
 public record SavedRiderDto(
     int Id, int ClubId, string FullName, DateTime? DateOfBirth, string? HorseName, string? Notes,
-    bool UseInitialOnly = false, bool NoFilming = false);
+    bool UseInitialOnly = false, bool NoFilming = false, decimal? PonyHeightHands = null);
 
 public record ChatMessageDto(
     int Id, int CompetitionId, string? UserId, string AuthorName,

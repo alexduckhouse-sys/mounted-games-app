@@ -38,7 +38,7 @@ export function AppShell() {
   const choosingCompetition = ['/', '/competitions', '/competitions/past'].includes(location.pathname);
   const competitionId = competitionIdFromPath(location.pathname);
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
-  const publicPage = choosingCompetition || competitionId != null || onProfile || location.pathname === '/chat' || location.pathname === '/following';
+  const publicPage = choosingCompetition || competitionId != null || onProfile || ['/chat', '/following', '/me/members'].includes(location.pathname);
   // The tabs belong to a competition. The profile borrows the one being followed, if any.
   const tabsCompetitionId = competitionId ?? (onProfile ? current?.id ?? null : null);
   const shown = meta && meta.id === competitionId ? meta : null;

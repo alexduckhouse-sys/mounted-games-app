@@ -77,6 +77,9 @@ public class DeclarationFormsController : ControllerBase
                 || (form.Team is not null && helping.Contains(form.Team.CompetitionId))));
     }
 
+    /// <summary>Pony heights in hands, as a decimal (13.2 is 13 hands 2 inches). Shetlands to big horses fit inside.</summary>
+    private const decimal MinPonyHands = 5m, MaxPonyHands = 20m;
+
     [HttpPost]
     [Authorize(Roles = Roles.TeamWork)]
     public async Task<ActionResult<DeclarationFormDto>> Submit(SubmitDeclarationFormRequest req)
@@ -94,6 +97,11 @@ public class DeclarationFormsController : ControllerBase
             && !await _db.CanManageAsync(User, team.CompetitionId))
             return Forbid();
 
+        if (!req.AcceptTerms)
+            return BadRequest(new { message = "Agree to the terms and conditions to submit the dec form." });
+        if (req.Riders.Any(r => r.PonyHeightHands is { } hh && (hh < MinPonyHands || hh > MaxPonyHands)))
+            return BadRequest(new { message = $"A pony's height must be between {MinPonyHands} and {MaxPonyHands} hands." });
+
         // A club's team managers and trainers share its saved riders; anyone else uses the riders they saved.
         var sharesRoster = isAdmin || await _db.SharesClubRosterAsync(User, team.ClubId);
         var savedIds = req.Riders.Where(r => r.SavedRiderId.HasValue).Select(r => r.SavedRiderId!.Value).Distinct().ToArray();
@@ -101,15 +109,16 @@ public class DeclarationFormsController : ControllerBase
             && r.ClubId == team.ClubId && (sharesRoster || (userId != null && r.CreatedByUserId == userId)));
         if (permittedSavedCount != savedIds.Length) return BadRequest(new { message = "A saved rider is not available to this account." });
 
-        if (!string.IsNullOrWhiteSpace(req.TrainerPhone) && userId is not null)
+        var submitter = userId is null ? null : await _users.FindByIdAsync(userId);
+        if (!string.IsNullOrWhiteSpace(req.TrainerPhone) && submitter is not null && submitter.PhoneNumber != req.TrainerPhone)
         {
-            var trainer = await _users.FindByIdAsync(userId);
-            if (trainer is not null && trainer.PhoneNumber != req.TrainerPhone)
-            {
-                trainer.PhoneNumber = req.TrainerPhone.Trim();
-                await _users.UpdateAsync(trainer);
-            }
+            submitter.PhoneNumber = req.TrainerPhone.Trim();
+            await _users.UpdateAsync(submitter);
         }
+
+        // The team's name is editable on the form; it's the page title everywhere else too.
+        var teamName = req.TeamName?.Trim();
+        if (!string.IsNullOrEmpty(teamName)) team.DisplayName = teamName;
 
         if (req.BibDescription is not null)
             team.BibDescription = string.IsNullOrWhiteSpace(req.BibDescription) ? null : req.BibDescription.Trim();
@@ -134,6 +143,9 @@ public class DeclarationFormsController : ControllerBase
         form.SubmittedAt = DateTime.UtcNow;
         form.Notes = req.Notes;
         form.IsLocked = true;
+        form.TrainerName = string.IsNullOrWhiteSpace(req.TrainerName) ? submitter?.FullName : req.TrainerName.Trim();
+        form.TermsAcceptedAt = form.SubmittedAt;
+        form.TermsAcceptedByUserId = userId;
         var order = 0;
         foreach (var r in req.Riders)
         {
@@ -143,6 +155,7 @@ public class DeclarationFormsController : ControllerBase
                 FullName = r.FullName,
                 DateOfBirth = r.DateOfBirth,
                 HorseName = r.HorseName,
+                PonyHeightHands = r.PonyHeightHands,
                 BibColour = string.IsNullOrWhiteSpace(r.BibColour) ? null : r.BibColour.Trim(),
                 IsCaptain = r.IsCaptain,
                 IsReserve = r.IsReserve,
@@ -170,6 +183,7 @@ public class DeclarationFormsController : ControllerBase
                         FullName = r.FullName,
                         DateOfBirth = r.DateOfBirth,
                         HorseName = r.HorseName,
+                        PonyHeightHands = r.PonyHeightHands,
                         UseInitialOnly = r.UseInitialOnly,
                         NoFilming = r.NoFilming
                     });
@@ -178,6 +192,7 @@ public class DeclarationFormsController : ControllerBase
                 {
                     existing.DateOfBirth ??= r.DateOfBirth;
                     existing.HorseName ??= r.HorseName;
+                    existing.PonyHeightHands ??= r.PonyHeightHands;
                     existing.UseInitialOnly = r.UseInitialOnly;
                     existing.NoFilming = r.NoFilming;
                     existing.UpdatedAt = DateTime.UtcNow;

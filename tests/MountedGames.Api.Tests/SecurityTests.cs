@@ -148,7 +148,7 @@ public class SecurityTests
         }
         using var response = await server.Send(HttpMethod.Post, "/api/declaration-forms", uid, role, new
         {
-            teamId = 1, saveToRoster = false,
+            teamId = 1, saveToRoster = false, acceptTerms = true,
             riders = new[] { new { savedRiderId = riderId, fullName = "Fake Rider", isCaptain = false, isReserve = false, orderIndex = 0 } },
         });
         Assert.Equal(status, (int)response.StatusCode);

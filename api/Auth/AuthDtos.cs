@@ -15,13 +15,15 @@ public record RegisterRequest(
 /// Self-service signup. Trainer requests receive Member access until approved
 /// by an admin or their club's team manager; manager requests until approved by an admin.
 /// Member signups are granted directly. ClubName is required: if it matches an existing Club
-/// (case-insensitive) we use it, otherwise a new Club is created.
+/// (case-insensitive) we use it, otherwise a new Club is created. FullName is the person's own name;
+/// without it the name is taken from the start of the username or email.
 /// </summary>
 public record SignupTrainerRequest(
     string Username,
     string Password,
     string? Role = null,
-    string? ClubName = null);
+    string? ClubName = null,
+    string? FullName = null);
 
 /// <summary>Deleting your own account needs the current password again, so a stolen session can't do it.</summary>
 public record DeleteAccountRequest(string Password);

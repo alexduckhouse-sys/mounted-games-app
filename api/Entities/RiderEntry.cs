@@ -12,6 +12,8 @@ public class RiderEntry
     public string FullName { get; set; } = string.Empty;
     public DateTime? DateOfBirth { get; set; }
     public string? HorseName { get; set; }
+    /// <summary>The pony's height in hands, written as a decimal: 13.2 means 13 hands 2 inches.</summary>
+    public decimal? PonyHeightHands { get; set; }
     public string? BibColour { get; set; }
     public bool IsCaptain { get; set; }
     public bool IsReserve { get; set; }

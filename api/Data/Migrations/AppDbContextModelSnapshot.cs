@@ -875,6 +875,16 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("TeamId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("TermsAcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TermsAcceptedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TrainerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SubmittedByUserId");
@@ -1666,6 +1676,10 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("PonyHeightHands")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)");
+
                     b.Property<int?>("SavedRiderId")
                         .HasColumnType("integer");
 
@@ -1718,6 +1732,10 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
+
+                    b.Property<decimal?>("PonyHeightHands")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

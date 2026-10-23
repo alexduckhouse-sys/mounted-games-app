@@ -44,16 +44,54 @@ describe('NeedsYouProvider', () => {
     expect(seen().requests).toEqual([request]);
   });
 
-  it('asks nothing of anyone else', () => {
+  it('counts a team manager\'s club requests too', async () => {
+    mount(['Manager']);
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+    expect(api.get).toHaveBeenCalledWith('/admin/trainer-requests');
+  });
+
+  it('asks nobody else for join requests', () => {
     mount(['Trainer']);
     expect(screen.getByTestId('count')).toHaveTextContent('0');
     expect(api.get).not.toHaveBeenCalledWith('/admin/trainer-requests');
+  });
+
+  it('counts the dec forms still to fill in, from the teams the person looks after', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => ({
+      data: url === '/trainer/my-teams'
+        ? [{ id: 1, needsDeclaration: true }, { id: 2, needsDeclaration: false }, { id: 3 }, { id: 4, needsDeclaration: true }]
+        : url === '/competitions/access' ? [] : {},
+    }));
+    mount(['Trainer']);
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('2'));
+    expect(seen().decForms.map((t) => t.id)).toEqual([1, 4]);
+    expect(seen().teams).toHaveLength(4);
+  });
+
+  it('adds the dec forms to the join requests', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => ({
+      data: url === '/admin/trainer-requests' ? [request] : url === '/trainer/my-teams' ? [{ id: 1, needsDeclaration: true }] : url === '/competitions/access' ? [] : {},
+    }));
+    mount(['Admin']);
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('2'));
+  });
+
+  it('keeps the teams unset when they cannot be loaded', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/trainer/my-teams') throw new Error('offline');
+      return { data: url === '/competitions/access' ? [] : {} };
+    });
+    mount(['Trainer']);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/trainer/my-teams'));
+    expect(screen.getByTestId('count')).toHaveTextContent('0');
+    expect(seen().teams).toBeNull();
   });
 
   it('asks nothing of a visitor', () => {
     mount(null);
     expect(screen.getByTestId('count')).toHaveTextContent('0');
     expect(api.get).not.toHaveBeenCalledWith('/admin/trainer-requests');
+    expect(api.get).not.toHaveBeenCalledWith('/trainer/my-teams');
   });
 
   it('stays at zero if the list cannot be loaded or is not a list', async () => {
