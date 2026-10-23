@@ -58,6 +58,7 @@ export function StructureStep({ draft, change, problems, clear, templates, teamC
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <NumberBox label="Minutes per heat" suffix="min" value={s.minutesPerRace} error={problems[`section.${i}.minutes`]}
+                  hint="How many minutes a single heat takes in the arena."
                   onChange={(minutesPerRace) => { patch(i, { minutesPerRace }); clear(`section.${i}.minutes`); }} />
                 <NumberBox label="Max teams per heat" value={s.maxTeamsPerHeat} error={problems[`section.${i}.heat`]} disabled={locked}
                   hint="Max lanes per heat in the arena."

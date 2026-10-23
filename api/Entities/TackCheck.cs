@@ -1,3 +1,4 @@
+
 namespace MountedGames.Api.Entities;
 
 /// <summary>What a section's tack check counts for.</summary>

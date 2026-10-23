@@ -105,22 +105,39 @@ describe('tack check tab', () => {
     expect(await screen.findByText('1 passed, 1 failed')).toBeInTheDocument();
   });
 
-  it('records points, refuses too many, and shows a failed save', async () => {
-    get.mockResolvedValueOnce({ data: board(section({ mode: 2, maxPoints: 5 })) });
+  it('records per-rider points in a grid, sums rider and team totals, refuses too many, and shows a failed save', async () => {
+    const scoredSection = section({
+      mode: 2, maxPoints: 5,
+      teams: [
+        { ...team(1), riders: ['Amy Archer', 'Ben Brook'] } as TackCheckSection['teams'][number],
+        team(2, { isHorsConcours: true, withdrawn: true }),
+      ],
+    });
+    get.mockResolvedValueOnce({ data: board(scoredSection) });
     put.mockRejectedValueOnce({ response: { data: { title: 'Marks not saved' } } });
     renderTab();
 
     const form = await screen.findByRole('form', { name: 'Team 1' });
-    await userEvent.type(within(form).getByLabelText('Bit'), '7');
+    await userEvent.type(within(form).getByLabelText('Amy Archer Bit'), '7');
     await userEvent.click(within(form).getByRole('button', { name: 'Save Team 1' }));
     expect(within(form).getByRole('alert')).toHaveTextContent('Points go from 0 to 5.');
     expect(put).not.toHaveBeenCalled();
 
-    await userEvent.clear(within(form).getByLabelText('Bit'));
-    await userEvent.type(within(form).getByLabelText('Bit'), '4');
-    expect(within(form).getByText('4 pts')).toBeInTheDocument();
+    await userEvent.clear(within(form).getByLabelText('Amy Archer Bit'));
+    await userEvent.type(within(form).getByLabelText('Amy Archer Bit'), '4');
+    await userEvent.type(within(form).getByLabelText('Amy Archer Boots'), '5');
+    await userEvent.type(within(form).getByLabelText('Ben Brook Bit'), '3');
+    expect(within(form).getByTestId('rider-total-0')).toHaveTextContent('9');
+    expect(within(form).getByTestId('rider-total-1')).toHaveTextContent('3');
+    expect(within(form).getByTestId('team-total')).toHaveTextContent('12 pts');
     await userEvent.click(within(form).getByRole('button', { name: 'Save Team 1' }));
     expect(await within(form).findByText('Marks not saved')).toBeInTheDocument();
+    expect(put).toHaveBeenCalledWith('/event-tools/competitions/12/tack-check/sections/5/teams/1', {
+      marks: [
+        { sectorId: 11, passed: null, points: 7, riderPoints: [4, 3] },
+        { sectorId: 12, passed: null, points: 5, riderPoints: [5, null] },
+      ],
+    });
   });
 
   it('switches between age groups and explains an empty one', async () => {

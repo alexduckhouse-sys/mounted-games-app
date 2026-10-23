@@ -302,6 +302,12 @@ describe('CompetitionEditor: races', () => {
     expect(group).toHaveTextContent('Left for later');
     await userEvent.click(within(group).getByText('Pony Club Zone list for all', { selector: 'button' }));
     expect(group).toHaveTextContent('10 races: Bending, Hollywood Bowl Boule & Bucket…');
+    expect(stored().sections[0].finalRaces).toHaveLength(10);
+    await userEvent.click(screen.getByRole('button', { name: 'Choose races for Finals · Senior Teams' }));
+    const finalsDialog = await screen.findByRole('dialog', { name: 'Races for Finals · Senior Teams' });
+    await userEvent.click(within(finalsDialog).getByRole('button', { name: 'Use Pony Club Area list' }));
+    await userEvent.click(within(finalsDialog).getByRole('button', { name: 'Save race list' }));
+    expect(stored().sections[0].finalRaces).toHaveLength(8);
   });
 
   it('names every session when an age group has several', () => {
@@ -396,13 +402,14 @@ describe('CompetitionEditor: creating', () => {
     });
     expect(api.post).toHaveBeenCalledWith('/competitions/41/sections', expect.objectContaining({ ageGroup: 'Open', displayName: 'Open Teams', usesRaceFinals: true }));
     const sessions = vi.mocked(api.post).mock.calls.filter(([url]) => url === '/competitions/41/sessions').map(([, body]) => body as Record<string, unknown>);
-    expect(sessions.map((s) => s.name)).toEqual(['Junior Individuals · Session 1', 'Junior Individuals · Session 2', 'Open Teams', 'Lunch']);
+    expect(sessions.map((s) => s.name)).toEqual(['Junior Individuals · Session 1', 'Junior Individuals · Session 2', 'Open Teams', 'Finals · Junior Individuals', 'Lunch']);
     expect(sessions[0]).toMatchObject({
       competitionSectionId: 51, arenaName: 'Main arena', kind: 0, lanesPerHeat: 4, minutesPerHeat: 5, plannedRaces: ['Bending', 'Bottle'], scheduledStart: expect.any(String), durationMinutes: expect.any(Number),
     });
     expect(sessions[1].plannedRaces).toEqual([]);
     expect(sessions[2]).toMatchObject({ arenaName: 'Arena 2', minutesPerHeat: 10, lanesPerHeat: 6 });
-    expect(sessions[3]).toMatchObject({ competitionSectionId: null, kind: 1, isBreak: true, durationMinutes: 30, arenaName: null });
+    expect(sessions[3]).toMatchObject({ competitionSectionId: 51, name: 'Finals · Junior Individuals', arenaName: 'Main arena', kind: 0, lanesPerHeat: 4, minutesPerHeat: 5, plannedRaces: [] });
+    expect(sessions[4]).toMatchObject({ competitionSectionId: null, kind: 1, isBreak: true, durationMinutes: 30, arenaName: null });
     // Every session is ordered by when it starts; the first session of a busy arena starts at the event start.
     expect(new Date(sessions[0].scheduledStart as string).getTime()).toBe(new Date('2026-10-24T09:00').getTime());
     expect(stored()).toBeNull();

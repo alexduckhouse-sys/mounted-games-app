@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { api } from '../../api';
 import { competition, heat, race, session } from '../../test/factories';
 import { ArenaPage } from './ArenaPage';
 
@@ -72,4 +73,42 @@ it('keeps the bar when an arena has nothing to run', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Arena 2' }));
   expect(screen.getByText('Nothing currently in the arena.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Arena 1' })).toBeInTheDocument();
+});
+
+it('displays current race and next race with setup diagram, short description and equipment required', async () => {
+  vi.mocked(api.get).mockResolvedValueOnce({
+    data: [
+      {
+        id: 1, name: 'Bending', isBuiltIn: true,
+        summary: 'Weave through five bending poles.',
+        rules: 'Place 5 poles in each lane.',
+        diagramJson: JSON.stringify([{ t: 'pole' }, { t: 'pole' }, { t: 'pole' }, { t: 'pole' }, { t: 'pole' }]),
+      },
+      {
+        id: 2, name: '5 Mug', isBuiltIn: true,
+        summary: 'Move mugs onto alternating poles.',
+        rules: null,
+        diagramJson: JSON.stringify([
+          { t: 'pole', on: [{ t: 'item', kind: 'mug' }] },
+          { t: 'pole', on: [{ t: 'item', kind: 'mug' }] },
+        ]),
+      },
+    ],
+  });
+  show([
+    session(1, {
+      arenaName: 'Arena 1', status: 1, name: 'First arena session',
+      heats: [heat(11, { sessionId: 1, label: 'Heat A', races: [race(1, { name: 'Bending', orderIndex: 1 }), race(2, { name: '5 Mug', orderIndex: 2 })] })],
+    }),
+  ]);
+
+  expect(await screen.findByText('Weave through five bending poles.')).toBeInTheDocument();
+  expect(screen.getByText('5 × Pole')).toBeInTheDocument();
+
+  const nextSection = screen.getByRole('region', { name: 'Next race' });
+  expect(within(nextSection).getByRole('heading', { level: 3, name: '5 Mug' })).toBeInTheDocument();
+  expect(within(nextSection).getByText('Move mugs onto alternating poles.')).toBeInTheDocument();
+  expect(within(nextSection).getByRole('img', { name: 'Arena setup diagram' })).toBeInTheDocument();
+  expect(within(nextSection).getByText('2 × Pole')).toBeInTheDocument();
+  expect(within(nextSection).getByText('2 × Mug')).toBeInTheDocument();
 });

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TACK_SECTORS, TACK_MODES, draftFromMarks, draftTotal, isScored, marksFromDraft, parsePoints, sectorProblem } from './tackCheck';
+import {
+  DEFAULT_TACK_SECTORS, TACK_MODES, defaultRiderSlots, draftFromMarks, draftTotal, isScored, marksFromDraft,
+  marksFromRiderGrid, parsePoints, riderGridFromMarks, riderGridTotal, riderRowTotal, sectorColumnTotal, sectorProblem, teamRiders,
+} from './tackCheck';
 
 describe('tack check helpers', () => {
   it('has the four default sectors and a label for every mode', () => {
@@ -33,5 +36,33 @@ describe('tack check helpers', () => {
     expect(parsePoints('11', 10)).toBe('invalid');
     expect(parsePoints('2.5', 10)).toBe('invalid');
     expect(parsePoints('-1', 10)).toBe('invalid');
+  });
+
+  it('builds a per-rider grid from declared or default slots, sums rows/columns/team total, and validates cells', () => {
+    expect(defaultRiderSlots(2)).toEqual(['Rider 1', 'Rider 2', 'Rider 3', 'Rider 4']);
+    expect(defaultRiderSlots(1)).toEqual(['Rider 1', 'Rider 2']);
+    expect(defaultRiderSlots(3)).toEqual(['Rider 1']);
+    expect(teamRiders({ riders: ['Amy', 'Ben'] })).toEqual(['Amy', 'Ben']);
+    expect(teamRiders({ riders: [] }, 1)).toEqual(['Rider 1', 'Rider 2']);
+
+    const sectors = [{ id: 1, name: 'Bit' }, { id: 2, name: 'Boots' }, { id: 3, name: 'Hat' }];
+    const grid = riderGridFromMarks(sectors, [
+      { sectorId: 1, passed: null, points: 17, riderPoints: [8, 9] },
+      { sectorId: 2, passed: null, points: 6 },
+    ], 2);
+    expect(grid).toEqual({ 1: ['8', '9'], 2: ['6', ''], 3: ['', ''] });
+    expect(riderRowTotal(grid, 0, 10)).toBe(14);
+    expect(riderRowTotal(grid, 1, 10)).toBe(9);
+    expect(sectorColumnTotal(grid, 1, 10)).toBe(17);
+    expect(sectorColumnTotal(grid, 2, 10)).toBe(6);
+    expect(sectorColumnTotal(grid, 99, 10)).toBe(0);
+    expect(riderGridTotal(grid, 10)).toBe(23);
+    expect(marksFromRiderGrid(grid, 10)).toEqual({
+      marks: [
+        { sectorId: 1, passed: null, points: 17, riderPoints: [8, 9] },
+        { sectorId: 2, passed: null, points: 6, riderPoints: [6, null] },
+      ],
+    });
+    expect(marksFromRiderGrid({ 1: ['11', '4'] }, 10)).toEqual({ problem: 'Points go from 0 to 10.' });
   });
 });

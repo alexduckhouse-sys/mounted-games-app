@@ -3,7 +3,11 @@ import { Link } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { Chevron, RefineList, RefineNote, RefineSection } from '../refine/Refine';
-import { MAX_SECTOR_NAME, MAX_TACK_SECTORS, TACK_MODES, draftFromMarks, draftTotal, isScored, marksFromDraft, sectorProblem, type MarkDraft } from '../../lib/tackCheck';
+import {
+  MAX_SECTOR_NAME, MAX_TACK_SECTORS, TACK_MODES, draftFromMarks, isScored, marksFromDraft, marksFromRiderGrid,
+  riderGridFromMarks, riderGridTotal, riderRowTotal, sectorColumnTotal, sectorProblem, teamRiders,
+  type MarkDraft, type RiderGridDraft, type TackTeamWithRiders,
+} from '../../lib/tackCheck';
 import type { TackCheckBoard, TackCheckMode, TackCheckSection, TackCheckTeam } from '../../types';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
@@ -120,7 +124,9 @@ function Marks({ competitionId, section, onSaved }: { competitionId: string; sec
 }
 
 function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: string; section: TackCheckSection; team: TackCheckTeam; onSaved: (s: TackCheckSection) => void }) {
+  const riders = teamRiders(team as TackTeamWithRiders);
   const [draft, setDraft] = useState<Record<number, MarkDraft>>(() => draftFromMarks(section.sectors, team.marks));
+  const [grid, setGrid] = useState<RiderGridDraft>(() => riderGridFromMarks(section.sectors, (team as TackTeamWithRiders).marks, riders.length));
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -131,9 +137,18 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
     setDirty(true); setProblem(null);
   }
 
+  function changeRiderCell(sectorId: number, riderIndex: number, value: string) {
+    setGrid((current) => {
+      const row = [...(current[sectorId] ?? Array.from({ length: riders.length }, () => ''))];
+      row[riderIndex] = value;
+      return { ...current, [sectorId]: row };
+    });
+    setDirty(true); setProblem(null);
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault();
-    const result = marksFromDraft(draft, section.maxPoints);
+    const result = scored ? marksFromRiderGrid(grid, section.maxPoints) : marksFromDraft(draft, section.maxPoints);
     if ('problem' in result) { setProblem(result.problem); return; }
     setBusy(true); setProblem(null);
     try {
@@ -146,21 +161,66 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
   }
 
   const tags = [team.isHorsConcours ? 'HC' : null, team.withdrawn ? 'withdrawn' : null].filter(Boolean).join(', ');
-  const summary = scored ? `${draftTotal(draft, section.maxPoints)} pts` : `${team.passed} passed, ${team.failed} failed`;
+  const teamTotal = riderGridTotal(grid, section.maxPoints);
+  const summary = scored ? `${teamTotal} pts` : `${team.passed} passed, ${team.failed} failed`;
   return <form className="tools-team" onSubmit={save} aria-label={team.teamName} noValidate><fieldset className="tools-fields" disabled={busy}><legend className="sr-only">{team.teamName}</legend>
     <div className="tools-team-head">
       <span><span className="tools-team-name">{team.teamName}</span> <span className="tools-muted">{team.clubName}{tags ? ` (${tags})` : ''}</span></span>
       <span className="tools-muted">{summary}</span>
     </div>
-    <div className="tools-grid">
-      {section.sectors.map((sector) => scored
-        ? <label key={sector.id} className="rf-fld">{sector.name}<NumberField min={0} max={section.maxPoints} value={draft[sector.id]?.points ?? ''} onChange={(event) => change(sector.id, { points: event.target.value })} /></label>
-        : <label key={sector.id} className="rf-fld">{sector.name}
-          <SelectField value={draft[sector.id]?.passed ?? ''} onChange={(event) => change(sector.id, { passed: event.target.value as MarkDraft['passed'] })}>
-            <option value="">Not checked</option><option value="pass">Pass</option><option value="fail">Fail</option>
-          </SelectField>
-        </label>)}
-    </div>
+    {scored ? (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <th scope="col" className="text-left py-1 pr-2">Rider</th>
+              {section.sectors.map((sector) => <th key={sector.id} scope="col" className="text-left py-1 px-1">{sector.name}</th>)}
+              <th scope="col" className="text-right py-1 pl-2">Rider total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {riders.map((riderName, riderIndex) => (
+              <tr key={`${riderIndex}-${riderName}`} className="border-t border-[rgb(var(--mg-rule-soft))]">
+                <th scope="row" className="py-1.5 pr-2 text-left font-medium">{riderName}</th>
+                {section.sectors.map((sector) => (
+                  <td key={sector.id} className="py-1 px-1">
+                    <NumberField
+                      aria-label={`${riderName} ${sector.name}`}
+                      min={0}
+                      max={section.maxPoints}
+                      value={grid[sector.id]?.[riderIndex] ?? ''}
+                      onChange={(event) => changeRiderCell(sector.id, riderIndex, event.target.value)}
+                    />
+                  </td>
+                ))}
+                <td className="py-1.5 pl-2 text-right font-semibold tabular-nums" data-testid={`rider-total-${riderIndex}`}>
+                  {riderRowTotal(grid, riderIndex, section.maxPoints)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-[rgb(var(--mg-rule-soft))] font-semibold">
+              <th scope="row" className="py-1.5 pr-2 text-left">Team total</th>
+              {section.sectors.map((sector) => (
+                <td key={sector.id} className="py-1.5 px-1 tabular-nums">{sectorColumnTotal(grid, sector.id, section.maxPoints)}</td>
+              ))}
+              <td className="py-1.5 pl-2 text-right tabular-nums" data-testid="team-total">{teamTotal} pts</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    ) : (
+      <div className="tools-grid">
+        {section.sectors.map((sector) => (
+          <label key={sector.id} className="rf-fld">{sector.name}
+            <SelectField value={draft[sector.id]?.passed ?? ''} onChange={(event) => change(sector.id, { passed: event.target.value as MarkDraft['passed'] })}>
+              <option value="">Not checked</option><option value="pass">Pass</option><option value="fail">Fail</option>
+            </SelectField>
+          </label>
+        ))}
+      </div>
+    )}
     {problem && <p role="alert" className="tools-error">{problem}</p>}
     <button className="rf-btn rf-btn-primary" disabled={!dirty}>{busy ? 'Saving…' : `Save ${team.teamName}`}</button>
   </fieldset></form>;
