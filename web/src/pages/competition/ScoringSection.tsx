@@ -7,6 +7,8 @@ import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
 import type { PendingPlace } from '../../lib/raceScoring';
 import { RESULT_STATUS, STATUS_CHOICES, effectiveStatus, statusLetter } from '../../lib/resultStatus';
 import { LaneRotationMode, lanesInUse } from '../../lib/lanes';
+import { BibSwatch } from '../../components/BibSwatch';
+import { inLaneOrder } from '../../lib/laneOrder';
 import { displayLaneFor, sitsOutOf, teamForDisplayLane, type LaneRules } from './laneRules';
 
 export type { PendingPlace } from '../../lib/raceScoring';
@@ -157,7 +159,7 @@ export function ScoringSection({
             {onSetStatus && <> For DNS, DNF, retired or a note, use <span className="font-semibold">More</span> under a team.</>}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {heat.entries.map((e) => {
+            {inLaneOrder(heat, activeRaceIdx, laneRules).map((e) => {
               const state = pendingByTeam.get(e.teamId);
               const sat = sitsOutOf(heat, e, activeRaceIdx, laneRules);
               const lane = displayLaneFor(heat, e, activeRaceIdx, laneRules);
@@ -167,6 +169,7 @@ export function ScoringSection({
                     teamName={e.teamName}
                     lane={lane}
                     colour={bibAccent(e.bibColour)}
+                    bibColour={e.bibColour}
                     place={state?.eliminated ? undefined : state?.place}
                     eliminated={state?.eliminated ?? false}
                     letter={state?.eliminated ? statusLetter(true, state.status) ?? 'E' : null}
@@ -317,6 +320,7 @@ interface ScoreTileProps {
   teamName: string;
   lane: number | string;
   colour: string;
+  bibColour?: string | null;
   place?: number;
   eliminated: boolean;
   /** E, DNS, DNF or R for a team that did not finish. */
@@ -329,7 +333,7 @@ interface ScoreTileProps {
 }
 
 function ScoreTile({
-  teamName, lane, colour, place, eliminated, letter, hasNote, disabled, onTap, onSwipeEliminate,
+  teamName, lane, colour, bibColour, place, eliminated, letter, hasNote, disabled, onTap, onSwipeEliminate,
 }: ScoreTileProps) {
   function handlePanEnd(_e: unknown, info: PanInfo) {
     if (disabled) return;
@@ -368,7 +372,10 @@ function ScoreTile({
         >
           {lane}
         </span>
-        <div className="text-sm leading-tight flex-1 min-w-0">{teamName}</div>
+        <div className="text-sm leading-tight flex-1 min-w-0">
+          <div>{teamName}</div>
+          <BibSwatch colour={bibColour} className="mt-0.5" />
+        </div>
         {hasNote && <StickyNote className="w-3.5 h-3.5 shrink-0 opacity-80" aria-label="Has a referee note" />}
       </div>
       {!place && !eliminated && !disabled && (
