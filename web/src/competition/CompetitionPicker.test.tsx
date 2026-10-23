@@ -62,7 +62,7 @@ describe('CompetitionPicker: the list', () => {
     expect(within(onToday).getByText('Today Cup')).toBeInTheDocument();
     expect(within(onToday).getByText('Ashdown · Sat 17 – Sun 18 Oct')).toBeInTheDocument();
     expect(within(onToday).getByText('LIVE')).toBeInTheDocument();
-    expect(within(onToday).getByText('Seniors · Heat 2 on now in Main arena')).toBeInTheDocument();
+    expect(within(onToday).getByText('Senior Teams · Heat 2 on now in Main arena')).toBeInTheDocument();
     expect(within(onToday).getByRole('button', { name: 'Open competition: Today Cup' })).toBeInTheDocument();
     const later = screen.getByRole('region', { name: 'Coming up' });
     expect(within(later).getAllByRole('button').map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'false']);

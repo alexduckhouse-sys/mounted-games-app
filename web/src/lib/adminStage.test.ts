@@ -14,6 +14,13 @@ describe('stageOf', () => {
     expect(stageOf(comp({ sectionCount: 3, teamCount: 12, sessionCount: 4 }), now)).toBe('ready');
   });
 
+  it('does not count sessions that have no heats yet as a timetable', () => {
+    const planned = { sectionCount: 3, teamCount: 12, sessionCount: 4 };
+    expect(stageOf(comp({ ...planned, heatedSessionCount: 0 }), now)).toBe('format');
+    expect(stageOf(comp({ ...planned, teamCount: 0, heatedSessionCount: 0 }), now)).toBe('entries');
+    expect(stageOf(comp({ ...planned, heatedSessionCount: 2 }), now)).toBe('ready');
+  });
+
   it('is live on the day, including the second day of a two-day event', () => {
     const base = { sectionCount: 3, teamCount: 12, sessionCount: 4 };
     expect(stageOf(comp({ ...base, startDate: new Date(2026, 9, 24, 9).toISOString() }), now)).toBe('live');
@@ -35,8 +42,8 @@ describe('stageOf', () => {
 describe('stageAction and stageCounts', () => {
   it('offers the next job for each stage', () => {
     expect(stageAction('live', 4)).toEqual({ label: 'Run day', to: '/competitions/4' });
-    expect(stageAction('format', 4)).toEqual({ label: 'Format', to: '/admin/competitions/4/format' });
-    expect(stageAction('ready', 4).label).toBe('Format');
+    expect(stageAction('format', 4)).toEqual({ label: 'On the day', to: '/admin/competitions/4/format' });
+    expect(stageAction('ready', 4).label).toBe('On the day');
     expect(stageAction('finished', 4)).toEqual({ label: 'Results', to: '/competitions/4/toplists' });
     expect(stageAction('entries', 4)).toEqual({ label: 'Edit', to: '/admin/competitions/4' });
     expect(stageAction('draft', 4).label).toBe('Edit');

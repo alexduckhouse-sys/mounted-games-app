@@ -8,7 +8,8 @@ import { TimetableBoard } from './TimetableBoard';
 
 const state = vi.hoisted(() => ({ value: null as unknown }));
 vi.mock('./context', async (importOriginal) => ({ ...(await importOriginal<typeof import('./context')>()), useCompetition: () => state.value }));
-vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => false }) }));
+const auth = vi.hoisted(() => ({ organise: false }));
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => auth.organise }) }));
 
 const day = dayKey(new Date());
 const reload = vi.fn();
@@ -32,6 +33,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(`${day}T09:00:00`));
   localStorage.clear();
+  auth.organise = false;
   reload.mockClear();
   setCompetition();
 });
@@ -71,7 +73,7 @@ it('uses the count in the group summary when nothing is late', () => {
 it('folds finished groups into one line under a divider and expands them on tap', () => {
   const { container } = renderBoard();
   expect(screen.getByRole('heading', { name: 'Finished today · 1' })).toBeVisible();
-  const folded = screen.getByRole('button', { name: /Seniors · Session 1 · 1 finished/ });
+  const folded = screen.getByRole('button', { name: /Senior Teams · Session 1 · 1 finished/ });
   expect(folded).toHaveAttribute('aria-expanded', 'false');
   expect(screen.queryByText('Heat 3')).toBeNull();
   // Active groups come first, the folded one last.
@@ -79,7 +81,7 @@ it('folds finished groups into one line under a divider and expands them on tap'
 
   fireEvent.click(folded);
   expect(screen.getByText('Heat 3')).toBeVisible();
-  const title = screen.getByRole('button', { name: /Seniors · Session 1/ });
+  const title = screen.getByRole('button', { name: /Senior Teams · Session 1/ });
   expect(title).toHaveAttribute('aria-expanded', 'true');
 
   fireEvent.click(title);
@@ -208,4 +210,19 @@ it('links race rows to their heat and shows the legend', () => {
   renderBoard();
   expect(screen.getByRole('link', { name: /Heat 2/ })).toHaveAttribute('href', '/competitions/1/session/2?heat=22');
   expect(within(screen.getByRole('list', { name: 'Status colours' })).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['On time', 'Late', 'On now', 'Finished']);
+});
+
+it('shows a session with no heats as provisional to organisers, and hides it from everyone else', () => {
+  const planned = session(4, { arenaName: 'Main Arena', name: 'Open Teams', scheduledStart: `${day}T13:00:00`, durationMinutes: 60, orderIndex: 4 });
+  setCompetition({ sessions: [...(state.value as { competition: { sessions: unknown[] } }).competition.sessions, planned] });
+  const { unmount } = renderBoard();
+  expect(screen.queryByText('Heats to follow')).not.toBeInTheDocument();
+  expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  unmount();
+
+  auth.organise = true;
+  renderBoard();
+  const row = screen.getByText('Heats to follow').closest('.tt-row') as HTMLElement;
+  expect(row).toHaveTextContent('Provisional');
+  expect(screen.getByRole('note')).toHaveTextContent('Provisional timetable');
 });

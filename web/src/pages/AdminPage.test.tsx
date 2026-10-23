@@ -195,8 +195,8 @@ describe('admin competitions', () => {
     expect(item('Hartpury Area Festival')).toHaveTextContent('Live');
     expect(item('Hartpury Area Festival')).toHaveTextContent('42');
     expect(within(item('Hartpury Area Festival')).getByRole('link', { name: /Run day/ })).toHaveAttribute('href', '/competitions/1');
-    expect(item('Northern Winter League R1')).toHaveTextContent('Set format');
-    expect(within(item('Northern Winter League R1')).getByRole('link', { name: /Format/ })).toHaveAttribute('href', '/admin/competitions/2/format');
+    expect(item('Northern Winter League R1')).toHaveTextContent('Build timetable');
+    expect(within(item('Northern Winter League R1')).getByRole('link', { name: /On the day/ })).toHaveAttribute('href', '/admin/competitions/2/format');
     expect(item('Christmas Cracker Teams')).toHaveTextContent('Draft');
     expect(within(item('Christmas Cracker Teams')).getByRole('link', { name: /Edit/ })).toHaveAttribute('href', '/admin/competitions/3');
     expect(item('Kelsall Hill Pairs')).toHaveTextContent('Finished');

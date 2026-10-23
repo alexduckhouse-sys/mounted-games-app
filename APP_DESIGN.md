@@ -245,9 +245,11 @@ Lifecycle the app supports today:
 4. **Close signups**: organiser flips `Competition.SignupsLocked` via the
    Details tab or the Format page. The public signup form hides and the
    API rejects new entries; existing signups stay editable.
-5. **Format wizard** (`/admin/competitions/:id/format`): a 3-step page —
-   close signups, auto-form teams from paid signups (with preview), then
-   hand off to the existing editor wizard for sessions/races/lanes.
+5. **On the day** (`/admin/competitions/:id/format`): close signups,
+   auto-form teams from paid signups (with preview), settle race lists, then
+   generate the exact timetable. Sessions, heat-heat-final, minutes and arena
+   are set earlier in the stepped competition creator, which also gives the
+   competition a provisional timetable (`docs/specs/creator-wizard.md`).
 6. **Dec forms**: trainers / team managers fill these in later (or on
    the day) once teams are formed.
 7. **Equipment list** (auto): generated from the formatted comp using

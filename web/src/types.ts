@@ -129,6 +129,8 @@ export interface CompetitionSummary {
   sectionCount: number;
   teamCount: number;
   sessionCount: number;
+  /** Sessions that have heats: the timetable is exact for these. Older API responses leave it out. */
+  heatedSessionCount?: number;
 }
 
 export interface CompetitionPickerItem {
@@ -282,6 +284,8 @@ export interface Session {
   laneRotationMode?: 0 | 1 | 2;
   /** Heat-heat-final: how many teams go through from each qualifier to the final (3 when unset). */
   qualifiersPerHeat?: number | null;
+  /** The races chosen for each heat before any heat exists (the competition creator); null when not chosen. */
+  plannedRaces?: string[] | null;
   heats: Heat[];
 }
 
