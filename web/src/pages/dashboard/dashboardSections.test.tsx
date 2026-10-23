@@ -38,6 +38,7 @@ beforeEach(() => {
   auth.clubId = 7;
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url === '/competitions/1/signups') return { data: [{ status: 0 }, { status: 1 }, { status: 0 }] } as never;
+    if (url === '/competitions/1/dec-form-flags') return { data: [{ teamId: 3, teamName: 'Oak A', declarationFormId: 9, flags: ['Rider is over the weight limit'] }, { teamId: 4, teamName: 'Ash B', declarationFormId: 10, flags: ['Pony is too tall'] }] } as never;
     if (url === '/clubs/7/payouts/summary') return { data: { clubName: 'Stockport PC', maskedAccount: null, ready: false } } as never;
     throw new Error(`unexpected ${url}`);
   });
@@ -52,6 +53,7 @@ describe('Needs you', () => {
     const region = within(screen.getByRole('region', { name: 'Needs you' }));
     expect(region.getByText('Sam Lee')).toBeInTheDocument();
     expect(await region.findByRole('link', { name: /2 entries waiting for payment/ })).toHaveAttribute('href', '/competitions/1/details');
+    expect(await region.findByRole('link', { name: /2 dec forms flagged/ })).toHaveAttribute('href', '/competitions/1/declarations');
     expect(await region.findByRole('link', { name: /Club payouts aren’t ready/ })).toHaveAttribute('href', '/me/payouts');
     expect(region.getByRole('link', { name: /Dec form needed: Oak A/ })).toHaveAttribute('href', '/competitions/4/declarations?team=3');
     await userEvent.click(region.getByRole('button', { name: 'Approve' }));
