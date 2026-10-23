@@ -47,7 +47,9 @@ export function nextRoundLanes(session: Session, heat: Heat, nextHeat: Heat | nu
   const qualifierHeats = round.filter((h) => h.raceRoundStage === 1).sort((a, b) => a.orderIndex - b.orderIndex);
   const final = round.find((h) => h.raceRoundStage === 2);
 
-  if (heat.raceRoundStage === 1 && final && qualifierHeats.length >= 2 && qualifierHeats.every(heatDone)) {
+  // Shown while a qualifier is on screen and, if the final has no teams yet, on the final's own page.
+  const onFinalEmpty = heat.raceRoundStage === 2 && !heatDone(heat) && heat.entries.length === 0;
+  if ((heat.raceRoundStage === 1 || onFinalEmpty) && final && qualifierHeats.length >= 2 && qualifierHeats.every(heatDone)) {
     const label = final.label ?? 'the final';
     if (final.entries.length > 0) return { title: `Lanes for ${label}`, note: null, provisional: false, rows: drawn(final.entries) };
     return {

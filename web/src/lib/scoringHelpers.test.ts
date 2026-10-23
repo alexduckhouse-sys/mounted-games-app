@@ -151,7 +151,7 @@ describe('next round lanes', () => {
     expect(lanes.title).toBe('Lanes for Heat 3');
     expect(lanes.rows.map((r) => r.teamName)).toEqual(['M', 'N']);
     expect(nextRoundLanes(session(1, { heats: [q1, q2, done] }), done, null, 3)).toBeNull();
-    expect(nextRoundLanes(session(1, { heats: [q1, q2, finalHeat()] }), finalHeat(), next, 3)).toBeNull();
+    expect(nextRoundLanes(session(1, { heats: [q1, q2, finalHeat()] }), finalHeat({ entries: entries('A', 'B') }), next, 3)).toBeNull();
   });
 });
 
