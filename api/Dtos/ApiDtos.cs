@@ -322,7 +322,7 @@ public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated, ResultSt
 public record StandingRow(
     int TeamId, string TeamName, string ClubName, string? BibColour,
     int TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null,
-    bool Withdrawn = false);
+    bool Withdrawn = false, int BonusPoints = 0);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,

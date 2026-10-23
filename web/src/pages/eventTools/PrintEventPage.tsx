@@ -3,11 +3,22 @@ import { Link, useParams } from 'react-router-dom';
 import { ChevronLeft, Printer } from 'lucide-react';
 import { api } from '../../api';
 import type { PrintableDraw, PrintableResults, PrintableScoreSheets } from './eventToolsTypes';
+import type { PrintableEntries, ResultsBook } from './resultsBookTypes';
+import { EntriesView, ResultsBookView } from './ResultsBookView';
 import { PosterPage } from './PosterPage';
 import { statusLetter } from '../../lib/resultStatus';
 import './printEvent.css';
 
-type View = 'draw' | 'score-sheets' | 'results';
+/** What each print view loads and is called. The book and entry list are not under /print because they have their own access rules. */
+const VIEWS = {
+  draw: { path: 'print/draw', title: 'Draw and lanes' },
+  'score-sheets': { path: 'print/score-sheets', title: 'Score sheets' },
+  results: { path: 'print/results', title: 'Results' },
+  'results-book': { path: 'results-book', title: 'Results book' },
+  'results-book-organiser': { path: 'results-book/organiser', title: 'Results book: organiser copy' },
+  entries: { path: 'print/entries', title: 'Entry list' },
+} as const;
+type View = keyof typeof VIEWS;
 
 function date(value: string) {
   return new Date(value).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
@@ -25,18 +36,18 @@ function message(error: unknown) {
 export default function PrintEventPage() {
   const { competitionId = '', view: rawView = 'draw' } = useParams();
   if (rawView === 'poster') return <PosterPage key={competitionId} competitionId={competitionId} />;
-  const view = (['draw', 'score-sheets', 'results'].includes(rawView) ? rawView : 'draw') as View;
+  const view = (Object.keys(VIEWS).includes(rawView) ? rawView : 'draw') as View;
   return <PrintView key={`${competitionId}:${view}`} competitionId={competitionId} view={view} />;
 }
 
 function PrintView({ competitionId, view }: { competitionId: string; view: View }) {
-  const [data, setData] = useState<PrintableDraw | PrintableScoreSheets | PrintableResults | null>(null);
+  const [data, setData] = useState<PrintableDraw | PrintableScoreSheets | PrintableResults | ResultsBook | PrintableEntries | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    api.get(`/event-tools/competitions/${competitionId}/print/${view}`)
+    api.get(`/event-tools/competitions/${competitionId}/${VIEWS[view].path}`)
       .then((response) => { if (!cancelled) setData(response.data); })
       .catch((caught) => { if (!cancelled) setError(message(caught)); });
     return () => { cancelled = true; };
@@ -56,12 +67,14 @@ function PrintView({ competitionId, view }: { competitionId: string; view: View 
         <p className="event-print-kicker">Mounted Games</p>
         <h1>{competition.name}</h1>
         <p>{date(competition.startDate)}{competition.location ? ` · ${competition.location}` : ''}</p>
-        <p className="event-print-kind">{view === 'draw' ? 'Draw and lanes' : view === 'score-sheets' ? 'Score sheets' : 'Results'}</p>
+        <p className="event-print-kind">{VIEWS[view].title}</p>
       </header>
 
       {view === 'draw' && <Draw data={data as PrintableDraw} />}
       {view === 'score-sheets' && <ScoreSheets data={data as PrintableScoreSheets} />}
       {view === 'results' && <Results data={data as PrintableResults} />}
+      {(view === 'results-book' || view === 'results-book-organiser') && <ResultsBookView data={data as ResultsBook} />}
+      {view === 'entries' && <EntriesView data={data as PrintableEntries} />}
     </article>
   );
 }

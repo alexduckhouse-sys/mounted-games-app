@@ -39,6 +39,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<ShopComment> ShopComments => Set<ShopComment>();
     public DbSet<ShopReport> ShopReports => Set<ShopReport>();
     public DbSet<CalendarHeatVersion> CalendarHeatVersions => Set<CalendarHeatVersion>();
+    public DbSet<SpecialAward> SpecialAwards => Set<SpecialAward>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {

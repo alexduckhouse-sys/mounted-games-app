@@ -86,6 +86,31 @@ public sealed class PrintableEventService(AppDbContext db)
         return new PrintableResultsDto(ToCompetition(competition), provisional, sections);
     }
 
+    /// <summary>
+    /// Every team of every section with its declared riders and ponies, so the organiser can check the entries
+    /// before the event. Staff only: it shows riders' full names.
+    /// </summary>
+    public async Task<PrintableEntriesDto?> EntriesAsync(int competitionId, CancellationToken ct)
+    {
+        var competition = await db.Competitions.AsNoTracking().AsSplitQuery()
+            .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.Club)
+            .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.DeclarationForms).ThenInclude(x => x.Riders)
+            .SingleOrDefaultAsync(x => x.Id == competitionId, ct);
+        if (competition is null) return null;
+        var sections = competition.Sections.OrderBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id)
+            .Select(section => new PrintableEntriesSectionDto(section.Id, section.DisplayName,
+                section.Teams.OrderBy(t => t.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Id).Select(team =>
+                {
+                    var form = team.DeclarationForms.OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id).FirstOrDefault();
+                    var riders = (form?.Riders ?? []).OrderBy(r => r.IsReserve).ThenBy(r => r.OrderIndex).ThenBy(r => r.Id)
+                        .Select(r => new PrintableEntryRiderDto(r.FullName, string.IsNullOrWhiteSpace(r.HorseName) ? null : r.HorseName.Trim(),
+                            r.IsCaptain, r.IsReserve, r.IsGuestRider)).ToArray();
+                    return new PrintableEntryTeamDto(team.Id, team.DisplayName, team.Club?.Name ?? string.Empty,
+                        team.BibDescription ?? team.BibColour, team.EntryStatus != TeamEntryStatus.Active, team.IsHorsConcours, riders);
+                }).ToArray())).ToArray();
+        return new PrintableEntriesDto(ToCompetition(competition), sections);
+    }
+
     /// <summary>Only race sessions have a draw and score sheets; breaks, briefings and custom items don't.</summary>
     private static bool IsRace(Session s) => s.Kind == SessionKind.Race && !s.IsBreak;
 
