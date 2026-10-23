@@ -8,8 +8,13 @@ import { api } from '../../api';
 import type { Club, DeclarationForm, Team } from '../../types';
 import { displaySectionName } from '../../lib/section';
 import { SelectField } from '../../components/SelectField';
+import { PageGrid } from '../../components/PageGrid';
+import { usePageWidth } from '../../components/pageWidthState';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
 
 export function TeamsTab() {
+  usePageWidth('wide');
+  const desktop = useIsDesktop();
   const { competition, reload } = useCompetition();
   const { favourites, error: favouriteError, toggle } = useFavourites();
   const followed = new Set(favourites.filter((item) => item.competitionId === competition.id).map((item) => item.teamId));
@@ -87,33 +92,32 @@ export function TeamsTab() {
 
   const canCreate = hasRole('Trainer') || hasRole('Admin');
 
-  return (
-    <div className="space-y-4">
-      <Link className="mg-btn mg-btn-secondary" to="../following"><Star className="h-4 w-4" />View followed teams</Link>
-      {favouriteError && <p role="alert" className="mg-notice">{favouriteError}</p>}
-      <div className="card p-3 flex flex-wrap gap-2 items-center">
-        <button
-          onClick={() => setSectionId('all')}
-          className={`pill ${sectionId === 'all' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700'}`}
-        >
-          All sections
-        </button>
-        {competition.sections.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => setSectionId(s.id)}
-            className={`pill ${sectionId === s.id ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700'}`}
-          >
-            {s.displayName}
-          </button>
-        ))}
-        {canCreate && (
-          <button onClick={() => setShowForm((s) => !s)} className="btn-primary !py-2 ml-auto">
-            <Plus className="w-4 h-4" /> {showForm ? 'Close' : 'Add custom team'}
-          </button>
-        )}
+  const addButton = canCreate && (
+    <button onClick={() => setShowForm((s) => !s)} className="btn-primary !py-2">
+      <Plus className="w-4 h-4" /> {showForm ? 'Close' : 'Add custom team'}
+    </button>
+  );
+  const sectionRail = (
+    <nav aria-label="Sections" className="flex flex-col gap-3">
+      <div className="mg-card overflow-hidden">
+        <h2 className="mg-display border-b-2 border-[rgb(var(--mg-heading))] px-3 py-2 text-[15px] font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-heading))]">Sections</h2>
+        <ul className="m-0 list-none p-0">
+          {([['all', 'All sections', competition.teams.length], ...competition.sections.map((sec) => [sec.id, sec.displayName, competition.teams.filter((t) => t.competitionSectionId === sec.id).length])] as [number | 'all', string, number][]).map(([id, label, count]) => (
+            <li key={id} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
+              <button type="button" aria-pressed={sectionId === id} onClick={() => setSectionId(id)}
+                className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-[15px] ${sectionId === id ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`}>
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+                <span className="shrink-0 text-xs text-[rgb(var(--mg-muted))]">{count}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
-
+      {addButton}
+    </nav>
+  );
+  const teamBlocks = (
+    <>
       {showForm && canCreate && (
         <form onSubmit={submit} className="card p-5 grid sm:grid-cols-12 gap-3">
           <label className="sm:col-span-5">
@@ -231,6 +235,45 @@ export function TeamsTab() {
           </div>
         </div>
       ))}
+
+    </>
+  );
+
+  return (
+    <div className="space-y-4">
+      <Link className="mg-btn mg-btn-secondary" to="../following"><Star className="h-4 w-4" />View followed teams</Link>
+      {favouriteError && <p role="alert" className="mg-notice">{favouriteError}</p>}
+      {desktop ? (
+        <PageGrid variant="left" aside={sectionRail}>
+          <div className="space-y-4">
+            {teamBlocks}
+          </div>
+        </PageGrid>
+      ) : (
+        <>
+      <div className="card p-3 flex flex-wrap gap-2 items-center">
+          <button
+            onClick={() => setSectionId('all')}
+            className={`pill ${sectionId === 'all' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+          >
+            All sections
+          </button>
+          {competition.sections.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setSectionId(s.id)}
+              className={`pill ${sectionId === s.id ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+            >
+              {s.displayName}
+            </button>
+          ))}
+          {canCreate && <span className="ml-auto">{addButton}</span>}
+        </div>
+
+
+          {teamBlocks}
+        </>
+      )}
     </div>
   );
 }
