@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { ChevronDown, MoreHorizontal } from 'lucide-react';
+import { Dropdown, type DropdownOption } from '../../components/Dropdown';
 
 /** A part of a laptop page: a navy rule with the title in Barlow Condensed capitals, and anything small on the right. */
 export function PartHead({ id, title, meta, alert }: { id: string; title: string; meta?: ReactNode; alert?: boolean }) {
@@ -45,5 +46,17 @@ export function MoreMenu({ label, items }: { label: string; items: MenuItem[] })
         </ul>
       )}
     </div>
+  );
+}
+
+/** A drop-down that looks like the form fields on Create competition. */
+export function FieldDrop({ label, value, options, onChange, className = '' }: { label: string; value: string; options: DropdownOption[]; onChange: (value: string) => void; className?: string }) {
+  const shown = options.find((o) => o.value === value)?.label ?? value;
+  return (
+    <Dropdown label={label} value={value} options={options} onChange={onChange} className={className}
+      buttonClassName="flex min-h-11 w-full items-center gap-2 rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-3 text-left text-[15px] font-medium">
+      <span className="min-w-0 flex-1 truncate">{shown || 'Choose'}</span>
+      <ChevronDown className="h-4 w-4 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
+    </Dropdown>
   );
 }

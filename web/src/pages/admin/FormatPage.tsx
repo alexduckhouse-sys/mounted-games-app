@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom';
 import { Check, ChevronDown, ChevronRight, Lock, Plus, Trash2, Unlock } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { Dropdown, type DropdownOption } from '../../components/Dropdown';
 import { competitionDateText } from '../../lib/competitionDates';
 import { defaultRaceList } from '../../lib/defaultRaces';
 import { defaultEventStart, describeHeats, heatSizes, planTimetable, type PlanRow } from '../../lib/formatPlan';
@@ -12,7 +11,7 @@ import { loadRaceTemplates } from '../../lib/raceTemplates';
 import { formatTime } from '../../lib/time';
 import type { CompetitionDetail, CompetitionSection, FormTeamsResult, SectionSignup, Session } from '../../types';
 import { SectionFormatLabel, SessionKind } from '../../types';
-import { PartHead } from './LaptopParts';
+import { FieldDrop, PartHead } from './LaptopParts';
 import { RaceListDialog } from './RaceListDialog';
 
 const DEFAULT_MINUTES = 10;
@@ -25,18 +24,6 @@ const message = (e: unknown, fallback: string) => {
 
 const isRace = (s: Session) => (s.kind ?? (s.isBreak ? SessionKind.Break : SessionKind.Race)) === SessionKind.Race;
 const hasScores = (s: Session) => s.status !== 0 || s.heats.some((h) => h.races.some((r) => r.isComplete));
-
-/** A drop-down that looks like the form fields on Create competition. */
-function FieldDrop({ label, value, options, onChange, className = '' }: { label: string; value: string; options: DropdownOption[]; onChange: (value: string) => void; className?: string }) {
-  const shown = options.find((o) => o.value === value)?.label ?? value;
-  return (
-    <Dropdown label={label} value={value} options={options} onChange={onChange} className={className}
-      buttonClassName="flex min-h-11 w-full items-center gap-2 rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-3 text-left text-[15px] font-medium">
-      <span className="min-w-0 flex-1 truncate">{shown || 'Choose'}</span>
-      <ChevronDown className="h-4 w-4 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-    </Dropdown>
-  );
-}
 
 /**
  * Format, after entries close: close signups, form teams, then set up each age group's sessions (arena, races, minutes)
