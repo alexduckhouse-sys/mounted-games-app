@@ -613,6 +613,7 @@ export interface ScorerSession {
   arenaName: string;
   expiresAt: string;
   sessions: Session[];
+}
 
 /** 0 headline, 1 major, 2 supporter. */
 export type SponsorTier = 0 | 1 | 2;
