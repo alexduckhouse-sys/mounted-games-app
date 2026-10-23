@@ -12,6 +12,8 @@ interface AuthContextValue {
   /** `username` is the email; `fullName` is the person's own name (without it the API uses the start of the email). */
   signupTrainer: (username: string, password: string, role?: string, clubName?: string, fullName?: string) => Promise<void>;
   logout: () => void;
+  /** True from a deliberate sign-out until the next sign-in, so protected pages can send the person somewhere public rather than to the sign-in page. */
+  signedOut: boolean;
   hasRole: (role: Role) => boolean;
   /**
    * Admin "Edit mode" — when off, admin gets the public-view UI without write
@@ -69,6 +71,7 @@ const EDITOR_MODE_KEY = 'mg.adminEditorMode';
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<StoredAuth | null>(() => readStoredAuth());
   const [loading, setLoading] = useState(false);
+  const [signedOut, setSignedOut] = useState(false);
   const [notice, setNotice] = useState<{ token: string; kind: 'requested' | 'approved' } | null>(null);
   const token = auth?.token ?? null;
   const pendingApproval = auth?.user.roles.some((role) => role === 'TrainerRequest' || role === 'ManagerRequest') ?? false;
@@ -119,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data } = await api.post<StoredAuth>('/auth/login', { email, password });
       writeStoredAuth(data);
       setAuth(data);
+      setSignedOut(false);
     } finally {
       setLoading(false);
     }
@@ -130,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data } = await api.post<StoredAuth>('/auth/admin-key', { key });
       writeStoredAuth(data);
       setAuth(data);
+      setSignedOut(false);
     } finally {
       setLoading(false);
     }
@@ -143,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       writeStoredAuth(data);
       setAuth(data);
+      setSignedOut(false);
       setNotice(data.user.roles.some((role) => role === 'TrainerRequest' || role === 'ManagerRequest') ? { token: data.token, kind: 'requested' } : null);
     } finally {
       setLoading(false);
@@ -153,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     writeStoredAuth(null);
     setAuth(null);
     setEditorModeState(false);
+    setSignedOut(true);
   }, []);
 
   const user: UserProfile | null = useMemo(() => {
@@ -209,6 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithAdminKey,
     signupTrainer,
     logout,
+    signedOut,
     hasRole,
     editorMode,
     setEditorMode,
