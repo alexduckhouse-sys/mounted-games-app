@@ -4,6 +4,50 @@ The cross-chat to-do list, confirmed product specifications, code-verified bugs,
 
 **This file, `BUGS.md` and `COMPLETED_NEXT_STEPS.md` live in git on main.** Edit them on your feature branch (or a small docs PR), not in an uncommitted copy in another worktree. Move finished items to `COMPLETED_NEXT_STEPS.md` once their PR is merged.
 
+## Start here: after the 23 October walkthrough
+
+On 23 October the user walked through creating a competition on production and reported findings live. Chat c5406079 turned them into PRs #105–#124, all merged with CI green; every migration ran on Neon first, each after a backup branch. Streaming is switched on (new Cloudflare SFU app; TURN not set up).
+
+**Decisions taken in the walkthrough** (don't relitigate):
+- Admin **edit mode is removed** entirely; destructive actions use the red full-screen `ConfirmDialog`, never `window.confirm`.
+- No "Demo event" labels anywhere (only the user uses the site); demo events count in stats.
+- `/events` is the one competition picker; Forget clears the saved competition; `/` jumps into a competition only when the user chose Remember.
+- A new competition is **entry-first**: until teams are drawn the public sees only the entry page and Details.
+- Competitions are created in a **stepped wizard** (structure, timing, HHF, hatbands and races up front, races skippable); the Format page is now **On the day**.
+- Section names are age group first: "Junior Individuals", "Novice Pairs".
+- **Club payouts** are a mock of provider onboarding owned by the club; only masked bank details are stored.
+- **Dec forms** are set per competition. New competitions start minimal: pony name and rider name per rider, trainer name and **trainer phone** per team. Organisers add parts and custom number rules (a breach is allowed but flagged).
+- HC teams are left out of race finals as well as standings.
+
+**1. Check in a browser first.** No agent had a browser, so nobody has seen these yet:
+- [ ] Live & stream, including **Go live from this device** on a phone, and the organiser laptop layout
+- [ ] Creator wizard, On the day, and the provisional timetable
+- [ ] Scoring page: lane order, team colours, stacked races, Undo, elimination reasons, between-race summary, HHF next lanes, Print heat table
+- [ ] Admin dashboard on Me, approvals (fixed in #123), and the red confirm dialog
+- [ ] Dec form setup and a submitted dec form with trainer phone
+- [ ] Timetable, event shop and events picker at full laptop width, and at phone width
+
+**2. Carry on with the walkthrough.** The user got to about section C of the checklist in chat c5406079 (create, entries, payment). Still to do: dec forms, Readiness & draw, event tools, then event day (scoring, Arena, scorer links, finals, toplists, Live & stream, Following), then account and themes, then delete "TEST COMP1". After that the planned phase 2: Claude goes through every page with Playwright.
+
+**3. Pages the user hasn't reviewed yet.** No feedback given on these:
+- Public: `/competitions/past`, `/stats/:kind` (rider, pony, team and club profiles), `/seasons/:id`, `/team-profiles` and `/team-profiles/:id`, `/following`, `/shop`, `/privacy`, `/unsubscribe`, `/login`
+- Competition tabs: Toplists, Arena, Teams, Following, Rulebooks, Sponsors, event Shop
+- Organiser: Readiness & draw (`operations`), Broadcast, Produce, `shop/manage`, `/event-tools/:id` (import, duplicate, print sheets, results book, tack and passport checks), the print views and the venue poster
+- Account: `/me/account`, `/me/signups` and the test payment page, `/me/catalogue`, `/me/orders`, `/me/members`, `/me/payouts` (new), `/teams` (My teams), `/declarations` index, `/confirm-email` (new)
+- Scorer link page `/score`, and the embed widget
+
+**4. Laptop layouts not done in #124:** Teams side drawer, Seasons filters, team profile in two columns, the scoring heat table beside the race stack, and `shop/manage`, `/me/catalogue`, `/me/orders`, rulebooks and members (still a centred column). `DataTable` exists but nothing uses it yet.
+
+**5. Security follow-ups** from the review of #113, #114 and #116 (all low):
+- [ ] Payouts: allow clearing the responsible person's date of birth; the privacy page should also mention the stored sort code and account holder name.
+- [ ] Payouts: pin the paying club on the competition before real money moves (it follows the creator's current club today).
+- [ ] Show "Pay to …" on the entry page only to signed-in users.
+- [ ] `IsClubManagerAsync` trusts the Manager role in the token; re-check it against the database, as `ClubPayoutsController.ScopeAsync` does.
+
+**6. Optional:** a TURN key for streaming on weak 4G (`Streaming__Cloudflare__TurnKeyId` is set, its `TurnKeyApiToken` isn't), a tutorial mode for scoring, and `window.prompt`/`alert` left in ShopPage, ChatTab, TimetableManagement and `useTeamNotifications`.
+
+**7. Housekeeping:** Neon has 9 of 10 branches (backups from 23 October); delete older ones once tonight's changes have settled. Remove the merged agent branches and worktrees (`.claude/worktrees/agent-*`). A stash entry `creator-wip-1` is safe to drop.
+
 ## Who owns what (22 October, evening)
 
 Check this before taking an item, and add yourself here when you start one.
