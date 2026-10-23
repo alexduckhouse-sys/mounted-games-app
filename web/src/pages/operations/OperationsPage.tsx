@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { usePageWidth } from '../../components/pageWidthState';
 import { MoreHorizontal } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
@@ -46,6 +47,7 @@ function OperationsPageContent() {
   const canWrite = true; // anyone who can organise this competition may change it; the API decides
   const { competition, reload: reloadCompetition } = useCompetition();
   const wide = useWideScreen();
+  usePageWidth(wide ? 'wide' : 'default');
   const [view, setView] = useState<View>('checks');
   const [sheet, setSheet] = useState<Sheet>(null);
   const [readiness, setReadiness] = useState<CompetitionReadiness | null>(null);
