@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  defaultDraft, defaultSection, firstProblemStep, hatbandsFor, laneCount, isLocked, MAX_SESSIONS, minutesOf, heatSizeOf, newSessionName, parseFinalistCount, parseMaxParticipants,
+  defaultDraft, defaultSection, finalistCountOf, firstProblemStep, hatbandsFor, laneCount, isLocked, MAX_SESSIONS, minutesOf, heatSizeOf, newSessionName, parseFinalistCount, parseMaxParticipants,
   priceGbpToMinor, readDraft, resizeSessions, sectionLocked, sectionName, setFormat, setRaceFinals, STEP_IDS, validateStep, wholeNumber,
   type CreatorDraft,
 } from './creatorDraft';
@@ -46,9 +46,14 @@ describe('structure helpers', () => {
     expect(setRaceFinals(hhf, false).usesRaceFinals).toBe(false);
   });
 
-  it('changes the heat size with the format only while it is the default', () => {
+  it('changes the heat size and default finalist count with the format only while they are the default', () => {
     expect(setFormat(defaultSection(), 1)).toMatchObject({ format: 1, maxTeamsPerHeat: '4' });
-    expect(setFormat({ ...defaultSection(), maxTeamsPerHeat: '5' }, 1).maxTeamsPerHeat).toBe('5');
+    expect(setFormat({ ...defaultSection(), finalistCount: '6' }, 1)).toMatchObject({ format: 1, maxTeamsPerHeat: '4', finalistCount: '4' });
+    expect(setFormat({ ...defaultSection(), maxTeamsPerHeat: '5', finalistCount: '8' }, 1)).toMatchObject({ maxTeamsPerHeat: '5', finalistCount: '8' });
+    expect(finalistCountOf(defaultSection())).toBe(6);
+    expect(finalistCountOf(defaultSection(1))).toBe(4);
+    expect(finalistCountOf({ ...defaultSection(), maxTeamsPerHeat: '5' })).toBe(5);
+    expect(finalistCountOf({ ...defaultSection(), finalistCount: '12' })).toBe(12);
   });
 
   it('reads what was typed', () => {

@@ -1,5 +1,5 @@
 import { describeHeats } from '../../../lib/formatPlan';
-import { MAX_SESSIONS, resizeSessions, sectionLocked, sectionName, setRaceFinals, type CreatorDraft, type SectionDraft } from '../../../lib/creatorDraft';
+import { lanesFor, MAX_SESSIONS, resizeSessions, sectionLocked, sectionName, setRaceFinals, type CreatorDraft, type SectionDraft } from '../../../lib/creatorDraft';
 import { durationText, estimateText, sectionEstimate } from '../../../lib/creatorPlan';
 import { HatbandEditor } from './Hatbands';
 import { NumberBox, SelectBox, StepIntro, TextBox, type StepProps } from './parts';
@@ -45,7 +45,8 @@ export function StructureStep({ draft, change, problems, clear, templates, teamC
                   hint={s.usesRaceFinals ? 'Heat, heat, final uses one session.' : 'Each session is a block of heats on the timetable.'}>
                   {Array.from({ length: MAX_SESSIONS }, (_, n) => <option key={n} value={n + 1}>{n + 1}</option>)}
                 </SelectBox>
-                <NumberBox label="Teams through to the final" placeholder="Not set" value={s.finalistCount} error={problems[`section.${i}.finalists`]} disabled={locked}
+                <NumberBox label="Teams through to the final" placeholder={s.maxTeamsPerHeat || String(lanesFor(s.format))} value={s.finalistCount} error={problems[`section.${i}.finalists`]} disabled={locked}
+                  hint={`Defaults to heat size (${s.maxTeamsPerHeat || lanesFor(s.format)}).`}
                   onChange={(finalistCount) => { patch(i, { finalistCount }); clear(`section.${i}.finalists`); }} />
               </div>
 
@@ -59,6 +60,7 @@ export function StructureStep({ draft, change, problems, clear, templates, teamC
                 <NumberBox label="Minutes per race" suffix="min" value={s.minutesPerRace} error={problems[`section.${i}.minutes`]}
                   onChange={(minutesPerRace) => { patch(i, { minutesPerRace }); clear(`section.${i}.minutes`); }} />
                 <NumberBox label="Max teams per heat" value={s.maxTeamsPerHeat} error={problems[`section.${i}.heat`]} disabled={locked}
+                  hint="Max lanes per heat in the arena."
                   onChange={(maxTeamsPerHeat) => { patch(i, { maxTeamsPerHeat }); clear(`section.${i}.heat`); }} />
                 <TextBox label="Arena" value={s.arena} error={problems[`section.${i}.arena`]} hint="Same arena: one after another. Different arenas run side by side."
                   onChange={(arena) => { patch(i, { arena }); clear(`section.${i}.arena`); }} />

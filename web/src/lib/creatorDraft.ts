@@ -102,10 +102,10 @@ export function hatbandsFor(draft: Pick<CreatorDraft, 'sections' | 'laneHatbands
   return Array.from({ length: laneCount(draft.sections) }, (_, i) => draft.laneHatbands[i]?.trim() || HATBAND_COLOURS[i % HATBAND_COLOURS.length]);
 }
 
-export function defaultSection(): SectionDraft {
+export function defaultSection(format: Format = 2): SectionDraft {
   return {
-    format: 2, ageGroup: 'Seniors', priceGbp: '', maxParticipants: '', usesRaceFinals: false, finalistCount: '', runoffRaceName: '',
-    minutesPerRace: String(DEFAULT_MINUTES), maxTeamsPerHeat: String(lanesFor(2)), arena: MAIN_ARENA, sessions: [{ races: null }],
+    format, ageGroup: 'Seniors', priceGbp: '', maxParticipants: '', usesRaceFinals: false, finalistCount: '', runoffRaceName: '',
+    minutesPerRace: String(DEFAULT_MINUTES), maxTeamsPerHeat: String(lanesFor(format)), arena: MAIN_ARENA, sessions: [{ races: null }],
   };
 }
 
@@ -144,10 +144,13 @@ export function setRaceFinals(section: SectionDraft, on: boolean): SectionDraft 
   return on ? resizeSessions(next, 1) : next;
 }
 
-/** Changing the format re-bases the heat size when it is still the default for the old format. */
+/** Changing the format re-bases the heat size and finalist count when they are still the default for the old format. */
 export function setFormat(section: SectionDraft, format: Format): SectionDraft {
-  const heat = section.maxTeamsPerHeat === String(lanesFor(section.format)) ? String(lanesFor(format)) : section.maxTeamsPerHeat;
-  return { ...section, format, maxTeamsPerHeat: heat };
+  const oldDefault = String(lanesFor(section.format));
+  const nextDefault = String(lanesFor(format));
+  const heat = section.maxTeamsPerHeat === oldDefault ? nextDefault : section.maxTeamsPerHeat;
+  const finalists = section.finalistCount === oldDefault ? nextDefault : section.finalistCount;
+  return { ...section, format, maxTeamsPerHeat: heat, finalistCount: finalists };
 }
 
 // ---- Reading what was typed ----
@@ -174,6 +177,7 @@ export function parseFinalistCount(input: string): number | null {
 export const wholeNumber = (input: string): number | null => (/^\d+$/.test(input.trim()) ? parseInt(input, 10) : null);
 export const minutesOf = (s: SectionDraft) => wholeNumber(s.minutesPerRace) ?? DEFAULT_MINUTES;
 export const heatSizeOf = (s: SectionDraft) => wholeNumber(s.maxTeamsPerHeat) ?? lanesFor(s.format);
+export const finalistCountOf = (s: SectionDraft) => parseFinalistCount(s.finalistCount) ?? heatSizeOf(s);
 
 // ---- Validation, one step at a time ----
 
