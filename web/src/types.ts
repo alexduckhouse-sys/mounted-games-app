@@ -314,6 +314,8 @@ export interface CompetitionDetail {
   isDemo?: boolean;
   /** The organiser's terms and conditions as plain text; empty means the sign-up form shows a placeholder. */
   termsText?: string | null;
+  /** Hatband colour for each lane, lane 1 first. Missing or null when the organiser hasn't set any. */
+  laneHatbands?: string[] | null;
   /** Where entry fees are paid out: the organiser's club and its masked account. Public, no personal data. */
   payoutsTo?: PayoutsTo | null;
 }

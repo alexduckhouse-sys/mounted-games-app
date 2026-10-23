@@ -5,22 +5,24 @@ import {
   ChevronLeft, Coffee, Wand2, X, Clock, ClipboardList, Users, CheckCircle2,
 } from 'lucide-react';
 import { useCompetition } from './context';
-import { RulesLink } from './RulesLink';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { DeclarationForm, Heat, Session } from '../../types';
-import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
+import type { QueuedScore } from '../../offline/scoreOutbox';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
 import { ScoringSection } from './ScoringSection';
 import { bibAccent } from '../../lib/bib';
 import { enqueue, placingsOf } from '../../offline/scoreOutbox';
+import { nextRoundLanes } from '../../lib/nextRoundLanes';
+import { sessionPointsBase, withQueuedResults } from '../../lib/queuedView';
+import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../../lib/scoreUndo';
 import {
-  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, setNote, setStatus, tapTeam, toggleEliminated,
+  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
   writeScoringDraft, type PendingPlace,
 } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
-import { LANE_ROTATION_LABELS, LaneRotationMode, lanesInUse, type LaneRotationModeValue } from '../../lib/lanes';
+import { LANE_ROTATION_LABELS, LaneRotationMode, type LaneRotationModeValue } from '../../lib/lanes';
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
 import { useRaceNotes } from './useRaceNotes';
 
@@ -50,7 +52,7 @@ export function SessionPage() {
   const requestedHeat = Number(searchParams.get('heat'));
   const sid = sessionId ? parseInt(sessionId, 10) : null;
   const { competition, reload } = useCompetition();
-  const { canManage } = useAuth();
+  const { canManage, canOrganise } = useAuth();
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const session = useMemo<Session | null>(
@@ -61,7 +63,7 @@ export function SessionPage() {
   const sessionBase = useMemo(() => {
     if (!session) return 0;
     // A heat with more teams than lanes races only the lanes, so points are out of the lanes, not the teams.
-    return session.heats.reduce((m, h) => Math.max(m, lanesInUse(h.entries.length, session.lanesPerHeat)), 0);
+    return sessionPointsBase(session.heats, session.lanesPerHeat);
   }, [session]);
 
   const orderedHeats = useMemo(
@@ -78,10 +80,9 @@ export function SessionPage() {
   const [activeRaceId, setActiveRaceId] = useState<number | null>(null);
   const [correctionReasons, setCorrectionReasons] = useState<Record<number, string>>({});
   const outbox = useScoreOutbox();
-  const [showResults, setShowResults] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
-  const [showLaneView, setShowLaneView] = useState(false);
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [decForms, setDecForms] = useState<DeclarationForm[]>([]);
 
   useEffect(() => {
@@ -115,7 +116,7 @@ export function SessionPage() {
     // UI shows "Select a race" and the admin can re-score by clicking a race tab.
     const preferred = preferredRaceRef.current;
     preferredRaceRef.current = null;
-    const nextRace = orderedRaces.find((r) => r.id === preferred && !r.isComplete) ?? orderedRaces.find((r) => !r.isComplete) ?? null;
+    const nextRace = orderedRaces.find((r) => r.id === preferred) ?? orderedRaces.find((r) => !r.isComplete) ?? null;
     setActiveRaceId(nextRace?.id ?? null);
   }, [activeHeat, orderedRaces]);
 
@@ -176,6 +177,23 @@ export function SessionPage() {
     }
   }
 
+  // Saves still waiting on this phone are shown as if sent, so the summary, table and next lanes don't wait for signal.
+  const viewHeats = useMemo(() => orderedHeats.map((h) => withQueuedResults(h, outbox, sessionBase)), [orderedHeats, outbox, sessionBase]);
+  const viewHeat = viewHeats.find((h) => h.id === activeHeatId) ?? null;
+  const viewRaces = useMemo(() => (viewHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex), [viewHeat]);
+  const hcTeamIds = useMemo(() => new Set(competition.teams.filter((t) => t.isHorsConcours).map((t) => t.id)), [competition.teams]);
+  // The private reasons for the race the announcer card is about: saved ones from the server, then any still waiting on this phone.
+  const summaryRace = [...viewRaces].reverse().find((r) => r.isComplete && r.id !== activeRaceId) ?? null;
+  const summarySaved = orderedRaces.find((r) => r.id === summaryRace?.id);
+  const savedReasons = useRaceNotes(
+    summaryRace?.id ?? null, canManage(competition) && summarySaved?.isComplete === true,
+    summarySaved?.results.map((r) => `${r.teamId}:${r.placing}:${r.status ?? 0}`).join(',') ?? '');
+  const summaryNotes = useMemo(() => {
+    const queued = outbox.find((q) => q.raceId === summaryRace?.id);
+    const waiting = Object.fromEntries((queued?.places ?? []).filter((p) => p.refereeNote).map((p) => [p.teamId, p.refereeNote as string]));
+    return { ...savedReasons, ...waiting };
+  }, [outbox, summaryRace?.id, savedReasons]);
+
   if (!session) {
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col items-start gap-3 pt-4">
@@ -213,29 +231,38 @@ export function SessionPage() {
   // and tapping one of those marks it eliminated instead (0 points).
   const qualifierCap = activeHeat?.raceRoundStage === 1 ? qualifiersOf(session) : null;
 
-  function clickTeam(teamId: number) {
+  // Each tap, swipe or Clear can be undone, so the placings before it are kept.
+  function changePending(change: (current: PendingPlace[]) => PendingPlace[]) {
     if (!activeRace) return;
-    setPending((cur) => tapTeam(cur, teamId, qualifierCap));
+    const before = pendingState.edited ? pendingState.places : savedPlaces;
+    setUndoStack((stack) => pushUndo(stack, { kind: 'draft', raceId: activeRace.id, places: before }));
+    setPending(change);
+  }
+
+  function clickTeam(teamId: number) {
+    changePending((cur) => tapTeam(cur, teamId, qualifierCap));
   }
 
   function toggleElim(teamId: number) {
-    setPending((cur) => toggleEliminated(cur, teamId));
+    changePending((cur) => toggleEliminated(cur, teamId));
   }
 
-  function changeStatus(teamId: number, status: number) {
-    setPending((cur) => setStatus(cur, teamId, status));
+  function resetPending() { changePending(() => []); }
+
+  // Marks a team hors concours, or brings it back. The event reloads so standings and the summary follow at once.
+  async function setHc(teamId: number, hc: boolean) {
+    try {
+      await api.put(`/competitions/${competition.id}/teams/${teamId}`, { isHorsConcours: hc });
+      setSaveError(null);
+      reload();
+    } catch {
+      setSaveError('Couldn’t change hors concours. Try again.');
+    }
   }
-
-  function changeNote(teamId: number, note: string) {
-    setPending((cur) => setNote(cur, teamId, note));
-  }
-
-  function resetPending() { setPending([]); }
-
 
   // Results go into this phone's outbox and send when there's signal, so the
-  // scorer can move straight on to the next race.
-  function submit() {
+  // scorer can move straight on to the next race. `places` carries the reasons when the sheet asked for them.
+  function submit(places: PendingPlace[] = pending) {
     if (!activeRace || !activeHeat || !session) return;
     const reason = correctionReasons[activeRace.id]?.trim();
     if ((activeRace.results.length > 0 || outbox.some((item) => item.raceId === activeRace.id)) && !reason) {
@@ -243,21 +270,24 @@ export function SessionPage() {
       return;
     }
     const heatIndex = orderedHeats.findIndex((h) => h.id === activeHeat.id);
-    const stored = updateOutbox((list) => enqueue(list, {
+    const item: QueuedScore = {
       saveId: crypto.randomUUID(),
       reason,
       raceId: activeRace.id,
       competitionId: session.competitionId,
       sessionId: session.id,
       label: `${activeHeat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
-      places: [...pending, ...restOfQualifier(activeHeat, pending), ...sitOutPlaces(activeHeat, orderedRaces.findIndex((r) => r.id === activeRace.id), lanesOf(session))],
+      places: [...places, ...restOfQualifier(activeHeat, places), ...sitOutPlaces(activeHeat, orderedRaces.findIndex((r) => r.id === activeRace.id), lanesOf(session))],
       expected: placingsOf(activeRace.results),
       teamNames: Object.fromEntries(activeHeat.entries.map((e) => [e.teamId, e.teamName])),
       queuedAt: new Date().toISOString(),
       state: 'waiting',
-    }));
+    };
+    const queuedBefore = outbox.find((q) => q.raceId === activeRace.id) ?? null;
+    const stored = updateOutbox((list) => enqueue(list, item));
     if (!stored) { setSaveError(OUTBOX_STORAGE_ERROR); return; }
     setSaveError(null);
+    setUndoStack((stack) => pushUndo(dropDrafts(stack, activeRace.id), { kind: 'save', raceId: activeRace.id, sent: item, queuedBefore, draft: places }));
     if (scoringDraftKey) writeScoringDraft(scoringDraftKey, []);
     setPending([]);
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
@@ -272,24 +302,38 @@ export function SessionPage() {
     }
   }
 
+  // Undo takes back the last action: a placing, a swipe or Clear on the open race, or else the last save.
+  const lastUndo = undoStack[undoStack.length - 1];
+  const canUndo = lastUndo != null && (lastUndo.kind === 'save' || lastUndo.raceId === activeRace?.id);
+  function undo() {
+    if (!lastUndo) return;
+    setUndoStack((stack) => stack.slice(0, -1));
+    if (lastUndo.kind === 'draft') { setPending(lastUndo.places); return; }
+    let restore: PendingPlace[] = [];
+    updateOutbox((list) => {
+      const result = undoSave(list, lastUndo);
+      restore = result.restore;
+      return result.outbox;
+    });
+    const heat = orderedHeats.find((h) => h.races.some((r) => r.id === lastUndo.raceId));
+    if (!heat) return;
+    preferredRaceRef.current = lastUndo.raceId;
+    setActiveHeatId(heat.id);
+    setActiveRaceId(lastUndo.raceId);
+    setPendingState({ key: draftKeyFor(heat.id, lastUndo.raceId), places: restore, edited: restore.length > 0 });
+    if (restore.length === 0) writeScoringDraft(draftKeyFor(heat.id, lastUndo.raceId), []);
+  }
+
+  const activeIndex = orderedHeats.findIndex((h) => h.id === activeHeatId);
+  const followingHeat = viewHeats[activeIndex + 1]
+    ?? competition.sessions.filter((s) => (s.kind ?? 0) === 0 && s.orderIndex > session.orderIndex).sort((a, b) => a.orderIndex - b.orderIndex).find((s) => s.heats.length > 0)?.heats
+      .slice().sort((a, b) => a.orderIndex - b.orderIndex)[0]
+    ?? null;
+  const nextLanes = viewHeat ? nextRoundLanes({ ...session, heats: viewHeats }, viewHeat, followingHeat, qualifiersOf(session), hcTeamIds) : null;
+
   return (
     <div className="space-y-3">
       {saveError && <p role="alert" className="mg-notice">{saveError}</p>}
-      {canManage(competition) && <div className="flex items-center justify-between gap-2 pt-4">
-        <Link to=".." className="btn-ghost !py-1.5 !px-2.5 text-xs">
-          <ChevronLeft className="w-3.5 h-3.5" /> Sessions
-        </Link>
-        {canManage(competition) && (
-          <div className="flex gap-1.5">
-            <RulesLink />
-            <LaneRotationControl session={session} onChanged={reload} />
-            {orderedHeats.some((h) => h.raceRoundStage) && <QualifiersControl session={session} onChanged={reload} />}
-            <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
-              <Wand2 className="w-3.5 h-3.5" /> Set up heats
-            </button>
-          </div>
-        )}
-      </div>}
 
       {canManage(competition) ? (
         <>
@@ -297,45 +341,56 @@ export function SessionPage() {
             session={session}
             heats={orderedHeats}
             activeHeatId={activeHeatId}
-            onSelect={(id) => { setActiveHeatId(id); setPending([]); }}
+            onSelect={(id) => { setActiveHeatId(id); setPending([]); setUndoStack((stack) => dropDrafts(stack)); }}
           />
 
-          {activeHeat ? (
+          {viewHeat ? (
             <ScoringSection
-              heat={activeHeat}
-              races={orderedRaces}
-              activeRace={activeRace}
-              onSelectRace={(id) => { setActiveRaceId(id); setPending([]); }}
+              heat={viewHeat}
+              races={viewRaces}
+              activeRace={viewRaces.find((r) => r.id === activeRaceId) ?? null}
+              onSelectRace={(id) => { setActiveRaceId(id); setPending([]); setUndoStack((stack) => dropDrafts(stack)); }}
               sessionBase={sessionBase}
               laneRules={lanesOf(session)}
               qualifiers={qualifiersOf(session)}
               pending={pending}
               canScore
               queued={outbox}
-              showResults={showResults}
-              onToggleResults={() => setShowResults((s) => !s)}
-              showLaneView={showLaneView}
-              onToggleLaneView={() => setShowLaneView((s) => !s)}
               onClickTeam={clickTeam}
               onToggleElim={toggleElim}
-              onSetStatus={changeStatus}
-              onSetNote={changeNote}
               onReset={resetPending}
               onSubmit={submit}
+              onUndo={canUndo ? undo : undefined}
+              undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
+              allowReasons
+              hcTeamIds={hcTeamIds}
+              onSetHc={canOrganise(competition) ? setHc : undefined}
+              tieRule={competition.sections.find((s) => s.id === session.competitionSectionId)?.tieBreakRule}
+              notes={summaryNotes}
+              nextLanes={nextLanes}
+              laneHatbands={competition.laneHatbands}
               correctionReason={activeRace ? correctionReasons[activeRace.id] ?? '' : ''}
               onCorrectionReason={(reason) => { if (activeRace) setCorrectionReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
             />
           ) : (
             <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>
           )}
+
+          <details className="mg-card p-3">
+            <summary className="cursor-pointer font-semibold">Organiser tools</summary>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <LaneRotationControl session={session} onChanged={reload} />
+              {orderedHeats.some((h) => h.raceRoundStage) && <QualifiersControl session={session} onChanged={reload} />}
+              <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
+                <Wand2 className="w-3.5 h-3.5" /> Set up heats
+              </button>
+            </div>
+          </details>
         </>
       ) : (
         <HeatScores session={session} heats={orderedHeats} activeHeatId={activeHeatId} />
       )}
 
-      {canManage(competition) && activeRace && !outbox.some((item) => item.raceId === activeRace.id) && (
-        <ScoreAuditPanel raceId={activeRace.id} onChanged={reload} />
-      )}
       <AnimatePresence>
         {heatEndOverlay && (
           <HeatEndOverlay
