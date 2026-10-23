@@ -11,6 +11,8 @@ const state = vi.hoisted(() => ({ value: null as unknown, get: vi.fn(), manage: 
 vi.mock('./context', async (importOriginal) => ({ ...(await importOriginal<typeof import('./context')>()), useCompetition: () => state.value }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canManage: () => state.manage }) }));
 vi.mock('../../api', () => ({ api: { get: state.get, post: vi.fn() } }));
+// The Tack & Turnout table fetches on its own; it has its own tests.
+vi.mock('./TackLeaderboard', () => ({ TackLeaderboard: () => null }));
 vi.mock('./TimetableBoard', () => ({
   TimetableBoard: ({ bandExtra, lead, title }: { bandExtra?: React.ReactNode; lead?: React.ReactNode; title?: string }) => <div><h1>{title}</h1>{bandExtra}{lead}</div>,
 }));

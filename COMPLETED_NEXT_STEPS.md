@@ -2,6 +2,17 @@
 
 Items moved here from `NEXT_STEPS.md` once their PR is merged into main and deployed. Newest first.
 
+## 23 October 2026
+
+### `feat/next-steps-batch`: result statuses, results book, finals tie-breaks, tack and passport checks, `/stats`
+- **Result statuses and referee notes** (A3). A team that doesn't finish is marked E, DNS, DNF or R; all score 0. A private referee note can go on any result. Notes only show in staff reads and the organiser's results book, never in public results, live updates or scorer links.
+- **Results book** (A4). Final standings per age group, each final and special awards, to print or download as CSV. The organiser's copy adds the referee notes. Special awards are edited in event tools.
+- **Finals tie-breaks** (A2, and the boundary part of bug 3). Each age group picks how ties on points are settled: most 1st places (the default), best result in the last race, a run-off, or the organiser decides. Every tied finals cut is flagged in Create finals, which says whether it's settled. The organiser can put tied teams in run-off or chosen order; that order lapses if the points change. Finals seeding, populate and the standings all rank the same way.
+- **Tack and passport checks** (section 4). Per age group: pass/fail, a separate Tack & Turnout table, or bonus points added to the standings (and to finals seeding). Printable tack forms list each team's riders and ponies. A per-event passport check lets staff tick ponies off on arrival.
+- **`/stats`** (section 8). Search riders, ponies, teams and clubs across events. Riders show full names unless they asked for initials. Anyone sees the headline numbers; per-game figures, partnerships and the event list need a sign-in.
+- Migration `AddNextStepsBatch` adds `Results.Status`, `Results.RefereeNote`, `CompetitionSections.TieBreakRule`, `Competitions.EnablePassportCheck` and the tables `SpecialAwards`, `FinalsTieOrders`, `TackCheckSections`, `TackCheckSectors`, `TackCheckMarks` and `PassportChecks`. Additive only; run `npm run db:migrate` before the API deploys.
+- Still open: ordering podium ties by hand, splitting points on a bonus tie, a real run-off heat on the scoring page, live updates for tack marks, copying the tack set-up when an event is duplicated, and a trigram index if `/stats` search gets slow on Neon.
+
 ## 22 October 2026
 
 ### `fix/bugs-md`: bugs 03, 05, 07, 14, 15, 16, 17, 18, 22, 23, 24, 25, 26 (issues #66 to #78)

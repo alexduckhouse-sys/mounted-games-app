@@ -163,6 +163,8 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Sessions", "LaneRotationMode", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Sessions", "QualifiersPerHeat", "INTEGER NULL");
         await EnsureColumnAsync(db, "Results", "IsSitOut", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "Results", "Status", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "Results", "RefereeNote", "TEXT NULL");
         await EnsureColumnAsync(db, "Teams", "BibDescription", "TEXT NULL");
         await EnsureColumnAsync(db, "RiderEntries", "IsGuestRider", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SectionSignups", "TeamName", "TEXT NULL");
@@ -173,6 +175,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Heats", "RaceRoundId", "INTEGER NULL");
         await EnsureColumnAsync(db, "Heats", "RaceRoundStage", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "RunoffRaceName", "TEXT NULL");
+        await EnsureColumnAsync(db, "CompetitionSections", "TieBreakRule", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "FinalistCount", "INTEGER NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "UsesRaceFinals", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Teams", "SupporterJoinKey", "TEXT NULL");
@@ -344,6 +347,9 @@ public static class DbInitializer
         await Email.EmailSqliteSchema.EnsureAsync(db);
 
         await Sponsors.SponsorsSqliteSchema.EnsureAsync(db);
+        await ResultsSqliteSchema.EnsureAsync(db);
+
+        await TackCheck.TackCheckSqliteSchema.EnsureAsync(db);
 
     }
 

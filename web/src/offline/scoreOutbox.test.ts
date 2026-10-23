@@ -16,8 +16,12 @@ describe('placingsOf', () => {
   it('turns results into placings, treating a missing placing as 0', () => {
     expect(placingsOf([result(1, 1), result(2, null, { eliminated: true })])).toEqual([
       { teamId: 1, place: 1, eliminated: false },
-      { teamId: 2, place: 0, eliminated: true },
+      { teamId: 2, place: 0, eliminated: true, status: 1 },
     ]);
+  });
+
+  it('keeps why a team did not finish', () => {
+    expect(placingsOf([result(3, null, { eliminated: true, status: 2 })])).toEqual([{ teamId: 3, place: 0, eliminated: true, status: 2 }]);
   });
 });
 

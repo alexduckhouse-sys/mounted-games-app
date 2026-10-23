@@ -10,7 +10,9 @@ using MountedGames.Api.Entities.Operations;
 
 namespace MountedGames.Api.Services;
 
-public record FinishingPlace(int TeamId, int Place, bool Eliminated);
+/// <param name="Status">Why the team did not finish; null means Eliminated when <paramref name="Eliminated"/> is set.</param>
+/// <param name="Note">The referee's private note. Null keeps the note the result already has; empty clears it.</param>
+public record FinishingPlace(int TeamId, int Place, bool Eliminated, ResultStatus? Status = null, string? Note = null);
 
 public sealed class ScoreConflictException(string message) : InvalidOperationException(message);
 public sealed class ScoreSignedOffException(string message) : InvalidOperationException(message);
@@ -62,7 +64,7 @@ public class ScoringService
         if (request.Places is null)
             throw new ScoreValidationException("Places are required.");
         return ApplyCoreAsync(raceId,
-            request.Places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated)).ToList(),
+            request.Places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status, p.RefereeNote)).ToList(),
             actorUserId, request.ExpectedRevision, null, request.RequestId, request.Reason,
             strictValidation: true, cancellationToken, actorLabel);
     }
@@ -72,9 +74,9 @@ public class ScoringService
         IReadOnlyList<FinishingPlaceDto>? expected, string? actorUserId, string? reason = null,
         CancellationToken cancellationToken = default, string? actorLabel = null)
         => ApplyCoreAsync(raceId,
-            places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated)).ToList(),
+            places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status, p.RefereeNote)).ToList(),
             actorUserId, null,
-            expected?.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated)).ToList(),
+            expected?.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status)).ToList(),
             $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, actorLabel);
 
     public async Task<RaceScoreDto> GetAsync(int raceId, CancellationToken cancellationToken = default)
@@ -163,6 +165,7 @@ public class ScoringService
         CancellationToken cancellationToken, string? actorLabel = null)
     {
         ValidateRequest(finishingPlaces, requestId);
+        finishingPlaces = Normalise(finishingPlaces);
         if (reason?.Trim().Length > 1000)
             throw new ScoreValidationException("Reason must be 1000 characters or fewer.");
         requestId = requestId.Trim();
@@ -179,11 +182,16 @@ public class ScoringService
         // With more teams than lanes some teams have no lane this race: they sit it out, whatever was sent for them.
         var sitOut = SitOutTeamIds(race, heat);
         if (sitOut.Count > 0)
-            finishingPlaces = finishingPlaces.Select(p => sitOut.Contains(p.TeamId) ? p with { Place = 0, Eliminated = false } : p).ToList();
+            finishingPlaces = finishingPlaces.Select(p => sitOut.Contains(p.TeamId) ? p with { Place = 0, Eliminated = false, Status = ResultStatus.Finished } : p).ToList();
         if (strictValidation && finishingPlaces.Any(p => !p.Eliminated && p.Place < 1 && !sitOut.Contains(p.TeamId)))
             throw new ScoreValidationException("A non-eliminated team must have a placing of at least 1.");
         var state = await GetOrCreateStateAsync(race, cancellationToken);
         var current = Snapshot(race.Results);
+        // A note left out (null) keeps the one the result already has; an empty one clears it.
+        var currentNotes = race.Results.Where(r => r.RefereeNote != null).ToDictionary(r => r.TeamId, r => r.RefereeNote);
+        finishingPlaces = finishingPlaces
+            .Select(p => p.Note is null && currentNotes.TryGetValue(p.TeamId, out var kept) ? p with { Note = kept } : p)
+            .ToList();
         var entryTeamIds = heat.Entries.Select(e => e.TeamId).ToHashSet();
         if (strictValidation && entryTeamIds.Count == 0)
             throw new ScoreValidationException("This race has no teams to score.");
@@ -201,9 +209,11 @@ public class ScoringService
         var accepted = strictValidation
             ? finishingPlaces.ToList()
             : finishingPlaces.Where(p => entryTeamIds.Contains(p.TeamId)).ToList();
-        var incomingCore = accepted.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated))
+        var incomingCore = accepted.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
+                p.Status ?? ResultStatus.Finished, CleanNoteOrNull(p.Note)))
             .OrderBy(p => p.TeamId).ToList();
-        var currentCore = current.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated))
+        var currentCore = current.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
+                p.Status, p.RefereeNote))
             .OrderBy(p => p.TeamId).ToList();
         var payloadFingerprint = PayloadFingerprint("results", incomingCore, expectedRevision, reason);
 
@@ -220,10 +230,16 @@ public class ScoringService
             throw new ScoreConflictException("These results were changed on another device.");
         if (expectedResults is not null)
         {
-            var expectedCore = expectedResults.Where(p => entryTeamIds.Contains(p.TeamId))
-                .Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated))
-                .OrderBy(p => p.TeamId).ToList();
-            if (!expectedCore.SequenceEqual(currentCore))
+            // What the scorer saw: places and why teams did not finish. The private note is not part of it (the
+            // scorer's screen may not show it), and a status the caller left out is not checked.
+            var seen = expectedResults.Where(p => entryTeamIds.Contains(p.TeamId)).OrderBy(p => p.TeamId).ToList();
+            var unchanged = seen.Count == currentCore.Count && seen.Zip(currentCore).All(pair =>
+                pair.First.TeamId == pair.Second.TeamId
+                && pair.First.Eliminated == pair.Second.Eliminated
+                && (pair.First.Eliminated ? null : (int?)pair.First.Place) == pair.Second.Place
+                && (pair.First.Status is null
+                    || ResultStatuses.Of(pair.First.Eliminated, pair.First.Status.Value) == pair.Second.Status));
+            if (!unchanged)
                 throw new ScoreConflictException("These results were changed on another device.");
         }
         if (current.Count > 0 && string.IsNullOrWhiteSpace(reason))
@@ -237,6 +253,8 @@ public class ScoringService
             TeamId = fp.TeamId,
             Placing = fp.Eliminated || sitOut.Contains(fp.TeamId) ? null : fp.Place,
             Eliminated = fp.Eliminated,
+            Status = fp.Eliminated ? fp.Status ?? ResultStatus.Eliminated : ResultStatus.Finished,
+            RefereeNote = CleanNoteOrNull(fp.Note),
             IsSitOut = sitOut.Contains(fp.TeamId),
             Points = sitOut.Contains(fp.TeamId) ? 0
                 : isQualifier ? (fp.Eliminated ? 0 : 1) : PointsForPlace(fp.Place, sessionBase, fp.Eliminated),
@@ -407,7 +425,8 @@ public class ScoringService
     }
 
     private static List<ScorePlaceDto> Snapshot(IEnumerable<Result> results) => results
-        .Select(r => new ScorePlaceDto(r.TeamId, r.Placing ?? 0, r.Eliminated, r.Points, r.IsSitOut))
+        .Select(r => new ScorePlaceDto(r.TeamId, r.Placing ?? 0, r.Eliminated, r.Points, r.IsSitOut,
+            ResultStatuses.Of(r), r.RefereeNote))
         .OrderBy(r => r.Eliminated).ThenBy(r => r.Place).ThenBy(r => r.TeamId).ToList();
 
     private static IReadOnlyList<ScorePlaceDto> Deserialize(string json)
@@ -424,5 +443,25 @@ public class ScoringService
         bool replay = false)
         => new(raceId, revision, signedOff, signedOffAt, signedOffBy, results, replay);
 
-    private sealed record CorePlace(int TeamId, int? Place, bool Eliminated);
+    private sealed record CorePlace(int TeamId, int? Place, bool Eliminated, ResultStatus Status, string? Note);
+
+    private static string? CleanNoteOrNull(string? note) => ResultStatuses.CleanNote(note);
+
+    /// <summary>
+    /// A team that did not finish is Eliminated unless the caller says why. A status other than Finished
+    /// means the team did not finish, whatever <c>Eliminated</c> says, and a finisher has no status.
+    /// </summary>
+    private static List<FinishingPlace> Normalise(IReadOnlyList<FinishingPlace> places)
+        => places.Select(p =>
+        {
+            if (p.Status is { } status && !Enum.IsDefined(status))
+                throw new ScoreValidationException("Unknown result status.");
+            ResultStatuses.CleanNote(p.Note);
+            var eliminated = p.Eliminated || p.Status is { } s && s != ResultStatus.Finished;
+            return p with
+            {
+                Eliminated = eliminated,
+                Status = eliminated ? p.Status is null or ResultStatus.Finished ? ResultStatus.Eliminated : p.Status : ResultStatus.Finished,
+            };
+        }).ToList();
 }

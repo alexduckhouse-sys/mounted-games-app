@@ -16,6 +16,9 @@ public class CompetitionSection
     /// </summary>
     public string? RunoffRaceName { get; set; }
 
+    /// <summary>How teams level on points are settled at a finals cut-off or on the podium.</summary>
+    public TieBreakRule TieBreakRule { get; set; }
+
     /// <summary>
     /// How many teams go through to the final ("Top 6 make the final").
     /// Null = not set yet. Valid range 1-50.

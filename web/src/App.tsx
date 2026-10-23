@@ -55,6 +55,7 @@ const CommerceManagementPage = lazy(() => import('./pages/commerce/CommerceManag
 const SeasonsPage = lazy(() => import('./pages/seasons/SeasonsPage').then((module) => ({ default: module.SeasonsPage })));
 const SeasonPage = lazy(() => import('./pages/seasons/SeasonPage').then((module) => ({ default: module.SeasonPage })));
 const TeamProfilePage = lazy(() => import('./pages/seasons/TeamProfilePage'));
+const StatsPage = lazy(() => import('./pages/stats/StatsPage').then((module) => ({ default: module.StatsPage })));
 const EventToolsPage = lazy(() => import('./pages/eventTools/EventToolsPage'));
 const PrintEventPage = lazy(() => import('./pages/eventTools/PrintEventPage'));
 const ScorerPage = lazy(() => import('./pages/ScorerPage').then((module) => ({ default: module.ScorerPage })));
@@ -120,6 +121,8 @@ export default function App() {
               <Route path="seasons/:seasonId" element={<SeasonPage />} />
               <Route path="team-profiles" element={<TeamProfilePage />} />
               <Route path="team-profiles/:profileId" element={<TeamProfilePage />} />
+              <Route path="stats" element={<StatsPage />} />
+              <Route path="stats/:kind" element={<StatsPage />} />
               <Route path="event-tools/:competitionId" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EventToolsPage /></ProtectedRoute>} />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
               <Route path="chat" element={<ChatIndexPage />} />

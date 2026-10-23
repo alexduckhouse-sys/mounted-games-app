@@ -65,6 +65,7 @@ public sealed class CompetitionCloneService(AppDbContext db)
                 AgeGroup = sourceSection.AgeGroup,
                 DisplayName = sourceSection.DisplayName,
                 RunoffRaceName = sourceSection.RunoffRaceName,
+                TieBreakRule = sourceSection.TieBreakRule,
                 FinalistCount = sourceSection.FinalistCount,
                 UsesRaceFinals = sourceSection.UsesRaceFinals,
                 PriceMinor = sourceSection.PriceMinor,

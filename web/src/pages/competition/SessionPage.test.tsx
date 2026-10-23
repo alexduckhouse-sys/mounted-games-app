@@ -268,6 +268,85 @@ describe('SessionPage', () => {
     });
   });
 
+  describe('did not start, did not finish, retired and referee notes', () => {
+    type Saved = { places: { teamId: number; place: number; eliminated: boolean; status?: number; refereeNote?: string }[] };
+    const saved = () => (JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]') as Saved[])[0].places;
+
+    it('keeps the one-tap flow: a swipe-free tap still places a team and More stays closed', async () => {
+      mount(scoringData(3));
+      await screen.findByText('Rider 1');
+      await tapRider('Rider 1', 1);
+      expect(screen.queryByRole('group', { name: /Result for/ })).not.toBeInTheDocument();
+    });
+
+    it('sends a team that did not start with its reason, scoring nobody else differently', async () => {
+      mount(scoringData(3));
+      await screen.findByText('Rider 1');
+      await tapRider('Rider 1', 1);
+      await userEvent.click(screen.getByRole('button', { name: 'More for Rider 3' }));
+      await userEvent.click(within(screen.getByRole('group', { name: 'Result for Rider 3' })).getByRole('button', { name: 'DNS' }));
+      expect(within(tile('Rider 3')).getByText('DNS')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Save 2 results' }));
+      expect(saved()).toEqual([
+        { teamId: 1, place: 1, eliminated: false },
+        { teamId: 3, place: 0, eliminated: true, status: 2 },
+        { teamId: 2, place: 0, eliminated: false },
+      ].slice(0, 2));
+    });
+
+    it('lets the scorer change their mind, and brings a team back as a finisher', async () => {
+      mount(scoringData(3));
+      await screen.findByText('Rider 1');
+      await userEvent.click(screen.getByRole('button', { name: 'More for Rider 2' }));
+      const panel = screen.getByRole('group', { name: 'Result for Rider 2' });
+      await userEvent.click(within(panel).getByRole('button', { name: 'DNF' }));
+      await userEvent.click(within(panel).getByRole('button', { name: 'R' }));
+      expect(within(tile('Rider 2')).getByText('R')).toBeInTheDocument();
+      await userEvent.click(within(panel).getByRole('button', { name: 'Finished' }));
+      await waitFor(() => expect(within(tile('Rider 2')).queryByText('R')).not.toBeInTheDocument());
+      expect(within(tile('Rider 2')).getByText('1')).toBeInTheDocument();
+    });
+
+    it('keeps a referee note with the result it belongs to, and needs a result first', async () => {
+      mount(scoringData(3));
+      await screen.findByText('Rider 1');
+      await userEvent.click(screen.getByRole('button', { name: 'More for Rider 1' }));
+      expect(screen.getByLabelText('Referee note (staff only)')).toBeDisabled();
+      await tapRider('Rider 1', 1);
+      await userEvent.type(screen.getByLabelText('Referee note (staff only)'), 'Warned for crossing the line');
+      await userEvent.click(screen.getByRole('button', { name: 'Save 1 result' }));
+      expect(saved()).toEqual([{ teamId: 1, place: 1, eliminated: false, refereeNote: 'Warned for crossing the line' }]);
+    });
+
+    it('loads the notes staff saved when a scored race is corrected, and sends them back unchanged', async () => {
+      const data = competition({
+        teams,
+        sessions: [session(1, { status: 1, heats: [heat(1, {
+          entries: entries(2),
+          races: [race(1, { name: 'Bending', isComplete: true, results: [result(1, 1, { points: 2 }), result(2, null, { eliminated: true, status: 3 })] })],
+        })] })],
+      });
+      vi.mocked(api.get).mockImplementation((url: string) => {
+        if (url === '/races/1/score') return Promise.resolve({ data: { raceId: 1, revision: 1, isSignedOff: false, results: [
+          { teamId: 1, place: 1, eliminated: false, points: 2, refereeNote: 'Quick start' },
+          { teamId: 2, place: 0, eliminated: true, points: 0, status: 3, refereeNote: null },
+        ] } });
+        return Promise.resolve({ data: [] });
+      });
+      render(
+        <MemoryRouter initialEntries={['/competitions/1/session/1']}>
+          <CompetitionContext.Provider value={{ competition: data, reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [] }}>
+            <Routes><Route path="/competitions/:id/session/:sessionId" element={<SessionPage />} /></Routes>
+          </CompetitionContext.Provider>
+        </MemoryRouter>,
+      );
+      await userEvent.click(await screen.findByRole('button', { name: /1\. Bending/ }));
+      await userEvent.click(await screen.findByRole('button', { name: 'More for Rider 1' }));
+      await waitFor(() => expect(screen.getByLabelText('Referee note (staff only)')).toHaveValue('Quick start'));
+      expect(within(tile('Rider 2')).getByText('DNF')).toBeInTheDocument();
+    });
+  });
+
   describe('heat-heat-final', () => {
     const entries = [1, 2, 3, 4].map((id) => ({ id, teamId: id, teamName: `Team ${id}`, laneIndex: id }));
     const round = (stage: 1 | 2) => competition({

@@ -39,6 +39,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<ShopComment> ShopComments => Set<ShopComment>();
     public DbSet<ShopReport> ShopReports => Set<ShopReport>();
     public DbSet<CalendarHeatVersion> CalendarHeatVersions => Set<CalendarHeatVersion>();
+    public DbSet<SpecialAward> SpecialAwards => Set<SpecialAward>();
+    public DbSet<FinalsTieOrder> FinalsTieOrders => Set<FinalsTieOrder>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -220,6 +222,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .HasForeignKey(r => r.TeamId)
                 .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(r => new { r.RaceId, r.TeamId }).IsUnique();
+            e.Property(r => r.RefereeNote).HasMaxLength(500);
         });
 
         b.Entity<DeclarationForm>(e =>

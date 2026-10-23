@@ -41,7 +41,12 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     public async Task<ActionResult<RaceScoreDto>> GetScore(int raceId, CancellationToken ct)
     {
         if (!await InScopeAsync(raceId, ct)) return NotFound();
-        try { return await scoring.GetAsync(raceId, ct); }
+        try
+        {
+            var score = await scoring.GetAsync(raceId, ct);
+            // Referee notes are for staff: a scorer link never reads them.
+            return score with { Results = score.Results.Select(r => r with { RefereeNote = null }).ToList() };
+        }
         catch (KeyNotFoundException) { return NotFound(); }
     }
 
@@ -52,9 +57,11 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         if (!await InScopeAsync(raceId, ct)) return NotFound();
         try
         {
-            var score = await scoring.ApplyVersionedAsync(raceId, request, null, ct, ActorLabel);
+            // A scorer link can't write referee notes either; leaving one out keeps the note staff set.
+            var withoutNotes = request with { Places = request.Places?.Select(p => p with { RefereeNote = null }).ToList() };
+            var score = await scoring.ApplyVersionedAsync(raceId, withoutNotes, null, ct, ActorLabel);
             await BroadcastAsync(raceId);
-            return score;
+            return score with { Results = score.Results.Select(r => r with { RefereeNote = null }).ToList() };
         }
         catch (KeyNotFoundException) { return NotFound(); }
         catch (InvalidOperationException ex) when (ex.Message == "Race not found") { return NotFound(); }
@@ -79,7 +86,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         if (req.Reason?.Length > 1000) return BadRequest(new { message = "Correction reason must be 1000 characters or fewer." });
         try
         {
-            await scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected, null, req.Reason, ct, ActorLabel);
+            await scoring.ApplyLegacyAsync(raceId, req.Places.Select(p => p with { RefereeNote = null }).ToList(), req.Expected, null, req.Reason, ct, ActorLabel);
         }
         catch (ScoreConflictException ex) { return await ConflictAsync(race, ex.Message); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }

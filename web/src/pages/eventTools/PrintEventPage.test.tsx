@@ -48,7 +48,7 @@ describe('PrintEventPage', () => {
         ] },
         { raceId: 8, name: 'Mug', teams: [
           { teamId: 5, teamName: 'South B', placing: null, eliminated: false, points: null, lane: 2, bib: 'Blue bibs' },
-          { teamId: 4, teamName: 'North A', placing: null, eliminated: true, points: 0, lane: 1, bib: 'Red bibs' },
+          { teamId: 4, teamName: 'North A', placing: null, eliminated: true, points: 0, lane: 1, bib: 'Red bibs', status: 3 },
         ] },
       ] }],
     } });
@@ -58,7 +58,7 @@ describe('PrintEventPage', () => {
     expect(headers).toEqual(['Lane', 'Team', 'Bib', '1. Bending', '2. Mug', 'Total']);
     const rows = screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent));
     // Lane order, scores filled in where recorded, blanks left to write in.
-    expect(rows).toEqual([['1', 'North A', 'Red bibs', '5', 'E', '5'], ['2', 'South B', 'Blue bibs', '', '', '']]);
+    expect(rows).toEqual([['1', 'North A', 'Red bibs', '5', 'DNF', '5'], ['2', 'South B', 'Blue bibs', '', '', '']]);
     expect(screen.queryByText('Time TBC')).not.toBeInTheDocument();
   });
 

@@ -1,3 +1,5 @@
+using MountedGames.Api.Entities;
+
 namespace MountedGames.Api.Dtos;
 
 public record CsvTeamImportRequest(string Csv);
@@ -31,16 +33,17 @@ public record PrintableDrawDto(PrintableCompetitionDto Competition, IReadOnlyLis
 
 /// <summary><c>Lane</c> is the team's drawn lane in the heat; <c>Bib</c> is what its bibs look like, if known.</summary>
 public record PrintableScoreCellDto(int TeamId, string TeamName, int? Placing, bool Eliminated, int? Points,
-    int Lane = 0, string? Bib = null, bool IsSitOut = false);
+    int Lane = 0, string? Bib = null, bool IsSitOut = false, ResultStatus Status = ResultStatus.Finished);
 public record PrintableScoreRaceDto(int RaceId, string Name, IReadOnlyList<PrintableScoreCellDto> Teams);
 public record PrintableScoreHeatDto(
     int HeatId, string Label, string SectionName, string SessionName,
     DateTime? ScheduledStart, IReadOnlyList<PrintableScoreRaceDto> Races);
 public record PrintableScoreSheetsDto(PrintableCompetitionDto Competition, IReadOnlyList<PrintableScoreHeatDto> Heats);
 
+/// <summary><c>BonusPoints</c> (tack check bonus) is already inside <c>TotalPoints</c>.</summary>
 public record PrintableResultRowDto(
     int Rank, int TeamId, string TeamName, string ClubName,
-    int TotalPoints, int RacesRun, int Wins, int Eliminations);
+    int TotalPoints, int RacesRun, int Wins, int Eliminations, int BonusPoints = 0);
 public record PrintableSectionResultsDto(
     int CompetitionSectionId, string SectionName, IReadOnlyList<PrintableResultRowDto> Results);
 public record PrintableResultsDto(

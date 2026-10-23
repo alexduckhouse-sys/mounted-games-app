@@ -9,6 +9,7 @@ import { Chevron, RefineDisclosure, RefineFoot, RefineHeader, RefineList, Refine
 import { ordinal, positionLabels, shortDate } from './seasonModel';
 import type { SeasonView, StandingView } from './seasonViewTypes';
 import { buildRows, latestPerRound, seasonChoices, type SeasonDetail } from './teamHistoryModel';
+import { TeamGameStats } from './TeamGameStats';
 import type { ClubOption, CompetitionDetailOption, CompetitionSummaryOption, TeamProfile, TeamProfileHistory } from './teamProfileTypes';
 import './seasonViews.css';
 
@@ -263,6 +264,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
         </RefineDisclosure></RefineList></div>}
         <RefineNote>Public results only. No rider names.</RefineNote>
       </>}
+      <TeamGameStats profileId={profile.id} linked={history.eventTeams.length} />
       <RefineSection title="Linked events" />
       {history.eventTeams.length === 0 ? <p className="rf-note">No event teams are linked yet.</p> : <RefineList label="Linked events">{history.eventTeams.map((item) => <li key={item.id} className="rf-row"><span className="rf-grow"><span className="rf-t1">{item.competitionName}</span><span className="rf-t2">{item.teamName}</span></span><time className="rf-t2" dateTime={item.linkedAt}>Linked {date(item.linkedAt)}</time></li>)}</RefineList>}
     </>}

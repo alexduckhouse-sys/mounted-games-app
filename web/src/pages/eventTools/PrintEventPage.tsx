@@ -3,10 +3,24 @@ import { Link, useParams } from 'react-router-dom';
 import { ChevronLeft, Printer } from 'lucide-react';
 import { api } from '../../api';
 import type { PrintableDraw, PrintableResults, PrintableScoreSheets } from './eventToolsTypes';
+import type { PrintableEntries, ResultsBook } from './resultsBookTypes';
+import { EntriesView, ResultsBookView } from './ResultsBookView';
 import { PosterPage } from './PosterPage';
+import { TackCheckForms, type PrintableTackCheck } from './TackCheckPrint';
+import { statusLetter } from '../../lib/resultStatus';
 import './printEvent.css';
 
-type View = 'draw' | 'score-sheets' | 'results';
+/** What each print view loads and is called. The book and entry list are not under /print because they have their own access rules. */
+const VIEWS = {
+  draw: { path: 'print/draw', title: 'Draw and lanes' },
+  'score-sheets': { path: 'print/score-sheets', title: 'Score sheets' },
+  results: { path: 'print/results', title: 'Results' },
+  'results-book': { path: 'results-book', title: 'Results book' },
+  'results-book-organiser': { path: 'results-book/organiser', title: 'Results book: organiser copy' },
+  entries: { path: 'print/entries', title: 'Entry list' },
+  'tack-check': { path: 'print/tack-check', title: 'Tack check' },
+} as const;
+type View = keyof typeof VIEWS;
 
 function date(value: string) {
   return new Date(value).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
@@ -24,18 +38,18 @@ function message(error: unknown) {
 export default function PrintEventPage() {
   const { competitionId = '', view: rawView = 'draw' } = useParams();
   if (rawView === 'poster') return <PosterPage key={competitionId} competitionId={competitionId} />;
-  const view = (['draw', 'score-sheets', 'results'].includes(rawView) ? rawView : 'draw') as View;
+  const view = (Object.keys(VIEWS).includes(rawView) ? rawView : 'draw') as View;
   return <PrintView key={`${competitionId}:${view}`} competitionId={competitionId} view={view} />;
 }
 
 function PrintView({ competitionId, view }: { competitionId: string; view: View }) {
-  const [data, setData] = useState<PrintableDraw | PrintableScoreSheets | PrintableResults | null>(null);
+  const [data, setData] = useState<PrintableDraw | PrintableScoreSheets | PrintableResults | ResultsBook | PrintableEntries | PrintableTackCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    api.get(`/event-tools/competitions/${competitionId}/print/${view}`)
+    api.get(`/event-tools/competitions/${competitionId}/${VIEWS[view].path}`)
       .then((response) => { if (!cancelled) setData(response.data); })
       .catch((caught) => { if (!cancelled) setError(message(caught)); });
     return () => { cancelled = true; };
@@ -55,12 +69,15 @@ function PrintView({ competitionId, view }: { competitionId: string; view: View 
         <p className="event-print-kicker">Mounted Games</p>
         <h1>{competition.name}</h1>
         <p>{date(competition.startDate)}{competition.location ? ` · ${competition.location}` : ''}</p>
-        <p className="event-print-kind">{view === 'draw' ? 'Draw and lanes' : view === 'score-sheets' ? 'Score sheets' : 'Results'}</p>
+        <p className="event-print-kind">{VIEWS[view].title}</p>
       </header>
 
       {view === 'draw' && <Draw data={data as PrintableDraw} />}
       {view === 'score-sheets' && <ScoreSheets data={data as PrintableScoreSheets} />}
       {view === 'results' && <Results data={data as PrintableResults} />}
+      {(view === 'results-book' || view === 'results-book-organiser') && <ResultsBookView data={data as ResultsBook} />}
+      {view === 'entries' && <EntriesView data={data as PrintableEntries} />}
+      {view === 'tack-check' && <TackCheckForms data={data as PrintableTackCheck} />}
     </article>
   );
 }
@@ -70,11 +87,11 @@ function Draw({ data }: { data: PrintableDraw }) {
   return <>{data.sessions.map((session) => <section key={session.sessionId} className="event-print-section"><h2>{session.sectionName || 'Open section'} · {session.sessionName}</h2>{session.arenaName && <p className="event-print-note">Arena: {session.arenaName}</p>}{session.heats.map((heat) => <div key={heat.heatId} className="event-print-block"><h3>{heat.label} <span>{time(heat.scheduledStart)}</span></h3><div className="event-print-table-wrap"><table><thead><tr><th>Lane</th><th>Team</th><th>Club</th><th>Races</th></tr></thead><tbody>{heat.teams.map((team, index) => <tr key={team.teamId}><td>{team.lane}</td><td>{team.teamName}</td><td>{team.clubName}</td>{index === 0 && <td rowSpan={Math.max(heat.teams.length, 1)}>{heat.races.map((race) => race.name).join(', ') || 'No races added'}</td>}</tr>)}</tbody></table></div></div>)}</section>)}</>;
 }
 
-/** A recorded result as it is written on the sheet: points, "E" for an elimination, "S" for a sit-out, nothing if the race isn't scored. */
-function scoreText(cell: { points: number | null; eliminated: boolean; isSitOut?: boolean } | undefined): string {
+/** A recorded result as it is written on the sheet: points, E, DNS, DNF or R for a team that did not finish, "S" for a sit-out, nothing if the race isn't scored. */
+function scoreText(cell: { points: number | null; eliminated: boolean; isSitOut?: boolean; status?: number } | undefined): string {
   if (!cell) return '';
   if (cell.isSitOut) return 'S';
-  if (cell.eliminated) return 'E';
+  if (cell.eliminated) return statusLetter(true, cell.status) ?? 'E';
   return cell.points === null || cell.points === undefined ? '' : String(cell.points);
 }
 
@@ -103,5 +120,9 @@ function ScoreSheets({ data }: { data: PrintableScoreSheets }) {
 }
 
 function Results({ data }: { data: PrintableResults }) {
-  return <>{data.isProvisional && <p className="event-print-provisional">Provisional results: some races are not complete.</p>}{data.sections.length === 0 ? <p className="event-print-empty">No sections are available yet.</p> : data.sections.map((section) => <section key={section.competitionSectionId} className="event-print-section"><h2>{section.sectionName}</h2>{section.results.length === 0 ? <p className="event-print-empty">No results yet.</p> : <div className="event-print-table-wrap"><table><thead><tr><th>Pos.</th><th>Team</th><th>Club</th><th>Points</th><th>Races</th><th>Wins</th><th>Elim.</th></tr></thead><tbody>{section.results.map((row) => <tr key={row.teamId}><td>{row.rank}</td><td>{row.teamName}</td><td>{row.clubName}</td><td><strong>{row.totalPoints}</strong></td><td>{row.racesRun}</td><td>{row.wins}</td><td>{row.eliminations}</td></tr>)}</tbody></table></div>}</section>)}</>;
+  return <>{data.isProvisional && <p className="event-print-provisional">Provisional results: some races are not complete.</p>}{data.sections.length === 0 ? <p className="event-print-empty">No sections are available yet.</p> : data.sections.map((section) => {
+    // Tack check bonus points are part of the total; the column shows them only when a section has any.
+    const hasBonus = section.results.some((row) => (row.bonusPoints ?? 0) > 0);
+    return <section key={section.competitionSectionId} className="event-print-section"><h2>{section.sectionName}</h2>{section.results.length === 0 ? <p className="event-print-empty">No results yet.</p> : <div className="event-print-table-wrap"><table><thead><tr><th>Pos.</th><th>Team</th><th>Club</th><th>Points</th>{hasBonus && <th>Tack bonus</th>}<th>Races</th><th>Wins</th><th>Elim.</th></tr></thead><tbody>{section.results.map((row) => <tr key={row.teamId}><td>{row.rank}</td><td>{row.teamName}</td><td>{row.clubName}</td><td><strong>{row.totalPoints}</strong></td>{hasBonus && <td>{row.bonusPoints ?? 0}</td>}<td>{row.racesRun}</td><td>{row.wins}</td><td>{row.eliminations}</td></tr>)}</tbody></table></div>}</section>;
+  })}</>;
 }

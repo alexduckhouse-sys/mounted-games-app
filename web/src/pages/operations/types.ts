@@ -95,6 +95,10 @@ export interface ScorePlace {
   place: number;
   eliminated: boolean;
   points: number;
+  /** Why the team did not finish: 1 E, 2 DNS, 3 DNF, 4 R. Missing on old history entries. */
+  status?: number;
+  /** The referee's private note. Staff-only reads only. */
+  refereeNote?: string | null;
 }
 
 export interface RaceScore {

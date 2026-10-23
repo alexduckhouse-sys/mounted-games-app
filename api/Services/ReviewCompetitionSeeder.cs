@@ -331,6 +331,14 @@ public static class ReviewCompetitionSeeder
             await db.Heats.Where(x => sessionIds.Contains(x.SessionId)).ExecuteDeleteAsync();
             await db.Sessions.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
 
+            // Tack check marks, sectors and set-ups, and passport ticks (they point at teams and sections).
+            var tackIds = db.Set<TackCheckSection>().Where(x => ids.Contains(x.CompetitionId) || sectionIds.Contains(x.CompetitionSectionId)).Select(x => x.Id);
+            var sectorIds = db.Set<TackCheckSector>().Where(x => tackIds.Contains(x.TackCheckSectionId)).Select(x => x.Id);
+            await db.Set<TackCheckMark>().Where(x => sectorIds.Contains(x.TackCheckSectorId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+            await db.Set<TackCheckSector>().Where(x => tackIds.Contains(x.TackCheckSectionId)).ExecuteDeleteAsync();
+            await db.Set<TackCheckSection>().Where(x => ids.Contains(x.CompetitionId) || sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
+            await db.Set<PassportCheck>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+
             // Entries, teams and declarations.
             await db.Set<RiderSwapEvent>().Where(x => ids.Contains(x.CompetitionId) || formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
             await db.RiderEntries.Where(x => formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
@@ -338,6 +346,8 @@ public static class ReviewCompetitionSeeder
             await db.Set<TeamStatusEvent>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
             await db.TeamSupporters.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
             await db.Set<EventTeamProfileLink>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+            await db.FinalsTieOrders.Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+            await db.SpecialAwards.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
             await db.SectionSignups.Where(x => sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
             await db.Teams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
             await db.Set<DrawChange>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();

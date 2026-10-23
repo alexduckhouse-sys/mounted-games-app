@@ -114,12 +114,18 @@ public record CompetitionSectionDto(
     int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName,
     string? RunoffRaceName, bool UsesRaceFinals, int PriceMinor,
     int? MaxParticipants = null, int? FinalistCount = null,
-    int ActiveSignupsCount = 0);
+    int ActiveSignupsCount = 0, TieBreakRule TieBreakRule = TieBreakRule.Countback);
 public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName,
     string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0,
-    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null);
+    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null,
+    [EnumDataType(typeof(TieBreakRule))] TieBreakRule TieBreakRule = TieBreakRule.Countback);
+/// <param name="TieBreakRule">Omitted leaves the rule as it is.</param>
 public record UpdateSectionRequest(string? RunoffRaceName, bool? UsesRaceFinals = null, int? PriceMinor = null,
-    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null);
+    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null,
+    [EnumDataType(typeof(TieBreakRule))] TieBreakRule? TieBreakRule = null);
+
+/// <summary>Teams level on points, best first: every active team in the age group on that total.</summary>
+public record SetTieOrderRequest(IReadOnlyList<int> TeamIds);
 
 public record SectionSignupDto(
     int Id, int CompetitionSectionId, string SectionName,
@@ -294,7 +300,9 @@ public record RaceClockRequest(DateTime? At);
 
 public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex);
 
-public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points, bool IsSitOut = false);
+/// <summary>A result as everyone sees it. Status says why a team that did not finish (Eliminated is true) did not. The referee note is never here.</summary>
+public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points, bool IsSitOut = false,
+    ResultStatus Status = ResultStatus.Finished);
 
 public record CreateHeatRequest(
     string? Label, int OrderIndex,
@@ -310,7 +318,8 @@ public record SubmitRaceResultsRequest(
     IReadOnlyList<FinishingPlaceDto> Places,
     IReadOnlyList<FinishingPlaceDto>? Expected = null,
     string? Reason = null);
-public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated);
+/// <summary>Status null means Eliminated when Eliminated is set. RefereeNote is private to staff (500 characters at most).</summary>
+public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated, ResultStatus? Status = null, string? RefereeNote = null);
 
 /// <param name="FinalTier">
 /// 0 for a team in the A Final, 1 for the B Final, and so on; null when it isn't in a lettered
@@ -319,7 +328,7 @@ public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated);
 public record StandingRow(
     int TeamId, string TeamName, string ClubName, string? BibColour,
     int TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null,
-    bool Withdrawn = false);
+    bool Withdrawn = false, int BonusPoints = 0);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,

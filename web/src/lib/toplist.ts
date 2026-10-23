@@ -16,6 +16,8 @@ export interface ToplistRow {
   racesLeft: number;
   /** Withdrawn or no-show: what they scored stays, they ride no more. */
   withdrawn: boolean;
+  /** Tack check bonus points, already in `points`. */
+  bonus: number;
 }
 
 export interface Toplist {
@@ -28,7 +30,7 @@ export interface Toplist {
   sessionsTotal: number;
   /** False until a race in this age group has been scored: before that nobody has a real position. */
   started: boolean;
-  /** Points per heat session in running order, then finals ("F") once they have points; `cells` follows `sessions`. */
+  /** Points per heat session in running order, then finals ("F") once they have points, then tack check bonus ("T") when any team has some; `cells` follows `sessions`. */
   bySession: { sessions: { id: number; label: string; title: string }[]; cells: Map<number, number[]> };
   /** Each final that has results, in running order ("A Final", "B Final"...). Empty until a final has been ridden. */
   finals: FinalGroup[];
@@ -54,7 +56,7 @@ export interface FinalGroup {
   races: Map<number, TeamRaceResult[]>;
 }
 
-export interface TeamRaceResult { id: number; name: string; placing: number | null; eliminated: boolean; points: number }
+export interface TeamRaceResult { id: number; name: string; placing: number | null; eliminated: boolean; points: number; status?: number }
 
 export interface TeamBlock {
   key: string;
@@ -131,7 +133,7 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   const rows: ToplistRow[] = ordered.map((row) => {
     const position = ordered.findIndex((other) => level(other, row)) + 1;
     const joint = ordered.filter((other) => level(other, row)).length > 1;
-    return { teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position, joint, runoff: false, out: false, needed: null, racesLeft: racesLeft.get(row.teamId) ?? 0, withdrawn: row.withdrawn === true };
+    return { teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position, joint, runoff: false, out: false, needed: null, racesLeft: racesLeft.get(row.teamId) ?? 0, withdrawn: row.withdrawn === true, bonus: row.bonusPoints ?? 0 };
   });
 
   // Until someone has scored, everyone is level and a cut-off line would mean nothing.
@@ -163,15 +165,18 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
     .map((team) => ({ teamId: team.id, teamName: team.displayName, points: (sessionPoints.get(team.id) ?? []).reduce((sum, value) => sum + value, 0), racesLeft: racesLeft.get(team.id) ?? 0 }))
     .sort((a, b) => b.points - a.points || a.teamName.localeCompare(b.teamName));
 
-  // Totals include finals, so the session columns only add up with a finals column alongside.
+  // Totals include finals and tack check bonus points, so the session columns only add up with those alongside.
   const columns = heatSessions.map((session, index) => ({ id: session.id, label: `S${index + 1}`, title: `Session ${index + 1}` }));
   const cells = new Map<number, number[]>();
   const withFinals = finalsPoints.size > 0;
-  for (const teamId of new Set([...sessionPoints.keys(), ...finalsPoints.keys()])) {
+  const bonus = new Map(rows.filter((row) => row.bonus > 0).map((row) => [row.teamId, row.bonus]));
+  for (const teamId of new Set([...sessionPoints.keys(), ...finalsPoints.keys(), ...bonus.keys()])) {
     const row = sessionPoints.get(teamId) ?? heatSessions.map(() => 0);
-    cells.set(teamId, withFinals ? [...row, finalsPoints.get(teamId) ?? 0] : row);
+    const withF = withFinals ? [...row, finalsPoints.get(teamId) ?? 0] : row;
+    cells.set(teamId, bonus.size > 0 ? [...withF, bonus.get(teamId) ?? 0] : withF);
   }
   if (withFinals) columns.push({ id: -1, label: 'F', title: 'Finals' });
+  if (bonus.size > 0) columns.push({ id: -2, label: 'T', title: 'Tack check bonus points' });
   const qualifying = qualifyingRanks(rows, sessionPoints);
   for (const group of finalGroups) for (const finalRow of group.rows) finalRow.qualifyingPosition = qualifying.get(finalRow.teamId)?.position ?? null;
   const detail = buildDetail(rows, finalGroups, heatSessions, qualifying);
@@ -212,7 +217,7 @@ function buildFinalGroups(sessions: Session[], sectionId: number): FinalGroup[] 
       const races = new Map<number, TeamRaceResult[]>();
       for (const race of heat.races) {
         for (const result of race.results) {
-          races.set(result.teamId, [...(races.get(result.teamId) ?? []), { id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points }]);
+          races.set(result.teamId, [...(races.get(result.teamId) ?? []), { id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points, status: result.status }]);
         }
       }
       groups.push({ id: heat.id, label: finalWording.test(named) ? named : [session.name, named].filter(Boolean).join(' · '), rows, races });
@@ -246,7 +251,7 @@ function buildDetail(rows: ToplistRow[], finals: FinalGroup[], heatSessions: Ses
     heatSessions.forEach((session, index) => {
       const heats = session.heats.filter((heat) => !isFinal(session, heat) && (heat.entries.some((entry) => entry.teamId === teamId) || heat.races.some((race) => race.results.some((result) => result.teamId === teamId))));
       const races: TeamRaceResult[] = heats.flatMap((heat) => heat.races).flatMap((race) =>
-        race.results.filter((result) => result.teamId === teamId).map((result) => ({ id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points })));
+        race.results.filter((result) => result.teamId === teamId).map((result) => ({ id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points, status: result.status })));
       const labels = heats.map((heat) => heat.label?.trim()).filter(Boolean);
       blocks.push({
         key: `session-${session.id}`,
@@ -272,6 +277,11 @@ function buildDetail(rows: ToplistRow[], finals: FinalGroup[], heatSessions: Ses
 
 /** The small line under a team's name, or null when there is nothing worth saying. */
 export function toplistNote(row: ToplistRow): string | null {
+  const tack = row.bonus > 0 ? `${row.bonus} tack bonus ${row.bonus === 1 ? 'point' : 'points'}` : null;
+  return [standingNote(row), tack].filter(Boolean).join(' · ') || null;
+}
+
+function standingNote(row: ToplistRow): string | null {
   if (row.withdrawn) return 'Withdrawn';
   if (row.runoff) return `Joint ${ordinal(row.position)} · run-off`;
   if (row.needed != null) return `${row.needed} needed to make the final`;

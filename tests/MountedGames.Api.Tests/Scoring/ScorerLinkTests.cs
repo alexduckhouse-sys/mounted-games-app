@@ -348,6 +348,53 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task TheLink_CanRecordWhyATeamDidNotFinish_ButNeverReadsOrChangesRefereeNotes()
+    {
+        var w = await WorldAsync();
+        var (token, _) = await CreateLinkAsync(w, "Main", "Sam");
+        var scorer = Scorer(token);
+        var race = w.MainRaces[0];
+        var ids = w.Arena.TeamIds;
+
+        // Staff score the race with a private note.
+        var staffSave = await w.Owner.PutAsJsonAsync($"/api/races/{race}/score", new UpdateRaceScoreRequest(new[]
+        {
+            new FinishingPlaceDto(ids[0], 1, false, null, "Staff note: protest lodged"),
+            new FinishingPlaceDto(ids[1], 2, false), new FinishingPlaceDto(ids[2], 0, true),
+        }, 0, "staff-1", null));
+        Assert.Equal(HttpStatusCode.OK, staffSave.StatusCode);
+
+        // The link's read of the same race leaves the note out.
+        var read = await scorer.GetStringAsync(Score(race));
+        Assert.DoesNotContain("protest", read);
+        Assert.Contains("\"status\":1", read);
+
+        // The link corrects the race (team 3 turns out to be a DNS), and tries to write a note of its own.
+        var corrected = await scorer.PutAsJsonAsync(Score(race), new UpdateRaceScoreRequest(new[]
+        {
+            new FinishingPlaceDto(ids[0], 1, false, null, "scorer tries to overwrite"),
+            new FinishingPlaceDto(ids[1], 2, false), new FinishingPlaceDto(ids[2], 0, true, ResultStatus.DidNotStart),
+        }, 1, "link-1", "Team 3 never started"));
+        Assert.Equal(HttpStatusCode.OK, corrected.StatusCode);
+        Assert.DoesNotContain("protest", await corrected.Content.ReadAsStringAsync());
+
+        var stored = await _f.WithDbAsync(db => db.Results.AsNoTracking().Where(r => r.RaceId == race).OrderBy(r => r.TeamId).ToListAsync());
+        Assert.Equal("Staff note: protest lodged", stored.Single(r => r.TeamId == ids[0]).RefereeNote);
+        Assert.Equal(ResultStatus.DidNotStart, stored.Single(r => r.TeamId == ids[2]).Status);
+
+        // The outbox's legacy save works the same way.
+        var legacy = await scorer.PostAsJsonAsync($"/api/scorer/races/{w.MainRaces[1]}/results", new SubmitRaceResultsRequest(new[]
+        {
+            new FinishingPlaceDto(ids[0], 1, false, null, "ignored note"), new FinishingPlaceDto(ids[1], 0, true, ResultStatus.Retired),
+            new FinishingPlaceDto(ids[2], 2, false),
+        }));
+        Assert.Equal(HttpStatusCode.OK, legacy.StatusCode);
+        var second = await _f.WithDbAsync(db => db.Results.AsNoTracking().Where(r => r.RaceId == w.MainRaces[1]).ToListAsync());
+        Assert.All(second, r => Assert.Null(r.RefereeNote));
+        Assert.Equal(ResultStatus.Retired, second.Single(r => r.TeamId == ids[1]).Status);
+    }
+
+    [Fact]
     public async Task LongCorrectionReasonIsRefused()
     {
         var w = await WorldAsync();
