@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { ShopClassifieds, ShopPage } from './ShopPage';
 
+import { autoConfirm } from '../test/confirm';
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 const auth = vi.hoisted(() => ({ user: null as null | { id: string; fullName: string }, admin: false }));
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: auth.user, canEdit: () => auth.admin }) }));
@@ -87,7 +88,7 @@ describe('the shop', () => {
   it('lets a signed-in person open the Sell something form, and lets the seller or an admin remove a post', async () => {
     auth.user = { id: 'seller', fullName: 'Sam Seller' };
     vi.mocked(api.delete).mockResolvedValue({ data: {} });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    autoConfirm(true);
     mount();
     await userEvent.click(await screen.findByRole('button', { name: /Grey saddle/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Remove post' }));

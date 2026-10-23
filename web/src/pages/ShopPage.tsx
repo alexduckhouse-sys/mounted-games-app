@@ -7,6 +7,7 @@ import { usePageHeader } from '../components/CompactPageBarContext';
 import { LazyImage } from '../components/LazyImage';
 import { priceLabel } from '../lib/money';
 import type { CompetitionSummary, ShopComment, ShopPost } from '../types';
+import { confirmDialog } from '../components/ConfirmDialog';
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -289,7 +290,7 @@ function PostRow({
   const ownPost = currentUserId != null && post.authorUserId === currentUserId;
 
   async function remove() {
-    if (!confirm('Remove this post?')) return;
+    if (!(await confirmDialog({ title: 'Remove this post?', message: 'Remove this post?', confirmLabel: 'Remove post', destructive: true }))) return;
     await api.delete(`/shop/posts/${post.id}`);
     onChanged();
   }

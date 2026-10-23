@@ -13,10 +13,10 @@ it('adds, sorts, updates and removes streams, ignoring older generations', () =>
 });
 it('uses the live heat and race for the stream arena, or null when nothing is racing there', () => {
   const sessions = [session(1, { status: 1, arenaName: ' Main Arena ', heats: [heat(1, { races: [race(2, { isComplete: true }), race(3)] })] })];
-  expect(streamHeatLabel(sessions, 'Main Arena')).toBe('Seniors Session 1 · Heat 1 · Race 3');
+  expect(streamHeatLabel(sessions, 'Main Arena')).toBe('Senior Teams Session 1 · Heat 1 · Race 3');
   expect(streamHeatLabel(sessions, 'Second')).toBeNull();
-  expect(streamHeatLabel([session(1, { status: 1, arenaName: 'A' })], 'A')).toBe('Seniors Session 1');
-  expect(streamHeatLabel([session(1, { status: 1, arenaName: 'A', heats: [heat(1, { label: 'Final A' })] })], 'A')).toBe('Seniors Session 1 · Final A');
+  expect(streamHeatLabel([session(1, { status: 1, arenaName: 'A' })], 'A')).toBe('Senior Teams Session 1');
+  expect(streamHeatLabel([session(1, { status: 1, arenaName: 'A', heats: [heat(1, { label: 'Final A' })] })], 'A')).toBe('Senior Teams Session 1 · Final A');
   expect(streamHeatLabel([session(1, { status: 1 })], 'A')).toBeNull();
 });
 it.each(['https://youtube.com/watch?v=abc_123-xy', 'https://www.youtube.com/embed/abc_123-xy', 'https://m.youtube.com/live/abc_123-xy', 'https://youtu.be/abc_123-xy', 'https://youtube-nocookie.com/shorts/abc_123-xy'])('allows only a no-cookie YouTube embed for %s', (raw) => {

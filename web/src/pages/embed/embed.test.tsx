@@ -46,7 +46,7 @@ describe('embedded standings', () => {
     open('/embed/competitions/1/standings');
     expect(await screen.findByText('Team 1')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Spring Games' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Seniors' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Senior Teams' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Top 1 make the final')).toBeInTheDocument();
     const link = screen.getByRole('link', { name: 'Powered by Mounted Games' });
     expect(link).toHaveAttribute('href', '/competitions/1/toplists');
@@ -62,7 +62,7 @@ describe('embedded standings', () => {
   it('switches age group and shows an empty message', async () => {
     open('/embed/competitions/1/standings');
     await screen.findByText('Team 1');
-    await userEvent.click(screen.getByRole('button', { name: 'Juniors' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Junior Teams' }));
     expect(await screen.findByText('No results yet.')).toBeInTheDocument();
   });
 
@@ -72,7 +72,7 @@ describe('embedded standings', () => {
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(container.querySelector<HTMLElement>('.emb')!.style.getPropertyValue('--emb-fill')).toBe('194 65 12');
     expect(screen.queryByRole('group', { name: 'Age group' })).not.toBeInTheDocument();
-    expect(screen.getByText('Standings · Seniors', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('Standings · Senior Teams', { exact: false })).toBeInTheDocument();
   });
 
   it('ignores an accent that is not a plain hex colour', async () => {
@@ -101,7 +101,7 @@ describe('embedded standings', () => {
 describe('embedded results', () => {
   it('lists heats with places and points', async () => {
     open('/embed/competitions/1/results');
-    expect(await screen.findByRole('region', { name: 'Seniors · Session 1 · Heat 1' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Senior Teams · Session 1 · Heat 1' })).toBeInTheDocument();
     expect(screen.getByText('Team 2')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Powered by Mounted Games' })).toHaveAttribute('href', '/competitions/1');
   });
@@ -110,10 +110,10 @@ describe('embedded results', () => {
     const many = competition({ ...detail, sessions: [session(1, { heats: Array.from({ length: 10 }, (_, i) => heat(i + 1, { orderIndex: i, entries, races: [race(i + 1, { isComplete: true, results: [result(1, 1, { points: 1 })] })] })) })] });
     routes['/api/competitions/1'] = () => json(many);
     open('/embed/competitions/1/results');
-    await screen.findByRole('region', { name: 'Seniors · Session 1 · Heat 10' });
-    expect(screen.queryByRole('region', { name: 'Seniors · Session 1 · Heat 1' })).not.toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Senior Teams · Session 1 · Heat 10' });
+    expect(screen.queryByRole('region', { name: 'Senior Teams · Session 1 · Heat 1' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Show earlier results' }));
-    expect(screen.getByRole('region', { name: 'Seniors · Session 1 · Heat 1' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Senior Teams · Session 1 · Heat 1' })).toBeInTheDocument();
   });
 
   it('shows an empty message before anything is scored', async () => {
@@ -126,7 +126,7 @@ describe('embedded results', () => {
 describe('embedded timetable', () => {
   it('shows rows with their status and no links into the app', async () => {
     open('/embed/competitions/1/timetable');
-    expect(await screen.findByRole('region', { name: 'Seniors · Session 1' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Senior Teams · Session 1' })).toBeInTheDocument();
     expect(screen.getByText('Heat 1')).toBeInTheDocument();
     expect(screen.getByText('Lunch')).toBeInTheDocument();
     expect(screen.getAllByRole('link')).toHaveLength(1);
@@ -141,7 +141,7 @@ describe('embedded timetable', () => {
     ] });
     routes['/api/competitions/1'] = () => json(day);
     open('/embed/competitions/1/timetable');
-    await screen.findByRole('region', { name: 'Juniors · Session 1' });
+    await screen.findByRole('region', { name: 'Junior Teams · Session 1' });
     expect(screen.getAllByRole('region')).toHaveLength(2);
     await userEvent.click(screen.getByRole('button', { name: 'Show the whole day' }));
     expect(screen.getAllByRole('region')).toHaveLength(3);
@@ -190,7 +190,7 @@ describe('embed errors', () => {
     expect(await screen.findByText(/Couldn’t load the results/)).toBeInTheDocument();
     routes['/api/competitions/1'] = () => json(detail);
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByRole('region', { name: 'Seniors · Session 1' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Senior Teams · Session 1' })).toBeInTheDocument();
   });
 
   it('keeps unknown /embed/ paths on a message instead of redirecting to the app', async () => {

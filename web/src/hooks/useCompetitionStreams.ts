@@ -7,6 +7,8 @@ import { updateStreams } from '../lib/streams';
 export function useCompetitionStreams(competitionId: number, ready: number) {
   const [streams, setStreams] = useState<LiveStream[]>([]);
   const [streamingEnabled, setEnabled] = useState(false);
+  // False until the server has answered, so "not set up" is never shown while still asking.
+  const [streamingChecked, setChecked] = useState(false);
   const pending = useRef<((streams: LiveStream[]) => LiveStream[])[] | null>(null);
   const apply = useCallback((change: (streams: LiveStream[]) => LiveStream[]) => {
     pending.current?.push(change);
@@ -29,10 +31,11 @@ export function useCompetitionStreams(competitionId: number, ready: number) {
         // that isn't a streams response means streaming is off rather than an empty list to trust.
         const valid = typeof data === 'object' && data !== null && Array.isArray(data.streams);
         setEnabled(valid && data.enabled === true);
+        setChecked(true);
         setStreams(journal.reduce((current, change) => change(current), valid ? data.streams : []));
       }).catch(() => { /* Keep the last confirmed list; onReady retries. */ })
       .finally(() => { if (pending.current === journal) pending.current = null; });
     return () => { controller.abort(); };
   }, [competitionId, ready]);
-  return { streams, streamingEnabled, onStreamUpdated, onStreamViewers };
+  return { streams, streamingEnabled, streamingChecked, onStreamUpdated, onStreamViewers };
 }

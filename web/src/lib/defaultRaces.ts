@@ -1,6 +1,6 @@
 /**
- * The race lists the competition editor has always started a session with. Kept here so the Format page can offer
- * the same lists; `defaultRaces.test.ts` checks they still match the editor.
+ * The standard race lists a session can start with. The competition creator and the On the day page both use them,
+ * so they live here once.
  */
 export const ZONE_SENIORS = [
   'Bending', 'Hollywood Bowl Boule & Bucket', 'Bottle', 'Litter', 'Tally Ho Farm Ball & Socket', 'STRUK Pole',

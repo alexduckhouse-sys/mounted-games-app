@@ -20,6 +20,7 @@ import { WeatherNow, WeatherAt } from '../../components/WeatherChips';
 import { exportTimetableCsv } from '../../lib/timetableCsv';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 type AddKind = 'break' | 'briefing' | 'custom';
 
@@ -213,7 +214,7 @@ export function TimetableManagement() {
           <button
             className="btn-ghost !py-1.5 !px-2.5 text-xs"
             onClick={async () => {
-              if (!confirm('Move all unstarted sessions forward by one day?')) return;
+              if (!(await confirmDialog({ title: 'Move sessions forward a day?', message: 'Move all unstarted sessions forward by one day?', confirmLabel: 'Move forward a day', destructive: true }))) return;
               await api.post(`/competitions/${competition.id}/shift-day`, null, { params: { days: 1 } });
               reload();
             }}
@@ -327,7 +328,7 @@ function SessionHeatRows({
   }, [heats]);
 
   async function populateFinals() {
-    if (!confirm('Populate these finals heats with the top teams from standings?')) return;
+    if (!(await confirmDialog({ title: 'Fill the finals heats?', message: 'Populate these finals heats with the top teams from standings?', confirmLabel: 'Fill finals heats' }))) return;
     setPopulating(true);
     try {
       await api.post(`/competitions/${session.competitionId}/sessions/${session.id}/populate-finals`);

@@ -30,8 +30,12 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const { canOrganise } = useAuth();
   const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
   const showQualifiers = canOrganise(competition);
+  // A race session with no heats yet is the provisional timetable (an estimate from the creator): organisers see it,
+  // the public sees sessions once heats exist.
   const rows = useMemo(
-    () => timetableRows(competition.sessions, timings, showQualifiers).filter((row) => sectionId == null || row.session.competitionSectionId === sectionId),
+    () => timetableRows(competition.sessions, timings, showQualifiers)
+      .filter((row) => sectionId == null || row.session.competitionSectionId === sectionId)
+      .filter((row) => showQualifiers || !isProvisionalRow(row)),
     [competition.sessions, timings, showQualifiers, sectionId],
   );
   const ordinals = useMemo(() => sessionOrdinals(competition.sessions), [competition.sessions]);
@@ -132,6 +136,9 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       )}
       <div className="tt-body">
         {lead}
+        {visibleRows.some(isProvisionalRow) && (
+          <p className="tt-provisional-note" role="note">Provisional timetable: times are estimates from the structure. They become exact once teams are formed and the races are set.</p>
+        )}
         {activeGroups.map(renderGroup)}
         {finishedGroups.length > 0 && (
           <h2 className="tt-divider">{selectedDay === today ? 'Finished today' : 'Finished'} · {finishedGroups.length}<span aria-hidden="true" /></h2>
@@ -149,6 +156,9 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
     </div>
   );
 }
+
+/** A race session with no heats yet: its time is an estimate. */
+const isProvisionalRow = (row: TimetableRow) => !row.heat && (row.session.kind ?? (row.session.isBreak ? 1 : 0)) === 0;
 
 /** The arena menu: "All arenas", then each arena (with "on now" when one is running). */
 function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
@@ -187,7 +197,7 @@ function TimetableEvent({ row, competitionId, showArena }: { row: TimetableRow; 
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
   const name = race ? heatName : session.name;
-  const label = race ? '' : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
+  const label = race ? (heat ? '' : 'Provisional') : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
   const sub = [label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
   const moved = delayMinutes > 0 && !!row.scheduled;
   const content = <>

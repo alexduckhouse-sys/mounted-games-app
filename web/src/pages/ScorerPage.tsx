@@ -7,9 +7,11 @@ import {
   tokenFromHash, writeSavedScorerSession, writeScorerToken, type ScorerLoadFailure,
 } from '../offline/scorerLink';
 import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, shouldNoticeSavedCopy } from '../offline/savedCopies';
-import { enqueue, placingsOf } from '../offline/scoreOutbox';
-import { nextRaceToScore, placesFromResults, setStatus, tapTeam, toggleEliminated } from '../lib/raceScoring';
-import { lanesInUse } from '../lib/lanes';
+import { enqueue, placingsOf, type QueuedScore } from '../offline/scoreOutbox';
+import { nextRoundLanes } from '../lib/nextRoundLanes';
+import { sessionPointsBase, withQueuedResults } from '../lib/queuedView';
+import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo';
+import { nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import type { Heat, ScorerSession, Session } from '../types';
@@ -158,8 +160,7 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
   // null until the scorer touches the tiles, so a scored race shows its saved placings for correcting.
   const [pending, setPending] = useState<PendingPlace[] | null>(null);
   const [reasons, setReasons] = useState<Record<number, string>>({});
-  const [showResults, setShowResults] = useState(false);
-  const [showLaneView, setShowLaneView] = useState(false);
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Default to the first session with an unfinished heat, so the scorer lands where the action is.
@@ -170,8 +171,14 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
   const races = (heat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
   const activeRace = races.find((r) => r.id === chosenRaceId) ?? races.find((r) => !r.isComplete) ?? null;
   // A heat with more teams than lanes races only the lanes, so points are out of the lanes, not the teams.
-  const sessionBase = session.heats.reduce((most, h) => Math.max(most, lanesInUse(h.entries.length, session.lanesPerHeat)), 0);
+  const sessionBase = sessionPointsBase(session.heats, session.lanesPerHeat);
   const laneRules = lanesOf(session);
+  // Saves still waiting on this phone are shown as if sent.
+  const viewHeats = heats.map((h) => withQueuedResults(h, outbox, sessionBase));
+  const viewHeat = heat ? viewHeats.find((h) => h.id === heat.id) ?? heat : null;
+  const viewRaces = (viewHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
+  const heatIndex = heat ? heats.findIndex((h) => h.id === heat.id) : -1;
+  const nextLanes = viewHeat ? nextRoundLanes({ ...session, heats: viewHeats }, viewHeat, viewHeats[heatIndex + 1] ?? null, qualifiersOf(session)) : null;
   // In a qualifier only the teams that go through to the final are placed; the rest score 1 point each.
   const qualifierCap = heat?.raceRoundStage === 1 ? qualifiersOf(session) : null;
 
@@ -187,27 +194,27 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
   const seeded = activeRace?.isComplete ? placesFromResults(activeRace) : [];
   const shown = pending ?? seeded;
 
+  function change(next: PendingPlace[]) {
+    if (activeRace) setUndoStack((stack) => pushUndo(stack, { kind: 'draft', raceId: activeRace.id, places: shown }));
+    setPending(next);
+  }
+
   function clickTeam(teamId: number) {
-    setPending(tapTeam(shown, teamId, qualifierCap));
+    change(tapTeam(shown, teamId, qualifierCap));
   }
 
   function toggleElim(teamId: number) {
-    setPending(toggleEliminated(shown, teamId));
+    change(toggleEliminated(shown, teamId));
   }
 
-  function changeStatus(teamId: number, status: number) {
-    setPending(setStatus(shown, teamId, status));
-  }
-
-  function submit() {
+  function submit(places: PendingPlace[] = shown) {
     if (!activeRace || !heat) return;
     const reason = reasons[activeRace.id]?.trim();
     if ((activeRace.results.length > 0 || outbox.some((item) => item.raceId === activeRace.id)) && !reason) {
       setSaveError('Add a reason for this correction before saving.');
       return;
     }
-    const heatIndex = heats.findIndex((h) => h.id === heat.id);
-    const stored = updateOutbox((list) => enqueue(list, {
+    const item: QueuedScore = {
       saveId: crypto.randomUUID(),
       reason,
       viaLink: true,
@@ -215,18 +222,38 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
       competitionId: session.competitionId,
       sessionId: session.id,
       label: `${heat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
-      places: [...shown, ...restOfQualifier(heat, shown), ...sitOutPlaces(heat, races.findIndex((r) => r.id === activeRace.id), laneRules)],
+      places: [...places, ...restOfQualifier(heat, places), ...sitOutPlaces(heat, races.findIndex((r) => r.id === activeRace.id), laneRules)],
       expected: placingsOf(activeRace.results),
       teamNames: Object.fromEntries(heat.entries.map((e) => [e.teamId, e.teamName])),
       queuedAt: new Date().toISOString(),
       state: 'waiting',
-    }));
-    if (!stored) { setSaveError(OUTBOX_STORAGE_ERROR); return; }
+    };
+    const queuedBefore = outbox.find((q) => q.raceId === activeRace.id) ?? null;
+    if (!updateOutbox((list) => enqueue(list, item))) { setSaveError(OUTBOX_STORAGE_ERROR); return; }
     setSaveError(null);
+    setUndoStack((stack) => pushUndo(dropDrafts(stack, activeRace.id), { kind: 'save', raceId: activeRace.id, sent: item, queuedBefore, draft: places }));
     setPending([]);
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
     const next = nextRaceToScore(heats, session.raceOrderAlternating === true, { heatId: heat.id, raceId: activeRace.id }, queuedIds);
     if (next) { setChosenHeatId(next.heatId); setChosenRaceId(next.raceId); }
+  }
+
+  // Undo takes back the last action on the open race, or else the last save.
+  const lastUndo = undoStack[undoStack.length - 1];
+  const canUndo = lastUndo != null && (lastUndo.kind === 'save' || lastUndo.raceId === activeRace?.id);
+  function undo() {
+    if (!lastUndo) return;
+    setUndoStack((stack) => stack.slice(0, -1));
+    if (lastUndo.kind === 'draft') { setPending(lastUndo.places); return; }
+    let restore: PendingPlace[] = [];
+    updateOutbox((list) => {
+      const result = undoSave(list, lastUndo);
+      restore = result.restore;
+      return result.outbox;
+    });
+    const owner = heats.find((h) => h.races.some((r) => r.id === lastUndo.raceId));
+    if (owner) { setChosenHeatId(owner.id); setChosenRaceId(lastUndo.raceId); }
+    setPending(restore.length > 0 ? restore : null);
   }
 
   return (
@@ -255,27 +282,25 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
           ))}
         </div>
       )}
-      {heat && (
+      {viewHeat && (
         <ScoringSection
-          heat={heat}
-          races={races}
-          activeRace={activeRace}
-          onSelectRace={(id) => choose({ race: id })}
+          heat={viewHeat}
+          races={viewRaces}
+          activeRace={viewRaces.find((r) => r.id === activeRace?.id) ?? null}
+          onSelectRace={(id) => { choose({ race: id }); setUndoStack((stack) => dropDrafts(stack)); }}
           sessionBase={sessionBase}
           laneRules={laneRules}
           qualifiers={qualifiersOf(session)}
           pending={shown}
           canScore
           queued={outbox}
-          showResults={showResults}
-          onToggleResults={() => setShowResults((s) => !s)}
-          showLaneView={showLaneView}
-          onToggleLaneView={() => setShowLaneView((s) => !s)}
           onClickTeam={clickTeam}
           onToggleElim={toggleElim}
-          onSetStatus={changeStatus}
-          onReset={() => setPending([])}
+          onReset={() => change([])}
           onSubmit={submit}
+          onUndo={canUndo ? undo : undefined}
+          undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
+          nextLanes={nextLanes}
           correctionReason={activeRace ? reasons[activeRace.id] ?? '' : ''}
           onCorrectionReason={(reason) => { if (activeRace) setReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
         />

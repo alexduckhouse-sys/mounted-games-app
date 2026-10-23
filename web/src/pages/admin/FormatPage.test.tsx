@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,7 @@ import { competition, heat, race, session, team } from '../../test/factories';
 import type { CompetitionDetail, CompetitionSection } from '../../types';
 import { FormatPage } from './FormatPage';
 
+import { autoConfirm } from '../../test/confirm';
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 const auth = vi.hoisted(() => ({ organise: true }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => auth.organise }) }));
@@ -18,6 +19,7 @@ const section = (id: number, extra: Partial<CompetitionSection> = {}): Competiti
 });
 const members = (sectionId: number, n: number) => Array.from({ length: n }, (_, i) => team(sectionId * 100 + i, { competitionSectionId: sectionId, displayName: `Pair ${sectionId}-${i}` }));
 const start = new Date(2026, 9, 31, 9, 0).toISOString();
+const at = (h: number, m = 0) => new Date(2026, 9, 31, h, m);
 
 let comp: CompetitionDetail;
 let signups: unknown[];
@@ -32,7 +34,7 @@ function build(extra: Partial<CompetitionDetail> = {}): CompetitionDetail {
         heat(1, { entries: [1, 2, 3].map((n) => ({ id: n, teamId: n, teamName: 'x', laneIndex: n })), races: [race(1, { name: 'Bending' }), race(2, { name: 'Bottle' })] }),
         heat(2, { entries: [4, 5, 6].map((n) => ({ id: n, teamId: n, teamName: 'x', laneIndex: n })), races: [race(3, { name: 'Bending' }), race(4, { name: 'Bottle' })] }),
       ] }),
-      session(11, { competitionSectionId: 2, name: 'Open pairs', arenaName: 'Arena 2', orderIndex: 2, minutesPerHeat: 12 }),
+      session(11, { competitionSectionId: 2, name: 'Open pairs', arenaName: 'Arena 2', orderIndex: 2, minutesPerHeat: 12, plannedRaces: ['Litter', 'Bending', 'Bottle'] }),
       session(12, { kind: 1, isBreak: true, name: 'Lunch', orderIndex: 3, scheduledStart: new Date(2026, 9, 31, 12, 0).toISOString(), durationMinutes: 30, arenaName: null }),
     ],
     ...extra,
@@ -42,7 +44,7 @@ function build(extra: Partial<CompetitionDetail> = {}): CompetitionDetail {
 function mount() {
   return render(<MemoryRouter initialEntries={['/admin/competitions/5/format']}><Routes><Route path="/admin/competitions/:id/format" element={<FormatPage />} /></Routes></MemoryRouter>);
 }
-const sectionRegion = (name: string) => screen.findByRole('region', { name });
+const region = (name: string) => screen.findByRole('region', { name });
 
 beforeEach(() => {
   resetRaceTemplates();
@@ -61,136 +63,112 @@ beforeEach(() => {
   vi.mocked(api.delete).mockResolvedValue({ data: {} });
 });
 
-describe('FormatPage', () => {
-  it('shows the competition, the four steps and each age group with its settings and sessions', async () => {
+describe('On the day', () => {
+  it('is called On the day, shows the competition and the four steps, and links back to the creator for structure', async () => {
     mount();
-    expect(await screen.findByRole('heading', { level: 1, name: 'Format' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'On the day' })).toBeInTheDocument();
     expect(screen.getByText(/Cheshire Halloween Pairs · .* · Kelsall Hill/)).toBeInTheDocument();
     const steps = screen.getByRole('list', { name: 'Steps' });
-    expect(within(steps).getAllByRole('listitem').map((li) => li.textContent)).toEqual([expect.stringContaining('Close signups'), expect.stringContaining('Form teams'), expect.stringContaining('Sessions'), expect.stringContaining('Ready to run')]);
-    expect(within(steps).getByText('Sessions').closest('li')).toHaveAttribute('aria-current', 'step');
-    const junior = await sectionRegion('Junior pairs');
-    expect(within(junior).getByText('6 pairs')).toBeInTheDocument();
-    expect(within(junior).getByRole('radio', { name: 'Standard' })).toHaveAttribute('aria-checked', 'true');
-    expect(within(junior).getByRole('radio', { name: 'Heat, heat, final' })).toHaveAttribute('aria-checked', 'false');
-    expect(within(junior).getByLabelText('Teams in finals')).toHaveValue('6');
-    expect(within(junior).getByLabelText(/Minutes per heat/)).toHaveValue('10');
+    expect(within(steps).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      expect.stringContaining('Close signups'), expect.stringContaining('Form teams'), expect.stringContaining('Race lists'), expect.stringContaining('Timetable')]);
+    expect(within(steps).getByText('Timetable').closest('li')).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('link', { name: 'Change the structure' })).toHaveAttribute('href', '/admin/competitions/5');
+  });
+
+  it('no longer edits the structure: no sessions to add or remove, no heat, heat, final switch, minutes or finalists', async () => {
+    mount();
+    await region('Junior pairs');
+    for (const name of [/Add a session/, /Remove Junior pairs/, /Heat, heat, final/, /Standard/]) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Minutes per heat|Teams in finals/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /Arena for|Run-off race/ })).not.toBeInTheDocument();
+  });
+
+  it('lists each age group’s sessions with their heats, start and race list', async () => {
+    mount();
+    const junior = await region('Junior pairs');
     expect(within(junior).getByText(/2 heats of 3 · starts/)).toBeInTheDocument();
     expect(within(junior).getByRole('button', { name: /Races for Junior pairs: 2 races/ })).toHaveTextContent('Bending, Bottle');
-    const open = await sectionRegion('Open pairs');
+    const open = await region('Open pairs');
+    expect(open).toHaveTextContent('heat, heat, final');
     expect(within(open).getByText(/2 heats of 4 · would start/)).toBeInTheDocument();
-    expect(within(open).getByText('Final')).toBeInTheDocument();
-    expect(within(open).getByRole('radio', { name: 'Heat, heat, final' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(open).getByRole('button', { name: /Races for Open pairs: 3 races/ })).toHaveTextContent('Litter, Bending…');
+    expect(within(open).getByRole('button', { name: /3 races/ })).not.toHaveTextContent('standard list');
   });
 
-  it('lists breaks and briefings, and links to the timetable to add one', async () => {
+  it('shows the timetable as provisional until every session has heats, with the break where it was put', async () => {
     mount();
-    const breaks = await sectionRegion('Breaks and briefings');
+    const timetable = await region('Timetable');
+    expect(timetable).toHaveTextContent('Provisional');
+    const rows = within(within(timetable).getByRole('list', { name: 'Timetable so far' })).getAllByRole('listitem');
+    expect(rows.map((r) => r.querySelector('strong')?.textContent)).toEqual(['Junior pairs', 'Open pairs', 'Lunch']);
+    expect(rows[2]).toHaveTextContent('Break · All arenas');
+    expect(rows[2]).toHaveTextContent('30 min');
+    expect(within(timetable).getByText(/An estimate from the structure and the teams formed so far/)).toBeInTheDocument();
+  });
+
+  it('calls the timetable exact once every session has heats', async () => {
+    comp = build({ sessions: build().sessions.map((s) => (s.id === 11 ? { ...s, heats: [heat(9, { entries: [{ id: 1, teamId: 1, teamName: 'x', laneIndex: 1 }], races: [race(9, { name: 'Litter' })] })], scheduledStart: start } : s)) });
+    mount();
+    const timetable = await region('Timetable');
+    expect(timetable).toHaveTextContent('Exact');
+    expect(within(timetable).queryByText(/An estimate from the structure/)).not.toBeInTheDocument();
+  });
+});
+
+describe('On the day: hatbands', () => {
+  it('shows which hatband goes with which lane when the creator set them, and nothing when it did not', async () => {
+    mount();
+    await region('Timetable');
+    expect(screen.queryByRole('list', { name: 'Hatbands by lane' })).not.toBeInTheDocument();
+  });
+
+  it('lists them', async () => {
+    comp = build({ laneHatbands: ['Red', 'White', 'Blue'] });
+    mount();
+    expect((await screen.findAllByRole('listitem')).some((li) => li.textContent === 'Lane 3 · Blue')).toBe(true);
+  });
+});
+
+describe('On the day: breaks and briefings', () => {
+  it('lists them, adds one to the timetable and removes one after asking', async () => {
+    mount();
+    const breaks = await region('Breaks and briefings');
     expect(breaks).toHaveTextContent('Lunch');
     expect(breaks).toHaveTextContent('30 min');
-    expect(within(breaks).getByRole('link', { name: /Add a break or briefing/ })).toHaveAttribute('href', '/competitions/5');
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const form = within(breaks).getByRole('group', { name: 'Add a break or briefing' });
+    await userEvent.selectOptions(within(form).getByLabelText('Type'), 'Briefing');
+    await userEvent.type(within(form).getByLabelText('Name'), 'Riders briefing');
+    fireEvent.change(within(form).getByLabelText('Starts'), { target: { value: '08:45' } });
+    await userEvent.selectOptions(within(form).getByLabelText('Who stops'), 'Arena 2');
+    await userEvent.click(within(form).getByRole('button', { name: 'Add to timetable' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/5/sessions', expect.objectContaining({
+      competitionSectionId: null, name: 'Riders briefing', arenaName: 'Arena 2', kind: 2, isBreak: false, durationMinutes: 45, orderIndex: 4,
+      scheduledStart: new Date(2026, 9, 31, 8, 45).toISOString(),
+    })));
+    expect(await screen.findByText('Riders briefing added to the timetable.')).toBeInTheDocument();
+
+    const confirm = autoConfirm([false, true]);
+    await userEvent.click(within(breaks).getByRole('button', { name: 'Remove Lunch' }));
+    expect(api.delete).not.toHaveBeenCalled();
     await userEvent.click(within(breaks).getByRole('button', { name: 'Remove Lunch' }));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/5/sessions/12'));
+    expect(confirm).toHaveBeenCalledWith('Remove Lunch?');
   });
 
-  it('switches an age group to heat, heat, final, and saves the run-off race and teams in finals', async () => {
+  it('shows a refusal when adding fails', async () => {
+    vi.mocked(api.post).mockRejectedValue({ response: { data: { message: 'Not allowed.' } } });
     mount();
-    const junior = await sectionRegion('Junior pairs');
-    await userEvent.click(within(junior).getByRole('radio', { name: 'Heat, heat, final' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/5/sections/1', { runoffRaceName: 'Speed Weave', usesRaceFinals: true, finalistCount: 6 }));
-    await userEvent.click(within(junior).getByRole('combobox', { name: 'Run-off race for Junior pairs' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Flag Race' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/5/sections/1', expect.objectContaining({ runoffRaceName: 'Flag Race' })));
-    const box = within(junior).getByLabelText('Teams in finals');
-    await userEvent.clear(box);
-    await userEvent.type(box, '8');
-    await userEvent.tab();
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/5/sections/1', expect.objectContaining({ finalistCount: 8 })));
-    await userEvent.clear(box);
-    await userEvent.tab();
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/5/sections/1', expect.objectContaining({ finalistCount: null })));
+    const form = within(await region('Breaks and briefings')).getByRole('group', { name: 'Add a break or briefing' });
+    await userEvent.click(within(form).getByRole('button', { name: 'Add to timetable' }));
+    expect(await screen.findByText('Not allowed.')).toBeInTheDocument();
   });
+});
 
-  it('refuses a teams in finals value that is not a number from 1 to 50', async () => {
+describe('On the day: race lists', () => {
+  it('edits a race list in a dialog and saves it on the session, so it is there until the timetable is generated', async () => {
     mount();
-    const box = (await sectionRegion('Junior pairs')).querySelector('input[inputmode="numeric"]') as HTMLInputElement;
-    await userEvent.clear(box);
-    await userEvent.type(box, '99');
-    await userEvent.tab();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Teams in finals must be a number from 1 to 50.');
-    expect(api.put).not.toHaveBeenCalled();
-  });
-
-  it('writes minutes per heat onto every session of the age group', async () => {
-    mount();
-    const junior = await sectionRegion('Junior pairs');
-    const box = within(junior).getByLabelText(/Minutes per heat/);
-    await userEvent.clear(box);
-    await userEvent.type(box, '14');
-    await userEvent.tab();
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/5/sessions/10/settings', { minutesPerHeat: 14 }));
-    expect(api.put).not.toHaveBeenCalledWith('/competitions/5/sessions/11/settings', expect.anything());
-    await userEvent.clear(box);
-    await userEvent.type(box, '0');
-    await userEvent.tab();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Minutes per heat must be a number from 1 to 180.');
-  });
-
-  it('adds a session with the next name and the minutes of its age group', async () => {
-    vi.mocked(api.post).mockResolvedValue({ data: { id: 20 } });
-    mount();
-    const junior = await sectionRegion('Junior pairs');
-    await userEvent.click(within(junior).getByRole('button', { name: 'Add a session' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/5/sessions', expect.objectContaining({
-      competitionSectionId: 1, name: 'Junior pairs · Session 2', arenaName: 'Main arena', kind: 0, orderIndex: 4,
-    })));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/5/sessions/20/settings', { minutesPerHeat: 10 }));
-  });
-
-  it('allows only one session for heat, heat, final', async () => {
-    mount();
-    const open = await sectionRegion('Open pairs');
-    expect(within(open).getByRole('button', { name: 'Add a session' })).toBeDisabled();
-  });
-
-  it('renames a session and moves it to another arena', async () => {
-    mount();
-    const junior = await sectionRegion('Junior pairs');
-    const name = within(junior).getByLabelText('Name of Junior pairs');
-    await userEvent.clear(name);
-    await userEvent.type(name, 'Junior pairs · Morning');
-    await userEvent.tab();
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/5/sessions/10', { name: 'Junior pairs · Morning' }));
-    await userEvent.click(within(junior).getByRole('combobox', { name: 'Arena for Junior pairs' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Arena 2' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/5/sessions/10', { arenaName: 'Arena 2' }));
-  });
-
-  it('puts a blank or unchanged name back as it was', async () => {
-    mount();
-    const junior = await sectionRegion('Junior pairs');
-    const name = within(junior).getByLabelText('Name of Junior pairs');
-    await userEvent.clear(name);
-    await userEvent.tab();
-    expect(name).toHaveValue('Junior pairs');
-    expect(api.put).not.toHaveBeenCalled();
-  });
-
-  it('removes a session after asking, and forgets its race list', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true);
-    mount();
-    const junior = await sectionRegion('Junior pairs');
-    await userEvent.click(within(junior).getByRole('button', { name: 'Remove Junior pairs' }));
-    expect(api.delete).not.toHaveBeenCalled();
-    await userEvent.click(within(junior).getByRole('button', { name: 'Remove Junior pairs' }));
-    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/5/sessions/10'));
-    expect(confirm).toHaveBeenLastCalledWith('Remove Junior pairs and its 2 heats?');
-  });
-
-  it('edits a race list in a dialog and keeps it until the timetable is generated', async () => {
-    mount();
-    const junior = await sectionRegion('Junior pairs');
+    const junior = await region('Junior pairs');
     await userEvent.click(within(junior).getByRole('button', { name: /Races for Junior pairs/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Races for Junior pairs' });
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(2);
@@ -200,15 +178,16 @@ describe('FormatPage', () => {
     await userEvent.click(within(dialog).getByRole('combobox', { name: 'Add a race from the library' }));
     await userEvent.click(await screen.findByRole('option', { name: 'Flag Race' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save race list' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/5/sessions/10', { plannedRaces: ['Bottle', 'Litter', 'Flag Race'] }));
     expect(await screen.findByRole('status')).toHaveTextContent('Race list saved for Junior pairs');
-    expect(within(junior).getByRole('button', { name: /Races for Junior pairs: 3 races/ })).toHaveTextContent('Bottle, Litter…');
-    expect(within(junior).getByRole('button', { name: /3 races/ })).toHaveTextContent('not generated yet');
-    expect(JSON.parse(localStorage.getItem('mg.format.races.v1.5')!)).toEqual({ 10: ['Bottle', 'Litter', 'Flag Race'] });
+    expect(localStorage.length).toBe(0);
   });
 
-  it('starts a race list from a standard list, and cancels without saving', async () => {
+  it('starts from a standard list when none was chosen, and cancels without saving', async () => {
+    comp = build({ sessions: build().sessions.map((s) => (s.id === 11 ? { ...s, plannedRaces: null } : s)) });
     mount();
-    const open = await sectionRegion('Open pairs');
+    const open = await region('Open pairs');
+    expect(within(open).getByRole('button', { name: /3 races|10 races/ })).toHaveTextContent('standard list');
     await userEvent.click(within(open).getByRole('button', { name: /Races for Open pairs/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Races for Open pairs' });
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(10);
@@ -216,64 +195,107 @@ describe('FormatPage', () => {
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(8);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(localStorage.getItem('mg.format.races.v1.5')).toBeNull();
+    expect(api.put).not.toHaveBeenCalled();
   });
 
-  it('previews start times without saving anything', async () => {
+  it('does not let the races of a session that has started be changed', async () => {
+    comp = build({ sessions: build().sessions.map((s) => (s.id === 10 ? { ...s, status: 1 as const } : s)) });
     mount();
-    await userEvent.click(await screen.findByRole('button', { name: 'Preview timetable' }));
-    const preview = screen.getByRole('region', { name: 'Timetable preview' });
-    expect(within(preview).getAllByRole('listitem')).toHaveLength(2);
-    expect(preview).toHaveTextContent('Open pairs');
-    expect(preview).toHaveTextContent('2 heats of 4');
-    expect(api.post).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Preview timetable' }));
-    expect(screen.queryByRole('region', { name: 'Timetable preview' })).not.toBeInTheDocument();
+    const junior = await region('Junior pairs');
+    expect(within(junior).queryByRole('button', { name: /Races for Junior pairs/ })).not.toBeInTheDocument();
+    expect(junior).toHaveTextContent('Started');
   });
 
-  it('generates heats with the chosen races and a planned start for each session, after asking', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true);
+  it('shows the reason when a race list cannot be saved', async () => {
+    vi.mocked(api.put).mockRejectedValue({ response: { data: { message: 'This session has started.' } } });
     mount();
-    await screen.findByRole('region', { name: 'Open pairs' });
+    const open = await region('Open pairs');
+    await userEvent.click(within(open).getByRole('button', { name: /Races for Open pairs/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Save race list' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('This session has started.');
+  });
+
+  it('works out the race list of a heat, heat, final session from its heats', async () => {
+    comp = build({ sessions: build().sessions.map((s) => (s.id === 11 ? { ...s, plannedRaces: null, heats: [
+      heat(5, { label: 'Litter · Q1', races: [race(5, { name: 'Litter' })] }), heat(6, { label: 'Litter · Q2', races: [race(6, { name: 'Litter' })] }), heat(7, { label: 'Litter · Final', races: [race(7, { name: 'Litter' })] }),
+      heat(8, { label: 'Bottle · Q1', races: [race(8, { name: 'Bottle' })] }),
+    ] } : s)) });
+    mount();
+    expect(await screen.findByRole('button', { name: /Races for Open pairs: 2 races/ })).toHaveTextContent('Litter, Bottle');
+    expect(screen.getAllByText(/4 heats, qualifiers and finals/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('On the day: generating the exact timetable', () => {
+  it('previews nothing but generates heats from the planned races with a start for each session, after asking', async () => {
+    autoConfirm([false, true]);
+    mount();
+    await region('Open pairs');
     await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
     expect(api.post).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/5/sessions/11/generate-heats', expect.objectContaining({
-      teamIds: members(2, 8).map((t) => t.id), lanesPerHeat: 4, replaceExisting: true,
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/5/sessions/10/generate-heats', expect.objectContaining({
+      teamIds: members(1, 6).map((t) => t.id), raceNames: ['Bending', 'Bottle'], lanesPerHeat: 4, replaceExisting: true,
     })));
-    expect(api.post).toHaveBeenCalledWith('/competitions/5/sessions/10/generate-heats', expect.objectContaining({ raceNames: ['Bending', 'Bottle'], teamIds: members(1, 6).map((t) => t.id) }));
+    // The heat, heat, final age group is generated as race finals, from its planned races.
+    expect(api.post).toHaveBeenCalledWith('/competitions/5/sessions/11/generate-race-finals', expect.objectContaining({
+      teamIds: members(2, 8).map((t) => t.id), raceNames: ['Litter', 'Bending', 'Bottle'], lanesPerHeat: 4, replaceExisting: true,
+    }));
     expect(api.put).toHaveBeenCalledWith('/competitions/5/sessions/10', { scheduledStart: expect.any(String) });
     expect(await screen.findByText('Timetable generated for 2 sessions.')).toBeInTheDocument();
   });
 
+  it('leaves breaks and briefings alone and plans the sessions around them', async () => {
+    comp = build({ sessions: [
+      ...build().sessions.filter((s) => s.id !== 12),
+      session(12, { kind: 1, isBreak: true, name: 'Lunch', orderIndex: 3, scheduledStart: at(9).toISOString(), durationMinutes: 45, arenaName: null }),
+      session(13, { kind: 2, name: 'Briefing', orderIndex: 4, scheduledStart: at(8, 30).toISOString(), durationMinutes: 15, arenaName: 'Arena 2' }),
+    ] });
+    autoConfirm(true);
+    mount();
+    await region('Open pairs');
+    await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
+    await screen.findByText('Timetable generated for 2 sessions.');
+    // Nothing that is a break or briefing is touched.
+    expect(api.delete).not.toHaveBeenCalled();
+    const touched = [...vi.mocked(api.put).mock.calls, ...vi.mocked(api.post).mock.calls].map(([url]) => String(url));
+    expect(touched.some((url) => /sessions\/1[23]/.test(url))).toBe(false);
+    // The whole-event lunch (9:00 to 9:45) pushes the first session to 9:45; the Arena 2 briefing ended before 9:00.
+    const startOf = (sessionId: number) => new Date((vi.mocked(api.put).mock.calls.find(([url]) => url === `/competitions/5/sessions/${sessionId}`)![1] as { scheduledStart: string }).scheduledStart);
+    expect(startOf(10)).toEqual(at(9, 45));
+    expect(startOf(11)).toEqual(at(9, 45));
+  });
+
   it('leaves a session that has already started alone, and says so', async () => {
     comp = build({ sessions: build().sessions.map((s) => (s.id === 10 ? { ...s, status: 1 as const } : s)) });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    autoConfirm(true);
     mount();
-    await screen.findByRole('region', { name: 'Open pairs' });
+    await region('Open pairs');
     await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/5/sessions/11/generate-heats', expect.anything()));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/5/sessions/11/generate-race-finals', expect.anything()));
     expect(api.post).not.toHaveBeenCalledWith('/competitions/5/sessions/10/generate-heats', expect.anything());
     expect(await screen.findByText(/1 left alone because they had started/)).toBeInTheDocument();
   });
 
-  it('says why when there is nothing to generate, and when generating fails', async () => {
+  it('says why when there is nothing to generate, and shows the server’s reason when generating fails', async () => {
     comp = build({ teams: [] });
     mount();
-    await screen.findByRole('region', { name: 'Open pairs' });
+    await region('Open pairs');
     await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('There are no teams to put in heats yet.');
   });
 
   it('shows the server’s reason when generating fails', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    autoConfirm(true);
     vi.mocked(api.post).mockRejectedValue({ response: { data: { message: 'Some of those teams aren’t in this competition.' } } });
     mount();
-    await screen.findByRole('region', { name: 'Open pairs' });
+    await region('Open pairs');
     await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Some of those teams aren’t in this competition.');
   });
+});
 
+describe('On the day: signups and teams', () => {
   it('closes and re-opens signups from the first step', async () => {
     comp = build({ signupsLocked: false });
     mount();

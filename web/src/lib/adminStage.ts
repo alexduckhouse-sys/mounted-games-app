@@ -5,7 +5,7 @@ export type Stage = 'draft' | 'entries' | 'format' | 'ready' | 'live' | 'finishe
 export const STAGE_LABEL: Record<Stage, string> = {
   draft: 'Draft',
   entries: 'Entries open',
-  format: 'Set format',
+  format: 'Build timetable',
   ready: 'Ready to run',
   live: 'Live',
   finished: 'Finished',
@@ -18,13 +18,13 @@ const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDat
  * no age groups is a draft; age groups with no teams is taking entries; teams but no timetable still needs its format;
  * a timetable is ready to run, and live on the day itself. Anything that ended before today is finished.
  */
-export function stageOf(c: Pick<CompetitionSummary, 'startDate' | 'endDate' | 'isArchived' | 'sectionCount' | 'teamCount' | 'sessionCount'>, now: Date): Stage {
+export function stageOf(c: Pick<CompetitionSummary, 'startDate' | 'endDate' | 'isArchived' | 'sectionCount' | 'teamCount' | 'sessionCount' | 'heatedSessionCount'>, now: Date): Stage {
   const start = new Date(c.startDate);
   const end = new Date(c.endDate ?? c.startDate);
   const today = startOfDay(now);
   if (c.isArchived || (!Number.isNaN(end.getTime()) && startOfDay(end) < today)) return 'finished';
   const onToday = !Number.isNaN(start.getTime()) && startOfDay(start) <= today && (Number.isNaN(end.getTime()) || today <= startOfDay(end));
-  if (c.sessionCount > 0) return onToday ? 'live' : 'ready';
+  if ((c.heatedSessionCount ?? c.sessionCount) > 0) return onToday ? 'live' : 'ready';
   if (c.teamCount > 0) return 'format';
   return c.sectionCount > 0 ? 'entries' : 'draft';
 }
@@ -34,7 +34,7 @@ export function stageAction(stage: Stage, id: number): { label: string; to: stri
   switch (stage) {
     case 'live': return { label: 'Run day', to: `/competitions/${id}` };
     case 'format':
-    case 'ready': return { label: 'Format', to: `/admin/competitions/${id}/format` };
+    case 'ready': return { label: 'On the day', to: `/admin/competitions/${id}/format` };
     case 'finished': return { label: 'Results', to: `/competitions/${id}/toplists` };
     default: return { label: 'Edit', to: `/admin/competitions/${id}` };
   }

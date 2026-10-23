@@ -1,4 +1,7 @@
 import type { DeclarationForm, RiderEntry, SavedRider, SectionFormat } from '../types';
+import {
+  asked, blankExtras, normalisePhone, PHONE_HELP, breach, extraIssues, extrasBody, extrasFromEntry, extrasReady, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers,
+} from './decFormConfig';
 
 /**
  * The dec form screen's rules, kept apart from the page so they can be tested: a team of five riders and a
@@ -19,6 +22,8 @@ export interface DecRider {
   useInitialOnly: boolean;
   noFilming: boolean;
   isGuestRider: boolean;
+  /** Answers to the parts the organiser added (weight, passport number, their own questions and so on). */
+  extra: ExtraAnswers;
 }
 
 export type Slot = DecRider | null;
@@ -35,7 +40,7 @@ export function emptySlots(riders: number): Slot[] {
 export const isReserveSlot = (slots: readonly Slot[], index: number): boolean => index === slots.length - 1;
 
 export function blankRider(): DecRider {
-  return { savedRiderId: null, fullName: '', dob: '', pony: '', height: '', isCaptain: false, useInitialOnly: false, noFilming: false, isGuestRider: false };
+  return { savedRiderId: null, fullName: '', dob: '', pony: '', height: '', isCaptain: false, useInitialOnly: false, noFilming: false, isGuestRider: false, extra: blankExtras() };
 }
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -69,10 +74,32 @@ export function parseHeight(text: string): number | null {
 
 export const heightText = (hands: number | null | undefined): string => (hands == null ? '' : hands.toFixed(1));
 
-/** Name and birth date for anyone; a riding slot also needs the pony and its height. */
-export function riderReady(rider: DecRider, reserve: boolean, today?: Date): boolean {
-  if (!rider.fullName.trim() || parseDob(rider.dob, today) === null) return false;
-  return reserve || (rider.pony.trim() !== '' && parseHeight(rider.height) !== null);
+/**
+ * What the form is still missing for one rider, and what is typed badly. The base form is the name and, for a riding
+ * slot, the pony; the date of birth and height follow the competition's setup (the standard form asks for both).
+ */
+export function riderIssues(rider: DecRider, reserve: boolean, config: DecFormConfig = STANDARD_CONFIG, today?: Date) {
+  const issues = extraIssues(rider.extra, reserve, config, today);
+  const missing = [...issues.missing];
+  const invalid = { ...issues.invalid };
+  if (!rider.fullName.trim()) missing.unshift('rider’s name');
+  if (asked(config.dob) && config.dobFormat === 0) {
+    if (rider.dob.trim() === '') { if (config.dob === 2) missing.push('date of birth'); }
+    else if (parseDob(rider.dob, today) === null) invalid.dob = 'Use dd/mm/yyyy, like 05/04/2015.';
+  }
+  if (!reserve) {
+    if (rider.pony.trim() === '') missing.push('pony’s name');
+    if (asked(config.ponyHeight)) {
+      if (rider.height.trim() === '') { if (config.ponyHeight === 2) missing.push('pony’s height'); }
+      else if (parseHeight(rider.height) === null) invalid.height = 'Use hands, like 13.2 (inches run 0 to 3).';
+    }
+  }
+  return { missing, invalid };
+}
+
+/** Whether the rider panel can add this rider. */
+export function riderReady(rider: DecRider, reserve: boolean, today?: Date, config: DecFormConfig = STANDARD_CONFIG): boolean {
+  return extrasReady(riderIssues(rider, reserve, config, today));
 }
 
 export function riderFromSaved(saved: SavedRider, reserve: boolean): DecRider {
@@ -89,7 +116,7 @@ export function riderFromSaved(saved: SavedRider, reserve: boolean): DecRider {
   };
 }
 
-function riderFromEntry(entry: RiderEntry): DecRider {
+function riderFromEntry(entry: RiderEntry, config: DecFormConfig): DecRider {
   return {
     savedRiderId: entry.savedRiderId ?? null,
     fullName: entry.fullName,
@@ -100,6 +127,7 @@ function riderFromEntry(entry: RiderEntry): DecRider {
     useInitialOnly: entry.useInitialOnly ?? false,
     noFilming: entry.noFilming ?? false,
     isGuestRider: entry.isGuestRider ?? false,
+    extra: extrasFromEntry(entry, config.weightUnit),
   };
 }
 
@@ -107,13 +135,13 @@ function riderFromEntry(entry: RiderEntry): DecRider {
  * The slots for a team that already has a declaration. A form from before this screen can hold more than the
  * usual number of riders; they all keep a slot so nobody is dropped when it is sent again.
  */
-export function slotsFromForm(form: DeclarationForm, required: number): Slot[] {
+export function slotsFromForm(form: DeclarationForm, required: number, config: DecFormConfig = STANDARD_CONFIG): Slot[] {
   const ordered = form.riders.slice().sort((a, b) => a.orderIndex - b.orderIndex);
   const reserve = ordered.find((r) => r.isReserve);
   const riding = ordered.filter((r) => r !== reserve);
   const slots = emptySlots(Math.max(required, riding.length));
-  riding.forEach((entry, i) => { slots[i] = riderFromEntry(entry); });
-  if (reserve) slots[slots.length - 1] = riderFromEntry(reserve);
+  riding.forEach((entry, i) => { slots[i] = riderFromEntry(entry, config); });
+  if (reserve) slots[slots.length - 1] = riderFromEntry(reserve, config);
   return slots;
 }
 
@@ -133,10 +161,19 @@ export function savedChoices(saved: readonly SavedRider[], slots: readonly Slot[
   return saved.filter((s) => !inTeam.some((r) => r.savedRiderId === s.id || sameName(r.fullName, s.fullName)));
 }
 
-/** The second line of a filled slot: "Pickle · 13.2 hh · born 05/04/2015". */
-export function slotMeta(rider: DecRider, reserve: boolean): string {
-  const born = `born ${rider.dob}`;
-  return reserve ? `Non-riding · ${born}` : `${rider.pony} · ${rider.height} hh · ${born}`;
+/** The second line of a filled slot: "Pickle · 13.2 hh · born 05/04/2015". Only what the form asks is shown. */
+export function slotMeta(rider: DecRider, reserve: boolean, config: DecFormConfig = STANDARD_CONFIG): string {
+  const born = !asked(config.dob) ? null
+    : config.dobFormat === 1 ? (rider.extra.birthYear ? `born ${rider.extra.birthYear}` : null)
+      : config.dobFormat === 2 ? (rider.extra.ageGroup ? rider.extra.ageGroup : null)
+        : rider.dob ? `born ${rider.dob}` : null;
+  const parts = reserve ? ['Non-riding', born] : [rider.pony, asked(config.ponyHeight) && rider.height ? `${rider.height} hh` : null, born];
+  return parts.filter(Boolean).join(' · ');
+}
+
+/** True when a rider in the slot has an answer that breaks one of the organiser's number rules. */
+export function slotFlagged(rider: DecRider, config: DecFormConfig): boolean {
+  return config.customFields.some((f) => f.type === 1 && breach(f, rider.extra.custom[f.id] ?? '') !== null);
 }
 
 export function slotLabel(slots: readonly Slot[], index: number): string {
@@ -154,8 +191,15 @@ export function statusText(slots: readonly Slot[], agreed: boolean, submitted: b
   return `${ridersAdded(slots)} of ${slots.length - 1} riders added`;
 }
 
-export function canSubmit(slots: readonly Slot[], agreed: boolean, teamName: string): boolean {
-  return teamIsFull(slots) && agreed && teamName.trim() !== '';
+export function canSubmit(slots: readonly Slot[], agreed: boolean, teamName: string, phoneOk = true): boolean {
+  return teamIsFull(slots) && agreed && teamName.trim() !== '' && phoneOk;
+}
+
+/** What is wrong with the trainer's phone number, in friendly words, or null when it is fine (or not asked for). */
+export function phoneProblem(phone: string, config: DecFormConfig): string | null {
+  if (!asked(config.trainerPhone)) return null;
+  if (phone.trim() === '') return config.trainerPhone === 2 ? 'Add a phone number for the trainer.' : null;
+  return normalisePhone(phone) === null ? PHONE_HELP : null;
 }
 
 export interface DecFormFields {
@@ -168,16 +212,16 @@ export interface DecFormFields {
 }
 
 /** The body of `POST /declaration-forms`. Ticking the terms is the only way to get here, so it is always true. */
-export function buildSubmitBody(fields: DecFormFields, slots: readonly Slot[]) {
+export function buildSubmitBody(fields: DecFormFields, slots: readonly Slot[], config: DecFormConfig = STANDARD_CONFIG) {
   const riders = slots.flatMap((rider, index) => {
     if (!rider) return [];
     const reserve = isReserveSlot(slots, index);
     return [{
       savedRiderId: rider.savedRiderId,
       fullName: rider.fullName.trim(),
-      dateOfBirth: parseDob(rider.dob),
+      dateOfBirth: asked(config.dob) && config.dobFormat === 0 ? parseDob(rider.dob) : null,
       horseName: reserve ? null : rider.pony.trim() || null,
-      ponyHeightHands: reserve ? null : parseHeight(rider.height),
+      ponyHeightHands: reserve || !asked(config.ponyHeight) ? null : parseHeight(rider.height),
       bibColour: null,
       isCaptain: rider.isCaptain,
       isReserve: reserve,
@@ -185,14 +229,15 @@ export function buildSubmitBody(fields: DecFormFields, slots: readonly Slot[]) {
       useInitialOnly: rider.useInitialOnly,
       noFilming: rider.noFilming,
       orderIndex: index,
+      ...extrasBody(rider.extra, reserve, config),
     }];
   });
   return {
     teamId: fields.teamId,
     teamName: fields.teamName.trim(),
-    bibDescription: fields.bibs.trim(),
+    bibDescription: asked(config.bib) ? fields.bibs.trim() : '',
     trainerName: fields.trainerName.trim() || null,
-    trainerPhone: fields.phone.trim() || null,
+    trainerPhone: asked(config.trainerPhone) ? fields.phone.trim() || null : null,
     notes: fields.notes.trim() || null,
     // New riders go on the club's roster so they can be picked next time.
     saveToRoster: true,
@@ -216,7 +261,7 @@ export function parseDraft(raw: string | null, required: number): DecFormDraft |
     const value = JSON.parse(raw) as Partial<DecFormDraft> | null;
     if (!value || typeof value.teamId !== 'number' || !Array.isArray(value.slots) || value.slots.length < required + 1) return null;
     const text = (v: unknown) => (typeof v === 'string' ? v : '');
-    const slots = value.slots.map((s): Slot => (s && typeof s === 'object' ? { ...blankRider(), ...s } : null));
+    const slots = value.slots.map((s): Slot => (s && typeof s === 'object' ? { ...blankRider(), ...s, extra: { ...blankExtras(), ...(s.extra ?? {}) } } : null));
     return {
       teamId: value.teamId, teamName: text(value.teamName), bibs: text(value.bibs), trainerName: text(value.trainerName),
       phone: text(value.phone), notes: text(value.notes), slots,

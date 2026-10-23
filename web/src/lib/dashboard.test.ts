@@ -33,7 +33,7 @@ describe('eventFacts', () => {
   it('names the heat on now, how late the timetable runs and where', () => {
     const facts = eventFacts(running, [stream(1, 1, 150), stream(2, 1, 62), stream(3, 2, 99)]);
     expect(facts.isLive).toBe(true);
-    expect(facts.line).toBe('Open · Session 1, Heat 2 on now');
+    expect(facts.line).toBe('Open Teams · Session 1, Heat 2 on now');
     expect(facts.timetable).toEqual({ text: 'Arena 2 · 8 min late', tone: 'late' });
     expect(facts.toplists).toEqual({ text: '2 age groups', tone: 'normal' });
     expect(facts.live).toEqual({ text: '212 watching', tone: 'normal' });

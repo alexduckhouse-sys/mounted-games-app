@@ -450,7 +450,7 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var dto = await r.ReadAsync<CompetitionSectionDto>();
-        Assert.Equal("Pairs Under 15", dto.DisplayName);
+        Assert.Equal("Under 15 Pairs", dto.DisplayName);
         Assert.Equal(comp, dto.CompetitionId);
         Assert.Equal(0, dto.PriceMinor);
         Assert.Null(dto.MaxParticipants);
@@ -470,7 +470,7 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
         });
 
         var dto = await r.ReadAsync<CompetitionSectionDto>();
-        Assert.Equal("Custom name", dto.DisplayName);
+        Assert.Equal("Open Teams", dto.DisplayName);
         Assert.Equal("Bending", dto.RunoffRaceName);
         Assert.True(dto.UsesRaceFinals);
         Assert.Equal(1500, dto.PriceMinor);

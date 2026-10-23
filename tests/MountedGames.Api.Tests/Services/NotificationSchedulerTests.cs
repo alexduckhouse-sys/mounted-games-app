@@ -48,7 +48,7 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
     }
 
     private Task<int> AddSessionAsync(Scenario s, SessionKind kind, double minutesAhead,
-        SessionStatus status = SessionStatus.Upcoming, bool withSection = true)
+        SessionStatus status = SessionStatus.Upcoming, bool withSection = true, bool withHeats = true)
         => _f.InDbAsync(async db =>
         {
             var session = new Session
@@ -60,6 +60,7 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
                 Status = status,
                 ScheduledStart = DateTime.UtcNow.AddMinutes(minutesAhead),
             };
+            if (kind == SessionKind.Race && withHeats) session.Heats.Add(new Heat { Label = "Heat 1", OrderIndex = 1 });
             db.Sessions.Add(session);
             await db.SaveChangesAsync();
             return session.Id;
@@ -74,6 +75,17 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
         await NewScheduler().TickAsync(CancellationToken.None);
 
         Assert.Equal(1, s.Push.Received);
+    }
+
+    [Fact]
+    public async Task Tick_SaysNothing_AboutARaceSessionThatOnlyHasAnEstimatedStart()
+    {
+        using var s = await ArrangeAsync();
+        await AddSessionAsync(s, SessionKind.Race, 57, withHeats: false);
+
+        await NewScheduler().TickAsync(CancellationToken.None);
+
+        Assert.Equal(0, s.Push.Received);
     }
 
     [Fact]

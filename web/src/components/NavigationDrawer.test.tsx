@@ -50,7 +50,6 @@ function Probe() {
 }
 
 const onClose = vi.fn();
-const onChangeCompetition = vi.fn();
 
 function mount(options: Options = {}) {
   if (options.roles) {
@@ -65,7 +64,7 @@ function mount(options: Options = {}) {
     <MemoryRouter initialEntries={[options.path ?? '/']}>
       <AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider>
         <Seed meta={options.meta} groups={options.groups} extras={options.extras} />
-        <NavigationDrawer onClose={onClose} onChangeCompetition={onChangeCompetition} />
+        <NavigationDrawer onClose={onClose} />
         <Probe />
       </CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider>
     </MemoryRouter>,
@@ -75,7 +74,6 @@ const links = (name: string) => within(screen.getByRole('navigation', { name }))
 
 beforeEach(() => {
   onClose.mockClear();
-  onChangeCompetition.mockClear();
   vi.mocked(api.get).mockResolvedValue({ data: {} });
   vi.mocked(getWeather).mockResolvedValue({ current: { temperature_2m: 16, weather_code: 0 } });
 });
@@ -90,16 +88,20 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(document.body.style.overflow).toBe('auto');
   });
 
-  it('sends the competition links to the picker or the general feed', () => {
+  it('sends the competition links to the events list, and leaves out live stream', () => {
     mount();
     expect(links('Main navigation')).toEqual([
-      ['Following', '/following'], ['Timetable', '/competitions'], ['Toplists', '/competitions'], ['Live feed & stream', '/chat'], ['Event shop', '/shop'], ['Rulebooks', '/competitions'], ['Details & entries', '/competitions'],
+      ['Following', '/following'], ['Timetable', '/events'], ['Toplists', '/events'], ['Event shop', '/shop'], ['Rulebooks', '/events'], ['Details & entries', '/events'],
     ]);
   });
 
   it('invites a visitor to sign in', () => {
     mount();
-    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    const signIn = screen.getByRole('link', { name: 'Sign in' });
+    expect(signIn).toHaveAttribute('href', '/login');
+    expect(signIn).toHaveClass('mg-btn-primary');
+    // It leads the menu as a button rather than sitting in the list of links.
+    expect(screen.getByRole('navigation', { name: 'Main navigation' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(screen.getByText('For trainers, organisers and stewards')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Account and management' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Notifications/)).not.toBeInTheDocument();
@@ -118,10 +120,11 @@ describe('NavigationDrawer: when no competition is followed', () => {
 
   it('offers to change competition and see past ones', async () => {
     mount();
-    await userEvent.click(screen.getByRole('button', { name: 'Change competition' }));
-    expect(onChangeCompetition).toHaveBeenCalledTimes(1);
-    await userEvent.click(screen.getByRole('link', { name: 'Past competitions' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Change competition' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('probe')).toHaveTextContent('/events');
+    await userEvent.click(screen.getByRole('link', { name: 'Past competitions' }));
+    expect(onClose).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/past');
   });
 
@@ -260,9 +263,9 @@ describe('NavigationDrawer: signed in', () => {
     expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 
-  it('shows an admin the admin page too', () => {
+  it('shows an admin the site admin section of the dashboard too', () => {
     mount({ roles: ['Admin', 'Trainer'] });
-    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['Admin', '/admin']]);
+    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['Site admin', '/me#site-admin']]);
   });
 
   it('shows extra links published by the current page', () => {
@@ -358,6 +361,28 @@ describe('NavigationDrawer: settings', () => {
     expect(screen.getByTestId('probe')).toHaveTextContent('|visit');
     await userEvent.click(toggle);
     expect(screen.getByTestId('probe')).toHaveTextContent('|remember');
+  });
+});
+
+describe('NavigationDrawer: forgetting the competition', () => {
+  const openSettings = () => userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+
+  it('is offered only when a competition is followed', async () => {
+    mount();
+    await openSettings();
+    expect(screen.queryByRole('button', { name: 'Forget this competition' })).not.toBeInTheDocument();
+  });
+
+  it('clears the competition and what the device kept, closes the menu and opens the events list', async () => {
+    mount({ competition: true, path: '/competitions/4' });
+    await openSettings();
+    await userEvent.click(screen.getByRole('button', { name: 'Forget this competition' }));
+    expect(document.cookie).not.toContain('mg.competition');
+    expect(sessionStorage.getItem('mg.competitionVisit')).toBeNull();
+    expect(screen.getByTestId('probe')).toHaveTextContent('/events|ask');
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('switch', { name: /Remember this competition/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Menu' })).toBeInTheDocument();
   });
 });
 

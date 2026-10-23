@@ -24,7 +24,6 @@ import { useCompetitionMeta } from '../components/competitionMeta';
 import { displaySectionName } from '../lib/section';
 import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
-import { DemoEventNotice } from '../components/DemoEventNotice';
 import { competitionPhase } from '../lib/competitionPhase';
 
 const BANNER_TAG = 'banner';
@@ -46,7 +45,7 @@ export function CompetitionPage() {
   const { id } = useParams<{ id: string }>();
   const competitionId = id ? Number(id) : null;
   if (competitionId == null || !Number.isSafeInteger(competitionId) || competitionId < 1) {
-    return <p className="pt-6"><Link className="mg-text-link" to="/competitions">Select a competition</Link></p>;
+    return <p className="pt-6"><Link className="mg-text-link" to="/events">Select a competition</Link></p>;
   }
   return <CompetitionContent key={competitionId} competitionId={competitionId} />;
 }
@@ -300,7 +299,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       <p>Couldn’t load this competition. Check your connection or choose another event.</p>
       <div className="flex flex-wrap gap-2">
         <button className="mg-btn mg-btn-primary" onClick={load}>Try again</button>
-        <Link className="mg-btn mg-btn-secondary" to="/competitions">Choose another competition</Link>
+        <Link className="mg-btn mg-btn-secondary" to="/events">Choose another competition</Link>
       </div>
     </div>
   );
@@ -313,10 +312,9 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing) && shouldNoticeSavedCopy(savedAt, !refreshing || savedAt === '', new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS);
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
-        {data.isDemo && <DemoEventNotice />}
         <Outlet />
         {partial && <p role="status" className="mg-notice mx-auto w-full max-w-xl">Loading the rest of the timetable…</p>}
         {/* Connection trouble is shown by the pill in the header; this only explains a saved copy. */}

@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
+import { autoConfirm } from '../../test/confirm';
 import { ScoreAuditPanel } from './ScoreAuditPanel';
 
 const auth = vi.hoisted(() => ({ manage: true, asked: [] as unknown[] }));
@@ -85,5 +86,20 @@ describe('ScoreAuditPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Reopen results' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Add a reason for reopening these results.');
     expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('asks in a red dialog before reopening signed-off results, and does nothing if cancelled', async () => {
+    const signedOff = { ...score, isSignedOff: true, signedOffAt: '2030-01-01T10:00:00Z', signedOffByUserId: 'u1' };
+    vi.mocked(api.get).mockImplementation((url: string) => Promise.resolve({ data: url.endsWith('/history') ? [] : signedOff }));
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    const asked = autoConfirm([false, true]);
+    const user = userEvent.setup();
+    render(<ScoreAuditPanel raceId={9} />);
+    await user.type(await screen.findByLabelText('Reason for reopening'), 'Wrong placing');
+    await user.click(screen.getByRole('button', { name: 'Reopen results' }));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Reopen these results for correction? The sign-off is removed until they are signed off again.'));
+    expect(api.post).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Reopen results' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/races/9/score/reopen', expect.objectContaining({ reason: 'Wrong placing' })));
   });
 });

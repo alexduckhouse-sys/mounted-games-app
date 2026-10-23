@@ -133,6 +133,8 @@ export interface CompetitionSummary {
   sectionCount: number;
   teamCount: number;
   sessionCount: number;
+  /** Sessions that have heats: the timetable is exact for these. Older API responses leave it out. */
+  heatedSessionCount?: number;
 }
 
 export interface CompetitionPickerItem {
@@ -286,6 +288,8 @@ export interface Session {
   laneRotationMode?: 0 | 1 | 2;
   /** Heat-heat-final: how many teams go through from each qualifier to the final (3 when unset). */
   qualifiersPerHeat?: number | null;
+  /** The races chosen for each heat before any heat exists (the competition creator); null when not chosen. */
+  plannedRaces?: string[] | null;
   heats: Heat[];
 }
 
@@ -318,6 +322,64 @@ export interface CompetitionDetail {
   isDemo?: boolean;
   /** The organiser's terms and conditions as plain text; empty means the sign-up form shows a placeholder. */
   termsText?: string | null;
+  /** The hatband colour in each lane, index 0 being lane 1; set when the competition is created. Null when not set. */
+  laneHatbands?: string[] | null;
+  /** Where entry fees are paid out: the organiser's club and its masked account. Public, no personal data. */
+  payoutsTo?: PayoutsTo | null;
+}
+
+/** The public summary of a club's payouts. `maskedAccount` is like "••••1234" and only appears once `ready`. */
+export interface PayoutsTo {
+  clubName: string;
+  maskedAccount: string | null;
+  ready: boolean;
+}
+
+/** Payout set-up status: 0 not started, 1 in progress, 2 ready. */
+export type PayoutStatus = 0 | 1 | 2;
+/** 0 individual or sole trader, 1 club or association, 2 registered charity, 3 company. */
+export type PayoutBusinessType = 0 | 1 | 2 | 3;
+/** 0 UK (GBP), 1 Ireland or the EU (EUR). */
+export type PayoutRegion = 0 | 1;
+/** 0 daily, 1 weekly, 2 after each event. */
+export type PayoutSchedule = 0 | 1 | 2;
+
+/** Saved bank details as the API returns them: masked only. */
+export interface PayoutBank {
+  accountHolder: string;
+  bankName: string | null;
+  sortCode: string | null;
+  maskedAccount: string;
+  ibanCountry: string | null;
+}
+
+/** A club's payout set-up, for its managers and admins. Includes the responsible person's date of birth. */
+export interface ClubPayouts {
+  clubId: number;
+  clubName: string;
+  status: PayoutStatus;
+  businessType: PayoutBusinessType | null;
+  region: PayoutRegion;
+  currency: string;
+  legalName: string | null;
+  tradingName: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  postcode: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  registrationNumber: string | null;
+  vatNumber: string | null;
+  personFullName: string | null;
+  /** YYYY-MM-DD. */
+  personDateOfBirth: string | null;
+  statementDescriptor: string | null;
+  schedule: PayoutSchedule;
+  bank: PayoutBank | null;
+  /** Field keys still missing or invalid before the account can be finished. */
+  missing: string[];
+  updatedAt: string | null;
 }
 
 export interface MySignup {
@@ -538,6 +600,21 @@ export interface RiderEntry {
   noFilming?: boolean;
   /** The pony's height in hands, written as a decimal: 13.2 is 13 hands 2 inches. */
   ponyHeightHands?: number | null;
+  // The answers below depend on what the organiser asks for. They are personal data about a child, so only staff and the
+  // submitting trainer are sent them; a public page never has any of them.
+  birthYear?: number | null;
+  ageGroup?: string | null;
+  weightKg?: number | null;
+  ponyPassportNumber?: string | null;
+  ponyAge?: number | null;
+  membershipNumber?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  medicalNotes?: string | null;
+  /** The organiser's own questions, keyed by field id. */
+  customValues?: Record<string, string | null> | null;
+  /** Plain-English notes where an answer broke the organiser's number rules. Staff and the submitter only. */
+  flags?: string[] | null;
 }
 
 /** A heat holding a rider who opted out of close-up filming. Staff only. */
@@ -576,6 +653,12 @@ export interface DeclarationForm {
   trainerName?: string | null;
   /** When the terms were agreed; missing on forms from before the tick. Private like the rest. */
   termsAcceptedAt?: string | null;
+  /** The team name the entrant gave when entering, so the form is clearly the one for that entry. Public, like the team's name. */
+  entryTeamName?: string | null;
+  /** The coach's phone number for this team. Staff and the submitter only. */
+  trainerPhone?: string | null;
+  /** How many riders on the form broke a rule. Staff and the submitter only; 0 for everyone else. */
+  flagCount?: number;
 }
 
 export interface SavedRider {

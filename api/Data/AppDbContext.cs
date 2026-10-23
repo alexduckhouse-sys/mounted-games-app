@@ -9,6 +9,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public DbSet<Club> Clubs => Set<Club>();
+    public DbSet<ClubPayoutAccount> ClubPayoutAccounts => Set<ClubPayoutAccount>();
     public DbSet<SavedRider> SavedRiders => Set<SavedRider>();
     public DbSet<Competition> Competitions => Set<Competition>();
     public DbSet<CompetitionSection> CompetitionSections => Set<CompetitionSection>();
@@ -112,6 +113,31 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             e.Property(c => c.Name).HasMaxLength(150).IsRequired();
             e.HasIndex(c => c.Name).IsUnique();
+        });
+
+        b.Entity<ClubPayoutAccount>(e =>
+        {
+            e.HasIndex(a => a.ClubId).IsUnique();
+            e.Property(a => a.Currency).HasMaxLength(3).IsRequired();
+            e.Property(a => a.LegalName).HasMaxLength(150);
+            e.Property(a => a.TradingName).HasMaxLength(150);
+            e.Property(a => a.AddressLine1).HasMaxLength(150);
+            e.Property(a => a.AddressLine2).HasMaxLength(150);
+            e.Property(a => a.City).HasMaxLength(100);
+            e.Property(a => a.Postcode).HasMaxLength(12);
+            e.Property(a => a.ContactEmail).HasMaxLength(200);
+            e.Property(a => a.ContactPhone).HasMaxLength(30);
+            e.Property(a => a.RegistrationNumber).HasMaxLength(20);
+            e.Property(a => a.VatNumber).HasMaxLength(20);
+            e.Property(a => a.PersonFullName).HasMaxLength(150);
+            e.Property(a => a.StatementDescriptor).HasMaxLength(22);
+            e.Property(a => a.BankAccountHolder).HasMaxLength(150);
+            e.Property(a => a.BankName).HasMaxLength(100);
+            e.Property(a => a.SortCode).HasMaxLength(8);
+            e.Property(a => a.AccountLast4).HasMaxLength(4);
+            e.Property(a => a.IbanCountry).HasMaxLength(2);
+            e.Property(a => a.IbanLast4).HasMaxLength(4);
+            e.HasOne(a => a.Club).WithMany().HasForeignKey(a => a.ClubId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<SavedRider>(e =>
@@ -249,6 +275,13 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             e.Property(r => r.FullName).HasMaxLength(200).IsRequired();
             e.Property(r => r.PonyHeightHands).HasPrecision(4, 1);
+            e.Property(r => r.WeightKg).HasPrecision(5, 1);
+            e.Property(r => r.AgeGroup).HasMaxLength(30);
+            e.Property(r => r.PonyPassportNumber).HasMaxLength(60);
+            e.Property(r => r.MembershipNumber).HasMaxLength(60);
+            e.Property(r => r.EmergencyContactName).HasMaxLength(120);
+            e.Property(r => r.EmergencyContactPhone).HasMaxLength(40);
+            e.Property(r => r.MedicalNotes).HasMaxLength(1000);
             e.HasOne(r => r.DeclarationForm)
                 .WithMany(d => d.Riders)
                 .HasForeignKey(r => r.DeclarationFormId)

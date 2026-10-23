@@ -139,7 +139,7 @@ describe('SignUpPage', () => {
     mount();
     await fill(user);
     await user.click(screen.getByRole('button', { name: 'Create account' }));
-    expect(await screen.findByRole('link', { name: 'Follow a competition' })).toHaveAttribute('href', '/competitions');
+    expect(await screen.findByRole('link', { name: 'Follow a competition' })).toHaveAttribute('href', '/events');
     await user.click(screen.getByRole('link', { name: 'Go to my profile' }));
     expect(screen.getByText('Profile page')).toBeInTheDocument();
   });

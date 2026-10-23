@@ -53,7 +53,7 @@ describe('heatRowsForTeam', () => {
 describe('heatSummary and heatTime', () => {
   const base = { competitionId: 1, competitionName: 'C', heatId: 1, label: 'Heat 3', sessionName: 's', arenaName: 'Arena 2', lane: 2, scheduled: null, effective: null, shifted: false, delayMinutes: 6, status: 'upcoming' as const };
   it('puts age group, heat, lane, arena and delay on one line', () => {
-    expect(heatSummary(base, 'Teams Open')).toBe('Open · Heat 3, lane 2 · Arena 2 · +6 min');
+    expect(heatSummary(base, 'Teams Open')).toBe('Open Teams · Heat 3, lane 2 · Arena 2 · +6 min');
     expect(heatSummary({ ...base, lane: null, arenaName: null, delayMinutes: 0 }, null)).toBe('Heat 3');
   });
   it('rounds the time to five minutes', () => {

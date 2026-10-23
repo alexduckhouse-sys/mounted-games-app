@@ -128,7 +128,7 @@ describe('navigation drawer', () => {
     return render(
       <MemoryRouter>
         <Lite><AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider>
-          <NavigationDrawer onClose={vi.fn()} onChangeCompetition={vi.fn()} {...props} />
+          <NavigationDrawer onClose={vi.fn()} {...props} />
         </CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider></Lite>
       </MemoryRouter>,
     );

@@ -6,9 +6,10 @@ import { apiErrorMessage } from '../../../lib/apiError';
 import { competitionDateText } from '../../../lib/competitionDates';
 import {
   blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, panelTitle, riderFromSaved,
-  riderReady, ridersRequired, savedChoices, slotLabel, slotMeta, slotsFromForm, statusText, subtitleOf, teamIsFull,
+  phoneProblem, riderReady, ridersRequired, savedChoices, slotFlagged, slotLabel, slotMeta, slotsFromForm, statusText, subtitleOf, teamIsFull,
   type DecFormDraft, type DecRider, type Slot,
 } from '../../../lib/decForm';
+import { asked, STANDARD_CONFIG, type DecFormConfig } from '../../../lib/decFormConfig';
 import type { CompetitionDetail, DeclarationForm, SavedRider, Team } from '../../../types';
 import { Field } from '../../auth/Field';
 import { RiderPanel } from './RiderPanel';
@@ -24,6 +25,8 @@ interface Props {
   /** A phone number this person gave on an earlier form. */
   priorPhone?: string;
   onSaved: (form: DeclarationForm) => void;
+  /** What this competition's dec form asks. The standard form when omitted. */
+  config?: DecFormConfig;
 }
 
 const wide = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches;
@@ -32,16 +35,16 @@ const wide = () => typeof window !== 'undefined' && typeof window.matchMedia ===
  * One team's dec form: the team's details, five rider slots and an optional non-riding reserve, with a panel
  * for the slot being filled. Replaces the old rider grid (docs/designs/dec-form-handoff.md).
  */
-export function DecFormEditor({ competition, team, existing, draft, priorPhone, onSaved }: Props) {
+export function DecFormEditor({ competition, team, existing, draft, priorPhone, onSaved, config = STANDARD_CONFIG }: Props) {
   const { user } = useAuth();
   const section = competition.sections.find((s) => s.id === team.competitionSectionId);
   const required = ridersRequired(section?.format);
 
-  const [slots, setSlots] = useState<Slot[]>(() => draft?.slots ?? (existing ? slotsFromForm(existing, required) : emptySlots(required)));
+  const [slots, setSlots] = useState<Slot[]>(() => draft?.slots ?? (existing ? slotsFromForm(existing, required, config) : emptySlots(required)));
   const [teamName, setTeamName] = useState(draft?.teamName ?? team.displayName);
   const [bibs, setBibs] = useState(draft?.bibs ?? existing?.bibDescription ?? team.bibDescription ?? '');
   const [trainerName, setTrainerName] = useState(draft?.trainerName ?? existing?.trainerName ?? existing?.submittedByName ?? user?.fullName ?? '');
-  const [phone, setPhone] = useState(draft?.phone ?? existing?.submittedByPhone ?? priorPhone ?? '');
+  const [phone, setPhone] = useState(draft?.phone ?? existing?.trainerPhone ?? existing?.submittedByPhone ?? priorPhone ?? '');
   const [notes, setNotes] = useState(draft?.notes ?? existing?.notes ?? '');
   const [agreed, setAgreed] = useState(false);
   const [submitted, setSubmitted] = useState(!!existing && !draft);
@@ -73,7 +76,9 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const reserve = active != null && isReserveSlot(slots, active);
   const editing = active != null && !!slots[active];
   const full = teamIsFull(slots);
-  const ready = canSubmit(slots, agreed, teamName);
+  const phoneIssue = phoneProblem(phone, config);
+  const ready = canSubmit(slots, agreed, teamName, phoneIssue === null);
+  const entryName = existing?.entryTeamName ?? null;
   const when = competition.startDate ? competitionDateText(competition.startDate, competition.endDate) : '';
 
   function changed<T>(set: (value: T) => void) {
@@ -99,7 +104,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   }
 
   function commit() {
-    if (active == null || !riderReady(form, reserve)) return;
+    if (active == null || !riderReady(form, reserve, undefined, config)) return;
     const next = slots.map((s, i) => (i === active ? { ...form, fullName: form.fullName.trim() } : s));
     setSlots(next);
     setSubmitted(false);
@@ -116,7 +121,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
     setError(null);
     try {
       const { data } = await api.post<DeclarationForm>('/declaration-forms',
-        buildSubmitBody({ teamId: team.id, teamName, bibs, trainerName, phone, notes }, slots));
+        buildSubmitBody({ teamId: team.id, teamName, bibs, trainerName, phone, notes }, slots, config));
       try { localStorage.removeItem(decDraftKey(competition.id, team.id)); } catch { /* ignore */ }
       setSubmitted(true);
       setActive(null);
@@ -133,6 +138,9 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
       <div className="flex flex-col gap-1">
         <h2 className="mg-h1 lg:!text-[44px] lg:!leading-none">{teamName.trim() || 'Team name'}</h2>
         <p className="mg-meta !text-base">{subtitleOf([section?.displayName, competition.name, when])}</p>
+        {entryName && entryName.trim().toLowerCase() !== teamName.trim().toLowerCase() && (
+          <p className="text-sm text-[rgb(var(--mg-muted))]">Entered as “{entryName}”.</p>
+        )}
       </div>
 
       {submitted && (
@@ -148,15 +156,19 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             <Field label="Team name" className="lg:col-span-2">
               {({ id }) => <div className="mg-field"><input id={id} value={teamName} placeholder="e.g. Stockport C" maxLength={150} onChange={(e) => changed(setTeamName)(e.target.value)} /></div>}
             </Field>
-            <Field label="Bibs" className="lg:col-span-2">
-              {({ id }) => <div className="mg-field"><input id={id} value={bibs} placeholder="e.g. Yellow with navy stars" maxLength={200} onChange={(e) => changed(setBibs)(e.target.value)} /></div>}
-            </Field>
+            {asked(config.bib) && (
+              <Field label="Bibs" className="lg:col-span-2">
+                {({ id }) => <div className="mg-field"><input id={id} value={bibs} placeholder="e.g. Yellow with navy stars" maxLength={200} onChange={(e) => changed(setBibs)(e.target.value)} /></div>}
+              </Field>
+            )}
             <Field label="Trainer name">
               {({ id }) => <div className="mg-field"><input id={id} value={trainerName} autoComplete="name" maxLength={200} onChange={(e) => changed(setTrainerName)(e.target.value)} /></div>}
             </Field>
-            <Field label="Phone number">
-              {({ id }) => <div className="mg-field"><input id={id} type="tel" value={phone} autoComplete="tel" onChange={(e) => changed(setPhone)(e.target.value)} /></div>}
-            </Field>
+            {asked(config.trainerPhone) && (
+              <Field label="Phone number" error={phone.trim() === '' ? null : phoneIssue}>
+                {({ id, invalid }) => <div className="mg-field" data-invalid={invalid}><input id={id} type="tel" value={phone} autoComplete="tel" aria-invalid={invalid} onChange={(e) => changed(setPhone)(e.target.value)} /></div>}
+              </Field>
+            )}
           </div>
 
           <ol aria-label="Riders" className="mg-card mg-list m-0 list-none p-0">
@@ -172,7 +184,8 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
                           {rider.fullName}
                           {isReserve && <span className="mg-badge mg-badge-outline !h-5">Reserve</span>}
                         </span>
-                        <span className="max-w-full truncate text-[13px] text-[rgb(var(--mg-muted))] lg:text-sm">{slotMeta(rider, isReserve)}</span>
+                        <span className="max-w-full truncate text-[13px] text-[rgb(var(--mg-muted))] lg:text-sm">{slotMeta(rider, isReserve, config)}</span>
+                        {slotFlagged(rider, config) && <span className="mg-flag mt-1">Above or below the limit. This will be flagged for the organisers.</span>}
                       </button>
                       <button type="button" className="mg-icon-btn !border-0 !bg-transparent text-[rgb(var(--mg-muted))] hover:!text-[rgb(var(--mg-elim))]" aria-label={`Remove ${rider.fullName}`} onClick={() => clear(index)}>
                         <X aria-hidden="true" className="h-[18px] w-[18px]" />
@@ -203,7 +216,8 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             form={form}
             choices={choices}
             addLabel={editing ? 'Save' : reserve ? 'Add reserve' : 'Add rider'}
-            ready={riderReady(form, reserve)}
+            ready={riderReady(form, reserve, undefined, config)}
+            config={config}
             onChange={(patch) => setForm((cur) => ({ ...cur, ...patch }))}
             onPick={(pick) => setForm(riderFromSaved(pick, reserve))}
             onCommit={commit}

@@ -17,12 +17,11 @@ type SeasonTab = 'standings' | 'rounds' | 'settings';
 
 export function SeasonPage() {
   const { seasonId } = useParams();
-  const { user, editorMode } = useAuth();
-  return <SeasonDetail key={`${seasonId}:${user?.id ?? 'public'}:${editorMode}`} id={seasonId ?? ''} />;
+  const { user } = useAuth();
+  return <SeasonDetail key={`${seasonId}:${user?.id ?? 'public'}`} id={seasonId ?? ''} />;
 }
 
 function SeasonDetail({ id }: { id: string }) {
-  const { hasRole, canEdit } = useAuth();
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState<{ season: SeasonView; table: StandingsView } | null>(null);
   const [error, setError] = useState('');
@@ -44,7 +43,7 @@ function SeasonDetail({ id }: { id: string }) {
   }, [id, attempt]);
 
   const reload = () => setAttempt((value) => value + 1);
-  const pageCanManage = !!data?.season.canManage && (!hasRole('Admin') || canEdit());
+  const pageCanManage = !!data?.season.canManage;
   if (!data) return <RefinePage>
     <RefineHeader back="/seasons" backLabel="All seasons" context="Seasons" title="Season" />
     {error ? <p role="alert" className="mg-notice sv-msg">{error} <button className="mg-text-link min-h-11" onClick={reload}>Try again</button></p> : <p role="status" className="rf-note">Loading season…</p>}

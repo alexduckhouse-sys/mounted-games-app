@@ -46,6 +46,18 @@ public class Competition
     public string? TermsText { get; set; }
 
     /// <summary>
+    /// The organiser's dec form setup as JSON (<c>DecFormConfig</c>). Null means the standard form: rider name, date of birth,
+    /// pony, height and bib. One column rather than a table because it is only ever read and written whole.
+    /// </summary>
+    public string? DecFormConfigJson { get; set; }
+
+    /// <summary>
+    /// The hatband colour worn in each lane, as a JSON array of names: index 0 is lane 1. Set by the organiser when
+    /// the competition is created. Null means not set.
+    /// </summary>
+    public string? LaneHatbands { get; set; }
+
+    /// <summary>
     /// When true, stewards tick off each pony's passport and vaccinations on arrival (event tools, staff only).
     /// </summary>
     public bool EnablePassportCheck { get; set; }

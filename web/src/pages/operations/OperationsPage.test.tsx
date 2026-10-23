@@ -6,7 +6,7 @@ import { api } from '../../api';
 import { OperationsPage } from './OperationsPage';
 
 const reload = vi.fn();
-const auth = vi.hoisted(() => ({ mayOrganise: true, editorMode: true }));
+const auth = vi.hoisted(() => ({ mayOrganise: true }));
 vi.mock('../competition/context', () => ({
   useCompetition: () => ({
     competition: { id: 7, name: 'Sample Games', sections: [{ id: 11, displayName: 'Open teams' }, { id: 12, displayName: 'Under 14' }] },
@@ -18,7 +18,6 @@ vi.mock('../../auth/AuthContext', () => ({
     user: { id: 'admin-1' },
     canOrganise: () => auth.mayOrganise,
     hasRole: (role: string) => role === 'Admin',
-    canEdit: () => auth.editorMode,
   }),
 }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn() } }));
@@ -56,7 +55,6 @@ describe('OperationsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.mayOrganise = true;
-    auth.editorMode = true;
     vi.mocked(api.get).mockResolvedValue({ data: readiness });
     vi.mocked(api.put).mockResolvedValue({ data: { ...readiness, equipmentChecklist: [{ ...readiness.equipmentChecklist[0], acknowledged: true }] } });
     vi.mocked(api.post).mockResolvedValue({ data: {
@@ -77,18 +75,18 @@ describe('OperationsPage', () => {
     expect(api.get).not.toHaveBeenCalled();
   });
 
-  it('keeps write controls disabled for an admin in view-only mode', async () => {
-    auth.editorMode = false;
+  it('lets an admin change the checklist and apply a draw with no edit mode to switch on', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
 
-    expect(await screen.findByText(/Switch on Edit mode/)).toBeInTheDocument();
+    await screen.findByRole('tab', { name: 'Equipment' });
+    expect(screen.queryByText(/Edit mode/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Equipment' }));
-    expect(await screen.findByRole('checkbox', { name: /4 × Pole/i })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Save checklist' })).toBeDisabled();
+    expect(await screen.findByRole('checkbox', { name: /4 × Pole/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save checklist' })).toBeEnabled();
     await user.click(screen.getByRole('tab', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
-    expect(await screen.findByRole('button', { name: 'Apply draw' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Apply draw' })).toBeEnabled();
   });
 
   it('shows readiness issues and saves the equipment checklist', async () => {

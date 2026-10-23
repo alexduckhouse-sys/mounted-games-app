@@ -1,24 +1,23 @@
 import { Link, useLocation } from 'react-router-dom';
 import { globalTabsPath, GLOBAL_EVENTS, GLOBAL_ME } from '../lib/routes';
-import { CalendarDays, MessageSquare, Star, UserRound } from 'lucide-react';
+import { CalendarDays, Star, UserRound } from 'lucide-react';
 
 /**
- * The tab bar for pages outside a competition: Events, Following, Live and Me.
- * Live opens the live feed of the competition being followed (or the list of feeds), and Me opens the dashboard.
+ * The tab bar for pages outside a competition: Events, Following and Me.
+ * There is no Live tab here, because the live feed belongs to a competition. Me opens the dashboard.
  * The shop sits under Me without lighting a tab, because it belongs to nobody in particular.
  */
 export function GlobalTabs({ meCount = 0 }: { meCount?: number }) {
   const { pathname } = useLocation();
   const path = globalTabsPath(pathname);
   const tabs = [
-    { to: '/', label: 'Events', icon: CalendarDays, active: GLOBAL_EVENTS.includes(path) },
+    { to: '/events', label: 'Events', icon: CalendarDays, active: GLOBAL_EVENTS.includes(path) },
     { to: '/following', label: 'Following', icon: Star, active: path === '/following' },
-    { to: '/chat', label: 'Live', icon: MessageSquare, active: path === '/chat' },
     { to: '/dashboard', label: 'Me', icon: UserRound, active: GLOBAL_ME.includes(path) && path !== '/shop' },
   ];
   return (
     <nav aria-label="Main" className="mg-tabs">
-      <div className="mx-auto grid max-w-xl grid-cols-4">
+      <div className="mx-auto grid max-w-xl grid-cols-3">
         {tabs.map((tab) => (
           <Link key={tab.label} to={tab.to} className="mg-tab" aria-current={tab.active ? 'page' : undefined}>
             <span className="relative inline-flex">

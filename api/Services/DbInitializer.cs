@@ -26,6 +26,7 @@ public static class DbInitializer
         }
 
         await SeedReferenceDataAsync(db, roles);
+        await NormaliseSectionNamesAsync(db);
         var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         if (!scope.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment()
             || !(configuration.GetValue<bool?>("Database:SeedDemoData") ?? db.Database.IsSqlite()))
@@ -35,6 +36,24 @@ public static class DbInitializer
             return;
         }
         await SeedDemoDataAsync(db, users);
+    }
+
+    /// <summary>
+    /// Brings every age group's stored name in line with <see cref="SectionNaming"/> ("Junior Individuals", "Open Teams").
+    /// Idempotent: only rows whose name differs are written, so it costs one read of a small table after the first run.
+    /// </summary>
+    public static async Task NormaliseSectionNamesAsync(AppDbContext db)
+    {
+        var sections = await db.CompetitionSections.ToListAsync();
+        var changed = false;
+        foreach (var section in sections)
+        {
+            var name = SectionNaming.Of(section);
+            if (name.Length == 0 || name == section.DisplayName) continue;
+            section.DisplayName = name.Length > 150 ? name[..150] : name;
+            changed = true;
+        }
+        if (changed) await db.SaveChangesAsync();
     }
 
     private static async Task EnsureSharedAdminAsync(UserManager<AppUser> users)
@@ -112,6 +131,43 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "StreamOverlays", "SponsorMode", "INTEGER NOT NULL DEFAULT 0");
 
         await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "ClubPayoutAccounts" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_ClubPayoutAccounts" PRIMARY KEY AUTOINCREMENT,
+                "ClubId" INTEGER NOT NULL,
+                "Status" INTEGER NOT NULL DEFAULT 0,
+                "BusinessType" INTEGER NULL,
+                "Region" INTEGER NOT NULL DEFAULT 0,
+                "Currency" TEXT NOT NULL DEFAULT 'GBP',
+                "LegalName" TEXT NULL,
+                "TradingName" TEXT NULL,
+                "AddressLine1" TEXT NULL,
+                "AddressLine2" TEXT NULL,
+                "City" TEXT NULL,
+                "Postcode" TEXT NULL,
+                "ContactEmail" TEXT NULL,
+                "ContactPhone" TEXT NULL,
+                "RegistrationNumber" TEXT NULL,
+                "VatNumber" TEXT NULL,
+                "PersonFullName" TEXT NULL,
+                "PersonDateOfBirth" TEXT NULL,
+                "StatementDescriptor" TEXT NULL,
+                "Schedule" INTEGER NOT NULL DEFAULT 1,
+                "BankAccountHolder" TEXT NULL,
+                "BankName" TEXT NULL,
+                "SortCode" TEXT NULL,
+                "AccountLast4" TEXT NULL,
+                "IbanCountry" TEXT NULL,
+                "IbanLast4" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NOT NULL,
+                "UpdatedByUserId" TEXT NULL,
+                CONSTRAINT "FK_ClubPayoutAccounts_Clubs_ClubId" FOREIGN KEY ("ClubId")
+                    REFERENCES "Clubs" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ClubPayoutAccounts_ClubId" ON "ClubPayoutAccounts" ("ClubId");
+            """);
+
+        await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "OverlayLooks" (
                 "Id" INTEGER NOT NULL CONSTRAINT "PK_OverlayLooks" PRIMARY KEY AUTOINCREMENT,
                 "OwnerUserId" TEXT NOT NULL,
@@ -164,6 +220,8 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "ChatMessages", "RecipientUserId", "TEXT NULL");
         await EnsureColumnAsync(db, "Sessions", "LaneRotationMode", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Sessions", "QualifiersPerHeat", "INTEGER NULL");
+        await EnsureColumnAsync(db, "Sessions", "PlannedRaces", "TEXT NULL");
+        await EnsureColumnAsync(db, "Competitions", "LaneHatbands", "TEXT NULL");
         await EnsureColumnAsync(db, "Results", "IsSitOut", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Results", "Status", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Results", "RefereeNote", "TEXT NULL");
@@ -320,6 +378,20 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "DeclarationForms", "TrainerName", "TEXT NULL");
         await EnsureColumnAsync(db, "DeclarationForms", "TermsAcceptedAt", "TEXT NULL");
         await EnsureColumnAsync(db, "DeclarationForms", "TermsAcceptedByUserId", "TEXT NULL");
+        // Adaptive dec forms: the organiser's setup, and the extra rider answers it can ask for.
+        await EnsureColumnAsync(db, "Competitions", "DecFormConfigJson", "TEXT NULL");
+        await EnsureColumnAsync(db, "DeclarationForms", "TrainerPhone", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "BirthYear", "INTEGER NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "AgeGroup", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "WeightKg", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "PonyPassportNumber", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "PonyAge", "INTEGER NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "MembershipNumber", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "EmergencyContactName", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "EmergencyContactPhone", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "MedicalNotes", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "CustomValuesJson", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "FlagsJson", "TEXT NULL");
         await Operations.OperationsSqliteSchema.EnsureAsync(db);
         await EnsureColumnAsync(db, "RaceScoreEvent", "ActorLabel", "TEXT NULL");
 

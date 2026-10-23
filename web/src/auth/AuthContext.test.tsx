@@ -32,7 +32,7 @@ describe('useAuth', () => {
 
   it('starts signed out', () => {
     const { result } = mount();
-    expect(result.current).toMatchObject({ user: null, token: null, loading: false, editorMode: false });
+    expect(result.current).toMatchObject({ user: null, token: null, loading: false });
     expect(get).not.toHaveBeenCalled();
   });
 
@@ -242,78 +242,29 @@ describe('trainer approval notice', () => {
   });
 });
 
-describe('admin edit mode', () => {
-  it('starts in view-only mode', () => {
+describe('admin permissions (there is no edit mode)', () => {
+  it('lets an admin edit straight away', () => {
     signIn(['Admin']);
     const { result } = mount();
-    expect(result.current).toMatchObject({ editorMode: false });
-    expect(result.current.canEdit()).toBe(false);
-  });
-
-  it('lets an admin switch it on and off, remembering the choice', () => {
-    signIn(['Admin']);
-    const { result } = mount();
-    act(() => result.current.setEditorMode(true));
-    expect(result.current.editorMode).toBe(true);
     expect(result.current.canEdit()).toBe(true);
-    expect(localStorage.getItem('mg.adminEditorMode')).toBe('1');
-    act(() => result.current.setEditorMode(false));
-    expect(result.current.canEdit()).toBe(false);
-    expect(localStorage.getItem('mg.adminEditorMode')).toBeNull();
+    expect(result.current).not.toHaveProperty('editorMode');
+    expect(result.current).not.toHaveProperty('setEditorMode');
   });
 
-  it('restores edit mode for a signed-in admin', () => {
-    signIn(['Admin']);
-    localStorage.setItem('mg.adminEditorMode', '1');
-    expect(mount().result.current.canEdit()).toBe(true);
-  });
-
-  it('never turns on for anyone who is not an admin', () => {
+  it('never lets anyone who is not an admin edit', () => {
     signIn(['Trainer']);
-    const { result } = mount();
-    act(() => result.current.setEditorMode(true));
-    expect(result.current.editorMode).toBe(false);
-    expect(result.current.canEdit()).toBe(false);
-    expect(localStorage.getItem('mg.adminEditorMode')).toBeNull();
+    expect(mount().result.current.canEdit()).toBe(false);
   });
 
-  it('is not inherited by the next person after signing out', () => {
-    signIn(['Admin']);
-    const { result } = mount();
-    act(() => result.current.setEditorMode(true));
-    act(() => result.current.logout());
-    expect(result.current.editorMode).toBe(false);
-    expect(localStorage.getItem('mg.adminEditorMode')).toBeNull();
-  });
-
-  it('is discarded when nobody is signed in', () => {
+  it('clears the old saved edit-mode switch', () => {
     localStorage.setItem('mg.adminEditorMode', '1');
-    const { result } = mount();
-    expect(result.current.editorMode).toBe(false);
+    mount();
     expect(localStorage.getItem('mg.adminEditorMode')).toBeNull();
   });
 
   it('carries on when storage is blocked', () => {
-    signIn(['Admin']);
-    const realGet = Storage.prototype.getItem;
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function getItem(this: Storage, key: string) {
-      if (key === 'mg.adminEditorMode') throw new Error('blocked');
-      return realGet.call(this, key);
-    });
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
     vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('blocked'); });
-    const { result } = mount();
-    expect(result.current.editorMode).toBe(false);
-    act(() => result.current.setEditorMode(true));
-    expect(result.current.editorMode).toBe(true);
-    act(() => result.current.setEditorMode(false));
-    expect(result.current.editorMode).toBe(false);
-  });
-
-  it('carries on when signing out with storage blocked', () => {
-    const removeItem = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('blocked'); });
     expect(() => mount()).not.toThrow();
-    expect(removeItem).toHaveBeenCalled();
   });
 });
 

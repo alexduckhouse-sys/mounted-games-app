@@ -1,11 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { readSavedCopy, savedCopyKeys, writeSavedCopy } from '../offline/savedCopies';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
-import { CompetitionPicker, CompetitionPickerDialog } from './CompetitionPicker';
+import { CompetitionPicker } from './CompetitionPicker';
 import { CurrentCompetitionProvider, useCurrentCompetition } from './CurrentCompetitionContext';
 
 vi.mock('../api', () => ({ api: { get: vi.fn() } }));
@@ -62,7 +62,7 @@ describe('CompetitionPicker: the list', () => {
     expect(within(onToday).getByText('Today Cup')).toBeInTheDocument();
     expect(within(onToday).getByText('Ashdown · Sat 17 – Sun 18 Oct')).toBeInTheDocument();
     expect(within(onToday).getByText('LIVE')).toBeInTheDocument();
-    expect(within(onToday).getByText('Seniors · Heat 2 on now in Main arena')).toBeInTheDocument();
+    expect(within(onToday).getByText('Senior Teams · Heat 2 on now in Main arena')).toBeInTheDocument();
     expect(within(onToday).getByRole('button', { name: 'Open competition: Today Cup' })).toBeInTheDocument();
     const later = screen.getByRole('region', { name: 'Coming up' });
     expect(within(later).getAllByRole('button').map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
@@ -117,15 +117,26 @@ describe('CompetitionPicker: the list', () => {
     expect(screen.queryByRole('region', { name: 'On today' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Finished' })).toBeInTheDocument();
     expect(screen.getByText('Sat 7 Nov 2026 · Hillside')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Upcoming' })).toHaveAttribute('href', '/competitions');
-    expect(screen.getByRole('link', { name: 'Past' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /Back to upcoming competitions/ })).toHaveAttribute('href', '/events');
+    expect(screen.queryByRole('link', { name: 'See past competitions' })).not.toBeInTheDocument();
   });
 
-  it('links upcoming competitions to the past ones', async () => {
+  it('has no Upcoming/Past switch at the top, and puts "See past competitions" at the bottom of the list', async () => {
     renderPicker();
     await loaded('Autumn Open');
-    expect(screen.getByRole('link', { name: 'Past' })).toHaveAttribute('href', '/competitions/past');
-    expect(screen.getByRole('link', { name: 'Upcoming' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('link', { name: 'Upcoming' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Past' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Back to upcoming competitions/ })).not.toBeInTheDocument();
+    const seePast = screen.getByRole('link', { name: 'See past competitions' });
+    expect(seePast).toHaveAttribute('href', '/competitions/past');
+    expect(screen.getByRole('button', { name: /Weekend Fest/ }).compareDocumentPosition(seePast) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('goes to the past list from the link, and back from there', async () => {
+    renderPicker();
+    await loaded('Autumn Open');
+    await userEvent.click(screen.getByRole('link', { name: 'See past competitions' }));
+    expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/past');
   });
 
   it.each([
@@ -139,20 +150,11 @@ describe('CompetitionPicker: the list', () => {
 });
 
 describe('CompetitionPicker: choosing', () => {
-  it('remembers the choice, opens its timetable and closes the picker', async () => {
-    const onClose = vi.fn();
-    renderPicker({ onClose });
+  it('remembers the choice and opens its timetable', async () => {
+    renderPicker();
     await loaded('Autumn Open');
     await userEvent.click(screen.getByRole('button', { name: /Autumn Open/ }));
     expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/2|Autumn Open');
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('works without a close handler', async () => {
-    renderPicker();
-    await loaded('Autumn Open');
-    await userEvent.click(screen.getByRole('button', { name: /Weekend Fest/ }));
-    expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/3|Weekend Fest');
   });
 
   it('marks the current competition', async () => {
@@ -164,21 +166,33 @@ describe('CompetitionPicker: choosing', () => {
     await userEvent.click(screen.getByRole('button', { name: /Autumn Open/ }));
     expect(screen.getByRole('button', { name: /Autumn Open.*current competition/ })).toHaveAttribute('aria-pressed', 'true');
   });
+});
 
-  it('closes from its close button, and from the links', async () => {
-    const onClose = vi.fn();
-    renderPicker({ onClose });
-    await loaded('Autumn Open');
-    await userEvent.click(screen.getByRole('button', { name: 'Close competition picker' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
-    await userEvent.click(screen.getByRole('link', { name: 'Past' }));
-    expect(onClose).toHaveBeenCalledTimes(2);
+describe('CompetitionPicker: forgetting', () => {
+  const remember = () => { document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 2, name: 'Autumn Open' }))}; Path=/`; };
+
+  it('forgets the competition, clears what the device kept and stays on the events list', async () => {
+    remember();
+    renderPicker();
+    await loaded('Weekend Fest');
+    await userEvent.click(screen.getByRole('button', { name: /Forget this competition/ }));
+    expect(screen.getByTestId('probe')).toHaveTextContent('/events|none');
+    expect(document.cookie).not.toContain('mg.competition');
+    expect(sessionStorage.getItem('mg.competitionVisit')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Forget this competition/ })).not.toBeInTheDocument();
   });
 
-  it('has no close button when it is a page', async () => {
+  it('is also offered on the past list', async () => {
+    remember();
+    renderPicker({ past: true });
+    await loaded('Weekend Fest');
+    expect(screen.getByRole('button', { name: /Forget this competition/ })).toBeInTheDocument();
+  });
+
+  it('is not offered without a current competition', async () => {
     renderPicker();
-    await loaded('Autumn Open');
-    expect(screen.queryByRole('button', { name: 'Close competition picker' })).not.toBeInTheDocument();
+    await loaded('Weekend Fest');
+    expect(screen.queryByRole('button', { name: /Forget this competition/ })).not.toBeInTheDocument();
   });
 });
 
@@ -208,17 +222,17 @@ describe('CompetitionPicker: search and tags', () => {
     expect(screen.getByText(/Load more to search further back/)).toBeInTheDocument();
   });
 
-  it('tags a competition taking entries and a demo event', async () => {
+  it('tags a competition taking entries, and says nothing about a demo event', async () => {
     reply(page([{ ...autumn, entriesOpen: true }, { ...festival, isDemo: true }, { ...today, entriesOpen: true, isDemo: true }]));
     renderPicker();
     await loaded('Autumn Open');
     const later = screen.getByRole('region', { name: 'Coming up' });
     expect(within(later).getByRole('button', { name: /Autumn Open/ })).toHaveTextContent('Entries open');
-    expect(within(later).getByRole('button', { name: /Weekend Fest/ })).toHaveTextContent('Demo event');
+    expect(within(later).getByRole('button', { name: /Weekend Fest/ })).not.toHaveTextContent('Demo event');
     expect(within(later).getByRole('button', { name: /Weekend Fest/ })).not.toHaveTextContent('Entries open');
     const onToday = screen.getByRole('region', { name: 'On today' });
     expect(onToday).toHaveTextContent('Entries open');
-    expect(onToday).toHaveTextContent('Demo event');
+    expect(onToday).not.toHaveTextContent('Demo event');
   });
 });
 
@@ -407,41 +421,11 @@ describe('CompetitionPicker: saved copies', () => {
   });
 });
 
-describe('CompetitionPickerDialog', () => {
-  it('opens as a modal dialog around the picker', async () => {
-    const onClose = vi.fn();
-    render(<MemoryRouter><CurrentCompetitionProvider><CompetitionPickerDialog onClose={onClose} /></CurrentCompetitionProvider></MemoryRouter>);
-    const dialog = screen.getByRole('dialog', { name: 'Select a competition' });
-    expect(dialog).toHaveAttribute('open');
-    await within(dialog).findByText('Autumn Open');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Close competition picker' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('closes when the dialog is cancelled with Escape', async () => {
-    const onClose = vi.fn();
-    render(<MemoryRouter><CurrentCompetitionProvider><CompetitionPickerDialog onClose={onClose} /></CurrentCompetitionProvider></MemoryRouter>);
-    fireEvent(screen.getByRole('dialog'), new Event('cancel'));
-    expect(onClose).toHaveBeenCalledTimes(1);
-    await screen.findByText('Autumn Open');
-  });
-
-  it('closes the dialog element when it unmounts', async () => {
-    const { unmount } = render(<MemoryRouter><CurrentCompetitionProvider><CompetitionPickerDialog onClose={vi.fn()} /></CurrentCompetitionProvider></MemoryRouter>);
-    const close = vi.spyOn(HTMLDialogElement.prototype, 'close');
-    await screen.findByText('Autumn Open');
-    unmount();
-    expect(close).toHaveBeenCalled();
-  });
-});
-
 describe('CompetitionPicker: demo events', () => {
-  it('badges a demo event on its card and its row, and leaves real events alone', async () => {
+  it('shows no demo label on a card or a row', async () => {
     reply(page([{ ...today, isDemo: true }, { ...autumn, isDemo: true }, festival]));
     renderPicker();
     await loaded('Autumn Open');
-
-    expect(screen.getAllByText('Demo event')).toHaveLength(2);
-    expect(within(screen.getByRole('button', { name: /Weekend Fest/ })).queryByText('Demo event')).not.toBeInTheDocument();
+    expect(screen.queryByText('Demo event')).not.toBeInTheDocument();
   });
 });

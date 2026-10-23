@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Check, Download, LogIn, Shield, Trash2 } from 'lucide-react';
+import { Check, Download, Flag, LogIn, Shield, Trash2 } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import type { DeclarationForm, Team } from '../../types';
+import type { DeclarationForm, RiderEntry, Team } from '../../types';
 import { toCsv, downloadCsv, safeFilename } from '../../lib/csv';
 import { decDraftKey, dobText, heightText, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
 import { DecFormEditor } from './decform/DecFormEditor';
+import { confirmDialog } from '../../components/ConfirmDialog';
+import { parseConfigResponse, STANDARD_CONFIG, type DecFormConfig } from '../../lib/decFormConfig';
 
 function readDraft(competitionId: number, teamId: number, required: number): DecFormDraft | null {
   try { return parseDraft(localStorage.getItem(decDraftKey(competitionId, teamId)), required); } catch { return null; }
@@ -20,6 +22,8 @@ export function DeclarationsTab() {
   // null until the forms have come back, so the editor starts from the team's real declaration.
   const [forms, setForms] = useState<DeclarationForm[] | null>(null);
   const [chosen, setChosen] = useState<number | null>(null);
+  // What this competition's dec form asks. Null until it has come back; the standard form if it can't be fetched.
+  const [config, setConfig] = useState<DecFormConfig | null>(null);
 
   // Trainers submit for the teams they coach, and a club's Team Manager for any team of their club.
   // Admins and people who organise this competition can submit for any team. The API enforces the same rule.
@@ -35,6 +39,19 @@ export function DeclarationsTab() {
     api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id } })
       .then((r) => { if (!cancelled) setForms(Array.isArray(r.data) ? r.data : []); })
       .catch(() => { if (!cancelled) setForms([]); });
+    return () => { cancelled = true; };
+  }, [competition.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let loaded: DecFormConfig = STANDARD_CONFIG;
+      try {
+        const { data } = await api.get(`/competitions/${competition.id}/dec-form-config`);
+        loaded = parseConfigResponse(data)?.config ?? STANDARD_CONFIG;
+      } catch { /* the standard form is a safe fallback */ }
+      if (!cancelled) setConfig(loaded);
+    })();
     return () => { cancelled = true; };
   }, [competition.id]);
 
@@ -54,6 +71,8 @@ export function DeclarationsTab() {
   const priorPhone = forms?.find((f) => f.submittedByUserId === user?.id && f.submittedByPhone)?.submittedByPhone ?? undefined;
 
   async function remove(id: number) {
+    const target = forms?.find((f) => f.id === id);
+    if (!(await confirmDialog({ title: 'Delete this dec form?', message: `Delete the dec form for ${target?.teamName ?? 'this team'}? This can’t be undone.`, confirmLabel: 'Delete dec form', destructive: true }))) return;
     await api.delete(`/declaration-forms/${id}`);
     setForms((cur) => cur?.filter((f) => f.id !== id) ?? cur);
   }
@@ -64,6 +83,23 @@ export function DeclarationsTab() {
 
   function exportCsv() {
     const header = ['Team', 'Rider', 'Reserve', 'Guest', 'DOB', 'Pony', 'Height (hh)', 'Bibs', 'Trainer', 'Phone', 'Submitted by', 'Terms agreed', 'Submitted at', 'Notes'];
+    // The answers an organiser added are only in the file when someone gave one (the API only sends them to staff and the submitter).
+    const allRiders = (forms ?? []).flatMap((f) => f.riders);
+    const customFields = (config ?? STANDARD_CONFIG).customFields;
+    const everyColumn: { title: string; value: (r: RiderEntry) => string }[] = [
+      { title: 'Birth year', value: (r) => (r.birthYear == null ? '' : String(r.birthYear)) },
+      { title: 'Age group', value: (r) => r.ageGroup ?? '' },
+      { title: 'Weight (kg)', value: (r) => (r.weightKg == null ? '' : String(r.weightKg)) },
+      { title: 'Pony passport or ID', value: (r) => r.ponyPassportNumber ?? '' },
+      { title: 'Pony age', value: (r) => (r.ponyAge == null ? '' : String(r.ponyAge)) },
+      { title: 'Membership number', value: (r) => r.membershipNumber ?? '' },
+      { title: 'Emergency contact', value: (r) => r.emergencyContactName ?? '' },
+      { title: 'Emergency phone', value: (r) => r.emergencyContactPhone ?? '' },
+      { title: 'Medical notes', value: (r) => r.medicalNotes ?? '' },
+      ...customFields.map((c) => ({ title: c.label, value: (r: RiderEntry) => r.customValues?.[c.id] ?? '' })),
+      { title: 'Flags', value: (r) => (r.flags ?? []).join(' ') },
+    ];
+    const extraColumns = everyColumn.filter((c) => allRiders.some((r) => c.value(r) !== ''));
     const rows: ReadonlyArray<string>[] = [];
     for (const f of forms ?? []) {
       const riders = f.riders.slice().sort((a, b) => a.orderIndex - b.orderIndex);
@@ -78,15 +114,16 @@ export function DeclarationsTab() {
           heightText(r.ponyHeightHands),
           f.bibDescription ?? '',
           f.trainerName ?? f.submittedByName ?? '',
-          f.submittedByPhone ?? '',
+          f.trainerPhone ?? f.submittedByPhone ?? '',
           f.submittedByName ?? '',
           f.termsAcceptedAt ? new Date(f.termsAcceptedAt).toLocaleString() : '',
           new Date(f.submittedAt).toLocaleString(),
           f.notes ?? '',
+          ...extraColumns.map((c) => c.value(r)),
         ]);
       }
     }
-    downloadCsv(`${safeFilename(competition.name)}-dec-forms.csv`, toCsv(header, rows));
+    downloadCsv(`${safeFilename(competition.name)}-dec-forms.csv`, toCsv([...header, ...extraColumns.map((c) => c.title)], rows));
   }
 
   const count = forms?.length ?? 0;
@@ -119,9 +156,9 @@ export function DeclarationsTab() {
               ))}
             </div>
           )}
-          {team && forms && (
+          {team && forms && config && (
             <DecFormEditor key={team.id} competition={competition} team={team} existing={existing} draft={draft}
-              priorPhone={priorPhone} onSaved={saved} />
+              priorPhone={priorPhone} onSaved={saved} config={config} />
           )}
         </>
       )}
@@ -130,23 +167,49 @@ export function DeclarationsTab() {
         {forms?.length === 0 && (
           <div className="card p-3 text-xs text-[rgb(var(--mg-muted))]">No declaration forms submitted yet.</div>
         )}
-        {forms?.map((f) => <DecFormCard key={f.id} f={f} onDelete={() => remove(f.id)} canDelete={user != null} />)}
+        {forms?.map((f) => <DecFormCard key={f.id} f={f} config={config ?? STANDARD_CONFIG} onDelete={() => remove(f.id)} canDelete={user != null} />)}
       </div>
     </div>
   );
 }
 
-interface CardProps { f: DeclarationForm; onDelete: () => void; canDelete: boolean }
+interface CardProps { f: DeclarationForm; config: DecFormConfig; onDelete: () => void; canDelete: boolean }
 
-function DecFormCard({ f, onDelete, canDelete }: CardProps) {
+/** The extra answers a rider gave, as one quiet line. Only staff and the submitter are ever sent them. */
+function detailLine(r: RiderEntry, config: DecFormConfig): string {
+  const parts = [
+    r.birthYear != null ? `born ${r.birthYear}` : null,
+    r.ageGroup,
+    r.weightKg != null ? `${r.weightKg} kg` : null,
+    r.ponyAge != null ? `pony ${r.ponyAge} yrs` : null,
+    r.ponyPassportNumber ? `passport ${r.ponyPassportNumber}` : null,
+    r.membershipNumber ? `member ${r.membershipNumber}` : null,
+    r.emergencyContactName ? `emergency: ${r.emergencyContactName}${r.emergencyContactPhone ? ` ${r.emergencyContactPhone}` : ''}` : null,
+    r.medicalNotes ? `medical: ${r.medicalNotes}` : null,
+    ...config.customFields.map((c) => (r.customValues?.[c.id] ? `${c.label}: ${r.customValues[c.id]}${c.unit ? ` ${c.unit}` : ''}` : null)),
+  ];
+  return parts.filter(Boolean).join(' · ');
+}
+
+function DecFormCard({ f, config, onDelete, canDelete }: CardProps) {
   return (
     <div className="card p-3">
       <div className="mb-2 flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold">{f.teamName}</h3>
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+            <span className="truncate">{f.teamName}</span>
+            {(f.flagCount ?? 0) > 0 && (
+              <span className="mg-flag inline-flex shrink-0 items-center gap-1 !px-1.5 !py-0.5 !text-[11px]" title="Someone's answer is outside the limits set for this event">
+                <Flag aria-hidden="true" className="h-3 w-3" />{f.flagCount} flagged
+              </span>
+            )}
+          </h3>
+          {f.entryTeamName && f.entryTeamName.trim().toLowerCase() !== f.teamName.trim().toLowerCase() && (
+            <p className="text-[11px] text-[rgb(var(--mg-muted))]">Entered as {f.entryTeamName}</p>
+          )}
           <p className="text-[11px] text-[rgb(var(--mg-muted))]">
             Trainer: <span className="font-medium text-[rgb(var(--mg-ink))]">{f.trainerName ?? f.submittedByName ?? '—'}</span>
-            {f.submittedByPhone && <span className="ml-1"> · {f.submittedByPhone}</span>}
+            {(f.trainerPhone ?? f.submittedByPhone) && <span className="ml-1"> · {f.trainerPhone ?? f.submittedByPhone}</span>}
           </p>
           <p className="text-[10px] text-[rgb(var(--mg-faint))]">
             Submitted {new Date(f.submittedAt).toLocaleString()}
@@ -161,7 +224,7 @@ function DecFormCard({ f, onDelete, canDelete }: CardProps) {
       {f.bibDescription && <p className="mb-2 text-[11px] text-[rgb(var(--mg-body))]">Bibs: {f.bibDescription}</p>}
       <ol className="space-y-1">
         {f.riders.map((r) => (
-          <li key={r.id} className="flex items-center gap-2 text-xs">
+          <li key={r.id} className="flex flex-wrap items-center gap-x-2 text-xs">
             <span className="flex-1 truncate font-medium text-[rgb(var(--mg-ink))]">
               {r.fullName}
               {r.isReserve && <Shield aria-label="Reserve" className="ml-1 inline h-3 w-3 text-sky-500" />}
@@ -170,6 +233,8 @@ function DecFormCard({ f, onDelete, canDelete }: CardProps) {
             <span className="truncate text-[rgb(var(--mg-muted))]">
               {r.horseName ?? '—'}{r.ponyHeightHands != null ? ` · ${heightText(r.ponyHeightHands)} hh` : ''}
             </span>
+            {detailLine(r, config) && <span className="basis-full text-[11px] text-[rgb(var(--mg-muted))]">{detailLine(r, config)}</span>}
+            {r.flags?.map((flag) => <span key={flag} className="mg-flag basis-full">{flag}</span>)}
           </li>
         ))}
       </ol>

@@ -7,6 +7,7 @@ import type { ScorerLink, ScorerLinkList } from '../../types';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { chooseOption } from '../../test/select';
 
+import { autoConfirm } from '../../test/confirm';
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 
 const link = (id: number, over: Partial<ScorerLink> = {}): ScorerLink => ({
@@ -50,7 +51,7 @@ describe('ScorerLinksCard', () => {
     expect(screen.queryByRole('button', { name: 'Make scorer link' })).not.toBeInTheDocument();
   });
 
-  it('hides the controls from an admin who has not turned Edit mode on', async () => {
+  it('hides the controls when the viewer cannot write', async () => {
     render(<ScorerLinksCard competitionId={5} canWrite={false} />);
     await screen.findByText('Scorer 1 · Main');
     expect(screen.queryByRole('button', { name: 'Make scorer link' })).not.toBeInTheDocument();
@@ -113,7 +114,7 @@ describe('ScorerLinksCard', () => {
 
   it('withdraws a link after confirming', async () => {
     const user = userEvent.setup();
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true);
+    const confirm = autoConfirm([false, true]);
     vi.mocked(api.post).mockResolvedValue({ data: link(1, { revokedAt: '2030-06-02T12:00:00Z' }) });
     render(<ScorerLinksCard competitionId={5} />);
     await user.click(await screen.findByRole('button', { name: 'Withdraw Scorer 1’s link' }));
@@ -128,7 +129,7 @@ describe('ScorerLinksCard', () => {
 
   it('says when withdrawing fails', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    autoConfirm(true);
     vi.mocked(api.post).mockRejectedValue(axiosError());
     render(<ScorerLinksCard competitionId={5} />);
     await user.click(await screen.findByRole('button', { name: 'Withdraw Scorer 1’s link' }));

@@ -1,3 +1,5 @@
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerPwa, setBroadcasting } from './pwa';
 
@@ -19,16 +21,18 @@ describe('registerPwa', () => {
     expect(registerSW).toHaveBeenCalledTimes(1);
   });
 
-  it('reloads into the new version when the user accepts the prompt', () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('reloads into the new version when the user accepts the prompt', async () => {
     options.onNeedRefresh();
-    expect(confirm).toHaveBeenCalledWith('A new version of the app is ready. Reload now?');
-    expect(updateSW).toHaveBeenCalledWith(true);
+    const dialog = await screen.findByRole('alertdialog', { name: 'Update ready' });
+    expect(dialog).toHaveTextContent('A new version of the app is ready. Reload now?');
+    await userEvent.click(screen.getByRole('button', { name: 'Reload now' }));
+    await waitFor(() => expect(updateSW).toHaveBeenCalledWith(true));
   });
 
-  it('leaves the new version waiting when the user declines', () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('leaves the new version waiting when the user declines', async () => {
     options.onNeedRefresh();
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(updateSW).not.toHaveBeenCalled();
   });
 
@@ -47,13 +51,13 @@ describe('registerPwa', () => {
   });
 });
 
-it('defers the update prompt and reload while broadcasting', () => {
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+it('defers the update prompt and reload while broadcasting', async () => {
   setBroadcasting(true);
   options.onNeedRefresh();
-  expect(confirm).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alertdialog')).toBeNull();
   expect(updateSW).not.toHaveBeenCalled();
   setBroadcasting(false);
   options.onNeedRefresh();
-  expect(updateSW).toHaveBeenCalledWith(true);
+  await userEvent.click(await screen.findByRole('button', { name: 'Reload now' }));
+  await waitFor(() => expect(updateSW).toHaveBeenCalledWith(true));
 });

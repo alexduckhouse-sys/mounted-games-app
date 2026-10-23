@@ -1,0 +1,152 @@
+import { api } from '../../../api';
+import {
+  hatbandsFor, heatSizeOf, minutesOf, parseFinalistCount, parseMaxParticipants, priceGbpToMinor, sectionName, type CreatorDraft,
+} from '../../../lib/creatorDraft';
+import { realFixedItems } from '../../../lib/creatorLoad';
+import { breakWindow, plannedSessions, provisionalTimetable } from '../../../lib/creatorPlan';
+import type { CompetitionDetail, Session } from '../../../types';
+import { SessionKind } from '../../../types';
+
+/** A save that stopped part way. `competitionId` is set once the competition exists, so the person can carry on in edit mode. */
+export class SaveError extends Error {
+  readonly competitionId: number | null;
+  constructor(message: string, competitionId: number | null) {
+    super(message);
+    this.competitionId = competitionId;
+  }
+}
+
+const messageOf = (e: unknown, fallback: string) => {
+  const data = (e as { response?: { data?: { message?: string; title?: string } | string } }).response?.data;
+  return typeof data === 'string' && data ? data : (typeof data === 'object' && (data?.message || data?.title)) || fallback;
+};
+
+export function basicsPayload(draft: CreatorDraft) {
+  const start = new Date(`${draft.startDate}T${draft.startTime}`).toISOString();
+  const hasEnd = draft.endDate || draft.endTime;
+  return {
+    name: draft.name.trim(),
+    icon: draft.icon,
+    location: draft.location.trim() || null,
+    description: draft.description.trim() || null,
+    latitude: draft.lat ? parseFloat(draft.lat) : null,
+    longitude: draft.lon ? parseFloat(draft.lon) : null,
+    what3Words: draft.what3Words.trim() || null,
+    postcode: draft.postcode.trim() || null,
+    appleMapsUrl: draft.appleMapsUrl.trim() || null,
+    organiserName: draft.organiserName.trim() || null,
+    paymentDestination: draft.paymentDestination.trim() || null,
+    termsText: draft.termsText.trim() || null,
+    laneHatbands: hatbandsFor(draft),
+    startDate: start,
+    endDate: hasEnd ? new Date(`${draft.endDate || draft.startDate}T${draft.endTime || '17:00'}`).toISOString() : null,
+  };
+}
+
+/**
+ * Saves the draft: the competition, its age groups, their sessions (with the estimated start times that make the
+ * provisional timetable) and its breaks. Never touches teams, entries, heats or results. Sessions that have heats are
+ * left as they are, apart from their minutes and arena; scored ones are not changed at all.
+ */
+export async function saveCreator(draft: CreatorDraft, opts: {
+  editingId: number | null;
+  competition: CompetitionDetail | null;
+  teamCounts: Readonly<Record<number, number>>;
+  progress: (message: string) => void;
+}): Promise<number> {
+  const { editingId, competition, teamCounts, progress } = opts;
+  let competitionId = editingId;
+  const step = async <T>(label: string, work: () => Promise<T>): Promise<T> => {
+    progress(label);
+    try { return await work(); } catch (e) { throw new SaveError(`${label.replace(/…$/, '')} failed: ${messageOf(e, 'please try again')}`, competitionId); }
+  };
+
+  if (editingId === null) {
+    const created = await step('Creating competition…', () => api.post<{ id: number }>('/competitions', basicsPayload(draft)));
+    competitionId = created.data.id;
+  } else {
+    await step('Saving details…', () => api.put(`/competitions/${editingId}`, { ...basicsPayload(draft), isActive: true, isArchived: false }));
+  }
+  const id = competitionId as number;
+  const base = `/competitions/${id}`;
+
+  // Age groups taken out of the draft.
+  const keptSections = new Set(draft.sections.flatMap((s) => (s.existingId ? [s.existingId] : [])));
+  for (const old of competition?.sections ?? []) {
+    if (!keptSections.has(old.id)) await step(`Removing ${old.displayName}…`, () => api.delete(`${base}/sections/${old.id}`));
+  }
+
+  const sectionIds: number[] = [];
+  for (const s of draft.sections) {
+    const name = sectionName(s);
+    const common = {
+      runoffRaceName: s.runoffRaceName.trim() || null,
+      usesRaceFinals: s.usesRaceFinals,
+      priceMinor: priceGbpToMinor(s.priceGbp),
+      // On an update, zero is how a cap is cleared (an omitted value leaves it as it is).
+      maxParticipants: parseMaxParticipants(s.maxParticipants),
+      finalistCount: parseFinalistCount(s.finalistCount),
+    };
+    if (s.existingId) {
+      await step(`Saving ${name}…`, () => api.put(`${base}/sections/${s.existingId}`, { ...common, maxParticipants: common.maxParticipants ?? 0 }));
+      sectionIds.push(s.existingId);
+    } else {
+      const made = await step(`Adding ${name}…`, () => api.post<{ id: number }>(`${base}/sections`, { format: s.format, ageGroup: s.ageGroup.trim(), displayName: name, ...common }));
+      sectionIds.push(made.data.id);
+    }
+  }
+
+  // Sessions and breaks, with the estimated times.
+  const real = realFixedItems(competition);
+  const plan = plannedSessions(draft, teamCounts);
+  const rows = provisionalTimetable(draft, teamCounts, real).rows;
+  const rank = new Map<string, number>();
+  rows.forEach((row, i) => rank.set(row.planKey !== undefined ? `s${row.planKey}` : `b${row.breakKey}`, i));
+  const topOrder = (competition?.sessions ?? []).reduce((m, s) => Math.max(m, s.orderIndex), 0);
+  const orderOf = (key: string) => topOrder + (rank.get(key) ?? 0) + 1;
+
+  const keptSessions = new Set(draft.sections.flatMap((s) => s.sessions.flatMap((x) => (x.existingId ? [x.existingId] : []))));
+  const isRace = (s: Session) => (s.kind ?? (s.isBreak ? SessionKind.Break : SessionKind.Race)) === SessionKind.Race;
+  for (const old of (competition?.sessions ?? []).filter(isRace)) {
+    // A session of a removed age group went with it.
+    if (keptSections.has(old.competitionSectionId ?? -1) && !keptSessions.has(old.id)) {
+      await step(`Removing ${old.name}…`, () => api.delete(`${base}/sessions/${old.id}`));
+    }
+  }
+
+  for (const p of plan) {
+    const section = draft.sections[p.sectionIndex];
+    const session = section.sessions[p.sessionIndex];
+    const row = rows.find((r) => r.planKey === p.key);
+    const minutes = minutesOf(section);
+    const arena = section.arena.trim();
+    if (session.existingId) {
+      if (session.scored) continue;
+      const body = session.hasHeats
+        ? { minutesPerHeat: minutes, arenaName: arena }
+        : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: session.races ?? [], scheduledStart: row?.start.toISOString(), durationMinutes: row && row.minutes > 0 ? row.minutes : undefined };
+      await step(`Saving ${p.name}…`, () => api.put(`${base}/sessions/${session.existingId}`, body));
+    } else {
+      await step(`Adding ${p.name}…`, () => api.post(`${base}/sessions`, {
+        competitionSectionId: sectionIds[p.sectionIndex], name: p.name, arenaName: arena, scheduledStart: row?.start.toISOString() ?? null,
+        orderIndex: orderOf(`s${p.key}`), notes: null, isBreak: false, durationMinutes: row && row.minutes > 0 ? row.minutes : null,
+        kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: session.races ?? [],
+      }));
+    }
+  }
+
+  const keptBreaks = new Set(draft.breaks.flatMap((b) => (b.existingId ? [b.existingId] : [])));
+  for (const old of (competition?.sessions ?? []).filter((s) => !isRace(s))) {
+    if (!keptBreaks.has(old.id)) await step(`Removing ${old.name}…`, () => api.delete(`${base}/sessions/${old.id}`));
+  }
+  for (const [i, b] of draft.breaks.entries()) {
+    if (b.existingId) continue;
+    const window = breakWindow(b);
+    await step(`Adding ${b.name.trim() || 'break'}…`, () => api.post(`${base}/sessions`, {
+      competitionSectionId: null, name: b.name.trim(), arenaName: b.arena.trim() || null, scheduledStart: window?.start.toISOString() ?? null,
+      orderIndex: orderOf(`b${i}`), notes: null, isBreak: b.kind === 1, durationMinutes: parseInt(b.minutes, 10) || null,
+      kind: b.kind, location: null,
+    }));
+  }
+  return id;
+}

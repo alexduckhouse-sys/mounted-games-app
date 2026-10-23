@@ -80,6 +80,7 @@ public class NotificationScheduler : BackgroundService
         var horizonEnd = now.AddMinutes(90);
         var sessions = await db.Sessions
             .Include(s => s.Section)
+            .Include(s => s.Heats)
             .Where(s => s.ScheduledStart != null
                 && s.ScheduledStart >= horizonStart
                 && s.ScheduledStart <= horizonEnd
@@ -92,8 +93,9 @@ public class NotificationScheduler : BackgroundService
             var minsAhead = (s.ScheduledStart.Value - now).TotalMinutes;
             var kind = s.Kind;
 
-            // 1 hour before a race session.
-            if (kind == SessionKind.Race && minsAhead is <= 60 and > 55)
+            // 1 hour before a race session. A race session with no heats yet is only the provisional timetable's
+            // estimate (made in the competition creator), so it says nothing to anyone until heats exist.
+            if (kind == SessionKind.Race && s.Heats.Count > 0 && minsAhead is <= 60 and > 55)
             {
                 await FireForSession(db, push, s, "1h", $"1 hour to {s.Name}",
                     $"Starts at {UkTime(s.ScheduledStart.Value):HH:mm} — {s.Section?.DisplayName ?? "—"}.", ct);

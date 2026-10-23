@@ -6,9 +6,11 @@ import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import { useLiveHub } from '../../live/useLiveHub';
+import { useDialogFocus } from '../../components/useDialogFocus';
 import { LiveVideo } from '../../components/stream/LiveVideo';
 import type { ChatMessage, LiveStream } from '../../types';
 import './chat.css';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
 const BANNER_TAG = 'banner';
@@ -40,7 +42,7 @@ export function ChatTab() {
 }
 
 function ChatTabSession() {
-  const { competition, reload, streams, streamingEnabled, invoke, ready, streamMessages } = useCompetition();
+  const { competition, reload, streams, streamingEnabled, streamingChecked = true, invoke, ready, streamMessages } = useCompetition();
   const { user, canEdit, hasRole, canOrganise } = useAuth();
   const isAdmin = hasRole('Admin');
   const isTrainer = hasRole('Trainer');
@@ -126,7 +128,7 @@ function ChatTabSession() {
 
   async function removeMessage(id: number, confirmFirst = true) {
     if (!canModerate) return;
-    if (confirmFirst && !confirm('Delete this announcement?')) return;
+    if (confirmFirst && !(await confirmDialog({ title: 'Delete this announcement?', message: 'Delete this announcement?', confirmLabel: 'Delete announcement', destructive: true }))) return;
     setActionError(null);
     try {
       await api.delete(`/competitions/${competition.id}/chat/${id}`);
@@ -139,7 +141,8 @@ function ChatTabSession() {
   }
 
   async function blockMessageAuthor(id: number) {
-    if (!canModerate || !confirm("Block this sender's IP from posting?")) return;
+    if (!canModerate) return;
+    if (!(await confirmDialog({ title: 'Block this sender?', message: "Block this sender's IP from posting?", confirmLabel: 'Block sender', destructive: true }))) return;
     try {
       const { data } = await api.post<{ alreadyBlocked: boolean; ipAddress: string }>(`/competitions/${competition.id}/chat/${id}/block-author`, {});
       alert(data.alreadyBlocked ? `IP ${data.ipAddress} was already blocked.` : `Blocked IP ${data.ipAddress}.`);
@@ -219,7 +222,7 @@ function ChatTabSession() {
       {actionError && !allOpen && <div className="live-action-error" role="alert"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError(null)}><X aria-hidden="true" /></button></div>}
 
       {canPost ? (
-        <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} onSaved={reload} />
+        <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
       ) : (
         <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
       )}
@@ -277,9 +280,6 @@ function ChatTabSession() {
       )}
       {canMessageOrganisers && !privateMessagingAvailable && (
         <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Messaging the organisers isn’t available for this event yet.</div>
-      )}
-      {isAdmin && !canModerate && (
-        <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Turn Edit mode on to post an announcement or pin a banner.</div>
       )}
 
       {allOpen && <AnnouncementsOverlay messages={visibleMessages.slice().reverse()} staff={canPost} canModerate={canModerate} error={actionError} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} onDismissError={dismissActionError} onClose={closeAnnouncements} returnFocusRef={announcementsTriggerRef} />}
@@ -349,12 +349,13 @@ function AnnouncementsOverlay({ messages, staff, canModerate, error, onDelete, o
   </div>;
 }
 
-function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEditStream, onSaved }: {
+function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEditStream, streamingNotSetUp, onSaved }: {
   active: LiveStream | null;
   fallback: string | null;
   competitionId: number;
   canBroadcast: boolean;
   canEditStream: boolean;
+  streamingNotSetUp: boolean;
   onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -368,6 +369,8 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
       {canEditStream ? <button ref={changeRef} type="button" className="staff-stream-change" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>Change</button>
         : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>Change</Link> : null}
     </div>
+    {canBroadcast && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}><Video aria-hidden="true" />Go live from this device</Link>}
+    {streamingNotSetUp && <p className="mg-notice" role="status">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</p>}
     {canBroadcast && <Link className="mg-text-link self-start text-sm" to={`/competitions/${competitionId}/produce`}>Banners and overlays</Link>}
     {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
   </div>;
@@ -431,40 +434,3 @@ function CompStreamEditor({ competition, canEditStream, onSaved }: { competition
   </div>;
 }
 
-function useDialogFocus(dialogRef: RefObject<HTMLDivElement | null>, onClose: () => void, initialFocus: string, returnFocusRef?: RefObject<HTMLElement | null>) {
-  const closeRef = useRef(onClose);
-  useEffect(() => { closeRef.current = onClose; }, [onClose]);
-  useEffect(() => {
-    const restoreTo = returnFocusRef?.current ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    dialogRef.current?.querySelector<HTMLElement>(initialFocus)?.focus();
-    const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeRef.current();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      const focusable = [...dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', key);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', key);
-      if (restoreTo?.isConnected) restoreTo.focus();
-    };
-  }, [dialogRef, initialFocus, returnFocusRef]);
-}

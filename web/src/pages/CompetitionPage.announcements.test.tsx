@@ -174,19 +174,12 @@ describe('score cards', () => {
   });
 });
 
-it('shows the demo event notice only on a demo competition', async () => {
+it('shows no demo event banner, even on a demo competition', async () => {
   vi.mocked(api.get).mockImplementation(async (url: string) => url.endsWith('/chat')
     ? { data: [] }
     : { data: competition({ isDemo: true }), headers: {} });
-  const demo = renderAt('/competitions/1');
-  expect(await screen.findByText('Competition loaded')).toBeVisible();
-  expect(screen.getByRole('note')).toHaveTextContent('Any payment here is a test');
-  demo.unmount();
-
-  vi.mocked(api.get).mockImplementation(async (url: string) => url.endsWith('/chat')
-    ? { data: [] }
-    : { data: competition(), headers: {} });
   renderAt('/competitions/1');
   expect(await screen.findByText('Competition loaded')).toBeVisible();
   expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  expect(screen.queryByText('Demo event')).not.toBeInTheDocument();
 });

@@ -125,7 +125,7 @@ describe('recentHeatResults', () => {
     const sessions = [session(1, { heats: [scored(10, { label: 'Heat A' }), heat(11, { entries })] })];
     const [only, ...rest] = recentHeatResults(sessions, null);
     expect(rest).toEqual([]);
-    expect(only.title).toBe('Seniors · Session 1 · Heat A');
+    expect(only.title).toBe('Senior Teams · Session 1 · Heat A');
     expect(only.complete).toBe(true);
     expect(only.rows.map((r) => [r.teamName, r.place, r.points])).toEqual([['Team 1', 1, 5], ['Team 2', 1, 5], ['Team 3', null, null]]);
   });
@@ -138,10 +138,10 @@ describe('recentHeatResults', () => {
     ] })];
     const results = recentHeatResults(sessions, null);
     expect(results.map((r) => r.key)).toEqual(['heat-23', 'heat-21', 'heat-20']);
-    expect(results[0].title).toBe('Seniors · Final · Heat 4');
-    expect(results[1].title).toBe('Seniors · A Final');
+    expect(results[0].title).toBe('Senior Teams · Final · Heat 4');
+    expect(results[1].title).toBe('Senior Teams · A Final');
     expect(results[2].complete).toBe(false);
-    expect(results[2].title).toBe('Seniors · Session 1 · Heat 1');
+    expect(results[2].title).toBe('Senior Teams · Session 1 · Heat 1');
   });
   it('orders newest first across sessions, filters by age group and ignores breaks', () => {
     const sessions = [
@@ -171,9 +171,9 @@ describe('timetable helpers', () => {
   });
   it('titles race groups and leaves other sessions without a heading', () => {
     const ordinals = sessionOrdinals(sessions);
-    expect(timetableGroupTitle(groups[0], ordinals)).toBe('Seniors · Session 1');
+    expect(timetableGroupTitle(groups[0], ordinals)).toBe('Senior Teams · Session 1');
     const finals = groupRowsBySession(timetableRows([session(9, { name: 'Seniors Final', heats: [heat(9, { raceRoundStage: 2 })] })], new Map(), false));
-    expect(timetableGroupTitle(finals[0], new Map())).toBe('Seniors · Finals');
+    expect(timetableGroupTitle(finals[0], new Map())).toBe('Senior Teams · Finals');
     const breaks = groupRowsBySession(timetableRows([session(8, { kind: 1, isBreak: true })], new Map(), false));
     expect(timetableGroupTitle(breaks[0], new Map())).toBeNull();
   });

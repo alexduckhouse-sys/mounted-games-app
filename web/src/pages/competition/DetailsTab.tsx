@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Trophy,
   Hammer, Check, ChevronDown, ChevronUp, Lock, Unlock, Sparkles, Download,
-  X, RotateCcw, Ban, CalendarPlus,
+  X, RotateCcw, Ban, CalendarPlus, ClipboardList,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { competitionDateText } from '../../lib/competitionDates';
@@ -25,6 +25,7 @@ import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignu
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 function priceLabel(minor?: number | null): string {
   if (!minor) return 'Free';
@@ -185,6 +186,13 @@ export function DetailsTab() {
               >
                 <Sparkles className="h-4 w-4" aria-hidden="true" /> Format competition
               </Link>
+              <Link
+                to={`/admin/competitions/${competition.id}/format#fm-dec`}
+                className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
+                title="Choose what the dec form asks for, such as weight or your own questions"
+              >
+                <ClipboardList className="h-4 w-4" aria-hidden="true" /> Dec form setup
+              </Link>
               <button
                 type="button"
                 onClick={exportAllSignupsCsv}
@@ -204,7 +212,7 @@ export function DetailsTab() {
         </>
       )}
 
-      {/* The owner, competition admins and site admins see who runs the event and can change it (site admins in Edit mode). */}
+      {/* The owner, competition admins and site admins see who runs the event and can change it. */}
       {user && (mayOrganise || hasRole('Admin')) && (
         <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
       )}
@@ -406,6 +414,7 @@ function SectionSignupCard({
           <label className="rf-fld">{wholeTeam ? 'Team name' : 'Team name (optional)'}
             <input placeholder={wholeTeam ? 'e.g. Welsh Dragons' : 'Riders with the same team name are put together'} value={teamName} onChange={(e) => setTeamName(e.target.value)} />
           </label>
+          <p className="-mt-1 text-xs text-[rgb(var(--mg-muted))]">The team name carries through to your team’s dec form, so organisers can match the two up.</p>
           <label className="rf-fld">Team code
             <input
               className="font-mono uppercase"
@@ -472,7 +481,7 @@ function SignupRow({ signup, isDemo, onChanged }: { signup: SectionSignup; isDem
     onChanged();
   }
   async function remove() {
-    if (!confirm(`Delete signup for ${signup.fullName}? This can't be undone.`)) return;
+    if (!(await confirmDialog({ title: 'Delete this signup?', message: `Delete signup for ${signup.fullName}? This can't be undone.`, confirmLabel: 'Delete signup', destructive: true }))) return;
     await api.delete(`/signups/${signup.id}`);
     onChanged();
   }

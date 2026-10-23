@@ -18,12 +18,14 @@ import { CompactPageBarProvider } from './components/CompactPageBarContext';
 import { StartPage } from './pages/StartPage';
 import { CompetitionPage } from './pages/CompetitionPage';
 import { AfterDrawOnly, CompetitionHome } from './pages/competition/CompetitionHome';
+import { ScrollToTop } from './components/ScrollToTop';
 import './App.css';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
 const SignUpPage = lazy(() => import('./pages/SignUpPage').then((module) => ({ default: module.SignUpPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
 const MembersPage = lazy(() => import('./pages/MembersPage').then((module) => ({ default: module.MembersPage })));
+const PayoutsPage = lazy(() => import('./pages/PayoutsPage').then((module) => ({ default: module.PayoutsPage })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })));
 const CompetitionsPage = lazy(() => import('./pages/CompetitionsPage').then((module) => ({ default: module.CompetitionsPage })));
 const ScoringTab = lazy(() => import('./pages/competition/ScoringTab').then((module) => ({ default: module.ScoringTab })));
@@ -40,7 +42,6 @@ const SponsorsPage = lazy(() => import('./pages/competition/SponsorsPage').then(
 const FollowingTab = lazy(() => import('./pages/competition/FollowingTab').then((module) => ({ default: module.FollowingTab })));
 const MyTeamsPage = lazy(() => import('./pages/MyTeamsPage').then((module) => ({ default: module.MyTeamsPage })));
 const DeclarationsIndexPage = lazy(() => import('./pages/DeclarationsIndexPage').then((module) => ({ default: module.DeclarationsIndexPage })));
-const ChatIndexPage = lazy(() => import('./pages/ChatIndexPage').then((module) => ({ default: module.ChatIndexPage })));
 const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })));
 const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
@@ -82,6 +83,7 @@ export default function App() {
         <CompetitionMetaProvider>
         <CompactPageBarProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <PageLoadBoundary page="app">
           <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
           <Routes>
@@ -92,6 +94,7 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route index element={<StartPage />} />
               <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="events" element={<CompetitionsPage />} />
               <Route path="competitions" element={<CompetitionsPage />} />
               <Route path="competitions/past" element={<CompetitionsPage past />} />
               <Route path="competitions/:id" element={<CompetitionPage />}>
@@ -128,10 +131,11 @@ export default function App() {
               <Route path="stats/:kind" element={<StatsPage />} />
               <Route path="event-tools/:competitionId" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EventToolsPage /></ProtectedRoute>} />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
-              <Route path="chat" element={<ChatIndexPage />} />
+              <Route path="chat" element={<Navigate to="/events" replace />} />
               <Route path="shop" element={<ShopPage />} />
               <Route path="me" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="me/members" element={<ProtectedRoute roles={['Manager', 'Admin']}><MembersPage /></ProtectedRoute>} />
+              <Route path="me/payouts" element={<ProtectedRoute roles={['Manager', 'Admin']}><PayoutsPage /></ProtectedRoute>} />
               <Route path="me/catalogue" element={<ProtectedRoute><SellerCataloguePage /></ProtectedRoute>} />
               <Route path="me/orders" element={<ProtectedRoute><CommerceOrdersPage /></ProtectedRoute>} />
               <Route path="admin" element={

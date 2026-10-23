@@ -91,12 +91,12 @@ describe('EntriesPanel', () => {
     expect(await screen.findByText('Team 1')).toBeInTheDocument();
   });
 
-  it('keeps every write control disabled outside edit mode', async () => {
+  it('keeps every write control disabled when the panel is read-only', async () => {
     mockGet({ '/entries': [entry(1)] });
     renderPanel(false);
 
     expect(await screen.findByText('Team 1')).toBeInTheDocument();
-    expect(screen.getByText(/Switch on Edit mode/)).toBeInTheDocument();
+    expect(screen.queryByText(/Edit mode/i)).not.toBeInTheDocument();
     for (const name of ['Withdraw Team 1', 'Mark Team 1 as a no-show', 'Swap a rider for Team 1']) {
       expect(screen.getByRole('button', { name })).toBeDisabled();
     }

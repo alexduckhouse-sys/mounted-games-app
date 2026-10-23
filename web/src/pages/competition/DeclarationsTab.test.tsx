@@ -7,6 +7,7 @@ import { competition, team } from '../../test/factories';
 import { decDraftKey } from '../../lib/decForm';
 import { CompetitionContext } from './context';
 import { DeclarationsTab } from './DeclarationsTab';
+import { autoConfirm } from '../../test/confirm';
 
 const state = vi.hoisted(() => ({
   user: { id: 'u1', fullName: 'Alex Morgan', email: 'alex@example.com', clubId: 1, clubName: 'Stockport PC', roles: ['Trainer'] } as { id: string; fullName: string; email: string; clubId: number | null; clubName: string; roles: Role[] } | null,
@@ -486,8 +487,12 @@ describe('DeclarationsTab: around the form', () => {
     const user = userEvent.setup();
     forms = [{ id: 9, teamId: 70, teamName: 'Other Club A', competitionId: 4, competitionName: 'x', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] }];
     mount();
+    const asked = autoConfirm([false, true]);
     await user.click(await screen.findByRole('button', { name: 'Delete the dec form for Other Club A' }));
-    expect(state.del).toHaveBeenCalledWith('/declaration-forms/9');
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Delete the dec form for Other Club A? This can’t be undone.'));
+    expect(state.del).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Delete the dec form for Other Club A' }));
+    await waitFor(() => expect(state.del).toHaveBeenCalledWith('/declaration-forms/9'));
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Other Club A' })).not.toBeInTheDocument());
   });
 

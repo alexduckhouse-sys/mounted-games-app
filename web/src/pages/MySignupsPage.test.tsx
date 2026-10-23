@@ -39,7 +39,7 @@ describe('MySignupsPage', () => {
 
   it('offers to browse competitions when the person has no entries', async () => {
     mount();
-    expect(await screen.findByRole('link', { name: 'Browse competitions' })).toHaveAttribute('href', '/competitions');
+    expect(await screen.findByRole('link', { name: 'Browse competitions' })).toHaveAttribute('href', '/events');
   });
 
   it('groups entries into coming up and past, with the price and status of each', async () => {
@@ -55,7 +55,7 @@ describe('MySignupsPage', () => {
     expect(within(coming).getAllByRole('listitem')).toHaveLength(2);
     const first = within(coming).getAllByRole('listitem')[0];
     expect(first).toHaveTextContent('Event 1');
-    expect(first).toHaveTextContent('Open · Stockport A');
+    expect(first).toHaveTextContent('Open Teams · Stockport A');
     expect(first).toHaveTextContent('£18.00');
     expect(first).toHaveTextContent('Awaiting payment');
     expect(within(coming).getAllByRole('listitem')[1]).toHaveTextContent('Paid 12 Oct');
