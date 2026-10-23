@@ -17,6 +17,9 @@ import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../../offline/savedCopies';
 import { NumberField } from '../../components/NumberField';
+import { PageGrid } from '../../components/PageGrid';
+import { usePageWidth } from '../../components/pageWidthState';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
 
 const NO_ROWS: StandingRow[] = [];
 
@@ -43,9 +46,40 @@ function AgeGroupSelect({ sections, value, teamCount, onChange }: { sections: { 
   );
 }
 
+/** Laptop version of the age group menu: every age group listed down the left, with its team count. */
+function AgeGroupRail({ sections, teams, value, onChange }: {
+  sections: { id: number; displayName: string }[];
+  teams: { competitionSectionId: number; isHorsConcours?: boolean }[];
+  value: number | null;
+  onChange: (id: number) => void;
+}) {
+  return (
+    <nav aria-label="Age groups" className="mg-card overflow-hidden">
+      <h2 className="mg-display border-b-2 border-[rgb(var(--mg-heading))] px-3 py-2 text-[15px] font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-heading))]">Age groups</h2>
+      <ul className="m-0 list-none p-0">
+        {sections.map((sec) => {
+          const count = teams.filter((t) => t.competitionSectionId === sec.id && !t.isHorsConcours).length;
+          const on = sec.id === value;
+          return (
+            <li key={sec.id} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
+              <button type="button" aria-current={on ? 'true' : undefined} onClick={() => onChange(sec.id)}
+                className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-[15px] ${on ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`}>
+                <span className="min-w-0 flex-1 truncate">{displaySectionName(sec.displayName)}</span>
+                <span className="shrink-0 text-xs text-[rgb(var(--mg-muted))]">{count}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
 export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const { competition, reload } = useCompetition();
   const { canManage } = useAuth();
+  usePageWidth('wide');
+  const desktop = useIsDesktop();
   // The age group lives in the URL (?section=ID) so the menu can link straight to one.
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSection = Number(searchParams.get('section'));
@@ -139,10 +173,12 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   );
 
   const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
-  const ageGroups = competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} onChange={chooseSection} />;
+  const rail = desktop && competition.sections.length > 1
+    ? <AgeGroupRail sections={competition.sections} teams={competition.teams} value={sectionId} onChange={chooseSection} /> : null;
+  const ageGroups = !rail && competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} onChange={chooseSection} />;
   if (toplistOnly || sectionId == null) {
-    return (
-      <div className="mx-auto flex w-full max-w-[560px] flex-col">
+    const page = (
+      <div className={`mx-auto flex w-full flex-col ${rail ? '' : 'max-w-[560px]'}`}>
         {toplistOnly && <ToplistHeader subtitle={[competition.name, progress].filter(Boolean).join(' · ')} onRefresh={() => setRetry((n) => n + 1)} />}
         {!toplistOnly && <h1 className="mg-h1 mg-h1-sm py-3">Age groups</h1>}
         {ageGroups}
@@ -154,10 +190,10 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
         {finalsModal}
       </div>
     );
+    return rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups">{page}</PageGrid> : page;
   }
 
-  return (
-    <>
+  const board = (
       <TimetableBoard
         sectionId={sectionId}
         title={sectionName || 'Age group'}
@@ -180,6 +216,11 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
           </div>
         }
       />
+  );
+
+  return (
+    <>
+      {rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups">{board}</PageGrid> : board}
       {finalsModal}
     </>
   );
