@@ -16,7 +16,7 @@ namespace MountedGames.Api.Tests.Stats;
 /// and "Club HC" (hors concours, also on Pony). Bending: Club A 1st, Other 2nd, HC 3rd. Flag Race: Other 1st,
 /// HC 2nd, Club A did not finish. Standings: Other 5, Club A 3, so Club A is 2nd of 2.</item>
 /// <item>Teams event 10 days ago: "Club A" again with Olly on Pony, racing an A Final heat; it wins the Mug Race.</item>
-/// <item>A demo event, an upcoming event and an event still running today, all with Olly: none of them count.</item>
+/// <item>An upcoming event and an event still running today, both with Olly: neither counts.</item>
 /// </list>
 /// </summary>
 public class StatsEndpointsTests : IClassFixture<ApiFactory>
@@ -126,10 +126,7 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
             [new RaceSpec("Mug Race", [(0, 1, 2), (1, 2, 1)])],
             heatLabel: "A Final");
 
-        // None of these count: a demo event, an event that hasn't started, and one still running today.
-        await SeedEventAsync($"Demo{u}", today.AddDays(-5), SectionFormat.Pairs,
-            [new TeamSpec($"Club{u}", $"Club{u} A", [olly, new RiderSpec($"DemoOnly{u} Rider", $"DemoPony{u}")])],
-            [new RaceSpec("Bending", [(0, 1, 1)])], demo: true);
+        // Neither of these counts: an event that hasn't started, and one still running today.
         await SeedEventAsync($"Soon{u}", today.AddDays(30), SectionFormat.Pairs,
             [new TeamSpec($"Club{u}", $"Club{u} A", [olly])], []);
         await SeedEventAsync($"Live{u}", today, SectionFormat.Pairs,
@@ -178,7 +175,7 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Search_SkipsReservesInPairs_OldForms_DemoEvents_AndDrafts()
+    public async Task Search_SkipsReservesInPairs_OldForms_AndDrafts()
     {
         var s = await SeedScenarioAsync();
         var draft = await SeedEventAsync($"Draft{s.U}", DateTime.UtcNow.Date.AddDays(-3), SectionFormat.Individual,
@@ -186,7 +183,7 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
             [new RaceSpec("Bending", [(0, 1, 1)])]);
         Assert.Single(draft);
         var anon = _f.CreateClient();
-        foreach (var q in new[] { $"res{s.U}", $"ghost{s.U}", $"ghosty{s.U}", $"demoonly{s.U}", $"demopony{s.U}", $"draft{s.U}" })
+        foreach (var q in new[] { $"res{s.U}", $"ghost{s.U}", $"ghosty{s.U}", $"draft{s.U}" })
         {
             var result = await (await anon.GetAsync($"/api/stats/search?q={q}")).ReadAsync<StatsSearchDto>();
             Assert.Empty(result.Riders);
@@ -422,5 +419,18 @@ public class StatsRateLimitTests : IClassFixture<LowStatsLimitFactory>
         var other = new HttpRequestMessage(HttpMethod.Get, "/api/stats/search?q=anyone");
         other.Headers.Add("X-Test-Ip", "198.51.100.41");
         Assert.Equal(HttpStatusCode.OK, (await _f.CreateClient().SendAsync(other)).StatusCode);
+    }
+
+    [Fact]
+    public async Task BrowseSharesTheSameLimit()
+    {
+        HttpResponseMessage last = null!;
+        for (var i = 0; i < 3; i++)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/stats/browse?kind=0");
+            request.Headers.Add("X-Test-Ip", "198.51.100.50");
+            last = await _f.CreateClient().SendAsync(request);
+        }
+        Assert.Equal(HttpStatusCode.TooManyRequests, last.StatusCode);
     }
 }
