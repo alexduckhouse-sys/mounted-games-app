@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, Search, X } from 'lucide-react';
+import { ChevronRight, PinOff, Search, X } from 'lucide-react';
 import { api } from '../api';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
@@ -32,7 +32,7 @@ function PlainHeader() {
 
 function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onRetry: () => void; past: boolean }) {
   const headingId = useId();
-  const { current, setCurrent } = useCurrentCompetition();
+  const { current, setCurrent, forget } = useCurrentCompetition();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -75,6 +75,11 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
     navigate(`/competitions/${competition.id}`);
     onClose?.();
   };
+  const forgetCurrent = () => {
+    forget();
+    navigate('/events');
+    onClose?.();
+  };
   return (
     <section className={`mg-font mx-auto flex w-full max-w-xl flex-col ${onClose ? 'gap-3.5 py-4' : 'gap-3.5 pb-5'}`} aria-labelledby={headingId}>
       {!onClose && <PlainHeader />}
@@ -97,6 +102,11 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
           <Link to="/competitions/past" onClick={onClose} aria-current={past ? 'page' : undefined}>Past</Link>
         </div>
       </div>
+      {onClose && current && (
+        <button type="button" onClick={forgetCurrent} className="mg-btn mg-btn-secondary w-full">
+          <PinOff className="h-4 w-4" aria-hidden="true" />Forget this competition<span className="sr-only">: {current.name}</span>
+        </button>
+      )}
       {state.savedCopy && !loading && <p role="status" className="mg-notice">Showing a saved list. It will refresh when your connection returns.</p>}
       <div className="flex flex-col gap-3.5" aria-busy={loading}>
         {onToday.length > 0 && (

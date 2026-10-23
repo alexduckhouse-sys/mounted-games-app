@@ -361,6 +361,28 @@ describe('NavigationDrawer: settings', () => {
   });
 });
 
+describe('NavigationDrawer: forgetting the competition', () => {
+  const openSettings = () => userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+
+  it('is offered only when a competition is followed', async () => {
+    mount();
+    await openSettings();
+    expect(screen.queryByRole('button', { name: 'Forget this competition' })).not.toBeInTheDocument();
+  });
+
+  it('clears the competition and what the device kept, closes the menu and opens the events list', async () => {
+    mount({ competition: true, path: '/competitions/4' });
+    await openSettings();
+    await userEvent.click(screen.getByRole('button', { name: 'Forget this competition' }));
+    expect(document.cookie).not.toContain('mg.competition');
+    expect(sessionStorage.getItem('mg.competitionVisit')).toBeNull();
+    expect(screen.getByTestId('probe')).toHaveTextContent('/events|ask');
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('switch', { name: /Remember this competition/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Menu' })).toBeInTheDocument();
+  });
+});
+
 describe('NavigationDrawer: the Seasons link', () => {
   const seasonLink = () => screen.queryByRole('link', { name: 'Seasons' });
 

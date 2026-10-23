@@ -11,7 +11,7 @@ export function GlobalTabs({ meCount = 0 }: { meCount?: number }) {
   const { pathname } = useLocation();
   const path = globalTabsPath(pathname);
   const tabs = [
-    { to: '/', label: 'Events', icon: CalendarDays, active: GLOBAL_EVENTS.includes(path) },
+    { to: '/events', label: 'Events', icon: CalendarDays, active: GLOBAL_EVENTS.includes(path) },
     { to: '/following', label: 'Following', icon: Star, active: path === '/following' },
     { to: '/chat', label: 'Live', icon: MessageSquare, active: path === '/chat' },
     { to: '/dashboard', label: 'Me', icon: UserRound, active: GLOBAL_ME.includes(path) && path !== '/shop' },

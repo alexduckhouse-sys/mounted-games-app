@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Clock, Trophy, MessageSquare, Info, ArrowLeftRight, X, Settings, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight, BarChart3 } from 'lucide-react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Clock, Trophy, MessageSquare, Info, ArrowLeftRight, X, Settings, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight, BarChart3, PinOff } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES } from '../theme/themes';
@@ -23,7 +23,8 @@ const iconClass = (active: boolean) => `h-5 w-5 shrink-0 ${active ? '' : 'text-[
 
 export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: startWithSettings = false }: { onClose: () => void; onChangeCompetition: () => void; settingsOpen?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const { current, rememberChoice, setRememberChoice } = useCurrentCompetition();
+  const { current, rememberChoice, setRememberChoice, forget } = useCurrentCompetition();
+  const navigate = useNavigate();
   const { user, hasRole } = useAuth();
   const { extras } = useNavExtras();
   const { meta } = useCompetitionMeta();
@@ -150,6 +151,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
                   <h3 className="px-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Options</h3>
                   <SettingSwitch icon={CloudSun} label="Show weather" checked={showWeather} onChange={toggleWeather} />
                   {current && <SettingSwitch icon={Pin} label="Remember this competition on this device" checked={rememberChoice === 'remember'} onChange={() => setRememberChoice(rememberChoice === 'remember' ? 'visit' : 'remember')} />}
+                  {current && <button onClick={() => { forget(); onClose(); navigate('/events'); }} className={itemClass(false)}><PinOff className={iconClass(false)} />Forget this competition</button>}
                 </div>
                 <NavLink to="/privacy" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShieldCheck className={iconClass(isActive)} />Privacy</>}</NavLink>
               </section>

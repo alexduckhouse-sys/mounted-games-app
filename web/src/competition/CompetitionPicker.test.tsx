@@ -182,6 +182,36 @@ describe('CompetitionPicker: choosing', () => {
   });
 });
 
+describe('CompetitionPicker: forgetting', () => {
+  const remember = () => { document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 2, name: 'Autumn Open' }))}; Path=/`; };
+
+  it('forgets the competition, clears what the device kept, opens the events list and closes', async () => {
+    remember();
+    const onClose = vi.fn();
+    renderPicker({ onClose });
+    await loaded('Weekend Fest');
+    await userEvent.click(screen.getByRole('button', { name: /Forget this competition/ }));
+    expect(screen.getByTestId('probe')).toHaveTextContent('/events|none');
+    expect(document.cookie).not.toContain('mg.competition');
+    expect(sessionStorage.getItem('mg.competitionVisit')).toBeNull();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: /Forget this competition/ })).not.toBeInTheDocument();
+  });
+
+  it('is not offered without a current competition, or on the page itself', async () => {
+    renderPicker({ onClose: vi.fn() });
+    await loaded('Weekend Fest');
+    expect(screen.queryByRole('button', { name: /Forget this competition/ })).not.toBeInTheDocument();
+  });
+
+  it('is left to the menu when the picker is a page', async () => {
+    remember();
+    renderPicker();
+    await loaded('Weekend Fest');
+    expect(screen.queryByRole('button', { name: /Forget this competition/ })).not.toBeInTheDocument();
+  });
+});
+
 describe('CompetitionPicker: search and tags', () => {
   it('finds a competition by name or by venue, and says so when nothing matches', async () => {
     renderPicker();

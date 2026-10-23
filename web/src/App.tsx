@@ -90,6 +90,7 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route index element={<StartPage />} />
               <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="events" element={<CompetitionsPage />} />
               <Route path="competitions" element={<CompetitionsPage />} />
               <Route path="competitions/past" element={<CompetitionsPage past />} />
               <Route path="competitions/:id" element={<CompetitionPage />}>

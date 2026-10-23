@@ -13,12 +13,12 @@ describe('GlobalTabs', () => {
     render(<MemoryRouter initialEntries={['/']}><GlobalTabs /></MemoryRouter>);
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
     expect(screen.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
-      ['Events', '/'], ['Following', '/following'], ['Live', '/chat'], ['Me', '/dashboard'],
+      ['Events', '/events'], ['Following', '/following'], ['Live', '/chat'], ['Me', '/dashboard'],
     ]);
   });
 
   it.each([
-    ['/', 'Events'], ['/competitions', 'Events'], ['/competitions/past', 'Events'], ['/competitions/past/', 'Events'],
+    ['/', 'Events'], ['/events', 'Events'], ['/competitions', 'Events'], ['/competitions/past', 'Events'], ['/competitions/past/', 'Events'],
     ['/following', 'Following'], ['/chat', 'Live'],
     ['/dashboard', 'Me'], ['/teams', 'Me'], ['/me/signups', 'Me'],
   ])('lights the right tab at %s', (path, tab) => {

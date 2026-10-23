@@ -13,6 +13,8 @@ interface CurrentCompetitionState {
   setCurrent: (c: CurrentCompetition | null) => void;
   setRememberChoice: (choice: RememberChoice) => void;
   clear: () => void;
+  /** Drops the competition from this device: state, cookie and visit copy, and the choice goes back to 'ask'. */
+  forget: () => void;
 }
 const Ctx = createContext<CurrentCompetitionState | null>(null);
 
@@ -58,8 +60,17 @@ export function CurrentCompetitionProvider({ children }: { children: ReactNode }
     setCurrentState((prev) => prev?.id === c?.id && prev?.name === c?.name ? prev : c);
   }, []);
   const clear = useCallback(() => setCurrentState(null), []);
-  const value = useMemo(() => ({ current, venue: venue?.competitionId === current?.id ? venue : null, setVenue, rememberChoice, storageError, setCurrent, setRememberChoice, clear }),
-    [current, venue, rememberChoice, storageError, setCurrent, clear]);
+  const forget = useCallback(() => {
+    // Wipe the browser copies straight away as well as through the effect above, so nothing can read them back in between.
+    try {
+      document.cookie = competitionCookie(null, location.protocol === 'https:');
+      sessionStorage.removeItem('mg.competitionVisit');
+    } catch { /* Storage may be blocked. */ }
+    setCurrentState(null);
+    setRememberChoice('ask');
+  }, []);
+  const value = useMemo(() => ({ current, venue: venue?.competitionId === current?.id ? venue : null, setVenue, rememberChoice, storageError, setCurrent, setRememberChoice, clear, forget }),
+    [current, venue, rememberChoice, storageError, setCurrent, clear, forget]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
