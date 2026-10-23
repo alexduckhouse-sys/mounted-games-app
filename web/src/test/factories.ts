@@ -1,4 +1,4 @@
-import type { ChatMessage, CompetitionDetail, Heat, Race, ResultRow, Session, StandingRow, Team } from '../types';
+import type { ChatMessage, CompetitionDetail, Heat, Race, ResultRow, Session, Sponsor, StandingRow, Team } from '../types';
 
 /** Minimal valid records for tests; override only what the test is about. */
 export const result = (teamId: number, placing: number | null, extra: Partial<ResultRow> = {}): ResultRow => ({
@@ -39,3 +39,8 @@ export const competition = (extra: Partial<CompetitionDetail> = {}): Competition
 /** An Axios-shaped failure, as `isNetworkError` and `outcomeOfError` expect it. */
 export const axiosError = (response?: { status: number; data?: unknown }, code?: string) =>
   Object.assign(new Error('request failed'), { isAxiosError: true, response, code });
+
+/** A sponsor that shows everywhere, with no logo or link. */
+export const sponsor = (id: number, extra: Partial<Sponsor> = {}): Sponsor => ({
+  id, name: `Sponsor ${id}`, linkUrl: null, logoUrl: null, tier: 1, sortOrder: id, showOn: 63, ...extra,
+});

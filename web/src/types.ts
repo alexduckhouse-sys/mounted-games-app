@@ -584,6 +584,8 @@ export interface StreamOverlay {
   scoreCardMode: OverlayMode;
   scoreCardDelaySeconds: number;
   scoreCardSeconds: number;
+  /** Sponsor cards over the video: Auto shows them during breaks and briefings, On always, Off never. */
+  sponsorMode: OverlayMode;
   /** The event's look, stored as the web app's own JSON. Read it with `parseLook`. */
   look: unknown;
   revision: number;
@@ -611,4 +613,29 @@ export interface ScorerSession {
   arenaName: string;
   expiresAt: string;
   sessions: Session[];
+
+/** 0 headline, 1 major, 2 supporter. */
+export type SponsorTier = 0 | 1 | 2;
+
+/** A sponsor that is on show now, as every viewer gets it. `showOn` is a set of `SPONSOR_PLACEMENTS` bits. */
+export interface Sponsor {
+  id: number;
+  name: string;
+  /** An https address, or null. */
+  linkUrl: string | null;
+  /** A path on the API, ending in the logo's version; null when there is no logo. */
+  logoUrl: string | null;
+  tier: SponsorTier;
+  sortOrder: number;
+  showOn: number;
+}
+
+/** A sponsor as the organisers see it. */
+export interface SponsorAdmin extends Sponsor {
+  isEnabled: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  /** Times shown, and seconds on screen (video), over all places and days. */
+  views: number;
+  seconds: number;
 }
