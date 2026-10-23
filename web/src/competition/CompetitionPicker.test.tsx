@@ -369,3 +369,14 @@ describe('CompetitionPickerDialog', () => {
     expect(close).toHaveBeenCalled();
   });
 });
+
+describe('CompetitionPicker: demo events', () => {
+  it('badges a demo event on its card and its row, and leaves real events alone', async () => {
+    reply(page([{ ...today, isDemo: true }, { ...autumn, isDemo: true }, festival]));
+    renderPicker();
+    await loaded('Autumn Open');
+
+    expect(screen.getAllByText('Demo event')).toHaveLength(2);
+    expect(within(screen.getByRole('button', { name: /Weekend Fest/ })).queryByText('Demo event')).not.toBeInTheDocument();
+  });
+});

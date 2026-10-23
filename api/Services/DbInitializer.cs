@@ -157,6 +157,14 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Teams", "IsHorsConcours", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "ChatMessages", "IpAddress", "TEXT NULL");
         await EnsureColumnAsync(db, "ChatMessages", "AdminOnly", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "ChatMessages", "RecipientUserId", "TEXT NULL");
+        await EnsureColumnAsync(db, "Sessions", "LaneRotationMode", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "Sessions", "QualifiersPerHeat", "INTEGER NULL");
+        await EnsureColumnAsync(db, "Results", "IsSitOut", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "Teams", "BibDescription", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "IsGuestRider", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "SectionSignups", "TeamName", "TEXT NULL");
+        await EnsureColumnAsync(db, "SectionSignups", "IsWholeTeam", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Competitions", "StreamUrl", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "Icon", "TEXT NOT NULL DEFAULT 'flag'");
         await EnsureColumnAsync(db, "Heats", "ScheduledStart", "TEXT NULL");
@@ -166,6 +174,22 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "CompetitionSections", "FinalistCount", "INTEGER NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "UsesRaceFinals", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Teams", "SupporterJoinKey", "TEXT NULL");
+        await EnsureColumnAsync(db, "Teams", "CalendarFeedTokenHash", "TEXT NULL");
+        await EnsureColumnAsync(db, "Teams", "CalendarFeedTokenCreatedAt", "TEXT NULL");
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "CalendarHeatVersions" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_CalendarHeatVersions" PRIMARY KEY AUTOINCREMENT,
+                "HeatId" INTEGER NOT NULL,
+                "TeamId" INTEGER NOT NULL,
+                "Fingerprint" TEXT NOT NULL,
+                "Sequence" INTEGER NOT NULL,
+                "ModifiedAt" TEXT NOT NULL,
+                CONSTRAINT "FK_CalendarHeatVersions_Heats_HeatId" FOREIGN KEY ("HeatId") REFERENCES "Heats" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_CalendarHeatVersions_Teams_TeamId" FOREIGN KEY ("TeamId") REFERENCES "Teams" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_CalendarHeatVersions_HeatId_TeamId" ON "CalendarHeatVersions" ("HeatId", "TeamId");
+            CREATE INDEX IF NOT EXISTS "IX_CalendarHeatVersions_TeamId" ON "CalendarHeatVersions" ("TeamId");
+            """);
         await db.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS ""TeamSupporters"" (
                 ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_TeamSupporters"" PRIMARY KEY AUTOINCREMENT,
@@ -275,12 +299,41 @@ public static class DbInitializer
         ");
         await EnsureColumnAsync(db, "SectionSignups", "UseInitialOnly", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SectionSignups", "NoFilming", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "Competitions", "TermsText", "TEXT NULL");
+        await EnsureColumnAsync(db, "SectionSignups", "TermsAccepted", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "SectionSignups", "TermsAcceptedAt", "TEXT NULL");
+        await EnsureColumnAsync(db, "SectionSignups", "TermsAcceptedByUserId", "TEXT NULL");
+        await EnsureColumnAsync(db, "SectionSignups", "TermsAcceptedByName", "TEXT NULL");
+        await EnsureColumnAsync(db, "SectionSignups", "TermsWordingVersion", "TEXT NULL");
 
+        await EnsureColumnAsync(db, "Teams", "EntryStatus", "INTEGER NOT NULL DEFAULT 0");
         await Operations.OperationsSqliteSchema.EnsureAsync(db);
+        await EnsureColumnAsync(db, "RaceScoreEvent", "ActorLabel", "TEXT NULL");
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "ScorerLinks" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_ScorerLinks" PRIMARY KEY AUTOINCREMENT,
+                "CompetitionId" INTEGER NOT NULL,
+                "Label" TEXT NOT NULL,
+                "ArenaName" TEXT NOT NULL,
+                "TokenHash" TEXT NOT NULL,
+                "CreatedByUserId" TEXT NOT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "ExpiresAt" TEXT NOT NULL,
+                "RevokedAt" TEXT NULL,
+                "LastUsedAt" TEXT NULL,
+                CONSTRAINT "FK_ScorerLinks_Competitions_CompetitionId" FOREIGN KEY ("CompetitionId")
+                    REFERENCES "Competitions" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ScorerLinks_TokenHash" ON "ScorerLinks" ("TokenHash");
+            CREATE INDEX IF NOT EXISTS "IX_ScorerLinks_CompetitionId" ON "ScorerLinks" ("CompetitionId");
+            """);
 
         await Commerce.CommerceSqliteSchema.EnsureAsync(db);
 
         await Seasons.SeasonsSqliteSchema.EnsureAsync(db);
+
+        await Email.EmailSqliteSchema.EnsureAsync(db);
 
     }
 
@@ -647,7 +700,7 @@ public static class DbInitializer
                 SubmittedByUserId = trainer1!.Id,
                 Notes = "All set for Spring Open."
             };
-            var bibs = new[] { "Red", "Yellow", "Blue", "Green", "White" };
+            warwickshireA.BibDescription = "Red bibs, numbered 1 to 5";
             var idx = 0;
             foreach (var sr in savedW)
             {
@@ -656,7 +709,6 @@ public static class DbInitializer
                     SavedRiderId = sr.Id,
                     FullName = sr.FullName,
                     HorseName = sr.HorseName,
-                    BibColour = bibs[idx % bibs.Length],
                     OrderIndex = idx,
                     IsCaptain = idx == 0,
                     IsReserve = idx == 4
@@ -1052,7 +1104,7 @@ public static class DbInitializer
     /// Adds a column to an existing table if it isn't present yet. Idempotent.
     /// SQLite-only (uses PRAGMA table_info).
     /// </summary>
-    private static async Task EnsureColumnAsync(AppDbContext db, string table, string column, string columnDef)
+    internal static async Task EnsureColumnAsync(AppDbContext db, string table, string column, string columnDef)
     {
         var conn = db.Database.GetDbConnection();
         await conn.OpenAsync();

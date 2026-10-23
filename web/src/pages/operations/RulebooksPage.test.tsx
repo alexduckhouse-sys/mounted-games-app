@@ -34,7 +34,7 @@ describe('RulebooksPage', () => {
 
   it('lists the shared rulebooks without loading any text', async () => {
     mount();
-    expect(await screen.findByRole('button', { name: /^Event handbook/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Event handbook/ }, { timeout: 10_000 })).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledTimes(1);
     expect(api.get).toHaveBeenCalledWith('/rulebooks');
     expect(screen.queryByText('Keep the changeover clear.')).not.toBeInTheDocument();

@@ -64,4 +64,31 @@ public class OperationsSchemaTests : IClassFixture<ApiFactory>
         Assert.Equal(new[] { "only copy", "newer copy" }, books.Select(x => x.Text));
         Assert.Equal(0, await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM pragma_table_info('Rulebook') WHERE name = 'CompetitionId'""").SingleAsync());
     }
+
+    [Fact]
+    public async Task ExistingSqliteDatabaseGainsWithdrawalTablesAndColumnWithoutLosingTeams()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var teams = await db.Teams.AsNoTracking().OrderBy(t => t.Id).Select(t => new { t.Id, t.DisplayName }).ToListAsync();
+        var teamId = teams[0].Id;
+        var competitionId = await db.Teams.Where(t => t.Id == teamId).Select(t => t.CompetitionId).SingleAsync();
+        await db.Database.ExecuteSqlRawAsync("DROP TABLE TeamStatusEvent; DROP TABLE DrawChange; DROP TABLE RiderSwapEvent; ALTER TABLE Teams DROP COLUMN EntryStatus;");
+
+        await DbInitializer.SeedAsync(_factory.Services);
+        db.ChangeTracker.Clear();
+        var team = await db.Teams.SingleAsync(t => t.Id == teamId);
+        team.EntryStatus = Entities.TeamEntryStatus.NoShow;
+        db.Add(new TeamStatusEvent { CompetitionId = competitionId, TeamId = teamId, Status = Entities.TeamEntryStatus.NoShow, Reason = "Synthetic" });
+        db.Add(new DrawChange { CompetitionId = competitionId, SectionId = team.CompetitionSectionId, Kind = DrawChangeKind.Redraw, RequestId = "schema-check", Fingerprint = "f" });
+        await db.SaveChangesAsync();
+        await DbInitializer.SeedAsync(_factory.Services);
+        db.ChangeTracker.Clear();
+
+        Assert.Equal(Entities.TeamEntryStatus.NoShow, (await db.Teams.SingleAsync(t => t.Id == teamId)).EntryStatus);
+        Assert.Single(await db.Set<TeamStatusEvent>().ToListAsync());
+        Assert.Single(await db.Set<DrawChange>().ToListAsync());
+        Assert.Empty(await db.Set<RiderSwapEvent>().ToListAsync());
+        Assert.Equal(teams, await db.Teams.AsNoTracking().OrderBy(t => t.Id).Select(t => new { t.Id, t.DisplayName }).ToListAsync());
+    }
 }

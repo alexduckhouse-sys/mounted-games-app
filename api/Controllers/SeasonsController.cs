@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
+using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Seasons;
 using MountedGames.Api.Services.Seasons;
 
@@ -342,18 +343,18 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
     [Authorize(Roles = Roles.Organiser)]
     public async Task<ActionResult<TeamProfileDto>> Create(CreateTeamProfileRequest request, CancellationToken ct)
     {
-        var error = Validate(request.ClubId, request.Suffix, request.DisplayName);
+        var error = Validate(request.ClubId, request.ClubName, request.Suffix, request.DisplayName);
         if (error is not null) return error;
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
-        var club = await db.Clubs.SingleOrDefaultAsync(x => x.Id == request.ClubId, ct);
+        var club = await ResolveClubAsync(request.ClubId, request.ClubName, ct);
         if (club is null) return BadRequest(new ProblemDetails { Status = 400, Title = "Club not found" });
         var profile = new TeamProfile
         {
             OwnerUserId = userId,
-            ClubId = request.ClubId,
+            ClubId = club.Id,
             Club = club,
-            Suffix = request.Suffix.Trim(),
+            Suffix = (request.Suffix ?? string.Empty).Trim(),
             DisplayName = request.DisplayName.Trim(),
         };
         db.Set<TeamProfile>().Add(profile);
@@ -365,14 +366,14 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
     [Authorize(Roles = Roles.Organiser)]
     public async Task<ActionResult<TeamProfileDto>> Update(Guid id, UpdateTeamProfileRequest request, CancellationToken ct)
     {
-        var error = Validate(request.ClubId, request.Suffix, request.DisplayName);
+        var error = Validate(request.ClubId, request.ClubName, request.Suffix, request.DisplayName);
         if (error is not null) return error;
         var profile = await db.Set<TeamProfile>().Include(x => x.Club).SingleOrDefaultAsync(x => x.Id == id, ct);
         if (profile is null || !CanManage(profile.OwnerUserId)) return NotFound();
-        var club = await db.Clubs.SingleOrDefaultAsync(x => x.Id == request.ClubId, ct);
+        var club = await ResolveClubAsync(request.ClubId, request.ClubName, ct);
         if (club is null) return BadRequest(new ProblemDetails { Status = 400, Title = "Club not found" });
-        var identityChanged = profile.ClubId != request.ClubId
-            || !string.Equals(profile.Suffix.Trim(), request.Suffix.Trim(), StringComparison.OrdinalIgnoreCase);
+        var identityChanged = profile.ClubId != club.Id
+            || !string.Equals(profile.Suffix.Trim(), (request.Suffix ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
         if (identityChanged && (await db.Set<EventTeamProfileLink>().AnyAsync(x => x.TeamProfileId == id, ct)
             || await db.Set<SeasonRoundResult>().AnyAsync(x => x.TeamProfileId == id, ct)))
             return Conflict(new ProblemDetails
@@ -383,7 +384,7 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
             });
         profile.ClubId = club.Id;
         profile.Club = club;
-        profile.Suffix = request.Suffix.Trim();
+        profile.Suffix = (request.Suffix ?? string.Empty).Trim();
         profile.DisplayName = request.DisplayName.Trim();
         profile.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
@@ -399,9 +400,10 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
         var team = await db.Teams.Include(x => x.Club).SingleOrDefaultAsync(x => x.Id == request.TeamId && x.CompetitionId == competitionId, ct);
         var profile = await db.Set<TeamProfile>().SingleOrDefaultAsync(x => x.Id == request.TeamProfileId, ct);
         if (team is null || profile is null || !CanManage(profile.OwnerUserId)) return NotFound();
-        if (team.ClubId != profile.ClubId
-            || !string.Equals(team.Suffix.Trim(), profile.Suffix.Trim(), StringComparison.OrdinalIgnoreCase))
-            return Conflict(new ProblemDetails { Status = 409, Title = "Team profile does not match this event team", Detail = "Choose a profile with the same club and suffix." });
+        // Any team of the profile's club can be linked: a club's teams can be named freely, so the suffix
+        // (which may be empty) is not part of the match.
+        if (team.ClubId != profile.ClubId)
+            return Conflict(new ProblemDetails { Status = 409, Title = "Team profile does not match this event team", Detail = "Choose a profile for the same club." });
         if (await db.Set<EventTeamProfileLink>().AnyAsync(x => x.TeamId == team.Id || (x.CompetitionId == competitionId && x.TeamProfileId == profile.Id), ct))
             return Conflict(new ProblemDetails { Status = 409, Title = "Team identity already linked", Detail = "An event team and a stable profile can each be linked only once per competition." });
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -419,11 +421,25 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
             link.Id, profile.Id, competition.Id, competition.Name, team.Id, team.DisplayName, link.LinkedAt));
     }
 
-    private ActionResult? Validate(int clubId, string suffix, string displayName)
+    /// <summary>The club by id, or by name (matched ignoring case); a new name creates the club.</summary>
+    private async Task<Club?> ResolveClubAsync(int clubId, string? clubName, CancellationToken ct)
     {
-        if (clubId < 1) return BadRequest(new ProblemDetails { Status = 400, Title = "Club is required" });
-        if (string.IsNullOrWhiteSpace(suffix) || suffix.Trim().Length > 10)
-            return BadRequest(new ProblemDetails { Status = 400, Title = "Suffix is required and must be at most 10 characters" });
+        var name = clubName?.Trim();
+        if (string.IsNullOrEmpty(name)) return await db.Clubs.SingleOrDefaultAsync(x => x.Id == clubId, ct);
+        var existing = await db.Clubs.FirstOrDefaultAsync(x => x.Name.ToLower() == name.ToLower(), ct);
+        if (existing is not null) return existing;
+        var club = new Club { Name = name, Region = "Custom" };
+        db.Clubs.Add(club);
+        await db.SaveChangesAsync(ct);
+        return club;
+    }
+
+    private ActionResult? Validate(int clubId, string? clubName, string? suffix, string displayName)
+    {
+        if (clubId < 1 && string.IsNullOrWhiteSpace(clubName)) return BadRequest(new ProblemDetails { Status = 400, Title = "Club is required" });
+        if (clubName?.Trim().Length > 150) return BadRequest(new ProblemDetails { Status = 400, Title = "Club name must be at most 150 characters" });
+        if ((suffix ?? string.Empty).Trim().Length > 10)
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Suffix must be at most 10 characters" });
         if (string.IsNullOrWhiteSpace(displayName) || displayName.Trim().Length > 200)
             return BadRequest(new ProblemDetails { Status = 400, Title = "Display name is required and must be at most 200 characters" });
         return null;

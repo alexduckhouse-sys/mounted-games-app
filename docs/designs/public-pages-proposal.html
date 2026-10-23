@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MG App — Public page designs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ground: #E9ECF1; --ink: #212121; --navy: #17385F; --muted: #5A6270; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: 'Barlow', sans-serif; }
+  a { color: #17385F; } a:hover { color: #E12A39; }
+  .intro { max-width: 1760px; margin: 0 auto; padding: 40px 16px 8px; }
+  .intro p { margin: 0 0 6px; font: 600 13px/1 'Barlow', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .intro h1 { margin: 0; font: 700 44px/1.05 'Barlow Condensed', sans-serif; color: var(--navy); }
+  .intro .sub { margin-top: 8px; font: 400 16px/1.4 'Barlow', sans-serif; color: #4A505A; max-width: 720px; text-transform: none; letter-spacing: 0; }
+  .boards { max-width: 1760px; margin: 0 auto; padding: 24px 16px 64px; display: flex; flex-wrap: wrap; gap: 40px; }
+  .board { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; }
+  .board-label { margin: 0; font: 700 18px/1.1 'Barlow Condensed', sans-serif; color: var(--navy); }
+  .phone { width: 390px; max-width: 100%; overflow-x: auto; border-radius: 28px; box-shadow: 0 1px 2px rgba(15,42,74,.12), 0 12px 32px rgba(15,42,74,.12); background: #fff; }
+  .phone > div { border-radius: 28px; }
+</style>
+</head>
+<body>
+<header class="intro">
+  <p>MG App · EGUK colours · Proposed</p>
+  <h1>Public pages — signed out</h1>
+  <div class="sub">Pick a competition, timetable heats, live heat, heat result, toplist, menu and the remember-competition prompt. Default option: soft corners, regular size, solid navy buttons. Names and venues are placeholders.</div>
+</header>
+<main class="boards">
+<section class="board" id="PublicPicker"><h2 class="board-label">Pick a competition</h2><div class="phone">
+
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: #F7F7F7; font-family: 'Barlow', sans-serif; color: #212121; overflow: hidden">
+  <header style="background: #17385F; color: #FFFFFF; padding: 14px 16px; display: flex; align-items: center; gap: 10px">
+    <div style="width: 32px; height: 32px; border-radius: 6px; background: #E12A39; display: flex; align-items: center; justify-content: center; font: 700 15px/1 'Barlow Condensed', sans-serif">MG</div>
+    <div style="flex: 1; min-width: 0; font: 600 16px/1.2 'Barlow', sans-serif">Mounted Games</div>
+    <a href="#" style="display: inline-flex; align-items: center; height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid #3B5577; color: #FFFFFF; text-decoration: none; font: 600 14px/1 'Barlow', sans-serif; box-sizing: border-box">Sign in</a>
+  </header>
+
+  <main style="flex: 1; overflow: auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 22px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h1 style="margin: 0; font: 700 32px/1.05 'Barlow Condensed', sans-serif; color: #17385F">Pick a competition</h1>
+      <div style="font: 400 15px/1.4 'Barlow', sans-serif; color: #4A505A">Timetables, live scores and results. No account needed.</div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px; border-radius: 10px; border: 1.5px solid #C4C9D1; background: #FFFFFF; box-sizing: border-box">
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+      <label for="pp-find" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search competitions</label>
+      <input id="pp-find" type="text" placeholder="Search by name or venue" style="flex: 1; min-width: 0; border: 0; outline: 0; font: 400 16px/1 'Barlow', sans-serif; color: #212121; background: transparent">
+    </div>
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 10px; font: 700 13px/1 'Barlow', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #5A6270">On today<span style="flex: 1; height: 1px; background: #DADADA"></span></div>
+      <a href="#PublicTimetable" style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 12px; background: #FFFFFF; border: 1.5px solid #E12A39; color: #212121; text-decoration: none">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 4px; background: #E12A39; color: #FFFFFF; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.06em"><span style="width: 6px; height: 6px; border-radius: 50%; background: #FFFFFF"></span>LIVE</span>
+          <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">Seniors Heat 2 in the arena</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <div style="font: 700 24px/1.1 'Barlow Condensed', sans-serif; color: #17385F">[Competition name]</div>
+          <div style="font: 400 14px/1.3 'Barlow', sans-serif; color: #4A505A">Sat 17 Oct · [Venue] · 3 age groups</div>
+        </div>
+        <span style="align-self: flex-start; display: inline-flex; align-items: center; justify-content: center; height: 50px; padding: 0 18px; border-radius: 10px; background: #17385F; color: #FFFFFF; border: 1.5px solid #17385F; font: 600 16px/1 'Barlow', sans-serif; text-transform: none; letter-spacing: 0; box-sizing: border-box">Open timetable</span>
+      </a>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 10px; font: 700 13px/1 'Barlow', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #5A6270">Coming up<span style="flex: 1; height: 1px; background: #DADADA"></span></div>
+      <div style="background: #FFFFFF; border: 1px solid #DADADA; border-radius: 12px">
+        
+          <a href="#PublicTimetable" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 16px; border-bottom: 1px solid #EBEBEB; color: #212121; text-decoration: none">
+            <div style="width: 44px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #17385F"><span style="font: 700 22px/1 'Barlow Condensed', sans-serif">21</span><span style="font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.06em">OCT</span></div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font: 600 16px/1.2 'Barlow', sans-serif">[Competition name]</span><span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">[Venue]</span></div>
+            <span style="flex-shrink: 0; display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: 4px; border: 1px solid #C4C9D1; box-sizing: border-box; color: #4A505A; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.05em">FR</span>
+          </a>
+        
+          <a href="#PublicTimetable" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 16px; border-bottom: 1px solid #EBEBEB; color: #212121; text-decoration: none">
+            <div style="width: 44px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #17385F"><span style="font: 700 22px/1 'Barlow Condensed', sans-serif">28</span><span style="font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.06em">OCT</span></div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font: 600 16px/1.2 'Barlow', sans-serif">[Competition name]</span><span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">[Venue]</span></div>
+            <span style="flex-shrink: 0; display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: 4px; border: 1px solid #C4C9D1; box-sizing: border-box; color: #4A505A; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.05em">DE</span>
+          </a>
+        
+          <a href="#PublicTimetable" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 16px; border-bottom: 1px solid #EBEBEB; color: #212121; text-decoration: none">
+            <div style="width: 44px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #17385F"><span style="font: 700 22px/1 'Barlow Condensed', sans-serif">4</span><span style="font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.06em">NOV</span></div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font: 600 16px/1.2 'Barlow', sans-serif">[Competition name]</span><span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">[Venue]</span></div>
+            <span style="flex-shrink: 0; display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: 4px; border: 1px solid #C4C9D1; box-sizing: border-box; color: #4A505A; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.05em">NL</span>
+          </a>
+        
+          <a href="#PublicTimetable" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 16px; border-bottom: 1px solid #EBEBEB; color: #212121; text-decoration: none">
+            <div style="width: 44px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #17385F"><span style="font: 700 22px/1 'Barlow Condensed', sans-serif">11</span><span style="font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.06em">NOV</span></div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font: 600 16px/1.2 'Barlow', sans-serif">[Competition name]</span><span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">[Venue]</span></div>
+            <span style="flex-shrink: 0; display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: 4px; border: 1px solid #C4C9D1; box-sizing: border-box; color: #4A505A; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.05em">INTL</span>
+          </a>
+        
+      </div>
+    </section>
+
+    <a href="#" style="display: flex; align-items: center; justify-content: center; height: 48px; color: #17385F; font: 600 15px/1 'Barlow', sans-serif">Past competitions</a>
+  </main>
+</div>
+</div></section>
+<section class="board" id="PublicTimetable"><h2 class="board-label">Timetable heats</h2><div class="phone">
+
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: #F7F7F7; font-family: 'Barlow', sans-serif; color: #212121; overflow: hidden">
+  <header style="background: #17385F; color: #FFFFFF; padding: 12px 12px 12px 16px; display: flex; align-items: center; gap: 10px">
+    <div style="width: 32px; height: 32px; border-radius: 6px; background: #E12A39; display: flex; align-items: center; justify-content: center; font: 700 15px/1 'Barlow Condensed', sans-serif">MG</div>
+    <a href="#PublicPicker" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #FFFFFF; text-decoration: none">
+      <span style="font: 700 18px/1.1 'Barlow Condensed', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">[Competition name]</span>
+      <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #C9D4E3">Sat 17 Oct · [Venue]</span>
+    </a>
+    <a href="#PublicMenu" aria-label="Open menu" style="width: 44px; height: 44px; border-radius: 10px; border: 1px solid #3B5577; color: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></a>
+  </header>
+  <div style="display: flex; align-items: stretch; background: #0F2A4A; color: #FFFFFF">
+    <a href="#" aria-label="Open the live feed" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px 0 16px; color: #FFFFFF; text-decoration: none; font: 500 14px/1.2 'Barlow', sans-serif">
+      <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 4px; background: #E12A39; border: 1px solid #E12A39; box-sizing: border-box; color: #FFFFFF; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.06em"><span style="width: 6px; height: 6px; border-radius: 50%; background: #FFFFFF"></span>LIVE</span>
+      <span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Seniors Heat 2 · Race 2, Mug Shuffle</span>
+    </a>
+    <button type="button" aria-label="Next update" style="flex-shrink: 0; width: 48px; border: 0; border-left: 1px solid #1E3E66; background: transparent; color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></button>
+  </div>
+
+  <div style="background: #FFFFFF; border-bottom: 1px solid #DADADA; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <h1 style="flex: 1; margin: 0; font: 700 26px/1 'Barlow Condensed', sans-serif; color: #17385F">Timetable</h1>
+      <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">Updated 20:08</span>
+      <button type="button" aria-label="Refresh timetable" style="width: 44px; height: 44px; border-radius: 10px; background: #FFFFFF; border: 1px solid #C4C9D1; color: #17385F; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg></button>
+    </div>
+    <div style="display: flex; gap: 8px; overflow-x: auto">
+      
+        <button type="button" style="flex-shrink: 0; height: 40px; padding: 0 16px; border-radius: 6px; background: #17385F; color: #FFFFFF; border: 1px solid #17385F; font: 600 15px/1 'Barlow', sans-serif; cursor: pointer">All arenas</button>
+      
+        <button type="button" style="flex-shrink: 0; height: 40px; padding: 0 16px; border-radius: 6px; background: #FFFFFF; color: #212121; border: 1px solid #C4C9D1; font: 600 15px/1 'Barlow', sans-serif; cursor: pointer">Main arena</button>
+      
+        <button type="button" style="flex-shrink: 0; height: 40px; padding: 0 16px; border-radius: 6px; background: #FFFFFF; color: #212121; border: 1px solid #C4C9D1; font: 600 15px/1 'Barlow', sans-serif; cursor: pointer">Final arena</button>
+      
+    </div>
+  </div>
+
+  <main style="flex: 1; overflow: auto; padding: 16px 16px 20px; display: flex; flex-direction: column; gap: 18px">
+    <a href="#" style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border-radius: 10px; background: rgb(227,231,236); color: #17385F; text-decoration: none; font: 600 15px/1.2 'Barlow', sans-serif">
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+      <span style="flex: 1">Find my team's heats</span>
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>
+    </a>
+
+    
+      <section style="flex-shrink: 0; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: baseline; gap: 10px; padding-bottom: 6px; border-bottom: 2px solid #17385F">
+          <h2 style="flex: 1; margin: 0; font: 700 18px/1.1 'Barlow Condensed', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; color: #17385F">Seniors · Session 1</h2>
+          <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">Main arena · 2 heats</span>
+        </div>
+        <div style="display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #DADADA; border-radius: 12px; overflow: hidden">
+          
+            <a href="#PublicHeat" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 14px 10px 16px; border-bottom: 1px solid #EBEBEB; background: #FFFFFF; color: #212121; text-decoration: none">
+              <div style="width: 66px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px">
+                
+                <span style="font: 700 26px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #6E7480">10:00</span>
+              </div>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                <span style="font: 600 16px/1.2 'Barlow', sans-serif; color: #4A505A">Heat 1</span>
+                <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">Main arena · 4 teams</span>
+              </div>
+              <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; background: #EFF1F4; border: 1px solid #EFF1F4; box-sizing: border-box; color: #4A505A; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.03em">Finished</span>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>
+            </a>
+          
+            <a href="#PublicHeat" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 14px 10px 16px; border-bottom: 1px solid #EBEBEB; background: #FDF1F2; color: #212121; text-decoration: none">
+              <div style="width: 66px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px">
+                
+                <span style="font: 700 26px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">10:25</span>
+              </div>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                <span style="font: 600 16px/1.2 'Barlow', sans-serif; color: #212121">Heat 2</span>
+                <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">Main arena · 4 teams</span>
+              </div>
+              <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; background: #E12A39; border: 1px solid #E12A39; box-sizing: border-box; color: #FFFFFF; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.03em">On now</span>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>
+            </a>
+          
+        </div>
+      </section>
+    
+      <section style="flex-shrink: 0; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: baseline; gap: 10px; padding-bottom: 6px; border-bottom: 2px solid #17385F">
+          <h2 style="flex: 1; margin: 0; font: 700 18px/1.1 'Barlow Condensed', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; color: #17385F">Seniors · Finals</h2>
+          <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">Final arena · 2 finals</span>
+        </div>
+        <div style="display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #DADADA; border-radius: 12px; overflow: hidden">
+          
+            <a href="#PublicHeat" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 14px 10px 16px; border-bottom: 1px solid #EBEBEB; background: #FFFFFF; color: #212121; text-decoration: none">
+              <div style="width: 66px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px">
+                
+                <span style="font: 700 26px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">11:05</span>
+              </div>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                <span style="font: 600 16px/1.2 'Barlow', sans-serif; color: #212121">Final A</span>
+                <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">Final arena · 4 teams</span>
+              </div>
+              <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; background: #FFFFFF; border: 1px solid #C4C9D1; box-sizing: border-box; color: #17385F; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.03em">On time</span>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>
+            </a>
+          
+            <a href="#PublicHeat" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 14px 10px 16px; border-bottom: 1px solid #EBEBEB; background: #FFFFFF; color: #212121; text-decoration: none">
+              <div style="width: 66px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px">
+                
+                <span style="font: 700 26px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">11:30</span>
+              </div>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                <span style="font: 600 16px/1.2 'Barlow', sans-serif; color: #212121">Final B</span>
+                <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">Final arena · 4 teams</span>
+              </div>
+              <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; background: #FFFFFF; border: 1px solid #C4C9D1; box-sizing: border-box; color: #17385F; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.03em">On time</span>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>
+            </a>
+          
+        </div>
+      </section>
+    
+      <section style="flex-shrink: 0; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: baseline; gap: 10px; padding-bottom: 6px; border-bottom: 2px solid #17385F">
+          <h2 style="flex: 1; margin: 0; font: 700 18px/1.1 'Barlow Condensed', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; color: #17385F">Juniors · Session 1</h2>
+          <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">Main arena · 2 heats</span>
+        </div>
+        <div style="display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #DADADA; border-radius: 12px; overflow: hidden">
+          
+            <a href="#PublicHeat" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 14px 10px 16px; border-bottom: 1px solid #EBEBEB; background: #FFFFFF; color: #212121; text-decoration: none">
+              <div style="width: 66px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px">
+                <span style="font: 500 13px/1 'Barlow Condensed', sans-serif; color: #6E7480; text-decoration: line-through">12:10</span>
+                <span style="font: 700 26px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #8A5A00">12:18</span>
+              </div>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                <span style="font: 600 16px/1.2 'Barlow', sans-serif; color: #212121">Heat 1</span>
+                <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">Main arena · 5 teams</span>
+              </div>
+              <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; background: #FBEED0; border: 1px solid #FBEED0; box-sizing: border-box; color: #7A5300; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.03em">+8 min</span>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>
+            </a>
+          
+            <a href="#PublicHeat" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 14px 10px 16px; border-bottom: 1px solid #EBEBEB; background: #FFFFFF; color: #212121; text-decoration: none">
+              <div style="width: 66px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px">
+                <span style="font: 500 13px/1 'Barlow Condensed', sans-serif; color: #6E7480; text-decoration: line-through">12:35</span>
+                <span style="font: 700 26px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #8A5A00">12:43</span>
+              </div>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                <span style="font: 600 16px/1.2 'Barlow', sans-serif; color: #212121">Heat 2</span>
+                <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">Main arena · 5 teams</span>
+              </div>
+              <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; background: #FBEED0; border: 1px solid #FBEED0; box-sizing: border-box; color: #7A5300; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.03em">+8 min</span>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>
+            </a>
+          
+        </div>
+      </section>
+    
+      <section style="flex-shrink: 0; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: baseline; gap: 10px; padding-bottom: 6px; border-bottom: 2px solid #17385F">
+          <h2 style="flex: 1; margin: 0; font: 700 18px/1.1 'Barlow Condensed', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; color: #17385F">Novices · Session 1</h2>
+          <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">Main arena · 2 heats</span>
+        </div>
+        <div style="display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #DADADA; border-radius: 12px; overflow: hidden">
+          
+            <a href="#PublicHeat" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 14px 10px 16px; border-bottom: 1px solid #EBEBEB; background: #FFFFFF; color: #212121; text-decoration: none">
+              <div style="width: 66px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px">
+                
+                <span style="font: 700 26px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">14:20</span>
+              </div>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                <span style="font: 600 16px/1.2 'Barlow', sans-serif; color: #212121">Heat 1</span>
+                <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">Main arena · 4 teams</span>
+              </div>
+              <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; background: #FFFFFF; border: 1px solid #C4C9D1; box-sizing: border-box; color: #17385F; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.03em">On time</span>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>
+            </a>
+          
+            <a href="#PublicHeat" style="display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 14px 10px 16px; border-bottom: 1px solid #EBEBEB; background: #FFFFFF; color: #212121; text-decoration: none">
+              <div style="width: 66px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px">
+                
+                <span style="font: 700 26px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">14:45</span>
+              </div>
+              <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                <span style="font: 600 16px/1.2 'Barlow', sans-serif; color: #212121">Heat 2</span>
+                <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #5A6270">Main arena · 4 teams</span>
+              </div>
+              <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; background: #FFFFFF; border: 1px solid #C4C9D1; box-sizing: border-box; color: #17385F; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.03em">On time</span>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>
+            </a>
+          
+        </div>
+      </section>
+    
+
+    <a href="#" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 50px; padding: 0 18px; border-radius: 10px; background: #FFFFFF; color: #17385F; border: 1.5px solid #C4C9D1; font: 600 16px/1 'Barlow', sans-serif; text-transform: none; letter-spacing: 0; text-decoration: none; box-sizing: border-box"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"></path><path d="M7 10l5 5 5-5"></path><path d="M5 20h14"></path></svg>Download timetable</a>
+  </main>
+
+  <nav aria-label="Main" style="background: #FFFFFF; border-top: 1px solid #DADADA; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px 4px 10px">
+    <a href="#PublicTimetable" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: #17385F; text-decoration: none; font: 600 12px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Timetable</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: #5A6270; text-decoration: none; font: 500 12px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"></path><path d="M12 13v4"></path><path d="M8 20h8"></path></svg>Toplists</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: #5A6270; text-decoration: none; font: 500 12px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>Live &amp; stream</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: #5A6270; text-decoration: none; font: 500 12px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><path d="M12 7.5v.5"></path></svg>Details</a>
+  </nav>
+</div>
+</div></section>
+<section class="board" id="PublicHeat"><h2 class="board-label">Heat — live</h2><div class="phone">
+
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: #F7F7F7; font-family: 'Barlow', sans-serif; color: #212121; overflow: hidden">
+  <header style="background: #17385F; color: #FFFFFF; padding: 12px 12px 12px 16px; display: flex; align-items: center; gap: 10px">
+    <div style="width: 32px; height: 32px; border-radius: 6px; background: #E12A39; display: flex; align-items: center; justify-content: center; font: 700 15px/1 'Barlow Condensed', sans-serif">MG</div>
+    <a href="#PublicPicker" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #FFFFFF; text-decoration: none">
+      <span style="font: 700 18px/1.1 'Barlow Condensed', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">[Competition name]</span>
+      <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #C9D4E3">Sat 17 Oct · [Venue]</span>
+    </a>
+    <a href="#PublicMenu" aria-label="Open menu" style="width: 44px; height: 44px; border-radius: 10px; border: 1px solid #3B5577; color: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></a>
+  </header>
+  <div style="display: flex; align-items: stretch; background: #0F2A4A; color: #FFFFFF">
+    <a href="#" aria-label="Open the live feed" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px 0 16px; color: #FFFFFF; text-decoration: none; font: 500 14px/1.2 'Barlow', sans-serif">
+      <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 4px; background: #E12A39; border: 1px solid #E12A39; box-sizing: border-box; color: #FFFFFF; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.06em"><span style="width: 6px; height: 6px; border-radius: 50%; background: #FFFFFF"></span>LIVE</span>
+      <span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Seniors Heat 2 · Race 2, Mug Shuffle</span>
+    </a>
+    <button type="button" aria-label="Next update" style="flex-shrink: 0; width: 48px; border: 0; border-left: 1px solid #1E3E66; background: transparent; color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></button>
+  </div>
+  <div style="background: #FFFFFF; border-bottom: 1px solid #DADADA; padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <a href="#PublicTimetable" style="display: inline-flex; align-items: center; gap: 4px; height: 44px; padding: 0 10px 0 4px; margin-left: -4px; color: #17385F; text-decoration: none; font: 600 14px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"></path></svg>Timetable</a>
+      <span style="flex: 1"></span>
+      <span style="display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 6px; background: #E12A39; color: #FFFFFF; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.04em"><span style="width: 6px; height: 6px; border-radius: 50%; background: #FFFFFF"></span>ON NOW</span>
+    </div>
+    <div style="display: flex; align-items: baseline; gap: 10px">
+      <h1 style="margin: 0; font: 700 28px/1 'Barlow Condensed', sans-serif; color: #17385F">Seniors · Heat 2</h1>
+      <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">10:25 · Race 2 of 8</span>
+    </div>
+  </div>
+
+  <main style="flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px">
+    <section style="flex-shrink: 0; background: #FFFFFF; border: 1px solid #DADADA; border-radius: 12px; overflow: hidden">
+      <div style="display: grid; grid-template-columns: minmax(0, 1fr) repeat(8, 21px) 32px; align-items: end; gap: 2px; padding: 10px 12px 0; border-bottom: 1px solid #212121; font: 700 12px/1 'Barlow Condensed', sans-serif; letter-spacing: 0.03em; text-transform: uppercase; color: #5A6270">
+        <div>Team</div>
+        <div style="position: relative; height: 92px"><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Two Flag</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #E12A39">Mug Shuffle</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Bottle Shuttle</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Sword Lancers</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Five Flag</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Tyre Race</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Ball and Cone</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Pony Express</span></div>
+        <div style="position: relative; height: 92px; display: flex; align-items: flex-end; justify-content: flex-end; padding-bottom: 8px; box-sizing: border-box; color: #17385F"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span>Pts</div>
+      </div>
+      
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) repeat(8, 21px) 32px; align-items: center; gap: 2px; min-height: 52px; padding: 0 12px; border-bottom: 1px solid #212121">
+          <div style="min-width: 0; font: 600 14px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Stockport A</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 0; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">4</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: flex-end; border-left: 1px solid #212121; font: 700 21px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">4</div>
+        </div>
+      
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) repeat(8, 21px) 32px; align-items: center; gap: 2px; min-height: 52px; padding: 0 12px; border-bottom: 1px solid #212121">
+          <div style="min-width: 0; font: 600 14px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Tynedale B</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 0; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">2</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: flex-end; border-left: 1px solid #212121; font: 700 21px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">2</div>
+        </div>
+      
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) repeat(8, 21px) 32px; align-items: center; gap: 2px; min-height: 52px; padding: 0 12px; border-bottom: 1px solid #212121">
+          <div style="min-width: 0; font: 600 14px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Wheatland A</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 0; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">3</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: flex-end; border-left: 1px solid #212121; font: 700 21px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">3</div>
+        </div>
+      
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) repeat(8, 21px) 32px; align-items: center; gap: 2px; min-height: 52px; padding: 0 12px; border-bottom: 1px solid #212121">
+          <div style="min-width: 0; font: 600 14px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Vale of Lune A</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 0; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #C8202F">0</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #A3A9B3">–</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: flex-end; border-left: 1px solid #212121; font: 700 21px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">0</div>
+        </div>
+      
+    </section>
+
+    <section style="flex-shrink: 0; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font: 700 20px/1.1 'Barlow Condensed', sans-serif; color: #17385F">Riders</h2>
+      <div style="background: #FFFFFF; border: 1px solid #DADADA; border-radius: 12px; overflow: hidden">
+        
+          <button type="button" aria-expanded="true" style="width: 100%; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; background: #FFFFFF; border: 0; border-bottom: 1px solid #EBEBEB; text-align: left; cursor: pointer; font-family: 'Barlow', sans-serif; color: #212121">
+            <span style="flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: #C8312B"></span>
+            <span style="flex: 1; min-width: 0; font: 600 15px/1.2 'Barlow', sans-serif">Stockport A</span>
+            <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">4 riders</span>
+            <svg aria-hidden="true" style="transform: rotate(180deg)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          
+            <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 14px 48px; background: #F7F8FA; border-bottom: 1px solid #EBEBEB">
+              
+                
+                  <div style="display: flex; align-items: baseline; gap: 10px; font: 400 14px/1.3 'Barlow', sans-serif"><span style="width: 18px; font: 700 14px/1 'Barlow Condensed', sans-serif; color: #5A6270">1</span><span style="flex: 1">[Rider name]</span><span style="color: #5A6270">[Pony]</span></div>
+                
+                  <div style="display: flex; align-items: baseline; gap: 10px; font: 400 14px/1.3 'Barlow', sans-serif"><span style="width: 18px; font: 700 14px/1 'Barlow Condensed', sans-serif; color: #5A6270">2</span><span style="flex: 1">[Rider name]</span><span style="color: #5A6270">[Pony]</span></div>
+                
+                  <div style="display: flex; align-items: baseline; gap: 10px; font: 400 14px/1.3 'Barlow', sans-serif"><span style="width: 18px; font: 700 14px/1 'Barlow Condensed', sans-serif; color: #5A6270">3</span><span style="flex: 1">[Rider name]</span><span style="color: #5A6270">[Pony]</span></div>
+                
+                  <div style="display: flex; align-items: baseline; gap: 10px; font: 400 14px/1.3 'Barlow', sans-serif"><span style="width: 18px; font: 700 14px/1 'Barlow Condensed', sans-serif; color: #5A6270">4</span><span style="flex: 1">[Rider name]</span><span style="color: #5A6270">[Pony]</span></div>
+                
+              
+              
+            </div>
+          
+        
+          <button type="button" aria-expanded="false" style="width: 100%; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; background: #FFFFFF; border: 0; border-bottom: 1px solid #EBEBEB; text-align: left; cursor: pointer; font-family: 'Barlow', sans-serif; color: #212121">
+            <span style="flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: #2457C5"></span>
+            <span style="flex: 1; min-width: 0; font: 600 15px/1.2 'Barlow', sans-serif">Tynedale B</span>
+            <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">4 riders</span>
+            <svg aria-hidden="true" style="transform: none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          
+        
+          <button type="button" aria-expanded="false" style="width: 100%; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; background: #FFFFFF; border: 0; border-bottom: 1px solid #EBEBEB; text-align: left; cursor: pointer; font-family: 'Barlow', sans-serif; color: #212121">
+            <span style="flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: #23824A"></span>
+            <span style="flex: 1; min-width: 0; font: 600 15px/1.2 'Barlow', sans-serif">Wheatland A</span>
+            <span style="font: 500 13px/1 'Barlow', sans-serif; color: #8A5A00">No dec form</span>
+            <svg aria-hidden="true" style="transform: none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          
+        
+          <button type="button" aria-expanded="false" style="width: 100%; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px; background: #FFFFFF; border: 0; border-bottom: 1px solid #EBEBEB; text-align: left; cursor: pointer; font-family: 'Barlow', sans-serif; color: #212121">
+            <span style="flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: #6B3FA0"></span>
+            <span style="flex: 1; min-width: 0; font: 600 15px/1.2 'Barlow', sans-serif">Vale of Lune A</span>
+            <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">4 riders</span>
+            <svg aria-hidden="true" style="transform: none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          
+        
+      </div>
+    </section>
+
+    <div style="display: flex; gap: 10px">
+      <a href="#" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; height: 50px; padding: 0 18px; border-radius: 10px; background: #17385F; color: #FFFFFF; border: 1.5px solid #17385F; font: 600 16px/1 'Barlow', sans-serif; text-transform: none; letter-spacing: 0; text-decoration: none; box-sizing: border-box">Watch stream</a>
+      <a href="#" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; height: 50px; padding: 0 18px; border-radius: 10px; background: #FFFFFF; color: #17385F; border: 1.5px solid #C4C9D1; font: 600 16px/1 'Barlow', sans-serif; text-transform: none; letter-spacing: 0; text-decoration: none; box-sizing: border-box">Seniors toplist</a>
+    </div>
+  </main>
+</div>
+</div></section>
+<section class="board" id="PublicHeatResult"><h2 class="board-label">Heat — result</h2><div class="phone">
+
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: #F7F7F7; font-family: 'Barlow', sans-serif; color: #212121; overflow: hidden">
+  <header style="background: #17385F; color: #FFFFFF; padding: 12px 12px 12px 16px; display: flex; align-items: center; gap: 10px">
+    <div style="width: 32px; height: 32px; border-radius: 6px; background: #E12A39; display: flex; align-items: center; justify-content: center; font: 700 15px/1 'Barlow Condensed', sans-serif">MG</div>
+    <a href="#PublicPicker" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #FFFFFF; text-decoration: none">
+      <span style="font: 700 18px/1.1 'Barlow Condensed', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">[Competition name]</span>
+      <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #C9D4E3">Sat 17 Oct · [Venue]</span>
+    </a>
+    <a href="#PublicMenu" aria-label="Open menu" style="width: 44px; height: 44px; border-radius: 10px; border: 1px solid #3B5577; color: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></a>
+  </header>
+  <div style="display: flex; align-items: stretch; background: #0F2A4A; color: #FFFFFF">
+    <a href="#" aria-label="Open the live feed" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px 0 16px; color: #FFFFFF; text-decoration: none; font: 500 14px/1.2 'Barlow', sans-serif">
+      <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 4px; background: #E12A39; border: 1px solid #E12A39; box-sizing: border-box; color: #FFFFFF; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.06em"><span style="width: 6px; height: 6px; border-radius: 50%; background: #FFFFFF"></span>LIVE</span>
+      <span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Seniors Heat 2 · Race 2, Mug Shuffle</span>
+    </a>
+    <button type="button" aria-label="Next update" style="flex-shrink: 0; width: 48px; border: 0; border-left: 1px solid #1E3E66; background: transparent; color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></button>
+  </div>
+  <div style="background: #FFFFFF; border-bottom: 1px solid #DADADA; padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <a href="#PublicTimetable" style="display: inline-flex; align-items: center; gap: 4px; height: 44px; padding: 0 10px 0 4px; margin-left: -4px; color: #17385F; text-decoration: none; font: 600 14px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"></path></svg>Timetable</a>
+      <span style="flex: 1"></span>
+      <span style="display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 6px; background: #E3E9F1; color: #17385F; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.04em">FINISHED</span>
+    </div>
+    <div style="display: flex; align-items: baseline; gap: 10px">
+      <h1 style="margin: 0; font: 700 28px/1 'Barlow Condensed', sans-serif; color: #17385F">Seniors · Heat 1</h1>
+      <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">10:00 · Main arena</span>
+    </div>
+  </div>
+
+  <main style="flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px">
+    <section style="flex-shrink: 0; background: #FFFFFF; border: 1px solid #DADADA; border-radius: 12px; overflow: hidden">
+      <div style="display: grid; grid-template-columns: 18px minmax(0, 1fr) repeat(8, 21px) 32px; align-items: end; gap: 2px; padding: 10px 12px 0; border-bottom: 1px solid #212121; font: 700 12px/1 'Barlow Condensed', sans-serif; letter-spacing: 0.03em; text-transform: uppercase; color: #5A6270">
+        <div>#</div><div>Team</div>
+        <div style="position: relative; height: 92px"><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Two Flag</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Mug Shuffle</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Bottle Shuttle</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Sword Lancers</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Five Flag</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Tyre Race</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Ball and Cone</span></div><div style="position: relative; height: 92px"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span><span style="position: absolute; left: 17px; bottom: 1px; transform-origin: 0 100%; transform: rotate(-55deg); white-space: nowrap; color: #212121">Pony Express</span></div>
+        <div style="position: relative; height: 92px; display: flex; align-items: flex-end; justify-content: flex-end; padding-bottom: 8px; box-sizing: border-box; color: #17385F"><span style="position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: #212121; transform-origin: 0 50%; transform: rotate(-55deg)"></span>Pts</div>
+      </div>
+      
+        <div style="display: grid; grid-template-columns: 18px minmax(0, 1fr) repeat(8, 21px) 32px; align-items: center; gap: 2px; min-height: 52px; padding: 0 12px; border-bottom: 1px solid #212121">
+          <div style="font: 700 17px/1 'Barlow Condensed', sans-serif; color: #5A6270">1</div>
+          <div style="min-width: 0; font: 600 14px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Stockport A</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 0; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">4</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">3</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">4</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">3</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">4</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">3</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">4</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">2</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: flex-end; border-left: 1px solid #212121; font: 700 21px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">27</div>
+        </div>
+      
+        <div style="display: grid; grid-template-columns: 18px minmax(0, 1fr) repeat(8, 21px) 32px; align-items: center; gap: 2px; min-height: 52px; padding: 0 12px; border-bottom: 1px solid #212121">
+          <div style="font: 700 17px/1 'Barlow Condensed', sans-serif; color: #5A6270">2</div>
+          <div style="min-width: 0; font: 600 14px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Tynedale B</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 0; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">2</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">4</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">2</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">2</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">3</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">4</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">2</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">4</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: flex-end; border-left: 1px solid #212121; font: 700 21px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">23</div>
+        </div>
+      
+        <div style="display: grid; grid-template-columns: 18px minmax(0, 1fr) repeat(8, 21px) 32px; align-items: center; gap: 2px; min-height: 52px; padding: 0 12px; border-bottom: 1px solid #212121">
+          <div style="font: 700 17px/1 'Barlow Condensed', sans-serif; color: #5A6270">3</div>
+          <div style="min-width: 0; font: 600 14px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Wheatland A</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 0; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">3</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">1</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">1</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">4</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">2</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">2</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">3</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">3</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: flex-end; border-left: 1px solid #212121; font: 700 21px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">19</div>
+        </div>
+      
+        <div style="display: grid; grid-template-columns: 18px minmax(0, 1fr) repeat(8, 21px) 32px; align-items: center; gap: 2px; min-height: 52px; padding: 0 12px; border-bottom: 1px solid #212121">
+          <div style="font: 700 17px/1 'Barlow Condensed', sans-serif; color: #5A6270">4</div>
+          <div style="min-width: 0; font: 600 14px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Vale of Lune A</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 0; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #C8202F">0</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">2</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">3</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">1</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">1</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">1</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">1</div><div style="align-self: stretch; display: flex; align-items: center; justify-content: center; border-left: 1px solid #212121; font: 600 16px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">1</div>
+          <div style="align-self: stretch; display: flex; align-items: center; justify-content: flex-end; border-left: 1px solid #212121; font: 700 21px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #17385F">10</div>
+        </div>
+      
+    </section>
+
+    <section style="flex-shrink: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <a href="#PublicToplist" style="display: inline-flex; align-items: center; justify-content: center; height: 50px; padding: 0 18px; border-radius: 10px; background: #17385F; color: #FFFFFF; border: 1.5px solid #17385F; font: 600 16px/1 'Barlow', sans-serif; text-transform: none; letter-spacing: 0; text-decoration: none; box-sizing: border-box">Toplist</a>
+      <a href="#PublicHeat" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 50px; padding: 0 18px; border-radius: 10px; background: #FFFFFF; color: #17385F; border: 1.5px solid #C4C9D1; font: 600 16px/1 'Barlow', sans-serif; text-transform: none; letter-spacing: 0; text-decoration: none; box-sizing: border-box">Heat 2<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg></a>
+    </section>
+  </main>
+</div>
+</div></section>
+<section class="board" id="PublicToplist"><h2 class="board-label">Toplist</h2><div class="phone">
+
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: #F7F7F7; font-family: 'Barlow', sans-serif; color: #212121; overflow: hidden">
+  <header style="background: #17385F; color: #FFFFFF; padding: 12px 12px 12px 16px; display: flex; align-items: center; gap: 10px">
+    <div style="width: 32px; height: 32px; border-radius: 6px; background: #E12A39; display: flex; align-items: center; justify-content: center; font: 700 15px/1 'Barlow Condensed', sans-serif">MG</div>
+    <a href="#PublicPicker" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #FFFFFF; text-decoration: none">
+      <span style="font: 700 18px/1.1 'Barlow Condensed', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">[Competition name]</span>
+      <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #C9D4E3">Sat 17 Oct · [Venue]</span>
+    </a>
+    <a href="#PublicMenu" aria-label="Open menu" style="width: 44px; height: 44px; border-radius: 10px; border: 1px solid #3B5577; color: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></a>
+  </header>
+  <div style="display: flex; align-items: stretch; background: #0F2A4A; color: #FFFFFF">
+    <a href="#" aria-label="Open the live feed" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px 0 16px; color: #FFFFFF; text-decoration: none; font: 500 14px/1.2 'Barlow', sans-serif">
+      <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 4px; background: transparent; border: 1px solid #AFC0D6; box-sizing: border-box; color: #FFFFFF; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.06em">RESULT</span>
+      <span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Two Flag won by Stockport A</span>
+    </a>
+    <button type="button" aria-label="Next update" style="flex-shrink: 0; width: 48px; border: 0; border-left: 1px solid #1E3E66; background: transparent; color: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg></button>
+  </div>
+
+  <div style="background: #FFFFFF; border-bottom: 1px solid #DADADA; padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; align-items: baseline; gap: 10px">
+      <h1 style="flex: 1; margin: 0; font: 700 26px/1 'Barlow Condensed', sans-serif; color: #17385F">Toplist</h1>
+      <span style="font: 500 13px/1 'Barlow', sans-serif; color: #5A6270">After session 2 of 3</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: #EEF1F5">
+      
+        <button type="button" aria-pressed="true" style="height: 40px; border-radius: 7px; background: #FFFFFF; color: #17385F; border: 0; box-shadow: 0 1px 2px rgba(23,56,95,0.18); font: 600 15px/1 'Barlow', sans-serif; cursor: pointer">Seniors</button>
+      
+        <button type="button" aria-pressed="false" style="height: 40px; border-radius: 7px; background: transparent; color: #3D4A5C; border: 0; box-shadow: none; font: 500 15px/1 'Barlow', sans-serif; cursor: pointer">Juniors</button>
+      
+        <button type="button" aria-pressed="false" style="height: 40px; border-radius: 7px; background: transparent; color: #3D4A5C; border: 0; box-shadow: none; font: 500 15px/1 'Barlow', sans-serif; cursor: pointer">Novices</button>
+      
+    </div>
+  </div>
+
+  <main style="flex: 1; overflow: auto; padding: 14px 16px 20px; display: flex; flex-direction: column; gap: 12px">
+    <div style="flex-shrink: 0; display: flex; align-items: center; gap: 8px">
+      <span style="flex: 1; font: 500 13px/1.3 'Barlow', sans-serif; color: #4A505A">Top 6 make the final</span>
+      <div style="display: flex; border: 1px solid #C4C9D1; border-radius: 10px; overflow: hidden">
+        <button type="button" aria-pressed="true" style="height: 36px; padding: 0 12px; border: 0; background: #17385F; color: #FFFFFF; font: 600 13px/1 'Barlow', sans-serif; cursor: pointer">Totals</button>
+        <button type="button" aria-pressed="false" style="height: 36px; padding: 0 12px; border: 0; border-left: 1px solid #C4C9D1; background: #FFFFFF; color: #17385F; font: 600 13px/1 'Barlow', sans-serif; cursor: pointer">By session</button>
+      </div>
+    </div>
+
+    
+      <section style="flex-shrink: 0; background: #FFFFFF; border: 1px solid #DADADA; border-radius: 12px; overflow: hidden">
+        
+          
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px solid #EBEBEB; box-shadow: none">
+            <div style="width: 32px; flex-shrink: 0; font: 700 22px/1 'Barlow Condensed', sans-serif; color: #212121">1</div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font: 600 16px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #212121">Stockport A</span>
+              <span style="font: 500 13px/1 'Barlow', sans-serif; color: #4A505A">8 races left</span>
+            </div>
+            <span style="flex-shrink: 0; font: 700 24px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">53</span>
+          </div>
+          
+        
+          
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px solid #EBEBEB; box-shadow: none">
+            <div style="width: 32px; flex-shrink: 0; font: 700 22px/1 'Barlow Condensed', sans-serif; color: #212121">2</div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font: 600 16px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #212121">Tynedale B</span>
+              <span style="font: 500 13px/1 'Barlow', sans-serif; color: #4A505A">8 races left</span>
+            </div>
+            <span style="flex-shrink: 0; font: 700 24px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">52</span>
+          </div>
+          
+        
+          
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px solid #EBEBEB; box-shadow: none">
+            <div style="width: 32px; flex-shrink: 0; font: 700 22px/1 'Barlow Condensed', sans-serif; color: #212121">3</div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font: 600 16px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #212121">Cheshire Forest A</span>
+              <span style="font: 500 13px/1 'Barlow', sans-serif; color: #4A505A">8 races left</span>
+            </div>
+            <span style="flex-shrink: 0; font: 700 24px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">49</span>
+          </div>
+          
+        
+          
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px solid #EBEBEB; box-shadow: none">
+            <div style="width: 32px; flex-shrink: 0; font: 700 22px/1 'Barlow Condensed', sans-serif; color: #212121">4</div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font: 600 16px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #212121">Berkeley A</span>
+              <span style="font: 500 13px/1 'Barlow', sans-serif; color: #4A505A">8 races left</span>
+            </div>
+            <span style="flex-shrink: 0; font: 700 24px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">44</span>
+          </div>
+          
+        
+          
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px solid #EBEBEB; box-shadow: none">
+            <div style="width: 32px; flex-shrink: 0; font: 700 22px/1 'Barlow Condensed', sans-serif; color: #212121">5</div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font: 600 16px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #212121">Cheshire Forest B</span>
+              <span style="font: 500 13px/1 'Barlow', sans-serif; color: #4A505A">8 races left</span>
+            </div>
+            <span style="flex-shrink: 0; font: 700 24px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">42</span>
+          </div>
+          
+        
+          
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px dashed #DADADA; box-shadow: inset 6px 0 0 #212121">
+            <div style="width: 32px; flex-shrink: 0; font: 700 22px/1 'Barlow Condensed', sans-serif; color: #212121">6</div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font: 600 16px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #212121">Vale of Lune A</span>
+              <span style="font: 500 13px/1 'Barlow', sans-serif; color: #4A505A">Joint 6th · run-off</span>
+            </div>
+            <span style="flex-shrink: 0; font: 700 24px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">40</span>
+          </div>
+          
+        
+          
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px solid #EBEBEB; box-shadow: inset 6px 0 0 #212121">
+            <div style="width: 32px; flex-shrink: 0; font: 700 22px/1 'Barlow Condensed', sans-serif; color: #212121">6</div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font: 600 16px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #212121">Tynedale A</span>
+              <span style="font: 500 13px/1 'Barlow', sans-serif; color: #4A505A">Joint 6th · run-off</span>
+            </div>
+            <span style="flex-shrink: 0; font: 700 24px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">40</span>
+          </div>
+          
+            <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; border-bottom: 1px solid #EBEBEB; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #5A6270"><span style="flex: 1; border-top: 2px dashed #A3A9B3"></span>Final cut-off<span style="flex: 1; border-top: 2px dashed #A3A9B3"></span></div>
+          
+        
+          
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px solid #EBEBEB; box-shadow: none">
+            <div style="width: 32px; flex-shrink: 0; font: 700 22px/1 'Barlow Condensed', sans-serif; color: #212121">8</div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font: 600 16px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #212121">Berkeley B</span>
+              <span style="font: 500 13px/1 'Barlow', sans-serif; color: #4A505A">14 needed to make the final</span>
+            </div>
+            <span style="flex-shrink: 0; font: 700 24px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">27</span>
+          </div>
+          
+        
+          
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px solid #EBEBEB; box-shadow: none">
+            <div style="width: 32px; flex-shrink: 0; font: 700 22px/1 'Barlow Condensed', sans-serif; color: #212121">9</div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font: 600 16px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #212121">Wheatland A</span>
+              <span style="font: 500 13px/1 'Barlow', sans-serif; color: #4A505A">1 heat to go</span>
+            </div>
+            <span style="flex-shrink: 0; font: 700 24px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #212121">22</span>
+          </div>
+          
+        
+          
+            <div style="padding: 12px 14px 6px; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #5A6270; border-bottom: 1px solid #EBEBEB">Hors concours</div>
+          
+          <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 14px; border-bottom: 1px solid #EBEBEB; box-shadow: none">
+            <div style="width: 32px; flex-shrink: 0; font: 700 22px/1 'Barlow Condensed', sans-serif; color: #6E7480">HC</div>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+              <span style="font: 600 16px/1.2 'Barlow', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #5A6270">Wheatland B</span>
+              <span style="font: 500 13px/1 'Barlow', sans-serif; color: #4A505A">8 races left</span>
+            </div>
+            <span style="flex-shrink: 0; font: 700 24px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: #5A6270">42</span>
+          </div>
+          
+        
+      </section>
+
+      <section style="flex-shrink: 0; background: #FFFFFF; border: 1px solid #DADADA; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <h2 style="flex: 1; margin: 0; font: 700 20px/1.1 'Barlow Condensed', sans-serif; color: #17385F">Run-off for 6th</h2>
+          <span style="font: 600 12px/1 'Barlow', sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: #5A6270">Pending</span>
+        </div>
+        <div style="font: 500 14px/1.3 'Barlow', sans-serif; color: #4A505A">2 Flag · after session 3, if still tied</div>
+        <div style="display: flex; flex-direction: column; border: 1px solid #EBEBEB; border-radius: 10px; overflow: hidden">
+          
+            <div style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; border-bottom: 1px solid #EBEBEB">
+              <span style="width: 40px; flex-shrink: 0; font: 700 16px/1 'Barlow Condensed', sans-serif; color: #5A6270">Lane 1</span>
+              <span style="flex: 1; font: 600 15px/1.2 'Barlow', sans-serif">Vale of Lune A</span>
+              <span style="font: 600 13px/1 'Barlow', sans-serif; color: #4A505A">40 pts</span>
+            </div>
+          
+            <div style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; border-bottom: 1px solid #EBEBEB">
+              <span style="width: 40px; flex-shrink: 0; font: 700 16px/1 'Barlow Condensed', sans-serif; color: #5A6270">Lane 2</span>
+              <span style="flex: 1; font: 600 15px/1.2 'Barlow', sans-serif">Tynedale A</span>
+              <span style="font: 600 13px/1 'Barlow', sans-serif; color: #4A505A">40 pts</span>
+            </div>
+          
+        </div>
+      </section>
+    
+
+    
+  </main>
+
+  <nav aria-label="Main" style="background: #FFFFFF; border-top: 1px solid #DADADA; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px 4px 10px">
+    <a href="#PublicTimetable" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: #5A6270; text-decoration: none; font: 500 12px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Timetable</a>
+    <a href="#PublicToplist" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: #17385F; text-decoration: none; font: 600 12px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"></path><path d="M12 13v4"></path><path d="M8 20h8"></path></svg>Toplists</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: #5A6270; text-decoration: none; font: 500 12px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>Live &amp; stream</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: #5A6270; text-decoration: none; font: 500 12px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><path d="M12 7.5v.5"></path></svg>Details</a>
+  </nav>
+</div>
+</div></section>
+<section class="board" id="PublicMenu"><h2 class="board-label">Menu</h2><div class="phone">
+
+<div style="width: 390px; height: 844px; position: relative; display: flex; justify-content: flex-end; background: rgba(15,42,74,0.55); font-family: 'Barlow', sans-serif; color: #212121; overflow: hidden">
+  <a href="#PublicTimetable" aria-label="Close menu" style="flex: 1"></a>
+  <nav aria-label="Menu" style="width: 320px; height: 100%; box-sizing: border-box; background: #FFFFFF; display: flex; flex-direction: column">
+    <div style="background: #17385F; color: #FFFFFF; padding: 16px; display: flex; align-items: flex-start; gap: 10px">
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+        <span style="font: 600 12px/1 'Barlow', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #C9D4E3">Following</span>
+        <span style="font: 700 20px/1.1 'Barlow Condensed', sans-serif">[Competition name]</span>
+        <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #C9D4E3">Sat 17 Oct · [Venue]</span>
+      </div>
+      <a href="#PublicTimetable" aria-label="Close menu" style="width: 44px; height: 44px; border-radius: 10px; border: 1px solid #3B5577; color: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+    </div>
+
+    <div style="flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div style="font: 700 12px/1 'Barlow', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #5A6270">Toplist by age group</div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+          <a href="#" style="display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 6px; border: 1px solid #C4C9D1; color: #17385F; text-decoration: none; font: 600 14px/1 'Barlow', sans-serif">Seniors</a>
+          <a href="#" style="display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 6px; border: 1px solid #C4C9D1; color: #17385F; text-decoration: none; font: 600 14px/1 'Barlow', sans-serif">Juniors</a>
+          <a href="#" style="display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 6px; border: 1px solid #C4C9D1; color: #17385F; text-decoration: none; font: 600 14px/1 'Barlow', sans-serif">Novices</a>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column">
+        <a href="#PublicTimetable" aria-current="page" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; border-radius: 10px; background: rgb(227,231,236); color: #17385F; text-decoration: none; font: 600 16px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Timetable</a>
+        <a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; color: #212121; text-decoration: none; font: 500 16px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6270" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0z"></path><path d="M12 13v4"></path><path d="M8 20h8"></path></svg>Toplists</a>
+        <a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; color: #212121; text-decoration: none; font: 500 16px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6270" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>Live feed &amp; stream<span style="margin-left: auto; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; background: #E12A39; color: #FFFFFF; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: 0.05em">LIVE</span></a>
+        <a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; color: #212121; text-decoration: none; font: 500 16px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6270" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><path d="M12 7.5v.5"></path></svg>Details &amp; entries</a>
+      </div>
+
+      <div style="height: 1px; background: #EBEBEB"></div>
+
+      <div style="display: flex; flex-direction: column">
+        <a href="#PublicPicker" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; color: #212121; text-decoration: none; font: 500 16px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6270" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3"></path><path d="M20 16H7l3 3"></path></svg>Change competition</a>
+        <a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; color: #212121; text-decoration: none; font: 500 16px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6270" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.7"></path><path d="M4 4v5h5"></path><path d="M12 8v4l3 2"></path></svg>Past competitions</a>
+        <a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; color: #212121; text-decoration: none; font: 500 16px/1 'Barlow', sans-serif"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6270" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10 21h4"></path></svg>Notify me when my team's up</a>
+      </div>
+    </div>
+
+    <div style="padding: 16px; border-top: 1px solid #EBEBEB; display: flex; flex-direction: column; gap: 8px">
+      <a href="#" style="display: inline-flex; align-items: center; justify-content: center; height: 50px; padding: 0 18px; border-radius: 10px; background: #17385F; color: #FFFFFF; border: 1.5px solid #17385F; font: 600 16px/1 'Barlow', sans-serif; text-transform: none; letter-spacing: 0; text-decoration: none; box-sizing: border-box">Sign in</a>
+      <div style="text-align: center; font: 400 13px/1.4 'Barlow', sans-serif; color: #5A6270">For trainers, organisers and stewards</div>
+    </div>
+  </nav>
+</div>
+</div></section>
+<section class="board" id="PublicCookie"><h2 class="board-label">Remember competition</h2><div class="phone">
+
+<div style="width: 390px; height: 844px; position: relative; display: flex; flex-direction: column; background: #F7F7F7; font-family: 'Barlow', sans-serif; color: #212121; overflow: hidden">
+  <header style="background: #17385F; color: #FFFFFF; padding: 12px 12px 12px 16px; display: flex; align-items: center; gap: 10px">
+    <div style="width: 32px; height: 32px; border-radius: 6px; background: #E12A39; display: flex; align-items: center; justify-content: center; font: 700 15px/1 'Barlow Condensed', sans-serif">MG</div>
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+      <span style="font: 700 18px/1.1 'Barlow Condensed', sans-serif">[Competition name]</span>
+      <span style="font: 400 13px/1.2 'Barlow', sans-serif; color: #C9D4E3">Sat 17 Oct · [Venue]</span>
+    </div>
+    <div style="width: 44px; height: 44px; border-radius: 10px; border: 1px solid #3B5577; box-sizing: border-box"></div>
+  </header>
+  <div style="flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+    <div style="font: 700 26px/1 'Barlow Condensed', sans-serif; color: #17385F; padding-bottom: 6px">Timetable</div>
+    <div style="height: 64px; border-radius: 12px; background: #FFFFFF; border: 1px solid #DADADA"></div>
+    <div style="height: 64px; border-radius: 12px; background: #FFFFFF; border: 1px solid #DADADA"></div>
+    <div style="height: 64px; border-radius: 12px; background: #FFFFFF; border: 1px solid #DADADA"></div>
+    <div style="height: 64px; border-radius: 12px; background: #FFFFFF; border: 1px solid #DADADA"></div>
+  </div>
+
+  
+    <div style="position: absolute; inset: 0; background: rgba(15,42,74,0.45); display: flex; align-items: flex-end">
+      <section role="dialog" aria-modal="true" aria-labelledby="ck-title" style="width: 100%; box-sizing: border-box; background: #FFFFFF; border-radius: 20px 20px 0 0; padding: 10px 20px 24px; display: flex; flex-direction: column; gap: 16px">
+        <div style="align-self: center; width: 40px; height: 4px; border-radius: 2px; background: #C4C9D1"></div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <div style="flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; background: #E3E9F1; color: #17385F; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"></path></svg></div>
+          <h2 id="ck-title" style="margin: 0; font: 700 24px/1.1 'Barlow Condensed', sans-serif; color: #17385F">Remember this competition?</h2>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <button type="button" style="height: 50px; padding: 0 18px; border-radius: 10px; background: #FFFFFF; color: #17385F; border: 1.5px solid #17385F; font: 600 16px/1 'Barlow', sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer">No thanks</button>
+          <button type="button" style="height: 50px; padding: 0 18px; border-radius: 10px; background: #17385F; color: #FFFFFF; border: 1.5px solid #17385F; font: 600 16px/1 'Barlow', sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer">Remember</button>
+        </div>
+      </section>
+    </div>
+  
+
+  
+</div>
+</div></section>
+</main>
+</body>
+</html>

@@ -47,7 +47,7 @@ public interface ILiveBroadcaster
 {
     Task ChatMessage(int competitionId, object message);
     /// <summary>Sends an admin-only message to the competition's admins and to its author.</summary>
-    Task AdminOnlyChatMessage(int competitionId, string? authorUserId, object message);
+    Task AdminOnlyChatMessage(int competitionId, string? authorUserId, object message, string? recipientUserId = null);
     Task ChatMessageDeleted(int competitionId, int messageId);
     Task SessionUpdated(int competitionId, object session);
     Task ResultsUpdated(int competitionId, object payload);
@@ -78,11 +78,13 @@ public class LiveBroadcaster : ILiveBroadcaster
     public Task ChatMessage(int competitionId, object message)
         => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("chatMessage", message);
 
-    public async Task AdminOnlyChatMessage(int competitionId, string? authorUserId, object message)
+    public async Task AdminOnlyChatMessage(int competitionId, string? authorUserId, object message, string? recipientUserId = null)
     {
         await _hub.Clients.Group(LiveHub.AdminGroupName(competitionId)).SendAsync("chatMessage", message);
         if (authorUserId is not null)
             await _hub.Clients.User(authorUserId).SendAsync("chatMessage", message);
+        if (recipientUserId is not null && recipientUserId != authorUserId)
+            await _hub.Clients.User(recipientUserId).SendAsync("chatMessage", message);
     }
 
     public Task ChatMessageDeleted(int competitionId, int messageId)

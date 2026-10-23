@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MountedGames.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261023102617_GlobalRulebooks")]
-    partial class GlobalRulebooks
+    [Migration("20261022202539_AddBugListFixes")]
+    partial class AddBugListFixes
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -262,6 +262,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("IpAddress")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RecipientUserId")
                         .HasColumnType("text");
 
                     b.Property<string>("Tag")
@@ -1167,6 +1170,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Edition")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1193,7 +1199,7 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Title", "Edition")
+                    b.HasIndex("CompetitionId", "Title", "Edition")
                         .IsUnique();
 
                     b.ToTable("Rulebook");
@@ -1359,6 +1365,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<bool>("Eliminated")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsSitOut")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("Placing")
                         .HasColumnType("integer");
 
@@ -1413,6 +1422,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<bool>("IsCaptain")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsGuestRider")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsReserve")
@@ -1788,6 +1800,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<bool>("IsWholeTeam")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("NoFilming")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1804,6 +1819,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int?>("TeamId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TeamName")
+                        .HasColumnType("text");
 
                     b.Property<bool>("UseInitialOnly")
                         .ValueGeneratedOnAdd()
@@ -1851,6 +1869,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("Kind")
                         .HasColumnType("integer");
 
+                    b.Property<int>("LaneRotationMode")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("LanesPerHeat")
                         .HasColumnType("integer");
 
@@ -1869,6 +1890,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("QualifiersPerHeat")
                         .HasColumnType("integer");
 
                     b.Property<bool>("RaceOrderAlternating")
@@ -2097,6 +2121,9 @@ namespace MountedGames.Api.Data.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("BibColour")
+                        .HasColumnType("text");
+
+                    b.Property<string>("BibDescription")
                         .HasColumnType("text");
 
                     b.Property<int>("ClubId")
@@ -2499,6 +2526,17 @@ namespace MountedGames.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Race");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.Rulebook", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Competition");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.PushSubscription", b =>

@@ -22,6 +22,7 @@ import { useCompetitionMeta } from '../components/competitionMeta';
 import { displaySectionName } from '../lib/section';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
+import { DemoEventNotice } from '../components/DemoEventNotice';
 
 const BANNER_TAG = 'banner';
 
@@ -313,6 +314,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards }}>
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
+        {data.isDemo && <DemoEventNotice />}
         <Outlet />
         {partial && <p role="status" className="mg-notice mx-auto w-full max-w-xl">Loading the rest of the timetable…</p>}
         {/* Connection trouble is shown by the pill in the header; this only explains a saved copy. */}

@@ -25,6 +25,16 @@
 .event-print-empty { border: 1px solid #9ca3af; padding: 12px; }
 .event-print-provisional { background: #fff3cd; border: 1px solid #d7a922; font-weight: 700; margin: 0 0 18px; padding: 10px; }
 
+/* Venue poster: big name and QR code, readable from a distance. Fits a phone and prints on one A4 page. */
+.event-poster { max-width: 820px; text-align: center; }
+.event-poster .event-print-kicker { font-size: 16px; }
+.event-poster-title { color: #17385f; font: 700 clamp(40px, 11vw, 78px)/1 'Barlow Condensed', sans-serif; margin: 8px 0 14px; overflow-wrap: anywhere; }
+.event-poster-when { font-size: clamp(20px, 5vw, 30px); font-weight: 700; margin: 4px 0; }
+.event-poster-where { font-size: clamp(18px, 4.4vw, 26px); margin: 2px 0; }
+.event-poster-qr { height: auto; margin: 26px auto 10px; width: min(100%, 26rem); }
+.event-poster-scan { color: #17385f; font: 700 clamp(22px, 5.4vw, 32px)/1.2 'Barlow Condensed', sans-serif; margin: 8px 0 6px; }
+.event-poster-link { font-size: 16px; margin: 0; overflow-wrap: anywhere; }
+
 @page { margin: 12mm; size: A4 portrait; }
 
 @media print {
@@ -37,4 +47,10 @@
   .event-print-page table { min-width: 0; }
   .event-print-break { break-after: page; }
   .event-print-break:last-child { break-after: auto; }
+  .event-poster-title { font-size: 84px; }
+  .event-poster-when { font-size: 32px; }
+  .event-poster-where { font-size: 28px; }
+  .event-poster-qr { margin-top: 36px; width: 15cm; }
+  .event-poster-scan { font-size: 36px; }
+  .event-poster-link { font-size: 20px; }
 }

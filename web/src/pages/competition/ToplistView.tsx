@@ -49,7 +49,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                 const lastInRunoff = row.runoff && list.rows[index + 1]?.runoff;
                 const openRow = open(row.teamId);
                 const content = <>
-                  <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none">{row.position}<span className="sr-only">{row.joint ? ' (joint)' : ''}</span></span>
+                  <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none">{list.started ? row.position : '—'}<span className="sr-only">{list.started && row.joint ? ' (joint)' : ''}</span></span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
                     <span className="truncate text-base font-semibold leading-tight">{row.teamName}</span>
                     {note && <span className="text-[13.5px] font-medium leading-none text-[rgb(var(--mg-body))]">{note}</span>}
@@ -109,7 +109,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                   const openRow = open(row.teamId);
                   return (
                     <tr key={row.teamId} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
-                      <td className="mg-display h-11 py-0 pl-3 text-base font-bold">{row.position}</td>
+                      <td className="mg-display h-11 py-0 pl-3 text-base font-bold">{list.started ? row.position : '—'}</td>
                       <th scope="row" className="min-w-0 py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
                         {openRow ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="block min-h-11 w-full text-left font-semibold">{row.teamName}</button> : row.teamName}
                       </th>

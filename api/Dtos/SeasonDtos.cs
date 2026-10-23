@@ -4,8 +4,9 @@ namespace MountedGames.Api.Dtos;
 
 public record SeasonPointsRule(int Place, int Points);
 
-public record CreateTeamProfileRequest(int ClubId, string Suffix, string DisplayName);
-public record UpdateTeamProfileRequest(int ClubId, string Suffix, string DisplayName);
+/// <summary>The suffix may be empty. A club can be given by <c>ClubName</c> (matched ignoring case, or created) instead of <c>ClubId</c>.</summary>
+public record CreateTeamProfileRequest(int ClubId, string Suffix, string DisplayName, string? ClubName = null);
+public record UpdateTeamProfileRequest(int ClubId, string Suffix, string DisplayName, string? ClubName = null);
 public record LinkEventTeamRequest(Guid TeamProfileId, int TeamId);
 
 public record TeamProfileDto(

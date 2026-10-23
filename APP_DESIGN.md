@@ -13,7 +13,7 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 ## Organiser access (15 October 2026)
 Admins can manage every competition. Trainers can create competitions and use organiser tools only for competitions they created. Manager and member roles do not grant organiser access. The API checks stored ownership on every organiser request; frontend controls reflect the same rule. Existing admin-only scoring, timetable and moderation operations stay admin-only.
 
-Signup contact/payment records are private to the organiser. Public declarations show the competition line-up without dates of birth, phone numbers or private notes. Saved rider records belong to the account that saved them; legacy records with no recorded owner remain admin-only. See `docs/security-review.md` for deployment requirements and verification limits.
+Signing up needs one tick: parental consent for the riders on the entry (filming limits are the separate "No close-up filming or photos" box) and acceptance of the event terms, which the organiser can write in the competition editor (a labelled placeholder shows if they have not). The tick, who ticked it, when and the wording version are stored on the signup. A short note near the public stream says spectator filming on their own phones is outside our control. Signup contact/payment records are private to the organiser. Public declarations show the competition line-up without dates of birth, phone numbers or private notes. Saved rider records belong to the account that saved them; legacy records with no recorded owner remain admin-only. See `docs/security-review.md` for deployment requirements and verification limits.
 
 Trainer signup needs admin approval. Applicants get Member access while their request is pending. Admins review requests in Admin → Trainer requests, with edit mode enabled. Approval grants Trainer access; decline keeps the account as a Member. Existing trainers and admin-created accounts are unchanged. Approved applicants must sign in again before organising; the app shows a notice when it detects approval on load.
 
@@ -152,6 +152,11 @@ Full spec: `docs/specs/live-stream.md`. Design: `docs/designs/live-stream-propos
 - **Supporter flow:** any authenticated user lands on `/teams` (route opened up beyond Trainer/Admin). A **Join a team** card at the top accepts a key. The request becomes a Pending row; the trainer accepts; the supporter then sees the team in their own My Teams list with a `Supporter` badge and gets the team's heat schedule and dec forms.
 - Endpoints: `POST/DELETE /api/teams/:id/supporter-key`, `GET /api/teams/:id/supporters`, `POST /api/teams/join`, `PUT /api/team-supporters/:id/accept`, `DELETE /api/team-supporters/:id`. The `/api/trainer/my-teams` response now annotates each team with `relationship: "trainer" | "supporter"` and (trainer-only) `supporterJoinKey`.
 
+## Sharing links, calendars and QR codes (22 October 2026)
+- **Link previews:** a shared competition link (any tab), team profile link, the home page and the competitions list show a title, description and branded image in WhatsApp, Facebook, iMessage and similar. Crawlers don't run JavaScript, so `web/middleware.ts` answers them with a tags-only page built from the public `/api/share/*` cards (competition name, date, venue, team count; team profile name, club, event count). Nothing staff-only or personal. Search engines get the normal app.
+- **Add to calendar:** the Details tab has an **Add to calendar** download (`.ics`) for the event. Trainers can make a **team calendar** link on My Teams: a subscribable feed of that team's heats, in the phone's own time zone, that moves when the timetable moves. The link holds a private token; it's shown once, making a new one stops the old one, and anyone with it can see the team's heat times and nothing else.
+- **QR codes:** organisers (owner, helpers and admins) can print a **venue poster** (name, date, venue, big QR to the event page) from the Details tab or Event tools. Trainers see a QR for each team's supporter join key under Supporters; scanning opens My Teams with the key filled in, after sign-in.
+
 ## Trainer / supporter notifications
 - **Foreground-only** browser notifications via the Web Notification API. Hook: `useTeamNotifications` (`web/src/hooks/`). Toggle lives in the My Teams header.
 - Fires when:
@@ -226,8 +231,10 @@ Lifecycle the app supports today:
    payment destination, sections + their prices.
 2. **Competition entry**: signed-in entrants, excluding admins, can join a
    section from the competition's Details page. Priced entries remain Pending
-   until payment is confirmed. Free entries are marked Paid immediately. Demo
-   events offer a labelled test checkout; normal events use manual payments.
+   until payment is confirmed. Free entries are marked Paid immediately. After a
+   paid sign-up on a demo event the entrant goes straight to a labelled test
+   payment page (pay, declined card or cancel, then a TEST receipt; no card
+   fields). Normal events use manual payments: pay the organiser directly.
 3. **Payment confirmation**: organiser sees a list of pending vs paid
    signups on the Details tab and ticks them paid as money lands. Refund
    and cancel also live on the same row.
@@ -257,6 +264,20 @@ Lifecycle the app supports today:
   - `POST /api/competitions/:cid/sections/:sid/form-teams` `{ ridersPerTeam, preview, replaceExisting }`
     — bins paid signups by pony club into A/B/C teams. Preview returns the
     bin without writing; commit creates Team rows and sets each signup's TeamId.
+
+### Entry email and the new-competition list
+- The sign-up form takes an optional **email** (the adult's, never a rider's; `ContactInfo` stays for a phone number).
+  When one is given, the API sends **one** plain-text confirmation inline (event, date, place, class, fee, the organiser's
+  payment instructions, a link to the competition page), through `IEmailSender`. It never says a payment was taken.
+  The outcome (`ConfirmationEmailStatus`: not requested, sent, failed, not sent because email is off, and when) is stored
+  on the signup and shown to the competition's staff. A failed or disabled send never fails the sign-up.
+- The form sends a `RequestId`; a retry from the same person for the same section returns the original entry and sends nothing more.
+- An **unticked** box, "Email me when new competitions open", records consent in `EmailOptIn` (address, time, wording
+  version, source `signup-form`, hash of a random unsubscribe token, unsubscribed time). No marketing is sent yet. The
+  token only goes into the confirmation email sent at opt-in. `/unsubscribe?token=...` (no sign-in) calls
+  `POST /api/email/unsubscribe`, which answers the same way for any token. Site admins download the active list from
+  Admin → Email opt-ins (`GET /api/admin/email-opt-ins.csv`).
+- Settings (`Email:*`): all off unless `Enabled`, `ApiKey` and `From` are set; the adapter is Resend's REST API.
 
 ### Trainer-as-organiser
 Trainers can create + edit competitions (controllers'
@@ -357,6 +378,8 @@ sessions taking the MAX per (kind, bucket).
 
 An event’s Details page links to Readiness & draw. Organisers can preview a seeded section draw, inspect repeated opponents and lane counts, then apply it while the source data is unchanged. Started or scored races cannot be redrawn. Readiness brings declarations, unpaid entries, timetable overlaps and the equipment checklist together.
 
+The Entries view under Event checks lists every team with its status. An organiser can withdraw a team or mark a no-show (with a reason only organisers see), reinstate it until a draw has been applied since, and swap a reserve in for a rider on the current declaration (a locked declaration needs an explicit override and a reason; each swap is audited with before, after, who and when). A team going out leaves every heat that hasn't been scored, and the public timetable shows the heats that remain. A re-draw preview then shows before and after for the unscored heats of the section (heats merged, sizes balanced, lanes closed up, empty heats removed) and applies only when the organiser confirms. Scored, signed-off and started heats and finals are never touched, a withdrawn team keeps the points it scored, and it is left out of finals seeding.
+
 Rulebooks are ordinary text attached to a competition, with a title, edition and optional source link. Everyone can read them; the organiser can edit them.
 
 The scoring screen keeps a revision history. Corrections need a reason, including changes waiting offline and decisions to replace another phone’s result. Completed results can be signed off; reopening them also needs a reason. Shared placings retain the existing points for that place; no points-sharing rule is introduced.
@@ -367,6 +390,8 @@ The scoring screen keeps a revision history. Corrections need a reason, includin
 Signed-in sellers can keep a catalogue of items and submit them to selected competitions. Each event’s organiser approves listings before they appear in its shop. Changing an approved listing’s content or price requires another review. Tickets, camping, merchandise and other items are collected at the event. Orders retain the agreed item names and prices; finite stock is reserved when an order is placed and released on cancellation or refund.
 
 Real-event payments are confirmed manually by the organiser. An event can be marked as a demo before it has orders or test payments. Demo checkout offers test success, decline, cancellation and refunds, and every test receipt states that no money was taken. The app does not collect payment-card details. Paid entries require sign-in and stay pending until payment is confirmed.
+
+Demo events carry the same mark the organiser sets under Demo in the shop settings (`EventCommerceSettings.IsDemo`); the review seeder sets it on its eight events. They show a "Demo event" badge on competition cards and a notice on every tab of the event. After a paid sign-up the entrant lands on `/me/signups/:id/test-payment`, which sends only the chosen outcome and shows a TEST receipt. Test payments are never real income: demo events earn nothing in `RealIncome`, and the organiser's signup list and CSV label demo payments as test.
 
 
 ### Seasons, team history and reusable event setup

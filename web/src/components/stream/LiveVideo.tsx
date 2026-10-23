@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Play, Video } from 'lucide-react';
 import type { ChatMessage, LiveStream, Session } from '../../types';
 import { streamHeatLabel, streamLink } from '../../lib/streams';
+import { SPECTATOR_NOTICE } from '../../lib/termsTick';
 import { browserViewerDependencies, createStreamViewer, type ViewerSnapshot } from '../../live/streamViewer';
 import type { StreamInvoke } from '../../live/streamRuntime';
 import { useLiteMode } from '../../lite/LiteModeContext';
@@ -30,6 +31,7 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
       {typeof RTCPeerConnection === 'undefined' ? <p role="status" className="mg-card p-4">Live video is not supported in this browser.</p>
         : lite && !tapped ? <TapToWatch stream={selected} captionBar={publicLayout} onTap={() => setTapped(true)} />
         : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} />}
+      <p className={`m-0 text-xs text-[rgb(var(--mg-muted))] ${publicLayout ? 'px-4 pt-2' : ''}`}>{SPECTATOR_NOTICE}</p>
     </> : fallback ? <CompStreamCard key={fallback} streamUrl={fallback} compName={competitionName} publicLayout={publicLayout} />
       : showPlaceholder ? <div className="live-stream-placeholder mg-card" role="status"><Video aria-hidden="true" /><strong>Stream hasn’t started</strong></div> : null}
   </section>;

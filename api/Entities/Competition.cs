@@ -39,6 +39,12 @@ public class Competition
     /// </summary>
     public bool SignupsLocked { get; set; }
 
+    /// <summary>
+    /// The event's terms and conditions, as plain text the organiser writes. Shown beside the sign-up tick.
+    /// Empty means the form shows a neutral placeholder the organiser should replace.
+    /// </summary>
+    public string? TermsText { get; set; }
+
     public string? CreatedByUserId { get; set; }
     public AppUser? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

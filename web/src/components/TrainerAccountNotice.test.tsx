@@ -41,7 +41,7 @@ it('hides the notice when there is no trainer account update', () => {
 it('shows the requested message after signup using the roles returned by the server', async () => {
   mount();
   await userEvent.click(screen.getByRole('button', { name: 'Request account' }));
-  expect(await screen.findByRole('status')).toHaveTextContent('Thanks. An admin needs to approve trainer accounts. You can use the app as a member in the meantime.');
+  expect(await screen.findByRole('status')).toHaveTextContent('Thanks. Your request needs approving before you can organise. You can use the app as a member in the meantime.');
   expect(screen.queryByText('TrainerRequest')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Sign in again' })).not.toBeInTheDocument();
 });
@@ -50,7 +50,7 @@ it('offers a fresh sign-in after approval and clears the old session before open
   localStorage.setItem('mg.auth', JSON.stringify(auth));
   vi.mocked(api.get).mockResolvedValue({ data: { ...auth.user, roles: ['Trainer'] } });
   mount();
-  expect(await screen.findByRole('status')).toHaveTextContent('Your trainer account was approved. Sign in again to start organising.');
+  expect(await screen.findByRole('status')).toHaveTextContent('Your account was approved. Sign in again to start organising.');
   await userEvent.click(screen.getByRole('button', { name: 'Sign in again' }));
   expect(screen.getByText('Login page')).toBeInTheDocument();
   expect(localStorage.getItem('mg.auth')).toBeNull();

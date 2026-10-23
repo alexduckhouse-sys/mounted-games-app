@@ -149,8 +149,9 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
         var owner = await _f.TrainerAsync();
         var profile = await (await owner.PostAsJsonAsync("/api/team-profiles",
             new CreateTeamProfileRequest(clubId, "A", "Owner team"))).ReadAsync<TeamProfileDto>();
+        // A profile of another club doesn't match the event team; the suffix no longer has to.
         var unrelated = await (await owner.PostAsJsonAsync("/api/team-profiles",
-            new CreateTeamProfileRequest(clubId, "B", "Different team"))).ReadAsync<TeamProfileDto>();
+            new CreateTeamProfileRequest(await _f.SeedClubAsync(), "A", "Different club team"))).ReadAsync<TeamProfileDto>();
         Assert.Equal(HttpStatusCode.Conflict,
             (await owner.PostAsJsonAsync($"/api/competitions/{competitionId}/team-profile-links",
                 new LinkEventTeamRequest(unrelated.Id, teamId))).StatusCode);

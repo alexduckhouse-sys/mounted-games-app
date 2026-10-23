@@ -5,7 +5,7 @@ import { DeleteAccountPanel } from '../components/DeleteAccountPanel';
 export function AccountPage() {
   const { user } = useAuth();
   if (!user) return null;
-  const roles = user.roles.filter((role) => role !== 'TrainerRequest');
+  const roles = user.roles.filter((role) => role !== 'TrainerRequest' && role !== 'ManagerRequest');
   return (
     <div className="skin mx-auto w-full max-w-[560px] space-y-4 py-4">
       <h1 className="mg-h1 mg-h1-sm">My account</h1>

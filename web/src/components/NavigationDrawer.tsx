@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Clock, Trophy, LogOut, MessageSquare, Info, ArrowLeftRight, X, Settings, Users, ClipboardList, CreditCard, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, Package, UserRound, ShieldCheck } from 'lucide-react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Clock, Trophy, MessageSquare, Info, ArrowLeftRight, X, Settings, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES } from '../theme/themes';
@@ -9,6 +9,7 @@ import { useLiteMode } from '../lite/LiteModeContext';
 import { LiteModeSetting } from '../lite/LiteModeSetting';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { competitionDateText } from '../lib/competitionDates';
+import { initialsOf, roleLabel } from '../lib/profile';
 import { useNavExtras } from './NavExtrasContext';
 import { WeatherBadge } from './WeatherBadge';
 import { useAgeGroups } from './AgeGroupsContext';
@@ -23,10 +24,9 @@ const iconClass = (active: boolean) => `h-5 w-5 shrink-0 ${active ? '' : 'text-[
 export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: startWithSettings = false }: { onClose: () => void; onChangeCompetition: () => void; settingsOpen?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const { current, rememberChoice, setRememberChoice } = useCurrentCompetition();
-  const { user, hasRole, logout } = useAuth();
+  const { user, hasRole } = useAuth();
   const { extras } = useNavExtras();
   const { meta } = useCompetitionMeta();
-  const navigate = useNavigate();
   const ageGroups = useAgeGroups();
   const location = useLocation();
   const { theme, setTheme } = useTheme();
@@ -66,18 +66,13 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
     { to: base, label: 'Timetable', icon: Clock, end: true, badge: false },
     { to: current ? `${base}/toplists` : '/competitions', label: 'Toplists', icon: Trophy, end: true, badge: false },
     { to: current ? `${base}/chat` : '/chat', label: 'Live feed & stream', icon: MessageSquare, end: true, badge: !!shown?.live },
-    { to: current ? `${base}/shop` : '/competitions', label: 'Event shop', icon: ShoppingBag, end: true, badge: false },
+    { to: current ? `${base}/shop` : '/shop', label: 'Event shop', icon: ShoppingBag, end: true, badge: false },
     { to: current ? `${base}/rulebooks` : '/competitions', label: 'Rulebooks', icon: BookOpen, end: true, badge: false },
     { to: current ? `${base}/details` : '/competitions', label: 'Details & entries', icon: Info, end: true, badge: false },
   ];
+  // Account and club links (teams, dec forms, signups, shop, sign out) live on the profile page now.
   const accountLinks = [
-    { to: '/me/account', label: 'My account', icon: UserRound, show: !!user },
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: !!user },
-    { to: '/teams', label: 'My teams', icon: Users, show: hasRole('Trainer') && !hasRole('Admin') },
-    { to: '/declarations', label: 'Dec forms', icon: ClipboardList, show: hasRole('Trainer') || hasRole('Admin') },
-    { to: '/me/signups', label: 'My signups', icon: CreditCard, show: !!user && !hasRole('Admin') },
-    { to: '/me/catalogue', label: 'My items for sale', icon: Package, show: !!user },
-    { to: '/me/orders', label: 'Orders & sales', icon: ShoppingBag, show: !!user },
     { to: '/admin', label: 'Admin', icon: Settings, show: hasRole('Admin') },
   ].filter((item) => item.show);
   const selectedSection = location.pathname === `${base}/scoring` ? new URLSearchParams(location.search).get('section') : null;
@@ -96,6 +91,17 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
         </div>
 
         <div className="flex flex-1 flex-col gap-5 p-4">
+          {user && (
+            <Link to="/me" onClick={onClose} className="flex min-h-14 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 !no-underline hover:!no-underline">
+              <span aria-hidden="true" className="mg-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-base font-bold leading-none text-[rgb(var(--mg-surface))]">{initialsOf(user.fullName, user.email)}</span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">{user.fullName || user.email}</span>
+                <span className="truncate text-[13px] leading-tight text-[rgb(var(--mg-muted))]">{[roleLabel(user.roles), user.clubName].filter(Boolean).join(' · ')}</span>
+              </span>
+              <ChevronRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))]" />
+            </Link>
+          )}
+
           {showWeather && !lite && <div className="flex min-h-12 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2"><CloudSun className="h-5 w-5 shrink-0 text-[rgb(var(--mg-muted))]" /><span className="font-medium">Weather</span><span className="ml-auto"><WeatherBadge /></span></div>}
 
           {current && ageGroups.competitionId === current.id && ageGroups.groups.length > 0 && (
@@ -127,7 +133,6 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
             <button onClick={onChangeCompetition} className={itemClass(false)}><ArrowLeftRight className={iconClass(false)} />Change competition</button>
             {(seasons === null || seasons.length > 0) && <NavLink to={seasonsTo} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>}
             <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
-            {user && <NavLink to="/teams" onClick={onClose} className={`${itemClass(false)} justify-between`}><span className="flex items-center gap-3"><Bell className={iconClass(false)} />Notifications</span><span className="text-sm text-[rgb(var(--mg-muted))]">In My teams</span></NavLink>}
             <button onClick={() => setSettingsOpen((v) => !v)} className={itemClass(settingsOpen)} aria-expanded={settingsOpen}><SlidersHorizontal className={iconClass(settingsOpen)} />Settings</button>
             {settingsOpen && (
               <section aria-label="Settings" className="mt-2 flex flex-col gap-4 rounded-xl border border-[rgb(var(--mg-rule))] p-3">
@@ -158,16 +163,12 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
           )}
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-[rgb(var(--mg-rule-soft))] p-4">
-          {!user && <>
+        {!user && (
+          <div className="flex flex-col gap-2 border-t border-[rgb(var(--mg-rule-soft))] p-4">
             <NavLink to="/login" onClick={onClose} className="mg-btn mg-btn-primary">Sign in</NavLink>
             <p className="text-center text-[13px] text-[rgb(var(--mg-muted))]">For trainers, organisers and stewards</p>
-          </>}
-          {user && <>
-            <p className="truncate text-center text-[13px] text-[rgb(var(--mg-muted))]">Signed in as {user.fullName || user.email}</p>
-            <button className="mg-btn mg-btn-secondary" onClick={() => { logout(); onClose(); navigate('/'); }}><LogOut className="h-5 w-5" />Sign out</button>
-          </>}
-        </div>
+          </div>
+        )}
       </div>
     </dialog>
   );

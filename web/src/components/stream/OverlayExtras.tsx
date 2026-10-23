@@ -98,7 +98,7 @@ export function ScoreCardOverlay({ stream, overlay, look, cards }: { stream: Liv
             <span className="mg-ov-card-team">{due.names?.[row.teamId] ?? row.teamName}</span>
             {row.change === 'up' && <ArrowUp className="mg-ov-card-up" aria-label="moved up" />}
             {row.change === 'down' && <ArrowDown className="mg-ov-card-down" aria-label="moved down" />}
-            <span className={`mg-ov-card-added ${row.eliminated ? 'is-out' : ''}`}>{row.eliminated ? 'E' : `+${row.added}`}</span>
+            <span className={`mg-ov-card-added ${row.eliminated ? 'is-out' : ''}`}>{row.eliminated ? 'E' : row.sitOut ? 'S' : `+${row.added}`}</span>
             <span className="mg-ov-card-total">{row.total}</span>
           </li>
         ))}

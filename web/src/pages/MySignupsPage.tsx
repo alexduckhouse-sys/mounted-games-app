@@ -126,7 +126,7 @@ function SignupList() {
                   <p className="mg-meta">Pony Club: {s.ponyClubName}</p>
                 )}
                 {s.amountMinor > 0 && (
-                  <DemoEntryPayment signupId={s.id} amountMinor={s.amountMinor} signupStatus={s.status} onChanged={reload} />
+                  <DemoEntryPayment signupId={s.id} signupStatus={s.status} />
                 )}
               </li>
             );

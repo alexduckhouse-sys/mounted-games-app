@@ -35,13 +35,14 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
   const [forms, setForms] = useState<DeclarationForm[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const next = competition.sessions
-    .filter((s) => s.orderIndex > finishedSession.orderIndex)
-    .sort((a, b) => a.orderIndex - b.orderIndex)[0] ?? null;
-
-  const nextRealSession = competition.sessions
-    .filter((s) => s.orderIndex > finishedSession.orderIndex && !s.isBreak)
-    .sort((a, b) => a.orderIndex - b.orderIndex)[0] ?? null;
+  // Arenas run side by side, so finishing a session moves on within its own arena only.
+  // A session with no arena name counts as being in the one and only arena.
+  const arenaOf = (s: Session) => s.arenaName?.trim() ?? '';
+  const laterInArena = competition.sessions
+    .filter((s) => s.orderIndex > finishedSession.orderIndex && arenaOf(s) === arenaOf(finishedSession))
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+  const next = laterInArena[0] ?? null;
+  const nextRealSession = laterInArena.find((s) => !s.isBreak) ?? null;
 
   const nextRealSessionId = nextRealSession?.id;
   const nextRealSectionId = nextRealSession?.competitionSectionId;

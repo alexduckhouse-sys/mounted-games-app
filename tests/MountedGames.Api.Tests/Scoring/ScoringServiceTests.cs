@@ -134,7 +134,7 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task ApplyRaceResults_FinalHeat_ScoresNormally()
+    public async Task ApplyRaceResults_FinalHeat_IsScoredOnItsOwnFieldPlusOne()
     {
         var a = await _f.CreateArenaAsync(4, raceFinals: true);
         var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds, "Final", 1, stage: RaceRoundStage.Final, roundId: 1);
@@ -143,7 +143,8 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
         var fresh = await Service(scope).ApplyRaceResultsAsync(races[0],
             new[] { new FinishingPlace(a.TeamIds[0], 1, false), new FinishingPlace(a.TeamIds[1], 2, false) }, null);
 
-        Assert.Equal(new[] { 4, 3 }, fresh.Select(r => r.Points));
+        // A final is scored on its own field of four: 5 for the win, down to 2 for last (one more than a qualifier's 1).
+        Assert.Equal(new[] { 5, 4 }, fresh.Select(r => r.Points));
     }
 
     [Fact]

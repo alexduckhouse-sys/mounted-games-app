@@ -45,9 +45,19 @@ public static class TestClients
     {
         var name = $"user{Guid.NewGuid():N}"[..14];
         var resp = await f.CreateClient().PostAsJsonAsync("/api/auth/signup-trainer",
-            new SignupTrainerRequest(name, "Passw0rd!x", role, clubName));
+            new SignupTrainerRequest(name, "Passw0rd!x", role, clubName ?? "Test Pony Club"));
         resp.EnsureSuccessStatusCode();
         var auth = (await resp.Content.ReadFromJsonAsync<AuthResponse>(Json))!;
+        return (f.WithToken(auth.Token), auth);
+    }
+
+    /// <summary>Signs up a team manager for the club, has an admin approve them, and signs in with the new role.</summary>
+    public static async Task<(HttpClient Client, AuthResponse Auth)> ApprovedManagerAsync(this ApiFactory f, string? clubName = null)
+    {
+        var (_, pending) = await f.SignupAsync("Manager", clubName);
+        var admin = await f.AdminAsync();
+        (await admin.PostAsync($"/api/admin/trainer-requests/{pending.User.Id}/approve", null)).EnsureSuccessStatusCode();
+        var auth = await f.LoginAsync(pending.User.Email, "Passw0rd!x");
         return (f.WithToken(auth.Token), auth);
     }
 
