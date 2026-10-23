@@ -11,6 +11,7 @@ import { competitionCalendarUrl } from '../../lib/sharing';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
+import { EmbedCard } from './EmbedCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
 import { TermsTickBox } from '../../components/TermsTickBox';
@@ -205,6 +206,9 @@ export function DetailsTab() {
       {user && (mayOrganise || hasRole('Admin')) && (
         <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
       )}
+
+      {/* Owner, competition admins and site admins can put live results on their own website. */}
+      {mayOrganise && <EmbedCard kind="competition" competitionId={competition.id} name={competition.name} sections={competition.sections} />}
 
       {/* Signup by section: signed-in users only; the public can't enter. */}
       {user && competition.sections.length > 0 && (

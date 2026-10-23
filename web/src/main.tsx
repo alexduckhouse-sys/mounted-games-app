@@ -18,12 +18,25 @@ import './theme/skin.css'
 import App from './App.tsx'
 import { registerPwa } from './pwa'
 import { startOutboxSync } from './offline/useScoreOutbox'
+import { isEmbedPath } from './lib/embed'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+const root = createRoot(document.getElementById('root')!)
 
-registerPwa();
-startOutboxSync();
+if (isEmbedPath(window.location.pathname)) {
+  // The widget on a club's site is its own small app. It must not read the visitor's sign-in, saved
+  // settings or caches, so it skips the providers, the service worker and the score outbox entirely.
+  void import('./pages/embed/EmbedApp').then(({ EmbedApp }) => root.render(
+    <StrictMode>
+      <EmbedApp />
+    </StrictMode>,
+  ))
+} else {
+  root.render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+
+  registerPwa();
+  startOutboxSync();
+}
