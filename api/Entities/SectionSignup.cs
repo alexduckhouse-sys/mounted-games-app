@@ -50,4 +50,15 @@ public class SectionSignup
     public int? TeamId { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// The sign-up tick: parental consent for the riders on this entry (filming opt-outs are <see cref="NoFilming"/>)
+    /// plus acceptance of the event terms. Entries made before the tick existed have <c>false</c> and no date.
+    /// </summary>
+    public bool TermsAccepted { get; set; }
+    public DateTime? TermsAcceptedAt { get; set; }
+    public string? TermsAcceptedByUserId { get; set; }
+    public string? TermsAcceptedByName { get; set; }
+    /// <summary>Which wording was on screen (see <c>SignupTerms</c>), so the exact text can be traced later.</summary>
+    public string? TermsWordingVersion { get; set; }
 }

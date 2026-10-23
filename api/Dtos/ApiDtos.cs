@@ -17,6 +17,12 @@ public record CompetitionPickerItem(
     string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false);
 public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore);
 
+public static class CompetitionTerms
+{
+    /// <summary>Plenty for a page or two of terms; stops the field being used as a file store.</summary>
+    public const int MaxLength = 20000;
+}
+
 public static class CompetitionIcons
 {
     public const string Pattern = "^(flag|world|trophy|gb|gb-eng|gb-sct|gb-wls|gb-nir|ie|fr|de|nl|be|es|pt|it|ch|at|se|no|dk|fi|pl|cz|us|ca|au|nz|za)\\z";
@@ -38,7 +44,8 @@ public record CompetitionDetail(
     string Icon = "flag",
     string? CreatedByUserId = null,
     bool StaffChatEnabled = true,
-    bool IsDemo = false);
+    bool IsDemo = false,
+    string? TermsText = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -49,7 +56,8 @@ public record CreateCompetitionRequest(
     string? StreamUrl = null,
     string? OrganiserName = null,
     string? PaymentDestination = null,
-    [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null);
+    [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null,
+    [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -61,7 +69,8 @@ public record UpdateCompetitionRequest(
     string? StreamUrl = null,
     string? OrganiserName = null,
     string? PaymentDestination = null,
-    [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null);
+    [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null,
+    [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 
@@ -114,11 +123,15 @@ public record SectionSignupDto(
     string FullName, string? PonyClubName, string? ContactInfo,
     int AmountMinor, SignupPaymentStatus Status, DateTime? PaidAt,
     int? TeamId, DateTime CreatedAt,
-    bool UseInitialOnly = false, bool NoFilming = false);
+    bool UseInitialOnly = false, bool NoFilming = false,
+    bool TermsAccepted = false, DateTime? TermsAcceptedAt = null, string? TermsWordingVersion = null);
 
+/// <param name="AcceptTerms">The one required tick (parental consent plus the event terms).</param>
+/// <param name="ConsentVersion">The wording version the page showed; the server refuses a stale one.</param>
 public record CreateSectionSignupRequest(
     string FullName, string? PonyClubName, string? ContactInfo,
-    string? TeamCode = null, bool UseInitialOnly = false, bool NoFilming = false);
+    string? TeamCode = null, bool UseInitialOnly = false, bool NoFilming = false,
+    bool AcceptTerms = false, string? ConsentVersion = null);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 

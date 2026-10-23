@@ -7,6 +7,7 @@ import { EMOJI_COMPETITION_ICONS, FLAG_COMPETITION_ICONS } from '../../competiti
 import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionDetail, CompetitionSection } from '../../types';
 import { Field } from '../auth/Field';
+import { MAX_TERMS_LENGTH } from '../../lib/termsTick';
 
 type Format = 1 | 2 | 3;
 const FORMAT_LABEL: Record<Format, string> = { 1: 'Pairs', 2: 'Teams', 3: 'Individual' };
@@ -164,6 +165,7 @@ interface PersistedDraft {
   description: string;
   organiserName?: string;
   paymentDestination?: string;
+  termsText?: string;
   sections: SectionDraft[];
   teams: TeamDraft[];
 }
@@ -309,6 +311,7 @@ export function CompetitionEditor() {
   const [description, setDescription] = useState(persisted?.description ?? '');
   const [organiserName, setOrganiserName] = useState(persisted?.organiserName ?? '');
   const [paymentDestination, setPaymentDestination] = useState(persisted?.paymentDestination ?? '');
+  const [termsText, setTermsText] = useState(persisted?.termsText ?? '');
   // The last postcode / what3words pair that was looked up, and how that went.
   const [geo, setGeo] = useState<{ key: string; status: 'ok' | 'none' | 'failed' } | null>(null);
 
@@ -333,7 +336,7 @@ export function CompetitionEditor() {
       startDate, startTime, endDate, endTime,
       what3Words, postcode, appleMapsUrl, lat, lon,
       description,
-      organiserName, paymentDestination,
+      organiserName, paymentDestination, termsText,
       sections,
       teams: [],
       savedAt: stamp,
@@ -342,7 +345,7 @@ export function CompetitionEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `persisted` is only read on the first run.
   }, [storageKey, name, location, icon, startDate, startTime, endDate, endTime,
       what3Words, postcode, appleMapsUrl, lat, lon, description,
-      organiserName, paymentDestination, sections]);
+      organiserName, paymentDestination, termsText, sections]);
 
   useEffect(() => {
     // Skip the server fetch on edit if we already have a local draft — the user
@@ -367,6 +370,7 @@ export function CompetitionEditor() {
         setDescription(c.description ?? '');
         setOrganiserName(c.organiserName ?? '');
         setPaymentDestination(c.paymentDestination ?? '');
+        setTermsText(c.termsText ?? '');
         setSections(c.sections.length > 0 ? c.sections.map((s) => existingToDraft(s, c)) : [defaultSection()]);
       })
       .catch(() => setError('Could not load competition.'))
@@ -395,7 +399,7 @@ export function CompetitionEditor() {
       startDate, startTime, endDate, endTime,
       what3Words, postcode, appleMapsUrl, lat, lon,
       description,
-      organiserName, paymentDestination,
+      organiserName, paymentDestination, termsText,
       sections,
       teams: [],
       savedAt: stamp,
@@ -593,6 +597,7 @@ export function CompetitionEditor() {
       appleMapsUrl: appleMapsUrl.trim() || null,
       organiserName: organiserName.trim() || null,
       paymentDestination: paymentDestination.trim() || null,
+      termsText: termsText.trim() || null,
       startDate: combinedStartIso(),
       endDate: endDate || endTime
         ? new Date(`${endDate || startDate}T${endTime || '17:00'}`).toISOString()
@@ -776,6 +781,15 @@ export function CompetitionEditor() {
           {({ id: fieldId }) => (
             <div className={`${fieldClass} !items-start`}>
               <textarea id={fieldId} rows={3} value={description} onChange={(e) => setDescription(e.target.value)}
+                className="min-h-[92px] w-full min-w-0 flex-1 resize-y border-0 bg-transparent py-3 font-[inherit] text-base text-[rgb(var(--mg-ink))] outline-none" />
+            </div>
+          )}
+        </Field>
+        <Field label={<>Terms and conditions <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>}>
+          {({ id: fieldId }) => (
+            <div className={`${fieldClass} !items-start`}>
+              <textarea id={fieldId} rows={4} value={termsText} maxLength={MAX_TERMS_LENGTH} placeholder="Paste or type your event terms. Plain text only."
+                onChange={(e) => setTermsText(e.target.value)}
                 className="min-h-[92px] w-full min-w-0 flex-1 resize-y border-0 bg-transparent py-3 font-[inherit] text-base text-[rgb(var(--mg-ink))] outline-none" />
             </div>
           )}

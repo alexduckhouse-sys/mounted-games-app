@@ -13,6 +13,8 @@ import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
+import { TermsTickBox } from '../../components/TermsTickBox';
+import { CONSENT_VERSION } from '../../lib/termsTick';
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
@@ -216,6 +218,7 @@ export function DetailsTab() {
                 signupsLocked={!!competition.signupsLocked}
                 isDemo={!!competition.isDemo}
                 paymentDestination={competition.paymentDestination ?? null}
+                termsText={competition.termsText ?? null}
                 competitionName={competition.name}
                 onChanged={() => { refreshSignups(); reload(); }}
                 canManage={canEdit() || mayOrganise}
@@ -234,7 +237,7 @@ export function DetailsTab() {
 
 function SectionSignupCard({
   competitionId, section, allSignups, signupsLocked,
-  competitionName, isDemo,
+  competitionName, isDemo, termsText,
   onChanged, canManage, hideJoin, countsKnown,
 }: {
   competitionId: number;
@@ -244,6 +247,7 @@ function SectionSignupCard({
   /** A demo event: a paid entry goes on to the test payment page. */
   isDemo: boolean;
   paymentDestination: string | null;
+  termsText: string | null;
   competitionName: string;
   onChanged: () => void;
   canManage: boolean;
@@ -260,6 +264,7 @@ function SectionSignupCard({
   const [contact, setContact] = useState('');
   const [teamCode, setTeamCode] = useState('');
   const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
+  const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -271,7 +276,7 @@ function SectionSignupCard({
   const full = seatsLeft != null && seatsLeft === 0;
 
   async function submit() {
-    if (!fullName.trim()) return;
+    if (!fullName.trim() || !accepted) return;
     setBusy(true);
     setErr(null);
     try {
@@ -281,9 +286,12 @@ function SectionSignupCard({
         contactInfo: contact.trim() || null,
         teamCode: teamCode.trim() || null,
         ...privacy,
+        acceptTerms: accepted,
+        consentVersion: CONSENT_VERSION,
       });
       setFullName(''); setPonyClub(''); setContact(''); setTeamCode('');
       setPrivacy({ useInitialOnly: false, noFilming: false });
+      setAccepted(false);
       setDone(signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.');
       onChanged();
       setOpen(false);
@@ -350,11 +358,12 @@ function SectionSignupCard({
             />
           </label>
           <RiderPrivacyFields value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
+          <TermsTickBox termsText={termsText} checked={accepted} onChange={setAccepted} />
           <div className="flex gap-2">
             <button
               type="button"
               onClick={submit}
-              disabled={busy || !fullName.trim()}
+              disabled={busy || !fullName.trim() || !accepted}
               className="mg-btn mg-btn-primary flex-1 !min-h-11"
             >
               <Check className="h-4 w-4" aria-hidden="true" /> {busy ? 'Joining…' : 'Confirm'}

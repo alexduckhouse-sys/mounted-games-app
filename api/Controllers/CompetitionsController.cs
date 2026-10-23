@@ -144,7 +144,7 @@ public class CompetitionsController : ControllerBase
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
             c.SignupsLocked, c.Icon, c.CreatedByUserId,
-            IsDemo: await IsDemoCompetitionAsync(c.Id));
+            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText);
     }
 
     /// <summary>
@@ -186,7 +186,7 @@ public class CompetitionsController : ControllerBase
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
             c.SignupsLocked, c.Icon, c.CreatedByUserId,
-            IsDemo: await IsDemoCompetitionAsync(c.Id));
+            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText);
     }
 
     internal sealed record SessionOutline(int Id, string? ArenaName, SessionStatus Status, int OrderIndex);
@@ -253,6 +253,7 @@ public class CompetitionsController : ControllerBase
             StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim(),
             OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
+            TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim(),
             StartDate = req.StartDate,
             EndDate = req.EndDate,
             CreatedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
@@ -297,6 +298,7 @@ public class CompetitionsController : ControllerBase
         c.AppleMapsUrl = appleUrl;
         c.OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim();
         c.PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
+        c.TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim();
         c.StartDate = req.StartDate;
         c.EndDate = req.EndDate;
         c.IsActive = req.IsActive;
@@ -879,6 +881,6 @@ public class CompetitionsController : ControllerBase
             refreshed.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
             refreshed.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             refreshed.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
-            IsDemo: await IsDemoCompetitionAsync(refreshed.Id));
+            IsDemo: await IsDemoCompetitionAsync(refreshed.Id), TermsText: refreshed.TermsText);
     }
 }

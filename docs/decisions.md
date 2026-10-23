@@ -9,6 +9,15 @@
 - Not changed: the shop checkout still uses the older card-style demo form (`DemoPaymentFlow`); its API answers 409 rather than 403 on a real event.
 - Files: `web/src/pages/commerce/TestEntryPaymentPage.tsx`, `DemoEntryPayment.tsx`, `web/src/components/DemoEventNotice.tsx`, `api/Controllers/CommerceController.cs`, `api/Services/Commerce/RealIncome.cs`, `api/Services/ReviewCompetitionSeeder.cs`.
 
+## 2026-10-22: Sign-up terms tick and organiser terms text
+- Why: the app streams juniors live, and entries recorded no acceptance of terms or parental consent. The filming opt-out itself is the `NoFilming` choice (rider privacy, PR #63); this adds the consent and terms side without replacing it.
+- Rule: the public sign-up form has one required tick covering parental consent for the riders on the entry (including appearing on the live stream, with any limits set by the "No close-up filming or photos" box) and acceptance of the event terms. The API refuses a signup without it, or with an out-of-date wording version, and stores on the signup that it was ticked, who ticked it, when (UTC) and the wording version. The version also names the terms shown (`...+terms:default` or a short digest of the organiser's text), so the exact text can be traced.
+- Terms: `Competition.TermsText` is optional plain text edited in the competition editor and shown in an expandable block beside the tick. If empty, the form shows a short placeholder labelled as one. No legal wording is built in. Duplicating an event copies the terms.
+- Public stream: one sentence near the video says filming by spectators on their own phones can't be controlled.
+- Not done: a per-rider "may be filmed" answer, heat warning screens and an organiser list (superseded by #63). Signups made before this have no recorded tick.
+- Changing the tick text: change `CONSENT_VERSION` (`web/src/lib/termsTick.ts`) and `SignupTerms.WordingVersion` together.
+- Files: `api/Services/SignupTerms.cs`, `api/Controllers/SignupController.cs`, `web/src/components/TermsTickBox.tsx`, `web/src/pages/admin/CompetitionEditor.tsx`.
+
 ## 2026-10-22: Deleting your own account
 - Why: people must be able to remove themselves, and the privacy page promises it. `DELETE /api/auth/me` with the current password in the body does it (the same lockout as sign-in applies to wrong guesses).
 - Refused: the shared admin account and any account with no password (admin-key sessions), with a message to ask an administrator; the last account in the Admin role.

@@ -254,6 +254,8 @@ export interface CompetitionDetail {
   staffChatEnabled?: boolean;
   /** A sample event: its payments are tests only. */
   isDemo?: boolean;
+  /** The organiser's terms and conditions as plain text; empty means the sign-up form shows a placeholder. */
+  termsText?: string | null;
 }
 
 export interface MySignup {
