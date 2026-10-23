@@ -6,6 +6,8 @@
   position: sticky; top: var(--mg-shell-h, 0px); z-index: 20; display: flex; align-items: center; gap: 8px; padding: 10px 0;
   border-image: conic-gradient(rgb(var(--mg-header)) 0 0) fill 0 // 0 100vmax; color: #fff;
 }
+/* Under the age-group band the two navy bars read as one: no second gap between the dropdowns. */
+.mg-band-header + .tt-strip { padding-top: 0; }
 .tt-strip :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .tt-days { display: flex; flex: none; gap: 2px; padding: 3px; border-radius: 8px; background: rgb(255 255 255 / .1); }
 .tt-day { min-height: 30px; padding: 0 12px; border-radius: 6px; color: #fff; font: 600 13px/1 'Barlow', sans-serif; }
