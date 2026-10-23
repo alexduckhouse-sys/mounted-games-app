@@ -22,7 +22,8 @@ public static class SignupConfirmationEmail
         string? competitionUrl, OptInOutcome optIn, string? unsubscribeUrl)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Hello {signup.FullName},");
+        // No name: it is typed by whoever made the entry, so it could carry links or a message in someone else's inbox.
+        sb.AppendLine("Hello,");
         sb.AppendLine();
         sb.AppendLine($"Thanks for entering {section.DisplayName} at {competition.Name}. Your entry is in.");
         sb.AppendLine();

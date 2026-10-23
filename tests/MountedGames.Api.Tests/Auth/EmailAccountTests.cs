@@ -28,6 +28,16 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
     private Task<HttpResponseMessage> SignUp(string username, string password = Password)
         => _f.CreateClient().PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(username, password, null, "Email Test Club", "Sam Lee"));
 
+    /// <summary>Pretends the last confirmation went out a while ago, so the next resend isn't held back by the 2 minute gap.</summary>
+    private Task AgeLastSendAsync(string userId, int sentToday = 1, TimeSpan? ago = null)
+        => _f.InDbAsync(async db =>
+        {
+            var u = await db.Users.SingleAsync(x => x.Id == userId);
+            u.LastConfirmationSentAt = DateTime.UtcNow - (ago ?? TimeSpan.FromMinutes(5));
+            u.ConfirmationsSentToday = sentToday;
+            await db.SaveChangesAsync();
+        });
+
     private static async Task<string> Message(HttpResponseMessage r) => await r.Content.ReadAsStringAsync();
 
     private static (string UserId, string Token) LinkIn(EmailApiFactory.SentMessage m)
@@ -203,7 +213,9 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
         Assert.Equal(email, mail.To);
         Assert.Equal("Confirm your email address", mail.Subject);
         Assert.Equal(1, _f.Sent.Count(m => m.To == email));
-        Assert.Contains("Sam Lee", mail.Text);
+        // The name is typed by whoever signs up, so it never goes into someone else's inbox.
+        Assert.DoesNotContain("Sam Lee", mail.Text);
+        Assert.StartsWith("Hello,", mail.Text);
         Assert.StartsWith("confirm-email-", mail.IdempotencyKey);
         var (userId, _) = LinkIn(mail);
         Assert.Equal(auth.User.Id, userId);
@@ -289,6 +301,7 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
     public async Task Resend_SendsAFreshLink_ThatAlsoWorks()
     {
         var (email, auth, first) = await SignedUpAsync();
+        await AgeLastSendAsync(auth.User.Id);
 
         var r = await _f.WithToken(auth.Token).PostAsync("/api/auth/resend-confirmation", null);
 
@@ -351,12 +364,87 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
             var r = await SignUp(email);
             Assert.Equal(HttpStatusCode.OK, r.StatusCode);
             var auth = await r.ReadAsync<AuthResponse>();
+            await AgeLastSendAsync(auth.User.Id);
 
             var resend = await _f.WithToken(auth.Token).PostAsync("/api/auth/resend-confirmation", null);
 
             Assert.Contains("Failed", await Message(resend));
         }
         finally { _f.Fail = null; }
+    }
+
+    // ---- the per-account cap ----
+
+    [Fact]
+    public async Task Resend_RightAfterSignUp_IsHeldBack_AndSendsNothing()
+    {
+        var (email, auth, _) = await SignedUpAsync();
+
+        var r = await _f.WithToken(auth.Token).PostAsync("/api/auth/resend-confirmation", null);
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, r.StatusCode);
+        Assert.Contains("TooSoon", await Message(r));
+        Assert.Equal(1, _f.Sent.Count(m => m.To == email));
+    }
+
+    [Fact]
+    public async Task Resend_StopsAtFiveADay_ThenStartsAgainTheNextDay()
+    {
+        var (email, auth, _) = await SignedUpAsync();
+        var client = _f.WithToken(auth.Token);
+
+        await AgeLastSendAsync(auth.User.Id, sentToday: 4);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/auth/resend-confirmation", null)).StatusCode);
+        var sent = _f.Sent.Count(m => m.To == email);
+
+        await _f.InDbAsync(async db =>
+        {
+            var u = await db.Users.SingleAsync(x => x.Id == auth.User.Id);
+            u.LastConfirmationSentAt = DateTime.UtcNow.Date.AddSeconds(1);
+            u.ConfirmationsSentToday = 5;
+            await db.SaveChangesAsync();
+        });
+        var blocked = await client.PostAsync("/api/auth/resend-confirmation", null);
+        if (DateTime.UtcNow - DateTime.UtcNow.Date > TimeSpan.FromMinutes(3))
+        {
+            Assert.Equal(HttpStatusCode.TooManyRequests, blocked.StatusCode);
+            Assert.Contains("DailyLimit", await Message(blocked));
+            Assert.Equal(sent, _f.Sent.Count(m => m.To == email));
+        }
+
+        // Yesterday's five don't count today.
+        await AgeLastSendAsync(auth.User.Id, sentToday: 5, ago: TimeSpan.FromDays(1));
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync("/api/auth/resend-confirmation", null)).StatusCode);
+        var count = await _f.InDbAsync(db => db.Users.Where(x => x.Id == auth.User.Id).Select(x => x.ConfirmationsSentToday).SingleAsync());
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public async Task ABurstOfResends_SendsAtMostOne()
+    {
+        var (email, auth, _) = await SignedUpAsync();
+        await AgeLastSendAsync(auth.User.Id);
+        var before = _f.Sent.Count(m => m.To == email);
+        var client = _f.WithToken(auth.Token);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => client.PostAsync("/api/auth/resend-confirmation", null)));
+
+        Assert.Equal(1, results.Count(r => r.StatusCode == HttpStatusCode.OK));
+        Assert.Equal(5, results.Count(r => r.StatusCode == HttpStatusCode.TooManyRequests));
+        Assert.Equal(before + 1, _f.Sent.Count(m => m.To == email));
+    }
+
+    [Fact]
+    public async Task SignUpName_NeverReachesTheEmail()
+    {
+        var email = NewEmail();
+        var r = await _f.CreateClient().PostAsJsonAsync("/api/auth/signup-trainer",
+            new SignupTrainerRequest(email, Password, null, "Email Test Club", "Click https://evil.example now\nyou won"));
+        r.EnsureSuccessStatusCode();
+
+        var text = _f.Sent.Last(m => m.To == email).Text;
+        Assert.DoesNotContain("evil.example", text);
+        Assert.DoesNotContain("you won", text);
     }
 
     // ---- existing behaviour ----
@@ -428,19 +516,23 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
     {
         var service = new AccountEmailService(
             new FailingSender(), Microsoft.Extensions.Options.Options.Create(new EmailOptions()), new ConfigurationBuilder().Build(),
-            new EmailConfirmationTokens(new ConfigurationBuilder().Build(), TimeProvider.System), NullLogger<AccountEmailService>.Instance);
+            new EmailConfirmationTokens(new ConfigurationBuilder().Build(), TimeProvider.System), null!, TimeProvider.System, NullLogger<AccountEmailService>.Instance);
 
-        Assert.Equal(EmailDeliveryStatus.NotSent, await service.SendConfirmationAsync(new AppUser { Id = "u", Email = "a@b.com" }));
+        Assert.Equal(ConfirmationResult.NotSent, await service.SendConfirmationAsync(new AppUser { Id = "u", Email = "a@b.com" }));
     }
 
     [Fact]
-    public async Task ABuildFailure_IsReportedAsFailed_NotThrown()
+    public async Task ASenderFailure_IsReportedAsFailed_NotThrown()
     {
+        var (_, auth, _) = await SignedUpAsync();
+        await AgeLastSendAsync(auth.User.Id);
+        using var scope = _f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MountedGames.Api.Data.AppDbContext>();
         var service = new AccountEmailService(
             new FailingSender(), Microsoft.Extensions.Options.Options.Create(new EmailOptions { SiteUrl = "https://mg.example.org" }), new ConfigurationBuilder().Build(),
-            new EmailConfirmationTokens(new ConfigurationBuilder().Build(), TimeProvider.System), NullLogger<AccountEmailService>.Instance);
+            new EmailConfirmationTokens(new ConfigurationBuilder().Build(), TimeProvider.System), db, TimeProvider.System, NullLogger<AccountEmailService>.Instance);
 
-        Assert.Equal(EmailDeliveryStatus.Failed, await service.SendConfirmationAsync(new AppUser { Id = "u", Email = "a@b.com" }));
+        Assert.Equal(ConfirmationResult.Failed, await service.SendConfirmationAsync(new AppUser { Id = auth.User.Id, Email = "a@b.com" }));
     }
 
     private sealed class FailingSender : IEmailSender
@@ -464,6 +556,12 @@ public class EmailOffAccountTests : IClassFixture<EmailOffApiFactory>
         var auth = await r.ReadAsync<AuthResponse>();
         Assert.False(auth.User.EmailConfirmed);
 
+        await _f.InDbAsync(async db =>
+        {
+            var u = await db.Users.SingleAsync(x => x.Id == auth.User.Id);
+            u.LastConfirmationSentAt = DateTime.UtcNow.AddMinutes(-5);
+            await db.SaveChangesAsync();
+        });
         var resend = await _f.WithToken(auth.Token).PostAsync("/api/auth/resend-confirmation", null);
 
         Assert.Contains("NotSent", await resend.Content.ReadAsStringAsync());
@@ -492,18 +590,32 @@ public class EmailResendLimitTests : IClassFixture<EmailResendLimitTests.Factory
         var a = await Register();
         var b = await Register();
 
-        Assert.Equal(HttpStatusCode.OK, (await a.PostAsync("/api/auth/resend-confirmation", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await a.PostAsync("/api/auth/resend-confirmation", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests, (await a.PostAsync("/api/auth/resend-confirmation", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await b.PostAsync("/api/auth/resend-confirmation", null)).StatusCode);
+        // The database cap would hold these back anyway, so age the last send before each to test the rate limiter itself.
+        Assert.Equal(HttpStatusCode.OK, (await Resend(a)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Resend(a)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await Resend(a)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Resend(b)).StatusCode);
     }
 
-    private async Task<HttpClient> Register()
+    private async Task<HttpResponseMessage> Resend((HttpClient Client, string Id) who)
+    {
+        await _f.InDbAsync(async db =>
+        {
+            var u = await db.Users.SingleAsync(x => x.Id == who.Id);
+            u.LastConfirmationSentAt = DateTime.UtcNow.AddMinutes(-5);
+            u.ConfirmationsSentToday = 0;
+            await db.SaveChangesAsync();
+        });
+        return await who.Client.PostAsync("/api/auth/resend-confirmation", null);
+    }
+
+    private async Task<(HttpClient Client, string Id)> Register()
     {
         var r = await _f.CreateClient().PostAsJsonAsync("/api/auth/signup-trainer",
             new SignupTrainerRequest($"rider.{Guid.NewGuid():N}@gmail.com", "Passw0rd!x", null, "Email Test Club"));
         r.EnsureSuccessStatusCode();
-        return _f.WithToken((await r.ReadAsync<AuthResponse>()).Token);
+        var auth = await r.ReadAsync<AuthResponse>();
+        return (_f.WithToken(auth.Token), auth.User.Id);
     }
 }
 
@@ -578,6 +690,28 @@ public sealed class DnsEmailDomainCheckerTests : IDisposable
         _dns.Answer = (_, type) => type == FakeDnsServer.MX ? new FakeDnsServer.Reply(0) : new FakeDnsServer.Reply(2);
 
         Assert.Equal(DomainMail.Unknown, await Checker().CheckAsync("half-broken.test"));
+    }
+
+    [Fact]
+    public async Task SlowDns_IsCutOffByTheOverallTimeout_AndFailsOpen()
+    {
+        // The client alone would wait 30 seconds for each of its three queries; the overall limit stops it first.
+        _dns.Answer = (_, _) => null;
+        var client = new LookupClient(new LookupClientOptions(_dns.Endpoint) { Timeout = TimeSpan.FromSeconds(30), Retries = 2, UseCache = false });
+        var checker = new DnsEmailDomainChecker(client, NullLogger<DnsEmailDomainChecker>.Instance, TimeSpan.FromMilliseconds(300));
+        var started = DateTime.UtcNow;
+
+        Assert.Equal(DomainMail.Unknown, await checker.CheckAsync("hangs.test"));
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task ACallerWhoGivesUp_StillGetsFailOpen()
+    {
+        _dns.Answer = (_, _) => null;
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        Assert.Equal(DomainMail.Unknown, await Checker(timeoutMs: 5000).CheckAsync("hangs.test", cts.Token));
     }
 
     [Fact]

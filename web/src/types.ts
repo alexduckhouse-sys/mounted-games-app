@@ -30,6 +30,8 @@ export interface CompetitionHelper {
   name: string;
   email: string;
   addedAt: string;
+  /** False when the address on the account has not been confirmed yet. Missing means confirmed. */
+  emailConfirmed?: boolean;
 }
 
 export interface CompetitionTeam {

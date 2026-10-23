@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using DnsClient;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MountedGames.Api.Entities;
 
@@ -87,10 +88,16 @@ public interface IEmailDomainChecker
 /// null MX ("."), is <see cref="DomainMail.NoMail"/>. Anything else that goes wrong (timeout, SERVFAIL, no network)
 /// is <see cref="DomainMail.Unknown"/> so flaky DNS never blocks a sign-up.
 /// </summary>
-public class DnsEmailDomainChecker(ILookupClient dns, ILogger<DnsEmailDomainChecker> log) : IEmailDomainChecker
+public class DnsEmailDomainChecker(ILookupClient dns, ILogger<DnsEmailDomainChecker> log, TimeSpan? overallTimeout = null) : IEmailDomainChecker
 {
-    public async Task<DomainMail> CheckAsync(string domain, CancellationToken ct = default)
+    /// <summary>Up to three queries, each with its own timeout and retry, must still finish inside this.</summary>
+    public static readonly TimeSpan DefaultOverallTimeout = TimeSpan.FromSeconds(3);
+
+    public async Task<DomainMail> CheckAsync(string domain, CancellationToken callerToken = default)
     {
+        using var overall = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
+        overall.CancelAfter(overallTimeout ?? DefaultOverallTimeout);
+        var ct = overall.Token;
         try
         {
             var mx = await dns.QueryAsync(domain, QueryType.MX, cancellationToken: ct);
@@ -109,7 +116,7 @@ public class DnsEmailDomainChecker(ILookupClient dns, ILogger<DnsEmailDomainChec
             }
             return DomainMail.NoMail;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || !callerToken.IsCancellationRequested)
         {
             return Inconclusive(domain, ex.GetType().Name);
         }
@@ -160,35 +167,78 @@ public class EmailConfirmationTokens(IConfiguration configuration, TimeProvider 
     }
 }
 
-/// <summary>Builds and sends the "confirm your email address" message. Never throws and never logs the address or the link.</summary>
+public enum ConfirmationResult { Sent, NotSent, Failed, TooSoon, DailyLimit }
+
+/// <summary>
+/// Builds and sends the "confirm your email address" message. Never throws and never logs the address or the link.
+/// Each account can be mailed at most once every 2 minutes and 5 times a UTC day, counted in the database so the
+/// cap holds across instances and whatever the rate limiter does. The email names no one: anyone can sign up with
+/// someone else's address, so it must not carry text they chose.
+/// </summary>
 public class AccountEmailService(
     IEmailSender sender, IOptions<EmailOptions> options, IConfiguration configuration,
-    EmailConfirmationTokens tokens, ILogger<AccountEmailService> log)
+    EmailConfirmationTokens tokens, MountedGames.Api.Data.AppDbContext db, TimeProvider clock, ILogger<AccountEmailService> log)
 {
-    public async Task<EmailDeliveryStatus> SendConfirmationAsync(AppUser user)
+    public static readonly TimeSpan MinGap = TimeSpan.FromMinutes(2);
+    public const int MaxPerDay = 5;
+
+    public async Task<ConfirmationResult> SendConfirmationAsync(AppUser user)
     {
         try
         {
             var site = EmailSite.Origin(options.Value, configuration);
-            if (site is null || string.IsNullOrEmpty(user.Email)) return EmailDeliveryStatus.NotSent;
+            if (site is null || string.IsNullOrEmpty(user.Email)) return ConfirmationResult.NotSent;
+
+            var reserved = await ReserveAsync(user.Id);
+            if (reserved != ConfirmationResult.Sent) return reserved;
+
             var link = $"{site}/confirm-email?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(tokens.Create(user))}";
             var text = $"""
-                Hello {user.FullName},
+                Hello,
 
-                Please confirm your email address so we can reach you about your Mounted Games account. This link works for {(int)EmailConfirmationTokens.Lifetime.TotalDays} days:
+                Someone used this email address to create a Mounted Games account. Please confirm the address so we can reach you. This link works for {(int)EmailConfirmationTokens.Lifetime.TotalDays} days:
 
                 {link}
 
-                If you didn't create an account, you can ignore this email.
+                If that wasn't you, you can ignore this email.
 
                 Mounted Games
                 """;
-            return await sender.SendAsync(new EmailMessage(user.Email, "Confirm your email address", text, null, $"confirm-email-{user.Id}-{Guid.NewGuid():N}"));
+            var status = await sender.SendAsync(new EmailMessage(user.Email, "Confirm your email address", text, null, $"confirm-email-{user.Id}-{Guid.NewGuid():N}"));
+            return status switch
+            {
+                EmailDeliveryStatus.Sent => ConfirmationResult.Sent,
+                EmailDeliveryStatus.NotSent => ConfirmationResult.NotSent,
+                _ => ConfirmationResult.Failed,
+            };
         }
         catch (Exception ex)
         {
             log.LogWarning("Could not build the confirmation email: {Reason}", ex.GetType().Name);
-            return EmailDeliveryStatus.Failed;
+            return ConfirmationResult.Failed;
         }
+    }
+
+    /// <summary>Takes one of the account's sends in a single guarded UPDATE, so parallel requests can't slip past the cap.</summary>
+    private async Task<ConfirmationResult> ReserveAsync(string userId)
+    {
+        var now = clock.GetUtcNow().UtcDateTime;
+        var dayStart = now.Date;
+        var earliest = now - MinGap;
+        var rows = await db.Users
+            .Where(u => u.Id == userId
+                && (u.LastConfirmationSentAt == null || u.LastConfirmationSentAt <= earliest)
+                && (u.LastConfirmationSentAt == null || u.LastConfirmationSentAt < dayStart || u.ConfirmationsSentToday < MaxPerDay))
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(u => u.ConfirmationsSentToday,
+                    u => u.LastConfirmationSentAt == null || u.LastConfirmationSentAt < dayStart ? 1 : u.ConfirmationsSentToday + 1)
+                .SetProperty(u => u.LastConfirmationSentAt, now));
+        if (rows == 1) return ConfirmationResult.Sent;
+
+        var last = await db.Users.AsNoTracking().Where(u => u.Id == userId)
+            .Select(u => new { u.LastConfirmationSentAt, u.ConfirmationsSentToday }).FirstOrDefaultAsync();
+        return last is not null && last.LastConfirmationSentAt >= dayStart && last.ConfirmationsSentToday >= MaxPerDay
+            ? ConfirmationResult.DailyLimit
+            : ConfirmationResult.TooSoon;
     }
 }

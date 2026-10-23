@@ -283,8 +283,17 @@ public class AuthController : ControllerBase
         // Made-up usernames and the shared admin account have no mailbox to write to.
         if (string.IsNullOrEmpty(user.Email) || user.Email.EndsWith(".mg.local", StringComparison.OrdinalIgnoreCase))
             return Ok(new { status = "NotSent" });
-        var status = await accountEmail.SendConfirmationAsync(user);
-        return Ok(new { status = status.ToString() });
+        var result = await accountEmail.SendConfirmationAsync(user);
+        // The per-account cap lives in the database, so it holds whatever the rate limiter allows.
+        if (result is ConfirmationResult.TooSoon or ConfirmationResult.DailyLimit)
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                status = result.ToString(),
+                message = result == ConfirmationResult.DailyLimit
+                    ? "We've sent enough confirmation emails today. Try again tomorrow."
+                    : "We sent one a moment ago. Check your inbox and spam folder, or try again in a couple of minutes.",
+            });
+        return Ok(new { status = result.ToString() });
     }
 
     [HttpGet("me")]
