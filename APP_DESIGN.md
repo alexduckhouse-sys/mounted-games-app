@@ -197,6 +197,10 @@ Full spec: `docs/specs/live-stream.md`. Design: `docs/designs/live-stream-propos
 - **Runtime caching**: `/api/*` is `NetworkFirst` with a 4s timeout and a 24-hour cache fallback — the timetable, comp detail, race templates and weather all open instantly when offline (showing the last good response). `/hubs/*` (SignalR) is `NetworkOnly` because realtime is meaningless from cache.
 - SW registration in `web/src/pwa.ts` shows a "new version ready" prompt on update.
 
+## Embeddable results widget (22 October 2026)
+- Clubs paste an iframe on their own site: `/embed/competitions/:id/standings`, `/results`, `/timetable` and `/embed/seasons/:id/standings`, with `?accent=<hex>&theme=dark&section=<id>`. Public data only; refreshed by polling. The organiser's "Embed on your website" card (competition Details, season Settings) builds the snippet and shows a preview.
+- `/embed/` is the only framable path (`frame-ancestors https:`); the rest of the site refuses framing. The widget never reads the visitor's sign-in, saved settings or service-worker caches. See `docs/decisions.md` (22 October).
+
 ## Draft auto-save (other forms)
 - **Dec form** drafts auto-save to `mg.draft.decform:{compId}` while the trainer is typing — riders, notes, phone. Restored on reload, cleared on submit or Cancel-with-confirmation. (Wizard auto-save was already in place for comp creation.)
 - **Scoring placings** per-race auto-save to `mg.draft.scoring:{heatId}:{raceId}` — the admin's pending placings survive a reload mid-scoring.

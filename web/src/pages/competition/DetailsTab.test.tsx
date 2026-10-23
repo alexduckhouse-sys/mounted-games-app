@@ -10,7 +10,7 @@ import { useCompetition } from './context';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: vi.fn() }));
-vi.mock('./context', () => ({ useCompetition: vi.fn() }));
+vi.mock('./context', async (importOriginal) => ({ ...(await importOriginal<typeof import('./context')>()), useCompetition: vi.fn() }));
 vi.mock('../commerce/DemoEntryPayment', () => ({ DemoEntryPayment: () => null }));
 
 const reload = vi.fn();

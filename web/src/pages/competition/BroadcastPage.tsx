@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { Camera, Eye, Megaphone, Mic, MicOff, Pause, Play, RefreshCw, Square, Wifi } from 'lucide-react';
+import { Camera, Eye, Handshake, Megaphone, Mic, MicOff, Pause, Play, RefreshCw, SkipForward, Square, Wifi } from 'lucide-react';
+import { api } from '../../api';
+import { sponsorsFor } from '../../lib/sponsors';
+import { SponsorOverlay } from '../../components/stream/SponsorOverlay';
 import { readMessages } from '../../lib/overlayMessages';
 import { DEFAULT_OVERLAY } from '../../lib/overlays';
 import { useCompetition } from './context';
@@ -92,12 +95,14 @@ function BroadcastStudio() {
         <span className={`mg-stream-glass flex items-center gap-1 border px-2 py-1 ${snapshot.signal === 'poor' ? 'border-[rgb(var(--mg-red))]' : snapshot.signal === 'fair' ? 'border-amber-400' : 'border-transparent'}`}><Wifi className="h-4 w-4" />{snapshot.signal === 'good' ? 'Good' : snapshot.signal === 'fair' ? 'Fair' : 'Weak signal'}</span>
         <span className="mg-stream-glass px-2 py-1">{arena} · {angle}</span>
       </div>
+      <SponsorOverlay arenaName={arena} track={false} />
       <div className="absolute left-4 right-24 top-14"><FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} /></div>
       <div className="pointer-events-auto absolute bottom-4 right-3 top-16 flex flex-col justify-center gap-2 overflow-y-auto text-center text-xs">
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={flip}><RefreshCw />Flip</button>
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={() => run(() => publisher.current!.mute(!snapshot.audioMuted))}>{snapshot.audioMuted ? <MicOff /> : <Mic />}{snapshot.audioMuted ? 'Sound off' : 'Sound on'}</button>
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={() => run(() => publisher.current!.pause(snapshot.state !== 'paused'))}>{snapshot.state === 'paused' ? <Play /> : <Pause />}{snapshot.state === 'paused' ? 'Resume' : 'Back soon'}</button>
         <BannerButton competitionId={competition.id} />
+        <SponsorButtons competitionId={competition.id} />
         <button className="mg-stream-control flex-col !rounded-xl !bg-[rgb(var(--mg-red))] p-2" onClick={() => setConfirmEnd(true)}><Square />End</button>
       </div>
       <div className="absolute bottom-20 left-4 right-24 flex flex-col items-start gap-2">{streamMessages.slice(-3).map((item) => <StreamNotice key={`${item.message.id}-${item.receivedAt}`} {...item} duration={10_000} />)}</div>
@@ -149,3 +154,31 @@ export function BannerButton({ competitionId }: { competitionId: number }) {
     aria-label={on ? 'Clear the banner' : `Show banner: ${next!.text}`}><Megaphone />{on ? 'Banner on' : 'Banner'}</button>;
 }
 
+
+/**
+ * Sponsor cards on the video: a switch between "in breaks" and off, and a skip to the next sponsor. Hidden when
+ * no sponsor is set to show on the video, or when this phone can't change the overlays.
+ */
+export function SponsorButtons({ competitionId }: { competitionId: number }) {
+  const { overlay, saveOverlay, sponsors } = useCompetition();
+  const [busy, setBusy] = useState(false);
+  const current = overlay ?? DEFAULT_OVERLAY;
+  const any = sponsorsFor(sponsors ?? [], 'BreakStream').length > 0 || sponsorsFor(sponsors ?? [], 'Stream').length > 0;
+  if (!saveOverlay || !any) return null;
+  const on = current.sponsorMode !== 2;
+  async function toggle() {
+    setBusy(true);
+    await saveOverlay!((o) => ({ ...o, sponsorMode: o.sponsorMode === 2 ? 0 : 2 }));
+    setBusy(false);
+  }
+  async function skip() {
+    setBusy(true);
+    try { await api.post(`/competitions/${competitionId}/sponsors/skip`); } catch { /* the next tap tries again */ }
+    setBusy(false);
+  }
+  return <>
+    <button className={`mg-stream-control flex-col !rounded-xl p-2 ${on ? '!bg-amber-500 !text-black' : ''}`} disabled={busy} aria-pressed={on} onClick={() => void toggle()}
+      aria-label={on ? 'Turn sponsors off' : 'Turn sponsors on'}><Handshake />{on ? 'Sponsors on' : 'Sponsors off'}</button>
+    {on && <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy} onClick={() => void skip()} aria-label="Skip sponsor"><SkipForward />Skip</button>}
+  </>;
+}

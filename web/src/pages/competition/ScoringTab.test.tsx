@@ -8,7 +8,7 @@ import type { Heat, Session, StandingRow } from '../../types';
 import { ScoringTab } from './ScoringTab';
 
 const state = vi.hoisted(() => ({ value: null as unknown, get: vi.fn(), manage: false }));
-vi.mock('./context', () => ({ useCompetition: () => state.value }));
+vi.mock('./context', async (importOriginal) => ({ ...(await importOriginal<typeof import('./context')>()), useCompetition: () => state.value }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canManage: () => state.manage }) }));
 vi.mock('../../api', () => ({ api: { get: state.get, post: vi.fn() } }));
 vi.mock('./TimetableBoard', () => ({

@@ -45,7 +45,7 @@ export const DEFAULT_LOOK: OverlayLook = {
 
 export const DEFAULT_OVERLAY: StreamOverlay = {
   bannerText: null, bannerStyle: 0, bannerArenas: [], stripMode: 0, scoreCardMode: 0,
-  scoreCardDelaySeconds: 4, scoreCardSeconds: 10, look: {}, revision: 0, updatedAt: null,
+  scoreCardDelaySeconds: 4, scoreCardSeconds: 10, sponsorMode: 0, look: {}, revision: 0, updatedAt: null,
 };
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -101,6 +101,7 @@ export function parseOverlay(raw: unknown): StreamOverlay | null {
     scoreCardMode: oneOf(raw.scoreCardMode, MODES, 0),
     scoreCardDelaySeconds: whole(raw.scoreCardDelaySeconds, DEFAULT_OVERLAY.scoreCardDelaySeconds),
     scoreCardSeconds: whole(raw.scoreCardSeconds, DEFAULT_OVERLAY.scoreCardSeconds),
+    sponsorMode: oneOf(raw.sponsorMode, MODES, 0),
     look: isRecord(raw.look) ? raw.look : {},
     revision: raw.revision,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : null,
@@ -117,7 +118,7 @@ export function overlayRequest(overlay: StreamOverlay) {
   return {
     bannerText: overlay.bannerText, bannerStyle: overlay.bannerStyle, bannerArenas: overlay.bannerArenas,
     stripMode: overlay.stripMode, scoreCardMode: overlay.scoreCardMode,
-    scoreCardDelaySeconds: overlay.scoreCardDelaySeconds, scoreCardSeconds: overlay.scoreCardSeconds,
+    scoreCardDelaySeconds: overlay.scoreCardDelaySeconds, scoreCardSeconds: overlay.scoreCardSeconds, sponsorMode: overlay.sponsorMode,
     look: overlay.look, expectedRevision: overlay.revision,
   };
 }

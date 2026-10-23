@@ -331,6 +331,25 @@ a.mg-row:hover, button.mg-row:hover { background: rgb(var(--mg-subtle)); }
 .mg-stream-chip[aria-pressed="true"] { background: rgb(var(--mg-header)); border-color: rgb(var(--mg-header)); color: white; }
 .mg-stream-control:disabled { opacity: .5; }
 
+/* Sponsors: a strip under a page, the full page, and the cards over the live video. */
+.mg-sponsors { padding: 12px; border-radius: 12px; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-rule)); }
+.mg-sponsors-title { margin: 0 0 8px; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: rgb(var(--mg-muted)); }
+.mg-sponsors ul { display: flex; flex-wrap: wrap; gap: 8px 12px; margin: 0; padding: 0; list-style: none; }
+.mg-sponsor { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: rgb(var(--mg-heading)); text-decoration: none; font: 600 15px/1.2 'Barlow', sans-serif; }
+a.mg-sponsor:hover .mg-sponsor-name { text-decoration: underline; }
+a.mg-sponsor:focus-visible { outline: 3px solid rgb(var(--mg-heading)); outline-offset: 2px; border-radius: 8px; }
+.mg-sponsor-logo { height: 44px; max-width: 140px; min-width: 44px; padding: 4px; border-radius: 8px; background: #fff; object-fit: contain; border: 1px solid rgb(var(--mg-rule)); }
+.mg-sponsor-large { font-size: 18px; }
+.mg-sponsor-large .mg-sponsor-logo { height: 56px; max-width: 180px; }
+.mg-sponsor-card-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.mg-sponsor-card-list > li { padding: 12px; }
+.mg-ov-sponsor-card { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: min(92%, 26rem); padding: 10px 16px; border-radius: 12px; background: color-mix(in srgb, var(--ov-bg, #0F1E3D) 94%, transparent); box-shadow: inset 4px 0 0 var(--ov-accent, #F5B82E); color: #fff; }
+.mg-ov-sponsor-card .mg-sponsor, .mg-ov-sponsor-bug .mg-sponsor { color: #fff; }
+.mg-ov-sponsor-tier { font-size: .7em; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+.mg-ov-sponsor-bug { padding: 4px 8px; border-radius: 10px; background: color-mix(in srgb, var(--ov-bg, #0F1E3D) 90%, transparent); font-size: .85em; }
+.mg-ov-sponsor-bug .mg-sponsor { min-height: 0; }
+.mg-ov-sponsor-bug .mg-sponsor-logo { height: 2.4em; }
+
 /* Lite mode (slow connection or Data Saver): see src/lite. */
 .mg-lite-chip { flex-shrink: 0; display: inline-flex; align-items: center; min-height: 44px; padding: 0; background: transparent; cursor: pointer; }
 .mg-lite-chip > span {

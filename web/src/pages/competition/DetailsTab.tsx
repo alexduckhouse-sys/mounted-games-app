@@ -11,7 +11,11 @@ import { competitionCalendarUrl } from '../../lib/sharing';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
+import { EmbedCard } from './EmbedCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
+import { SponsorsCard } from './SponsorsCard';
+import { SponsorStrip } from '../../components/SponsorStrip';
+import { hasPlacement } from '../../lib/sponsors';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
 import { TermsTickBox } from '../../components/TermsTickBox';
 import { CONSENT_VERSION } from '../../lib/termsTick';
@@ -35,7 +39,7 @@ const SIGNUP_STATUS: Record<SignupPaymentStatus, { label: string; tone: StatusTo
 };
 
 export function DetailsTab() {
-  const { competition, reload } = useCompetition();
+  const { competition, reload, sponsors } = useCompetition();
   const { canEdit, canManage, canOrganise, hasRole, user } = useAuth();
   const [signupResult, setSignupResult] = useState<{ key: string; items: SectionSignup[] } | null>(null);
   const signupKey = `${competition.id}:${user?.id ?? ''}`;
@@ -91,6 +95,7 @@ export function DetailsTab() {
     <li key={label}><Link className="rf-row" to={to}><span className="rf-grow rf-t1">{label}</span><Chevron /></Link></li>
   );
 
+  const hasSponsorPage = (sponsors ?? []).some((sponsor) => hasPlacement(sponsor.showOn, 'SponsorPage'));
   const longDescription = (competition.description?.length ?? 0) > 140;
 
   return (
@@ -146,6 +151,7 @@ export function DetailsTab() {
             <CalendarPlus className="h-5 w-5 rf-chev" aria-hidden="true" />
           </a>
         </li>
+        {(hasSponsorPage || mayOrganise) && linkRow('../sponsors', 'Sponsors')}
         {linkRow(`/event-tools/${competition.id}/print/draw`, 'Print draw')}
         {linkRow(`/event-tools/${competition.id}/print/results`, 'Print results')}
         {mayOrganise && linkRow(`/event-tools/${competition.id}/print/poster`, 'Print venue poster')}
@@ -205,6 +211,12 @@ export function DetailsTab() {
       {user && (mayOrganise || hasRole('Admin')) && (
         <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
       )}
+
+      {mayOrganise && <SponsorsCard competitionId={competition.id} />}
+      {/* Owner, competition admins and site admins can put live results on their own website. */}
+      {mayOrganise && <EmbedCard kind="competition" competitionId={competition.id} name={competition.name} sections={competition.sections} />}
+
+      <SponsorStrip placement="Details" />
 
       {/* Signup by section: signed-in users only; the public can't enter. */}
       {user && competition.sections.length > 0 && (

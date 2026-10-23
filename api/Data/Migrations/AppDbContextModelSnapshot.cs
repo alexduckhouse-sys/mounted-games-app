@@ -2381,6 +2381,89 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("ShopReports");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Sponsor", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LinkUrl")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<byte[]>("LogoBytes")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("LogoContentType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<int>("LogoVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("ShowOn")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Tier")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.ToTable("Sponsors");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.SponsorExposure", b =>
+                {
+                    b.Property<int>("SponsorId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Day")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Placement")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Seconds")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Views")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("SponsorId", "Day", "Placement");
+
+                    b.ToTable("SponsorExposures");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.StreamOverlay", b =>
                 {
                     b.Property<int>("CompetitionId")
@@ -2413,6 +2496,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("ScoreCardSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SponsorMode")
                         .HasColumnType("integer");
 
                     b.Property<int>("StripMode")
@@ -3205,6 +3291,28 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Post");
 
                     b.Navigation("Reporter");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Sponsor", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Competition");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.SponsorExposure", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Sponsor", "Sponsor")
+                        .WithMany()
+                        .HasForeignKey("SponsorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Sponsor");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.StreamOverlay", b =>
