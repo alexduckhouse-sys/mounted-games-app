@@ -29,6 +29,11 @@ Lint must be clean: CI runs it. Vitest coverage has a **97% gate** (lines, state
 - **Hub event:** in `live/useLiveHub.ts`, add `onX?` to `LiveHandlers` and `conn.on('x', forward(...))`. Then handle it in `pages/CompetitionPage.tsx`. `forward` drops events from a replaced connection, so always use it. Put catch-up fetches in `onReady` (runs after every rejoin), not in the event handler. Names must match `api/Hubs/` exactly.
 - **Offline read:** a GET can be cached only if every viewer sees the same response. Add it to `offline/cachePolicy.ts` and extend `tests/offline-cache.test.mjs`. If you change the cache shape, bump the cache name in `sw.ts` (now `mg-public-api-v2`).
 - **Offline write:** follow the score outbox (`offline/scoreOutbox.ts` logic, `useScoreOutbox.ts` storage). Queue the item with the `expected` state so the server can answer with a conflict, rather than overwriting.
+- **Sponsor placement** (a new place a sponsor can appear): three steps, in this order.
+  1. Add the next power of two to `SponsorPlacement` in `api/Entities/Sponsor.cs`.
+  2. Add one entry to `SPONSOR_PLACEMENTS` in `src/lib/sponsors.ts`: `{ key, placement, label, description }`. The organiser's "Show on" boxes in `pages/competition/SponsorsCard.tsx` come from this list, and a test in `lib/sponsors.test.ts` fails if its bits differ from the enum.
+  3. Put a slot where it should show: `<SponsorStrip placement="YourKey" />` on a page, or read `sponsorsFor(sponsors, 'YourKey')` (via `useSponsors`) for something custom, and call `useRecordSponsorViews('YourKey', list)` so it is counted. The exposure endpoint accepts any defined placement, so nothing else changes.
+  Sponsors come from `CompetitionContext` (`sponsors`, fetched by `hooks/useSponsorFeed.ts`); the public list is cached offline (`offline/cachePolicy.ts`), the organiser list (`/sponsors/manage`) never is. Video overlays live in `components/stream/SponsorOverlay.tsx`; the producer's switch is `overlay.sponsorMode` and "skip" arrives as the `sponsorControl` hub event.
 - **Theme token:** add `--mg-*` RGB channels to `theme/skin.css` (`:root, [data-theme="eguk"]` is the full base set) and use them as `rgb(var(--mg-x) / 0.5)`. A new theme needs a `ThemeName` and `THEMES` entry in `theme/themes.ts` plus a `[data-theme]` block. Tailwind `brand-*` colours come from `--brand-*` in `index.css`.
 
 ## Tests

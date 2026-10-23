@@ -109,6 +109,8 @@ public static class DbInitializer
             );
             """);
 
+        await EnsureColumnAsync(db, "StreamOverlays", "SponsorMode", "INTEGER NOT NULL DEFAULT 0");
+
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "OverlayLooks" (
                 "Id" INTEGER NOT NULL CONSTRAINT "PK_OverlayLooks" PRIMARY KEY AUTOINCREMENT,
@@ -334,6 +336,8 @@ public static class DbInitializer
         await Seasons.SeasonsSqliteSchema.EnsureAsync(db);
 
         await Email.EmailSqliteSchema.EnsureAsync(db);
+
+        await Sponsors.SponsorsSqliteSchema.EnsureAsync(db);
 
     }
 

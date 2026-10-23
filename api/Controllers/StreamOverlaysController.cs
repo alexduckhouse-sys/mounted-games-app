@@ -36,7 +36,7 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<StreamOverlayDto>> Update(int competitionId, UpdateStreamOverlayRequest req)
     {
-        if (!Enum.IsDefined(req.BannerStyle) || !Enum.IsDefined(req.StripMode) || !Enum.IsDefined(req.ScoreCardMode))
+        if (!Enum.IsDefined(req.BannerStyle) || !Enum.IsDefined(req.StripMode) || !Enum.IsDefined(req.ScoreCardMode) || !Enum.IsDefined(req.SponsorMode))
             return BadRequest(new { message = "Unknown overlay option." });
         var arenas = (req.BannerArenas ?? []).Select(a => a?.Trim() ?? "").Where(a => a.Length > 0).Distinct().ToList();
         if (arenas.Count > MaxArenas || arenas.Any(a => a.Length > MaxArenaLength))
@@ -59,6 +59,7 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
         overlay.BannerArenas = JsonSerializer.Serialize(arenas);
         overlay.StripMode = req.StripMode;
         overlay.ScoreCardMode = req.ScoreCardMode;
+        overlay.SponsorMode = req.SponsorMode;
         overlay.ScoreCardDelaySeconds = req.ScoreCardDelaySeconds;
         overlay.ScoreCardSeconds = req.ScoreCardSeconds;
         overlay.LookJson = look;
@@ -115,6 +116,6 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
         return new StreamOverlayDto(
             o.BannerText, o.BannerStyle, JsonSerializer.Deserialize<List<string>>(o.BannerArenas) ?? [],
             o.StripMode, o.ScoreCardMode, o.ScoreCardDelaySeconds, o.ScoreCardSeconds,
-            look.RootElement.Clone(), o.Revision, o.Revision == 0 ? null : o.UpdatedAt);
+            look.RootElement.Clone(), o.Revision, o.Revision == 0 ? null : o.UpdatedAt, o.SponsorMode);
     }
 }

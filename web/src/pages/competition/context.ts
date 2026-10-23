@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { StreamInvoke } from '../../live/streamRuntime';
-import type { CompetitionDetail, LiveStream, ChatMessage, StreamOverlay } from '../../types';
+import type { CompetitionDetail, LiveStream, ChatMessage, Sponsor, StreamOverlay } from '../../types';
 import type { OverlaySaveResult } from '../../hooks/useStreamOverlay';
 import type { QueuedScoreCard } from '../../lib/scoreCard';
 
@@ -22,6 +22,12 @@ export interface CompetitionCtx {
   saveOverlay?: (change: (overlay: StreamOverlay) => StreamOverlay) => Promise<OverlaySaveResult>;
   /** Score cards from recent results, newest last, for the video overlays. */
   scoreCards?: QueuedScoreCard[];
+  /** The sponsors on show now, for every place they can appear (see `lib/sponsors.ts`). */
+  sponsors?: Sponsor[];
+  /** Fetch the sponsors again, e.g. after an organiser changes them. */
+  reloadSponsors?: () => void;
+  /** Counts the producer's "skip" instructions, so the sponsor cards on screen can move on. */
+  sponsorSkip?: { count: number; at: number };
 }
 
 export const CompetitionContext = createContext<CompetitionCtx | null>(null);

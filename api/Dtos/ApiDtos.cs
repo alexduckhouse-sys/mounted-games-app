@@ -404,7 +404,7 @@ public record WatchStreamResponse(string WatchId, string SdpOffer, int Generatio
 public record StreamOverlayDto(
     string? BannerText, OverlayBannerStyle BannerStyle, IReadOnlyList<string> BannerArenas,
     OverlayMode StripMode, OverlayMode ScoreCardMode, int ScoreCardDelaySeconds, int ScoreCardSeconds,
-    System.Text.Json.JsonElement Look, int Revision, DateTime? UpdatedAt);
+    System.Text.Json.JsonElement Look, int Revision, DateTime? UpdatedAt, OverlayMode SponsorMode = OverlayMode.Auto);
 
 /// <summary>Replaces the overlay settings. Send the revision you last saw; a newer one on the server returns 409.</summary>
 public record UpdateStreamOverlayRequest(
@@ -416,7 +416,8 @@ public record UpdateStreamOverlayRequest(
     [Range(0, 30)] int ScoreCardDelaySeconds,
     [Range(3, 60)] int ScoreCardSeconds,
     System.Text.Json.JsonElement? Look,
-    int? ExpectedRevision);
+    int? ExpectedRevision,
+    OverlayMode SponsorMode = OverlayMode.Auto);
 
 /// <summary>A producer's instruction for one race's score card: show it now, skip it, or change how it looks.</summary>
 public record ScoreCardControlRequest(

@@ -5,7 +5,7 @@ import { Clock, Info, MessageSquare, Trophy } from 'lucide-react';
 export interface MeTab { initials: string; count: number }
 
 /**
- * Timetable, toplists, live feed and details: the four places spectators move between inside a competition.
+ * Timetable, toplists, live feed and details (the sponsor page counts as details): the four places spectators move between inside a competition.
  * Signed-in people get a fifth tab, Me, which opens their profile.
  */
 export function BottomTabs({ competitionId, me }: { competitionId: number; me?: MeTab }) {
@@ -20,7 +20,7 @@ export function BottomTabs({ competitionId, me }: { competitionId: number; me?: 
     { to: base, label: 'Timetable', icon: Clock, active: section === '' || section === 'session' || section === 'scoring' },
     { to: `${base}/toplists`, label: 'Toplists', icon: Trophy, active: section === 'toplists' },
     { to: `${base}/chat`, label: 'Live & stream', icon: MessageSquare, active: section === 'chat' },
-    { to: `${base}/details`, label: 'Details', icon: Info, active: section === 'details' },
+    { to: `${base}/details`, label: 'Details', icon: Info, active: section === 'details' || section === 'sponsors' },
   ];
   return (
     <nav aria-label="Competition" className="mg-tabs">

@@ -167,7 +167,7 @@ describe('useLiveHub', () => {
   it('passes each event to the matching handler', async () => {
     const connection = next();
     const handlers: Required<LiveHandlers> = {
-      onStreamUpdated: vi.fn(), onStreamViewers: vi.fn(), onOverlayUpdated: vi.fn(), onScoreCardControl: vi.fn(),
+      onStreamUpdated: vi.fn(), onStreamViewers: vi.fn(), onOverlayUpdated: vi.fn(), onScoreCardControl: vi.fn(), onSponsorControl: vi.fn(),
       onReady: vi.fn(), onChatMessage: vi.fn(), onChatMessageDeleted: vi.fn(),
       onSessionUpdated: vi.fn(), onResultsUpdated: vi.fn(), onAnnouncement: vi.fn(),
     };
@@ -184,6 +184,8 @@ describe('useLiveHub', () => {
     expect(handlers.onOverlayUpdated).toHaveBeenCalledWith({ revision: 7 });
     connection.emit('scoreCardControl', { action: 'skip' });
     expect(handlers.onScoreCardControl).toHaveBeenCalledWith({ action: 'skip' });
+    connection.emit('sponsorControl', { action: 'skip' });
+    expect(handlers.onSponsorControl).toHaveBeenCalledWith({ action: 'skip' });
     expect(handlers.onStreamUpdated).toHaveBeenCalledWith({ id: 6 });
     expect(handlers.onStreamViewers).toHaveBeenCalledWith({ streamId: 6, count: 12 });
     expect(handlers.onChatMessage).toHaveBeenCalledWith({ id: 1 });

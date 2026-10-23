@@ -36,11 +36,16 @@ describe('parseOverlay', () => {
   it('cleans up each field', () => {
     expect(parseOverlay({
       bannerText: '  ', bannerStyle: 7, bannerArenas: ['Arena 1', 3], stripMode: 2, scoreCardMode: 'off',
-      scoreCardDelaySeconds: 2.5, scoreCardSeconds: 12, look: [], revision: 3, updatedAt: 5,
+      scoreCardDelaySeconds: 2.5, scoreCardSeconds: 12, sponsorMode: 5, look: [], revision: 3, updatedAt: 5,
     })).toEqual({
       bannerText: null, bannerStyle: 0, bannerArenas: ['Arena 1'], stripMode: 2, scoreCardMode: 0,
-      scoreCardDelaySeconds: 4, scoreCardSeconds: 12, look: {}, revision: 3, updatedAt: null,
+      scoreCardDelaySeconds: 4, scoreCardSeconds: 12, sponsorMode: 0, look: {}, revision: 3, updatedAt: null,
     });
+  });
+
+  it('reads the sponsor switch', () => {
+    expect(parseOverlay({ ...DEFAULT_OVERLAY, sponsorMode: 2 })?.sponsorMode).toBe(2);
+    expect(parseOverlay({ ...DEFAULT_OVERLAY, sponsorMode: undefined })?.sponsorMode).toBe(0);
   });
 
   it('keeps a well-formed response as it is', () => {
@@ -62,7 +67,7 @@ describe('bannerShowsIn', () => {
 describe('overlayRequest', () => {
   it('sends the settings with the revision it expects', () => {
     const request = overlayRequest({ ...DEFAULT_OVERLAY, bannerText: 'Hi', revision: 5, updatedAt: 'x' });
-    expect(request).toMatchObject({ bannerText: 'Hi', expectedRevision: 5, scoreCardSeconds: 10 });
+    expect(request).toMatchObject({ bannerText: 'Hi', expectedRevision: 5, scoreCardSeconds: 10, sponsorMode: 0 });
     expect(request).not.toHaveProperty('updatedAt');
     expect(request).not.toHaveProperty('revision');
   });

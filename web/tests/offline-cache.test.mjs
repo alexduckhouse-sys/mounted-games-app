@@ -7,6 +7,13 @@ test('only public competition reads and reference data can be cached', () => {
   for (const path of ['/api/competitions/42/signups', '/api/competitions/42/signups-locked', '/api/auth/me', '/api/me/signups', '/api/declaration-forms', '/api/trainer/my-teams', '/api/shop', '/api/competitions/42/chat', '/api/unknown']) assert.equal(canCachePublicApi(path), false, path);
 });
 
+test('the public sponsor list can be cached, the organiser list, logos and counts cannot', () => {
+  assert.equal(canCachePublicApi('/api/competitions/42/sponsors'), true);
+  assert.equal(canCachePublicApi('/api/competitions/42/sponsors/'), true);
+  for (const path of ['/api/competitions/42/sponsors/manage', '/api/competitions/42/sponsors/7/logo', '/api/competitions/42/sponsors/exposures', '/api/competitions/42/sponsors/order', '/api/competitions/0/sponsors', '/api/competitions/x/sponsors']) assert.equal(canCachePublicApi(path), false, path);
+  assert.equal(canCachePublicApi('/api/competitions/42/sponsors', 'POST'), false);
+});
+
 test('writes never use cached public responses', () => {
   for (const method of ['POST', 'PUT', 'DELETE', 'PATCH']) assert.equal(canCachePublicApi('/api/competitions/42', method), false);
 });
