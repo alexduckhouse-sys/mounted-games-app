@@ -24,6 +24,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ def
 const SignUpPage = lazy(() => import('./pages/SignUpPage').then((module) => ({ default: module.SignUpPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
 const MembersPage = lazy(() => import('./pages/MembersPage').then((module) => ({ default: module.MembersPage })));
+const PayoutsPage = lazy(() => import('./pages/PayoutsPage').then((module) => ({ default: module.PayoutsPage })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })));
 const CompetitionsPage = lazy(() => import('./pages/CompetitionsPage').then((module) => ({ default: module.CompetitionsPage })));
 const ScoringTab = lazy(() => import('./pages/competition/ScoringTab').then((module) => ({ default: module.ScoringTab })));
@@ -129,6 +130,7 @@ export default function App() {
               <Route path="shop" element={<ShopPage />} />
               <Route path="me" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="me/members" element={<ProtectedRoute roles={['Manager', 'Admin']}><MembersPage /></ProtectedRoute>} />
+              <Route path="me/payouts" element={<ProtectedRoute roles={['Manager', 'Admin']}><PayoutsPage /></ProtectedRoute>} />
               <Route path="me/catalogue" element={<ProtectedRoute><SellerCataloguePage /></ProtectedRoute>} />
               <Route path="me/orders" element={<ProtectedRoute><CommerceOrdersPage /></ProtectedRoute>} />
               <Route path="admin" element={

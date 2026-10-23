@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, ChevronRight, ClipboardList, Contact, CreditCard, LogOut, Package, Pencil, ShoppingBag, UserCog, UserRound, Users, type LucideIcon } from 'lucide-react';
+import { Bell, ChevronRight, ClipboardList, Contact, CreditCard, Landmark, LogOut, Package, Pencil, ShoppingBag, UserCog, UserRound, Users, type LucideIcon } from 'lucide-react';
 import { api } from '../api';
 import { signOutDestination } from '../auth/signOutDestination';
 import { useAuth } from '../auth/AuthContext';
@@ -115,6 +115,7 @@ export function ProfilePage() {
             {clubId != null && <ListRow icon={Contact} label="Saved riders" count={savedRiders != null ? String(savedRiders) : undefined} />}
             <ListRow to="/declarations" icon={ClipboardList} label="Dec forms" count={decFormCount} />
             {runsClub && <ListRow to="/me/members" icon={UserCog} label="Members" />}
+            {runsClub && <ListRow to="/me/payouts" icon={Landmark} label="Payouts" />}
           </div>
         </Section>
       )}
