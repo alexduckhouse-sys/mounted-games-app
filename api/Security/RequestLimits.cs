@@ -8,6 +8,9 @@ namespace MountedGames.Api.Security;
 
 public static class RequestLimits
 {
+    /// <summary>The statistics hub: search and profiles, per signed-in user or per address (<c>RateLimits:StatsPerMinute</c>, 60).</summary>
+    public const string StatsPolicy = "stats";
+
     /// <summary>
     /// Per-minute limits for sign-in (per IP), geocoding (per IP), API writes (per user, or per IP when anonymous), the public
     /// calendar and link-preview reads (per IP) and sponsor "shown" counts (per IP). <c>RateLimits:AuthPerMinute</c>,
@@ -23,7 +26,13 @@ public static class RequestLimits
         var geocodePermits = configuration.GetValue("RateLimits:GeocodePerMinute", 20);
         var publicReadPermits = configuration.GetValue("RateLimits:PublicReadsPerMinute", 120);
         var exposurePermits = configuration.GetValue("RateLimits:SponsorExposurePerMinute", 12);
-        return services.AddRateLimiter(options => Configure(options, authPermits, writePermits, geocodePermits, scorerPermits, publicReadPermits, exposurePermits));
+        // Each search reads across every competition, so the web waits for a pause in typing before it asks.
+        var statsPermits = configuration.GetValue("RateLimits:StatsPerMinute", 60);
+        return services.AddRateLimiter(options =>
+        {
+            Configure(options, authPermits, writePermits, geocodePermits, scorerPermits, publicReadPermits, exposurePermits);
+            options.AddPolicy(StatsPolicy, context => Partition(context, $"stats:{WritePartition(context)}", statsPermits));
+        });
     }
 
     private static void Configure(RateLimiterOptions options, int authPermits, int writePermits, int geocodePermits, int scorerPermits, int publicReadPermits, int exposurePermits)
