@@ -41,7 +41,7 @@ describe('SponsorsCard', () => {
     expect(first).toHaveTextContent('Shown 1,234 times · 10 min on video');
     expect(second).toHaveTextContent('Bridle Bros');
     expect(second).toHaveTextContent('Hidden');
-    expect(api.get).toHaveBeenCalledWith('/competitions/5/sponsors/1/logo?v=1', { responseType: 'blob' });
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/competitions/5/sponsors/1/logo?v=1', { responseType: 'blob' }));
     expect(await within(first).findByRole('img', { name: 'Acme Feeds logo' })).toHaveAttribute('src', 'blob:logo-1');
     expect(within(second).getByText('No logo')).toBeInTheDocument();
   });
@@ -225,7 +225,7 @@ describe('the logos in the organiser’s list', () => {
     expect(vi.mocked(api.get).mock.calls.some(([url]) => String(url).includes('/logo'))).toBe(false);
     await user.click(screen.getByRole('button', { name: 'Load image: Acme Feeds logo' }));
     expect(await screen.findByRole('img', { name: 'Acme Feeds logo' })).toBeInTheDocument();
-    expect(api.get).toHaveBeenCalledWith('/competitions/5/sponsors/1/logo?v=1', { responseType: 'blob' });
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/competitions/5/sponsors/1/logo?v=1', { responseType: 'blob' }));
   });
 
   it('keep the placeholder if the logo cannot be fetched, and give the picture back when leaving', async () => {
