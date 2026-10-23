@@ -51,8 +51,8 @@ describe('signupsToCsv', () => {
 
   it('marks a demo event\'s payments as test money in the header and the status', () => {
     const rows = signupsToCsv([signup, { ...signup, fullName: 'Ben', status: 0 }, { ...signup, fullName: 'Cat', status: 7 }], { test: true }).split('\r\n');
-    expect(rows[0]).toBe('Section,Name,Pony Club,Contact,Test amount (GBP - no money taken),Status,Paid at,Signed up at');
-    expect(rows[1].split(',').slice(-3, -2)).toEqual(['paid (test)']);
+    expect(rows[0]).toBe('Section,Name,Pony Club,Contact,Test amount (GBP - no money taken),Status,Paid at,Signed up at,Email,Confirmation email');
+    expect(rows[1].split(',').slice(-5, -4)).toEqual(['paid (test)']);
     expect(rows[2]).toContain(',pending,');
     expect(rows[3]).toContain(',7 (test),');
   });

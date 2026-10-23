@@ -38,6 +38,7 @@ function mount(roles: string[] = ['Member'], userId = 'u1') {
 async function openForm() {
   await userEvent.click(await screen.findByRole('button', { name: /Join/ }));
   await userEvent.type(screen.getByLabelText('Your full name'), 'Alice Rider');
+  await userEvent.click(screen.getByRole('checkbox', { name: /parental consent/ }));
 }
 
 beforeEach(() => {

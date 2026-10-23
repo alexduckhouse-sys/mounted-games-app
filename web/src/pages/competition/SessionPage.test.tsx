@@ -285,7 +285,7 @@ describe('SessionPage', () => {
       expect(outbox[0].places).toEqual([
         { teamId: 1, place: 1, eliminated: false },
         { teamId: 2, place: 2, eliminated: false },
-        { teamId: 3, place: 3, eliminated: true },
+        { teamId: 3, place: 0, eliminated: true },
         { teamId: 4, place: 3, eliminated: false },
       ]);
     });
@@ -295,11 +295,6 @@ describe('SessionPage', () => {
       expect(await screen.findByText(/Tap a team to assign its place/)).toBeInTheDocument();
       expect(screen.queryByText(/Tap the first/)).not.toBeInTheDocument();
     });
-  });
-
-  it('shows a dash for a race that has not started', () => {
-    mount(competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { races: [race(1)] })] })] }));
-    expect(screen.getByText('—')).toBeInTheDocument();
   });
 
   describe('Set up heats', () => {

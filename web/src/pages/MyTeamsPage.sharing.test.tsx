@@ -6,6 +6,7 @@ import { api } from '../api';
 import { MyTeamsPage } from './MyTeamsPage';
 
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ hasRole: () => false }) }));
 vi.mock('../hooks/useTeamNotifications', () => ({
   useTeamNotifications: () => ({ enabled: false, permission: 'default', setEnabled: vi.fn() }),
 }));
