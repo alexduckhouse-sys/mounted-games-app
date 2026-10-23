@@ -11,6 +11,7 @@ import { api } from '../../api';
 import type { StandingRow } from '../../types';
 import { buildToplist } from '../../lib/toplist';
 import { ToplistView } from './ToplistView';
+import { TackLeaderboard } from './TackLeaderboard';
 import { ToplistRowsSkeleton } from '../../components/Skeletons';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
@@ -110,11 +111,13 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     <section aria-label={sectionLabel} className="flex flex-col">
       <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
       {standings.length > 0 && <ToplistView key={sectionId} list={list} section={section} standalone />}
+      {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
     </section>
   ) : (
     <section aria-label={sectionLabel} className="flex flex-col gap-2.5">
       {notices}
       {standings.length > 0 && <ToplistView key={sectionId} list={list} section={section} />}
+      {sectionId != null && <TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} />}
     </section>
   );
   const finalsButton = canManage(competition) && sectionId != null && (

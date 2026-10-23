@@ -6,6 +6,7 @@ import type { PrintableDraw, PrintableResults, PrintableScoreSheets } from './ev
 import type { PrintableEntries, ResultsBook } from './resultsBookTypes';
 import { EntriesView, ResultsBookView } from './ResultsBookView';
 import { PosterPage } from './PosterPage';
+import { TackCheckForms, type PrintableTackCheck } from './TackCheckPrint';
 import { statusLetter } from '../../lib/resultStatus';
 import './printEvent.css';
 
@@ -17,6 +18,7 @@ const VIEWS = {
   'results-book': { path: 'results-book', title: 'Results book' },
   'results-book-organiser': { path: 'results-book/organiser', title: 'Results book: organiser copy' },
   entries: { path: 'print/entries', title: 'Entry list' },
+  'tack-check': { path: 'print/tack-check', title: 'Tack check' },
 } as const;
 type View = keyof typeof VIEWS;
 
@@ -41,7 +43,7 @@ export default function PrintEventPage() {
 }
 
 function PrintView({ competitionId, view }: { competitionId: string; view: View }) {
-  const [data, setData] = useState<PrintableDraw | PrintableScoreSheets | PrintableResults | ResultsBook | PrintableEntries | null>(null);
+  const [data, setData] = useState<PrintableDraw | PrintableScoreSheets | PrintableResults | ResultsBook | PrintableEntries | PrintableTackCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -75,6 +77,7 @@ function PrintView({ competitionId, view }: { competitionId: string; view: View 
       {view === 'results' && <Results data={data as PrintableResults} />}
       {(view === 'results-book' || view === 'results-book-organiser') && <ResultsBookView data={data as ResultsBook} />}
       {view === 'entries' && <EntriesView data={data as PrintableEntries} />}
+      {view === 'tack-check' && <TackCheckForms data={data as PrintableTackCheck} />}
     </article>
   );
 }
@@ -117,5 +120,9 @@ function ScoreSheets({ data }: { data: PrintableScoreSheets }) {
 }
 
 function Results({ data }: { data: PrintableResults }) {
-  return <>{data.isProvisional && <p className="event-print-provisional">Provisional results: some races are not complete.</p>}{data.sections.length === 0 ? <p className="event-print-empty">No sections are available yet.</p> : data.sections.map((section) => <section key={section.competitionSectionId} className="event-print-section"><h2>{section.sectionName}</h2>{section.results.length === 0 ? <p className="event-print-empty">No results yet.</p> : <div className="event-print-table-wrap"><table><thead><tr><th>Pos.</th><th>Team</th><th>Club</th><th>Points</th><th>Races</th><th>Wins</th><th>Elim.</th></tr></thead><tbody>{section.results.map((row) => <tr key={row.teamId}><td>{row.rank}</td><td>{row.teamName}</td><td>{row.clubName}</td><td><strong>{row.totalPoints}</strong></td><td>{row.racesRun}</td><td>{row.wins}</td><td>{row.eliminations}</td></tr>)}</tbody></table></div>}</section>)}</>;
+  return <>{data.isProvisional && <p className="event-print-provisional">Provisional results: some races are not complete.</p>}{data.sections.length === 0 ? <p className="event-print-empty">No sections are available yet.</p> : data.sections.map((section) => {
+    // Tack check bonus points are part of the total; the column shows them only when a section has any.
+    const hasBonus = section.results.some((row) => (row.bonusPoints ?? 0) > 0);
+    return <section key={section.competitionSectionId} className="event-print-section"><h2>{section.sectionName}</h2>{section.results.length === 0 ? <p className="event-print-empty">No results yet.</p> : <div className="event-print-table-wrap"><table><thead><tr><th>Pos.</th><th>Team</th><th>Club</th><th>Points</th>{hasBonus && <th>Tack bonus</th>}<th>Races</th><th>Wins</th><th>Elim.</th></tr></thead><tbody>{section.results.map((row) => <tr key={row.teamId}><td>{row.rank}</td><td>{row.teamName}</td><td>{row.clubName}</td><td><strong>{row.totalPoints}</strong></td>{hasBonus && <td>{row.bonusPoints ?? 0}</td>}<td>{row.racesRun}</td><td>{row.wins}</td><td>{row.eliminations}</td></tr>)}</tbody></table></div>}</section>;
+  })}</>;
 }
