@@ -5,6 +5,7 @@ import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Chevron, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
 import type { CloneCompetitionResult, CsvTeamImportPreview } from './eventToolsTypes';
+import { ResultsBookTab } from './ResultsBookTab';
 import './eventTools.css';
 
 interface CompetitionForTools {
@@ -15,7 +16,7 @@ interface CompetitionForTools {
   createdByUserId: string | null;
 }
 
-type ToolTab = 'import' | 'duplicate' | 'print';
+type ToolTab = 'import' | 'duplicate' | 'print' | 'results';
 
 function message(error: unknown, fallback: string) {
   const candidate = error as { response?: { data?: { detail?: string; title?: string } } };
@@ -126,8 +127,10 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
     { id: 'import', label: 'Import teams' },
     ...(mayDuplicate ? [{ id: 'duplicate' as const, label: 'Duplicate event' }] : []),
     { id: 'print', label: 'Print sheets' },
+    { id: 'results', label: 'Results book' },
   ];
   const printSheets = [
+    { to: 'entries', title: 'Entry list', detail: 'Every team with its riders and ponies, to check before the day' },
     { to: 'draw', title: 'Draw and lanes', detail: 'Sessions, heats, lanes and race order' },
     { to: 'score-sheets', title: 'Score sheets', detail: 'Blank placing, elimination and points columns' },
     { to: 'results', title: 'Results', detail: 'Current section standings, marked provisional when unfinished' },
@@ -212,5 +215,6 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
         </Link>)}
       </RefineList></nav>
     </section>}
+    {tab === 'results' && <ResultsBookTab competitionId={competitionId} />}
   </RefinePage>;
 }
