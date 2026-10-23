@@ -335,6 +335,8 @@ public static class DbInitializer
 
         await Email.EmailSqliteSchema.EnsureAsync(db);
 
+        await Sponsors.SponsorsSqliteSchema.EnsureAsync(db);
+
     }
 
     private static async Task SeedReferenceDataAsync(AppDbContext db, RoleManager<IdentityRole> roles)
