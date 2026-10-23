@@ -1,3 +1,4 @@
+import { Dropdown } from '../../components/Dropdown';
 import { displaySectionName } from '../../lib/section';
 import { TimetableBoard } from './TimetableBoard';
 import { useEffect, useMemo, useState } from 'react';
@@ -23,21 +24,19 @@ function ToplistHeader({ subtitle, onRefresh }: { subtitle: string; onRefresh: (
   return null;
 }
 
-/** The age group menu: a styled control with a native select laid over it, so phones use their own picker. */
+/** The age group menu, in the header band. */
 function AgeGroupSelect({ sections, value, teamCount, onChange }: { sections: { id: number; displayName: string }[]; value: number | null; teamCount: number; onChange: (id: number) => void }) {
   const current = sections.find((s) => s.id === value);
+  const options = sections.map((sec) => ({ value: String(sec.id), label: displaySectionName(sec.displayName) }));
   return (
-    <div className="mg-band-header pb-2.5">
-      <label className="relative flex min-h-10 cursor-pointer items-stretch overflow-hidden rounded-lg border border-[rgb(var(--mg-header-line))] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-white">
+    <div className="mg-band-header pb-2.5 pt-2.5">
+      <Dropdown label="Age group" value={value == null ? '' : String(value)} options={options} onChange={(id) => onChange(Number(id))} buttonClassName="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg border border-[rgb(var(--mg-header-line))] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
         <span className="mg-display flex min-w-0 flex-1 items-baseline gap-2 self-center px-3 text-base font-bold uppercase leading-none tracking-[0.04em]">
           <span className="truncate">{displaySectionName(current?.displayName)}</span>
           <span className="shrink-0 text-xs font-medium normal-case tracking-normal text-[rgb(var(--mg-header-sub))]">{teamCount} {teamCount === 1 ? 'team' : 'teams'}</span>
         </span>
         <span aria-hidden="true" className="flex w-11 shrink-0 items-center justify-center border-l border-[rgb(var(--mg-header-line))] bg-white/10"><ChevronDown className="h-[18px] w-[18px]" /></span>
-        <select aria-label="Age group" value={value ?? ''} onChange={(event) => onChange(Number(event.target.value))} className="absolute inset-0 h-full w-full cursor-pointer opacity-0">
-          {sections.map((sec) => <option key={sec.id} value={sec.id}>{displaySectionName(sec.displayName)}</option>)}
-        </select>
-      </label>
+      </Dropdown>
     </div>
   );
 }
@@ -98,18 +97,8 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     : list.sessionsDone === list.sessionsTotal ? (list.sessionsTotal === 1 ? 'After session 1' : `After all ${list.sessionsTotal} sessions`)
     : list.sessionsDone > 0 ? `After session ${list.sessionsDone} of ${list.sessionsTotal}` : null;
   const chooseSection = (id: number) => setSearchParams({ section: String(id) }, { replace: true });
-  const chips = competition.sections.length > 1 && (
-    <div className="mg-chips" role="group" aria-label="Age group">
-      {competition.sections.map((sec) => (
-        <button key={sec.id} type="button" className="mg-chip" aria-pressed={sec.id === sectionId} onClick={() => chooseSection(sec.id)}>
-          {displaySectionName(sec.displayName)}
-        </button>
-      ))}
-    </div>
-  );
   const notices = (
     <>
-      {standingsResult?.sectionId === sectionId && standingsResult.savedCopy && <p role="status" className="mg-notice">Showing saved results. Positions may have changed.</p>}
       {standingsLoading && !savedStandings && <ToplistRowsSkeleton />}
       {standingsError && <div role="alert" className="mg-card flex flex-col items-start gap-3 p-4"><p>Couldn’t load results. Check your connection and try again.</p><button className="mg-btn mg-btn-secondary" onClick={() => { setStandingsResult(null); setRetry((n) => n + 1); }}>Try again</button></div>}
       {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No results yet.</p>}
@@ -145,13 +134,14 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     </AnimatePresence>
   );
 
+  const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
+  const ageGroups = competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} onChange={chooseSection} />;
   if (toplistOnly || sectionId == null) {
-    const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
     return (
       <div className="mx-auto flex w-full max-w-[560px] flex-col">
         {toplistOnly && <ToplistHeader subtitle={[competition.name, progress].filter(Boolean).join(' · ')} onRefresh={() => setRetry((n) => n + 1)} />}
         {!toplistOnly && <h1 className="mg-h1 mg-h1-sm py-3">Age groups</h1>}
-        {competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} onChange={chooseSection} />}
+        {ageGroups}
         <div className="flex flex-col gap-3">
           {sectionId == null ? <p className="mg-card mt-3 p-4 text-[rgb(var(--mg-muted))]">No age groups yet.</p> : toplist}
           {sectionId != null && <SponsorStrip placement="Results" />}
@@ -167,7 +157,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
       <TimetableBoard
         sectionId={sectionId}
         title={sectionName || 'Age group'}
-        bandExtra={chips}
+        bandExtra={ageGroups}
         lead={
           <div className="flex flex-col gap-3">
             <button type="button" className="mg-tint-link" aria-expanded={showToplist} onClick={() => setShowToplist((v) => !v)}>

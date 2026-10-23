@@ -165,28 +165,37 @@ public class ReadinessAndRulebooksTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Rulebook_IsPubliclyReadable_ButOnlyOwnerOrAdminCanEdit()
+    public async Task Rulebook_IsPubliclyReadable_ButOnlyAdminsCanEdit()
     {
-        var competitionId = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
-        var owner = await _f.TrainerAsync();
-        var createdResponse = await owner.PostAsJsonAsync(RulebooksUrl(competitionId),
-            new UpsertRulebookRequest("Event handbook", "Autumn 2030", "https://example.invalid/rules", "Plain text rules."));
+        var admin = await _f.AdminAsync();
+        var title = $"Event handbook {Guid.NewGuid():N}";
+        var createdResponse = await admin.PostAsJsonAsync(RulebooksUrl,
+            new UpsertRulebookRequest(title, "Autumn 2030", "https://example.invalid/rules", "Plain text rules."));
         var created = await createdResponse.ReadAsync<RulebookDto>();
 
         Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
-        var publicResponse = await _f.CreateClient().GetAsync($"{RulebooksUrl(competitionId)}/{created.Id}");
+        var publicResponse = await _f.CreateClient().GetAsync($"{RulebooksUrl}/{created.Id}");
         Assert.Equal(HttpStatusCode.OK, publicResponse.StatusCode);
         Assert.Equal("Plain text rules.", (await publicResponse.ReadAsync<RulebookDto>()).Text);
+
+        // The list leaves the text out; it is fetched one rulebook at a time.
+        var list = await (await _f.CreateClient().GetAsync(RulebooksUrl)).ReadAsync<List<RulebookSummaryDto>>();
+        Assert.Contains(list, r => r.Id == created.Id && r.Title == title);
+        Assert.DoesNotContain("Plain text rules.", await (await _f.CreateClient().GetAsync(RulebooksUrl)).Content.ReadAsStringAsync());
+
         var update = new UpsertRulebookRequest("Changed", "1", null, "No");
         var (pendingTrainer, _) = await _f.SignupAsync("Trainer");
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await pendingTrainer.PutAsJsonAsync($"{RulebooksUrl(competitionId)}/{created.Id}", update)).StatusCode);
-        var (other, _) = await _f.ApprovedTrainerAsync();
-        Assert.Equal(HttpStatusCode.NotFound,
-            (await other.PutAsJsonAsync($"{RulebooksUrl(competitionId)}/{created.Id}", update)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await pendingTrainer.PutAsJsonAsync($"{RulebooksUrl}/{created.Id}", update)).StatusCode);
+        var owner = await _f.TrainerAsync();
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PutAsJsonAsync($"{RulebooksUrl}/{created.Id}", update)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(RulebooksUrl, update)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.DeleteAsync($"{RulebooksUrl}/{created.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PostAsJsonAsync(RulebooksUrl, update)).StatusCode);
         Assert.Equal(HttpStatusCode.OK,
-            (await (await _f.AdminAsync()).PutAsJsonAsync($"{RulebooksUrl(competitionId)}/{created.Id}",
-                new UpsertRulebookRequest("Event handbook", "Winter 2030", null, "Updated text."))).StatusCode);
+            (await admin.PutAsJsonAsync($"{RulebooksUrl}/{created.Id}", new UpsertRulebookRequest(title, "Winter 2030", null, "Updated text."))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync(RulebooksUrl, new UpsertRulebookRequest(title, "Winter 2030", null, "Again"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"{RulebooksUrl}/{created.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await _f.CreateClient().GetAsync($"{RulebooksUrl}/{created.Id}")).StatusCode);
     }
 
     [Theory]
@@ -196,8 +205,7 @@ public class ReadinessAndRulebooksTests : IClassFixture<ApiFactory>
     [InlineData("Rules", "1", null, "")]
     public async Task Rulebook_RejectsInvalidFields(string title, string edition, string? source, string text)
     {
-        var competitionId = await _f.SeedCompetitionAsync();
-        var response = await (await _f.AdminAsync()).PostAsJsonAsync(RulebooksUrl(competitionId),
+        var response = await (await _f.AdminAsync()).PostAsJsonAsync(RulebooksUrl,
             new UpsertRulebookRequest(title, edition, source, text));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -205,10 +213,9 @@ public class ReadinessAndRulebooksTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Rulebook_RejectsSourceUrlOverStorageLimit()
     {
-        var competitionId = await _f.SeedCompetitionAsync();
         var source = $"https://example.invalid/{new string('a', 2000)}";
 
-        var response = await (await _f.AdminAsync()).PostAsJsonAsync(RulebooksUrl(competitionId),
+        var response = await (await _f.AdminAsync()).PostAsJsonAsync(RulebooksUrl,
             new UpsertRulebookRequest("Rules", "1", source, "Text"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -366,6 +373,6 @@ public class ReadinessAndRulebooksTests : IClassFixture<ApiFactory>
     }
 
     private static string ReadinessUrl(int competitionId) => $"/api/competitions/{competitionId}/operations/readiness";
-    private static string RulebooksUrl(int competitionId) => $"/api/competitions/{competitionId}/rulebooks";
+    private const string RulebooksUrl = "/api/rulebooks";
     private sealed record ReadinessData(Arena Arena, int SignupId, int SecondSessionId, int HeatId);
 }

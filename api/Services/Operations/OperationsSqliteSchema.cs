@@ -5,7 +5,48 @@ namespace MountedGames.Api.Services.Operations;
 
 public static class OperationsSqliteSchema
 {
-    public static Task EnsureAsync(AppDbContext db) => db.Database.ExecuteSqlRawAsync("""
+    public static async Task EnsureAsync(AppDbContext db)
+    {
+        await MakeRulebooksGlobalAsync(db);
+        await CreateAsync(db);
+    }
+
+    /// <summary>Rulebooks used to belong to one competition. Keep the newest copy of each title and edition as a shared rulebook.</summary>
+    private static async Task MakeRulebooksGlobalAsync(AppDbContext db)
+    {
+        var legacy = await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM pragma_table_info('Rulebook') WHERE name = 'CompetitionId'""").SingleAsync();
+        if (legacy == 0) return;
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE "Rulebook" RENAME TO "Rulebook_old";
+            DROP INDEX IF EXISTS "IX_Rulebook_CompetitionId_Title_Edition";
+            """);
+        await CreateRulebookTableAsync(db);
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "Rulebook" ("Title", "Edition", "SourceUrl", "Text", "UpdatedAt", "UpdatedByUserId")
+            SELECT r."Title", r."Edition", r."SourceUrl", r."Text", r."UpdatedAt", r."UpdatedByUserId" FROM "Rulebook_old" r
+            WHERE r."Id" = (SELECT o."Id" FROM "Rulebook_old" o WHERE o."Title" = r."Title" AND o."Edition" = r."Edition" ORDER BY o."UpdatedAt" DESC, o."Id" DESC LIMIT 1);
+            DROP TABLE "Rulebook_old";
+            """);
+    }
+
+    private static Task CreateRulebookTableAsync(AppDbContext db) => db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS "Rulebook" (
+            "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            "Title" TEXT NOT NULL,
+            "Edition" TEXT NOT NULL,
+            "SourceUrl" TEXT,
+            "Text" TEXT NOT NULL,
+            "UpdatedAt" TEXT NOT NULL,
+            "UpdatedByUserId" TEXT
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_Rulebook_Title_Edition" ON "Rulebook" ("Title", "Edition");
+        """);
+
+    private static async Task CreateAsync(AppDbContext db)
+    {
+        await CreateRulebookTableAsync(db);
+        await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS "EquipmentAcknowledgement" (
             "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             "CompetitionId" INTEGER NOT NULL,
@@ -49,19 +90,6 @@ public static class OperationsSqliteSchema
 
         CREATE UNIQUE INDEX IF NOT EXISTS "IX_RaceScoreState_RaceId" ON "RaceScoreState" ("RaceId");
 
-        CREATE TABLE IF NOT EXISTS "Rulebook" (
-            "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            "CompetitionId" INTEGER NOT NULL,
-            "Title" TEXT NOT NULL,
-            "Edition" TEXT NOT NULL,
-            "SourceUrl" TEXT,
-            "Text" TEXT NOT NULL,
-            "UpdatedAt" TEXT NOT NULL,
-            "UpdatedByUserId" TEXT,
-            CONSTRAINT "FK_Rulebook_Competitions_CompetitionId" FOREIGN KEY ("CompetitionId") REFERENCES "Competitions" ("Id") ON DELETE CASCADE
-        );
-
-        CREATE UNIQUE INDEX IF NOT EXISTS "IX_Rulebook_CompetitionId_Title_Edition" ON "Rulebook" ("CompetitionId", "Title", "Edition");
 
         CREATE TABLE IF NOT EXISTS "TeamStatusEvent" (
             "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -116,4 +144,5 @@ public static class OperationsSqliteSchema
 
         CREATE UNIQUE INDEX IF NOT EXISTS "IX_RiderSwapEvent_DeclarationFormId_RequestId" ON "RiderSwapEvent" ("DeclarationFormId", "RequestId");
         """);
+    }
 }

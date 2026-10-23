@@ -232,6 +232,7 @@ public class ReviewSeedFreshTests
         var targets = await db.Competitions.Include(c => c.Teams).Include(c => c.Sections)
             .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races)
             .Where(c => c.Name == "Demo Meadow Cup" || c.Name == "Demo Valley Finals").ToListAsync();
+        db.Set<Rulebook>().Add(new Rulebook { Title = "Rules", Edition = "1", Text = "Shared rules" });
         foreach (var competition in targets)
         {
             var section = competition.Sections.First();
@@ -249,7 +250,6 @@ public class ReviewSeedFreshTests
             db.SponsorExposures.Add(new SponsorExposure { Sponsor = sponsor, Day = Today, Placement = SponsorPlacement.Details, Views = 3 });
             db.CompetitionCollaborators.Add(new CompetitionCollaborator { Competition = competition, UserId = user.Id, AddedByUserId = user.Id, AddedAt = Today });
             db.TeamSupporters.Add(new TeamSupporter { Team = team, UserId = user.Id });
-            db.Set<Rulebook>().Add(new Rulebook { Competition = competition, Title = "Rules" });
             db.Set<EquipmentAcknowledgement>().Add(new EquipmentAcknowledgement { Competition = competition, ItemKey = "flags" });
             db.Set<DrawChange>().Add(new DrawChange { CompetitionId = competition.Id, SectionId = section.Id, Kind = DrawChangeKind.SectionDraw, RequestId = Guid.NewGuid().ToString() });
             db.Set<CalendarHeatVersion>().Add(new CalendarHeatVersion { HeatId = heat.Id, TeamId = team.Id, Fingerprint = "x" });
@@ -300,7 +300,8 @@ public class ReviewSeedFreshTests
         Assert.Empty(await db.Set<RaceScoreEvent>().ToListAsync());
         Assert.Empty(await db.Set<CalendarHeatVersion>().ToListAsync());
         Assert.Empty(await db.Set<RiderSwapEvent>().ToListAsync());
-        Assert.Empty(await db.Set<Rulebook>().ToListAsync());
+        // Rulebooks are shared by every competition, so a reseed leaves them alone.
+        Assert.Equal("Rules", (await db.Set<Rulebook>().SingleAsync()).Title);
         Assert.Empty(await db.Set<EquipmentAcknowledgement>().ToListAsync());
         // The two orders' held stock went back to the seller's item; the item and both users stay.
         Assert.Equal(7 + 2 * 2, (await db.Set<CatalogueItem>().SingleAsync()).StockQuantity);

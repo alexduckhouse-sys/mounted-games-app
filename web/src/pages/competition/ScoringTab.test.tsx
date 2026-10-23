@@ -89,22 +89,25 @@ describe('the toplist page header', () => {
 });
 
 describe('the age group select', () => {
-  it('lists the age groups with the current one and its team count', () => {
+  it('lists the age groups with the current one and its team count', async () => {
     renderTab();
     const select = screen.getByRole('combobox', { name: 'Age group' });
-    expect(select).toHaveValue('9');
-    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Under 12', 'Under 14']);
-    expect(screen.getByText('3 teams')).toBeVisible();
+    expect(select).toHaveTextContent('Under 123 teams');
+    await userEvent.click(select);
+    const options = within(screen.getByRole('listbox', { name: 'Age group' })).getAllByRole('option');
+    expect(options.map((o) => o.textContent)).toEqual(['Under 12', 'Under 14']);
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
   });
 
   it('changes the section in the URL and loads that age group', async () => {
     const user = userEvent.setup();
     renderTab();
     await screen.findByText('Team 3');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Age group' }), '10');
+    await user.click(screen.getByRole('combobox', { name: 'Age group' }));
+    await user.click(screen.getByRole('option', { name: 'Under 14' }));
     expect(screen.getByTestId('search')).toHaveTextContent('?section=10');
     await screen.findByText('Team 8');
-    expect(screen.getByRole('combobox', { name: 'Age group' })).toHaveValue('10');
+    expect(screen.getByRole('combobox', { name: 'Age group' })).toHaveTextContent('Under 14');
     expect(state.get).toHaveBeenLastCalledWith('/competitions/1/standings', { params: { sectionId: 10 } });
   });
 
@@ -127,7 +130,7 @@ describe('the view tabs', () => {
     renderTab();
     await screen.findByRole('region', { name: 'Finals' });
     const tabs = screen.getByRole('group', { name: 'Toplist view' });
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Finals', 'Totals', 'Sessions']);
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Finals', 'Totals', 'By session']);
     expect(within(tabs).getByRole('button', { name: 'Finals' })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -136,7 +139,7 @@ describe('the view tabs', () => {
     renderTab();
     await screen.findByRole('region', { name: 'Totals' });
     const tabs = screen.getByRole('group', { name: 'Toplist view' });
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Totals', 'Sessions']);
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Totals', 'By session']);
     expect(screen.queryByRole('button', { name: 'Finals' })).toBeNull();
   });
 
@@ -155,7 +158,7 @@ describe('the view tabs', () => {
     const totals = screen.getByRole('region', { name: 'Totals' });
     expect(screen.getByText('Top 2 make the final')).toBeVisible();
     expect(within(totals).getByRole('separator', { name: 'Final cut-off' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Sessions' }));
+    await user.click(screen.getByRole('button', { name: 'By session' }));
     const table = screen.getByRole('region', { name: 'Points by session' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['#', 'Team', 'S1', 'F', 'Pts', 'Open']);
     await user.click(screen.getByRole('button', { name: 'Finals' }));
@@ -166,7 +169,8 @@ describe('the view tabs', () => {
     const user = userEvent.setup();
     renderTab();
     await screen.findByRole('region', { name: 'Finals' });
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Age group' }), '10');
+    await user.click(screen.getByRole('combobox', { name: 'Age group' }));
+    await user.click(screen.getByRole('option', { name: 'Under 14' }));
     await screen.findByText('Team 8');
     expect(screen.getByRole('region', { name: 'Totals' })).toBeVisible();
   });
@@ -247,7 +251,7 @@ describe('the team sheet', () => {
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByRole('region', { name: 'Session 2' })).toHaveTextContent('Didn’t ride this session');
     await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('button', { name: 'Sessions' }));
+    await user.click(screen.getByRole('button', { name: 'By session' }));
     await user.click(within(screen.getByRole('region', { name: 'Points by session' })).getByRole('button', { name: 'Team 2' }));
     expect(within(screen.getByRole('dialog')).getByRole('region', { name: 'Session 2 · Heat 2' })).toHaveTextContent('Not ridden yet');
   });
@@ -293,16 +297,17 @@ describe('loading and failure states', () => {
 });
 
 describe('embedded in the timetable', () => {
-  it('keeps the age group chips and the collapsible toplist, with the create finals button for organisers', async () => {
+  it('keeps the age group menu and the collapsible toplist, with the create finals button for organisers', async () => {
     state.manage = true;
     const user = userEvent.setup();
     renderTab('/?section=9', { toplistOnly: false });
     expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Under 14' })).toBeVisible();
+    expect(screen.getByRole('combobox', { name: 'Age group' })).toBeVisible();
     expect(screen.getByRole('button', { name: /Create finals/ })).toBeVisible();
     await user.click(screen.getByRole('button', { name: /Show Under 12 toplist/ }));
     await screen.findByRole('region', { name: 'Finals' });
-    await user.click(screen.getByRole('button', { name: 'Under 14' }));
+    await user.click(screen.getByRole('combobox', { name: 'Age group' }));
+    await user.click(screen.getByRole('option', { name: 'Under 14' }));
     expect(screen.getByTestId('search')).toHaveTextContent('?section=10');
   });
 });

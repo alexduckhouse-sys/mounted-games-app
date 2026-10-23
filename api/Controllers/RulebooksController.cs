@@ -10,48 +10,38 @@ using MountedGames.Api.Entities.Operations;
 namespace MountedGames.Api.Controllers;
 
 [ApiController]
-[Route("api/competitions/{competitionId:int}/rulebooks")]
+[Route("api/rulebooks")]
 public class RulebooksController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
     [AllowAnonymous]
-    public async Task<ActionResult<IReadOnlyList<RulebookDto>>> List(
-        int competitionId, CancellationToken cancellationToken)
-    {
-        if (!await db.Competitions.AnyAsync(c => c.Id == competitionId, cancellationToken)) return NotFound();
-        var rows = await db.Set<Rulebook>().AsNoTracking()
-            .Where(r => r.CompetitionId == competitionId)
+    public async Task<ActionResult<IReadOnlyList<RulebookSummaryDto>>> List(CancellationToken cancellationToken) =>
+        await db.Set<Rulebook>().AsNoTracking()
             .OrderBy(r => r.Title).ThenByDescending(r => r.UpdatedAt)
+            .Select(r => new RulebookSummaryDto(r.Id, r.Title, r.Edition, r.SourceUrl, r.UpdatedAt))
             .ToListAsync(cancellationToken);
-        return rows.Select(ToDto).ToList();
-    }
 
     [HttpGet("{id:int}")]
     [AllowAnonymous]
-    public async Task<ActionResult<RulebookDto>> Get(
-        int competitionId, int id, CancellationToken cancellationToken)
+    public async Task<ActionResult<RulebookDto>> Get(int id, CancellationToken cancellationToken)
     {
-        var row = await db.Set<Rulebook>().AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == id && r.CompetitionId == competitionId, cancellationToken);
+        var row = await db.Set<Rulebook>().AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
         return row is null ? NotFound() : ToDto(row);
     }
 
     [HttpPost]
-    [Authorize(Policy = CompetitionStaff.Policy)]
-    [CompetitionAccess("competitionId")]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<RulebookDto>> Create(
-        int competitionId, UpsertRulebookRequest request, CancellationToken cancellationToken)
+        UpsertRulebookRequest request, CancellationToken cancellationToken)
     {
         var error = Validate(request);
         if (error is not null) return BadRequest(new { message = error });
         var title = request.Title.Trim();
         var edition = request.Edition.Trim();
-        if (await db.Set<Rulebook>().AnyAsync(r => r.CompetitionId == competitionId
-                && r.Title == title && r.Edition == edition, cancellationToken))
+        if (await db.Set<Rulebook>().AnyAsync(r => r.Title == title && r.Edition == edition, cancellationToken))
             return Conflict(new { message = "That rulebook title and edition already exists." });
         var row = new Rulebook
         {
-            CompetitionId = competitionId,
             Title = title,
             Edition = edition,
             SourceUrl = Normalise(request.SourceUrl),
@@ -61,23 +51,22 @@ public class RulebooksController(AppDbContext db) : ControllerBase
         };
         db.Add(row);
         await db.SaveChangesAsync(cancellationToken);
-        return CreatedAtAction(nameof(Get), new { competitionId, id = row.Id }, ToDto(row));
+        return CreatedAtAction(nameof(Get), new { id = row.Id }, ToDto(row));
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Policy = CompetitionStaff.Policy)]
-    [CompetitionAccess("competitionId")]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<RulebookDto>> Update(
-        int competitionId, int id, UpsertRulebookRequest request, CancellationToken cancellationToken)
+        int id, UpsertRulebookRequest request, CancellationToken cancellationToken)
     {
         var error = Validate(request);
         if (error is not null) return BadRequest(new { message = error });
         var row = await db.Set<Rulebook>()
-            .FirstOrDefaultAsync(r => r.Id == id && r.CompetitionId == competitionId, cancellationToken);
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
         if (row is null) return NotFound();
         var title = request.Title.Trim();
         var edition = request.Edition.Trim();
-        if (await db.Set<Rulebook>().AnyAsync(r => r.CompetitionId == competitionId && r.Id != id
+        if (await db.Set<Rulebook>().AnyAsync(r => r.Id != id
                 && r.Title == title && r.Edition == edition, cancellationToken))
             return Conflict(new { message = "That rulebook title and edition already exists." });
         row.Title = title;
@@ -91,12 +80,11 @@ public class RulebooksController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    [Authorize(Policy = CompetitionStaff.Policy)]
-    [CompetitionAccess("competitionId")]
-    public async Task<IActionResult> Delete(int competitionId, int id, CancellationToken cancellationToken)
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         var row = await db.Set<Rulebook>()
-            .FirstOrDefaultAsync(r => r.Id == id && r.CompetitionId == competitionId, cancellationToken);
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
         if (row is null) return NotFound();
         db.Remove(row);
         await db.SaveChangesAsync(cancellationToken);
@@ -121,5 +109,5 @@ public class RulebooksController(AppDbContext db) : ControllerBase
 
     private static string? Normalise(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static RulebookDto ToDto(Rulebook row) =>
-        new(row.Id, row.CompetitionId, row.Title, row.Edition, row.SourceUrl, row.Text, row.UpdatedAt);
+        new(row.Id, row.Title, row.Edition, row.SourceUrl, row.Text, row.UpdatedAt);
 }

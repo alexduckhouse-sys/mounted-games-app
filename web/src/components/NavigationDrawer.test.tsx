@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Clock } from 'lucide-react';
 import { useEffect } from 'react';
@@ -106,8 +106,11 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
   });
 
-  it('links to the privacy page for everyone', async () => {
+  it('has no Team history link and keeps Privacy inside Settings', async () => {
     mount();
+    expect(screen.queryByRole('link', { name: 'Team history' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Privacy' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
     await userEvent.click(screen.getByRole('link', { name: 'Privacy' }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('probe')).toHaveTextContent('/privacy');
@@ -350,3 +353,39 @@ describe('NavigationDrawer: settings', () => {
     expect(screen.getByTestId('probe')).toHaveTextContent('|remember');
   });
 });
+
+describe('NavigationDrawer: the Seasons link', () => {
+  const seasonLink = () => screen.queryByRole('link', { name: 'Seasons' });
+
+  it('shows for a competition in one season and goes straight to it', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/seasons/for-competition/4' ? [{ id: 'abc' }] : {} }));
+    mount({ competition: true });
+    expect(await screen.findByRole('link', { name: 'Seasons' })).toHaveAttribute('href', '/seasons/abc');
+  });
+
+  it('goes to the season list when the competition is in several', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/seasons/for-competition/4' ? [{ id: 'abc' }, { id: 'def' }] : {} }));
+    mount({ competition: true });
+    expect(await screen.findByRole('link', { name: 'Seasons' })).toHaveAttribute('href', '/seasons');
+  });
+
+  it('is hidden when the competition is not in a season, or the lookup fails', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/seasons/for-competition/4' ? [] : {} }));
+    const first = mount({ competition: true });
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/seasons/for-competition/4'));
+    expect(seasonLink()).toBeNull();
+    first.unmount();
+    vi.mocked(api.get).mockImplementation(async (url: string) => { if (url.startsWith('/seasons/')) throw new Error('offline'); return { data: {} }; });
+    mount({ competition: true });
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === '/seasons/for-competition/4')).toHaveLength(2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(seasonLink()).toBeNull();
+  });
+
+  it('stays available before a competition is chosen', () => {
+    mount();
+    expect(seasonLink()).toHaveAttribute('href', '/seasons');
+    expect(api.get).not.toHaveBeenCalledWith(expect.stringContaining('/seasons/'));
+  });
+});
+

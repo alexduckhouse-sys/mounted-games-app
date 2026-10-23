@@ -352,7 +352,6 @@ public static class ReviewCompetitionSeeder
             await db.Sponsors.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
             await db.CompetitionCollaborators.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
             await db.ScorerLinks.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
-            await db.Set<Rulebook>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
             await db.Set<EquipmentAcknowledgement>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
             await db.Competitions.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync();
 

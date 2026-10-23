@@ -1,10 +1,9 @@
 namespace MountedGames.Api.Entities.Operations;
 
+/// <summary>A rulebook shared by every competition; only admins edit it.</summary>
 public class Rulebook
 {
     public int Id { get; set; }
-    public int CompetitionId { get; set; }
-    public Competition? Competition { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Edition { get; set; } = string.Empty;
     public string? SourceUrl { get; set; }

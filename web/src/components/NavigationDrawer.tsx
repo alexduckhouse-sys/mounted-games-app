@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Clock, Trophy, MessageSquare, Info, ArrowLeftRight, X, Settings, Users, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight } from 'lucide-react';
+import { Clock, Trophy, MessageSquare, Info, ArrowLeftRight, X, Settings, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight } from 'lucide-react';
+import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES } from '../theme/themes';
 import { useTheme } from '../theme/ThemeContext';
@@ -37,6 +38,19 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
     setShowWeather(next);
     try { if (next) localStorage.setItem(WEATHER_KEY, '1'); else localStorage.removeItem(WEATHER_KEY); } catch { /* storage blocked */ }
   }
+  // The Seasons link only shows for a competition that counts towards a season.
+  const [seasonLinks, setSeasonLinks] = useState<{ competitionId: number; seasons: { id: string }[] } | null>(null);
+  const currentId = current?.id ?? null;
+  useEffect(() => {
+    if (currentId == null) return;
+    let cancelled = false;
+    api.get<{ id: string }[]>(`/seasons/for-competition/${currentId}`)
+      .then((r) => { if (!cancelled) setSeasonLinks({ competitionId: currentId, seasons: Array.isArray(r.data) ? r.data : [] }); })
+      .catch(() => { if (!cancelled) setSeasonLinks({ competitionId: currentId, seasons: [] }); });
+    return () => { cancelled = true; };
+  }, [currentId]);
+  const seasons = currentId == null ? null : seasonLinks?.competitionId === currentId ? seasonLinks.seasons : [];
+  const seasonsTo = seasons && seasons.length === 1 ? `/seasons/${seasons[0].id}` : '/seasons';
   useEffect(() => {
     const dialog = ref.current;
     const overflow = document.body.style.overflow;
@@ -117,10 +131,8 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
 
           <div className="flex flex-col">
             <button onClick={onChangeCompetition} className={itemClass(false)}><ArrowLeftRight className={iconClass(false)} />Change competition</button>
-            <NavLink to="/seasons" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>
-            <NavLink to="/team-profiles" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Users className={iconClass(isActive)} />Team history</>}</NavLink>
+            {(seasons === null || seasons.length > 0) && <NavLink to={seasonsTo} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>}
             <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
-            <NavLink to="/privacy" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShieldCheck className={iconClass(isActive)} />Privacy</>}</NavLink>
             <button onClick={() => setSettingsOpen((v) => !v)} className={itemClass(settingsOpen)} aria-expanded={settingsOpen}><SlidersHorizontal className={iconClass(settingsOpen)} />Settings</button>
             {settingsOpen && (
               <section aria-label="Settings" className="mt-2 flex flex-col gap-4 rounded-xl border border-[rgb(var(--mg-rule))] p-3">
@@ -138,6 +150,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
                   <SettingSwitch icon={CloudSun} label="Show weather" checked={showWeather} onChange={toggleWeather} />
                   {current && <SettingSwitch icon={Pin} label="Remember this competition on this device" checked={rememberChoice === 'remember'} onChange={() => setRememberChoice(rememberChoice === 'remember' ? 'visit' : 'remember')} />}
                 </div>
+                <NavLink to="/privacy" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShieldCheck className={iconClass(isActive)} />Privacy</>}</NavLink>
               </section>
             )}
           </div>

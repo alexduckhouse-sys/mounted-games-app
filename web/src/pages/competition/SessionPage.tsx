@@ -5,6 +5,7 @@ import {
   ChevronLeft, Coffee, Wand2, X, Clock, ClipboardList, Users, CheckCircle2,
 } from 'lucide-react';
 import { useCompetition } from './context';
+import { RulesLink } from './RulesLink';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { DeclarationForm, Heat, Session } from '../../types';
@@ -267,6 +268,7 @@ export function SessionPage() {
         </Link>
         {canManage(competition) && (
           <div className="flex gap-1.5">
+            <RulesLink />
             <LaneRotationControl session={session} onChanged={reload} />
             {orderedHeats.some((h) => h.raceRoundStage) && <QualifiersControl session={session} onChanged={reload} />}
             <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>

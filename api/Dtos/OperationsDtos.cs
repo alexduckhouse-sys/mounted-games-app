@@ -47,6 +47,8 @@ public record CompetitionReadinessDto(int CompetitionId, bool IsReady, string Eq
 public record UpdateEquipmentAcknowledgementsRequest(
     IReadOnlyList<string> AcknowledgedKeys, string ExpectedFingerprint);
 
-public record RulebookDto(int Id, int CompetitionId, string Title, string Edition,
+/// <summary>The list entry: no text, so the list stays small. The text comes from the single-rulebook endpoint.</summary>
+public record RulebookSummaryDto(int Id, string Title, string Edition, string? SourceUrl, DateTime UpdatedAt);
+public record RulebookDto(int Id, string Title, string Edition,
     string? SourceUrl, string Text, DateTime UpdatedAt);
 public record UpsertRulebookRequest(string Title, string Edition, string? SourceUrl, string Text);

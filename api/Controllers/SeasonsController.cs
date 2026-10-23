@@ -32,6 +32,16 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
         return result;
     }
 
+    /// <summary>The seasons a competition counts towards, for the menu: no standings, so it stays small.</summary>
+    [HttpGet("for-competition/{competitionId:int}")]
+    [AllowAnonymous]
+    public async Task<ActionResult<IReadOnlyList<SeasonLinkDto>>> ForCompetition(int competitionId, CancellationToken ct) =>
+        await db.Set<Season>().AsNoTracking()
+            .Where(x => x.Rounds.Any(r => r.CompetitionId == competitionId && r.IsIncluded))
+            .OrderByDescending(x => x.Year).ThenBy(x => x.Title)
+            .Select(x => new SeasonLinkDto(x.Id, x.Title, x.Year))
+            .ToListAsync(ct);
+
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     public async Task<ActionResult<SeasonDto>> Get(Guid id, CancellationToken ct)

@@ -11,6 +11,8 @@ export interface TickerItem {
   key: string;
   kind: TickerKind;
   text: string;
+  /** The session this line is about; the ticker links there instead of to the live feed. */
+  sessionId?: number;
 }
 
 export const MAX_TICKER_ITEMS = 8;
@@ -70,7 +72,7 @@ function breakEnd(row: TimetableRow): Date | null {
 }
 
 function latestResult(sessions: Session[], now: number): TickerItem | null {
-  let best: { at: number; id: number; text: string } | null = null;
+  let best: { at: number; id: number; text: string; sessionId: number } | null = null;
   for (const session of sessions) {
     for (const heat of session.heats) {
       for (const race of heat.races) {
@@ -79,11 +81,11 @@ function latestResult(sessions: Session[], now: number): TickerItem | null {
         if (!Number.isFinite(at) || now - at > RESULT_MAX_AGE_MS || at - now > MINUTE) continue;
         const winners = race.results.filter((result) => result.placing === 1 && !result.eliminated).map((result) => result.teamName);
         if (winners.length === 0 || (best && best.at >= at)) continue;
-        best = { at, id: race.id, text: `${winners.join(' & ')} won ${oneLine(race.name) || 'a race'}` };
+        best = { at, id: race.id, text: `${winners.join(' & ')} won ${oneLine(race.name) || 'a race'}`, sessionId: session.id };
       }
     }
   }
-  return best ? { key: `result-${best.id}`, kind: 'result', text: best.text } : null;
+  return best ? { key: `result-${best.id}`, kind: 'result', text: best.text, sessionId: best.sessionId } : null;
 }
 
 /**
@@ -124,11 +126,11 @@ export function tickerItems(sessions: Session[], announcements: ChatMessage[], n
   items.push(...recent.filter((item) => item.fresh).map(announcement));
 
   for (const row of liveRaces.slice(0, MAX_LIVE)) {
-    items.push({ key: `live-${row.key}`, kind: row.group === 'Finals' ? 'finals' : 'live', text: `Now: ${raceName(row, ordinals)}` });
+    items.push({ key: `live-${row.key}`, kind: row.group === 'Finals' ? 'finals' : 'live', text: `Now: ${raceName(row, ordinals)}`, sessionId: row.session.id });
   }
   if (breakNow) {
     const end = breakEnd(breakNow);
-    items.push({ key: `break-${breakNow.key}`, kind: 'break', text: end ? `${breakName(breakNow.session)} until ${tickerClock(end, now)}` : `${breakName(breakNow.session)} now` });
+    items.push({ key: `break-${breakNow.key}`, kind: 'break', text: end ? `${breakName(breakNow.session)} until ${tickerClock(end, now)}` : `${breakName(breakNow.session)} now`, sessionId: breakNow.session.id });
   }
 
   if (liveRaces.length > 0 || upcoming.length > 0) {
@@ -140,10 +142,10 @@ export function tickerItems(sessions: Session[], announcements: ChatMessage[], n
   }
 
   if (nextRace?.effective) {
-    items.push({ key: `next-${nextRace.key}`, kind: nextRace.group === 'Finals' ? 'finals' : 'next', text: `Next ${tickerClock(nextRace.effective, now)}: ${raceName(nextRace, ordinals)}` });
+    items.push({ key: `next-${nextRace.key}`, kind: nextRace.group === 'Finals' ? 'finals' : 'next', text: `Next ${tickerClock(nextRace.effective, now)}: ${raceName(nextRace, ordinals)}`, sessionId: nextRace.session.id });
   }
   if (breakSoon?.effective) {
-    items.push({ key: `break-${breakSoon.key}`, kind: 'break', text: `${breakName(breakSoon.session)} ${tickerClock(breakSoon.effective, now)}` });
+    items.push({ key: `break-${breakSoon.key}`, kind: 'break', text: `${breakName(breakSoon.session)} ${tickerClock(breakSoon.effective, now)}`, sessionId: breakSoon.session.id });
   }
 
   const races = rows.filter(isRaceRow);
@@ -161,7 +163,7 @@ export function tickerItems(sessions: Session[], announcements: ChatMessage[], n
 
 /** True when both lists would show the same lines, so the ticker need not re-render. */
 export function sameTickerItems(a: TickerItem[], b: TickerItem[]): boolean {
-  return a.length === b.length && a.every((item, index) => item.key === b[index].key && item.kind === b[index].kind && item.text === b[index].text);
+  return a.length === b.length && a.every((item, index) => item.key === b[index].key && item.kind === b[index].kind && item.text === b[index].text && item.sessionId === b[index].sessionId);
 }
 
 /**

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, MapPin } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
+import { Dropdown } from '../../components/Dropdown';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { computeTimings, formatTime } from '../../lib/time';
@@ -116,6 +117,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
 
   return (
     <div className="timetable-board">
+      {bandExtra}
       {(days.length > 1 || arenas.length > 1) && (
         <div className="tt-strip">
           {days.length > 1 && (
@@ -128,7 +130,6 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
           {arenas.length > 1 && <ArenaSelect arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />}
         </div>
       )}
-      {bandExtra && <div className="tt-extra mg-band">{bandExtra}</div>}
       <div className="tt-body">
         {lead}
         {activeGroups.map(renderGroup)}
@@ -149,7 +150,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   );
 }
 
-/** A native arena menu dressed as a compact control: "All arenas", then each arena (with "on now" when one is running). */
+/** The arena menu: "All arenas", then each arena (with "on now" when one is running). */
 function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
   arenas: string[];
   selectedArena: string;
@@ -157,17 +158,14 @@ function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
   onChoose: (name: string) => void;
 }) {
   const isLive = (name: string) => dayRows.some((row) => row.status === 'live' && (!name || row.session.arenaName?.trim() === name));
+  const options = [{ value: '', label: 'All arenas' }, ...arenas.map((name) => ({ value: name, label: name, live: isLive(name) }))];
   return (
-    <label className="tt-arena">
+    <Dropdown label="Arena" value={selectedArena} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
       <MapPin aria-hidden="true" className="tt-arena-pin" size={14} />
-      <span className="tt-arena-text" aria-hidden="true">{selectedArena || 'All arenas'}</span>
+      <span className="tt-arena-text">{selectedArena || 'All arenas'}</span>
       {isLive(selectedArena) && <span className="tt-arena-live" aria-hidden="true" />}
       <ChevronDown aria-hidden="true" className="tt-arena-chevron" size={14} />
-      <select aria-label="Arena" value={selectedArena} onChange={(event) => onChoose(event.target.value)}>
-        <option value="">All arenas</option>
-        {arenas.map((name) => <option key={name} value={name}>{name}{isLive(name) ? ' · on now' : ''}</option>)}
-      </select>
-    </label>
+    </Dropdown>
   );
 }
 

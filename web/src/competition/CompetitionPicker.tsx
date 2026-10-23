@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { api } from '../api';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
@@ -58,9 +58,7 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
     return () => controller.abort();
   }, [past, page, saved]);
 
-  const [query, setQuery] = useState('');
-  const search = query.trim().toLowerCase();
-  const matches = state.items.filter((item) => !search || item.name.toLowerCase().includes(search) || (item.location ?? '').toLowerCase().includes(search));
+  const matches = state.items;
   const now = new Date();
   const onToday = past ? [] : matches.filter((item) => isOnToday(item.startDate, item.endDate, now));
   const later = matches.filter((item) => !onToday.includes(item));
@@ -74,15 +72,10 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
       <div className="flex items-start gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <h1 id={headingId} className="mg-h1">{past ? 'Past competitions' : 'Pick a competition'}</h1>
-          <p className="mg-lede">{past ? 'Results and toplists from earlier events.' : 'Timetables, live scores and results. No account needed.'}</p>
+          {past && <p className="mg-lede">Results and toplists from earlier events.</p>}
         </div>
         {onClose && <button autoFocus onClick={onClose} className="mg-icon-btn" aria-label="Close competition picker"><X className="h-5 w-5" /></button>}
       </div>
-      <label className="mg-field">
-        <Search aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
-        <span className="sr-only">Search competitions</span>
-        <input type="search" placeholder="Search by name or venue" value={query} onChange={(e) => setQuery(e.target.value)} />
-      </label>
       {state.savedCopy && !loading && <p role="status" className="mg-notice">Showing a saved list. It will refresh when your connection returns.</p>}
       <div className="flex flex-col gap-[22px]" aria-busy={loading}>
         {onToday.length > 0 && (
@@ -102,7 +95,6 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
         {loading && (state.items.length === 0 ? <CompetitionListSkeleton /> : <p role="status" className="mg-meta py-3 text-center">Checking for changes…</p>)}
         {!loading && state.error && <div className="mg-card flex flex-col items-start gap-3 p-4" role="alert"><p>Couldn’t load competitions. Check your connection and try again.</p><button className="mg-btn mg-btn-primary" onClick={onRetry}>Try again</button></div>}
         {!loading && !state.error && state.items.length === 0 && <p className="mg-card p-4">{past ? 'No past competitions yet.' : 'No competitions available yet.'}</p>}
-        {!loading && !state.error && state.items.length > 0 && matches.length === 0 && <p className="mg-card p-4">No competitions match “{query.trim()}”{state.hasMore ? '. Load more to search further.' : '.'}</p>}
         {!loading && !state.error && state.hasMore && <button className="mg-btn mg-btn-secondary w-full" onClick={() => setPage((value) => value + 1)}>Load more competitions</button>}
       </div>
       <Link to={past ? '/competitions' : '/competitions/past'} onClick={onClose} className="mg-text-link">{past ? 'Upcoming competitions' : 'Past competitions'}</Link>

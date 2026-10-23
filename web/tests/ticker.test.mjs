@@ -16,7 +16,7 @@ const find = (items, kind) => items.find((item) => item.kind === kind);
 
 test('says what is on now using the age group and session number', () => {
   const items = tickerItems([session([heat(1, { label: 'Heat 1' })], { status: 1 })], [], now);
-  assert.deepEqual(items[0], { key: 'live-heat-1', kind: 'live', text: 'Now: Seniors Session 1 · Heat 1' });
+  assert.deepEqual(items[0], { key: 'live-heat-1', kind: 'live', text: 'Now: Seniors Session 1 · Heat 1', sessionId: 1 });
 });
 
 test('the live heat is the first one not yet finished', () => {
@@ -94,15 +94,15 @@ test('a briefing is labelled as one', () => {
 test('finals get their own kind, titled by age group, when next or live', () => {
   const finals = (extra) => session([heat(9, { label: 'Final A', raceRoundStage: 2 })], { id: 3, name: 'Seniors Finals', orderIndex: 90, ...extra });
   const next = tickerItems([finals({ scheduledStart: at(25) })], [], now);
-  assert.deepEqual(next[0], { key: 'next-heat-9', kind: 'finals', text: `Next ${clock(25)}: Seniors Finals · Final A` });
+  assert.deepEqual(next[0], { key: 'next-heat-9', kind: 'finals', text: `Next ${clock(25)}: Seniors Finals · Final A`, sessionId: 3 });
   const live = tickerItems([finals({ status: 1 })], [], now);
-  assert.deepEqual(live[0], { key: 'live-heat-9', kind: 'finals', text: 'Now: Seniors Finals · Final A' });
+  assert.deepEqual(live[0], { key: 'live-heat-9', kind: 'finals', text: 'Now: Seniors Finals · Final A', sessionId: 3 });
 });
 
 test('the latest race winner from the last half hour', () => {
   const heats = [heat(1, { finishedAt: at(-5), races: [race(1, 'Bending', 12, 'Ashdown'), race(2, 'Sock Race', 6, 'Pony Club A')] }), heat(2)];
   const items = tickerItems([session(heats, { status: 1 })], [], now);
-  assert.deepEqual(find(items, 'result'), { key: 'result-2', kind: 'result', text: 'Pony Club A won Sock Race' });
+  assert.deepEqual(find(items, 'result'), { key: 'result-2', kind: 'result', text: 'Pony Club A won Sock Race', sessionId: 1 });
   const stale = [heat(1, { finishedAt: at(-40), races: [race(1, 'Bending', 40, 'Ashdown')] })];
   assert.equal(find(tickerItems([session(stale, { status: 1 })], [], now), 'result'), undefined);
 });

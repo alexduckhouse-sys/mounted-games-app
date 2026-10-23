@@ -24,7 +24,7 @@ public class OperationsSchemaTests : IClassFixture<ApiFactory>
         await db.Database.ExecuteSqlRawAsync("DROP TABLE RaceScoreEvent; DROP TABLE RaceScoreState; DROP TABLE EquipmentAcknowledgement; DROP TABLE Rulebook;");
 
         await DbInitializer.SeedAsync(_factory.Services);
-        var book = new Rulebook { CompetitionId = competitionId, Title = "Synthetic rules", Edition = "2030", Text = "Plain text rules." };
+        var book = new Rulebook { Title = "Synthetic rules", Edition = "2030", Text = "Plain text rules." };
         db.Add(book);
         db.Add(new EquipmentAcknowledgement { CompetitionId = competitionId, ItemKey = "test-item" });
         db.Add(new RaceScoreState { RaceId = raceId, Revision = 1 });
@@ -41,6 +41,30 @@ public class OperationsSchemaTests : IClassFixture<ApiFactory>
         Assert.Equal(competitionCount, await db.Competitions.CountAsync());
         Assert.Equal(results, await db.Results.AsNoTracking().OrderBy(x => x.Id).Select(x => new { x.Id, x.TeamId, x.Points }).ToListAsync());
     }
+
+    [Fact]
+    public async Task PerCompetitionRulebooksBecomeSharedKeepingTheNewestCopy()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Database.ExecuteSqlRawAsync("""
+            DROP TABLE Rulebook;
+            CREATE TABLE "Rulebook" ("Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "CompetitionId" INTEGER NOT NULL, "Title" TEXT NOT NULL, "Edition" TEXT NOT NULL, "SourceUrl" TEXT, "Text" TEXT NOT NULL, "UpdatedAt" TEXT NOT NULL, "UpdatedByUserId" TEXT);
+            CREATE UNIQUE INDEX "IX_Rulebook_CompetitionId_Title_Edition" ON "Rulebook" ("CompetitionId", "Title", "Edition");
+            INSERT INTO "Rulebook" ("CompetitionId", "Title", "Edition", "Text", "UpdatedAt") VALUES
+                (1, 'Handbook', '2030', 'older copy', '2030-01-01 10:00:00'),
+                (2, 'Handbook', '2030', 'newer copy', '2030-02-01 10:00:00'),
+                (2, 'Games guide', '1', 'only copy', '2030-01-05 10:00:00');
+            """);
+
+        await DbInitializer.SeedAsync(_factory.Services);
+        db.ChangeTracker.Clear();
+
+        var books = await db.Set<Rulebook>().AsNoTracking().OrderBy(x => x.Title).ToListAsync();
+        Assert.Equal(new[] { "only copy", "newer copy" }, books.Select(x => x.Text));
+        Assert.Equal(0, await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM pragma_table_info('Rulebook') WHERE name = 'CompetitionId'""").SingleAsync());
+    }
+
     [Fact]
     public async Task ExistingSqliteDatabaseGainsWithdrawalTablesAndColumnWithoutLosingTeams()
     {

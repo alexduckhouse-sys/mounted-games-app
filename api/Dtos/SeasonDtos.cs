@@ -39,6 +39,7 @@ public record UpdateSeasonRequest(
 public record AddSeasonRoundRequest(int CompetitionSectionId, int? OrderIndex = null);
 public record SetSeasonRoundIncludedRequest(bool IsIncluded);
 
+public record SeasonLinkDto(Guid Id, string Title, int Year);
 public record SeasonRoundDto(
     Guid Id, int CompetitionId, string CompetitionName, DateTime CompetitionDate,
     int CompetitionSectionId, string SectionName, int OrderIndex, bool IsIncluded,

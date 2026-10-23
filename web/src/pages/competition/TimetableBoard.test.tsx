@@ -91,19 +91,22 @@ it('no longer offers the old "View complete timetable" toggle', () => {
   expect(screen.queryByRole('button', { name: /complete timetable|completed sessions/i })).toBeNull();
 });
 
-it('filters by arena from the native menu, flags the live arena and remembers the choice', () => {
+it('filters by arena from the menu, flags the live arena and remembers the choice', () => {
   renderBoard();
   const select = screen.getByRole('combobox', { name: 'Arena' });
-  expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual(['All arenas', 'Finished Arena', 'Main Arena · on now', 'Arena Two']);
+  fireEvent.click(select);
+  expect(within(screen.getByRole('listbox', { name: 'Arena' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['All arenas', 'Finished Arena', 'Main ArenaON NOW', 'Arena Two']);
   expect(screen.getByText('Heat 1')).toBeVisible();
 
-  fireEvent.change(select, { target: { value: 'Arena Two' } });
+  fireEvent.click(screen.getByRole('option', { name: 'Arena Two' }));
+  expect(screen.queryByRole('listbox')).toBeNull();
   expect(localStorage.getItem('mg.tt.arena.1')).toBe('Arena Two');
   expect(screen.getByText('Heat 2')).toBeVisible();
   expect(screen.queryByText('Heat 1')).toBeNull();
-  expect(select).toHaveValue('Arena Two');
+  expect(select).toHaveTextContent('Arena Two');
 
-  fireEvent.change(select, { target: { value: '' } });
+  fireEvent.click(select);
+  fireEvent.click(screen.getByRole('option', { name: 'All arenas' }));
   expect(localStorage.getItem('mg.tt.arena.1')).toBeNull();
   expect(screen.getByText('Heat 1')).toBeVisible();
 });
@@ -111,7 +114,7 @@ it('filters by arena from the native menu, flags the live arena and remembers th
 it('starts on the arena remembered on this phone', () => {
   localStorage.setItem('mg.tt.arena.1', 'Main Arena');
   const { container } = renderBoard();
-  expect(screen.getByRole('combobox', { name: 'Arena' })).toHaveValue('Main Arena');
+  expect(screen.getByRole('combobox', { name: 'Arena' })).toHaveTextContent('Main Arena');
   expect(container.querySelector('.tt-arena-live')).not.toBeNull();
   expect(screen.queryByText('Heat 2')).toBeNull();
 });

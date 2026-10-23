@@ -25,7 +25,7 @@ describe('ToplistView positions', () => {
     const sessions = [{ id: 1, label: 'S1', title: 'Session 1' }];
     const before = { ...list([0, 0]), bySession: { sessions, cells: new Map<number, number[]>() } };
     render(<ToplistView list={before} section={null} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Sessions' }));
+    await userEvent.click(screen.getByRole('button', { name: 'By session' }));
     const body = within(screen.getByRole('region', { name: 'Points by session' })).getAllByRole('row').slice(1);
     expect(body.map((r) => within(r).getAllByRole('cell')[0].textContent)).toEqual(['—', '—']);
   });
