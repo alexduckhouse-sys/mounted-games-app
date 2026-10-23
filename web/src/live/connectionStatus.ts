@@ -14,10 +14,15 @@ export interface ConnectionInputs {
   everConnected: boolean;
 }
 
-/** A short drop or the first connect shouldn't flash a pill. */
-export const GRACE_MS = 3_000;
+/**
+ * A drop or the first connect shouldn't flash a pill. The hub is a scale-to-zero container, so a cold
+ * start plus the join can take several seconds, and a phone waking up needs a moment to reconnect.
+ */
+export const GRACE_MS = 15_000;
+/** A device that reports no network is believed after this short wait, so a Wi-Fi blip stays quiet. */
+export const OFFLINE_GRACE_MS = 5_000;
 /** After this long without the live link, say we're checking instead of reconnecting. */
-export const RECONNECT_MS = 20_000;
+export const RECONNECT_MS = 45_000;
 
 const FOCUS_PAGE = /\/competitions\/\d+\/(?:session\/\d+|scoring)\/?$/;
 
@@ -34,9 +39,12 @@ export function pollIntervalMs(focusPage: boolean, failures: number): number {
 
 export function liveState(inputs: ConnectionInputs, now: number): LiveState {
   if (inputs.connected) return 'live';
-  if (!inputs.online || inputs.failures > 0) return 'offline';
   const downFor = inputs.downSince == null ? 0 : now - inputs.downSince;
+  if (!inputs.online) return downFor < OFFLINE_GRACE_MS ? 'connecting' : 'offline';
+  // A failed timetable check only matters once the live link has stayed down too: one slow request
+  // during a routine reconnect isn't "offline".
   if (downFor < GRACE_MS) return 'connecting';
+  if (inputs.failures > 0) return 'offline';
   if (inputs.everConnected && downFor < RECONNECT_MS) return 'reconnecting';
   return 'polling';
 }

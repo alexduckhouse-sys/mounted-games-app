@@ -11,6 +11,7 @@ import { useTicker } from '../components/TickerContext';
 import { useLiveHub } from '../live/useLiveHub';
 import { useConnectionStatus } from '../live/ConnectionStatusContext';
 import { isFocusPage, pollIntervalMs } from '../live/connectionStatus';
+import { useDownSince } from '../live/useDownSince';
 import { HEAT_SAVED } from '../offline/useScoreOutbox';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
 import { applyResultsUpdate, replaceHeat, type ResultsUpdate } from '../lib/liveUpdates';
@@ -287,13 +288,10 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   // Tell the header's connection pill what is happening.
   const retry = useCallback(() => { setRetrying(true); load(); reconnect(); }, [load, reconnect]);
   const { setStatus } = useConnectionStatus();
-  const downSince = useRef<number | null>(null);
-  const everConnected = useRef(false);
+  const { downSince, everConnected } = useDownSince(connected);
   useEffect(() => {
-    if (connected) { everConnected.current = true; downSince.current = null; }
-    else downSince.current ??= Date.now();
-    setStatus({ connected, online, failures, downSince: downSince.current, everConnected: everConnected.current, updatedAt, intervalMs, retrying, retry });
-  }, [connected, online, failures, updatedAt, intervalMs, retrying, retry, setStatus]);
+    setStatus({ connected, online, failures, downSince, everConnected, updatedAt, intervalMs, retrying, retry });
+  }, [connected, online, failures, downSince, everConnected, updatedAt, intervalMs, retrying, retry, setStatus]);
   useEffect(() => () => setStatus(null), [setStatus]);
 
   if (error && !data) return (

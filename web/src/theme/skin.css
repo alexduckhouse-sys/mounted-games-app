@@ -166,16 +166,20 @@ body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-ink)); 
 .mg-badge-late { background: #FBEED0; color: #7A5300; }
 .mg-badge-notice { background: #fff; color: rgb(var(--mg-header)); }
 .mg-badge-outline { border: 1px solid rgb(var(--mg-control)); color: rgb(var(--mg-body)); }
+/* The pill floats just under the top bar (its sticky wrapper is the positioned parent), so showing or
+   hiding it never moves the bar's own controls. Colours are theme tokens, so it reads on every skin. */
 .mg-conn-pill {
-  position: relative; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 15px;
-  border: 0; font: 600 12.5px/1 'Barlow', sans-serif; white-space: nowrap; cursor: pointer;
+  position: absolute; top: calc(100% + 6px); right: 12px; z-index: 5; display: inline-flex; align-items: center; gap: 5px;
+  height: 24px; padding: 0 9px; border-radius: 12px; border: 1px solid rgb(var(--mg-control));
+  background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading));
+  font: 600 11.5px/1 'Barlow', sans-serif; white-space: nowrap; cursor: pointer; box-shadow: 0 1px 4px rgb(0 0 0 / .18);
 }
-.mg-conn-pill::after { content: ''; position: absolute; inset: -7px -4px; } /* 44 px tap target */
-.mg-conn-pill svg { width: 15px; height: 15px; }
+.mg-conn-pill::after { content: ''; position: absolute; inset: -10px -6px; } /* 44 px tap target */
+.mg-conn-pill svg { width: 12px; height: 12px; }
 .mg-conn-pill:disabled { cursor: default; }
-.mg-conn-reconnecting { background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); }
-.mg-conn-polling { background: rgba(255,255,255,.12); color: #fff; box-shadow: inset 0 0 0 1px rgb(var(--mg-header-line)); }
-.mg-conn-offline { background: #fff; color: rgb(var(--mg-elim)); }
+.mg-conn-reconnecting { background: rgb(var(--mg-late-bg)); border-color: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); }
+.mg-conn-polling { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-control)); color: rgb(var(--mg-heading)); }
+.mg-conn-offline { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-elim)); color: rgb(var(--mg-elim)); }
 .mg-conn-spin { animation: mg-conn-spin 1s linear infinite; }
 @keyframes mg-conn-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .mg-conn-spin { animation: none; } }
