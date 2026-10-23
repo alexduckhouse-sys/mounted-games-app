@@ -21,15 +21,19 @@ public sealed class StandingsService(AppDbContext db)
 
         var teams = await teamsQ.ToListAsync(ct);
         var tiers = await FinalsTiers.LoadAsync(db, competitionId, ct);
+        // Tack check bonus points are part of the total (so they move a team within its final, never past one)
+        // and also reported on their own so the table shows why a total changed. They are not wins.
+        var bonus = await TackCheck.TackCheckBonus.ForCompetitionAsync(db, competitionId, ct);
 
         return teams.Select(t => new StandingRow(
                 t.Id, t.DisplayName, t.Club?.Name ?? string.Empty, t.BibColour,
-                t.Results.Sum(r => r.Points),
+                t.Results.Sum(r => r.Points) + bonus.GetValueOrDefault(t.Id),
                 t.Results.Count,
                 t.Results.Count(r => r.Placing == 1 && !r.Eliminated),
                 t.Results.Count(r => r.Eliminated && ResultStatuses.Of(r) == ResultStatus.Eliminated),
                 tiers.TierOf(t.Id),
-                t.EntryStatus != TeamEntryStatus.Active))
+                t.EntryStatus != TeamEntryStatus.Active,
+                bonus.GetValueOrDefault(t.Id)))
             .OrderBy(r => r.FinalTier ?? FinalsTiers.NotInFinals)
             .ThenByDescending(r => r.TotalPoints)
             .ThenByDescending(r => r.Wins)

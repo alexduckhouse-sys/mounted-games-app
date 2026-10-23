@@ -40,9 +40,10 @@ public record PrintableScoreHeatDto(
     DateTime? ScheduledStart, IReadOnlyList<PrintableScoreRaceDto> Races);
 public record PrintableScoreSheetsDto(PrintableCompetitionDto Competition, IReadOnlyList<PrintableScoreHeatDto> Heats);
 
+/// <summary><c>BonusPoints</c> (tack check bonus) is already inside <c>TotalPoints</c>.</summary>
 public record PrintableResultRowDto(
     int Rank, int TeamId, string TeamName, string ClubName,
-    int TotalPoints, int RacesRun, int Wins, int Eliminations);
+    int TotalPoints, int RacesRun, int Wins, int Eliminations, int BonusPoints = 0);
 public record PrintableSectionResultsDto(
     int CompetitionSectionId, string SectionName, IReadOnlyList<PrintableResultRowDto> Results);
 public record PrintableResultsDto(
