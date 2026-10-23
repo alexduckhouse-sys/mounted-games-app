@@ -48,7 +48,7 @@ export function DetailsTab() {
   const [lockBusy, setLockBusy] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
 
-  usePageHeader({ title: 'Details', subtitle: `${competition.name}${competitionDateText(competition.startDate, competition.endDate) ? ` · ${competitionDateText(competition.startDate, competition.endDate)}` : ''}`, onRefresh: reload, refreshLabel: 'Refresh details' });
+  usePageHeader({ title: 'Details', subtitle: `${competition.name}${competitionDateText(competition.startDate, competition.endDate) ? ` · ${competitionDateText(competition.startDate, competition.endDate)}` : ''}` });
 
   async function refreshSignups() {
     if (!mayOrganise) return;
