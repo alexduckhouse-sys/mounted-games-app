@@ -1,0 +1,159 @@
+import { describe, expect, it } from 'vitest';
+import type { ClubPayouts } from '../types';
+import {
+  bankLine, bankProblems, businessTypeLabel, digitsOnly, emptyBank, firstOpenStep, formFrom, formatIban, formatSortCode, friendlyDate,
+  isValidBic, maskedAccount, needsRegistrationNumber, normaliseAccountNumber, normaliseIban, normaliseSortCode, payoutsLine, regionLabel,
+  registrationLabel, scheduleLabel, stepOfField, stepProblems, validateDateOfBirth, validateDescriptor, validateEmail, validatePhone,
+  validatePostcode, validateRegistrationNumber, validateVat, BULLETS,
+} from './payouts';
+
+const today = new Date(2026, 9, 23);
+
+const saved = (extra: Partial<ClubPayouts> = {}): ClubPayouts => ({
+  clubId: 1, clubName: 'Ashdown PC', status: 1, businessType: 1, region: 0, currency: 'GBP',
+  legalName: 'Ashdown Pony Club', tradingName: null, addressLine1: '1 High Street', addressLine2: null, city: 'Reading', postcode: 'RG1 1AB',
+  contactEmail: 'a@example.org', contactPhone: '+44 7700 900123', registrationNumber: null, vatNumber: null,
+  personFullName: 'Ann Smith', personDateOfBirth: '1985-03-14', statementDescriptor: 'ASHDOWN PC', schedule: 1,
+  bank: null, missing: [], updatedAt: null, ...extra,
+});
+
+describe('number and bank formatting', () => {
+  it('keeps digits only, up to a limit', () => {
+    expect(digitsOnly('12e-3 4x', 8)).toBe('1234');
+    expect(digitsOnly('123456789', 8)).toBe('12345678');
+  });
+  it('shows a sort code as 12-34-56 while typing', () => {
+    expect(formatSortCode('1')).toBe('1');
+    expect(formatSortCode('123')).toBe('12-3');
+    expect(formatSortCode('12-34-5678')).toBe('12-34-56');
+    expect(formatSortCode('')).toBe('');
+  });
+  it('accepts a six-digit sort code and an eight-digit account number only', () => {
+    expect(normaliseSortCode('12-34-56')).toBe('123456');
+    expect(normaliseSortCode('12-34-5')).toBeNull();
+    expect(normaliseAccountNumber('1234 5678')).toBe('12345678');
+    expect(normaliseAccountNumber('1234567')).toBeNull();
+  });
+  it('checks an IBAN by shape, country length and mod 97', () => {
+    expect(normaliseIban('ie29 aibk 9311 5212 3456 78')).toBe('IE29AIBK93115212345678');
+    expect(normaliseIban('GB82WEST12345698765432')).not.toBeNull();
+    expect(normaliseIban('IE29AIBK93115212345679')).toBeNull();
+    expect(normaliseIban('IE29AIBK9311521234567')).toBeNull();
+    expect(normaliseIban('12')).toBeNull();
+    expect(normaliseIban('1234567890123456')).toBeNull();
+    expect(normaliseIban('XX82WEST12345698765432')).toBeNull();
+  });
+  it('groups an IBAN in fours as it is typed', () => {
+    expect(formatIban('ie29aibk93115212345678')).toBe('IE29 AIBK 9311 5212 3456 78');
+    expect(formatIban('ie29 *')).toBe('IE29');
+  });
+  it('checks a BIC and masks an account', () => {
+    expect(isValidBic('aibkie2d')).toBe(true);
+    expect(isValidBic('AIBKIE2DXXX')).toBe(true);
+    expect(isValidBic('nope')).toBe(false);
+    expect(maskedAccount('1234')).toBe(`${BULLETS}1234`);
+    expect(maskedAccount(null)).toBe('');
+    expect(bankLine(null)).toBe('');
+    expect(bankLine({ accountHolder: 'x', bankName: 'Barclays', sortCode: '20-12-34', maskedAccount: `${BULLETS}1234`, ibanCountry: null })).toBe(`Barclays ${BULLETS}1234`);
+    expect(bankLine({ accountHolder: 'x', bankName: null, sortCode: null, maskedAccount: `${BULLETS}5678`, ibanCountry: 'IE' })).toBe(`${BULLETS}5678`);
+  });
+});
+
+describe('field checks', () => {
+  it('checks email and phone', () => {
+    expect(validateEmail('a@b.co')).toBeNull();
+    expect(validateEmail('nope')).not.toBeNull();
+    expect(validatePhone('+44 7700 900123')).toBeNull();
+    expect(validatePhone('abc')).not.toBeNull();
+    expect(validatePhone('123')).not.toBeNull();
+  });
+  it('checks postcodes by region', () => {
+    expect(validatePostcode('rg1  1ab', 0)).toBeNull();
+    expect(validatePostcode('12345', 0)).not.toBeNull();
+    expect(validatePostcode('D02 X285', 1)).toBeNull();
+    expect(validatePostcode('!!', 1)).not.toBeNull();
+  });
+  it('checks registration, VAT and descriptor', () => {
+    expect(validateRegistrationNumber('1234567')).toBeNull();
+    expect(validateRegistrationNumber('12')).not.toBeNull();
+    expect(validateVat('GB123456789', 0)).toBeNull();
+    expect(validateVat('123456789', 0)).toBeNull();
+    expect(validateVat('xyz', 0)).not.toBeNull();
+    expect(validateVat('IE1234567A', 1)).toBeNull();
+    expect(validateVat('12', 1)).not.toBeNull();
+    expect(validateDescriptor('ASHDOWN PC')).toBeNull();
+    expect(validateDescriptor('ABC')).not.toBeNull();
+    expect(validateDescriptor('12345 678')).not.toBeNull();
+    expect(validateDescriptor('Bad*Name here')).not.toBeNull();
+  });
+  it('checks a date of birth', () => {
+    expect(validateDateOfBirth('1985-03-14', today)).toBeNull();
+    expect(validateDateOfBirth('', today)).toBe('Enter their date of birth.');
+    expect(validateDateOfBirth('2002-02-30', today)).toBe('Enter a real date.');
+    expect(validateDateOfBirth('2010-01-01', today)).toBe('They must be at least 18.');
+    expect(validateDateOfBirth('1800-01-01', today)).toBe('Check the date of birth.');
+  });
+});
+
+describe('labels and steps', () => {
+  it('names things', () => {
+    expect(businessTypeLabel(2)).toBe('Registered charity');
+    expect(businessTypeLabel(null)).toBe('');
+    expect(regionLabel(1)).toBe('Ireland or the EU');
+    expect(scheduleLabel(2)).toBe('After each event');
+    expect(needsRegistrationNumber(2)).toBe(true);
+    expect(needsRegistrationNumber(1)).toBe(false);
+    expect(registrationLabel(2)).toBe('Charity number');
+    expect(registrationLabel(3)).toBe('Company number');
+  });
+  it('maps a field to its step', () => {
+    expect(stepOfField('businessType')).toBe(1);
+    expect(stepOfField('postcode')).toBe(2);
+    expect(stepOfField('personFullName')).toBe(3);
+    expect(stepOfField('iban')).toBe(4);
+    expect(stepOfField('bank')).toBe(4);
+    expect(stepOfField('statementDescriptor')).toBe(5);
+  });
+  it('opens on the right step', () => {
+    expect(firstOpenStep(saved({ status: 2 }))).toBe(6);
+    expect(firstOpenStep(saved({ status: 0 }))).toBe(1);
+    expect(firstOpenStep(saved({ missing: ['statementDescriptor', 'bank'] }))).toBe(4);
+    expect(firstOpenStep(saved({ missing: [] }))).toBe(6);
+  });
+  it('formats dates and the editor line', () => {
+    expect(friendlyDate('1985-03-14')).toBe('14 March 1985');
+    expect(friendlyDate(null)).toBe('');
+    expect(payoutsLine({ clubName: 'Ashdown PC', maskedAccount: `${BULLETS}1234`, ready: true })).toBe(`Entry fees are paid out to Ashdown PC — ${BULLETS}1234 · Ready`);
+    expect(payoutsLine({ clubName: 'Ashdown PC', maskedAccount: null, ready: false })).toBe("Ashdown PC hasn't finished setting up payouts yet.");
+  });
+});
+
+describe('step and bank problems', () => {
+  const form = formFrom(saved());
+  it('has no problems for good details', () => {
+    for (const step of [1, 2, 3, 5] as const) expect(stepProblems(step, form, today)).toEqual({});
+  });
+  it('turns a missing form into a form of empty strings', () => {
+    const blank = formFrom(saved({ businessType: null, legalName: null, addressLine1: null, addressLine2: null, city: null, postcode: null, contactEmail: null, contactPhone: null, personFullName: null, personDateOfBirth: null, statementDescriptor: null, tradingName: null, vatNumber: null, registrationNumber: null }));
+    expect(Object.keys(stepProblems(1, blank, today))).toEqual(['businessType']);
+    expect(Object.keys(stepProblems(2, blank, today))).toEqual(['legalName', 'addressLine1', 'city', 'postcode', 'contactEmail', 'contactPhone']);
+    expect(Object.keys(stepProblems(3, blank, today))).toEqual(['personFullName', 'personDateOfBirth']);
+    expect(Object.keys(stepProblems(5, blank, today))).toEqual(['statementDescriptor']);
+  });
+  it('wants a charity or company number only for those types, and checks one if given', () => {
+    expect(stepProblems(2, { ...form, businessType: 2, registrationNumber: '' }, today).registrationNumber).toBe('Enter the charity number.');
+    expect(stepProblems(2, { ...form, businessType: 3, registrationNumber: '' }, today).registrationNumber).toBe('Enter the company number.');
+    expect(stepProblems(2, { ...form, businessType: 1, registrationNumber: '' }, today)).toEqual({});
+    expect(stepProblems(2, { ...form, businessType: 1, registrationNumber: '12' }, today).registrationNumber).toBeDefined();
+    expect(stepProblems(2, { ...form, vatNumber: 'xyz' }, today).vatNumber).toBeDefined();
+    expect(stepProblems(2, { ...form, vatNumber: 'GB123456789' }, today)).toEqual({});
+  });
+  it('checks the bank form for each region without echoing the numbers', () => {
+    expect(Object.keys(bankProblems(emptyBank, 0))).toEqual(['accountHolder', 'sortCode', 'accountNumber']);
+    expect(Object.keys(bankProblems(emptyBank, 1))).toEqual(['accountHolder', 'iban']);
+    expect(bankProblems({ ...emptyBank, accountHolder: 'x'.repeat(151) }, 0).accountHolder).toBe('Use 150 characters or fewer.');
+    expect(bankProblems({ accountHolder: 'A', sortCode: '12-34-56', accountNumber: '12345678', iban: '', bic: '' }, 0)).toEqual({});
+    expect(bankProblems({ accountHolder: 'A', sortCode: '', accountNumber: '', iban: 'IE29 AIBK 9311 5212 3456 78', bic: 'nope' }, 1)).toEqual({ bic: 'A BIC has 8 or 11 letters and numbers.' });
+    for (const message of Object.values(bankProblems({ ...emptyBank, accountHolder: 'A', sortCode: '999', accountNumber: '4242' }, 0))) expect(message).not.toMatch(/4242|999/);
+  });
+});

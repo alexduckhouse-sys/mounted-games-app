@@ -48,6 +48,7 @@ public record CompetitionDetail(
     bool StaffChatEnabled = true,
     bool IsDemo = false,
     string? TermsText = null,
+    PayoutsToDto? PayoutsTo = null,
     IReadOnlyList<string>? LaneHatbands = null);
 
 public record CreateCompetitionRequest(

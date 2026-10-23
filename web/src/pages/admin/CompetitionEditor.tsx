@@ -7,7 +7,7 @@ import {
 } from '../../lib/creatorDraft';
 import { draftFromCompetition, realFixedItems, teamCountsOf } from '../../lib/creatorLoad';
 import { loadRaceTemplates } from '../../lib/raceTemplates';
-import type { CompetitionDetail } from '../../types';
+import type { CompetitionDetail, PayoutsTo } from '../../types';
 import { AboutStep } from './creator/AboutStep';
 import { PaymentNotesStep } from './creator/PaymentNotesStep';
 import { RacesStep } from './creator/RacesStep';
@@ -38,7 +38,7 @@ function clockTime(iso: string): string {
 
 export function CompetitionEditor() {
   const navigate = useNavigate();
-  const { canOrganise } = useAuth();
+  const { canOrganise, user, hasRole } = useAuth();
   const { id } = useParams<{ id: string }>();
   const editingId = id ? parseInt(id, 10) : null;
   const isEdit = editingId != null;
@@ -57,6 +57,9 @@ export function CompetitionEditor() {
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<{ message: string; competitionId: number | null } | null>(null);
   const [templates, setTemplates] = useState<string[]>([]);
+  // Where entry fees are paid out: the event's own club when editing, else the signed-in person's club. Read-only here.
+  const [clubPayouts, setClubPayouts] = useState<PayoutsTo | null>(null);
+  const clubId = user?.clubId ?? null;
   const [savedAt, setSavedAt] = useState<string | null>(stored?.savedAt ?? null);
   const pageRef = useRef<HTMLDivElement>(null);
   const firstSave = useRef(true);
@@ -81,6 +84,15 @@ export function CompetitionEditor() {
     loadRaceTemplates().then((list) => { if (!cancelled) setTemplates(list.map((t) => t.name)); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (isEdit || clubId == null) return;
+    let cancelled = false;
+    api.get<PayoutsTo>(`/clubs/${clubId}/payouts/summary`)
+      .then((r) => { if (!cancelled && typeof r.data?.clubName === 'string') setClubPayouts(r.data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isEdit, clubId]);
 
   // Autosave on every change. The first run only restores what was there.
   useEffect(() => {
@@ -187,7 +199,7 @@ export function CompetitionEditor() {
           {step === 'sections' && <SectionsStep {...props} />}
           {step === 'structure' && <StructureStep {...props} templates={templates} teamCounts={teamCounts} />}
           {step === 'races' && <RacesStep {...props} templates={templates} />}
-          {step === 'payment' && <PaymentNotesStep {...props} />}
+          {step === 'payment' && <PaymentNotesStep {...props} payoutsTo={isEdit ? competition?.payoutsTo ?? null : clubPayouts} canSetUpPayouts={hasRole('Manager') || hasRole('Admin')} />}
           {step === 'review' && <ReviewStep {...props} teamCounts={teamCounts} real={real} />}
         </div>
       </div>

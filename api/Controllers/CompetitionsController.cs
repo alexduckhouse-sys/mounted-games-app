@@ -9,6 +9,7 @@ using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Payouts;
 using MountedGames.Api.Services.Streaming;
 
 namespace MountedGames.Api.Controllers;
@@ -145,7 +146,8 @@ public class CompetitionsController : ControllerBase
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
             c.SignupsLocked, c.Icon, c.CreatedByUserId,
-            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText, LaneHatbands: PlannedRaceList.Read(c.LaneHatbands));
+            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText,
+            PayoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId), LaneHatbands: PlannedRaceList.Read(c.LaneHatbands));
     }
 
     /// <summary>
@@ -188,7 +190,8 @@ public class CompetitionsController : ControllerBase
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
             c.SignupsLocked, c.Icon, c.CreatedByUserId,
-            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText, LaneHatbands: PlannedRaceList.Read(c.LaneHatbands));
+            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText,
+            PayoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId), LaneHatbands: PlannedRaceList.Read(c.LaneHatbands));
     }
 
     internal sealed record SessionOutline(int Id, string? ArenaName, SessionStatus Status, int OrderIndex);

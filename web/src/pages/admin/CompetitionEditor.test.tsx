@@ -621,7 +621,7 @@ describe('CompetitionEditor: editing', () => {
     expect(screen.getByLabelText('Organiser')).toHaveValue('Cheshire PC');
     for (const name of ['Review', 'Structure & timing', 'Races']) expect(screen.getByRole('button', { name })).toBeEnabled();
     await userEvent.click(step('Payment & notes'));
-    expect(screen.getByLabelText('Where entry fees go (optional)')).toHaveValue('Bank 12-34');
+    expect(screen.getByLabelText('How riders pay for now (optional)')).toHaveValue('Bank 12-34');
     expect(screen.getByLabelText('Notes for riders (optional)')).toHaveValue('Notes');
     await userEvent.click(step('When & where'));
     expect(screen.getByLabelText('Venue')).toHaveValue('Tatton');
@@ -762,6 +762,51 @@ describe('CompetitionEditor: editing', () => {
     await screen.findByDisplayValue('Autumn Area');
     await userEvent.click(step('Review'));
     expect(screen.getByText('Save changes', { selector: 'button' })).toBeEnabled();
+  });
+
+  it('says where entry fees are paid out, from the event itself', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/competitions/7') return { data: { ...saved, payoutsTo: { clubName: 'Cheshire PC', maskedAccount: '\u2022\u2022\u2022\u20221234', ready: true } } };
+      if (url === '/race-templates') return { data: [] };
+      return { data: {} };
+    });
+    mount('/admin/competitions/7');
+    await screen.findByDisplayValue('Autumn Area');
+    await userEvent.click(step('Payment & notes'));
+    expect(await screen.findByText('Entry fees are paid out to Cheshire PC \u2014 \u2022\u2022\u2022\u20221234 \u00b7 Ready')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Set up payouts' })).not.toBeInTheDocument();
+    expect(screen.getByText('Test mode: no real money moves yet.')).toBeInTheDocument();
+  });
+
+  it('links an admin to Set up payouts when the club is not ready', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/competitions/7') return { data: { ...saved, payoutsTo: { clubName: 'Cheshire PC', maskedAccount: null, ready: false } } };
+      if (url === '/race-templates') return { data: [] };
+      return { data: {} };
+    });
+    mount('/admin/competitions/7');
+    await screen.findByDisplayValue('Autumn Area');
+    await userEvent.click(step('Payment & notes'));
+    expect(await screen.findByText(/Cheshire PC hasn't finished setting up payouts yet/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Set up payouts' })).toHaveAttribute('href', '/me/payouts');
+  });
+
+  it('asks a trainer to get their manager to set payouts up, using the club summary for a new event', async () => {
+    localStorage.clear();
+    signIn(['Trainer']);
+    const auth = JSON.parse(localStorage.getItem('mg.auth')!);
+    auth.user.clubId = 5;
+    localStorage.setItem('mg.auth', JSON.stringify(auth));
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/clubs/5/payouts/summary') return { data: { clubName: 'Cheshire PC', maskedAccount: null, ready: false } };
+      if (url === '/race-templates') return { data: [] };
+      return { data: {} };
+    });
+    seed('payment');
+    mount();
+    expect(await screen.findByText(/Cheshire PC hasn't finished setting up payouts yet/)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Set up payouts' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Ask your club.s manager/)).toBeInTheDocument();
   });
 
   it('keeps a local draft instead of reloading from the server', async () => {

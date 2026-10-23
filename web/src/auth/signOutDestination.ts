@@ -2,7 +2,7 @@ import { readCompetitionCookie } from '../competition/preference';
 
 /**
  * Where to land after signing out: the timetable of the competition being followed, otherwise the events page.
- * The events list lives at `/` (there is no separate `/events` route).
+ * `/` shows the events list unless a competition is remembered; `/events` always does.
  */
 export function signOutDestination(): string {
   try {

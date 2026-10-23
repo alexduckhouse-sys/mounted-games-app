@@ -134,6 +134,16 @@ describe('NeedsYouProvider', () => {
     expect(screen.getByTestId('count')).toHaveTextContent('1');
   });
 
+  it('keeps the server\'s message for the failure, and clears it on the next try', async () => {
+    vi.mocked(api.post).mockRejectedValueOnce({ response: { status: 409, data: { message: 'Could not approve this request. Refresh the list and try again.' } } });
+    mount(['Admin']);
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+    await act(async () => { await seen().review(request, 'approve'); });
+    expect(seen().reviewError).toBe('Could not approve this request. Refresh the list and try again.');
+    await act(async () => { await seen().review(request, 'approve'); });
+    expect(seen().reviewError).toBeNull();
+  });
+
   it('does nothing when used outside the provider', async () => {
     render(<Probe />);
     expect(screen.getByTestId('count')).toHaveTextContent('0');

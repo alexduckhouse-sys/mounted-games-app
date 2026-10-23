@@ -320,6 +320,62 @@ export interface CompetitionDetail {
   termsText?: string | null;
   /** The hatband colour in each lane, index 0 being lane 1; set when the competition is created. Null when not set. */
   laneHatbands?: string[] | null;
+  /** Where entry fees are paid out: the organiser's club and its masked account. Public, no personal data. */
+  payoutsTo?: PayoutsTo | null;
+}
+
+/** The public summary of a club's payouts. `maskedAccount` is like "••••1234" and only appears once `ready`. */
+export interface PayoutsTo {
+  clubName: string;
+  maskedAccount: string | null;
+  ready: boolean;
+}
+
+/** Payout set-up status: 0 not started, 1 in progress, 2 ready. */
+export type PayoutStatus = 0 | 1 | 2;
+/** 0 individual or sole trader, 1 club or association, 2 registered charity, 3 company. */
+export type PayoutBusinessType = 0 | 1 | 2 | 3;
+/** 0 UK (GBP), 1 Ireland or the EU (EUR). */
+export type PayoutRegion = 0 | 1;
+/** 0 daily, 1 weekly, 2 after each event. */
+export type PayoutSchedule = 0 | 1 | 2;
+
+/** Saved bank details as the API returns them: masked only. */
+export interface PayoutBank {
+  accountHolder: string;
+  bankName: string | null;
+  sortCode: string | null;
+  maskedAccount: string;
+  ibanCountry: string | null;
+}
+
+/** A club's payout set-up, for its managers and admins. Includes the responsible person's date of birth. */
+export interface ClubPayouts {
+  clubId: number;
+  clubName: string;
+  status: PayoutStatus;
+  businessType: PayoutBusinessType | null;
+  region: PayoutRegion;
+  currency: string;
+  legalName: string | null;
+  tradingName: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  postcode: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  registrationNumber: string | null;
+  vatNumber: string | null;
+  personFullName: string | null;
+  /** YYYY-MM-DD. */
+  personDateOfBirth: string | null;
+  statementDescriptor: string | null;
+  schedule: PayoutSchedule;
+  bank: PayoutBank | null;
+  /** Field keys still missing or invalid before the account can be finished. */
+  missing: string[];
+  updatedAt: string | null;
 }
 
 export interface MySignup {

@@ -34,7 +34,7 @@ describe('FollowingPage', () => {
   it('has a way to choose a competition when nothing is starred', () => {
     mount();
     expect(screen.getByText('No starred teams yet')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Choose a competition' })).toHaveAttribute('href', '/competitions');
+    expect(screen.getByRole('link', { name: 'Choose a competition' })).toHaveAttribute('href', '/events');
   });
 
   it('shows one block per event, with each starred team and its next heat', async () => {
@@ -52,7 +52,7 @@ describe('FollowingPage', () => {
     const second = await screen.findByRole('region', { name: 'Northern Winter League R1' });
     expect(within(second).queryByText('LIVE')).not.toBeInTheDocument();
     expect(within(second).getByText('Thu 7 Nov')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Follow teams at another event' })).toHaveAttribute('href', '/competitions');
+    expect(screen.getByRole('link', { name: 'Follow teams at another event' })).toHaveAttribute('href', '/events');
   });
 
   it('tells the user about a followed team the event no longer lists', async () => {

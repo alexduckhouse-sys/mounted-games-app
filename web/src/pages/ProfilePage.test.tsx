@@ -114,6 +114,11 @@ describe('ProfilePage: my club', () => {
     expect(await section('My club').findByRole('link', { name: /Members/ })).toHaveAttribute('href', '/me/members');
   });
 
+  it('gives a team manager a Payouts row', async () => {
+    mount({ roles: ['Manager'] });
+    expect(await section('My club').findByRole('link', { name: /Payouts/ })).toHaveAttribute('href', '/me/payouts');
+  });
+
   it('shows an admin the Members row too', async () => {
     responses['/trainer/my-teams'] = [];
     mount({ roles: ['Admin'], clubName: null });
@@ -259,16 +264,26 @@ describe('ProfilePage: needs you', () => {
     mount({ roles: ['Admin'], editMode: true });
     const needs = await needsSection();
     await userEvent.click(needs.getAllByRole('button', { name: 'Approve' })[0]);
-    expect(await needs.findByRole('alert')).toHaveTextContent('Could not update this request. Try again.');
+    expect(await needs.findByRole('alert')).toHaveTextContent('Could not approve this request. Check your connection and try again.');
     expect(needs.getByText('Sam Lee')).toBeInTheDocument();
   });
 
-  it('keeps the buttons off until the admin switches on edit mode', async () => {
+  it("shows the server's own words when it refuses", async () => {
+    vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { message: 'Could not approve this request. Refresh the list and try again.' } } });
+    mount({ roles: ['Admin'], editMode: false });
+    const needs = await needsSection();
+    await userEvent.click(needs.getAllByRole('button', { name: 'Approve' })[0]);
+    expect(await needs.findByRole('alert')).toHaveTextContent('Refresh the list and try again.');
+  });
+
+  it('lets an admin approve or decline without edit mode', async () => {
     mount({ roles: ['Admin'], editMode: false });
     const needs = await needsSection();
     const approve = needs.getAllByRole('button', { name: 'Approve' })[0];
-    expect(approve).toBeDisabled();
-    expect(needs.getAllByRole('button', { name: 'Decline' })[0]).toBeDisabled();
+    expect(approve).toBeEnabled();
+    expect(needs.getAllByRole('button', { name: 'Decline' })[0]).toBeEnabled();
+    await userEvent.click(approve);
+    expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r1/approve');
   });
 
   it('does not ask a trainer or a member for join requests', () => {

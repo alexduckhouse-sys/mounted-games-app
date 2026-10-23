@@ -78,14 +78,16 @@ public class SignupTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Create_Returns403_ForAdmin()
+    public async Task Create_LetsAnAdminEnter_ForTestingAndClubUse()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1500);
         var admin = await _f.AdminAsync();
 
-        var resp = await admin.PostAsJsonAsync(Url(section), Entry());
+        var resp = await admin.PostAsJsonAsync(Url(section), Entry("Admin Entrant"));
 
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var dto = await resp.ReadAsync<SectionSignupDto>();
+        Assert.Equal(("Admin Entrant", 1500, SignupPaymentStatus.Pending), (dto.FullName, dto.AmountMinor, dto.Status));
     }
 
     [Fact]
