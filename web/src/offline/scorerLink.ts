@@ -8,6 +8,7 @@ import type { ScorerSession } from '../types';
  */
 const TOKEN_KEY = 'mg.scorer.token';
 const SESSION_KEY = 'mg.scorer.session';
+const SESSION_AT_KEY = 'mg.scorer.sessionAt';
 
 /** The token in a URL fragment such as `#t=mgs_abc`, or null. */
 export function tokenFromHash(hash: string): string | null {
@@ -30,7 +31,7 @@ export function writeScorerToken(token: string): boolean {
 
 /** Forget the token and the saved timetable, e.g. when the link has been withdrawn. */
 export function clearScorerToken() {
-  try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(SESSION_KEY); } catch { /* storage unavailable */ }
+  try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(SESSION_KEY); localStorage.removeItem(SESSION_AT_KEY); } catch { /* storage unavailable */ }
 }
 
 /** A separate client, so a scorer link never touches a signed-in account's token or clears it on a 401. */
@@ -63,7 +64,15 @@ export function readSavedScorerSession(): ScorerSession | null {
 }
 
 export function writeSavedScorerSession(session: ScorerSession) {
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch { /* storage full: the live copy still works */ }
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    localStorage.setItem(SESSION_AT_KEY, new Date().toISOString());
+  } catch { /* storage full: the live copy still works */ }
+}
+
+/** When the saved timetable last came from the server, or null if unknown. */
+export function readSavedScorerSessionAt(): string | null {
+  try { return localStorage.getItem(SESSION_AT_KEY) || null; } catch { return null; }
 }
 
 export type ScorerLoadFailure = 'missing' | 'invalid' | 'withdrawn' | 'offline' | 'other';

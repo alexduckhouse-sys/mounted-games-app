@@ -617,6 +617,11 @@ export interface RaceTemplate {
  * `on` is a stack of equipment placed ON this element (mug on a pole,
  * tennis ball on a mug, etc). Renderer draws each level above the previous.
  *
+ * Positions are slots on the lane (see components/diagramSlots.ts): `anchor`
+ * holds the slot id (`start`, `pole1`, `gap2`, `top`, `beyond`) and `x` is
+ * derived from it. Older diagrams with free `x` or anchor + offset are mapped
+ * to the nearest slot when read.
+ *
  * `label` is the human-readable name for the element ("Mug", "EGUK flag", …).
  */
 /** Equipment kind discriminator for `cone` and `item` elements. */
@@ -643,7 +648,9 @@ export type DiagramElement =
   | ({ t: 'in' } & DiagramPos)
   /** Legacy alias for `in` — both names render identically. */
   | ({ t: 'table' } & DiagramPos)
-  | { t: 'midline' };
+  | { t: 'midline' }
+  /** Lane layout: how many bending poles the slot grid has (see diagramSlots.ts). */
+  | { t: 'lane'; poles?: number };
 
 /** All placeable shape types exposed in the diagram editor toolbar. */
 export interface DiagramTool {

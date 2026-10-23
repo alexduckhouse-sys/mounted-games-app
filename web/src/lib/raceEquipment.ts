@@ -12,7 +12,7 @@ function parse(json?: string | null): DiagramElement[] {
 }
 
 function labelFor(el: DiagramElement): string | null {
-  if (el.t === 'midline') return null;
+  if (el.t === 'midline' || el.t === 'lane') return null;
   const own = typeof el.label === 'string' ? el.label.trim() : '';
   if (own) return own;
   // `table` is the legacy name for `in`.
@@ -33,7 +33,7 @@ export function equipmentFromDiagram(json?: string | null): EquipmentCount[] {
       if (found) found.count += 1;
       else counts.set(key, { label, count: 1 });
     }
-    if (el.t !== 'midline') for (const stacked of Array.isArray(el.on) ? el.on : []) if (stacked && typeof stacked === 'object') add(stacked);
+    if (el.t !== 'midline' && el.t !== 'lane') for (const stacked of Array.isArray(el.on) ? el.on : []) if (stacked && typeof stacked === 'object') add(stacked);
   };
   for (const el of parse(json)) add(el);
   return [...counts.values()];
