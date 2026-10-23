@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axiosError, heat, race, result, session } from '../test/factories';
@@ -20,23 +20,25 @@ const timetable = (over: Partial<ScorerSession> = {}): ScorerSession => ({
 });
 const outbox = () => JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]') as Array<Record<string, unknown>>;
 
+const placed = () => screen.queryAllByLabelText(/^Place \d+$/).length;
+const opened = (name: string) => screen.findByRole('region', { name: `Scoring ${name}` });
+
 /**
- * Taps teams in order. A tile's tap is detected by framer-motion from pointer events, which a slow CI machine
- * can miss, so each tap is checked by the Save button's count and repeated if it didn't register.
+ * Taps teams in order. A row's tap is detected by framer-motion from pointer events, which a slow CI machine
+ * can miss, so each tap is checked by the number of placed teams and repeated if it didn't register.
  */
 async function tapTeams(user: ReturnType<typeof userEvent.setup>, names: string[]) {
   for (const [index, name] of names.entries()) {
-    const label = new RegExp(`Save ${index + 1} result`);
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      await user.click(screen.getByText(name));
+      await user.click(screen.getByRole('button', { name: new RegExp(`^${name}, lane`) }));
       try {
-        await screen.findByRole('button', { name: label }, { timeout: 1500 });
+        await waitFor(() => expect(placed()).toBe(index + 1), { timeout: 1500 });
         break;
       } catch {
         // The tap never registered (nothing changed), so tapping again can't undo it.
       }
     }
-    await screen.findByRole('button', { name: label });
+    await waitFor(() => expect(placed()).toBe(index + 1));
   }
 }
 
@@ -68,7 +70,7 @@ describe('ScorerPage', () => {
     expect(window.location.pathname).toBe('/score');
     expect(link.get).toHaveBeenCalledWith('/scorer/session');
     expect(screen.getByText('Scoring as Sam')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Scoring · Bending/ })).toBeInTheDocument();
+    expect(await opened('Bending')).toBeInTheDocument();
     // No clock or sign-off controls for a link.
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
     expect(screen.queryByText(/sign off/i)).not.toBeInTheDocument();
@@ -83,16 +85,16 @@ describe('ScorerPage', () => {
   it('saves a race to the phone’s outbox for the link, then moves to the next race', async () => {
     const user = userEvent.setup();
     open();
-    await screen.findByRole('heading', { name: /Scoring · Bending/ });
+    await opened('Bending');
 
     await tapTeams(user, ['Team 2', 'Team 1', 'Team 3']);
-    await user.click(screen.getByRole('button', { name: /Save 3 results/ }));
+    await user.click(screen.getByRole('button', { name: 'Race complete' }));
 
     expect(outbox()).toEqual([expect.objectContaining({
       viaLink: true, raceId: 11, competitionId: 1, sessionId: 1, state: 'waiting', label: 'Heat 1 · Bending',
       places: [{ teamId: 2, place: 1, eliminated: false }, { teamId: 1, place: 2, eliminated: false }, { teamId: 3, place: 3, eliminated: false }],
     })]);
-    expect(await screen.findByRole('heading', { name: /Scoring · Flag/ })).toBeInTheDocument();
+    expect(await opened('Flag')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('saved on this phone');
   });
 
@@ -102,17 +104,17 @@ describe('ScorerPage', () => {
       races: [race(11, { name: 'Bending', isComplete: true, results: [result(1, 1), result(2, 2), result(3, 3)] }), race(12, { name: 'Flag' })],
     })] })] }) });
     open();
-    await screen.findByRole('heading', { name: /Scoring · Flag/ });
+    await opened('Flag');
     await user.click(screen.getByRole('button', { name: /1\. Bending/ }));
     // The saved placings are there to correct.
-    expect(screen.getByRole('button', { name: /Save 3 results/ })).toBeEnabled();
+    expect(placed()).toBe(3);
 
-    await user.click(screen.getByRole('button', { name: /Save 3 results/ }));
+    await user.click(screen.getByRole('button', { name: 'Race complete' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Add a reason for this correction');
     expect(outbox()).toEqual([]);
 
     await user.type(screen.getByLabelText('Reason for correction'), 'Judge changed it');
-    await user.click(screen.getByRole('button', { name: /Save 3 results/ }));
+    await user.click(screen.getByRole('button', { name: 'Race complete' }));
     expect(outbox()).toEqual([expect.objectContaining({ raceId: 11, reason: 'Judge changed it', expected: expect.any(Array) })]);
   });
 
@@ -125,15 +127,58 @@ describe('ScorerPage', () => {
     await screen.findByRole('button', { name: /1\. Bending/ });
     await user.click(screen.getByRole('button', { name: /1\. Bending/ }));
     await user.click(screen.getByRole('button', { name: /Clear/ }));
-    expect(screen.getByRole('button', { name: /Save 0 results/ })).toBeDisabled();
+    expect(placed()).toBe(0);
+  });
+
+  it('lists the teams in lane order with the bib colour under each name', async () => {
+    const bibbed = [
+      { id: 1, teamId: 1, teamName: 'Team 1', laneIndex: 3, bibColour: 'Red' },
+      { id: 2, teamId: 2, teamName: 'Team 2', laneIndex: 1, bibColour: 'Green' },
+      { id: 3, teamId: 3, teamName: 'Team 3', laneIndex: 2 },
+    ];
+    link.get.mockResolvedValue({ data: timetable({ sessions: [session(1, { arenaName: 'Main', heats: [heatWith({ entries: bibbed })] })] }) });
+    open();
+    const region = await opened('Bending');
+    const rows = within(region).getAllByRole('listitem').map((li) => li.textContent ?? '');
+    expect(rows[0]).toMatch(/Team 2.*Green bib/);
+    expect(rows[1]).toMatch(/Team 3.*No bib colour/);
+    expect(rows[2]).toMatch(/Team 1.*Red bib/);
+  });
+
+  it('does not ask why a team is out, because a link cannot write referee notes, and has no HC button', async () => {
+    const user = userEvent.setup();
+    open();
+    await opened('Bending');
+    await tapTeams(user, ['Team 1']);
+    await user.click(screen.getByRole('button', { name: 'Eliminate Team 2' }));
+    await user.click(screen.getByRole('button', { name: 'Race complete' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(outbox()[0].places).toEqual([{ teamId: 1, place: 1, eliminated: false }, { teamId: 2, place: 0, eliminated: true }]);
+    expect(screen.queryByRole('button', { name: /hors concours/i })).not.toBeInTheDocument();
+  });
+
+  it('undoes a tap, and cancels a save that is still waiting on the phone', async () => {
+    const user = userEvent.setup();
+    open();
+    await opened('Bending');
+    await tapTeams(user, ['Team 2', 'Team 1']);
+    await user.click(screen.getByRole('button', { name: /Undo/ }));
+    await waitFor(() => expect(placed()).toBe(1));
+    await user.click(screen.getByRole('button', { name: 'Race complete' }));
+    await opened('Flag');
+    expect(outbox()).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Undo last save' }));
+    await opened('Bending');
+    expect(outbox()).toHaveLength(0);
+    expect(placed()).toBe(1);
   });
 
   it('says so when the phone can’t store the scores', async () => {
     const user = userEvent.setup();
     open();
-    await screen.findByRole('heading', { name: /Scoring · Bending/ });
+    await opened('Bending');
     await tapTeams(user, ['Team 1']);
-    const save = await screen.findByRole('button', { name: /Save 1 result/ }, { timeout: 5000 });
+    const save = await screen.findByRole('button', { name: 'Race complete' }, { timeout: 5000 });
     const set = Storage.prototype.setItem;
     Storage.prototype.setItem = () => { throw new Error('full'); };
     try {
@@ -150,14 +195,14 @@ describe('ScorerPage', () => {
       session(3, { name: 'Lunch', arenaName: 'Main', orderIndex: 3, kind: 1 }),
     ] }) });
     open();
-    await screen.findByRole('heading', { name: /Scoring · Bending/ });
+    await opened('Bending');
     await user.click(screen.getByRole('tab', { name: 'Heat 2' }));
-    expect(screen.getByRole('heading', { name: /Scoring · Mug/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Scoring Mug' })).toBeInTheDocument();
 
     const picker = screen.getByLabelText('Session');
     expect(screen.queryByRole('option', { name: 'Lunch' })).not.toBeInTheDocument();
     await user.selectOptions(picker, 'Teams');
-    expect(screen.getByRole('heading', { name: /Scoring · Ball/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Scoring Ball' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Final' })).toHaveAttribute('aria-selected', 'true');
   });
 
@@ -238,13 +283,13 @@ describe('ScorerPage', () => {
 
   it('shows a newer copy of a heat when one is saved, and refreshes on a timer', async () => {
     open();
-    await screen.findByRole('heading', { name: /Scoring · Bending/ });
+    await opened('Bending');
     const newer = heatWith({ races: [race(11, { name: 'Bending', isComplete: true, results: [result(1, 1)] }), race(12, { name: 'Flag' })] });
 
     act(() => { window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: { sessionId: 1, heat: newer } })); });
     act(() => { window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: {} })); });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /1\. Bending/ }).className).toContain('emerald'));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^1\. Bending.*1st Team 1/ })).toBeInTheDocument());
   });
 
   it('reloads when the phone comes back online or the page is shown again', async () => {
