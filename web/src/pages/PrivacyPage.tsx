@@ -58,7 +58,7 @@ export function PrivacyPage() {
           We don't use tracking or advertising cookies, and we don't run analytics. The app keeps these on your device:
         </p>
         <ul className="list-disc space-y-1.5 pl-5 marker:text-[rgb(var(--mg-muted))]">
-          <li className="mg-lede">your sign-in, and the "Edit mode" switch if you are an administrator;</li>
+          <li className="mg-lede">your sign-in;</li>
           <li className="mg-lede">your choices: colour theme, Lite mode, weather, notifications, the competition you picked and, if you asked it to remember, one small preference cookie holding that competition for 180 days;</li>
           <li className="mg-lede">teams you follow, a draft declaration form you haven't submitted, and banners you saved on a streaming device;</li>
           <li className="mg-lede">a saved copy of public pages (timetables, results) so they open without signal.</li>

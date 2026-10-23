@@ -19,15 +19,15 @@ interface RulebookDraft {
 const emptyDraft: RulebookDraft = { id: null, title: '', edition: '', sourceUrl: '', text: '' };
 
 export function RulebooksPage() {
-  const { user, editorMode } = useAuth();
-  return <GlobalRulebooks key={`${user?.id ?? ''}:${editorMode}`} />;
+  const { user } = useAuth();
+  return <GlobalRulebooks key={user?.id ?? ''} />;
 }
 
 /** Rulebooks are shared by every competition. The list holds titles only; a rulebook's text is fetched when it is opened. */
 function GlobalRulebooks() {
   const { competition } = useCompetition();
-  const { canEdit, hasRole } = useAuth();
-  const canWrite = hasRole('Admin') && canEdit();
+  const { canEdit } = useAuth();
+  const canWrite = canEdit();
   const [rulebooks, setRulebooks] = useState<RulebookSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [texts, setTexts] = useState<Record<number, Rulebook>>({});

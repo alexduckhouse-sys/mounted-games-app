@@ -34,13 +34,12 @@ function localInput(value: string | null) {
 
 export default function EventToolsPage() {
   const { competitionId = '' } = useParams();
-  const { user, editorMode } = useAuth();
-  return <EventToolsPageContent key={`${competitionId}:${user?.id ?? 'public'}:${editorMode}`} competitionId={competitionId} />;
+  const { user } = useAuth();
+  return <EventToolsPageContent key={`${competitionId}:${user?.id ?? 'public'}`} competitionId={competitionId} />;
 }
 
 function EventToolsPageContent({ competitionId }: { competitionId: string }) {
-  const { user, hasRole, canEdit, canOrganise } = useAuth();
-  const mayManage = !hasRole('Admin') || canEdit();
+  const { user, hasRole, canOrganise } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [competition, setCompetition] = useState<CompetitionForTools | null>(null);
   const [tab, setTab] = useState<ToolTab>('import');
@@ -120,7 +119,7 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
 
   if (loading) return <RefinePage><p role="status" className="rf-note tools-pad">Loading organiser tools…</p></RefinePage>;
   if (!competition) return <RefinePage><div role="alert" className="tools-pad"><p className="mg-notice">{error ?? 'Competition not found.'} <button type="button" className="rf-btn rf-btn-text" onClick={() => { setLoading(true); setError(null); setLoadAttempt((value) => value + 1); }}>Try again</button></p></div></RefinePage>;
-  if (!mayManage || !canOrganise(competition)) return <RefinePage><div role="alert" className="tools-pad"><p className="mg-notice">These tools are available to this competition’s organiser.</p></div></RefinePage>;
+  if (!canOrganise(competition)) return <RefinePage><div role="alert" className="tools-pad"><p className="mg-notice">These tools are available to this competition’s organiser.</p></div></RefinePage>;
 
   const hasErrors = preview?.rows.some((row) => row.errors.length > 0) ?? false;
   // Duplicating makes a new competition the caller owns, so it needs a trainer (or admin) account.

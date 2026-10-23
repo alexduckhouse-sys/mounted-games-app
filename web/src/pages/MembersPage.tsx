@@ -17,7 +17,7 @@ import { SelectField } from '../components/SelectField';
  * and everyone else by role, with a role switch and Remove from club on each row (docs/designs/members-handoff.md).
  */
 export function MembersPage() {
-  const { user, hasRole, canEdit } = useAuth();
+  const { user, hasRole } = useAuth();
   const { review } = useNeedsYou();
   const isAdmin = hasRole('Admin');
   const [clubs, setClubs] = useState<Club[]>([]);
@@ -53,9 +53,6 @@ export function MembersPage() {
 
   if (!user) return null;
   const data = loaded && loaded.clubId === clubId ? loaded.data : null;
-  // The admin lock guards an admin's own changes; a team manager has no such switch.
-  const locked = isAdmin && !canEdit();
-  const lockedTitle = locked ? 'Switch to edit mode' : undefined;
 
   function edit(change: (current: ClubMembers) => ClubMembers) {
     setLoaded((cur) => (cur && cur.clubId === clubId ? { ...cur, data: change(cur.data) } : cur));
@@ -144,8 +141,8 @@ export function MembersPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button type="button" className="mg-btn mg-btn-primary !min-h-11 flex-1 !text-[15px]" disabled={locked} title={lockedTitle} onClick={() => { void decide(request, 'approve'); }}>Approve</button>
-                <button type="button" className="mg-btn mg-btn-secondary !min-h-11 flex-1 !text-[15px]" disabled={locked} title={lockedTitle} onClick={() => { void decide(request, 'decline'); }}>Decline</button>
+                <button type="button" className="mg-btn mg-btn-primary !min-h-11 flex-1 !text-[15px]" onClick={() => { void decide(request, 'approve'); }}>Approve</button>
+                <button type="button" className="mg-btn mg-btn-secondary !min-h-11 flex-1 !text-[15px]" onClick={() => { void decide(request, 'decline'); }}>Decline</button>
               </div>
             </div>
           ))}
@@ -180,13 +177,13 @@ export function MembersPage() {
                     <div className="flex flex-col gap-2.5 px-3.5 pb-3.5 pt-1">
                       <div role="group" aria-label={`Role for ${member.fullName}`} className="mg-seg !grid-cols-3">
                         {MEMBER_GROUPS.map(({ role }) => (
-                          <button key={role} type="button" aria-pressed={member.role === role} disabled={locked || busy} title={lockedTitle}
+                          <button key={role} type="button" aria-pressed={member.role === role} disabled={busy}
                             onClick={() => { if (member.role !== role) void setRole(member.userId, role); }}>
                             {ROLE_LABEL[role]}
                           </button>
                         ))}
                       </div>
-                      <button type="button" disabled={locked || busy} title={lockedTitle} onClick={() => { void remove(member.userId, member.fullName); }}
+                      <button type="button" disabled={busy} onClick={() => { void remove(member.userId, member.fullName); }}
                         className="flex min-h-11 items-center gap-2 text-[15px] font-semibold text-[rgb(var(--mg-elim))] disabled:opacity-50">
                         <UserMinus aria-hidden="true" className="h-[18px] w-[18px]" />Remove from club
                       </button>

@@ -204,7 +204,7 @@ export function DetailsTab() {
         </>
       )}
 
-      {/* The owner, competition admins and site admins see who runs the event and can change it (site admins in Edit mode). */}
+      {/* The owner, competition admins and site admins see who runs the event and can change it. */}
       {user && (mayOrganise || hasRole('Admin')) && (
         <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
       )}

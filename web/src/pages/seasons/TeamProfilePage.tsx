@@ -44,13 +44,13 @@ async function fetchPage(id: string | undefined, mayManage: boolean) {
 export default function TeamProfilePage() {
   const params = useParams();
   const id = params.id ?? params.profileId;
-  const { user, editorMode } = useAuth();
-  return <TeamProfilePageContent key={`${id ?? 'list'}:${user?.id ?? 'public'}:${editorMode}`} id={id} />;
+  const { user } = useAuth();
+  return <TeamProfilePageContent key={`${id ?? 'list'}:${user?.id ?? 'public'}`} id={id} />;
 }
 
 function TeamProfilePageContent({ id }: { id: string | undefined }) {
-  const { user, canOrganise, hasRole, canEdit } = useAuth();
-  const mayManage = canOrganise() && (!hasRole('Admin') || canEdit());
+  const { user, canOrganise } = useAuth();
+  const mayManage = canOrganise();
   const navigate = useNavigate();
   const [query] = useSearchParams();
   const [profiles, setProfiles] = useState<TeamProfile[] | null>(null);

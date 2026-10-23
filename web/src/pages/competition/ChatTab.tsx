@@ -40,7 +40,7 @@ export function ChatTab() {
 }
 
 function ChatTabSession() {
-  const { competition, reload, streams, streamingEnabled, invoke, ready, streamMessages } = useCompetition();
+  const { competition, reload, streams, streamingEnabled, streamingChecked = true, invoke, ready, streamMessages } = useCompetition();
   const { user, canEdit, hasRole, canOrganise } = useAuth();
   const isAdmin = hasRole('Admin');
   const isTrainer = hasRole('Trainer');
@@ -219,7 +219,7 @@ function ChatTabSession() {
       {actionError && !allOpen && <div className="live-action-error" role="alert"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError(null)}><X aria-hidden="true" /></button></div>}
 
       {canPost ? (
-        <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} onSaved={reload} />
+        <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
       ) : (
         <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
       )}
@@ -277,9 +277,6 @@ function ChatTabSession() {
       )}
       {canMessageOrganisers && !privateMessagingAvailable && (
         <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Messaging the organisers isn’t available for this event yet.</div>
-      )}
-      {isAdmin && !canModerate && (
-        <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Turn Edit mode on to post an announcement or pin a banner.</div>
       )}
 
       {allOpen && <AnnouncementsOverlay messages={visibleMessages.slice().reverse()} staff={canPost} canModerate={canModerate} error={actionError} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} onDismissError={dismissActionError} onClose={closeAnnouncements} returnFocusRef={announcementsTriggerRef} />}
@@ -349,12 +346,13 @@ function AnnouncementsOverlay({ messages, staff, canModerate, error, onDelete, o
   </div>;
 }
 
-function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEditStream, onSaved }: {
+function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEditStream, streamingNotSetUp, onSaved }: {
   active: LiveStream | null;
   fallback: string | null;
   competitionId: number;
   canBroadcast: boolean;
   canEditStream: boolean;
+  streamingNotSetUp: boolean;
   onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -368,6 +366,8 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
       {canEditStream ? <button ref={changeRef} type="button" className="staff-stream-change" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>Change</button>
         : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>Change</Link> : null}
     </div>
+    {canBroadcast && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}><Video aria-hidden="true" />Go live from this device</Link>}
+    {streamingNotSetUp && <p className="mg-notice" role="status">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</p>}
     {canBroadcast && <Link className="mg-text-link self-start text-sm" to={`/competitions/${competitionId}/produce`}>Banners and overlays</Link>}
     {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
   </div>;

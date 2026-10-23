@@ -18,14 +18,13 @@ export function CommerceManagementPage() {
 
 function CommerceManagementContent() {
   const { competition } = useCompetition();
-  const { canEdit, canOrganise, hasRole } = useAuth();
+  const { canOrganise } = useAuth();
   const [listings, setListings] = useState<CompetitionListing[] | null>(null);
   const [orders, setOrders] = useState<EventOrder[] | null>(null);
   const [settings, setSettings] = useState<EventCommerceSettings | null>(null);
   const [view, setView] = useState<ManagementView>('listings');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canMutate = !hasRole('Admin') || canEdit();
 
   const load = useCallback(() => {
     if (!canOrganise(competition)) return Promise.resolve();
@@ -48,7 +47,6 @@ function CommerceManagementContent() {
   useEffect(() => { void load(); }, [load]);
 
   async function review(id: number, status: 1 | 2) {
-    if (!canMutate) return;
     setBusy(true);
     setError(null);
     try {
@@ -62,7 +60,6 @@ function CommerceManagementContent() {
   }
 
   async function setDemo(isDemo: boolean) {
-    if (!canMutate) return;
     setBusy(true);
     setError(null);
     try {
@@ -76,7 +73,6 @@ function CommerceManagementContent() {
   }
 
   async function manualAction(order: EventOrder, action: 'manual-payment' | 'manual-refund') {
-    if (!canMutate) return;
     setBusy(true);
     setError(null);
     try {
@@ -102,7 +98,6 @@ function CommerceManagementContent() {
         <button type="button" aria-pressed={view === 'orders'} onClick={() => setView('orders')}>Orders{orders?.length ? ` (${orders.length})` : ''}</button>
         <button type="button" aria-pressed={view === 'settings'} onClick={() => setView('settings')}>Settings</button>
       </div>
-      {!canMutate && <p className="mg-notice">Admin view only is on. Switch to edit mode to change shop settings or orders.</p>}
       {error && <LoadError message={error} onRetry={() => void load()} />}
 
       {view === 'settings' && <section className="flex flex-col gap-4" aria-labelledby="payment-mode-title">
@@ -114,8 +109,8 @@ function CommerceManagementContent() {
           <div className="flex flex-wrap items-center gap-3">
             <StatusPill tone={settings.isDemo ? 'test' : 'neutral'}>{settings.isDemo ? 'DEMO — no money is taken' : 'Manual payments'}</StatusPill>
             <div className="mg-toggle">
-              <button type="button" aria-pressed={!settings.isDemo} disabled={busy || settings.isLocked || !canMutate} onClick={() => void setDemo(false)}>Manual</button>
-              <button type="button" aria-pressed={settings.isDemo} disabled={busy || settings.isLocked || !canMutate} onClick={() => void setDemo(true)}>Demo</button>
+              <button type="button" aria-pressed={!settings.isDemo} disabled={busy || settings.isLocked} onClick={() => void setDemo(false)}>Manual</button>
+              <button type="button" aria-pressed={settings.isDemo} disabled={busy || settings.isLocked} onClick={() => void setDemo(true)}>Demo</button>
             </div>
             {settings.isLocked && <p className="mg-meta">Locked because an order or test payment exists.</p>}
           </div>
@@ -135,8 +130,8 @@ function CommerceManagementContent() {
                 <p className="mt-1 text-sm font-bold">{pounds(listing.item.priceMinor)} · {CATEGORY_LABEL[listing.item.category]} · {listing.item.stockQuantity == null ? 'Unlimited stock' : `${listing.item.stockQuantity} available`}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className="mg-btn mg-btn-primary" disabled={busy || !canMutate} onClick={() => void review(listing.id, 1)}><Check className="h-4 w-4" /> Approve</button>
-                <button type="button" className="mg-btn mg-btn-secondary" disabled={busy || !canMutate} onClick={() => void review(listing.id, 2)}><X className="h-4 w-4" /> Reject</button>
+                <button type="button" className="mg-btn mg-btn-primary" disabled={busy} onClick={() => void review(listing.id, 1)}><Check className="h-4 w-4" /> Approve</button>
+                <button type="button" className="mg-btn mg-btn-secondary" disabled={busy} onClick={() => void review(listing.id, 2)}><X className="h-4 w-4" /> Reject</button>
               </div>
             </div>
           </article>
@@ -156,8 +151,8 @@ function CommerceManagementContent() {
               <strong className="ml-auto">{pounds(order.totalMinor)}</strong>
             </div>
             <p className="text-sm text-[rgb(var(--mg-body))]">{order.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</p>
-            {!order.isTestOrder && order.status === 0 && <button type="button" className="mg-btn mg-btn-primary self-start" disabled={busy || !canMutate} onClick={() => void manualAction(order, 'manual-payment')}>Mark external payment received</button>}
-            {!order.isTestOrder && order.status === 2 && <button type="button" className="mg-btn mg-btn-secondary self-start" disabled={busy || !canMutate} onClick={() => void manualAction(order, 'manual-refund')}>Mark external refund sent</button>}
+            {!order.isTestOrder && order.status === 0 && <button type="button" className="mg-btn mg-btn-primary self-start" disabled={busy} onClick={() => void manualAction(order, 'manual-payment')}>Mark external payment received</button>}
+            {!order.isTestOrder && order.status === 2 && <button type="button" className="mg-btn mg-btn-secondary self-start" disabled={busy} onClick={() => void manualAction(order, 'manual-refund')}>Mark external refund sent</button>}
           </article>
         ))}</div>}
       </section>}

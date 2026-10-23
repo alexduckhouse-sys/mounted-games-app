@@ -237,7 +237,7 @@ function SellerCatalogueContent() {
               return (
                 <li key={listing.id} className="rf-row">
                   {row}
-                  {listing.status === 0 && <button type="button" className="rf-btn" disabled={busy} onClick={() => void run(() => api.delete(`/commerce/listings/${listing.id}`), 'Couldn’t withdraw the listing.')}>Withdraw</button>}
+                  {listing.status === 0 && <button type="button" className="rf-btn" disabled={busy} onClick={() => { if (window.confirm('Withdraw this listing?')) void run(() => api.delete(`/commerce/listings/${listing.id}`), 'Couldn’t withdraw the listing.'); }}>Withdraw</button>}
                 </li>
               );
             })}
@@ -267,7 +267,7 @@ function SellerCatalogueContent() {
             <div className="flex flex-col gap-2">
               <button type="button" className="rf-btn rf-wide" onClick={() => openEdit(active)}>Edit details</button>
               {active.isActive
-                ? <button type="button" className="rf-btn rf-wide" aria-label={`Archive ${active.title}`} disabled={busy} onClick={() => void run(() => api.delete(`/commerce/catalogue/${active.id}`), 'Couldn’t archive the item.').then((result) => { if (result.ok) setSheet(null); })}>Archive item</button>
+                ? <button type="button" className="rf-btn rf-wide" aria-label={`Archive ${active.title}`} disabled={busy} onClick={() => { if (!window.confirm(`Archive ${active.title}?`)) return; void run(() => api.delete(`/commerce/catalogue/${active.id}`), 'Couldn’t archive the item.').then((result) => { if (result.ok) setSheet(null); }); }}>Archive item</button>
                 : <button type="button" className="rf-btn rf-wide" disabled={busy} onClick={() => void run(() => api.put(`/commerce/catalogue/${active.id}`, { title: active.title, description: active.description, priceMinor: active.priceMinor, stockQuantity: active.stockQuantity, category: active.category, imageUrl: active.imageUrl, isActive: true, expectedVersion: active.version }), 'Couldn’t restore the item. Refresh the catalogue and try again.').then((result) => { if (result.ok) setSheet(null); })}>Restore item</button>}
             </div>
           </RefineSheet>

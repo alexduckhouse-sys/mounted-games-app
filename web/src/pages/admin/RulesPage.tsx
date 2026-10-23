@@ -26,7 +26,7 @@ function Labelled({ label, children, className = '' }: { label: string; children
 }
 
 /**
- * The race library. Each race is a row; opening one shows its rules and diagram, and for an admin in edit mode
+ * The race library. Each race is a row; opening one shows its rules and diagram, and for an admin
  * turns the row into the editor.
  */
 export function RulesPage() {
@@ -191,7 +191,7 @@ export function RulesPage() {
           })}
         </ul>
       </div>
-      {list.length > 0 && <p className="mg-meta">{list.length} races in the library{canEdit() ? '' : '. Switch to edit mode to change them.'}</p>}
+      {list.length > 0 && <p className="mg-meta">{list.length} races in the library</p>}
       {error && !draft && <p role="alert" className="mg-notice !bg-[rgb(var(--mg-live-row))] !text-[rgb(var(--mg-elim))]">{error}</p>}
     </div>
   );

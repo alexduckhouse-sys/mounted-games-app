@@ -90,6 +90,7 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
       setError('Add a reason for reopening these results.');
       return;
     }
+    if (!signOff && !window.confirm('Reopen these results for correction? The sign-off is removed until they are signed off again.')) return;
     setBusy(true);
     setError(null);
     setMessage(null);

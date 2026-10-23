@@ -54,6 +54,8 @@ export function DeclarationsTab() {
   const priorPhone = forms?.find((f) => f.submittedByUserId === user?.id && f.submittedByPhone)?.submittedByPhone ?? undefined;
 
   async function remove(id: number) {
+    const target = forms?.find((f) => f.id === id);
+    if (!window.confirm(`Delete the dec form for ${target?.teamName ?? 'this team'}? This can’t be undone.`)) return;
     await api.delete(`/declaration-forms/${id}`);
     setForms((cur) => cur?.filter((f) => f.id !== id) ?? cur);
   }

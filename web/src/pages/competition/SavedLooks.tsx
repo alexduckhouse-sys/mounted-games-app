@@ -49,11 +49,11 @@ export function SavedLooks({ current, onApply, onError }: { current: OverlayLook
     await api.put(`/overlay-looks/${chosen!.id}`, { name: chosen!.name, look: current });
     setLooks((all) => all.map((l) => (l.id === chosen!.id ? { ...l, look: current } : l)));
   });
-  const remove = () => run(async () => {
+  const remove = () => { if (!window.confirm(`Delete the look “${chosen?.name ?? ''}”?`)) return; return run(async () => {
     await api.delete(`/overlay-looks/${chosen!.id}`);
     setLooks((all) => all.filter((l) => l.id !== chosen!.id));
     setSelected(null);
-  });
+  }); };
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3 text-sm" role="group" aria-label="Reusable looks">

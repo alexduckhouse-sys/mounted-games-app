@@ -312,7 +312,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing) && shouldNoticeSavedCopy(savedAt, !refreshing || savedAt === '', new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS);
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />
