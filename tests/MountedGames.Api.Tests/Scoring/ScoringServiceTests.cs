@@ -183,4 +183,103 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
         Assert.NotNull(race.StartedAt);
         Assert.NotNull(race.FinishedAt);
     }
+
+    [Fact]
+    public async Task ApplyRaceResults_TransitionsSessionToInArena_AndFinishedWhenAllRacesComplete()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var (heatId, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds, raceCount: 2);
+        using var scope = _f.Services.CreateScope();
+
+        await Service(scope).ApplyRaceResultsAsync(races[0],
+            new[] { new FinishingPlace(a.TeamIds[0], 1, false), new FinishingPlace(a.TeamIds[1], 2, false) }, null);
+
+        var midSession = await _f.WithDbAsync(db => db.Sessions.SingleAsync(s => s.Id == a.SessionId));
+        var midHeat = await _f.WithDbAsync(db => db.Heats.SingleAsync(h => h.Id == heatId));
+        Assert.Equal(SessionStatus.InArena, midSession.Status);
+        Assert.NotNull(midSession.StartedAt);
+        Assert.NotNull(midHeat.StartedAt);
+        Assert.Null(midHeat.FinishedAt);
+
+        await Service(scope).ApplyRaceResultsAsync(races[1],
+            new[] { new FinishingPlace(a.TeamIds[1], 1, false), new FinishingPlace(a.TeamIds[0], 2, false) }, null);
+
+        var endSession = await _f.WithDbAsync(db => db.Sessions.SingleAsync(s => s.Id == a.SessionId));
+        var endHeat = await _f.WithDbAsync(db => db.Heats.SingleAsync(h => h.Id == heatId));
+        Assert.Equal(SessionStatus.Finished, endSession.Status);
+        Assert.NotNull(endSession.FinishedAt);
+        Assert.NotNull(endHeat.FinishedAt);
+    }
+
+    [Fact]
+    public async Task ApplyRaceResults_AutoPopulatesFinalHeat_WhenBothQualifiersComplete()
+    {
+        var a = await _f.CreateArenaAsync(6, raceFinals: true);
+        var (_, q1Races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds[..3], "Q1", 1, stage: RaceRoundStage.Qualifier, roundId: 1);
+        var (_, q2Races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds[3..], "Q2", 2, stage: RaceRoundStage.Qualifier, roundId: 1);
+        var (finalHeatId, _) = await _f.AddHeatAsync(a.SessionId, Array.Empty<int>(), "Final", 3, stage: RaceRoundStage.Final, roundId: 1);
+        using var scope = _f.Services.CreateScope();
+
+        await Service(scope).ApplyRaceResultsAsync(q1Races[0],
+            new[] { new FinishingPlace(a.TeamIds[0], 1, false), new FinishingPlace(a.TeamIds[1], 2, false), new FinishingPlace(a.TeamIds[2], 3, false) }, null);
+        await Service(scope).ApplyRaceResultsAsync(q2Races[0],
+            new[] { new FinishingPlace(a.TeamIds[3], 1, false), new FinishingPlace(a.TeamIds[4], 2, false), new FinishingPlace(a.TeamIds[5], 3, false) }, null);
+
+        var finalEntries = await _f.WithDbAsync(db => db.HeatEntries
+            .Where(e => e.HeatId == finalHeatId)
+            .OrderBy(e => e.LaneIndex)
+            .Select(e => e.TeamId)
+            .ToListAsync());
+        Assert.Equal(new[] { a.TeamIds[0], a.TeamIds[3], a.TeamIds[1], a.TeamIds[4], a.TeamIds[2], a.TeamIds[5] }, finalEntries);
+    }
+
+    [Fact]
+    public async Task ApplyRaceResults_HorsConcoursScoresZero_AndCompactsCompetitivePlacings()
+    {
+        var a = await _f.CreateArenaAsync(3);
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Teams.SingleAsync(t => t.Id == a.TeamIds[0])).IsHorsConcours = true;
+            await db.SaveChangesAsync();
+        });
+        var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        using var scope = _f.Services.CreateScope();
+
+        // Team 0 (HC) finishes 1st physically, Team 1 finishes 2nd, Team 2 finishes 3rd.
+        var results = await Service(scope).ApplyRaceResultsAsync(races[0],
+            new[]
+            {
+                new FinishingPlace(a.TeamIds[0], 1, false),
+                new FinishingPlace(a.TeamIds[1], 2, false),
+                new FinishingPlace(a.TeamIds[2], 3, false),
+            }, null);
+
+        var byTeam = results.ToDictionary(r => r.TeamId, r => r.Points);
+        Assert.Equal(0, byTeam[a.TeamIds[0]]);
+        Assert.Equal(3, byTeam[a.TeamIds[1]]);
+        Assert.Equal(2, byTeam[a.TeamIds[2]]);
+    }
+
+    [Fact]
+    public async Task OverrideRacePoints_AndAdjustTeamPoints_ApplyCustomAndDeltaPoints()
+    {
+        var a = await _f.CreateArenaAsync(3);
+        var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        using var scope = _f.Services.CreateScope();
+        var svc = Service(scope);
+
+        await svc.ApplyRaceResultsAsync(races[0],
+            new[]
+            {
+                new FinishingPlace(a.TeamIds[0], 1, false),
+                new FinishingPlace(a.TeamIds[1], 2, false),
+                new FinishingPlace(a.TeamIds[2], 3, false),
+            }, null);
+
+        var overridden = await svc.OverrideRacePointsAsync(races[0], a.TeamIds[1], 10, "Combined heat bonus", null);
+        Assert.Equal(10, overridden.Results.Single(r => r.TeamId == a.TeamIds[1]).Points);
+
+        var adjusted = await svc.AdjustTeamPointsAsync(races[0], a.TeamIds[0], -2, "Jury penalty", null);
+        Assert.Equal(1, adjusted.Results.Single(r => r.TeamId == a.TeamIds[0]).Points);
+    }
 }

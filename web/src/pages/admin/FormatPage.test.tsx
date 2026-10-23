@@ -293,6 +293,21 @@ describe('On the day: generating the exact timetable', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Some of those teams aren’t in this competition.');
   });
+
+  it('excludes A Final and Finals sessions when generating preliminary heats', async () => {
+    comp = build({
+      sessions: [
+        ...build().sessions,
+        session(19, { competitionSectionId: 1, name: 'Junior pairs · A Final', arenaName: 'Main arena', orderIndex: 5, heats: [] }),
+      ],
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mount();
+    await region('Open pairs');
+    await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/5/sessions/10/generate-heats', expect.anything()));
+    expect(api.post).not.toHaveBeenCalledWith('/competitions/5/sessions/19/generate-heats', expect.anything());
+  });
 });
 
 describe('On the day: signups and teams', () => {

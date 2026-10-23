@@ -191,6 +191,72 @@ public class DrawOperationsTests : IClassFixture<ApiFactory>
             (await other.PostAsJsonAsync(PreviewUrl(arena), new DrawRequest(1))).StatusCode);
     }
 
+    [Fact]
+    public async Task Preview_ExcludesFinalSessionsFromSectionDraw()
+    {
+        var arena = await CreateDrawArenaAsync(6, 2, 1);
+        var finalSessionId = await _f.WithDbAsync(async db =>
+        {
+            var finalSession = new Session
+            {
+                CompetitionId = arena.CompetitionId,
+                CompetitionSectionId = arena.SectionId,
+                Name = "Junior pairs · A Final",
+                OrderIndex = 10,
+                Kind = SessionKind.Race,
+            };
+            db.Sessions.Add(finalSession);
+            await db.SaveChangesAsync();
+            return finalSession.Id;
+        });
+        await _f.AddHeatAsync(finalSessionId, Array.Empty<int>(), "A Final", 1, 2);
+
+        var response = await (await _f.AdminAsync()).PostAsJsonAsync(PreviewUrl(arena), new DrawRequest(42));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var preview = await response.ReadAsync<DrawPreviewDto>();
+
+        Assert.Equal(2, preview.Sessions.Count);
+        Assert.DoesNotContain(preview.Sessions, s => s.SessionId == finalSessionId);
+    }
+
+    [Fact]
+    public async Task GenerateHeats_UsesFairSeededDrawAcrossSessions()
+    {
+        var arena = await _f.CreateArenaAsync(6);
+        var session2Id = await _f.WithDbAsync(async db =>
+        {
+            var s2 = new Session
+            {
+                CompetitionId = arena.CompetitionId,
+                CompetitionSectionId = arena.SectionId,
+                Name = "Session 2",
+                OrderIndex = 2,
+                Kind = SessionKind.Race,
+            };
+            db.Sessions.Add(s2);
+            await db.SaveChangesAsync();
+            return s2.Id;
+        });
+        var admin = await _f.AdminAsync();
+
+        var gen1 = await admin.PostAsJsonAsync(
+            $"/api/competitions/{arena.CompetitionId}/sessions/{arena.SessionId}/generate-heats",
+            new GenerateHeatsRequest(arena.TeamIds, ["Bending"], 3, true));
+        var gen2 = await admin.PostAsJsonAsync(
+            $"/api/competitions/{arena.CompetitionId}/sessions/{session2Id}/generate-heats",
+            new GenerateHeatsRequest(arena.TeamIds, ["Bending"], 3, true));
+
+        Assert.Equal(HttpStatusCode.OK, gen1.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, gen2.StatusCode);
+        var s1 = await gen1.ReadAsync<SessionDto>();
+        var s2Dto = await gen2.ReadAsync<SessionDto>();
+
+        // Session 2's heat groupings are balanced against Session 1's heat groupings rather than identical.
+        var s1Heat1 = s1.Heats[0].Entries.Select(e => e.TeamId).OrderBy(id => id).ToArray();
+        var s2Heat1 = s2Dto.Heats[0].Entries.Select(e => e.TeamId).OrderBy(id => id).ToArray();
+        Assert.False(s1Heat1.SequenceEqual(s2Heat1));
+    }
+
     private async Task<Arena> CreateDrawArenaAsync(int teamCount, int heatsPerSession, int additionalSessions)
     {
         var arena = await _f.CreateArenaAsync(teamCount);
