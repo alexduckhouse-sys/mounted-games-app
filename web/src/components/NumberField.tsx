@@ -8,7 +8,7 @@ export interface NumberFieldProps extends Omit<InputHTMLAttributes<HTMLInputElem
 }
 
 /** Whether `text` is a number being typed: digits, with a point and a leading minus only where allowed. */
-export function isNumberText(text: string, decimal: boolean, negative: boolean): boolean {
+function isNumberText(text: string, decimal: boolean, negative: boolean): boolean {
   const pattern = decimal ? (negative ? /^-?\d*\.?\d*$/ : /^\d*\.?\d*$/) : (negative ? /^-?\d*$/ : /^\d*$/);
   return pattern.test(text);
 }

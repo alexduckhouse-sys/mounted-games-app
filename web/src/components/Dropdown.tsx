@@ -56,8 +56,6 @@ export function Dropdown({
     return () => document.removeEventListener('pointerdown', onPointer);
   }, [open]);
 
-  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
-
   // Choose above or below, and keep the menu inside the screen.
   useLayoutEffect(() => {
     if (!open || !root.current) return;
@@ -130,7 +128,6 @@ export function Dropdown({
     }
   };
 
-  let lastGroup: string | undefined;
   return (
     <div ref={root} className={`relative ${className ?? ''}`}>
       <button
@@ -153,7 +150,7 @@ export function Dropdown({
       >
         {children}
       </button>
-      {open && (
+      {open && !disabled && (
         <ul
           ref={menu}
           id={id}
@@ -164,8 +161,7 @@ export function Dropdown({
           style={place.max ? { maxHeight: place.max } : undefined}
         >
           {options.map((option, index) => {
-            const heading = option.group && option.group !== lastGroup ? option.group : null;
-            lastGroup = option.group;
+            const heading = option.group && option.group !== options[index - 1]?.group ? option.group : null;
             return [
               heading && <li key={`g-${heading}-${index}`} role="presentation" className="mg-dropdown-group">{heading}</li>,
               <li

@@ -289,7 +289,6 @@ describe('MembersPage: a person\'s row', () => {
 
 describe('MembersPage: an admin', () => {
   it('chooses the club, and sees its people', async () => {
-    const user = userEvent.setup();
     mount({ roles: ['Admin'], clubId: null, editMode: true });
     const select = await screen.findByLabelText('Club');
     expect(screen.queryByRole('region', { name: 'Trainers' })).not.toBeInTheDocument();

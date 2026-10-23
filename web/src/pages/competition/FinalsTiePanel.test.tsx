@@ -51,7 +51,6 @@ describe('FinalsTiePanel', () => {
 
   it('changes the rule without losing the run-off race or finalist count', async () => {
     put.mockResolvedValue({ data: null });
-    const user = userEvent.setup();
     const { onChanged, onRuleChange } = mount();
 
     chooseOption(screen.getByLabelText(/Teams level on points/), String(TieBreakRule.LastRace));

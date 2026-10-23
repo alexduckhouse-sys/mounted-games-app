@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { NumberField, isNumberText } from './NumberField';
+import { NumberField } from './NumberField';
 
 function Harness(props: Partial<Parameters<typeof NumberField>[0]> & { onValue?: (v: string) => void }) {
   const { onValue, ...rest } = props;
@@ -73,6 +73,14 @@ describe('NumberField', () => {
     expect(onPaste).toHaveBeenCalled();
   });
 
+  it('accepts a negative whole number where negatives are allowed but not decimals', () => {
+    render(<Harness allowNegative />);
+    expect(pastePrevented('-3')).toBe(false);
+    expect(pastePrevented('-3.5')).toBe(true);
+    fireEvent.change(box(), { target: { value: '-3' } });
+    expect(box().value).toBe('-3');
+  });
+
   it('passes a typed number on, and drops a value that is not digits', () => {
     const onValue = vi.fn();
     render(<Harness onValue={onValue} />);
@@ -90,16 +98,5 @@ describe('NumberField', () => {
     render(<NumberField aria-label="Amount" defaultValue="3" disabled />);
     expect(box()).toBeDisabled();
     fireEvent.change(box(), { target: { value: '4' } });
-  });
-
-  it('checks text the same way as the key rules', () => {
-    expect(isNumberText('', false, false)).toBe(true);
-    expect(isNumberText('12', false, false)).toBe(true);
-    expect(isNumberText('1.2', false, false)).toBe(false);
-    expect(isNumberText('1.2', true, false)).toBe(true);
-    expect(isNumberText('-1', false, false)).toBe(false);
-    expect(isNumberText('-1', false, true)).toBe(true);
-    expect(isNumberText('-1.5', true, true)).toBe(true);
-    expect(isNumberText('1e5', true, true)).toBe(false);
   });
 });

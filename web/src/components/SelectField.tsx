@@ -40,7 +40,7 @@ function textOf(node: ReactNode): string {
 interface OptionProps { value?: string | number; disabled?: boolean; label?: string; children?: ReactNode }
 
 /** Reads `<option>`, `<optgroup>` and fragments the way a native select would. */
-export function optionsFromChildren(children: ReactNode, group?: string, out: DropdownOption[] = []): DropdownOption[] {
+function optionsFromChildren(children: ReactNode, group?: string, out: DropdownOption[] = []): DropdownOption[] {
   Children.forEach(children, (child) => {
     if (!isValidElement(child)) return;
     const element = child as ReactElement<OptionProps>;

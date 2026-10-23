@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { SelectField, optionsFromChildren } from './SelectField';
+import { SelectField } from './SelectField';
 import { chooseOption, optionLabels, selectedValue } from '../test/select';
 
 function Harness({ onChange = vi.fn(), initial = 'b', ...rest }: { onChange?: (value: string) => void; initial?: string } & Partial<Parameters<typeof SelectField>[0]>) {
@@ -37,8 +37,10 @@ describe('SelectField', () => {
   });
 
   it('builds options from fragments and ignores anything else', () => {
-    const list = optionsFromChildren(<><option>Plain</option>{false}{'text'}<option value={3}>Three</option></>);
-    expect(list).toEqual([{ value: 'Plain', label: 'Plain', disabled: undefined, group: undefined }, { value: '3', label: 'Three', disabled: undefined, group: undefined }]);
+    render(<SelectField aria-label="Mixed" value=""><><option>Plain</option>{false}{'text'}<option value={3}>Three</option><option value="e"><i>Nested</i> text</option></></SelectField>);
+    const mixed = screen.getByRole('combobox', { name: 'Mixed' });
+    expect(optionLabels(mixed)).toEqual(['Plain', 'Three', 'Nested text']);
+    chooseOption(mixed, '3');
   });
 
   it('tells the handler the new value as event.target.value and ignores disabled options', () => {
