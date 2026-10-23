@@ -70,6 +70,7 @@ describe('confirmDialog', () => {
     expect(document.querySelector('.mg-confirm-backdrop')).toBeNull();
 
     const no = confirmDialog({ title: 'Remove?', message: 'Gone for good.' });
+    await screen.findByRole('alertdialog');
     await userEvent.keyboard('{Escape}');
     await expect(no).resolves.toBe(false);
   });

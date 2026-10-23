@@ -333,3 +333,32 @@ describe('ProfilePage: needs you', () => {
     expect(needs.getByText('3', { selector: 'span' })).toBeInTheDocument();
   });
 });
+
+describe('ProfilePage: the dashboard', () => {
+  it('gives an admin quick actions, today’s events and the site admin sections on one page', async () => {
+    responses['/competitions/picker'] = { items: [{ id: 4, name: 'Spring Games', startDate: new Date().toISOString(), endDate: null, icon: 'flag' }], hasMore: false };
+    mount({ roles: ['Admin'] });
+    expect(screen.getByRole('heading', { name: 'Site admin' })).toBeInTheDocument();
+    const quick = section('Quick actions');
+    expect(quick.getByRole('link', { name: /Create competition/ })).toHaveAttribute('href', '/admin/competitions/new');
+    expect(await quick.findByRole('link', { name: /Score now/ })).toHaveAttribute('href', '/competitions/4/scoring');
+    expect(quick.getByRole('link', { name: /Rules library/ })).toHaveAttribute('href', '/admin/rules');
+    expect(await section('Today’s events').findByRole('link', { name: 'Jump in to Spring Games' })).toHaveAttribute('href', '/competitions/4');
+    expect(screen.getByRole('region', { name: 'My club' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  it('gives a trainer Create competition but no site admin or events list', () => {
+    mount({ roles: ['Trainer'] });
+    expect(screen.queryByRole('heading', { name: 'Site admin' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Today’s events' })).not.toBeInTheDocument();
+    expect(section('Quick actions').getByRole('link', { name: /Create competition/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Rules library/ })).not.toBeInTheDocument();
+  });
+
+  it('gives a plain member neither', () => {
+    mount({ roles: ['Member'] });
+    expect(screen.queryByRole('region', { name: 'Quick actions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Site admin' })).not.toBeInTheDocument();
+  });
+});

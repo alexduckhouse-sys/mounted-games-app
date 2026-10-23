@@ -32,6 +32,7 @@ describe('TeamCalendarFeed', () => {
     post.mockResolvedValue({ data: { token: 'tok', path: '/api/calendar/teams/5/tok.ics', createdAt: '2026-10-22T10:00:00Z' } });
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const confirm = autoConfirm(true);
     render(<TeamCalendarFeed team={TEAM} />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Create calendar link' }));

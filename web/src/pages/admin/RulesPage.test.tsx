@@ -84,12 +84,13 @@ describe('RulesPage', () => {
 
   it('only offers Delete on races that are not built in', async () => {
     const user = userEvent.setup();
+    const confirm = autoConfirm(true);
     mount();
     await user.click(await screen.findByRole('button', { name: /Speed Weave/ }));
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Flag Race/ }));
     await user.click(screen.getByRole('button', { name: 'Delete' }));
-    expect(confirm).toHaveBeenCalledWith('Delete "Flag Race"?');
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith('Delete "Flag Race" from the library? This can’t be undone.'));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/race-templates/2'));
   });
 

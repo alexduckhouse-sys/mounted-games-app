@@ -1,4 +1,3 @@
-import { act } from '@testing-library/react';
 import { afterEach, vi, type Mock } from 'vitest';
 
 type Asked = Mock<(message: string) => void> & { stop: () => void; titles: string[] };
@@ -25,7 +24,7 @@ export function autoConfirm(answers: boolean | boolean[] = true): Asked {
       asked(dialog.querySelector('.mg-confirm-body')?.textContent ?? '');
       const buttons = dialog.querySelectorAll('button');
       const button = yes ? buttons[buttons.length - 1] : buttons[0];
-      void act(async () => { button.click(); });
+      button.click();
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });

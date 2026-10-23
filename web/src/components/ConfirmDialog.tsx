@@ -59,9 +59,9 @@ export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
     document.body.appendChild(host);
     const root = createRoot(host);
     const answer = (confirmed: boolean) => {
-      root.unmount();
-      host.remove();
       resolve(confirmed);
+      // Not inside the click that got us here: React will not unmount a root while it is handling that root's event.
+      queueMicrotask(() => { root.unmount(); host.remove(); });
     };
     root.render(<ConfirmDialog {...options} onAnswer={answer} />);
   });
