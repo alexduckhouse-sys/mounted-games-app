@@ -15,16 +15,7 @@ namespace MountedGames.Api.Controllers;
 public class SignupController : ControllerBase
 {
     private readonly AppDbContext _db;
-    private readonly SignupConfirmationService _confirmation;
-    private readonly EmailOptInService _optIns;
-    private readonly TimeProvider _clock;
-    public SignupController(AppDbContext db, SignupConfirmationService confirmation, EmailOptInService optIns, TimeProvider clock)
-    {
-        _db = db;
-        _confirmation = confirmation;
-        _optIns = optIns;
-        _clock = clock;
-    }
+    public SignupController(AppDbContext db) => _db = db;
 
     /// <summary>
     /// Sign up to a comp section. The amount is captured from the section's
@@ -35,7 +26,9 @@ public class SignupController : ControllerBase
     /// </summary>
     [HttpPost("api/competitions/{competitionId:int}/sections/{sectionId:int}/signups")]
     [Authorize]
-    public async Task<ActionResult<SectionSignupDto>> Create(int competitionId, int sectionId, CreateSectionSignupRequest req)
+    public async Task<ActionResult<SectionSignupDto>> Create(int competitionId, int sectionId, CreateSectionSignupRequest req,
+        // Taken here, not in the constructor, so only entering a competition needs the email services.
+        [FromServices] SignupConfirmationService confirmation, [FromServices] EmailOptInService optIns, [FromServices] TimeProvider clock)
     {
         // Admin role runs comps — they explicitly shouldn't be entering them.
         // Guard at the API layer too so a stray UI bug or curl can't slip through.
@@ -155,7 +148,7 @@ public class SignupController : ControllerBase
         string? unsubscribeToken = null;
         if (req.EmailOptIn && contactEmail is not null)
         {
-            var result = await _optIns.AddAsync(contactEmail, EmailOptInWording.Version, EmailOptInWording.SignupSource);
+            var result = await optIns.AddAsync(contactEmail, EmailOptInWording.Version, EmailOptInWording.SignupSource);
             optIn = result.Joined ? OptInOutcome.Joined : OptInOutcome.AlreadyOnList;
             unsubscribeToken = result.UnsubscribeToken;
         }
@@ -176,11 +169,11 @@ public class SignupController : ControllerBase
         // One confirmation, sent here and now (the API can be asleep a moment later). Whatever happens, the entry stays.
         if (contactEmail is not null)
         {
-            var status = await _confirmation.SendAsync(signup, section.Competition!, section, optIn, unsubscribeToken);
+            var status = await confirmation.SendAsync(signup, section.Competition!, section, optIn, unsubscribeToken);
             try
             {
                 signup.ConfirmationEmailStatus = status;
-                signup.ConfirmationEmailAt = _clock.GetUtcNow().UtcDateTime;
+                signup.ConfirmationEmailAt = clock.GetUtcNow().UtcDateTime;
                 await _db.SaveChangesAsync();
             }
             catch (DbUpdateException)
