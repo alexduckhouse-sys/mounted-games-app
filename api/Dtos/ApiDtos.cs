@@ -82,7 +82,8 @@ public record FormedTeamPreview(
     int ClubId,
     string Suffix,
     IReadOnlyList<int> SignupIds,
-    IReadOnlyList<string> RiderNames);
+    IReadOnlyList<string> RiderNames,
+    string? TeamName = null);
 
 public record FormTeamsResult(
     bool Preview,
@@ -112,7 +113,8 @@ public record UpsertRaceTemplateRequest(
 public record CompetitionSectionDto(
     int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName,
     string? RunoffRaceName, bool UsesRaceFinals, int PriceMinor,
-    int? MaxParticipants = null, int? FinalistCount = null);
+    int? MaxParticipants = null, int? FinalistCount = null,
+    int ActiveSignupsCount = 0);
 public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName,
     string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0,
     int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null);
@@ -127,7 +129,8 @@ public record SectionSignupDto(
     bool UseInitialOnly = false, bool NoFilming = false,
     bool TermsAccepted = false, DateTime? TermsAcceptedAt = null, string? TermsWordingVersion = null,
     string? ContactEmail = null, EmailDeliveryStatus ConfirmationEmailStatus = EmailDeliveryStatus.NotRequested,
-    DateTime? ConfirmationEmailAt = null);
+    DateTime? ConfirmationEmailAt = null,
+    string? TeamName = null, bool IsWholeTeam = false);
 
 /// <param name="ContactInfo">Phone number (free text).</param>
 /// <param name="AcceptTerms">The one required tick (parental consent plus the event terms).</param>
@@ -142,7 +145,8 @@ public record CreateSectionSignupRequest(
     bool AcceptTerms = false, string? ConsentVersion = null,
     [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
     bool EmailOptIn = false, string? EmailOptInVersion = null,
-    [MaxLength(64)] string? RequestId = null);
+    [MaxLength(64)] string? RequestId = null,
+    [StringLength(200)] string? TeamName = null, bool WholeTeam = false);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 
@@ -179,16 +183,24 @@ public record TeamDto(
     /// <summary>Join key — exposed only to the trainer; null for everyone else.</summary>
     string? SupporterJoinKey = null,
     /// <summary>Withdrawn or no-show. Public on purpose; the reason is organiser-only.</summary>
-    bool IsWithdrawn = false);
+    bool IsWithdrawn = false,
+    string? BibDescription = null);
 
 public record CreateTeamRequest(
     int CompetitionSectionId, int ClubId, string Suffix,
     string? BibColour, string? TrainerUserId,
-    bool IsHorsConcours = false);
+    bool IsHorsConcours = false,
+    [StringLength(200)] string? BibDescription = null);
 
+/// <summary>Omitted (null) fields stay as they are. An empty <c>TrainerUserId</c> or <c>BibDescription</c> clears it.</summary>
 public record UpdateTeamRequest(
     string? Suffix = null,
-    bool? IsHorsConcours = null);
+    bool? IsHorsConcours = null,
+    string? TrainerUserId = null,
+    [StringLength(200)] string? BibDescription = null);
+
+/// <summary>A trainer who can be put in charge of a team.</summary>
+public record ClubTrainerDto(string UserId, string FullName);
 
 public record SessionDto(
     int Id, int CompetitionId, int? CompetitionSectionId, string? SectionName,
@@ -199,9 +211,12 @@ public record SessionDto(
     SessionKind Kind, string? Location,
     string? StreamUrl, int? LanesPerHeat,
     int? MinutesPerHeat, bool RaceOrderAlternating,
-    IReadOnlyList<HeatDto> Heats);
+    IReadOnlyList<HeatDto> Heats,
+    LaneRotationMode LaneRotationMode = LaneRotationMode.MoveUp,
+    int? QualifiersPerHeat = null);
 
-public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating);
+public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating,
+    LaneRotationMode? LaneRotationMode = null, [Range(1, 20)] int? QualifiersPerHeat = null);
 
 public record HeatAssignmentEntry(string Label, IReadOnlyList<int> TeamIds);
 public record UpdateHeatAssignmentsRequest(IReadOnlyList<HeatAssignmentEntry> Assignments);
@@ -277,7 +292,7 @@ public record RaceClockRequest(DateTime? At);
 
 public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex);
 
-public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points);
+public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points, bool IsSitOut = false);
 
 public record CreateHeatRequest(
     string? Label, int OrderIndex,
@@ -309,21 +324,23 @@ public record DeclarationFormDto(
     string? SubmittedByUserId, string? SubmittedByName, string? SubmittedByPhone,
     DateTime SubmittedAt,
     string? Notes, bool IsLocked,
-    IReadOnlyList<RiderEntryDto> Riders);
+    IReadOnlyList<RiderEntryDto> Riders,
+    string? BibDescription = null);
 
 public record RiderEntryDto(
     int Id, int? SavedRiderId, string FullName, DateTime? DateOfBirth,
     string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex,
-    bool UseInitialOnly = false, bool NoFilming = false);
+    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false);
 
 public record SubmitDeclarationFormRequest(
     int TeamId, string? Notes, IReadOnlyList<RiderEntryInput> Riders, bool SaveToRoster,
-    string? TrainerPhone);
+    string? TrainerPhone,
+    [StringLength(200)] string? BibDescription = null);
 
 public record RiderEntryInput(
     int? SavedRiderId, string FullName, DateTime? DateOfBirth,
     string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex,
-    bool UseInitialOnly = false, bool NoFilming = false);
+    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false);
 
 public record SavedRiderDto(
     int Id, int ClubId, string FullName, DateTime? DateOfBirth, string? HorseName, string? Notes,
@@ -331,9 +348,10 @@ public record SavedRiderDto(
 
 public record ChatMessageDto(
     int Id, int CompetitionId, string? UserId, string AuthorName,
-    string Body, ChatMessageType Type, string? Tag, DateTime CreatedAt, bool AdminOnly);
+    string Body, ChatMessageType Type, string? Tag, DateTime CreatedAt, bool AdminOnly,
+    string? RecipientUserId = null);
 
-public record PostChatMessageRequest(string Body);
+public record PostChatMessageRequest([StringLength(2000)] string Body, string? ReplyToUserId = null);
 
 public record AnnouncementRequest(string Body, string? Tag);
 

@@ -1,6 +1,6 @@
-export type Role = 'Admin' | 'Trainer' | 'TrainerRequest' | 'Manager' | 'Member' | 'Rider';
+export type Role = 'Admin' | 'Trainer' | 'TrainerRequest' | 'ManagerRequest' | 'Manager' | 'Member' | 'Rider';
 
-/** Self-service signup choices. Trainer accounts need admin approval. */
+/** Self-service signup choices. Trainer accounts need approval from an admin or their club's manager; team managers from an admin. */
 export const SIGNUP_ROLES: { value: 'Trainer' | 'Manager' | 'Member'; label: string; description: string }[] = [
   { value: 'Trainer', label: 'Trainer', description: 'Coach your pony club\'s teams; submit dec forms.' },
   { value: 'Manager', label: 'Team manager', description: 'Run the team\'s admin side: dec forms, contact, signups.' },
@@ -47,6 +47,8 @@ export interface TrainerRequest {
   email: string | null;
   clubName: string | null;
   requestedAt: string;
+  /** The role they asked for. */
+  requestedRole?: 'Trainer' | 'Manager';
 }
 
 export interface Club {
@@ -124,6 +126,8 @@ export interface CompetitionSection {
   priceMinor?: number;
   /** Cap on active signups (null/undefined = unlimited). */
   maxParticipants?: number | null;
+  /** Paid and pending entries, the ones that take a seat. Public, so everyone sees the real seats left. */
+  activeSignupsCount?: number;
 }
 
 export type RaceRoundStage = 0 | 1 | 2; // None / Qualifier / Final
@@ -141,12 +145,14 @@ export interface Team {
   trainerUserId?: string | null;
   trainerName?: string | null;
   isHorsConcours: boolean;
-  /** "trainer", "supporter" or null — only set on /trainer/my-teams. */
-  relationship?: 'trainer' | 'supporter' | null;
-  /** Join key — set only when the viewer is the trainer of this team. */
+  /** "trainer", "manager" (of the team's club), "supporter" or null — only set on /trainer/my-teams. */
+  relationship?: 'trainer' | 'manager' | 'supporter' | null;
+  /** Join key — set only when the viewer is the trainer or the club's manager. */
   supporterJoinKey?: string | null;
   /** Withdrawn or no-show. Public; the reason is organiser-only. */
   isWithdrawn?: boolean;
+  /** What the team's bibs look like, in plain words. One description for the whole team. */
+  bibDescription?: string | null;
 }
 
 export type TeamSupporterStatus = 0 | 1; // Pending / Accepted
@@ -177,6 +183,8 @@ export interface ResultRow {
   placing: number | null;
   eliminated: boolean;
   points: number;
+  /** The team had no lane this race (more teams than lanes) and sat it out. Shown as S. */
+  isSitOut?: boolean;
 }
 
 export interface Race {
@@ -226,6 +234,10 @@ export interface Session {
   lanesPerHeat?: number | null;
   minutesPerHeat?: number | null;
   raceOrderAlternating?: boolean;
+  /** How teams change lane after each race: 0 move up one (the default), 1 stay, 2 move down one. */
+  laneRotationMode?: 0 | 1 | 2;
+  /** Heat-heat-final: how many teams go through from each qualifier to the final (3 when unset). */
+  qualifiersPerHeat?: number | null;
   heats: Heat[];
 }
 
@@ -316,6 +328,10 @@ export interface SectionSignup {
   contactEmail?: string | null;
   confirmationEmailStatus?: EmailDeliveryStatus;
   confirmationEmailAt?: string | null;
+  /** A custom team name; riders who share one form a team of that name. */
+  teamName?: string | null;
+  /** A team manager or trainer entering a whole team in one go. */
+  isWholeTeam?: boolean;
 }
 
 export interface ShopPost {
@@ -375,8 +391,10 @@ export interface ChatMessage {
   type: ChatMessageType;
   tag?: string | null;
   createdAt: string;
-  /** Trainer message: only admins and its author see it. */
+  /** Private message to the organisers: only admins and its author see it (and the recipient of an organiser's reply). */
   adminOnly: boolean;
+  /** For an organiser's private reply: the person whose thread it answers. */
+  recipientUserId?: string | null;
 }
 
 export interface RiderEntry {
@@ -388,6 +406,8 @@ export interface RiderEntry {
   bibColour?: string | null;
   isCaptain: boolean;
   isReserve: boolean;
+  /** A guest rider borrowed from outside the team. */
+  isGuestRider?: boolean;
   orderIndex: number;
   /** Public pages get the name already shortened; staff and the owning trainer see the choice. */
   useInitialOnly?: boolean;
@@ -425,6 +445,8 @@ export interface DeclarationForm {
   notes?: string | null;
   isLocked: boolean;
   riders: RiderEntry[];
+  /** The team's bib description, shown with the declaration. */
+  bibDescription?: string | null;
 }
 
 export interface SavedRider {

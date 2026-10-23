@@ -16,7 +16,7 @@ ASP.NET Core 10, EF Core (Npgsql in production, SQLite locally and in tests), Si
 - **Shop** (`ShopPost`, `ShopComment`, `ShopReport`): marketplace posts. **Commerce**: event shops with listings and orders.
 - **Scorer link** (`ScorerLink`): a no-account way to score one arena of one competition. Only a SHA-256 hash of the token is stored; the token is shown once on creation. Made, listed and revoked by anyone `[CompetitionAccess]` lets in, through `ScorerLinksController`.
 - **Email** (`Services/Email/`): `IEmailSender` (`LoggingEmailSender` unless `Email:Enabled`, `Email:ApiKey` and `Email:From` are all set, then `ResendEmailSender`). `SignupConfirmationService` sends the one entry confirmation inline from `SignupController.Create`; the result goes on `SectionSignup.ConfirmationEmailStatus`. `EmailOptIn` is the consent list for new-competition emails (unticked box, hashed unsubscribe token, site-admin CSV export).
-- **Roles** (`Auth/Roles.cs`): Admin, Trainer, TrainerRequest (signed up, awaiting approval), Manager, Member, Rider. "Steward" and "spectator" are product words with no role behind them.
+- **Roles** (`Auth/Roles.cs`): Admin, Trainer, TrainerRequest and ManagerRequest (signed up, awaiting approval), Manager, Member, Rider. "Steward" and "spectator" are product words with no role behind them.
 
 ## Recipes
 

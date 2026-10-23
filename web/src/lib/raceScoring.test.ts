@@ -33,6 +33,18 @@ describe('tapTeam', () => {
   });
 });
 
+describe('tapTeam in a qualifier', () => {
+  it('places teams up to the cap, then eliminates any further team tapped', () => {
+    const list = [3, 1, 2, 4].reduce<PendingPlace[]>((cur, id) => tapTeam(cur, id, 2), []);
+    expect(places(list)).toEqual(['3:1', '1:2', '2:out', '4:out']);
+  });
+
+  it('places again once a qualifier is tapped off', () => {
+    const full = [3, 1].reduce<PendingPlace[]>((cur, id) => tapTeam(cur, id, 2), []);
+    expect(places(tapTeam(tapTeam(full, 3, 2), 5, 2))).toEqual(['1:1', '5:2']);
+  });
+});
+
 describe('toggleEliminated', () => {
   it('eliminates a placed team and closes the gap behind it', () => {
     expect(places(toggleEliminated(tapAll(1, 2, 3), 1))).toEqual(['1:out', '2:1', '3:2']);
@@ -145,6 +157,11 @@ describe('placesFromResults', () => {
       { teamId: 2, place: 2, eliminated: false },
       { teamId: 3, place: 0, eliminated: true },
     ]);
+  });
+
+  it('leaves out teams that sat the race out', () => {
+    const r = race(1, { results: [result(1, 1), result(2, null, { isSitOut: true }), result(3, 2)] });
+    expect(placesFromResults(r).map((p) => p.teamId)).toEqual([1, 3]);
   });
 
   it('numbers a result that has no placing by its position', () => {

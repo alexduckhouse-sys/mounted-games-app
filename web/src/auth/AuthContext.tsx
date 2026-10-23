@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<{ token: string; kind: 'requested' | 'approved' } | null>(null);
   const token = auth?.token ?? null;
-  const pendingTrainer = auth?.user.roles.includes('TrainerRequest') ?? false;
+  const pendingApproval = auth?.user.roles.some((role) => role === 'TrainerRequest' || role === 'ManagerRequest') ?? false;
   // Default off: admins land in safe "View only" mode and have to opt into
   // Edit mode explicitly. Persisted so it survives navigation.
   const [editorMode, setEditorModeState] = useState<boolean>(() => {
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     let cancelled = false;
     api.get<UserProfile>('/auth/me').then(({ data }) => {
-      if (!cancelled && pendingTrainer && data.roles.includes('Trainer')) {
+      if (!cancelled && pendingApproval && (data.roles.includes('Trainer') || data.roles.includes('Manager'))) {
         // Keep the saved roles aligned with the JWT until the next sign-in.
         setNotice({ token, kind: 'approved' });
       }
@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
     return () => { cancelled = true; };
-  }, [token, pendingTrainer]);
+  }, [token, pendingApproval]);
 
   const userKey = auth?.user.id ?? null;
   // Remember whose list this is, so one person's access is never shown to the next.
@@ -142,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       writeStoredAuth(data);
       setAuth(data);
-      setNotice(data.user.roles.includes('TrainerRequest') ? { token: data.token, kind: 'requested' } : null);
+      setNotice(data.user.roles.some((role) => role === 'TrainerRequest' || role === 'ManagerRequest') ? { token: data.token, kind: 'requested' } : null);
     } finally {
       setLoading(false);
     }

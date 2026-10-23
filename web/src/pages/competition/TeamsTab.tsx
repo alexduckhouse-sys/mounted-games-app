@@ -12,7 +12,8 @@ export function TeamsTab() {
   const { competition, reload } = useCompetition();
   const { favourites, error: favouriteError, toggle } = useFavourites();
   const followed = new Set(favourites.filter((item) => item.competitionId === competition.id).map((item) => item.teamId));
-  const { user, hasRole, canEdit } = useAuth();
+  const { user, hasRole, canEdit, canOrganise } = useAuth();
+  const mayAssignTrainers = canEdit() || canOrganise(competition);
   const [sectionId, setSectionId] = useState<number | 'all'>('all');
   const [clubs, setClubs] = useState<Club[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -186,9 +187,13 @@ export function TeamsTab() {
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
-                      {t.trainerName ?? 'No trainer assigned'}
-                    </div>
+                    {mayAssignTrainers ? (
+                      <TrainerPicker competitionId={competition.id} team={t} onSaved={reload} />
+                    ) : (
+                      <div className="text-[10px] text-slate-400 truncate">
+                        {t.trainerName ?? 'No trainer assigned'}
+                      </div>
+                    )}
                   </div>
                   <button className="btn-ghost min-h-11 min-w-11 !px-2" aria-pressed={followed.has(t.id)} aria-label={`${followed.has(t.id) ? 'Unfollow' : 'Follow'} ${t.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: t.id })}>
                     <Star aria-hidden="true" className={`h-5 w-5 ${followed.has(t.id) ? 'fill-current' : ''}`} />
@@ -216,5 +221,42 @@ export function TeamsTab() {
         </div>
       ))}
     </div>
+  );
+}
+
+/** Lets an organiser put one of the team's club trainers in charge of it. */
+function TrainerPicker({ competitionId, team, onSaved }: { competitionId: number; team: Team; onSaved: () => void }) {
+  const [trainers, setTrainers] = useState<{ userId: string; fullName: string }[]>([]);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    api.get<{ userId: string; fullName: string }[]>(`/clubs/${team.clubId}/trainers`)
+      .then((r) => setTrainers(r.data))
+      .catch(() => setTrainers([]));
+  }, [team.clubId]);
+  // The current trainer stays selectable even if they belong to another club.
+  const options = team.trainerUserId && !trainers.some((t) => t.userId === team.trainerUserId)
+    ? [{ userId: team.trainerUserId, fullName: team.trainerName ?? 'Current trainer' }, ...trainers]
+    : trainers;
+  async function change(trainerUserId: string) {
+    setError(false);
+    try {
+      await api.put(`/competitions/${competitionId}/teams/${team.id}`, { trainerUserId });
+      onSaved();
+    } catch { setError(true); }
+  }
+  return (
+    <label className="block text-[10px] text-slate-400">
+      <span className="sr-only">Trainer for {team.displayName}</span>
+      <select
+        className="input !min-h-0 !py-0.5 text-[11px]"
+        aria-label={`Trainer for ${team.displayName}`}
+        value={team.trainerUserId ?? ''}
+        onChange={(e) => void change(e.target.value)}
+      >
+        <option value="">No trainer assigned</option>
+        {options.map((t) => <option key={t.userId} value={t.userId}>{t.fullName}</option>)}
+      </select>
+      {error && <span role="alert" className="text-rose-600"> Could not change the trainer.</span>}
+    </label>
   );
 }

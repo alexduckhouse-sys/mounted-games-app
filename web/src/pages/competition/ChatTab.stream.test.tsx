@@ -8,7 +8,7 @@ import { flush } from '../../test/streamFakes';
 
 const context = vi.hoisted(() => ({ enabled: false, organiser: true, edit: false, roles: [] as string[], streamUrl: 'https://youtu.be/old' as string | null, messages: [] as unknown[], reload: vi.fn() }));
 vi.mock('./context', () => ({ useCompetition: () => ({ competition: competition({ streamUrl: context.streamUrl, organiserName: 'Example Club', paymentDestination: 'Example payment instructions' }), reload: context.reload, streams: [], streamingEnabled: context.enabled, invoke: vi.fn(), ready: 1, streamMessages: [] }) }));
-vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ user: null, canEdit: () => context.edit, hasRole: (role: string) => context.roles.includes(role), canOrganise: () => context.organiser }) }));
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ user: context.roles.length > 0 ? { id: 'fake-user', roles: context.roles } : null, canEdit: () => context.edit, hasRole: (role: string) => context.roles.includes(role), canOrganise: () => context.organiser }) }));
 vi.mock('../../live/useLiveHub', () => ({ useLiveHub: () => ({ connected: true }) }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 beforeEach(() => { Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() }); context.enabled = false; context.organiser = true; context.edit = false; context.roles = ['Admin']; context.streamUrl = 'https://youtu.be/old'; context.messages = []; context.reload.mockReset(); vi.mocked(api.get).mockImplementation(async () => ({ data: context.messages })); vi.mocked(api.put).mockResolvedValue({}); vi.mocked(api.post).mockResolvedValue({}); vi.mocked(api.delete).mockResolvedValue({}); });

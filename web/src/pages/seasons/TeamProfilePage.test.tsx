@@ -44,7 +44,8 @@ describe('TeamProfilePage', () => {
     await user.selectOptions(competition, '12');
     const team = await screen.findByLabelText('Event team');
     expect(screen.queryByRole('option', { name: 'Wrong club A' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'North Club B' })).not.toBeInTheDocument();
+    // Any team of the profile's club can be linked, whatever its suffix.
+    expect(screen.getByRole('option', { name: 'North Club B' })).toBeInTheDocument();
     await user.selectOptions(team, '41');
     await user.click(screen.getByRole('button', { name: 'Link event team' }));
 
@@ -158,5 +159,19 @@ describe('TeamProfilePage', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     await act(async () => resolveCreate({ data: profile }));
     await waitFor(() => expect(api.post).toHaveBeenCalled());
+  });
+
+  it('creates a profile with no suffix for a club that is not on the list yet', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: profile });
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={['/team-profiles']}><Routes><Route path="/team-profiles" element={<TeamProfilePage />} /><Route path="/team-profiles/:profileId" element={<TeamProfilePage />} /></Routes></MemoryRouter>);
+
+    await user.click(await screen.findByRole('button', { name: 'New profile' }));
+    await user.selectOptions(screen.getByLabelText('Club'), 'new');
+    await user.type(screen.getByLabelText('New club name'), 'Welsh Dragons');
+    await user.type(screen.getByLabelText('Display name'), 'Welsh Dragons');
+    expect(screen.getByLabelText('Suffix')).not.toBeRequired();
+    await user.click(screen.getByRole('button', { name: 'Create profile' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/team-profiles', { clubId: 0, clubName: 'Welsh Dragons', suffix: '', displayName: 'Welsh Dragons' }));
   });
 });

@@ -21,6 +21,19 @@ public enum ChatMessageType
     Announcement = 2
 }
 
+/// <summary>How teams change lane from one race of a heat to the next.</summary>
+public enum LaneRotationMode
+{
+    // MoveUp is 0 on purpose: it is what every session did before this was a choice, so existing rows and
+    // new sessions need no stored default.
+    /// <summary>Every team moves up one lane after each race (the last wraps round to the first).</summary>
+    MoveUp = 0,
+    /// <summary>Every team stays in its drawn lane.</summary>
+    Stay = 1,
+    /// <summary>Every team moves down one lane after each race.</summary>
+    MoveDown = 2
+}
+
 public enum SessionKind
 {
     Race = 0,

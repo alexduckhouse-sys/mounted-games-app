@@ -14,6 +14,9 @@ import './seasonViews.css';
 
 type ProfileTab = 'history' | 'edit' | 'link';
 
+/** The club choice that means "a club that isn't on the list yet". */
+const NEW_CLUB = 'new';
+
 function message(error: unknown, fallback: string) {
   const candidate = error as { response?: { data?: { detail?: string; title?: string } } };
   return candidate.response?.data?.detail ?? candidate.response?.data?.title ?? fallback;
@@ -56,6 +59,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const [competitionId, setCompetitionId] = useState('');
   const [teamId, setTeamId] = useState('');
   const [clubId, setClubId] = useState('');
+  const [newClubName, setNewClubName] = useState('');
   const [suffix, setSuffix] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [tab, setTab] = useState<ProfileTab>('history');
@@ -125,8 +129,8 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
 
   const matchingTeams = useMemo(() => {
     if (!competition || !history) return [];
-    return competition.teams.filter((team) => team.clubId === history.profile.clubId
-      && team.suffix.trim().toLocaleLowerCase() === history.profile.suffix.trim().toLocaleLowerCase());
+    // Any team of the profile's club can be linked: teams can have their own names, and a suffix is optional.
+    return competition.teams.filter((team) => team.clubId === history.profile.clubId);
   }, [competition, history]);
 
   function chooseCompetition(value: string) {
@@ -137,11 +141,12 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     event.preventDefault();
     setBusy(true); setError(null); setSuccess(null);
     try {
+      const club = clubId === NEW_CLUB ? { clubId: 0, clubName: newClubName.trim() } : { clubId: Number(clubId) };
       if (id) {
-        await api.put(`/team-profiles/${id}`, { clubId: Number(clubId), suffix, displayName });
+        await api.put(`/team-profiles/${id}`, { ...club, suffix, displayName });
         setSuccess('Profile saved.'); setRefresh((value) => value + 1);
       } else {
-        const { data } = await api.post<TeamProfile>('/team-profiles', { clubId: Number(clubId), suffix, displayName });
+        const { data } = await api.post<TeamProfile>('/team-profiles', { ...club, suffix, displayName });
         navigate(`/team-profiles/${data.id}`);
       }
     } catch (caught) { setError(message(caught, 'Couldn’t save the profile. Check the details and try again.')); }
@@ -168,8 +173,9 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       <form onSubmit={saveProfile}>
         <fieldset disabled={busy} className="sv-fieldset sv-stack">
           <legend className="sr-only">Team details</legend>
-          <label className="rf-fld">Club<select value={clubId} onChange={(event) => setClubId(event.target.value)} required><option value="">Choose a club</option>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}</select></label>
-          <div className="sv-two"><label className="rf-fld">Suffix<input value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} required /></label><label className="rf-fld">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div>
+          <label className="rf-fld">Club<select value={clubId} onChange={(event) => setClubId(event.target.value)} required><option value="">Choose a club</option>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}<option value={NEW_CLUB}>A club that isn’t listed…</option></select></label>
+          {clubId === NEW_CLUB && <label className="rf-fld">New club name<input value={newClubName} onChange={(event) => setNewClubName(event.target.value)} maxLength={150} required /></label>}
+          <div className="sv-two"><label className="rf-fld">Suffix<input value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} placeholder="Optional" /></label><label className="rf-fld">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div>
         </fieldset>
         <RefineFoot>
           <span className="rf-grow" />
@@ -187,7 +193,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       {error && <div role="alert" className="mg-notice sv-msg">{error} <button type="button" className="mg-text-link min-h-11" onClick={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>Try again</button></div>}
       {!error && (profiles?.length ? <>
         <RefineSection title="All profiles" meta={profiles.length} />
-        <RefineList label="Team profiles">{profiles.map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="rf-row"><span className="rf-grow"><span className="rf-t1">{profile.displayName}</span><span className="rf-t2">{profile.clubName} · suffix {profile.suffix}</span></span><Chevron /></Link></li>)}</RefineList>
+        <RefineList label="Team profiles">{profiles.map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="rf-row"><span className="rf-grow"><span className="rf-t1">{profile.displayName}</span><span className="rf-t2">{profile.clubName}{profile.suffix ? ` · suffix ${profile.suffix}` : ''}</span></span><Chevron /></Link></li>)}</RefineList>
       </> : <div className="sv-empty"><h2>No team profiles yet</h2><p>Profiles will appear here once an organiser creates them.</p></div>)}
     </RefinePage>;
   }
@@ -234,7 +240,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     <RefineHeader
       back={selected ? `/seasons/${selected.seasonId}` : '/team-profiles'} backLabel={selected ? 'Back to standings' : 'Back to team profiles'}
       context={context} title={profile.displayName}
-      subtitle={selected ? <>{placeLabel && <><strong>{placeLabel}</strong> · </>}{total} pts · {roundsText}</> : `${profile.clubName} · suffix ${profile.suffix}`}
+      subtitle={selected ? <>{placeLabel && <><strong>{placeLabel}</strong> · </>}{total} pts · {roundsText}</> : profile.suffix ? `${profile.clubName} · suffix ${profile.suffix}` : profile.clubName}
       actions={history.eventTeams.length > 0 ? <button type="button" className="rf-ib sv-star" aria-pressed={following} aria-label={`${following ? 'Unstar' : 'Star'} ${profile.displayName}`} title="Follow on this device" onClick={toggleStar}><Star className="h-5 w-5" aria-hidden="true" /></button> : undefined}
       tabs={tabs} tabsKind="tablist" tabsLabel="Team profile sections"
     />
@@ -266,8 +272,9 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       <form onSubmit={saveProfile} className="sv-stack">
         <fieldset disabled={busy} className="sv-fieldset sv-stack">
           <legend className="sr-only">Profile details</legend>
-          <label className="rf-fld">Club<select value={clubId} onChange={(event) => setClubId(event.target.value)} required disabled={identityLocked}>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}</select></label>
-          <div className="sv-two"><label className="rf-fld">Suffix<input value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} required disabled={identityLocked} /></label><label className="rf-fld">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div>
+          <label className="rf-fld">Club<select value={clubId} onChange={(event) => setClubId(event.target.value)} required disabled={identityLocked}>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}<option value={NEW_CLUB}>A club that isn’t listed…</option></select></label>
+          {clubId === NEW_CLUB && <label className="rf-fld">New club name<input value={newClubName} onChange={(event) => setNewClubName(event.target.value)} maxLength={150} required disabled={identityLocked} /></label>}
+          <div className="sv-two"><label className="rf-fld">Suffix<input value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} placeholder="Optional" disabled={identityLocked} /></label><label className="rf-fld">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div>
         </fieldset>
         <RefineNote>Once this profile is linked, the club and suffix stay fixed. You can still correct the display name.</RefineNote>
         <button className="rf-btn rf-btn-primary" disabled={busy}><Save className="h-4 w-4" aria-hidden="true" />{busy ? 'Saving…' : 'Save profile'}</button>
@@ -281,7 +288,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
           <legend className="sr-only">Event team link</legend>
           <label className="rf-fld">Competition<select value={competitionId} onChange={(event) => chooseCompetition(event.target.value)} required><option value="">Choose a competition</option>{competitions.map((item) => <option key={item.id} value={item.id}>{item.name} · {date(item.startDate)}</option>)}</select></label>
           <label className="rf-fld">Event team<select value={teamId} onChange={(event) => setTeamId(event.target.value)} required disabled={!competition}><option value="">Choose the matching team</option>{matchingTeams.map((team) => <option key={team.id} value={team.id}>{team.displayName}</option>)}</select></label>
-          {competition && matchingTeams.length === 0 && <p className="rf-note sv-flush">There’s no unlinked team with this profile’s club and suffix in that competition.</p>}
+          {competition && matchingTeams.length === 0 && <p className="rf-note sv-flush">There’s no unlinked team from this profile’s club in that competition.</p>}
         </fieldset>
         <RefineNote>Choose the event team yourself. The system won’t match teams by name.</RefineNote>
         <button className="rf-btn rf-btn-primary" disabled={busy || !teamId}><Link2 className="h-4 w-4" aria-hidden="true" />{busy ? 'Linking…' : 'Link event team'}</button>

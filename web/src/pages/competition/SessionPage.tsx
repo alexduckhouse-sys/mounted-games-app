@@ -19,6 +19,8 @@ import {
   writeScoringDraft, type PendingPlace,
 } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
+import { LANE_ROTATION_LABELS, LaneRotationMode, lanesInUse, type LaneRotationModeValue } from '../../lib/lanes';
+import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
 
 function formatTime(d: Date | null): string {
   if (!d) return '—';
@@ -56,7 +58,8 @@ export function SessionPage() {
 
   const sessionBase = useMemo(() => {
     if (!session) return 0;
-    return session.heats.reduce((m, h) => Math.max(m, h.entries.length), 0);
+    // A heat with more teams than lanes races only the lanes, so points are out of the lanes, not the teams.
+    return session.heats.reduce((m, h) => Math.max(m, lanesInUse(h.entries.length, session.lanesPerHeat)), 0);
   }, [session]);
 
   const orderedHeats = useMemo(
@@ -200,9 +203,13 @@ export function SessionPage() {
 
   const activeRace = orderedRaces.find((r) => r.id === activeRaceId) ?? null;
 
+  // In a qualifier only the teams that go through to the final need placing. The rest finish on 1 point each,
+  // and tapping one of those marks it eliminated instead (0 points).
+  const qualifierCap = activeHeat?.raceRoundStage === 1 ? qualifiersOf(session) : null;
+
   function clickTeam(teamId: number) {
     if (!activeRace) return;
-    setPending((cur) => tapTeam(cur, teamId));
+    setPending((cur) => tapTeam(cur, teamId, qualifierCap));
   }
 
   function toggleElim(teamId: number) {
@@ -210,6 +217,7 @@ export function SessionPage() {
   }
 
   function resetPending() { setPending([]); }
+
 
   // Results go into this phone's outbox and send when there's signal, so the
   // scorer can move straight on to the next race.
@@ -228,7 +236,7 @@ export function SessionPage() {
       competitionId: session.competitionId,
       sessionId: session.id,
       label: `${activeHeat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
-      places: pending,
+      places: [...pending, ...restOfQualifier(activeHeat, pending), ...sitOutPlaces(activeHeat, orderedRaces.findIndex((r) => r.id === activeRace.id), lanesOf(session))],
       expected: placingsOf(activeRace.results),
       teamNames: Object.fromEntries(activeHeat.entries.map((e) => [e.teamId, e.teamName])),
       queuedAt: new Date().toISOString(),
@@ -259,6 +267,8 @@ export function SessionPage() {
         </Link>
         {canManage(competition) && (
           <div className="flex gap-1.5">
+            <LaneRotationControl session={session} onChanged={reload} />
+            {orderedHeats.some((h) => h.raceRoundStage) && <QualifiersControl session={session} onChanged={reload} />}
             <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
               <Wand2 className="w-3.5 h-3.5" /> Set up heats
             </button>
@@ -282,6 +292,8 @@ export function SessionPage() {
               activeRace={activeRace}
               onSelectRace={(id) => { setActiveRaceId(id); setPending([]); }}
               sessionBase={sessionBase}
+              laneRules={lanesOf(session)}
+              qualifiers={qualifiersOf(session)}
               pending={pending}
               canScore
               queued={outbox}
@@ -344,6 +356,60 @@ export function SessionPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/** How teams change lane after each race. Saved with the session's other timing settings, which it must carry along. */
+function LaneRotationControl({ session, onChanged }: { session: Session; onChanged: () => void }) {
+  const [error, setError] = useState(false);
+  async function change(mode: LaneRotationModeValue) {
+    setError(false);
+    try {
+      await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/settings`, {
+        minutesPerHeat: session.minutesPerHeat ?? null,
+        raceOrderAlternating: session.raceOrderAlternating ?? false,
+        laneRotationMode: mode,
+      });
+      onChanged();
+    } catch { setError(true); }
+  }
+  return (
+    <label className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+      <span>Lanes after each race</span>
+      <select
+        className="input !min-h-0 !py-1 text-xs"
+        value={session.laneRotationMode ?? LaneRotationMode.MoveUp}
+        onChange={(e) => void change(Number(e.target.value) as LaneRotationModeValue)}
+      >
+        {([0, 1, 2] as const).map((mode) => <option key={mode} value={mode}>{LANE_ROTATION_LABELS[mode]}</option>)}
+      </select>
+      {error && <span role="alert" className="text-rose-600">Not saved</span>}
+    </label>
+  );
+}
+
+/** Heat-heat-final: how many teams go through from each qualifier. The final fills itself from this once both qualifiers are scored. */
+function QualifiersControl({ session, onChanged }: { session: Session; onChanged: () => void }) {
+  const [error, setError] = useState(false);
+  async function change(count: number) {
+    setError(false);
+    try {
+      await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/settings`, {
+        minutesPerHeat: session.minutesPerHeat ?? null,
+        raceOrderAlternating: session.raceOrderAlternating ?? false,
+        qualifiersPerHeat: count,
+      });
+      onChanged();
+    } catch { setError(true); }
+  }
+  return (
+    <label className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+      <span>Through to the final</span>
+      <select className="input !min-h-0 !py-1 text-xs" value={qualifiersOf(session)} onChange={(e) => void change(Number(e.target.value))}>
+        {Array.from({ length: 10 }, (_, i) => i + 1).map((count) => <option key={count} value={count}>{count} from each</option>)}
+      </select>
+      {error && <span role="alert" className="text-rose-600">Not saved</span>}
+    </label>
   );
 }
 

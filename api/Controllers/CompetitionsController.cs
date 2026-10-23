@@ -132,6 +132,7 @@ public class CompetitionsController : ControllerBase
             .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return NotFound();
+        var signupCounts = await ActiveSignupCountsAsync(id);
 
         return new CompetitionDetail(
             c.Id, c.Name, c.Location, c.Description,
@@ -139,7 +140,7 @@ public class CompetitionsController : ControllerBase
             c.What3Words, c.AppleMapsUrl,
             c.StartDate, c.EndDate,
             c.IsActive, c.IsArchived,
-            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
+            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
             c.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
@@ -174,6 +175,7 @@ public class CompetitionsController : ControllerBase
             .Where(t => t.CompetitionId == id && teamIds.Contains(t.Id))
             .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer)
             .ToListAsync();
+        var signupCounts = await ActiveSignupCountsAsync(id);
 
         return new CompetitionDetail(
             c.Id, c.Name, c.Location, c.Description,
@@ -181,7 +183,7 @@ public class CompetitionsController : ControllerBase
             c.What3Words, c.AppleMapsUrl,
             c.StartDate, c.EndDate,
             c.IsActive, c.IsArchived,
-            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
+            c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
             teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
@@ -381,6 +383,15 @@ public class CompetitionsController : ControllerBase
         return section.ToDto();
     }
 
+    /// <summary>Entries that count towards a section's cap (paid and pending), by section id.</summary>
+    private async Task<Dictionary<int, int>> ActiveSignupCountsAsync(int competitionId)
+        => await _db.SectionSignups.AsNoTracking()
+            .Where(s => s.Section!.CompetitionId == competitionId
+                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending))
+            .GroupBy(s => s.CompetitionSectionId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count);
+
     [HttpPut("{id:int}/sections/{sectionId:int}")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]
@@ -397,7 +408,7 @@ public class CompetitionsController : ControllerBase
         // always sends the full section, and null is how an organiser unsets it.
         section.FinalistCount = req.FinalistCount;
         await _db.SaveChangesAsync();
-        return section.ToDto();
+        return section.ToDto((await ActiveSignupCountsAsync(id)).GetValueOrDefault(section.Id));
     }
 
     [HttpDelete("{id:int}/sections/{sectionId:int}")]
@@ -491,9 +502,10 @@ public class CompetitionsController : ControllerBase
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]
     public async Task<ActionResult<object>> FinalsBoundary(int id,
-        [FromQuery] int topN, [FromQuery] int? sectionId = null)
+        [FromQuery] int topN, [FromQuery] int? sectionId = null, [FromQuery] int lanesPerHeat = 6)
     {
         if (topN < 1) return BadRequest(new { message = "topN must be >= 1." });
+        lanesPerHeat = Math.Clamp(lanesPerHeat, 1, 50);
         var teamsQ = _db.Teams
             .Include(t => t.Results)
             .Where(t => t.CompetitionId == id && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active);
@@ -514,20 +526,29 @@ public class CompetitionsController : ControllerBase
         if (ordered.Count <= topN)
             return new { tied = false, message = "All teams qualify; no boundary tie." };
 
-        // Tie sits at the cutoff if the team just inside (position topN-1) shares total+wins
-        // with the team just outside (position topN).
-        var lastIn = ordered[topN - 1];
-        var firstOut = ordered[topN];
-        if (lastIn.Total == firstOut.Total && lastIn.Wins == firstOut.Wins)
+        // Every cut between finals (A/B, B/C, ... and the last place that goes through) can be tied.
+        // A tie is teams level on points: finishing more races first doesn't settle it, so it is
+        // flagged for the organiser to decide (a run-off, a countback on wins, or by hand).
+        var cutoffs = Enumerable.Range(1, topN / lanesPerHeat).Select(k => k * lanesPerHeat).Append(topN).Distinct().OrderBy(c => c).ToList();
+        var boundaries = new List<BoundaryTie>();
+        foreach (var cutoff in cutoffs)
         {
+            if (cutoff >= ordered.Count) continue;
+            var lastIn = ordered[cutoff - 1];
+            if (lastIn.Total != ordered[cutoff].Total) continue;
             var tied = ordered
-                .Where(o => o.Total == lastIn.Total && o.Wins == lastIn.Wins)
+                .Where(o => o.Total == lastIn.Total)
                 .Select(o => new { o.Id, o.Name, o.Total, o.Wins })
-                .ToList();
-            return new { tied = true, cutoff = topN, totalAtCutoff = lastIn.Total, winsAtCutoff = lastIn.Wins, teams = tied };
+                .ToList<object>();
+            boundaries.Add(new BoundaryTie(cutoff, lastIn.Total, lastIn.Wins, tied));
         }
-        return new { tied = false };
+        if (boundaries.Count == 0) return new { tied = false };
+        // The first tied cut is reported at the top level, as before; every tied cut is in `boundaries`.
+        var first = boundaries[0];
+        return new { tied = true, cutoff = first.Cutoff, totalAtCutoff = first.TotalAtCutoff, winsAtCutoff = first.WinsAtCutoff, teams = first.Teams, boundaries };
     }
+
+    private sealed record BoundaryTie(int Cutoff, int TotalAtCutoff, int WinsAtCutoff, IReadOnlyList<object> Teams);
 
     [HttpPost("{id:int}/finals")]
     [Authorize(Policy = CompetitionStaff.Policy)]
@@ -867,6 +888,7 @@ public class CompetitionsController : ControllerBase
             .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstAsync(c => c.Id == id);
 
+        var signupCounts = await ActiveSignupCountsAsync(id);
         foreach (var s in createdSessions)
         {
             var dto = refreshed.Sessions.First(x => x.Id == s.Id).ToDto();
@@ -879,7 +901,7 @@ public class CompetitionsController : ControllerBase
             refreshed.What3Words, refreshed.AppleMapsUrl,
             refreshed.StartDate, refreshed.EndDate,
             refreshed.IsActive, refreshed.IsArchived,
-            refreshed.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto()).ToList(),
+            refreshed.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
             refreshed.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             refreshed.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             IsDemo: await IsDemoCompetitionAsync(refreshed.Id), TermsText: refreshed.TermsText);

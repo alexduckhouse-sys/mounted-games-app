@@ -99,6 +99,96 @@ public class RaceFinalsPopulateTests : IClassFixture<ApiFactory>
         Assert.Equal(new[] { q1t[0], q2t[0], q1t[1], q2t[1] }, Teams(heat));
     }
 
+    private async Task SetQualifiersAsync(HttpClient admin, Arena a, int qualifiers)
+        => (await admin.PutAsJsonAsync(Url(a, "/settings"), new UpdateSessionSettingsRequest(null, null, QualifiersPerHeat: qualifiers)))
+            .EnsureSuccessStatusCode();
+
+    [Fact]
+    public async Task ScoringTheSecondQualifier_FillsTheFinalByItself_UsingTheSessionsQualifierCount()
+    {
+        var a = await _f.CreateArenaAsync(8, raceFinals: true);
+        var (admin, q1, q2, fin) = await GenerateRoundAsync(a, lanes: 4);
+        await SetQualifiersAsync(admin, a, 2);
+        var q1t = Teams(q1); var q2t = Teams(q2);
+
+        await ScoreAsync(admin, q1, (q1t[0], 1, false), (q1t[1], 2, false), (q1t[2], 3, false), (q1t[3], 4, false));
+        Assert.Equal(0, await _f.WithDbAsync(db => db.HeatEntries.CountAsync(e => e.HeatId == fin.Id)));
+
+        await ScoreAsync(admin, q2, (q2t[0], 1, false), (q2t[1], 2, false), (q2t[2], 3, false), (q2t[3], 4, false));
+
+        var entries = await _f.WithDbAsync(db => db.HeatEntries.Where(e => e.HeatId == fin.Id).OrderBy(e => e.LaneIndex).Select(e => e.TeamId).ToListAsync());
+        Assert.Equal(new[] { q1t[0], q2t[0], q1t[1], q2t[1] }, entries);
+    }
+
+    [Fact]
+    public async Task TheFinalFillsItself_WithThreeQualifiersEachWhenNoCountWasSet()
+    {
+        var a = await _f.CreateArenaAsync(8, raceFinals: true);
+        var (admin, q1, q2, fin) = await GenerateRoundAsync(a, lanes: 8);
+        var q1t = Teams(q1); var q2t = Teams(q2);
+        await ScoreAsync(admin, q1, (q1t[0], 1, false), (q1t[1], 2, false), (q1t[2], 3, false), (q1t[3], 4, false));
+        await ScoreAsync(admin, q2, (q2t[0], 1, false), (q2t[1], 2, false), (q2t[2], 3, false), (q2t[3], 4, false));
+
+        Assert.Equal(6, await _f.WithDbAsync(db => db.HeatEntries.CountAsync(e => e.HeatId == fin.Id)));
+    }
+
+    [Fact]
+    public async Task ACorrectedQualifier_DoesNotRefillAFinalThatHasAlreadyBeenRaced()
+    {
+        var a = await _f.CreateArenaAsync(4, raceFinals: true);
+        var (admin, q1, q2, fin) = await GenerateRoundAsync(a);
+        await SetQualifiersAsync(admin, a, 1);
+        var q1t = Teams(q1); var q2t = Teams(q2);
+        await ScoreAsync(admin, q1, (q1t[0], 1, false), (q1t[1], 2, false));
+        await ScoreAsync(admin, q2, (q2t[0], 1, false), (q2t[1], 2, false));
+        var finalists = await _f.WithDbAsync(db => db.HeatEntries.Where(e => e.HeatId == fin.Id).OrderBy(e => e.LaneIndex).Select(e => e.TeamId).ToListAsync());
+        var finalRace = (await _f.WithDbAsync(db => db.Races.Where(r => r.HeatId == fin.Id).Select(r => r.Id).SingleAsync()));
+        (await admin.PostAsJsonAsync($"/api/races/{finalRace}/results", new SubmitRaceResultsRequest(
+            [new FinishingPlaceDto(finalists[0], 1, false), new FinishingPlaceDto(finalists[1], 2, false)]))).EnsureSuccessStatusCode();
+
+        // The scorer fixes Q1 afterwards: the raced final is left as it was.
+        (await admin.PostAsJsonAsync($"/api/races/{q1.Races[0].Id}/results", new SubmitRaceResultsRequest(
+            [new FinishingPlaceDto(q1t[1], 1, false), new FinishingPlaceDto(q1t[0], 2, false)], null, "wrong order"))).EnsureSuccessStatusCode();
+
+        Assert.Equal(finalists, await _f.WithDbAsync(db => db.HeatEntries.Where(e => e.HeatId == fin.Id).OrderBy(e => e.LaneIndex).Select(e => e.TeamId).ToListAsync()));
+    }
+
+    [Fact]
+    public async Task FinalistsAreScoredOnTheFinalsOwnField_NotTheQualifiersBiggerOne()
+    {
+        var a = await _f.CreateArenaAsync(8, raceFinals: true);
+        var (admin, q1, q2, fin) = await GenerateRoundAsync(a, lanes: 4);
+        await SetQualifiersAsync(admin, a, 1);
+        var q1t = Teams(q1); var q2t = Teams(q2);
+        await ScoreAsync(admin, q1, (q1t[0], 1, false), (q1t[1], 2, false), (q1t[2], 3, false), (q1t[3], 4, false));
+        await ScoreAsync(admin, q2, (q2t[0], 1, false), (q2t[1], 2, false), (q2t[2], 3, false), (q2t[3], 4, false));
+        var finalists = await _f.WithDbAsync(db => db.HeatEntries.Where(e => e.HeatId == fin.Id).OrderBy(e => e.LaneIndex).Select(e => e.TeamId).ToListAsync());
+        Assert.Equal(2, finalists.Count);
+        var finalRace = await _f.WithDbAsync(db => db.Races.Where(r => r.HeatId == fin.Id).Select(r => r.Id).SingleAsync());
+
+        (await admin.PostAsJsonAsync($"/api/races/{finalRace}/results", new SubmitRaceResultsRequest(
+            [new FinishingPlaceDto(finalists[1], 1, false), new FinishingPlaceDto(finalists[0], 2, false)]))).EnsureSuccessStatusCode();
+
+        // Two finalists: 3 points for the win and 2 for last, one more than the 1 a qualifier earns.
+        var points = await _f.WithDbAsync(db => db.Results.Where(r => r.RaceId == finalRace).OrderBy(r => r.Placing).Select(r => r.Points).ToListAsync());
+        Assert.Equal(new[] { 3, 2 }, points);
+        var qualifierPoints = await _f.WithDbAsync(db => db.Results.Where(r => r.RaceId == q1.Races[0].Id).Select(r => r.Points).ToListAsync());
+        Assert.All(qualifierPoints, point => Assert.Equal(1, point));
+    }
+
+    [Fact]
+    public async Task SessionSettings_StoreHowManyTeamsGoThroughFromEachQualifier()
+    {
+        var a = await _f.CreateArenaAsync(4, raceFinals: true);
+        var admin = await _f.AdminAsync();
+
+        var saved = await (await admin.PutAsJsonAsync(Url(a, "/settings"), new UpdateSessionSettingsRequest(null, null, QualifiersPerHeat: 4))).ReadAsync<SessionDto>();
+        var tooMany = await admin.PutAsJsonAsync(Url(a, "/settings"), new { qualifiersPerHeat = 99 });
+
+        Assert.Equal(4, saved.QualifiersPerHeat);
+        Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
+    }
+
     [Fact]
     public async Task Populate_Returns400_WhenNoQualifierResults()
     {

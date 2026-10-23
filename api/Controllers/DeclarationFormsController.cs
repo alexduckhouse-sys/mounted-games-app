@@ -87,15 +87,18 @@ public class DeclarationFormsController : ControllerBase
 
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var isAdmin = User.IsInRole(Roles.Admin);
-        // Only the team's own trainer, or someone who organises its competition, may submit or overwrite a
-        // declaration. An unclaimed team is not open to everyone.
+        // Only the team's own trainer, the Team Manager of its club, or someone who organises its
+        // competition, may submit or overwrite a declaration. An unclaimed team is not open to everyone.
         if (!isAdmin && !(userId is not null && team.TrainerUserId == userId)
+            && !await _db.IsClubManagerAsync(User, team.ClubId)
             && !await _db.CanManageAsync(User, team.CompetitionId))
             return Forbid();
 
+        // A club's team managers and trainers share its saved riders; anyone else uses the riders they saved.
+        var sharesRoster = isAdmin || await _db.SharesClubRosterAsync(User, team.ClubId);
         var savedIds = req.Riders.Where(r => r.SavedRiderId.HasValue).Select(r => r.SavedRiderId!.Value).Distinct().ToArray();
         var permittedSavedCount = await _db.SavedRiders.CountAsync(r => savedIds.Contains(r.Id)
-            && r.ClubId == team.ClubId && (isAdmin || (userId != null && r.CreatedByUserId == userId)));
+            && r.ClubId == team.ClubId && (sharesRoster || (userId != null && r.CreatedByUserId == userId)));
         if (permittedSavedCount != savedIds.Length) return BadRequest(new { message = "A saved rider is not available to this account." });
 
         if (!string.IsNullOrWhiteSpace(req.TrainerPhone) && userId is not null)
@@ -108,13 +111,29 @@ public class DeclarationFormsController : ControllerBase
             }
         }
 
-        var form = new DeclarationForm
+        if (req.BibDescription is not null)
+            team.BibDescription = string.IsNullOrWhiteSpace(req.BibDescription) ? null : req.BibDescription.Trim();
+
+        // One declaration per team: submitting again updates it instead of adding a second form.
+        var forms = await _db.DeclarationForms.Include(f => f.Riders)
+            .Where(f => f.TeamId == team.Id).OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id).ToListAsync();
+        var form = forms.FirstOrDefault();
+        if (form is null)
         {
-            TeamId = team.Id,
-            SubmittedByUserId = userId,
-            Notes = req.Notes,
-            IsLocked = true
-        };
+            form = new DeclarationForm { TeamId = team.Id };
+            _db.DeclarationForms.Add(form);
+        }
+        else
+        {
+            // Older duplicates (from before this rule) fold into the latest.
+            foreach (var old in forms.Skip(1)) _db.DeclarationForms.Remove(old);
+            _db.RiderEntries.RemoveRange(form.Riders);
+            form.Riders.Clear();
+        }
+        form.SubmittedByUserId = userId;
+        form.SubmittedAt = DateTime.UtcNow;
+        form.Notes = req.Notes;
+        form.IsLocked = true;
         var order = 0;
         foreach (var r in req.Riders)
         {
@@ -127,20 +146,21 @@ public class DeclarationFormsController : ControllerBase
                 BibColour = string.IsNullOrWhiteSpace(r.BibColour) ? null : r.BibColour.Trim(),
                 IsCaptain = r.IsCaptain,
                 IsReserve = r.IsReserve,
+                IsGuestRider = r.IsGuestRider,
                 OrderIndex = r.OrderIndex == 0 ? order : r.OrderIndex,
                 UseInitialOnly = r.UseInitialOnly,
                 NoFilming = r.NoFilming
             });
             order++;
         }
-        _db.DeclarationForms.Add(form);
 
         if (req.SaveToRoster)
         {
-            foreach (var r in req.Riders.Where(r => r.SavedRiderId is null && !string.IsNullOrWhiteSpace(r.FullName)))
+            foreach (var r in req.Riders.Where(r => r.SavedRiderId is null && !r.IsGuestRider && !string.IsNullOrWhiteSpace(r.FullName)))
             {
                 var existing = await _db.SavedRiders.FirstOrDefaultAsync(s =>
-                    s.ClubId == team.ClubId && s.CreatedByUserId == userId && s.FullName == r.FullName);
+                    s.ClubId == team.ClubId && s.FullName == r.FullName
+                    && (sharesRoster || s.CreatedByUserId == userId));
                 if (existing is null)
                 {
                     _db.SavedRiders.Add(new SavedRider

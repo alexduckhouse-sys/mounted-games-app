@@ -2,6 +2,26 @@
 
 Every bug listed below has been verified directly against the current source code in `api/` and `web/src/`. Each entry includes the exact file and line numbers, what is broken, and how to fix it.
 
+## Status (updated 22 October 2026)
+
+Issues #66 to #78 hold these bugs, grouped by area. Bugs 03, 05, 07, 14, 15, 16, 17, 18, 22, 23, 24, 25 and 26 were fixed in the `fix/bugs-md` PR; the rest are covered by PRs #79, #80, #81 and the scoring page PR (#91).
+
+| Bug | Status | What differs from the text below |
+| --- | --- | --- |
+| 03 | Fixed | `LaneRotationMode` per session (move up, stay, move down; move up is the default and stored as 0). A heat may have one team more than the lanes; that team sits out each race in turn and shows **S** (scoring page, heat table, score card overlay and printed sheets). More than one extra team is still refused. `ToplistView` has no per-race column, so it needed no change. |
+| 05 | Mostly fixed | Every finals tier boundary is checked, and teams level on points are flagged as tied (wins no longer break the tie silently). Choosing a tie-break rule in the app is not built: settle a tie with a run-off race or by hand. |
+| 07 | Fixed | The final fills itself once both qualifiers are scored (stored "through to the final" count, default 3). In a qualifier only the qualifying places are tapped; the rest score 1 point, and a further tap eliminates. Finalists score on the final's own field plus one. The heat page shows one table per round. |
+| 14 | Fixed | Club is required and created if new. A signed-up Team Manager waits for admin approval (new `ManagerRequest` role). A club's Manager approves its Trainers. Managers see and run every team of their club. Members still join without approval. `Roles.Organiser` is unchanged: it means "organises a competition", not "runs a club". |
+| 15 | Fixed | `UpdateTeamRequest` takes `TrainerUserId` and `BibDescription` (an empty string clears). Organisers pick the trainer on the Teams tab; a club Manager does it on My Teams. |
+| 16 | Fixed | `CompetitionSectionDto.ActiveSignupsCount` is public. Team Managers and Trainers can enter a whole team in a team section. |
+| 17 | Fixed, one gap | One `BibDescription` per team, guest riders, one declaration per team (resubmitting updates it and folds old duplicates), saved riders shared by a club's Manager and Trainers. There is no `Competition.DeclarationsLocked` field, so editing is not locked after a cut-off. |
+| 18 | Fixed | Any signed-in person can message the organisers privately; admins can reply privately into that thread. |
+| 22 | Fixed, one gap | `FormTeams` gives each distinct new club its own team, skips signups already on a team, and groups by team name. Clubs are created when teams are formed, not when someone enters, so anyone signed in can't add clubs by typing names. |
+| 23 | Fixed | Pinned heats carry the session delay, a session ends when its last heat does, and My Teams times heats with the breaks counted. |
+| 24 | Fixed | Heat times are worked out from the session start, only race sessions print, and the score sheet is one grid per heat with lanes, bibs and recorded scores. |
+| 25 | Fixed | Suffix is optional; unknown clubs are created (CSV import and team profiles); any team of a profile's club can be linked. |
+| 26 | Fixed | `/shop` lists the event shops and the tack and equipment listings, and each event shop shows the same listings. Listings are not tied to one event. |
+
 ---
 
 ## 1. Scoring & Finals Bugs

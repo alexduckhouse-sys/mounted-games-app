@@ -32,6 +32,10 @@ public class SectionSignup
     public string FullName { get; set; } = string.Empty;
     /// <summary>Pony Club branch they're representing — free text for v1.</summary>
     public string? PonyClubName { get; set; }
+    /// <summary>A custom team name ("Welsh Dragons"); riders who share one are formed into a team of that name.</summary>
+    public string? TeamName { get; set; }
+    /// <summary>A team manager or trainer entering a whole team in one go; it forms its own team named <see cref="TeamName"/>.</summary>
+    public bool IsWholeTeam { get; set; }
     /// <summary>Optional phone number (or anything else) captured for the organiser.</summary>
     public string? ContactInfo { get; set; }
 

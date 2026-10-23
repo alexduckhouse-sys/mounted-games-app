@@ -238,6 +238,70 @@ describe('SessionPage', () => {
     }, 60_000);
   });
 
+  describe('more teams than lanes', () => {
+    const fourTeams = [1, 2, 3, 4].map((id) => ({ id, teamId: id, teamName: `Team ${id}`, laneIndex: id }));
+    const sevenFour = () => competition({
+      teams: [team(1, { displayName: 'Team 1' }), team(2, { displayName: 'Team 2' }), team(3, { displayName: 'Team 3' }), team(4, { displayName: 'Team 4' })],
+      sessions: [session(1, { status: 1, lanesPerHeat: 3, heats: [heat(1, { entries: fourTeams, races: [race(1, { name: 'Bending' }), race(2, { name: 'Mug', orderIndex: 2 })] })] })],
+    });
+
+    it('shows S for the team without a lane, and does not let it be tapped into a place', async () => {
+      mount(sevenFour());
+      expect(await screen.findByTitle('Lane S')).toHaveTextContent('S');
+      expect(screen.getAllByTitle(/^Lane [123]$/)).toHaveLength(3);
+      await userEvent.click(screen.getByText('Team 4'));
+      expect(screen.getByRole('button', { name: 'Save 0 results' })).toBeInTheDocument();
+    });
+
+    it('sends the sitting-out team with no place when the race is saved', async () => {
+      mount(sevenFour());
+      for (const name of ['Team 1', 'Team 2', 'Team 3']) await userEvent.click(await screen.findByText(name));
+      await userEvent.click(screen.getByRole('button', { name: 'Save 3 results' }));
+      const outbox = JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]') as { places: { teamId: number; place: number; eliminated: boolean }[] }[];
+      expect(outbox[0].places).toEqual([
+        { teamId: 1, place: 1, eliminated: false },
+        { teamId: 2, place: 2, eliminated: false },
+        { teamId: 3, place: 3, eliminated: false },
+        { teamId: 4, place: 0, eliminated: false },
+      ]);
+    });
+  });
+
+  describe('heat-heat-final', () => {
+    const entries = [1, 2, 3, 4].map((id) => ({ id, teamId: id, teamName: `Team ${id}`, laneIndex: id }));
+    const round = (stage: 1 | 2) => competition({
+      teams: [team(1, { displayName: 'Team 1' }), team(2, { displayName: 'Team 2' }), team(3, { displayName: 'Team 3' }), team(4, { displayName: 'Team 4' })],
+      sessions: [session(1, { status: 1, qualifiersPerHeat: 2, heats: [heat(1, { raceRoundId: 5, raceRoundStage: stage, entries, races: [race(1, { name: 'Bending' })] })] })],
+    });
+
+    it('only asks for the qualifying places, then eliminates anyone tapped after them', async () => {
+      mount(round(1));
+      expect(await screen.findByText(/Tap the first 2 teams home/)).toBeInTheDocument();
+      for (const name of ['Team 1', 'Team 2', 'Team 3']) await userEvent.click(screen.getByText(name));
+      expect(screen.getByText('ELIM')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Save 3 results' }));
+      const outbox = JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]') as { places: { teamId: number; place: number; eliminated: boolean }[] }[];
+      // Team 4 was never tapped: it finishes after the qualifiers, on the qualifier's one point.
+      expect(outbox[0].places).toEqual([
+        { teamId: 1, place: 1, eliminated: false },
+        { teamId: 2, place: 2, eliminated: false },
+        { teamId: 3, place: 3, eliminated: true },
+        { teamId: 4, place: 3, eliminated: false },
+      ]);
+    });
+
+    it('does not ask for qualifiers in the final', async () => {
+      mount(round(2));
+      expect(await screen.findByText(/Tap a team to assign its place/)).toBeInTheDocument();
+      expect(screen.queryByText(/Tap the first/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows a dash for a race that has not started', () => {
+    mount(competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { races: [race(1)] })] })] }));
+    expect(screen.getByText('—')).toBeInTheDocument();
+  });
+
   describe('Set up heats', () => {
     const data = () => competition({ teams, sessions: [session(1, { status: 0, heats: [] })] });
 

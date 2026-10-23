@@ -296,6 +296,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("IpAddress")
                         .HasColumnType("text");
 
+                    b.Property<string>("RecipientUserId")
+                        .HasColumnType("text");
+
                     b.Property<string>("Tag")
                         .HasColumnType("text");
 
@@ -1593,6 +1596,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<bool>("Eliminated")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsSitOut")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("Placing")
                         .HasColumnType("integer");
 
@@ -1647,6 +1653,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<bool>("IsCaptain")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsGuestRider")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsReserve")
@@ -2090,6 +2099,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<bool>("IsWholeTeam")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("NoFilming")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -2106,6 +2118,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int?>("TeamId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TeamName")
+                        .HasColumnType("text");
 
                     b.Property<bool>("TermsAccepted")
                         .HasColumnType("boolean");
@@ -2171,6 +2186,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("Kind")
                         .HasColumnType("integer");
 
+                    b.Property<int>("LaneRotationMode")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("LanesPerHeat")
                         .HasColumnType("integer");
 
@@ -2189,6 +2207,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("QualifiersPerHeat")
                         .HasColumnType("integer");
 
                     b.Property<bool>("RaceOrderAlternating")
@@ -2417,6 +2438,9 @@ namespace MountedGames.Api.Data.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("BibColour")
+                        .HasColumnType("text");
+
+                    b.Property<string>("BibDescription")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("CalendarFeedTokenCreatedAt")

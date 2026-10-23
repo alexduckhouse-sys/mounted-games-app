@@ -8,6 +8,8 @@ import {
 } from '../offline/scorerLink';
 import { enqueue, placingsOf } from '../offline/scoreOutbox';
 import { nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
+import { lanesInUse } from '../lib/lanes';
+import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import type { Heat, ScorerSession, Session } from '../types';
 
@@ -163,7 +165,11 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
   const heat = heats.find((h) => h.id === chosenHeatId) ?? heats.find((h) => !heatIsComplete(h)) ?? heats[0] ?? null;
   const races = (heat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
   const activeRace = races.find((r) => r.id === chosenRaceId) ?? races.find((r) => !r.isComplete) ?? null;
-  const sessionBase = session.heats.reduce((most, h) => Math.max(most, h.entries.length), 0);
+  // A heat with more teams than lanes races only the lanes, so points are out of the lanes, not the teams.
+  const sessionBase = session.heats.reduce((most, h) => Math.max(most, lanesInUse(h.entries.length, session.lanesPerHeat)), 0);
+  const laneRules = lanesOf(session);
+  // In a qualifier only the teams that go through to the final are placed; the rest score 1 point each.
+  const qualifierCap = heat?.raceRoundStage === 1 ? qualifiersOf(session) : null;
 
   function choose(change: { session?: number; heat?: number; race?: number }) {
     if (change.session !== undefined) { setChosenSessionId(change.session); setChosenHeatId(null); setChosenRaceId(null); }
@@ -178,7 +184,7 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
   const shown = pending ?? seeded;
 
   function clickTeam(teamId: number) {
-    setPending(tapTeam(shown, teamId));
+    setPending(tapTeam(shown, teamId, qualifierCap));
   }
 
   function toggleElim(teamId: number) {
@@ -201,7 +207,7 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
       competitionId: session.competitionId,
       sessionId: session.id,
       label: `${heat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
-      places: shown,
+      places: [...shown, ...restOfQualifier(heat, shown), ...sitOutPlaces(heat, races.findIndex((r) => r.id === activeRace.id), laneRules)],
       expected: placingsOf(activeRace.results),
       teamNames: Object.fromEntries(heat.entries.map((e) => [e.teamId, e.teamName])),
       queuedAt: new Date().toISOString(),
@@ -248,6 +254,8 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
           activeRace={activeRace}
           onSelectRace={(id) => choose({ race: id })}
           sessionBase={sessionBase}
+          laneRules={laneRules}
+          qualifiers={qualifiersOf(session)}
           pending={shown}
           canScore
           queued={outbox}

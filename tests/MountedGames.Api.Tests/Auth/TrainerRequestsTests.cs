@@ -23,8 +23,12 @@ public class TrainerRequestsTests : IClassFixture<ApiFactory>
     public void TrainerRequest_IsSeededButDoesNotGrantAnyRoleGroup()
     {
         Assert.Contains(Roles.TrainerRequest, Roles.All);
+        Assert.Contains(Roles.ManagerRequest, Roles.All);
         foreach (var group in new[] { Roles.Organiser, Roles.TeamMember, Roles.TeamWork })
+        {
             Assert.DoesNotContain(Roles.TrainerRequest, group.Split(','));
+            Assert.DoesNotContain(Roles.ManagerRequest, group.Split(','));
+        }
     }
 
     [Theory]
@@ -64,7 +68,7 @@ public class TrainerRequestsTests : IClassFixture<ApiFactory>
         Assert.Equal(new TrainerRequestDto(older.User.Id, older.User.FullName, older.User.Email, clubName, oldest), requests[0]);
         Assert.Equal(DateTimeKind.Utc, requests[0].RequestedAt.Kind);
         Assert.Equal(newer.User.Id, requests[1].UserId);
-        Assert.Null(requests[1].ClubName);
+        Assert.Equal("Test Pony Club", requests[1].ClubName);
         Assert.DoesNotContain(requests, r => r.UserId == member.User.Id);
         Assert.DoesNotContain(requests, r => r.Email == TestClients.TrainerEmail || r.Email == TestClients.AdminEmail);
     }
@@ -132,10 +136,9 @@ public class TrainerRequestsTests : IClassFixture<ApiFactory>
     [Theory]
     [InlineData(null, HttpStatusCode.Unauthorized)]
     [InlineData(Roles.Member, HttpStatusCode.Forbidden)]
-    [InlineData(Roles.Manager, HttpStatusCode.Forbidden)]
     [InlineData(Roles.TrainerRequest, HttpStatusCode.Forbidden)]
     [InlineData(Roles.Trainer, HttpStatusCode.Forbidden)]
-    public async Task AllEndpoints_RequireAdmin(string? role, HttpStatusCode expected)
+    public async Task AllEndpoints_RequireAdminOrAClubManager(string? role, HttpStatusCode expected)
     {
         var (_, pending) = await _f.SignupAsync();
         var client = role switch

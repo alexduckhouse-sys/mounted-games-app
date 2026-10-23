@@ -1,36 +1,27 @@
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import { CloudOff, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Columns3 } from 'lucide-react';
-import type { Heat, HeatEntry, Race } from '../../types';
+import type { Heat, Race } from '../../types';
 import { bibAccent } from '../../lib/bib';
 import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
 import type { PendingPlace } from '../../lib/raceScoring';
-
-function displayLaneFor(baseLane: number, raceIndex: number, heatSize: number): number {
-  if (heatSize <= 0) return baseLane;
-  return ((baseLane - 1 + raceIndex) % heatSize) + 1;
-}
-
-function teamForDisplayLane(heat: Heat, raceIndex: number, displayLane: number): HeatEntry | null {
-  const size = heat.entries.length;
-  if (size <= 0) return null;
-  return heat.entries.find((e) => displayLaneFor(e.laneIndex, raceIndex, size) === displayLane) ?? null;
-}
+import { LaneRotationMode, lanesInUse } from '../../lib/lanes';
+import { displayLaneFor, sitsOutOf, teamForDisplayLane, type LaneRules } from './laneRules';
 
 export type { PendingPlace } from '../../lib/raceScoring';
 
-
-function LaneGrid({ heat, raceIndex, raceName }: { heat: Heat; raceIndex: number; raceName: string }) {
+function LaneGrid({ heat, raceIndex, raceName, rules }: { heat: Heat; raceIndex: number; raceName: string; rules: LaneRules }) {
   const size = heat.entries.length;
   if (size === 0) return null;
-  const lanes = Array.from({ length: size }, (_, i) => i + 1);
+  const lanes = Array.from({ length: lanesInUse(size, rules.lanesPerHeat) }, (_, i) => i + 1);
+  const sittingOut = heat.entries.filter((e) => sitsOutOf(heat, e, raceIndex, rules));
   return (
     <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 bg-slate-50/60 dark:bg-slate-800/40">
       <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-300 mb-1 flex items-center gap-1">
-        <Columns3 className="w-3 h-3" /> Lanes for {raceName} {raceIndex > 0 && <span className="font-normal text-slate-400">(rotated +{raceIndex})</span>}
+        <Columns3 className="w-3 h-3" /> Lanes for {raceName} {raceIndex > 0 && rules.mode !== LaneRotationMode.Stay && <span className="font-normal text-slate-400">(rotated {rules.mode === LaneRotationMode.MoveDown ? '-' : '+'}{raceIndex})</span>}
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
         {lanes.map((laneNum) => {
-          const team = teamForDisplayLane(heat, raceIndex, laneNum);
+          const team = teamForDisplayLane(heat, raceIndex, laneNum, rules);
           return (
             <div
               key={laneNum}
@@ -43,6 +34,11 @@ function LaneGrid({ heat, raceIndex, raceName }: { heat: Heat; raceIndex: number
           );
         })}
       </div>
+      {sittingOut.length > 0 && (
+        <p className="mt-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+          <span className="font-bold">S</span> Sitting out this race: {sittingOut.map((e) => e.teamName).join(', ')}
+        </p>
+      )}
     </div>
   );
 }
@@ -53,6 +49,8 @@ interface ScoringProps {
   activeRace: Race | null;
   onSelectRace: (id: number) => void;
   sessionBase: number;
+  laneRules: LaneRules;
+  qualifiers: number;
   pending: PendingPlace[];
   canScore: boolean;
   queued: QueuedScore[];
@@ -70,7 +68,7 @@ interface ScoringProps {
 }
 
 export function ScoringSection({
-  heat, races, activeRace, onSelectRace, sessionBase, pending, canScore, queued, showResults,
+  heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued, showResults,
   onToggleResults, showLaneView, onToggleLaneView, onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason,
 }: ScoringProps) {
   const pendingByTeam = new Map(pending.map((p) => [p.teamId, p]));
@@ -78,11 +76,15 @@ export function ScoringSection({
   const activeQueued = activeRace ? queuedByRace.get(activeRace.id) : undefined;
   const activeRaceIdx = activeRace ? races.findIndex((r) => r.id === activeRace.id) : 0;
   const heatSize = heat.entries.length;
+  // A qualifier gives 1 point a finisher; a final is scored on its own field plus one (so last place beats a qualifier's 1).
+  const isQualifier = heat.raceRoundStage === 1;
+  const scoringBase = heat.raceRoundStage === 2 ? heatSize + 1 : sessionBase;
 
   function pointsFor(place: number, eliminated: boolean) {
     if (eliminated) return 0;
-    if (place < 1 || place > sessionBase) return 0;
-    return sessionBase - place + 1;
+    if (isQualifier) return 1;
+    if (place < 1 || place > scoringBase) return 0;
+    return scoringBase - place + 1;
   }
 
   return (
@@ -124,7 +126,7 @@ export function ScoringSection({
           </div>
         )}
         {showLaneView && activeRace && heatSize > 0 && (
-          <LaneGrid heat={heat} raceIndex={activeRaceIdx} raceName={activeRace.name} />
+          <LaneGrid heat={heat} raceIndex={activeRaceIdx} raceName={activeRace.name} rules={laneRules} />
         )}
       </div>
 
@@ -141,12 +143,15 @@ export function ScoringSection({
             </p>
           )}
           <p className="text-[11px] text-slate-500 dark:text-slate-300 mb-3">
-            Tap a team to assign its place · swipe a tile <span className="font-semibold">downwards</span> to eliminate (0 pts).
+            {isQualifier
+              ? <>Tap the first {qualifiers} teams home, in order. The rest score 1 point each; tap one of them to eliminate it (0 pts).</>
+              : <>Tap a team to assign its place · swipe a tile <span className="font-semibold">downwards</span> to eliminate (0 pts).</>}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {heat.entries.map((e) => {
               const state = pendingByTeam.get(e.teamId);
-              const lane = displayLaneFor(e.laneIndex, activeRaceIdx, heatSize);
+              const sat = sitsOutOf(heat, e, activeRaceIdx, laneRules);
+              const lane = displayLaneFor(heat, e, activeRaceIdx, laneRules);
               return (
                 <ScoreTile
                   key={e.id}
@@ -155,7 +160,7 @@ export function ScoringSection({
                   colour={bibAccent(e.bibColour)}
                   place={state?.eliminated ? undefined : state?.place}
                   eliminated={state?.eliminated ?? false}
-                  disabled={!canScore}
+                  disabled={!canScore || sat}
                   onTap={() => onClickTeam(e.teamId)}
                   onSwipeEliminate={() => onToggleElim(e.teamId)}
                 />
@@ -277,7 +282,7 @@ function HeatResultsTable({ heat, pending, activeRaceId, pointsFor }: {
 
 interface ScoreTileProps {
   teamName: string;
-  lane: number;
+  lane: number | string;
   colour: string;
   place?: number;
   eliminated: boolean;

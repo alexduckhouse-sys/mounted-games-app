@@ -13,8 +13,9 @@ public record RegisterRequest(
 
 /// <summary>
 /// Self-service signup. Trainer requests receive Member access until approved
-/// by an admin. Manager and Member signups are granted directly. ClubName is optional;
-/// if it matches an existing Club row (case-insensitive) we set ClubId.
+/// by an admin or their club's team manager; manager requests until approved by an admin.
+/// Member signups are granted directly. ClubName is required: if it matches an existing Club
+/// (case-insensitive) we use it, otherwise a new Club is created.
 /// </summary>
 public record SignupTrainerRequest(
     string Username,
@@ -43,4 +44,5 @@ public record TrainerRequestDto(
     string FullName,
     string? Email,
     string? ClubName,
-    DateTime RequestedAt);
+    DateTime RequestedAt,
+    string RequestedRole = Roles.Trainer);
