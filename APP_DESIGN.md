@@ -265,6 +265,20 @@ Lifecycle the app supports today:
     — bins paid signups by pony club into A/B/C teams. Preview returns the
     bin without writing; commit creates Team rows and sets each signup's TeamId.
 
+### Entry email and the new-competition list
+- The sign-up form takes an optional **email** (the adult's, never a rider's; `ContactInfo` stays for a phone number).
+  When one is given, the API sends **one** plain-text confirmation inline (event, date, place, class, fee, the organiser's
+  payment instructions, a link to the competition page), through `IEmailSender`. It never says a payment was taken.
+  The outcome (`ConfirmationEmailStatus`: not requested, sent, failed, not sent because email is off, and when) is stored
+  on the signup and shown to the competition's staff. A failed or disabled send never fails the sign-up.
+- The form sends a `RequestId`; a retry from the same person for the same section returns the original entry and sends nothing more.
+- An **unticked** box, "Email me when new competitions open", records consent in `EmailOptIn` (address, time, wording
+  version, source `signup-form`, hash of a random unsubscribe token, unsubscribed time). No marketing is sent yet. The
+  token only goes into the confirmation email sent at opt-in. `/unsubscribe?token=...` (no sign-in) calls
+  `POST /api/email/unsubscribe`, which answers the same way for any token. Site admins download the active list from
+  Admin → Email opt-ins (`GET /api/admin/email-opt-ins.csv`).
+- Settings (`Email:*`): all off unless `Enabled`, `ApiKey` and `From` are set; the adapter is Resend's REST API.
+
 ### Trainer-as-organiser
 Trainers can create + edit competitions (controllers'
 Create/Update/AddSection/UpdateSection/Teams accept Trainer role).

@@ -32,6 +32,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<TeamSupporter> TeamSupporters => Set<TeamSupporter>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<SectionSignup> SectionSignups => Set<SectionSignup>();
+    public DbSet<EmailOptIn> EmailOptIns => Set<EmailOptIn>();
     public DbSet<ShopPost> ShopPosts => Set<ShopPost>();
     public DbSet<ShopComment> ShopComments => Set<ShopComment>();
     public DbSet<ShopReport> ShopReports => Set<ShopReport>();
@@ -329,6 +330,21 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .HasForeignKey(s => s.UserId)
                 .OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(s => new { s.CompetitionSectionId, s.UserId });
+            e.Property(s => s.ContactEmail).HasMaxLength(254);
+            e.Property(s => s.ClientRequestId).HasMaxLength(64);
+            e.Property(s => s.ConfirmationEmailStatus).HasDefaultValue(EmailDeliveryStatus.NotRequested);
+            // A retried submit must not create a second entry (NULLs never collide).
+            e.HasIndex(s => new { s.CompetitionSectionId, s.UserId, s.ClientRequestId }).IsUnique();
+        });
+
+        b.Entity<EmailOptIn>(e =>
+        {
+            e.Property(o => o.Email).HasMaxLength(254).IsRequired();
+            e.Property(o => o.WordingVersion).HasMaxLength(40).IsRequired();
+            e.Property(o => o.Source).HasMaxLength(40).IsRequired();
+            e.Property(o => o.UnsubscribeTokenHash).HasMaxLength(64).IsRequired();
+            e.HasIndex(o => o.UnsubscribeTokenHash).IsUnique();
+            e.HasIndex(o => o.Email);
         });
 
         b.Entity<ShopPost>(e =>

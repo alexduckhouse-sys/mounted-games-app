@@ -30,7 +30,8 @@ public static class Mappings
         s.UseInitialOnly, s.NoFilming,
         s.TermsAccepted,
         s.TermsAcceptedAt is { } at ? DateTime.SpecifyKind(at, DateTimeKind.Utc) : null,
-        s.TermsWordingVersion);
+        s.TermsWordingVersion,
+        s.ContactEmail, s.ConfirmationEmailStatus, s.ConfirmationEmailAt);
 
     public static MySignupDto ToMyDto(this SectionSignup s, Team? team = null) => new(
         s.Id,

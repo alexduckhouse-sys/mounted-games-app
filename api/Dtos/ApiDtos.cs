@@ -1,4 +1,5 @@
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services.Email;
 using System.ComponentModel.DataAnnotations;
 
 namespace MountedGames.Api.Dtos;
@@ -124,14 +125,24 @@ public record SectionSignupDto(
     int AmountMinor, SignupPaymentStatus Status, DateTime? PaidAt,
     int? TeamId, DateTime CreatedAt,
     bool UseInitialOnly = false, bool NoFilming = false,
-    bool TermsAccepted = false, DateTime? TermsAcceptedAt = null, string? TermsWordingVersion = null);
+    bool TermsAccepted = false, DateTime? TermsAcceptedAt = null, string? TermsWordingVersion = null,
+    string? ContactEmail = null, EmailDeliveryStatus ConfirmationEmailStatus = EmailDeliveryStatus.NotRequested,
+    DateTime? ConfirmationEmailAt = null);
 
+/// <param name="ContactInfo">Phone number (free text).</param>
 /// <param name="AcceptTerms">The one required tick (parental consent plus the event terms).</param>
 /// <param name="ConsentVersion">The wording version the page showed; the server refuses a stale one.</param>
+/// <param name="ContactEmail">Optional address of the adult signing up; the entry confirmation goes here.</param>
+/// <param name="EmailOptIn">The unticked-by-default box for new-competition emails. Needs a <paramref name="ContactEmail"/>.</param>
+/// <param name="EmailOptInVersion">The wording version the page showed beside the box.</param>
+/// <param name="RequestId">Made by the form for one submit, so a retry doesn't create a second entry or a second email.</param>
 public record CreateSectionSignupRequest(
     string FullName, string? PonyClubName, string? ContactInfo,
     string? TeamCode = null, bool UseInitialOnly = false, bool NoFilming = false,
-    bool AcceptTerms = false, string? ConsentVersion = null);
+    bool AcceptTerms = false, string? ConsentVersion = null,
+    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
+    bool EmailOptIn = false, string? EmailOptInVersion = null,
+    [MaxLength(64)] string? RequestId = null);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 

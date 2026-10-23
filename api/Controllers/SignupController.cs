@@ -7,6 +7,7 @@ using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Email;
 
 namespace MountedGames.Api.Controllers;
 
@@ -14,7 +15,16 @@ namespace MountedGames.Api.Controllers;
 public class SignupController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public SignupController(AppDbContext db) => _db = db;
+    private readonly SignupConfirmationService _confirmation;
+    private readonly EmailOptInService _optIns;
+    private readonly TimeProvider _clock;
+    public SignupController(AppDbContext db, SignupConfirmationService confirmation, EmailOptInService optIns, TimeProvider clock)
+    {
+        _db = db;
+        _confirmation = confirmation;
+        _optIns = optIns;
+        _clock = clock;
+    }
 
     /// <summary>
     /// Sign up to a comp section. The amount is captured from the section's
@@ -37,6 +47,17 @@ public class SignupController : ControllerBase
             .Include(s => s.Signups)
             .FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == competitionId);
         if (section is null) return NotFound();
+
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var requestId = req.RequestId?.Trim();
+        if (string.IsNullOrEmpty(requestId)) requestId = null;
+        // A retry of the same submit gets the original entry back: no second entry and no second email.
+        if (requestId is not null)
+        {
+            var replay = await FindReplayAsync(sectionId, userId, requestId);
+            if (replay is not null) return replay.ToDto();
+        }
+
         if (section.Competition?.SignupsLocked == true)
             return StatusCode(403, new { message = "Signups are closed for this competition." });
         var name = req.FullName?.Trim();
@@ -45,6 +66,18 @@ public class SignupController : ControllerBase
             return BadRequest(new { message = "Please tick the box to confirm parental consent and that you accept the event terms." });
         if (req.ConsentVersion != SignupTerms.WordingVersion)
             return BadRequest(new { message = "The wording next to the tick box has changed. Please reload the page and read it again." });
+
+        string? contactEmail = null;
+        if (!string.IsNullOrWhiteSpace(req.ContactEmail))
+        {
+            if (!EmailAddresses.TryNormalise(req.ContactEmail, out var normalised))
+                return BadRequest(new { message = "That email address doesn't look right. Please check it, or leave it blank." });
+            contactEmail = normalised;
+        }
+        if (req.EmailOptIn && contactEmail is null)
+            return BadRequest(new { message = "Add your email address if you'd like emails when new competitions open." });
+        if (req.EmailOptIn && req.EmailOptInVersion != EmailOptInWording.Version)
+            return BadRequest(new { message = "The wording next to the email box has changed. Please reload the page and read it again." });
 
         // Honour the section's signup cap, counting Paid + Pending only.
         if (section.MaxParticipants.HasValue)
@@ -82,10 +115,12 @@ public class SignupController : ControllerBase
         var signup = new SectionSignup
         {
             CompetitionSectionId = sectionId,
-            UserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
+            UserId = userId,
             FullName = name.Length > 200 ? name[..200] : name,
             PonyClubName = req.PonyClubName?.Trim(),
             ContactInfo = req.ContactInfo?.Trim(),
+            ContactEmail = contactEmail,
+            ClientRequestId = requestId,
             UseInitialOnly = req.UseInitialOnly,
             NoFilming = req.NoFilming,
             TermsAccepted = true,
@@ -99,12 +134,55 @@ public class SignupController : ControllerBase
             PaidAt = isFree ? DateTime.UtcNow : null,
         };
         _db.SectionSignups.Add(signup);
-        await _db.SaveChangesAsync();
+
+        // Consent is stored in the same save as the entry, so there is never an entry without its record or the reverse.
+        var optIn = OptInOutcome.NotAsked;
+        string? unsubscribeToken = null;
+        if (req.EmailOptIn && contactEmail is not null)
+        {
+            var result = await _optIns.AddAsync(contactEmail, EmailOptInWording.Version, EmailOptInWording.SignupSource);
+            optIn = result.Joined ? OptInOutcome.Joined : OptInOutcome.AlreadyOnList;
+            unsubscribeToken = result.UnsubscribeToken;
+        }
+
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException) when (requestId is not null)
+        {
+            // Two copies of the same submit arrived together; the other one won. Return its entry.
+            _db.ChangeTracker.Clear();
+            var winner = await FindReplayAsync(sectionId, userId, requestId);
+            if (winner is not null) return winner.ToDto();
+            throw;
+        }
+
+        // One confirmation, sent here and now (the API can be asleep a moment later). Whatever happens, the entry stays.
+        if (contactEmail is not null)
+        {
+            var status = await _confirmation.SendAsync(signup, section.Competition!, section, optIn, unsubscribeToken);
+            try
+            {
+                signup.ConfirmationEmailStatus = status;
+                signup.ConfirmationEmailAt = _clock.GetUtcNow().UtcDateTime;
+                await _db.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // The entry is already saved; only the note about the email is lost.
+            }
+        }
+
         var loaded = await _db.SectionSignups
             .Include(s => s.Section)
             .FirstAsync(s => s.Id == signup.Id);
         return loaded.ToDto();
     }
+
+    private Task<SectionSignup?> FindReplayAsync(int sectionId, string? userId, string requestId)
+        => _db.SectionSignups.Include(s => s.Section).AsNoTracking()
+            .FirstOrDefaultAsync(s => s.CompetitionSectionId == sectionId && s.UserId == userId && s.ClientRequestId == requestId);
 
     /// <summary>Contact and payment details are restricted to the competition organiser.</summary>
     [HttpGet("api/competitions/{competitionId:int}/signups")]

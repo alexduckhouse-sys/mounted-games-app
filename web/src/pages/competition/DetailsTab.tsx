@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Trophy,
@@ -15,6 +15,8 @@ import { ScorerLinksCard } from './ScorerLinksCard';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
 import { TermsTickBox } from '../../components/TermsTickBox';
 import { CONSENT_VERSION } from '../../lib/termsTick';
+import { EntryEmailFields, type EntryEmail } from '../../components/EntryEmailFields';
+import { EMAIL_OPT_IN_VERSION, confirmationEmailLabel, looksLikeEmail, newRequestId } from '../../lib/emailOptIn';
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
@@ -262,6 +264,9 @@ function SectionSignupCard({
   const [fullName, setFullName] = useState('');
   const [ponyClub, setPonyClub] = useState('');
   const [contact, setContact] = useState('');
+  const [entryEmail, setEntryEmail] = useState<EntryEmail>({ email: '', optIn: false });
+  // One id per attempt: if the connection drops and the form is sent again, the server returns the first entry.
+  const requestId = useRef<string | null>(null);
   const [teamCode, setTeamCode] = useState('');
   const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
   const [accepted, setAccepted] = useState(false);
@@ -277,6 +282,9 @@ function SectionSignupCard({
 
   async function submit() {
     if (!fullName.trim() || !accepted) return;
+    const emailText = entryEmail.email.trim();
+    if (emailText && !looksLikeEmail(emailText)) { setErr("That email address doesn't look right."); return; }
+    requestId.current ??= newRequestId();
     setBusy(true);
     setErr(null);
     try {
@@ -284,15 +292,23 @@ function SectionSignupCard({
         fullName: fullName.trim(),
         ponyClubName: ponyClub.trim() || null,
         contactInfo: contact.trim() || null,
+        contactEmail: emailText || null,
+        emailOptIn: !!emailText && entryEmail.optIn,
+        emailOptInVersion: emailText && entryEmail.optIn ? EMAIL_OPT_IN_VERSION : null,
+        requestId: requestId.current,
         teamCode: teamCode.trim() || null,
         ...privacy,
         acceptTerms: accepted,
         consentVersion: CONSENT_VERSION,
       });
       setFullName(''); setPonyClub(''); setContact(''); setTeamCode('');
+      setEntryEmail({ email: '', optIn: false });
+      requestId.current = null;
       setPrivacy({ useInitialOnly: false, noFilming: false });
       setAccepted(false);
-      setDone(signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.');
+      setDone((signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.')
+        + (signup.confirmationEmailStatus === 1 ? ' We have emailed you a confirmation.'
+          : signup.confirmationEmailStatus === 2 ? " We couldn't send the confirmation email, but your entry is saved." : ''));
       onChanged();
       setOpen(false);
       // Demo events only: straight on to the clearly labelled test payment page.
@@ -348,7 +364,8 @@ function SectionSignupCard({
         <div className="flex flex-col gap-2">
           <label className="rf-fld">Your full name<input placeholder="Your full name" value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
           <label className="rf-fld">Pony Club<input placeholder="Pony Club (optional)" value={ponyClub} onChange={(e) => setPonyClub(e.target.value)} /></label>
-          <label className="rf-fld">Phone or email<input placeholder="Phone / email (optional)" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
+          <label className="rf-fld">Phone<input type="tel" autoComplete="tel" placeholder="Phone (optional)" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
+          <EntryEmailFields value={entryEmail} onChange={setEntryEmail} />
           <label className="rf-fld">Team code
             <input
               className="font-mono uppercase"
@@ -424,6 +441,9 @@ function SignupRow({ signup, isDemo, onChanged }: { signup: SectionSignup; isDem
       <span className="min-w-0 flex-1">
         <span className={`block truncate font-semibold ${status.struck ? 'line-through' : ''}`}>{signup.fullName}</span>
         {signup.ponyClubName && <span className="rf-t2 truncate">{signup.ponyClubName}</span>}
+        <span className="rf-t2 truncate">
+          {signup.contactEmail ? `${signup.contactEmail} · ` : ''}{confirmationEmailLabel(signup.confirmationEmailStatus, !!signup.contactEmail)}
+        </span>
       </span>
       <RefineStatus tone={status.tone}>{isDemo && signup.amountMinor > 0 && signup.status !== 0 ? `${status.label} (test)` : status.label}</RefineStatus>
       {/* Demo entries are paid through the test payment page only; the server refuses manual changes. */}

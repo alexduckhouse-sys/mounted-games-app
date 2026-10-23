@@ -39,8 +39,8 @@ describe('signupsToCsv', () => {
 
   it('writes one row per signup with pounds and a readable status', () => {
     const [header, row] = signupsToCsv([signup]).split('\r\n');
-    expect(header).toBe('Section,Name,Pony Club,Contact,Amount (GBP),Status,Paid at,Signed up at');
-    expect(row).toBe('Seniors,"Ann, Smith",Ashdown,ann@example.com,12.50,paid,2026-05-01,2026-04-30');
+    expect(header).toBe('Section,Name,Pony Club,Contact,Amount (GBP),Status,Paid at,Signed up at,Email,Confirmation email');
+    expect(row).toBe('Seniors,"Ann, Smith",Ashdown,ann@example.com,12.50,paid,2026-05-01,2026-04-30,,');
   });
 
   it('labels every payment status and shows unknown ones as their number', () => {
@@ -59,7 +59,17 @@ describe('signupsToCsv', () => {
 
   it('leaves optional fields blank when missing', () => {
     const row = signupsToCsv([{ ...signup, ponyClubName: null, contactInfo: undefined, paidAt: null }]).split('\r\n')[1];
-    expect(row).toBe('Seniors,"Ann, Smith",,,12.50,paid,,2026-04-30');
+    expect(row).toBe('Seniors,"Ann, Smith",,,12.50,paid,,2026-04-30,,');
+  });
+
+  it('adds the contact email and whether its confirmation went', () => {
+    const rowFor = (confirmationEmailStatus?: number) =>
+      signupsToCsv([{ ...signup, contactEmail: 'parent@example.org', confirmationEmailStatus }]).split('\r\n')[1];
+    expect(rowFor(1)).toMatch(/,parent@example.org,sent$/);
+    expect(rowFor(2)).toMatch(/,parent@example.org,failed$/);
+    expect(rowFor(3)).toMatch(/,parent@example.org,not sent \(email off\)$/);
+    expect(rowFor(undefined)).toMatch(/,parent@example.org,not sent$/);
+    expect(rowFor(9)).toMatch(/,parent@example.org,$/);
   });
 });
 

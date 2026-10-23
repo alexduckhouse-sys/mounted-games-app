@@ -295,6 +295,8 @@ export interface FormTeamsResult {
 }
 
 export type SignupPaymentStatus = 0 | 1 | 2 | 3; // Pending / Paid / Refunded / Cancelled
+/** Entry confirmation email: NotRequested / Sent / Failed / NotSent (sending is off on the server). */
+export type EmailDeliveryStatus = 0 | 1 | 2 | 3;
 
 export interface SectionSignup {
   id: number;
@@ -310,6 +312,10 @@ export interface SectionSignup {
   createdAt: string;
   useInitialOnly?: boolean;
   noFilming?: boolean;
+  /** Staff-only: the adult's address and whether the confirmation email went. */
+  contactEmail?: string | null;
+  confirmationEmailStatus?: EmailDeliveryStatus;
+  confirmationEmailAt?: string | null;
 }
 
 export interface ShopPost {

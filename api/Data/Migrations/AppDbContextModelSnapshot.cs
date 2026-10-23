@@ -881,6 +881,50 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("DeclarationForms");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.EmailOptIn", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ConsentedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("UnsubscribeTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UnsubscribedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WordingVersion")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email");
+
+                    b.HasIndex("UnsubscribeTokenHash")
+                        .IsUnique();
+
+                    b.ToTable("EmailOptIns");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Heat", b =>
                 {
                     b.Property<int>("Id")
@@ -2016,8 +2060,24 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("AmountMinor")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ClientRequestId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<int>("CompetitionSectionId")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ConfirmationEmailAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ConfirmationEmailStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
 
                     b.Property<string>("ContactInfo")
                         .HasColumnType("text");
@@ -2075,6 +2135,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.HasIndex("CompetitionSectionId", "UserId");
+
+                    b.HasIndex("CompetitionSectionId", "UserId", "ClientRequestId")
+                        .IsUnique();
 
                     b.ToTable("SectionSignups");
                 });

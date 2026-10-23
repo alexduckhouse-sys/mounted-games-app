@@ -31,7 +31,7 @@ public class TestPaymentPageTests : IClassFixture<ApiFactory>
         var (entrant, _) = await _f.SignupAsync();
         var signup = await (await entrant.PostAsJsonAsync(
             $"/api/competitions/{section.CompetitionId}/sections/{section.Id}/signups",
-            new CreateSectionSignupRequest("Test entrant", null, null))).ReadAsync<SectionSignupDto>();
+            new CreateSectionSignupRequest("Test entrant", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion))).ReadAsync<SectionSignupDto>();
         return (section, entrant, signup);
     }
 
