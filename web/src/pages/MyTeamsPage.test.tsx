@@ -7,6 +7,7 @@ import { competition, heat, race, session, team } from '../test/factories';
 import type { CompetitionDetail, Team } from '../types';
 import { formatTime, roundTo5Min } from '../lib/time';
 import { MyTeamsPage } from './MyTeamsPage';
+import { chooseOption, optionLabels } from '../test/select';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
@@ -268,8 +269,8 @@ describe('MyTeamsPage for a club manager', () => {
     });
     vi.mocked(api.put).mockResolvedValue({ data: {} });
     mount();
-    await screen.findByRole('option', { name: 'Pat Trainer' }, { timeout: 5000 });
-    fireEvent.change(screen.getByLabelText('Trainer'), { target: { value: 'tr-1' } });
+    await waitFor(() => expect(optionLabels(screen.getByLabelText('Trainer'))).toContain('Pat Trainer'), { timeout: 5000 });
+    chooseOption(screen.getByLabelText('Trainer'), 'tr-1');
     fireEvent.change(screen.getByPlaceholderText('e.g. Red bibs, numbered 1 to 5'), { target: { value: 'Blue bibs 1-5' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save team details' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/teams/1/trainer', { trainerUserId: 'tr-1', bibDescription: 'Blue bibs 1-5' }));

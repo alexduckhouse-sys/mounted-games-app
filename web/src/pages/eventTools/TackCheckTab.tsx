@@ -5,6 +5,8 @@ import { api } from '../../api';
 import { Chevron, RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { MAX_SECTOR_NAME, MAX_TACK_SECTORS, TACK_MODES, draftFromMarks, draftTotal, isScored, marksFromDraft, sectorProblem, type MarkDraft } from '../../lib/tackCheck';
 import type { TackCheckBoard, TackCheckMode, TackCheckSection, TackCheckTeam } from '../../types';
+import { SelectField } from '../../components/SelectField';
+import { NumberField } from '../../components/NumberField';
 
 function message(error: unknown, fallback: string) {
   const candidate = error as { response?: { data?: { message?: string; detail?: string; title?: string } } };
@@ -47,9 +49,9 @@ export function TackCheckTab({ competitionId }: { competitionId: string }) {
     {board && board.sections.length === 0 && <RefineNote>Add an age group to this competition first.</RefineNote>}
     {board && section && <div className="tools-form">
       {board.sections.length > 1 && <label className="rf-fld">Age group
-        <select value={section.sectionId} onChange={(event) => setSectionId(Number(event.target.value))}>
+        <SelectField value={section.sectionId} onChange={(event) => setSectionId(Number(event.target.value))}>
           {board.sections.map((s) => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
-        </select>
+        </SelectField>
       </label>}
       <SettingsForm key={section.sectionId} competitionId={competitionId} section={section} onSaved={replace} />
       {section.configured && section.isEnabled && <Marks key={section.sectionId} competitionId={competitionId} section={section} onSaved={replace} />}
@@ -95,7 +97,7 @@ function SettingsForm({ competitionId, section, onSaved }: { competitionId: stri
         <span>{option.label}<span className="tools-check-sub">{option.detail}</span></span>
       </label>)}
     </fieldset>
-    {isScored(mode) && <label className="rf-fld">Most points for one sector<input type="number" inputMode="numeric" min={1} max={100} value={maxPoints} onChange={(event) => edit(() => setMaxPoints(event.target.value))} /></label>}
+    {isScored(mode) && <label className="rf-fld">Most points for one sector<NumberField min={1} max={100} value={maxPoints} onChange={(event) => edit(() => setMaxPoints(event.target.value))} /></label>}
     <fieldset className="tools-fields"><legend className="rf-fld">Sectors</legend>
       {sectors.map((sector, index) => <div key={sector.key} className="tools-row">
         <label className="rf-fld">Sector {index + 1}<input value={sector.name} maxLength={MAX_SECTOR_NAME} onChange={(event) => edit(() => setSectors((list) => list.map((s) => (s.key === sector.key ? { ...s, name: event.target.value } : s))))} /></label>
@@ -153,11 +155,11 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
     </div>
     <div className="tools-grid">
       {section.sectors.map((sector) => scored
-        ? <label key={sector.id} className="rf-fld">{sector.name}<input type="number" inputMode="numeric" min={0} max={section.maxPoints} value={draft[sector.id]?.points ?? ''} onChange={(event) => change(sector.id, { points: event.target.value })} /></label>
+        ? <label key={sector.id} className="rf-fld">{sector.name}<NumberField min={0} max={section.maxPoints} value={draft[sector.id]?.points ?? ''} onChange={(event) => change(sector.id, { points: event.target.value })} /></label>
         : <label key={sector.id} className="rf-fld">{sector.name}
-          <select value={draft[sector.id]?.passed ?? ''} onChange={(event) => change(sector.id, { passed: event.target.value as MarkDraft['passed'] })}>
+          <SelectField value={draft[sector.id]?.passed ?? ''} onChange={(event) => change(sector.id, { passed: event.target.value as MarkDraft['passed'] })}>
             <option value="">Not checked</option><option value="pass">Pass</option><option value="fail">Fail</option>
-          </select>
+          </SelectField>
         </label>)}
     </div>
     {problem && <p role="alert" className="tools-error">{problem}</p>}

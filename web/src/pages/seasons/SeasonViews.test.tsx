@@ -8,6 +8,7 @@ import { SeasonPage } from './SeasonPage';
 import { SeasonsPage } from './SeasonsPage';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
 import type { SeasonView } from './seasonViewTypes';
+import { chooseOption } from '../../test/select';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: vi.fn() }));
@@ -171,7 +172,7 @@ describe('SeasonPage', () => {
     render(<MemoryRouter initialEntries={['/seasons/example-season?tab=rounds']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
 
     await user.click(await screen.findByRole('button', { name: 'Add round' }));
-    await user.selectOptions(await screen.findByLabelText('Competition'), '12');
+    chooseOption(await screen.findByLabelText('Competition'), '12');
     expect(await screen.findByRole('alert')).toHaveTextContent('competition couldn’t be loaded');
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 

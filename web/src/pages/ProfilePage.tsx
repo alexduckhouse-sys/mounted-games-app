@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Bell, ChevronRight, ClipboardList, Contact, CreditCard, LogOut, Package, Pencil, ShoppingBag, UserCog, UserRound, Users, type LucideIcon } from 'lucide-react';
 import { api } from '../api';
+import { signOutDestination } from '../auth/signOutDestination';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
@@ -133,7 +134,7 @@ export function ProfilePage() {
           {!isAdmin && <ListRow to="/me/signups" icon={CreditCard} label="My signups" />}
           <ListRow to="/me/catalogue" icon={Package} label="My items for sale" />
           <ListRow to="/me/orders" icon={ShoppingBag} label="Orders & sales" />
-          <button type="button" className="mg-row !min-h-14" onClick={() => { logout(); navigate('/'); }}>
+          <button type="button" className="mg-row !min-h-14" onClick={() => { logout(); navigate(signOutDestination(), { replace: true }); }}>
             <LogOut aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-heading))]" />
             <span className="flex-1 text-base font-semibold">Sign out</span>
           </button>

@@ -8,7 +8,7 @@ import { CompetitionIcon } from './CompetitionIcon';
 import { competitionIcon } from './icons';
 import { competitionDateText, isOnToday } from '../lib/competitionDates';
 import { displaySectionName } from '../lib/section';
-import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
+import { lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
 import { CompetitionListSkeleton } from '../components/Skeletons';
 import { usePageHeader } from '../components/CompactPageBarContext';
 
@@ -38,7 +38,7 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
   const [search, setSearch] = useState('');
   // The first page this phone saw last time shows while the list refreshes.
   const [saved] = useState(() => readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(past)));
-  const [state, setState] = useState({ items: saved?.data.items ?? [] as CompetitionPickerItem[], page: 0, hasMore: false, error: false, savedCopy: !!saved });
+  const [state, setState] = useState({ items: saved?.data.items ?? [] as CompetitionPickerItem[], page: 0, hasMore: false, error: false, savedCopy: !!saved, savedAt: saved?.savedAt ?? null as string | null });
   const loading = state.page !== page;
   useEffect(() => {
     const controller = new AbortController();
@@ -56,6 +56,7 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
             items: [...kept, ...fresh.items.filter((item) => !kept.some((existing) => existing.id === item.id))],
             page, hasMore: fresh.hasMore, error: false,
             savedCopy: (page > 1 && previous.savedCopy) || fallback !== null,
+            savedAt: fallback === null ? (page > 1 ? previous.savedAt : null) : keepSaved ? saved.savedAt : fallback === 'unknown' ? '' : fallback.toISOString(),
           };
         });
       })
@@ -97,7 +98,7 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
           <Link to="/competitions/past" onClick={onClose} aria-current={past ? 'page' : undefined}>Past</Link>
         </div>
       </div>
-      {state.savedCopy && !loading && <p role="status" className="mg-notice">Showing a saved list. It will refresh when your connection returns.</p>}
+      {state.savedCopy && !loading && shouldNoticeSavedCopy(state.savedAt, true, now) && <p role="status" className="mg-notice">{lastUpdatedText(state.savedAt, now)}. We’ll refresh when you’re back online.</p>}
       <div className="flex flex-col gap-3.5" aria-busy={loading}>
         {onToday.length > 0 && (
           <section className="mg-sec" aria-label="On today">

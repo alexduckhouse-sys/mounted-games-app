@@ -195,6 +195,19 @@ if (args.Contains("--reseed-review-competitions"))
     return;
 }
 
+if (args.Contains("--seed-history"))
+{
+    // Fictional clubs, riders, past competitions, a season and shop listings. Removes only what an earlier run made.
+    await DbInitializer.SeedAsync(app.Services);
+    using var scope = app.Services.CreateScope();
+    var history = await HistorySeeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), DateTime.UtcNow);
+    Console.WriteLine($"Cleared {history.Removed} earlier history competitions, then created {history.Competitions} competitions "
+        + $"({history.Teams} teams, {history.Races} races, {history.Results} results), {history.Clubs} clubs, {history.Riders} riders, "
+        + $"{history.Ponies} ponies, {history.Seasons} season with {history.TeamProfiles} team profiles, {history.ShopPosts} shop posts "
+        + $"and {history.CatalogueItems} event shop items.");
+    return;
+}
+
 if (migrateDatabase)
 {
     if (!DatabaseConfiguration.UsesPostgres(builder.Configuration))

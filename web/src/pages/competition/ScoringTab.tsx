@@ -16,6 +16,7 @@ import { ToplistRowsSkeleton } from '../../components/Skeletons';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../../offline/savedCopies';
+import { NumberField } from '../../components/NumberField';
 
 const NO_ROWS: StandingRow[] = [];
 
@@ -251,12 +252,12 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-xs font-semibold">Top N teams</span>
-              <input type="number" min={1} max={50} className="input mt-1 text-sm"
+              <NumberField  min={1} max={50} className="input mt-1 text-sm"
                 value={topN} onChange={(e) => setTopN(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             </label>
             <label className="block">
               <span className="text-xs font-semibold">Lanes per heat</span>
-              <input type="number" min={1} max={20} className="input mt-1 text-sm"
+              <NumberField  min={1} max={20} className="input mt-1 text-sm"
                 value={lanes} onChange={(e) => setLanes(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             </label>
           </div>

@@ -10,6 +10,7 @@ import { formatTime } from '../../lib/time';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { sessionOrdinals } from '../../lib/timetableRows';
 import { useCompetition } from './context';
+import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, shouldNoticeSavedCopy } from '../../offline/savedCopies';
 
 const dayText = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
@@ -90,7 +91,7 @@ export function FollowingTab() {
       </div>}
     </div>
     {error && <p role="alert" className="mg-notice">{error}</p>}
-    {isStale && <p role="status" className="mg-notice">Showing the latest copy received. Times may have changed. {updatedAt ? updatedAt.toLocaleString('en-GB') : 'Time unavailable'}
+    {isStale && shouldNoticeSavedCopy(updatedAt, true, new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS) && <p role="status" className="mg-notice">{lastUpdatedText(updatedAt)}. Times may have changed.
       <button className="mg-text-link ml-3 !min-h-11" onClick={reload}>Refresh</button></p>}
     {missing.map((teamId) => <p key={teamId} className="mg-notice">A followed team is no longer listed at this event. <button className="mg-text-link !min-h-11" onClick={() => toggle({ competitionId: competition.id, teamId })}>Remove saved team</button></p>)}
 
