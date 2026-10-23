@@ -107,6 +107,62 @@ public class TrainerRequestsTests : IClassFixture<ApiFactory>
         Assert.DoesNotContain(await (await admin.GetAsync(Route)).ReadAsync<List<TrainerRequestDto>>(), r => r.UserId == auth.User.Id);
     }
 
+    private Task<List<string>> RolesOfAsync(string userId) => _f.WithDbAsync(db =>
+        (from ur in db.UserRoles join r in db.Roles on ur.RoleId equals r.Id where ur.UserId == userId orderby r.Name select r.Name!).ToListAsync());
+
+    [Fact]
+    public async Task List_ShowsAnAdminAManagerRequest_AsAManagerRequest()
+    {
+        var (_, wantsManager) = await _f.SignupAsync(Roles.Manager);
+        var (_, wantsTrainer) = await _f.SignupAsync();
+        var admin = await _f.AdminAsync();
+
+        var requests = await (await admin.GetAsync(Route)).ReadAsync<List<TrainerRequestDto>>();
+
+        Assert.Equal(Roles.Manager, requests.Single(r => r.UserId == wantsManager.User.Id).RequestedRole);
+        Assert.Equal(Roles.Trainer, requests.Single(r => r.UserId == wantsTrainer.User.Id).RequestedRole);
+    }
+
+    [Fact]
+    public async Task Approve_MakesAManagerRequestAManager_AndDropsTheRequestAndMemberRoles()
+    {
+        var (pending, auth) = await _f.SignupAsync(Roles.Manager);
+        var admin = await _f.AdminAsync();
+        Assert.Equal(new[] { Roles.ManagerRequest, Roles.Member }, await RolesOfAsync(auth.User.Id));
+
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PostAsync($"{Route}/{auth.User.Id}/approve", null)).StatusCode);
+
+        Assert.Equal(new[] { Roles.Manager }, await RolesOfAsync(auth.User.Id));
+        var fresh = await _f.LoginAsync(auth.User.Email, "Passw0rd!x");
+        Assert.Equal(new[] { Roles.Manager }, fresh.User.Roles);
+        // The manager can now review their club's trainers.
+        Assert.Equal(HttpStatusCode.OK, (await _f.WithToken(fresh.Token).GetAsync(Route)).StatusCode);
+        Assert.DoesNotContain(await (await admin.GetAsync(Route)).ReadAsync<List<TrainerRequestDto>>(), r => r.UserId == auth.User.Id);
+    }
+
+    [Fact]
+    public async Task Decline_LeavesAManagerRequestAsAMember()
+    {
+        var (_, auth) = await _f.SignupAsync(Roles.Manager);
+        var admin = await _f.AdminAsync();
+
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PostAsync($"{Route}/{auth.User.Id}/decline", null)).StatusCode);
+
+        Assert.Equal(new[] { Roles.Member }, await RolesOfAsync(auth.User.Id));
+    }
+
+    [Fact]
+    public async Task AClubManager_CannotSeeOrApproveAManagerRequest()
+    {
+        var club = $"Test Club {Guid.NewGuid():N}";
+        var (manager, _) = await _f.ApprovedManagerAsync(club);
+        var (_, wantsManager) = await _f.SignupAsync(Roles.Manager, club);
+
+        Assert.DoesNotContain(await (await manager.GetAsync(Route)).ReadAsync<List<TrainerRequestDto>>(), r => r.UserId == wantsManager.User.Id);
+        Assert.Equal(HttpStatusCode.NotFound, (await manager.PostAsync($"{Route}/{wantsManager.User.Id}/approve", null)).StatusCode);
+        Assert.Equal(new[] { Roles.ManagerRequest, Roles.Member }, await RolesOfAsync(wantsManager.User.Id));
+    }
+
     [Theory]
     [InlineData("approve", false)]
     [InlineData("decline", false)]
