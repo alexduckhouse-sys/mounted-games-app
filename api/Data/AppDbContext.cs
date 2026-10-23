@@ -23,6 +23,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<LiveStream> LiveStreams => Set<LiveStream>();
     public DbSet<StreamOverlay> StreamOverlays => Set<StreamOverlay>();
+    public DbSet<Sponsor> Sponsors => Set<Sponsor>();
+    public DbSet<SponsorExposure> SponsorExposures => Set<SponsorExposure>();
     public DbSet<OverlayLook> OverlayLooks => Set<OverlayLook>();
     public DbSet<CompetitionCollaborator> CompetitionCollaborators => Set<CompetitionCollaborator>();
     public DbSet<ScorerLink> ScorerLinks => Set<ScorerLink>();

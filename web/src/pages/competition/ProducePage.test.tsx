@@ -1,11 +1,12 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { api } from '../../api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StreamOverlay } from '../../types';
 import { DEFAULT_OVERLAY } from '../../lib/overlays';
 import { readMessages, writeMessages } from '../../lib/overlayMessages';
 import type { OverlaySaveResult } from '../../hooks/useStreamOverlay';
-import { competition, session } from '../../test/factories';
+import { competition, session, sponsor } from '../../test/factories';
 import { liveStream } from '../../test/streamFakes';
 import { CompetitionContext, type CompetitionCtx } from './context';
 import { ProducePage } from './ProducePage';
@@ -127,6 +128,42 @@ describe('ProducePage', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t save. Check your connection and try again.');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('turns the sponsor cards on, off or to breaks only, at once', async () => {
+    show();
+    const modes = within(screen.getByRole('group', { name: 'Sponsor cards' }));
+    expect(modes.getByRole('button', { name: 'In breaks' })).toHaveAttribute('aria-pressed', 'true');
+    await act(async () => { fireEvent.click(modes.getByRole('button', { name: 'Off' })); });
+    expect(saved.at(-1)).toMatchObject({ sponsorMode: 2 });
+    await act(async () => { fireEvent.click(modes.getByRole('button', { name: 'Always' })); });
+    expect(saved.at(-1)).toMatchObject({ sponsorMode: 1 });
+    // The look has not been touched, so it is still not waiting to be saved.
+    expect(screen.getByRole('button', { name: 'Save for this event' })).toBeDisabled();
+  });
+
+  it('skips the sponsor on screen, when there are sponsors in the break rotation', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { action: 'skip' } });
+    const { unmount } = show();
+    expect(screen.getByText('No sponsors are set to show on the video during breaks.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Skip sponsor' })).toBeDisabled();
+    unmount();
+
+    show({ sponsors: [sponsor(1, { showOn: 16 }), sponsor(2, { showOn: 16 }), sponsor(3, { showOn: 1 })] });
+    expect(screen.getByText('2 sponsors in the break rotation, headline first.')).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Skip sponsor' })); });
+    expect(api.post).toHaveBeenCalledWith('/competitions/1/sponsors/skip');
+
+    vi.mocked(api.post).mockRejectedValue(new Error('no signal'));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Skip sponsor' })); });
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t skip.');
+  });
+
+  it('cannot skip when the sponsor cards are off, and says "1 sponsor" for one', () => {
+    overlay = { ...overlay, sponsorMode: 2 };
+    show({ sponsors: [sponsor(1, { showOn: 16 })] });
+    expect(screen.getByText('1 sponsor in the break rotation, headline first.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Skip sponsor' })).toBeDisabled();
   });
 
   it('previews the unsaved look over a sample video', () => {

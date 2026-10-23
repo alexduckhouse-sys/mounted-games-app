@@ -9,7 +9,7 @@ import { DetailsTab } from './DetailsTab';
 const state = vi.hoisted(() => ({ detail: null as unknown }));
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
-vi.mock('./context', () => ({ useCompetition: () => ({ competition: state.detail, reload: vi.fn() }) }));
+vi.mock('./context', async (importOriginal) => ({ ...(await importOriginal<typeof import('./context')>()), useCompetition: () => ({ competition: state.detail, reload: vi.fn() }) }));
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 'u1' }, canEdit: () => false, canManage: () => false, canOrganise: () => false, hasRole: () => false,

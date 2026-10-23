@@ -19,7 +19,8 @@ vi.mock('../../auth/AuthContext', () => ({
     hasRole: () => false,
   }),
 }));
-vi.mock('./context', () => ({
+vi.mock('./context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./context')>()),
   useCompetition: () => ({
     reload: vi.fn(),
     competition: {

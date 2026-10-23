@@ -4,6 +4,7 @@ import { api } from '../api';
 import type { ChatMessage, CompetitionDetail, Session, Heat } from '../types';
 import { useCompetitionStreams } from '../hooks/useCompetitionStreams';
 import { useStreamOverlay } from '../hooks/useStreamOverlay';
+import { useSponsorFeed } from '../hooks/useSponsorFeed';
 import { appendStreamMessage } from '../lib/streams';
 import { tickerItems } from '../lib/ticker';
 import { useTicker } from '../components/TickerContext';
@@ -162,6 +163,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const [ready, setReady] = useState(0);
   const streamState = useCompetitionStreams(competitionId, ready);
   const overlayState = useStreamOverlay(competitionId, ready);
+  const sponsorFeed = useSponsorFeed(competitionId, ready);
   // Score cards are worked out from what this phone held before each results update.
   const latestData = useRef(data);
   useEffect(() => { latestData.current = data; }, [data]);
@@ -205,6 +207,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     onStreamUpdated: streamState.onStreamUpdated,
     onStreamViewers: streamState.onStreamViewers,
     onOverlayUpdated: overlayState.onOverlayUpdated,
+    onSponsorControl: sponsorFeed.onSponsorControl,
     onScoreCardControl: (raw) => {
       const control = parseScoreCardControl(raw);
       if (control) setScoreCards((cards) => applyScoreCardControl(cards, control, Date.now(), overlayState.overlay.scoreCardDelaySeconds * 1000));
@@ -311,7 +314,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing);
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
         {data.isDemo && <DemoEventNotice />}

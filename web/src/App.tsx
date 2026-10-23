@@ -34,6 +34,7 @@ const ProducePage = lazy(() => import('./pages/competition/ProducePage').then((m
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
 const DetailsTab = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.DetailsTab })));
 const FollowingPage = lazy(() => import('./pages/FollowingPage').then((module) => ({ default: module.FollowingPage })));
+const SponsorsPage = lazy(() => import('./pages/competition/SponsorsPage').then((module) => ({ default: module.SponsorsPage })));
 const FollowingTab = lazy(() => import('./pages/competition/FollowingTab').then((module) => ({ default: module.FollowingTab })));
 const MyTeamsPage = lazy(() => import('./pages/MyTeamsPage').then((module) => ({ default: module.MyTeamsPage })));
 const DeclarationsIndexPage = lazy(() => import('./pages/DeclarationsIndexPage').then((module) => ({ default: module.DeclarationsIndexPage })));
@@ -107,6 +108,7 @@ export default function App() {
                 <Route path="produce" element={<ProtectedRoute roles={['Admin', 'Trainer']}><ProducePage /></ProtectedRoute>} />
                 <Route path="chat" element={<ChatTab />} />
                 <Route path="details" element={<DetailsTab />} />
+                <Route path="sponsors" element={<SponsorsPage />} />
                 <Route path="live" element={<Navigate to="../chat" replace />} />
               </Route>
               <Route path="teams" element={

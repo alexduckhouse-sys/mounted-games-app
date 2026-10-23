@@ -13,6 +13,7 @@ import { buildToplist } from '../../lib/toplist';
 import { ToplistView } from './ToplistView';
 import { ToplistRowsSkeleton } from '../../components/Skeletons';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { SponsorStrip } from '../../components/SponsorStrip';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../../offline/savedCopies';
 
 const NO_ROWS: StandingRow[] = [];
@@ -143,6 +144,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
         {ageGroups}
         <div className="flex flex-col gap-3">
           {sectionId == null ? <p className="mg-card mt-3 p-4 text-[rgb(var(--mg-muted))]">No age groups yet.</p> : toplist}
+          {sectionId != null && <SponsorStrip placement="Results" />}
           {finalsButton && <div className="pt-1">{finalsButton}</div>}
         </div>
         {finalsModal}

@@ -28,6 +28,7 @@ describe('BottomTabs', () => {
     ['/competitions/12/toplists', 'Toplists'],
     ['/competitions/12/chat', 'Live & stream'],
     ['/competitions/12/details/', 'Details'],
+    ['/competitions/12/sponsors', 'Details'],
   ])('highlights the right tab at %s', (path, tab) => {
     expect(current(path)).toEqual([tab]);
   });

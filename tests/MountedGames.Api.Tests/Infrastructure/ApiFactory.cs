@@ -39,6 +39,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimits:WritesPerMinute", "100000");
         builder.UseSetting("RateLimits:PublicReadsPerMinute", "100000");
         builder.UseSetting("RateLimits:GeocodePerMinute", "100000");
+        builder.UseSetting("RateLimits:SponsorExposurePerMinute", "100000");
         builder.ConfigureServices(services =>
         {
             var scheduler = services.Single(d => d.ImplementationType == typeof(NotificationScheduler));

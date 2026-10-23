@@ -20,6 +20,8 @@ public class StreamOverlay
     public string BannerArenas { get; set; } = "[]";
     public OverlayMode StripMode { get; set; }
     public OverlayMode ScoreCardMode { get; set; }
+    /// <summary>Auto shows sponsor cards during breaks and briefings; On shows them whatever is running; Off hides them.</summary>
+    public OverlayMode SponsorMode { get; set; }
     public int ScoreCardDelaySeconds { get; set; } = 4;
     public int ScoreCardSeconds { get; set; } = 10;
     /// <summary>The event's look (colours, logo, size, which elements show), as JSON written by the web app.</summary>

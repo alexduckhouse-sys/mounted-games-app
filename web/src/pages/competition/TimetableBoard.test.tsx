@@ -7,7 +7,7 @@ import { dayKey } from '../../lib/timetableDay';
 import { TimetableBoard } from './TimetableBoard';
 
 const state = vi.hoisted(() => ({ value: null as unknown }));
-vi.mock('./context', () => ({ useCompetition: () => state.value }));
+vi.mock('./context', async (importOriginal) => ({ ...(await importOriginal<typeof import('./context')>()), useCompetition: () => state.value }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => false }) }));
 
 const day = dayKey(new Date());
