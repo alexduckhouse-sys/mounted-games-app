@@ -5,7 +5,7 @@ import { api } from '../../api';
 import { competition } from '../../test/factories';
 import { dateToEnd, dateToStart } from '../../lib/sponsors';
 import { CompetitionContext } from './context';
-import { SponsorsCard, shownText } from './SponsorsCard';
+import { SponsorsCard } from './SponsorsCard';
 import { prepareLogo } from './sponsorLogo';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
@@ -24,14 +24,6 @@ const serve = (...items: unknown[]) => vi.mocked(api.get).mockResolvedValue({ da
 
 beforeEach(() => {
   serve(wire(1, { name: 'Acme Feeds', tier: 0, views: 1234, seconds: 600, logoUrl: '/api/competitions/5/sponsors/1/logo?v=1' }), wire(2, { name: 'Bridle Bros', isEnabled: false }));
-});
-
-describe('shownText', () => {
-  it('counts times and minutes on video', () => {
-    expect(shownText(0, 0)).toBe('Shown 0 times');
-    expect(shownText(1, 59)).toBe('Shown 1 time');
-    expect(shownText(1234, 600)).toBe('Shown 1,234 times · 10 min on video');
-  });
 });
 
 describe('SponsorsCard', () => {

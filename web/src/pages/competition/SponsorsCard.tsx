@@ -9,7 +9,7 @@ import { LogoError, prepareLogo } from './sponsorLogo';
 import type { SponsorAdmin, SponsorTier } from '../../types';
 import {
   SPONSOR_PLACEMENTS, SPONSOR_TIERS, dateToEnd, dateToStart, datesText, endToDate, hasPlacement, isHttpsLink, logoSrc,
-  parseSponsorAdmin, parseSponsorAdmins, startToDate, withPlacement,
+  parseSponsorAdmin, parseSponsorAdmins, shownText, startToDate, withPlacement,
 } from '../../lib/sponsors';
 
 /** What the form edits. Dates are `yyyy-mm-dd` boxes; `logo` is a chosen file waiting to be sent. */
@@ -35,11 +35,6 @@ const draftOf = (s: SponsorAdmin): Draft => ({
 });
 
 type ListState = { competitionId: number; items: SponsorAdmin[] } | 'error' | null;
-
-export function shownText(views: number, seconds: number): string {
-  const times = `Shown ${views.toLocaleString('en-GB')} ${views === 1 ? 'time' : 'times'}`;
-  return seconds >= 60 ? `${times} · ${Math.round(seconds / 60).toLocaleString('en-GB')} min on video` : times;
-}
 
 /**
  * The organiser's sponsors: add, edit, delete and reorder, with a logo, tier, places to show and optional

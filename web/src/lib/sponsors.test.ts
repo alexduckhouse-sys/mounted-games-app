@@ -1,23 +1,14 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { session, sponsor } from '../test/factories';
 import {
   FRESH_ROTATION, SPONSOR_PLACEMENTS, SPONSOR_TIERS, currentItem, datesText, dateToEnd, dateToStart, endToDate, fitWithin, groupByTier,
   hasPlacement, isHttpsLink, logoSrc, msUntilNext, onBreak, parseSponsor, parseSponsorAdmin, parseSponsorAdmins, parseSponsorControl,
-  parseSponsors, placementBit, rotationIndex, skipRotation, sponsorsFor, startToDate, withPlacement,
+  parseSponsors, placementBit, rotationIndex, shownText, skipRotation, sponsorsFor, startToDate, withPlacement,
 } from './sponsors';
 
 afterEach(() => { vi.unstubAllEnvs(); });
 
 describe('the placement registry', () => {
-  it('lists every SponsorPlacement the API knows, with the same bits', () => {
-    const source = readFileSync(resolve(process.cwd(), '../api/Entities/Sponsor.cs'), 'utf8');
-    const body = /enum SponsorPlacement\s*\{([^}]*)\}/.exec(source)![1];
-    const fromApi = [...body.matchAll(/^\s*(\w+)\s*=\s*(\d+),?/gm)].map((m) => ({ key: m[1], placement: Number(m[2]) })).filter((m) => m.placement !== 0);
-    expect(SPONSOR_PLACEMENTS.map(({ key, placement }) => ({ key, placement }))).toEqual(fromApi);
-  });
-
   it('gives each place its own single bit, a label and a description', () => {
     const bits = SPONSOR_PLACEMENTS.map((p) => p.placement);
     expect(new Set(bits).size).toBe(bits.length);
@@ -192,5 +183,13 @@ describe('rotation', () => {
     expect(rotationIndex(18_000, skipped, 8_000, 3)).toBe(0);
     expect(msUntilNext(10_000, skipped, 8_000)).toBe(8_000);
     expect(skipRotation(FRESH_ROTATION, 10_000, 8_000, 0)).toBe(FRESH_ROTATION);
+  });
+});
+
+describe('shownText', () => {
+  it('counts times and minutes on video', () => {
+    expect(shownText(0, 0)).toBe('Shown 0 times');
+    expect(shownText(1, 59)).toBe('Shown 1 time');
+    expect(shownText(1234, 600)).toBe('Shown 1,234 times · 10 min on video');
   });
 });

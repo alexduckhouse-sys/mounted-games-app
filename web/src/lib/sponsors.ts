@@ -111,6 +111,14 @@ export function parseSponsorControl(raw: unknown): 'skip' | null {
   return isRecord(raw) && raw.action === 'skip' ? 'skip' : null;
 }
 
+// ---- counts ----
+
+/** "Shown 1,234 times", with minutes on video when there are any. */
+export function shownText(views: number, seconds: number): string {
+  const times = `Shown ${views.toLocaleString('en-GB')} ${views === 1 ? 'time' : 'times'}`;
+  return seconds >= 60 ? `${times} · ${Math.round(seconds / 60).toLocaleString('en-GB')} min on video` : times;
+}
+
 // ---- dates ----
 
 const pad = (n: number) => String(n).padStart(2, '0');
