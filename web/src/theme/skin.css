@@ -422,3 +422,22 @@ a.mg-sponsor:focus-visible { outline: 3px solid rgb(var(--mg-heading)); outline-
 
 /* Fields that failed validation: a red border and the message under them (no banner). */
 .mg-field[data-invalid="true"] { border-color: rgb(var(--mg-elim)); }
+
+/* Form dropdown (SelectField) */
+.mg-dropdown-menu.mg-dropdown-up { top: auto; bottom: calc(100% + 4px); }
+.mg-dropdown-menu.mg-select-menu { right: auto; min-width: 100%; width: max-content; max-width: min(92vw, 26rem); overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.mg-dropdown-option[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.mg-dropdown-group { padding: 8px 10px 4px; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--mg-muted)); }
+.mg-select {
+  display: flex; width: 100%; min-height: 44px; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 10px; text-align: left; cursor: pointer;
+  border: 1.5px solid rgb(var(--mg-control)); border-radius: 8px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink));
+  font: 500 16px/1.2 'Barlow', sans-serif;
+}
+.mg-select:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 1px; }
+.mg-select[aria-expanded="true"] { border-color: rgb(var(--mg-heading)); }
+.mg-select[aria-invalid="true"] { border-color: rgb(var(--mg-elim)); }
+.mg-select:disabled { opacity: .6; cursor: not-allowed; }
+.mg-select-value { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mg-select-placeholder { color: rgb(var(--mg-faint)); }
+.mg-select-caret { flex: none; opacity: .7; }
+.mg-field .mg-select { border: 0; background: transparent; padding: 0; }

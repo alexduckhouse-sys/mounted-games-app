@@ -4,6 +4,8 @@ import type { DiagramElement, DiagramPos, DiagramTool, ConeKind, ItemKind } from
 import { DIAGRAM_TOOLS } from '../types';
 import { ElementShape } from './RaceDiagram';
 import { LANE, CENTRE_Y, pctToPx, pxToPct, clampPct, resolveX } from './diagramGeometry';
+import { SelectField } from './SelectField';
+import { NumberField } from './NumberField';
 
 interface Props {
   value: string;
@@ -515,7 +517,7 @@ function PositionRow({
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
       <label className="block col-span-2 sm:col-span-1">
         <span className="text-[11px] text-slate-500">Anchored to</span>
-        <select
+        <SelectField
           className="input mt-0.5 text-sm"
           value={el.anchor ?? ''}
           onChange={(e) => {
@@ -526,13 +528,13 @@ function PositionRow({
         >
           <option value="">— Absolute —</option>
           {anchors.map((a) => <option key={a} value={a}>{a}</option>)}
-        </select>
+        </SelectField>
       </label>
       {isAnchored ? (
         <label className="block">
           <span className="text-[11px] text-slate-500">Offset (% from anchor)</span>
-          <input
-            type="number" step={1}
+          <NumberField allowNegative
+             step={1}
             className="input mt-0.5 text-sm"
             value={el.offset ?? 0}
             onChange={(e) => onChange({ offset: parseInt(e.target.value, 10) || 0 })}
@@ -541,8 +543,8 @@ function PositionRow({
       ) : (
         <label className="block">
           <span className="text-[11px] text-slate-500">Position (0–120)</span>
-          <input
-            type="number" min={0} max={LANE.xMax} step={1}
+          <NumberField
+             min={0} max={LANE.xMax} step={1}
             className="input mt-0.5 text-sm"
             value={el.x ?? 50}
             onChange={(e) => onChange({ x: clampPct(parseInt(e.target.value, 10) || 0) })}
