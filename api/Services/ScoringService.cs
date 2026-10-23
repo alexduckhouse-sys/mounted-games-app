@@ -23,13 +23,14 @@ public class ScoringService
 
     public ScoringService(AppDbContext db) => _db = db;
 
+    /// <summary>The largest field that races at once in the session: a heat with more teams than lanes races only the lanes.</summary>
     public async Task<int> GetSessionBaseAsync(int sessionId)
     {
-        var sizes = await _db.Heats
+        var heats = await _db.Heats
             .Where(h => h.SessionId == sessionId)
-            .Select(h => h.Entries.Count)
+            .Select(h => new { Size = h.Entries.Count, Lanes = h.Session!.LanesPerHeat })
             .ToListAsync();
-        return sizes.Count == 0 ? 0 : sizes.Max();
+        return heats.Count == 0 ? 0 : heats.Max(h => LaneRotation.LanesInUse(h.Size, h.Lanes));
     }
 
     public int PointsForPlace(int place, int sessionBase, bool eliminated)
@@ -56,25 +57,25 @@ public class ScoringService
 
     public Task<RaceScoreDto> ApplyVersionedAsync(
         int raceId, UpdateRaceScoreRequest request, string? actorUserId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? actorLabel = null)
     {
         if (request.Places is null)
             throw new ScoreValidationException("Places are required.");
         return ApplyCoreAsync(raceId,
             request.Places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated)).ToList(),
             actorUserId, request.ExpectedRevision, null, request.RequestId, request.Reason,
-            strictValidation: true, cancellationToken);
+            strictValidation: true, cancellationToken, actorLabel);
     }
 
     public Task<RaceScoreDto> ApplyLegacyAsync(
         int raceId, IReadOnlyList<FinishingPlaceDto> places,
         IReadOnlyList<FinishingPlaceDto>? expected, string? actorUserId, string? reason = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? actorLabel = null)
         => ApplyCoreAsync(raceId,
             places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated)).ToList(),
             actorUserId, null,
             expected?.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated)).ToList(),
-            $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken);
+            $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, actorLabel);
 
     public async Task<RaceScoreDto> GetAsync(int raceId, CancellationToken cancellationToken = default)
     {
@@ -96,7 +97,7 @@ public class ScoringService
         var events = await _db.Set<RaceScoreEvent>().AsNoTracking()
             .Where(e => e.RaceId == raceId).OrderBy(e => e.Revision).ToListAsync(cancellationToken);
         return events.Select(e => new RaceScoreHistoryDto(e.Revision, e.Kind,
-            Deserialize(e.BeforeJson), Deserialize(e.AfterJson), e.ActorUserId, e.Reason, e.CreatedAt)).ToList();
+            Deserialize(e.BeforeJson), Deserialize(e.AfterJson), e.ActorUserId, e.Reason, e.CreatedAt, e.ActorLabel)).ToList();
     }
 
     public Task<RaceScoreDto> SignOffAsync(
@@ -159,9 +160,9 @@ public class ScoringService
         int raceId, IReadOnlyList<FinishingPlace> finishingPlaces, string? actorUserId,
         int? expectedRevision, IReadOnlyList<FinishingPlace>? expectedResults,
         string requestId, string? reason, bool strictValidation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? actorLabel = null)
     {
-        ValidateRequest(finishingPlaces, requestId, strictValidation);
+        ValidateRequest(finishingPlaces, requestId);
         if (reason?.Trim().Length > 1000)
             throw new ScoreValidationException("Reason must be 1000 characters or fewer.");
         requestId = requestId.Trim();
@@ -169,10 +170,18 @@ public class ScoringService
         {
         var race = await _db.Races
             .Include(r => r.Heat).ThenInclude(h => h!.Entries)
+            .Include(r => r.Heat).ThenInclude(h => h!.Races)
+            .Include(r => r.Heat).ThenInclude(h => h!.Session)
             .Include(r => r.Results)
             .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken)
             ?? throw new InvalidOperationException("Race not found");
         var heat = race.Heat ?? throw new InvalidOperationException("Race has no heat");
+        // With more teams than lanes some teams have no lane this race: they sit it out, whatever was sent for them.
+        var sitOut = SitOutTeamIds(race, heat);
+        if (sitOut.Count > 0)
+            finishingPlaces = finishingPlaces.Select(p => sitOut.Contains(p.TeamId) ? p with { Place = 0, Eliminated = false } : p).ToList();
+        if (strictValidation && finishingPlaces.Any(p => !p.Eliminated && p.Place < 1 && !sitOut.Contains(p.TeamId)))
+            throw new ScoreValidationException("A non-eliminated team must have a placing of at least 1.");
         var state = await GetOrCreateStateAsync(race, cancellationToken);
         var current = Snapshot(race.Results);
         var entryTeamIds = heat.Entries.Select(e => e.TeamId).ToHashSet();
@@ -183,8 +192,12 @@ public class ScoringService
             throw new ScoreValidationException("Submit one result for every team in the heat.");
         var sessionBase = await GetSessionBaseAsync(heat.SessionId);
         if (sessionBase < 1) sessionBase = heat.Entries.Count;
-        if (strictValidation && finishingPlaces.Any(p => !p.Eliminated && p.Place > heat.Entries.Count))
-            throw new ScoreValidationException($"Placings must be between 1 and {heat.Entries.Count}.");
+        // A race final is scored on its own field: last place in a final of 4 takes 2 points, a point more than
+        // a team that only qualified and didn't make it through, whatever size the qualifiers were.
+        if (heat.RaceRoundStage == RaceRoundStage.Final) sessionBase = heat.Entries.Count + 1;
+        var racing = heat.Entries.Count - sitOut.Count;
+        if (strictValidation && finishingPlaces.Any(p => !p.Eliminated && p.Place > racing))
+            throw new ScoreValidationException($"Placings must be between 1 and {racing}.");
         var accepted = strictValidation
             ? finishingPlaces.ToList()
             : finishingPlaces.Where(p => entryTeamIds.Contains(p.TeamId)).ToList();
@@ -222,9 +235,11 @@ public class ScoringService
         {
             RaceId = raceId,
             TeamId = fp.TeamId,
-            Placing = fp.Eliminated ? null : fp.Place,
+            Placing = fp.Eliminated || sitOut.Contains(fp.TeamId) ? null : fp.Place,
             Eliminated = fp.Eliminated,
-            Points = isQualifier ? (fp.Eliminated ? 0 : 1) : PointsForPlace(fp.Place, sessionBase, fp.Eliminated),
+            IsSitOut = sitOut.Contains(fp.TeamId),
+            Points = sitOut.Contains(fp.TeamId) ? 0
+                : isQualifier ? (fp.Eliminated ? 0 : 1) : PointsForPlace(fp.Place, sessionBase, fp.Eliminated),
             RecordedAt = now,
             RecordedByUserId = actorUserId,
         }).ToList();
@@ -244,6 +259,7 @@ public class ScoringService
             BeforeJson = JsonSerializer.Serialize(current, Json),
             AfterJson = JsonSerializer.Serialize(after, Json),
             ActorUserId = actorUserId,
+            ActorLabel = actorLabel,
             Reason = string.IsNullOrWhiteSpace(reason) ? "Initial results recorded." : reason.Trim(),
             RequestId = requestId,
             PayloadFingerprint = payloadFingerprint,
@@ -367,18 +383,31 @@ public class ScoringService
             state.SignedOffByUserId, current, true);
     }
 
-    private static void ValidateRequest(IReadOnlyList<FinishingPlace> places, string requestId, bool strict)
+    private static void ValidateRequest(IReadOnlyList<FinishingPlace> places, string requestId)
     {
         if (string.IsNullOrWhiteSpace(requestId) || requestId.Trim().Length > 100)
             throw new ScoreValidationException("RequestId is required and must be 100 characters or fewer.");
         if (places.GroupBy(p => p.TeamId).Any(g => g.Count() > 1))
             throw new ScoreValidationException("Each team can appear only once.");
-        if (strict && places.Any(p => !p.Eliminated && p.Place < 1))
-            throw new ScoreValidationException("A non-eliminated team must have a placing of at least 1.");
+    }
+
+    /// <summary>The teams with no lane in this race. Empty unless the heat has more teams than the session has lanes.</summary>
+    private static HashSet<int> SitOutTeamIds(Race race, Heat heat)
+    {
+        var teams = heat.Entries.OrderBy(e => e.LaneIndex).ThenBy(e => e.Id).ToList();
+        var lanes = heat.Session?.LanesPerHeat;
+        if (lanes is not > 0 || teams.Count <= lanes) return [];
+        var raceIndex = heat.Races.OrderBy(r => r.OrderIndex).ThenBy(r => r.Id).ToList().FindIndex(r => r.Id == race.Id);
+        var mode = heat.Session!.LaneRotationMode;
+        return teams
+            .Select((entry, index) => (entry.TeamId, Drawn: index + 1))
+            .Where(t => LaneRotation.SitsOut(t.Drawn, Math.Max(raceIndex, 0), teams.Count, lanes, mode))
+            .Select(t => t.TeamId)
+            .ToHashSet();
     }
 
     private static List<ScorePlaceDto> Snapshot(IEnumerable<Result> results) => results
-        .Select(r => new ScorePlaceDto(r.TeamId, r.Placing ?? 0, r.Eliminated, r.Points))
+        .Select(r => new ScorePlaceDto(r.TeamId, r.Placing ?? 0, r.Eliminated, r.Points, r.IsSitOut))
         .OrderBy(r => r.Eliminated).ThenBy(r => r.Place).ThenBy(r => r.TeamId).ToList();
 
     private static IReadOnlyList<ScorePlaceDto> Deserialize(string json)

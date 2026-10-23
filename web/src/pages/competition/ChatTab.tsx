@@ -41,12 +41,15 @@ export function ChatTab() {
 
 function ChatTabSession() {
   const { competition, reload, streams, streamingEnabled, invoke, ready, streamMessages } = useCompetition();
-  const { canEdit, hasRole, canOrganise } = useAuth();
+  const { user, canEdit, hasRole, canOrganise } = useAuth();
   const isAdmin = hasRole('Admin');
   const isTrainer = hasRole('Trainer');
-  // Older APIs don't keep trainer messages private, so they must say they do before trainers can post.
-  const trainerMessagingAvailable = competition.staffChatEnabled === true;
+  // Older APIs don't keep private messages private, so they must say they do before anyone can send one.
+  const privateMessagingAvailable = competition.staffChatEnabled === true;
   const canPost = isAdmin || isTrainer;
+  // Anyone signed in (trainer, team manager, member, rider) can message the organisers privately.
+  const canMessageOrganisers = !!user && !isAdmin;
+  const [replyTo, setReplyTo] = useState<{ userId: string; name: string } | null>(null);
   const canModerate = canEdit();
   const canManageStream = isAdmin ? canModerate : isTrainer && canOrganise(competition);
   const canBroadcast = streamingEnabled && canManageStream;
@@ -105,14 +108,21 @@ function ChatTabSession() {
 
   const banners = messages.filter((message) => message.type === 2 && message.tag === BANNER_TAG);
   const banner = banners.at(-1) ?? null;
-  const visibleMessages = messages.filter((message) => message.type !== 1 && message.tag !== BANNER_TAG && (canPost || !message.adminOnly));
+  const mineOrForMe = (message: ChatMessage) => !!user && (message.userId === user.id || message.recipientUserId === user.id);
+  const visibleMessages = messages.filter((message) => message.type !== 1 && message.tag !== BANNER_TAG && (canPost || !message.adminOnly || mineOrForMe(message)));
   const latest = visibleMessages.slice(-3).reverse();
   const activeStreams = streams.filter((stream) => stream.status !== 2);
   const liveNow = competition.sessions.some((session) => session.status === 1) || activeStreams.length > 0;
   const effectiveMode = canModerate ? mode : 'announcement';
-  const canCompose = canModerate || (isTrainer && trainerMessagingAvailable);
+  const canCompose = canModerate || (canMessageOrganisers && privateMessagingAvailable) || (isAdmin && replyTo !== null);
   const closeAnnouncements = useCallback(() => setAllOpen(false), []);
   const dismissActionError = useCallback(() => setActionError(null), []);
+
+  function startReply(message: ChatMessage) {
+    if (!message.userId) return;
+    setReplyTo({ userId: message.userId, name: message.authorName });
+    setAllOpen(false);
+  }
 
   async function removeMessage(id: number, confirmFirst = true) {
     if (!canModerate) return;
@@ -166,7 +176,7 @@ function ChatTabSession() {
     setSending(true);
     try {
       let posted: ChatMessage | undefined;
-      if (isAdmin && canModerate) {
+      if (isAdmin && canModerate && !replyTo) {
         const response = await api.post<ChatMessage>(`/competitions/${competition.id}/chat/announcement`, { body: text, tag: effectiveMode === 'banner' ? BANNER_TAG : 'general' });
         posted = response.data;
         if (posted) setMessages((current) => current.some((item) => item.id === posted!.id) ? current : [...current, posted!]);
@@ -178,9 +188,10 @@ function ChatTabSession() {
           }
         }
       } else {
-        const response = await api.post<ChatMessage>(`/competitions/${competition.id}/chat`, { body: text });
+        const response = await api.post<ChatMessage>(`/competitions/${competition.id}/chat`, replyTo ? { body: text, replyToUserId: replyTo.userId } : { body: text });
         posted = response.data;
         if (posted) setMessages((current) => current.some((item) => item.id === posted!.id) ? current : [...current, posted!]);
+        if (replyTo) setReplyTo(null);
       }
       if (isAdmin && canModerate) reload();
       setBody((current) => current.trim() === text ? '' : current);
@@ -238,83 +249,91 @@ function ChatTabSession() {
           ? <div className="live-feed-state mg-card" role="status">Loading announcements…</div>
           : messagesError && messages.length === 0
             ? null
-            : <AnnouncementList messages={latest} staff={canPost} canModerate={canModerate} onDelete={removeMessage} onBlock={blockMessageAuthor} />}
+            : <AnnouncementList messages={latest} staff={canPost} canModerate={canModerate} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} />}
       </section>
 
       {canCompose && (
         <div className="live-composer">
-          {canModerate ? (
+          {replyTo ? (
+            <div className="live-composer-label"><Lock aria-hidden="true" /> Private reply to {replyTo.name}
+              <button type="button" className="live-reply-cancel" onClick={() => setReplyTo(null)}>Cancel</button>
+            </div>
+          ) : canModerate ? (
             <div className="mg-seg" role="group" aria-label="Post type">
               <button type="button" aria-pressed={effectiveMode === 'announcement'} onClick={() => setMode('announcement')}>Announcement</button>
               <button type="button" aria-pressed={effectiveMode === 'banner'} onClick={() => setMode('banner')}>Pin as banner</button>
             </div>
           ) : (
-            <div className="live-composer-label">{isTrainer ? <><Lock aria-hidden="true" /> Message organisers</> : 'Announcement'}</div>
+            <div className="live-composer-label"><Lock aria-hidden="true" /> Message organisers</div>
           )}
           <div className="live-compose-row">
             <label className="mg-field">
-              <span className="sr-only">{effectiveMode === 'banner' ? 'Banner text' : isTrainer ? 'Message organisers' : 'Announcement'}</span>
-              <input value={body} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && body.trim()) void send(); }} placeholder={effectiveMode === 'banner' ? 'Banner text, replaces the pinned one' : isTrainer ? 'Message the organisers…' : 'Write an announcement…'} />
+              <span className="sr-only">{replyTo ? `Reply to ${replyTo.name}` : effectiveMode === 'banner' ? 'Banner text' : canMessageOrganisers ? 'Message organisers' : 'Announcement'}</span>
+              <input value={body} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && body.trim()) void send(); }} placeholder={replyTo ? 'Write a private reply…' : effectiveMode === 'banner' ? 'Banner text, replaces the pinned one' : canMessageOrganisers ? 'Message the organisers…' : 'Write an announcement…'} />
             </label>
             <button type="button" className="live-send" aria-label="Send" disabled={!body.trim() || sending} onClick={send}><Send aria-hidden="true" /></button>
           </div>
         </div>
       )}
-      {isTrainer && !canModerate && !trainerMessagingAvailable && (
+      {canMessageOrganisers && !privateMessagingAvailable && (
         <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Messaging the organisers isn’t available for this event yet.</div>
       )}
       {isAdmin && !canModerate && (
         <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Turn Edit mode on to post an announcement or pin a banner.</div>
       )}
 
-      {allOpen && <AnnouncementsOverlay messages={visibleMessages.slice().reverse()} staff={canPost} canModerate={canModerate} error={actionError} onDelete={removeMessage} onBlock={blockMessageAuthor} onDismissError={dismissActionError} onClose={closeAnnouncements} returnFocusRef={announcementsTriggerRef} />}
+      {allOpen && <AnnouncementsOverlay messages={visibleMessages.slice().reverse()} staff={canPost} canModerate={canModerate} error={actionError} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} onDismissError={dismissActionError} onClose={closeAnnouncements} returnFocusRef={announcementsTriggerRef} />}
     </div>
   );
 }
 
-function AnnouncementList({ messages, staff, canModerate, onDelete, onBlock, full = false }: {
+function AnnouncementList({ messages, staff, canModerate, onDelete, onBlock, onReply, full = false }: {
   messages: ChatMessage[];
   staff: boolean;
   canModerate: boolean;
   onDelete: (id: number) => Promise<void>;
   onBlock: (id: number) => Promise<void>;
+  onReply?: (message: ChatMessage) => void;
   full?: boolean;
 }) {
   const reduceMotion = useReducedMotion();
   return <div className={`live-announcement-list mg-card mg-list ${full ? 'live-announcement-list-full' : ''}`}>
     <AnimatePresence initial={false}>
-      {messages.map((message) => <AnnouncementRow key={message.id} message={message} staff={staff} canModerate={canModerate} onDelete={onDelete} onBlock={onBlock} reduceMotion={!!reduceMotion} />)}
+      {messages.map((message) => <AnnouncementRow key={message.id} message={message} staff={staff} canModerate={canModerate} onDelete={onDelete} onBlock={onBlock} onReply={onReply} reduceMotion={!!reduceMotion} />)}
     </AnimatePresence>
     {messages.length === 0 && <p className="live-empty">Nothing posted yet.</p>}
   </div>;
 }
 
-function AnnouncementRow({ message, staff, canModerate, onDelete, onBlock, reduceMotion }: {
+function AnnouncementRow({ message, staff, canModerate, onDelete, onBlock, onReply, reduceMotion }: {
   message: ChatMessage;
   staff: boolean;
   canModerate: boolean;
   onDelete: (id: number) => Promise<void>;
   onBlock: (id: number) => Promise<void>;
+  onReply?: (message: ChatMessage) => void;
   reduceMotion: boolean;
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
   const canBlock = canModerate && message.type === 0;
   return <motion.div className={`live-announcement-row ${staff ? 'live-announcement-row-staff' : ''}`} initial={reduceMotion ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -4 }} transition={{ duration: reduceMotion ? 0 : 0.2 }}>
     <time dateTime={message.createdAt}>{messageTime(message)}</time>
-    {canBlock ? <button type="button" className="live-announcement-copy" aria-expanded={actionsOpen} onClick={(event) => { event.stopPropagation(); setActionsOpen((open) => !open); }}><span>{message.body}</span>{staff && message.adminOnly && <small><Lock aria-hidden="true" /> Organisers only</small>}</button>
-      : <div className="live-announcement-copy"><span>{message.body}</span>{staff && message.adminOnly && <small><Lock aria-hidden="true" /> Organisers only</small>}</div>}
+    {canBlock ? <button type="button" className="live-announcement-copy" aria-expanded={actionsOpen} onClick={(event) => { event.stopPropagation(); setActionsOpen((open) => !open); }}><span>{message.body}</span>{message.adminOnly && <small><Lock aria-hidden="true" /> Organisers only</small>}</button>
+      : <div className="live-announcement-copy"><span>{message.body}</span>{message.adminOnly && <small><Lock aria-hidden="true" /> Organisers only</small>}</div>}
+    {onReply && message.adminOnly && !message.recipientUserId && message.userId && <button type="button" className="live-reply" onClick={(event) => { event.stopPropagation(); onReply(message); }}>Reply privately<span className="sr-only"> to {message.authorName}</span></button>}
     {canModerate && <button type="button" className="live-delete" aria-label={`Delete: ${message.body}`} onClick={(event) => { event.stopPropagation(); void onDelete(message.id); }}><Trash2 aria-hidden="true" /></button>}
     {actionsOpen && canBlock && <button type="button" className="live-block" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); void onBlock(message.id); }}><Shield aria-hidden="true" /> Block this sender</button>}
   </motion.div>;
 }
 
-function AnnouncementsOverlay({ messages, staff, canModerate, error, onDelete, onBlock, onDismissError, onClose, returnFocusRef }: {
+function AnnouncementsOverlay({ messages, staff, canModerate, error, onDelete, onBlock, onReply, onDismissError, onClose, returnFocusRef }: {
   messages: ChatMessage[];
   staff: boolean;
   canModerate: boolean;
   error: string | null;
   onDelete: (id: number) => Promise<void>;
   onBlock: (id: number) => Promise<void>;
+  onReply?: (message: ChatMessage) => void;
   onDismissError: () => void;
   onClose: () => void;
   returnFocusRef: RefObject<HTMLElement | null>;
@@ -325,7 +344,7 @@ function AnnouncementsOverlay({ messages, staff, canModerate, error, onDelete, o
     <div ref={dialogRef} className="live-all-dialog" role="dialog" aria-modal="true" aria-label="All announcements">
       <div className="live-all-head"><h2>All announcements</h2><button type="button" className="mg-icon-btn" aria-label="Close announcements" onClick={onClose}><X aria-hidden="true" /></button></div>
       {error && <div className="live-action-error" role="alert"><span>{error}</span><button type="button" aria-label="Dismiss error" onClick={onDismissError}><X aria-hidden="true" /></button></div>}
-      <AnnouncementList messages={messages} staff={staff} canModerate={canModerate} onDelete={onDelete} onBlock={onBlock} full />
+      <AnnouncementList messages={messages} staff={staff} canModerate={canModerate} onDelete={onDelete} onBlock={onBlock} onReply={onReply} full />
     </div>
   </div>;
 }

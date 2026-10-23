@@ -1,18 +1,23 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Trophy,
   Hammer, Check, ChevronDown, ChevronUp, Lock, Unlock, Sparkles, Download,
-  X, RotateCcw, Ban,
+  X, RotateCcw, Ban, CalendarPlus,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { competitionDateText } from '../../lib/competitionDates';
-import { DemoEntryPayment } from '../commerce/DemoEntryPayment';
+import { competitionCalendarUrl } from '../../lib/sharing';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
 import { EmbedCard } from './EmbedCard';
+import { ScorerLinksCard } from './ScorerLinksCard';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
+import { TermsTickBox } from '../../components/TermsTickBox';
+import { CONSENT_VERSION } from '../../lib/termsTick';
+import { EntryEmailFields, type EntryEmail } from '../../components/EntryEmailFields';
+import { EMAIL_OPT_IN_VERSION, confirmationEmailLabel, looksLikeEmail, newRequestId } from '../../lib/emailOptIn';
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
@@ -73,7 +78,7 @@ export function DetailsTab() {
 
   function exportAllSignupsCsv() {
     if (allSignups.length === 0) return;
-    const csv = signupsToCsv(allSignups);
+    const csv = signupsToCsv(allSignups, { test: !!competition.isDemo });
     downloadCsv(`${safeFilename(competition.name)}_signups.csv`, csv);
   }
 
@@ -136,8 +141,15 @@ export function DetailsTab() {
       <RefineList label="Event links">
         {linkRow('../shop', 'Event shop')}
         {linkRow('../rulebooks', 'Rulebooks')}
+        <li>
+          <a className="rf-row" href={competitionCalendarUrl(competition.id, window.location.origin)}>
+            <span className="rf-grow rf-t1">Add to calendar</span>
+            <CalendarPlus className="h-5 w-5 rf-chev" aria-hidden="true" />
+          </a>
+        </li>
         {linkRow(`/event-tools/${competition.id}/print/draw`, 'Print draw')}
         {linkRow(`/event-tools/${competition.id}/print/results`, 'Print results')}
+        {mayOrganise && linkRow(`/event-tools/${competition.id}/print/poster`, 'Print venue poster')}
         {mayOrganise && linkRow(`/event-tools/${competition.id}`, hasRole('Admin') || hasRole('Trainer') ? 'Import, duplicate & print' : 'Import & print')}
         {mayOrganise && linkRow('../shop/manage', 'Manage event shop')}
         {mayOrganise && linkRow('../operations', 'Readiness & draw')}
@@ -191,6 +203,9 @@ export function DetailsTab() {
       {user && (mayOrganise || hasRole('Admin')) && (
         <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
       )}
+      {user && (mayOrganise || hasRole('Admin')) && (
+        <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
+      )}
 
       {/* Owner, competition admins and site admins can put live results on their own website. */}
       {mayOrganise && <EmbedCard kind="competition" competitionId={competition.id} name={competition.name} sections={competition.sections} />}
@@ -207,7 +222,9 @@ export function DetailsTab() {
                 section={sec}
                 allSignups={allSignups}
                 signupsLocked={!!competition.signupsLocked}
+                isDemo={!!competition.isDemo}
                 paymentDestination={competition.paymentDestination ?? null}
+                termsText={competition.termsText ?? null}
                 competitionName={competition.name}
                 onChanged={() => { refreshSignups(); reload(); }}
                 canManage={canEdit() || mayOrganise}
@@ -226,14 +243,17 @@ export function DetailsTab() {
 
 function SectionSignupCard({
   competitionId, section, allSignups, signupsLocked,
-  competitionName,
+  competitionName, isDemo, termsText,
   onChanged, canManage, hideJoin, countsKnown,
 }: {
   competitionId: number;
   section: CompetitionSection;
   allSignups: SectionSignup[];
   signupsLocked: boolean;
+  /** A demo event: a paid entry goes on to the test payment page. */
+  isDemo: boolean;
   paymentDestination: string | null;
+  termsText: string | null;
   competitionName: string;
   onChanged: () => void;
   canManage: boolean;
@@ -242,26 +262,41 @@ function SectionSignupCard({
   /** Only organisers receive the signup list, so places taken is only known to them. */
   countsKnown: boolean;
 }) {
-  const { user } = useAuth();
-  const [createdSignup, setCreatedSignup] = useState<SectionSignup | null>(null);
+  const { user, hasRole } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [ponyClub, setPonyClub] = useState('');
   const [contact, setContact] = useState('');
+  const [entryEmail, setEntryEmail] = useState<EntryEmail>({ email: '', optIn: false });
+  // One id per attempt: if the connection drops and the form is sent again, the server returns the first entry.
+  const requestId = useRef<string | null>(null);
   const [teamCode, setTeamCode] = useState('');
+  const [teamName, setTeamName] = useState('');
+  const [wholeTeam, setWholeTeam] = useState(false);
   const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
+  const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const signups = allSignups.filter((s) => s.competitionSectionId === section.id);
-  const paidCount = signups.filter((s) => s.status === 1).length;
+  // Paid and pending entries both take a seat (the API counts them the same way). Only organisers load the
+  // signup list, so everyone else reads the count the API sends with the section.
+  const takenSeats = allSignups.length > 0
+    ? signups.filter((s) => s.status === 0 || s.status === 1).length
+    : section.activeSignupsCount ?? 0;
+  const known = countsKnown || section.activeSignupsCount != null;
+  const canEnterWholeTeam = section.format === 2 && (hasRole('Manager') || hasRole('Trainer'));
   const max = section.maxParticipants;
-  const seatsLeft = max ? Math.max(0, max - paidCount) : null;
+  const seatsLeft = max ? Math.max(0, max - takenSeats) : null;
   const full = seatsLeft != null && seatsLeft === 0;
 
   async function submit() {
-    if (!fullName.trim()) return;
+    if (!fullName.trim() || !accepted) return;
+    const emailText = entryEmail.email.trim();
+    if (emailText && !looksLikeEmail(emailText)) { setErr("That email address doesn't look right."); return; }
+    requestId.current ??= newRequestId();
     setBusy(true);
     setErr(null);
     try {
@@ -269,15 +304,29 @@ function SectionSignupCard({
         fullName: fullName.trim(),
         ponyClubName: ponyClub.trim() || null,
         contactInfo: contact.trim() || null,
+        contactEmail: emailText || null,
+        emailOptIn: !!emailText && entryEmail.optIn,
+        emailOptInVersion: emailText && entryEmail.optIn ? EMAIL_OPT_IN_VERSION : null,
+        requestId: requestId.current,
         teamCode: teamCode.trim() || null,
+        teamName: teamName.trim() || null,
+        wholeTeam: wholeTeam && canEnterWholeTeam,
         ...privacy,
+        acceptTerms: accepted,
+        consentVersion: CONSENT_VERSION,
       });
-      setFullName(''); setPonyClub(''); setContact(''); setTeamCode('');
+      setFullName(''); setPonyClub(''); setContact(''); setTeamCode(''); setTeamName(''); setWholeTeam(false);
+      setEntryEmail({ email: '', optIn: false });
+      requestId.current = null;
       setPrivacy({ useInitialOnly: false, noFilming: false });
-      setCreatedSignup(signup);
-      setDone(signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.');
+      setAccepted(false);
+      setDone((signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.')
+        + (signup.confirmationEmailStatus === 1 ? ' We have emailed you a confirmation.'
+          : signup.confirmationEmailStatus === 2 ? " We couldn't send the confirmation email, but your entry is saved." : ''));
       onChanged();
       setOpen(false);
+      // Demo events only: straight on to the clearly labelled test payment page.
+      if (isDemo && signup.status === 0 && signup.amountMinor > 0) navigate(`/me/signups/${signup.id}/test-payment`);
     } catch (e) {
       const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
       setErr(typeof msg === 'string' ? msg : msg?.message ?? 'Could not sign up.');
@@ -290,28 +339,28 @@ function SectionSignupCard({
     if (signups.length === 0) return;
     downloadCsv(
       `${safeFilename(competitionName)}_${safeFilename(section.displayName)}_signups.csv`,
-      signupsToCsv(signups),
+      signupsToCsv(signups, { test: isDemo }),
     );
   }
 
-  const places = max ? Math.round((paidCount / max) * 100) : 30;
+  const places = max ? Math.round((takenSeats / max) * 100) : 30;
   const scarce = seatsLeft != null && seatsLeft > 0 && seatsLeft <= 4;
-  const wide = open || !!createdSignup || (canManage && signups.length > 0);
+  const wide = open || (canManage && signups.length > 0);
   return (
     <div className={`mg-card flex flex-col gap-1.5 p-2.5 ${wide ? 'col-span-2 border-[rgb(var(--mg-heading))]' : ''}`}>
       <div className="flex items-baseline gap-1.5">
         <span className="mg-display flex-1 text-base font-bold uppercase leading-none tracking-[0.03em] text-[rgb(var(--mg-heading))]">{section.displayName}</span>
         <span className="mg-display text-base font-bold leading-none">{priceLabel(section.priceMinor)}</span>
       </div>
-      {countsKnown && (
+      {known && (
         <div className="h-1 overflow-hidden rounded-sm bg-[rgb(var(--mg-tint))]" aria-hidden="true">
           <div className={`h-full ${full ? 'bg-[rgb(var(--mg-dash))]' : scarce ? 'bg-[rgb(var(--mg-late-time))]' : 'bg-[rgb(var(--mg-heading))]'}`} style={{ width: `${places}%` }} />
         </div>
       )}
       <span className={`text-xs font-medium ${scarce ? 'text-[rgb(var(--mg-late-ink))]' : 'text-[rgb(var(--mg-muted))]'}`}>
-        {!countsKnown ? (max ? `Up to ${max} places` : 'No limit')
-          : full ? 'Full' : max ? `${seatsLeft} of ${max} places left` : `${paidCount} entered · no limit`}
-        {countsKnown && <span className="sr-only">. {paidCount} in{max ? `, ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left` : `, ${signups.length} signup${signups.length === 1 ? '' : 's'}`}</span>}
+        {!known ? (max ? `Up to ${max} places` : 'No limit')
+          : full ? 'Full' : max ? `${seatsLeft} of ${max} places left` : `${takenSeats} entered · no limit`}
+        {known && <span className="sr-only">. {takenSeats} in{max ? `, ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left` : `, ${signups.length} signup${signups.length === 1 ? '' : 's'}`}</span>}
       </span>
       {hideJoin ? (
         <p className="rf-note !p-0 italic">Admin view — entrants only.</p>
@@ -329,7 +378,17 @@ function SectionSignupCard({
         <div className="flex flex-col gap-2">
           <label className="rf-fld">Your full name<input placeholder="Your full name" value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
           <label className="rf-fld">Pony Club<input placeholder="Pony Club (optional)" value={ponyClub} onChange={(e) => setPonyClub(e.target.value)} /></label>
-          <label className="rf-fld">Phone or email<input placeholder="Phone / email (optional)" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
+          <label className="rf-fld">Phone<input type="tel" autoComplete="tel" placeholder="Phone (optional)" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
+          <EntryEmailFields value={entryEmail} onChange={setEntryEmail} />
+          {canEnterWholeTeam && (
+            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
+              <input type="checkbox" checked={wholeTeam} onChange={(e) => setWholeTeam(e.target.checked)} />
+              Enter a whole team
+            </label>
+          )}
+          <label className="rf-fld">{wholeTeam ? 'Team name' : 'Team name (optional)'}
+            <input placeholder={wholeTeam ? 'e.g. Welsh Dragons' : 'Riders with the same team name are put together'} value={teamName} onChange={(e) => setTeamName(e.target.value)} />
+          </label>
           <label className="rf-fld">Team code
             <input
               className="font-mono uppercase"
@@ -339,11 +398,12 @@ function SectionSignupCard({
             />
           </label>
           <RiderPrivacyFields value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
+          <TermsTickBox termsText={termsText} checked={accepted} onChange={setAccepted} />
           <div className="flex gap-2">
             <button
               type="button"
               onClick={submit}
-              disabled={busy || !fullName.trim()}
+              disabled={busy || !fullName.trim() || !accepted || (wholeTeam && !teamName.trim())}
               className="mg-btn mg-btn-primary flex-1 !min-h-11"
             >
               <Check className="h-4 w-4" aria-hidden="true" /> {busy ? 'Joining…' : 'Confirm'}
@@ -351,7 +411,9 @@ function SectionSignupCard({
             <button type="button" onClick={() => setOpen(false)} className="mg-btn mg-btn-secondary !min-h-11">Cancel</button>
           </div>
           <p className="rf-note !p-0">
-            Paid entries stay pending until the organiser confirms payment. Demo events offer a test checkout after entry.
+            {isDemo
+              ? 'This is a demo event. After you confirm, you will see a test payment page. No money is taken.'
+              : 'Paid entries stay pending until the organiser confirms payment.'}
           </p>
         </div>
       )}
@@ -360,15 +422,6 @@ function SectionSignupCard({
         <p role="status" className="m-0 flex items-center gap-1 text-sm font-semibold text-[rgb(var(--mg-ok))]">
           <Check className="h-4 w-4" aria-hidden="true" /> {done}
         </p>
-      )}
-      {createdSignup && (
-        <DemoEntryPayment
-          key={createdSignup.id}
-          signupId={createdSignup.id}
-          amountMinor={createdSignup.amountMinor}
-          signupStatus={createdSignup.status}
-          onChanged={onChanged}
-        />
       )}
       {canManage && signups.length > 0 && (
         <details className="text-sm">
@@ -386,7 +439,7 @@ function SectionSignupCard({
           </summary>
           <ul className="m-0 flex list-none flex-col p-0">
             {signups.map((s) => (
-              <SignupRow key={s.id} signup={s} onChanged={onChanged} />
+              <SignupRow key={s.id} signup={s} isDemo={isDemo} onChanged={onChanged} />
             ))}
           </ul>
         </details>
@@ -395,7 +448,7 @@ function SectionSignupCard({
   );
 }
 
-function SignupRow({ signup, onChanged }: { signup: SectionSignup; onChanged: () => void }) {
+function SignupRow({ signup, isDemo, onChanged }: { signup: SectionSignup; isDemo: boolean; onChanged: () => void }) {
   const status = SIGNUP_STATUS[signup.status];
   async function setStatus(next: SignupPaymentStatus) {
     await api.put(`/signups/${signup.id}/status`, { status: next });
@@ -411,19 +464,23 @@ function SignupRow({ signup, onChanged }: { signup: SectionSignup; onChanged: ()
       <span className="min-w-0 flex-1">
         <span className={`block truncate font-semibold ${status.struck ? 'line-through' : ''}`}>{signup.fullName}</span>
         {signup.ponyClubName && <span className="rf-t2 truncate">{signup.ponyClubName}</span>}
+        <span className="rf-t2 truncate">
+          {signup.contactEmail ? `${signup.contactEmail} · ` : ''}{confirmationEmailLabel(signup.confirmationEmailStatus, !!signup.contactEmail)}
+        </span>
       </span>
-      <RefineStatus tone={status.tone}>{status.label}</RefineStatus>
-      {signup.status !== 1 && signup.status !== 3 && (
+      <RefineStatus tone={status.tone}>{isDemo && signup.amountMinor > 0 && signup.status !== 0 ? `${status.label} (test)` : status.label}</RefineStatus>
+      {/* Demo entries are paid through the test payment page only; the server refuses manual changes. */}
+      {!isDemo && signup.status !== 1 && signup.status !== 3 && (
         <button type="button" onClick={() => setStatus(1)} className="mg-icon-btn" title="Mark paid" aria-label={`Mark ${signup.fullName} paid`}>
           <Check className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
-      {signup.status === 1 && (
+      {!isDemo && signup.status === 1 && (
         <button type="button" onClick={() => setStatus(2)} className="mg-icon-btn" title="Mark refunded" aria-label={`Mark ${signup.fullName} refunded`}>
           <RotateCcw className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
-      {signup.status !== 3 && (
+      {!isDemo && signup.status !== 3 && (
         <button type="button" onClick={() => setStatus(3)} className="mg-icon-btn" title="Cancel signup (keeps the record)" aria-label={`Cancel signup for ${signup.fullName}`}>
           <Ban className="h-4 w-4" aria-hidden="true" />
         </button>

@@ -314,7 +314,7 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
         using var r = await Delete(client, Password);
         Assert.Equal(HttpStatusCode.NoContent, r.StatusCode);
 
-        var again = await _f.CreateClient().PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(auth.User.Email, Password));
+        var again = await _f.CreateClient().PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(auth.User.Email, Password, null, "Deletion Test Club"));
         Assert.Equal(HttpStatusCode.OK, again.StatusCode);
     }
 }

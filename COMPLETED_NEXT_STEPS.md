@@ -4,6 +4,18 @@ Items moved here from `NEXT_STEPS.md` once their PR is merged into main and depl
 
 ## 22 October 2026
 
+### `fix/bugs-md`: bugs 03, 05, 07, 14, 15, 16, 17, 18, 22, 23, 24, 25, 26 (issues #66 to #78)
+- **Lane rotation and sit-outs** (bug 3). Sessions choose move up, stay or move down. A heat with one team more than the lanes rotates that team out each race and shows **S**.
+- **Heat-heat-final** (bug 7). The final fills itself when both qualifiers are scored; only the qualifying places are tapped; finalists score on the final's field plus one; one table per round.
+- **Clubs and approvals** (bugs 14, 15, 25). Club required on signup. Team Managers need admin approval and then run their club's teams, trainers and riders; they approve their club's trainers.
+- **Entries and declarations** (bugs 16, 17, 22). Real seats left for everyone, whole-team entry, one bib description per team, guest riders, one declaration per team, saved riders shared in a club, `FormTeams` fixes.
+- **Chat** (bug 18). Private messages to the organisers for any signed-in person, with private replies.
+- **Timing and print** (bugs 23, 24). Pinned heats carry the delay; printed draw and score sheets have times, lanes, bibs and scores.
+- **Shop** (bug 26). One shop for event add-ons and tack and equipment.
+- Migration `AddBugListFixes` adds: `Sessions.LaneRotationMode`, `Sessions.QualifiersPerHeat`, `Results.IsSitOut`, `Teams.BibDescription`, `RiderEntries.IsGuestRider`, `SectionSignups.TeamName`, `SectionSignups.IsWholeTeam`, `ChatMessages.RecipientUserId`. Run `npm run db:migrate` before the API deploys.
+- Still open: a tie-break rule choice for finals boundary ties (bug 5), a declarations cut-off (bug 17).
+
+
 ### PR #81: rider clash warning and tidy-ups
 - **Same-Rider Clash Readiness Warning (`CompetitionReadinessService.cs`)** (section 6). Declared riders are matched by name (case and spacing ignored). A rider in two different arenas at overlapping heat times shows under "Arena clashes" and blocks readiness. Reserves, trainers and pony names are ignored. Still to do: avoiding these clashes when auto-scheduling.
 - **Unreachable code** (housekeeping). Removed the blank-suffix branch in `TeamsController.Update` and the empty-string guard in `GeocodingService.ResolvePostcodeAsync`.

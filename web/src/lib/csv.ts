@@ -40,6 +40,10 @@ const STATUS_LABEL: Record<number, string> = {
   0: 'pending', 1: 'paid', 2: 'refunded', 3: 'cancelled',
 };
 
+const EMAIL_LABEL: Record<number, string> = {
+  0: 'not sent', 1: 'sent', 2: 'failed', 3: 'not sent (email off)',
+};
+
 interface SignupRow {
   sectionName: string;
   fullName: string;
@@ -49,16 +53,19 @@ interface SignupRow {
   status: number;
   paidAt?: string | null;
   createdAt: string;
+  contactEmail?: string | null;
+  confirmationEmailStatus?: number;
 }
 
 /**
  * CSV of signups for a single competition. Columns kept narrow so it opens
  * cleanly in Excel / Google Sheets without horizontal scroll.
  */
-export function signupsToCsv(signups: ReadonlyArray<SignupRow>): string {
+export function signupsToCsv(signups: ReadonlyArray<SignupRow>, options: { test?: boolean } = {}): string {
+  // A demo event's payments are tests: say so in the file, so nobody adds them up as money received.
   const header = [
-    'Section', 'Name', 'Pony Club', 'Contact', 'Amount (GBP)',
-    'Status', 'Paid at', 'Signed up at',
+    'Section', 'Name', 'Pony Club', 'Contact', options.test ? 'Test amount (GBP - no money taken)' : 'Amount (GBP)',
+    'Status', 'Paid at', 'Signed up at', 'Email', 'Confirmation email',
   ];
   const rows = signups.map((s) => [
     s.sectionName,
@@ -66,9 +73,13 @@ export function signupsToCsv(signups: ReadonlyArray<SignupRow>): string {
     s.ponyClubName ?? '',
     s.contactInfo ?? '',
     (s.amountMinor / 100).toFixed(2),
-    STATUS_LABEL[s.status] ?? String(s.status),
+    options.test && s.amountMinor > 0 && s.status !== 0
+      ? `${STATUS_LABEL[s.status] ?? s.status} (test)`
+      : STATUS_LABEL[s.status] ?? String(s.status),
     s.paidAt ?? '',
     s.createdAt,
+    s.contactEmail ?? '',
+    s.contactEmail ? (EMAIL_LABEL[s.confirmationEmailStatus ?? 0] ?? '') : '',
   ]);
   return toCsv(header, rows);
 }

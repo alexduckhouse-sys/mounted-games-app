@@ -15,12 +15,20 @@ public class Team
     public string Suffix { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string? BibColour { get; set; }
+    /// <summary>What the team's bibs look like, in plain words ("red bibs, numbers 1 to 5"); one description for the whole team.</summary>
+    public string? BibDescription { get; set; }
 
     public string? TrainerUserId { get; set; }
     public AppUser? Trainer { get; set; }
 
     /// <summary>Hors Concours — team competes but is excluded from scoring + standings.</summary>
     public bool IsHorsConcours { get; set; }
+
+    /// <summary>
+    /// Withdrawn or no-show teams are out of the unscored heats and the draw. Scored results stay.
+    /// The reason lives in <c>TeamStatusEvent</c>, never on this row, so it can't leak through a team DTO.
+    /// </summary>
+    public TeamEntryStatus EntryStatus { get; set; } = TeamEntryStatus.Active;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -29,6 +37,13 @@ public class Team
     /// request read access to this team's profile. Null when no key is set.
     /// </summary>
     public string? SupporterJoinKey { get; set; }
+
+    /// <summary>
+    /// SHA-256 (hex) of the token in this team's calendar feed link. The token itself is shown once, when the
+    /// trainer creates or regenerates the link, and is never stored. Null while the feed is off.
+    /// </summary>
+    public string? CalendarFeedTokenHash { get; set; }
+    public DateTime? CalendarFeedTokenCreatedAt { get; set; }
 
     public ICollection<DeclarationForm> DeclarationForms { get; set; } = new List<DeclarationForm>();
     public ICollection<HeatEntry> HeatEntries { get; set; } = new List<HeatEntry>();

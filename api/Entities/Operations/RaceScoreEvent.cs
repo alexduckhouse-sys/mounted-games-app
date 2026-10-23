@@ -18,6 +18,8 @@ public class RaceScoreEvent
     public string BeforeJson { get; set; } = "[]";
     public string AfterJson { get; set; } = "[]";
     public string? ActorUserId { get; set; }
+    /// <summary>Who acted when there is no account: "Scorer link: {label}". Null for signed-in users.</summary>
+    public string? ActorLabel { get; set; }
     public string Reason { get; set; } = string.Empty;
     public string RequestId { get; set; } = string.Empty;
     public string PayloadFingerprint { get; set; } = string.Empty;

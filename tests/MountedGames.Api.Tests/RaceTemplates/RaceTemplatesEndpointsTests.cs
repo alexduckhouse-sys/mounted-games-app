@@ -38,6 +38,26 @@ public class RaceTemplatesEndpointsTests : IClassFixture<ApiFactory>
         Assert.True(rows.FindIndex(x => x.Id == a) < rows.FindIndex(x => x.Id == b));
     }
 
+    [Theory]
+    [InlineData("One Mug Race (Junior)")]
+    [InlineData("Two Bean Bag Race (Junior)")]
+    [InlineData("Three Mug and Table (Pairs)")]
+    [InlineData("Spell PONY (Juniors)")]
+    [InlineData("Ball & Racquet (Old Version)")]
+    [InlineData("Four Ball Cone (2002)")]
+    public async Task List_IncludesThe2026PonyClubRaces(string name)
+    {
+        var r = await _f.CreateClient().GetAsync("/api/race-templates");
+
+        var rows = await r.ReadAsync<List<RaceTemplateDto>>();
+        var template = Assert.Single(rows, x => x.Name == name);
+        Assert.True(template.IsBuiltIn);
+        Assert.False(string.IsNullOrWhiteSpace(template.Summary));
+        Assert.False(string.IsNullOrWhiteSpace(template.Rules));
+        using var diagram = System.Text.Json.JsonDocument.Parse(template.DiagramJson ?? "");
+        Assert.Equal(System.Text.Json.JsonValueKind.Array, diagram.RootElement.ValueKind);
+    }
+
     [Fact]
     public async Task Get_Returns404_WhenMissing()
     {

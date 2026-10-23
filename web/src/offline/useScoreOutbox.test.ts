@@ -1,12 +1,15 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
+import { scorerApi } from './scorerLink';
 import { axiosError, heat, race, result } from '../test/factories';
 import type { QueuedScore } from './scoreOutbox';
 import { flushOutbox, HEAT_SAVED, readOutbox, updateOutbox, useScoreOutbox } from './useScoreOutbox';
 
 vi.mock('../api', () => ({ api: { post: vi.fn() } }));
+vi.mock('./scorerLink', () => ({ scorerApi: { post: vi.fn() } }));
 const post = vi.mocked(api.post);
+const linkPost = vi.mocked(scorerApi.post);
 
 const KEY = 'mg.outbox.scores';
 const queued = (raceId: number, extra: Partial<QueuedScore> = {}): QueuedScore => ({
@@ -36,6 +39,32 @@ describe('readOutbox', () => {
     expect(readOutbox()).toEqual([]);
     localStorage.setItem(KEY, '{"a":1}');
     expect(readOutbox()).toEqual([]);
+  });
+});
+
+describe('flushOutbox for a scorer link', () => {
+  it('sends through the scorer endpoint with the link’s client, not the account’s', async () => {
+    seed(queued(1, { viaLink: true, reason: 'Fixed order' }));
+    linkPost.mockResolvedValue(saved());
+    await flushOutbox();
+    expect(linkPost).toHaveBeenCalledWith('/scorer/races/1/results', expect.objectContaining({ reason: 'Fixed order' }), { timeout: 15_000 });
+    expect(post).not.toHaveBeenCalled();
+    expect(outbox()).toEqual([]);
+  });
+
+  it('words a withdrawn link for the scorer and keeps the save', async () => {
+    seed(queued(1, { viaLink: true }));
+    linkPost.mockRejectedValue(axiosError({ status: 410 }));
+    await flushOutbox();
+    expect(outbox()).toEqual([expect.objectContaining({ state: 'failed', error: expect.stringContaining('expired or been withdrawn') })]);
+  });
+
+  it('still sends an account’s saves through the account', async () => {
+    seed(queued(1));
+    post.mockResolvedValue(saved());
+    await flushOutbox();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(linkPost).not.toHaveBeenCalled();
   });
 });
 

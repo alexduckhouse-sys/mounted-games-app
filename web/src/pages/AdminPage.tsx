@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import type { Club, CompetitionSummary } from '../types';
 import { bibAccent, bibLabel } from '../lib/bib';
 import { TrainerRequestsSection } from './admin/TrainerRequestsSection';
+import { EmailOptInExportSection } from './admin/EmailOptInExportSection';
 
 interface IpBlock { id: number; ipAddress: string; reason?: string | null; createdAt: string }
 interface RaceSummary { id: number; name: string; category?: string | null; isBuiltIn: boolean }
@@ -100,6 +101,7 @@ export function AdminPage() {
       </div>
 
       {hasRole('Admin') && <TrainerRequestsSection canReview={canEdit()} />}
+      {hasRole('Admin') && <EmailOptInExportSection />}
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="card p-5">
           <h2 className="font-semibold mb-3 flex items-center gap-2">

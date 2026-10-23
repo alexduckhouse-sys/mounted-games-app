@@ -155,6 +155,16 @@ describe('outcomeOfError', () => {
     expect(outcomeOfError(err)).toEqual({ kind: 'offline' });
   });
 
+  it('words the failures for a scorer link, and still reports its conflicts', () => {
+    expect(outcomeOfError(fail(401), true)).toMatchObject({ kind: 'failed', message: expect.stringContaining('lost its scorer link') });
+    expect(outcomeOfError(fail(410), true)).toMatchObject({ kind: 'failed', message: expect.stringContaining('expired or been withdrawn') });
+    expect(outcomeOfError(fail(404), true)).toMatchObject({ kind: 'failed', message: expect.stringContaining('isn’t in your arena') });
+    expect(outcomeOfError(fail(403), true)).toMatchObject({ kind: 'failed', message: expect.stringContaining('can’t save scores') });
+    expect(outcomeOfError(fail(409, { sessionId: 3, heat: conflictHeat }), true)).toMatchObject({ kind: 'conflict' });
+    expect(outcomeOfError(fail(500), true)).toEqual({ kind: 'offline' });
+    expect(outcomeOfError(fail(400, { message: 'Nope.' }), true)).toEqual({ kind: 'failed', message: 'Nope.' });
+  });
+
   it('reports a conflict with the server’s heat', () => {
     expect(outcomeOfError(fail(409, { sessionId: 3, heat: conflictHeat }))).toEqual({ kind: 'conflict', sessionId: 3, heat: conflictHeat });
     expect(outcomeOfError(fail(409, { sessionId: 0, heat: conflictHeat }))).toMatchObject({ kind: 'conflict', sessionId: 0 });

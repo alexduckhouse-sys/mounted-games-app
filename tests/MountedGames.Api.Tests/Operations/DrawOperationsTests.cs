@@ -122,10 +122,44 @@ public class DrawOperationsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Preview_RejectsDrawThatExceedsSessionLaneLimit()
     {
+        // Seven teams in two heats make a heat of four: two more than the two lanes.
+        var arena = await CreateDrawArenaAsync(7, 2, 0);
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Sessions.FindAsync(arena.SessionId))!.LanesPerHeat = 2;
+            await db.SaveChangesAsync();
+        });
+
+        var response = await (await _f.AdminAsync()).PostAsJsonAsync(PreviewUrl(arena), new DrawRequest(1));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Preview_AllowsOneTeamMoreThanTheLanes_BecauseThatTeamSitsOutEachRace()
+    {
+        // Five teams in two heats make a heat of three: one more than two lanes.
         var arena = await CreateDrawArenaAsync(5, 2, 0);
         await _f.WithDbAsync(async db =>
         {
             (await db.Sessions.FindAsync(arena.SessionId))!.LanesPerHeat = 2;
+            await db.SaveChangesAsync();
+        });
+
+        var response = await (await _f.AdminAsync()).PostAsJsonAsync(PreviewUrl(arena), new DrawRequest(1));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Preview_Refuses_AnExtraTeamWhenTheSessionKeepsTeamsInTheirLanes()
+    {
+        var arena = await CreateDrawArenaAsync(5, 2, 0);
+        await _f.WithDbAsync(async db =>
+        {
+            var session = (await db.Sessions.FindAsync(arena.SessionId))!;
+            session.LanesPerHeat = 2;
+            session.LaneRotationMode = LaneRotationMode.Stay;
             await db.SaveChangesAsync();
         });
 

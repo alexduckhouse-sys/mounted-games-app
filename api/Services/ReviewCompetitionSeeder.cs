@@ -1,12 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Commerce;
 
 namespace MountedGames.Api.Services;
 
 public static class ReviewCompetitionSeeder
 {
     private const int LanesPerHeat = 6;
+    private const int DemoEntryPriceMinor = 1500;
     // Cycled per age group: team counts span 4-16, race counts 6-10 (8 is the norm).
     private static readonly int[] TeamCounts = { 6, 8, 12, 16, 6, 10, 4, 14, 6 };
     private static readonly int[] RaceCounts = { 8, 8, 10, 8, 6, 8, 7, 9, 8 };
@@ -45,7 +47,17 @@ public static class ReviewCompetitionSeeder
             foreach (var (name, icon, offset) in events)
             {
                 eventIndex++;
-                if (await db.Competitions.AnyAsync(c => c.Name == name)) continue;
+                var existingId = await db.Competitions.Where(c => c.Name == name).Select(c => (int?)c.Id).FirstOrDefaultAsync();
+                if (existingId.HasValue)
+                {
+                    // Events made before the demo mark existed gain it; an existing choice is never changed.
+                    if (!await db.Set<EventCommerceSettings>().AnyAsync(x => x.CompetitionId == existingId.Value))
+                    {
+                        db.Set<EventCommerceSettings>().Add(new EventCommerceSettings { CompetitionId = existingId.Value, IsDemo = true });
+                        await db.SaveChangesAsync();
+                    }
+                    continue;
+                }
                 var day = DateTime.SpecifyKind(todayUtc.Date.AddDays(offset), DateTimeKind.Utc);
                 var clubName = $"{name} Club";
                 var club = await db.Clubs.SingleOrDefaultAsync(c => c.Name == clubName)
@@ -86,6 +98,8 @@ public static class ReviewCompetitionSeeder
                             Format = SectionFormat.Teams,
                             AgeGroup = ageGroup,
                             DisplayName = sectionName,
+                            // Priced so the test payment page can be shown; no money is ever taken.
+                            PriceMinor = DemoEntryPriceMinor,
                         };
                         competition.Sections.Add(section);
                         var teams = Enumerable.Range(1, sectionSizes[sectionIndex]).Select(_ =>
@@ -178,6 +192,8 @@ public static class ReviewCompetitionSeeder
                     }
                 }
                 db.Competitions.Add(competition);
+                // The same mark an organiser sets under "Demo" in the event shop settings.
+                db.Set<EventCommerceSettings>().Add(new EventCommerceSettings { Competition = competition, IsDemo = true });
                 await db.SaveChangesAsync();
                 created++;
             }

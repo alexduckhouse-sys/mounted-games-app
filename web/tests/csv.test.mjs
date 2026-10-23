@@ -21,13 +21,13 @@ test('signup exports format pounds, optional fields and payment statuses', () =>
   const rows = [0, 1, 2, 3, 99].map((status) => ({ sectionName: 'Example section', fullName: 'Test Entrant', amountMinor: 1234, status, createdAt: '2026-01-01T00:00:00Z' }));
   const lines = signupsToCsv(rows).split('\r\n');
   for (const [index, status] of ['pending', 'paid', 'refunded', 'cancelled', '99'].entries()) {
-    assert.equal(lines[index + 1], `Example section,Test Entrant,,,12.34,${status},,2026-01-01T00:00:00Z`);
+    assert.equal(lines[index + 1], `Example section,Test Entrant,,,12.34,${status},,2026-01-01T00:00:00Z,,`);
   }
 });
 
 test('signup exports preserve supplied optional fields using CSV escaping', () => {
   const csv = signupsToCsv([{ sectionName: 'Example', fullName: 'Test Entrant', ponyClubName: 'Example, Club', contactInfo: 'test@example.invalid', amountMinor: 0, status: 1, paidAt: '2026-01-02', createdAt: '2026-01-01' }]);
-  assert.equal(csv.split('\r\n')[1], 'Example,Test Entrant,"Example, Club",test@example.invalid,0.00,paid,2026-01-02,2026-01-01');
+  assert.equal(csv.split('\r\n')[1], 'Example,Test Entrant,"Example, Club",test@example.invalid,0.00,paid,2026-01-02,2026-01-01,,');
 });
 
 test('downloads UTF-8 CSV and releases the temporary link and object URL', async (t) => {

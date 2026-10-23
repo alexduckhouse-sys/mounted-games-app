@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Commerce;
@@ -461,7 +462,7 @@ public class CommerceEndpointsTests : IClassFixture<ApiFactory>
         var (other, _) = await _f.SignupAsync();
         var signup = await (await owner.PostAsJsonAsync(
             $"/api/competitions/{section.CompetitionId}/sections/{section.Id}/signups",
-            new CreateSectionSignupRequest("Test entrant", null, null, null))).ReadAsync<SectionSignupDto>();
+            new CreateSectionSignupRequest("Test entrant", null, null, null, false, false, true, SignupTerms.WordingVersion))).ReadAsync<SectionSignupDto>();
 
         var hidden = await other.PostAsJsonAsync($"/api/commerce/signups/{signup.Id}/demo-checkout",
             Checkout("other", FakePaymentOutcome.Success));
@@ -496,12 +497,12 @@ public class CommerceEndpointsTests : IClassFixture<ApiFactory>
         var (owner, _) = await _f.SignupAsync();
         var signup = await (await owner.PostAsJsonAsync(
             $"/api/competitions/{section.CompetitionId}/sections/{section.Id}/signups",
-            new CreateSectionSignupRequest("Real entrant", null, null, null))).ReadAsync<SectionSignupDto>();
+            new CreateSectionSignupRequest("Real entrant", null, null, null, false, false, true, SignupTerms.WordingVersion))).ReadAsync<SectionSignupDto>();
 
         var response = await owner.PostAsJsonAsync($"/api/commerce/signups/{signup.Id}/demo-checkout",
             Checkout("not-demo", FakePaymentOutcome.Success));
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal(SignupPaymentStatus.Pending,
             await _f.InDbAsync(db => db.SectionSignups.Where(x => x.Id == signup.Id).Select(x => x.Status).SingleAsync()));
     }

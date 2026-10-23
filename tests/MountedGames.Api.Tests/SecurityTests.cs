@@ -153,7 +153,8 @@ public class SecurityTests
         });
         Assert.Equal(status, (int)response.StatusCode);
         using var checkScope = server.App.Services.CreateScope();
-        Assert.Equal(status == 200 ? 3 : 2, await checkScope.ServiceProvider.GetRequiredService<AppDbContext>().DeclarationForms.CountAsync());
+        // A team has one declaration: a successful submit updates it and folds the two seeded duplicates into it.
+        Assert.Equal(status == 200 ? 1 : 2, await checkScope.ServiceProvider.GetRequiredService<AppDbContext>().DeclarationForms.CountAsync());
     }
 
     [Fact]

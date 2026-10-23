@@ -9,7 +9,7 @@ const heat = (id: number, teamIds: number[], races: Heat['races'], extra: Partia
 const session = (id: number, heats: Heat[], extra: Partial<Session> = {}) => baseSession(id, { competitionSectionId: SECTION, sectionName: 'Seniors', name: 'Seniors heats', heats, ...extra });
 const scored = (id: number, ...pairs: [teamId: number, points: number][]) => race(id, { isComplete: true, results: pairs.map(([teamId, points]) => result(teamId, 1, { points })) });
 const team = (id: number, extra: Parameters<typeof baseTeam>[1] = {}) => baseTeam(id, { competitionSectionId: SECTION, ...extra });
-const row = (extra: Partial<ToplistRow>): ToplistRow => ({ teamId: 1, teamName: 'T', points: 0, position: 1, joint: false, runoff: false, out: false, needed: null, racesLeft: 0, ...extra });
+const row = (extra: Partial<ToplistRow>): ToplistRow => ({ teamId: 1, teamName: 'T', points: 0, position: 1, joint: false, runoff: false, out: false, needed: null, racesLeft: 0, withdrawn: false, ...extra });
 
 describe('ordinal', () => {
   it('reads naturally, including the teens', () => {
@@ -56,6 +56,14 @@ describe('buildToplist positions', () => {
   it('is empty for no standings', () => {
     const list = buildToplist([], [], [], SECTION, 3);
     expect(list).toMatchObject({ rows: [], cutAfter: null, runoff: null, hc: [], sessionsDone: 0, sessionsTotal: 0 });
+  });
+});
+
+describe('buildToplist withdrawn teams', () => {
+  it('keeps their points and marks them withdrawn', () => {
+    const list = buildToplist([{ ...standing(1, 10), withdrawn: true }, standing(2, 8)], [], [], SECTION, null);
+    expect(list.rows.map((r) => [r.teamId, r.points, r.withdrawn])).toEqual([[1, 10, true], [2, 8, false]]);
+    expect(toplistNote(list.rows[0])).toBe('Withdrawn');
   });
 });
 
@@ -254,6 +262,7 @@ describe('toplistNote', () => {
     expect(toplistNote(row({ needed: 2, racesLeft: 4 }))).toBe('2 needed to make the final');
     expect(toplistNote(row({ racesLeft: 1 }))).toBe('1 race left');
     expect(toplistNote(row({ racesLeft: 4 }))).toBe('4 races left');
+    expect(toplistNote(row({ withdrawn: true, racesLeft: 4 }))).toBe('Withdrawn');
   });
 
   it('has nothing to say when there is nothing worth saying', () => {
@@ -262,5 +271,28 @@ describe('toplistNote', () => {
 
   it('still says how many are needed when the figure is zero', () => {
     expect(toplistNote(row({ needed: 0 }))).toBe('0 needed to make the final');
+  });
+});
+
+describe('buildToplist started', () => {
+  it('is false while nobody has points and no race has results', () => {
+    const open = session(1, [heat(1, [1, 2], [race(1)])]);
+    expect(buildToplist([standing(1, 0), standing(2, 0)], [open], [], SECTION, null).started).toBe(false);
+    expect(buildToplist([standing(1, 0), standing(2, 0)], [], [], SECTION, null).started).toBe(false);
+  });
+
+  it('is true once any team has points', () => {
+    expect(buildToplist([standing(1, 3), standing(2, 0)], [], [], SECTION, null).started).toBe(true);
+  });
+
+  it('is true once a race in the age group has results, even if every team scored nothing', () => {
+    const allOut = race(1, { isComplete: true, results: [result(1, null, { eliminated: true }), result(2, null, { eliminated: true })] });
+    const played = session(1, [heat(1, [1, 2], [allOut])]);
+    expect(buildToplist([standing(1, 0), standing(2, 0)], [played], [], SECTION, null).started).toBe(true);
+  });
+
+  it('ignores results in other age groups', () => {
+    const other = session(1, [heat(1, [1, 2], [scored(1, [1, 0])])], { competitionSectionId: SECTION + 1 });
+    expect(buildToplist([standing(1, 0), standing(2, 0)], [other], [], SECTION, null).started).toBe(false);
   });
 });

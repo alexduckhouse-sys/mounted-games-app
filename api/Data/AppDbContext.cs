@@ -25,15 +25,18 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<StreamOverlay> StreamOverlays => Set<StreamOverlay>();
     public DbSet<OverlayLook> OverlayLooks => Set<OverlayLook>();
     public DbSet<CompetitionCollaborator> CompetitionCollaborators => Set<CompetitionCollaborator>();
+    public DbSet<ScorerLink> ScorerLinks => Set<ScorerLink>();
     public DbSet<TrainerNote> TrainerNotes => Set<TrainerNote>();
     public DbSet<IpBlock> IpBlocks => Set<IpBlock>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
     public DbSet<TeamSupporter> TeamSupporters => Set<TeamSupporter>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<SectionSignup> SectionSignups => Set<SectionSignup>();
+    public DbSet<EmailOptIn> EmailOptIns => Set<EmailOptIn>();
     public DbSet<ShopPost> ShopPosts => Set<ShopPost>();
     public DbSet<ShopComment> ShopComments => Set<ShopComment>();
     public DbSet<ShopReport> ShopReports => Set<ShopReport>();
+    public DbSet<CalendarHeatVersion> CalendarHeatVersions => Set<CalendarHeatVersion>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -156,6 +159,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .WithMany(u => u.CoachedTeams)
                 .HasForeignKey(t => t.TrainerUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+            e.Property(t => t.CalendarFeedTokenHash).HasMaxLength(64);
         });
 
         b.Entity<Session>(e =>
@@ -283,6 +287,15 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.HasIndex(r => r.Name).IsUnique();
         });
 
+        b.Entity<CalendarHeatVersion>(e =>
+        {
+            e.Property(v => v.Fingerprint).HasMaxLength(64).IsRequired();
+            e.HasOne<Heat>().WithMany().HasForeignKey(v => v.HeatId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Team>().WithMany().HasForeignKey(v => v.TeamId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(v => new { v.HeatId, v.TeamId }).IsUnique();
+            e.HasIndex(v => v.TeamId);
+        });
+
         b.Entity<TeamSupporter>(e =>
         {
             e.HasOne(s => s.Team)
@@ -317,6 +330,21 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .HasForeignKey(s => s.UserId)
                 .OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(s => new { s.CompetitionSectionId, s.UserId });
+            e.Property(s => s.ContactEmail).HasMaxLength(254);
+            e.Property(s => s.ClientRequestId).HasMaxLength(64);
+            e.Property(s => s.ConfirmationEmailStatus).HasDefaultValue(EmailDeliveryStatus.NotRequested);
+            // A retried submit must not create a second entry (NULLs never collide).
+            e.HasIndex(s => new { s.CompetitionSectionId, s.UserId, s.ClientRequestId }).IsUnique();
+        });
+
+        b.Entity<EmailOptIn>(e =>
+        {
+            e.Property(o => o.Email).HasMaxLength(254).IsRequired();
+            e.Property(o => o.WordingVersion).HasMaxLength(40).IsRequired();
+            e.Property(o => o.Source).HasMaxLength(40).IsRequired();
+            e.Property(o => o.UnsubscribeTokenHash).HasMaxLength(64).IsRequired();
+            e.HasIndex(o => o.UnsubscribeTokenHash).IsUnique();
+            e.HasIndex(o => o.Email);
         });
 
         b.Entity<ShopPost>(e =>

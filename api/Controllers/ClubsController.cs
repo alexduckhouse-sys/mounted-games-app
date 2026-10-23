@@ -32,9 +32,10 @@ public class ClubsController : ControllerBase
     public async Task<IEnumerable<SavedRiderDto>> SavedRiders(int id)
     {
         var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        var isAdmin = User.IsInRole(Roles.Admin);
+        // A club's team managers and trainers share its roster; anyone else sees only the riders they saved.
+        var seesWholeClub = User.IsInRole(Roles.Admin) || await _db.SharesClubRosterAsync(User, id);
         return (await _db.SavedRiders
-            .Where(r => r.ClubId == id && (isAdmin || (uid != null && r.CreatedByUserId == uid)))
+            .Where(r => r.ClubId == id && (seesWholeClub || (uid != null && r.CreatedByUserId == uid)))
             .OrderBy(r => r.FullName).ToListAsync()).Select(r => r.ToDto());
     }
 

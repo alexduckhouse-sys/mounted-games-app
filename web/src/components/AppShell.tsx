@@ -18,6 +18,8 @@ import { useCompactPageBarState } from './CompactPageBarContext';
 import './compact-page-bar.css';
 import { TrainerAccountNotice } from './TrainerAccountNotice';
 import { LiteChip } from '../lite/LiteChip';
+import { initialsOf } from '../lib/profile';
+import { useNeedsYou } from '../pages/profile/needsYou';
 
 export function AppShell() {
   const { user, hasRole, editorMode, setEditorMode } = useAuth();
@@ -31,10 +33,14 @@ export function AppShell() {
   const openMenu = () => { setMenuShowsSettings(false); setMenuOpen(true); };
   const openLiteSettings = () => { setMenuShowsSettings(true); setMenuOpen(true); };
   const location = useLocation();
+  const { count: needsYou } = useNeedsYou();
+  const onProfile = location.pathname === '/me' || location.pathname === '/me/';
   const choosingCompetition = ['/', '/competitions', '/competitions/past'].includes(location.pathname);
   const competitionId = competitionIdFromPath(location.pathname);
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
-  const publicPage = choosingCompetition || competitionId != null || location.pathname === '/chat' || location.pathname === '/following';
+  const publicPage = choosingCompetition || competitionId != null || onProfile || location.pathname === '/chat' || location.pathname === '/following';
+  // The tabs belong to a competition. The profile borrows the one being followed, if any.
+  const tabsCompetitionId = competitionId ?? (onProfile ? current?.id ?? null : null);
   const shown = meta && meta.id === competitionId ? meta : null;
   const title = shown?.name ?? (current && current.id === competitionId ? current.name : null);
   const subtitle = shown ? [competitionDateText(shown.startDate, shown.endDate), shown.location?.trim()].filter(Boolean).join(' · ') : '';
@@ -112,7 +118,7 @@ export function AppShell() {
         {competitionId != null && <TopBarTicker />}
       </div>
       <main className={publicPage
-        ? `skin mx-auto w-full max-w-5xl flex-1 px-4 ${/\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : competitionId != null ? 'pb-28' : 'pb-10'}`
+        ? `skin mx-auto w-full max-w-5xl flex-1 px-4 ${/\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : tabsCompetitionId != null ? 'pb-28' : 'pb-10'}`
         : 'mx-auto w-full max-w-5xl flex-1 px-3 py-3 sm:px-4 sm:py-5'}>
         {storageError && <p role="status" className={publicPage ? 'mg-notice mt-4' : 'mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900'}>{storageError}</p>}
         <TrainerAccountNotice />
@@ -120,7 +126,7 @@ export function AppShell() {
           <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
         </PageLoadBoundary>
       </main>
-      {competitionId != null && <BottomTabs competitionId={competitionId} />}
+      {tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
       {menuOpen && <NavigationDrawer settingsOpen={menuShowsSettings} onClose={() => setMenuOpen(false)} onChangeCompetition={() => { setMenuOpen(false); setPickerOpen(true); }} />}
       {pickerOpen && <CompetitionPickerDialog onClose={() => setPickerOpen(false)} />}
       {current && !choosingCompetition && rememberChoice === 'ask' && !pickerOpen && !menuOpen && <RememberCompetitionDialog />}

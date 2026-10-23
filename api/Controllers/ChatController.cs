@@ -31,11 +31,13 @@ public class ChatController : ControllerBase
     {
         take = Math.Clamp(take, 1, 500);
         var query = _db.ChatMessages.Where(m => m.CompetitionId == competitionId);
-        // Trainer messages are private: admins see them all, a trainer sees only their own.
+        // Private messages to the organisers: admins see them all; anyone else sees only their own
+        // and the organisers' replies to them.
         if (!User.IsInRole(Roles.Admin))
         {
             var userId = _users.GetUserId(User);
-            query = query.Where(m => !m.AdminOnly || (userId != null && m.UserId == userId));
+            query = query.Where(m => !m.AdminOnly
+                || (userId != null && (m.UserId == userId || m.RecipientUserId == userId)));
         }
         var messages = await query
             .OrderByDescending(m => m.CreatedAt)
@@ -46,11 +48,12 @@ public class ChatController : ControllerBase
     }
 
     /// <summary>
-    /// Only admins and trainers post. Admin messages go to the public feed;
-    /// trainer messages are seen only by admins and the trainer who sent them.
+    /// Any signed-in user can message the organisers privately; those messages are seen only by
+    /// admins and the sender. An admin's message goes to the public feed, unless it replies to a
+    /// user's thread (<c>ReplyToUserId</c>), in which case only admins and that user see it.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer)]
+    [Authorize]
     public async Task<ActionResult<ChatMessageDto>> Post(int competitionId, PostChatMessageRequest req)
     {
         if (string.IsNullOrWhiteSpace(req.Body)) return BadRequest();
@@ -59,6 +62,15 @@ public class ChatController : ControllerBase
         var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
         var isAdmin = User.IsInRole(Roles.Admin);
+        var replyTo = string.IsNullOrWhiteSpace(req.ReplyToUserId) ? null : req.ReplyToUserId.Trim();
+        if (replyTo is not null)
+        {
+            if (!isAdmin) return Forbid();
+            // Only into a thread that exists: an admin can't push private messages at arbitrary accounts.
+            var hasThread = await _db.ChatMessages.AnyAsync(m =>
+                m.CompetitionId == competitionId && m.AdminOnly && m.UserId == replyTo);
+            if (!hasThread) return BadRequest(new { message = "That person hasn't messaged the organisers." });
+        }
 
         if (!isAdmin)
         {
@@ -77,14 +89,15 @@ public class ChatController : ControllerBase
             AuthorName = authorName,
             Body = req.Body.Trim(),
             Type = ChatMessageType.Chat,
-            AdminOnly = !isAdmin,
+            AdminOnly = !isAdmin || replyTo is not null,
+            RecipientUserId = replyTo,
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
         };
         _db.ChatMessages.Add(msg);
         await _db.SaveChangesAsync();
         var dto = msg.ToDto();
         if (msg.AdminOnly)
-            await _live.AdminOnlyChatMessage(competitionId, user.Id, dto);
+            await _live.AdminOnlyChatMessage(competitionId, user.Id, dto, replyTo);
         else
             await _live.ChatMessage(competitionId, dto);
         return dto;

@@ -25,6 +25,7 @@ interface Options {
   path?: string;
   roles?: string[];
   fullName?: string;
+  clubName?: string;
   competition?: boolean;
   meta?: Partial<CompetitionMeta>;
   groups?: AgeGroupLink[];
@@ -55,7 +56,7 @@ function mount(options: Options = {}) {
   if (options.roles) {
     const auth: StoredAuth = {
       token: 't', expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      user: { id: 'u1', email: 'ann@example.com', fullName: options.fullName ?? 'Ann Smith', clubId: null, clubName: null, roles: options.roles },
+      user: { id: 'u1', email: 'ann@example.com', fullName: options.fullName ?? 'Ann Smith', clubId: options.clubName ? 3 : null, clubName: options.clubName ?? null, roles: options.roles },
     };
     localStorage.setItem('mg.auth', JSON.stringify(auth));
   }
@@ -92,7 +93,7 @@ describe('NavigationDrawer: when no competition is followed', () => {
   it('sends the competition links to the picker or the general feed', () => {
     mount();
     expect(links('Main navigation')).toEqual([
-      ['Following', '/following'], ['Timetable', '/competitions'], ['Toplists', '/competitions'], ['Live feed & stream', '/chat'], ['Event shop', '/competitions'], ['Rulebooks', '/competitions'], ['Details & entries', '/competitions'],
+      ['Following', '/following'], ['Timetable', '/competitions'], ['Toplists', '/competitions'], ['Live feed & stream', '/chat'], ['Event shop', '/shop'], ['Rulebooks', '/competitions'], ['Details & entries', '/competitions'],
     ]);
   });
 
@@ -220,25 +221,38 @@ describe('NavigationDrawer: age groups', () => {
 });
 
 describe('NavigationDrawer: signed in', () => {
-  it('shows a trainer their pages and who they are signed in as', () => {
+  it('links the avatar block to the profile, with the role and club under the name', async () => {
+    mount({ roles: ['Trainer'], clubName: 'Stockport PC' });
+    const profile = screen.getByRole('link', { name: /Ann Smith/ });
+    expect(profile).toHaveAttribute('href', '/me');
+    expect(profile).toHaveTextContent('AS');
+    expect(profile).toHaveTextContent('Trainer · Stockport PC');
+    await userEvent.click(profile);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('probe')).toHaveTextContent('/me');
+  });
+
+  it('falls back to the email when there is no name', () => {
+    mount({ roles: ['Member'], fullName: '' });
+    const profile = screen.getByRole('link', { name: /ann@example.com/ });
+    expect(profile).toHaveTextContent('AN');
+    expect(profile).toHaveTextContent('Member');
+  });
+
+  it('leaves account and club links to the profile page', () => {
     mount({ roles: ['Trainer'] });
-    expect(links('Account and management')).toEqual([
-      ['My account', '/me/account'], ['Dashboard', '/dashboard'], ['My teams', '/teams'], ['Dec forms', '/declarations'], ['My signups', '/me/signups'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders'],
-    ]);
-    expect(screen.getByText('Signed in as Ann Smith')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Notifications/ })).toHaveAttribute('href', '/teams');
+    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard']]);
+    for (const name of ['My account', 'My teams', 'Dec forms', 'My signups', 'My items for sale', 'Orders & sales', /Notifications/]) {
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Signed in as/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 
-  it('shows an admin the admin page and not the trainer-only pages', () => {
+  it('shows an admin the admin page too', () => {
     mount({ roles: ['Admin', 'Trainer'] });
-    expect(links('Account and management')).toEqual([['My account', '/me/account'], ['Dashboard', '/dashboard'], ['Dec forms', '/declarations'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders'], ['Admin', '/admin']]);
-  });
-
-  it('shows a member their dashboard, signups and shop', () => {
-    mount({ roles: ['Member'], fullName: '' });
-    expect(links('Account and management')).toEqual([['My account', '/me/account'], ['Dashboard', '/dashboard'], ['My signups', '/me/signups'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders']]);
-    expect(screen.getByText('Signed in as ann@example.com')).toBeInTheDocument();
+    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['Admin', '/admin']]);
   });
 
   it('shows extra links published by the current page', () => {
@@ -246,19 +260,9 @@ describe('NavigationDrawer: signed in', () => {
     expect(links('Account and management')).toEqual([['Rules', '/admin/rules']]);
   });
 
-  it('signs out, closes the menu and goes home', async () => {
-    mount({ roles: ['Trainer'], path: '/teams' });
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(localStorage.getItem('mg.auth')).toBeNull();
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId('probe')).toHaveTextContent('/|');
-    expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument();
-  });
-
-  it('closes the menu when a link is chosen', async () => {
-    mount({ roles: ['Trainer'] });
-    await userEvent.click(screen.getByRole('link', { name: 'My teams' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+  it('has no profile link for a visitor', () => {
+    mount();
+    expect(screen.getAllByRole('link').some((link) => link.getAttribute('href') === '/me')).toBe(false);
   });
 });
 

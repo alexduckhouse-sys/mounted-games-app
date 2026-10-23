@@ -24,6 +24,8 @@ export interface QueuedScore {
   teamNames: Record<number, string>;
   queuedAt: string;
   reason?: string;
+  /** Sent with a scorer link's token instead of a signed-in account. */
+  viaLink?: boolean;
   state: 'waiting' | 'conflict' | 'failed';
   /** What the server holds, when it refused the save as a conflict. */
   theirs?: Placing[];
@@ -97,13 +99,19 @@ export function discard(list: QueuedScore[], raceId: number): QueuedScore[] {
 }
 
 /** Turn a request error into what the outbox should do next. */
-export function outcomeOfError(err: unknown): SendOutcome {
+export function outcomeOfError(err: unknown, viaLink = false): SendOutcome {
   const e = err as { isAxiosError?: boolean; response?: { status: number; data?: { sessionId?: number; heat?: Heat; message?: string } } } | null;
   const res = e?.response;
   // No answer, or the server is waking up / overloaded: keep it and try later.
   if (!res || res.status >= 500 || res.status === 408 || res.status === 429) return { kind: 'offline' };
   if (res.status === 409 && res.data?.heat && res.data.sessionId != null) {
     return { kind: 'conflict', sessionId: res.data.sessionId, heat: res.data.heat };
+  }
+  if (viaLink) {
+    if (res.status === 401) return { kind: 'failed', message: 'This phone has lost its scorer link. Open the link the organiser sent you again.' };
+    if (res.status === 410) return { kind: 'failed', message: 'This scorer link has expired or been withdrawn. Ask the organiser for a new one.' };
+    if (res.status === 404) return { kind: 'failed', message: 'This race isn’t in your arena, or the link is no longer valid.' };
+    if (res.status === 403) return { kind: 'failed', message: 'This scorer link can’t save scores.' };
   }
   if (res.status === 401) return { kind: 'failed', message: 'You’ve been signed out. Sign in again, then tap Try again.' };
   if (res.status === 403) return { kind: 'failed', message: 'Only admins can save scores. Sign in with an admin account, then tap Try again.' };

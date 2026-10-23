@@ -10,6 +10,7 @@ public class RaceScoreEventConfiguration : IEntityTypeConfiguration<RaceScoreEve
     {
         b.Property(x => x.BeforeJson).IsRequired();
         b.Property(x => x.AfterJson).IsRequired();
+        b.Property(x => x.ActorLabel).HasMaxLength(120);
         b.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
         b.Property(x => x.RequestId).HasMaxLength(100).IsRequired();
         b.Property(x => x.PayloadFingerprint).HasMaxLength(64).IsRequired();

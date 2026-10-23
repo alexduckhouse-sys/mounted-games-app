@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Signups;
@@ -15,7 +16,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     private static string Url(CompetitionSection s) => $"/api/competitions/{s.CompetitionId}/sections/{s.Id}/signups";
 
     private static CreateSectionSignupRequest Entry(string name = "Rider One", string? club = null, string? code = null)
-        => new(name, club, "rider@example.com", code);
+        => new(name, club, "rider@example.com", code, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion);
 
     [Fact]
     public async Task Create_RecordsPendingSignupAtSectionPrice()
@@ -360,6 +361,22 @@ public class SignupTests : IClassFixture<ApiFactory>
         Assert.Equal("Test Club A", rows.Single().TeamName);
     }
 
+    [Fact]
+    public async Task CompetitionDetail_ShowsEveryoneHowManyEntriesAreTakingSeats()
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 500, max: 5);
+        var trainer = await _f.TrainerAsync();
+        foreach (var n in new[] { "R1", "R2", "R3" }) (await trainer.PostAsJsonAsync(Url(section), Entry(n))).EnsureSuccessStatusCode();
+        var admin = await _f.AdminAsync();
+        var list = await (await admin.GetAsync($"/api/competitions/{section.CompetitionId}/signups")).ReadAsync<List<SectionSignupDto>>();
+        await admin.PutAsJsonAsync($"/api/signups/{list.First(x => x.FullName == "R1").Id}/status", new UpdateSignupStatusRequest(SignupPaymentStatus.Paid));
+        await admin.PutAsJsonAsync($"/api/signups/{list.First(x => x.FullName == "R2").Id}/status", new UpdateSignupStatusRequest(SignupPaymentStatus.Cancelled));
+
+        var detail = await (await _f.CreateClient().GetAsync($"/api/competitions/{section.CompetitionId}")).ReadAsync<CompetitionDetail>();
+
+        Assert.Equal(2, detail.Sections.Single().ActiveSignupsCount);
+    }
+
     // ---- form-teams ----
 
     private string FormUrl(CompetitionSection s) => $"/api/competitions/{s.CompetitionId}/sections/{s.Id}/form-teams";
@@ -493,16 +510,110 @@ public class SignupTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task FormTeams_PutsUnmatchedClubsInUnaffiliated()
+    public async Task FormTeams_GivesEachNewClubItsOwnTeam_AndBlankClubsGoToUnaffiliated()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..6];
+        var section = await _f.NewSectionAsync();
+        await SignUpAsync(section, "R1", $"Welsh Dragons {suffix}");
+        await SignUpAsync(section, "R2", $"Gower MG {suffix}");
+        await SignUpAsync(section, "R3", $"gower mg {suffix}");
+        await SignUpAsync(section, "R4", null);
+        var admin = await _f.AdminAsync();
+
+        var preview = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, true, false)))
+            .ReadAsync<FormTeamsResult>();
+        Assert.Equal(0, await _f.InDbAsync(db => db.Clubs.CountAsync(c => c.Name.EndsWith(suffix))));
+        Assert.Equal(3, preview.Teams.Count);
+
+        var result = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false)))
+            .ReadAsync<FormTeamsResult>();
+
+        Assert.Equal(
+            new[] { $"Gower MG {suffix} A", "Unaffiliated A", $"Welsh Dragons {suffix} A" },
+            result.Created.Select(t => t.DisplayName).Order(StringComparer.Ordinal));
+        var gower = result.Created.Single(t => t.DisplayName.StartsWith("Gower"));
+        Assert.Equal(2, await _f.InDbAsync(db => db.SectionSignups.CountAsync(x => x.TeamId == gower.Id)));
+    }
+
+    [Fact]
+    public async Task FormTeams_DoesNotReBinSignupsThatAreAlreadyOnATeam()
     {
         var section = await _f.NewSectionAsync();
-        await SignUpAsync(section, "R1", "No such club");
+        await SignUpAsync(section, "R1", null);
+        var admin = await _f.AdminAsync();
+        await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false));
+        await SignUpAsync(section, "R2", null);
+
+        var second = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false)))
+            .ReadAsync<FormTeamsResult>();
+
+        Assert.Equal(1, second.PaidSignups);
+        Assert.Equal(new[] { "B" }, second.Created.Select(t => t.Suffix));
+        Assert.Equal(2, await _f.InDbAsync(db => db.Teams.CountAsync(t => t.CompetitionSectionId == section.Id)));
+    }
+
+    [Fact]
+    public async Task FormTeams_ReplaceExisting_ReFormsUnusedTeamsWithoutDuplicates()
+    {
+        var section = await _f.NewSectionAsync();
+        await SignUpAsync(section, "R1", null);
+        var admin = await _f.AdminAsync();
+        await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false));
+
+        var preview = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, true, true)))
+            .ReadAsync<FormTeamsResult>();
+
+        Assert.Equal(1, preview.PaidSignups);
+        Assert.Single(preview.Teams);
+    }
+
+    [Fact]
+    public async Task FormTeams_KeepsRidersWhoShareACustomTeamNameTogether()
+    {
+        var section = await _f.NewSectionAsync();
+        var trainer = await _f.TrainerAsync();
+        foreach (var n in new[] { "R1", "R2", "R3", "R4", "R5" })
+            (await trainer.PostAsJsonAsync(Url(section), new CreateSectionSignupRequest(n, "Stockport", null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, TeamName: "Stockport Stars")))
+                .EnsureSuccessStatusCode();
+        var admin = await _f.AdminAsync();
+
+        var result = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(4, false, false)))
+            .ReadAsync<FormTeamsResult>();
+
+        var team = Assert.Single(result.Created);
+        Assert.Equal("Stockport Stars", team.DisplayName);
+        Assert.Equal(5, await _f.InDbAsync(db => db.SectionSignups.CountAsync(x => x.TeamId == team.Id)));
+    }
+
+    [Fact]
+    public async Task FormTeams_FormsAWholeTeamEntryAsOneTeam()
+    {
+        var section = await _f.NewSectionAsync();
+        (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section),
+            new CreateSectionSignupRequest("Manager", "Stockport", null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true, TeamName: "Stockport Reds")))
+            .EnsureSuccessStatusCode();
         var admin = await _f.AdminAsync();
 
         var result = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false)))
             .ReadAsync<FormTeamsResult>();
 
-        Assert.Equal("Unaffiliated A", result.Created.Single().DisplayName);
+        Assert.Equal("Stockport Reds", Assert.Single(result.Created).DisplayName);
+    }
+
+    [Fact]
+    public async Task Create_WholeTeam_NeedsATeamSectionAManagerOrTrainerAndAName()
+    {
+        var teams = await _f.NewSectionAsync(SectionFormat.Teams);
+        var pairs = await _f.NewSectionAsync(SectionFormat.Pairs);
+        var trainer = await _f.TrainerAsync();
+        var (member, _) = await _f.SignupAsync("Member");
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(Url(pairs),
+            new CreateSectionSignupRequest("M", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true, TeamName: "X"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(Url(teams),
+            new CreateSectionSignupRequest("M", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.PostAsJsonAsync(Url(teams),
+            new CreateSectionSignupRequest("M", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true, TeamName: "X"))).StatusCode);
     }
 
     [Fact]
@@ -513,6 +624,7 @@ public class SignupTests : IClassFixture<ApiFactory>
         var admin = await _f.AdminAsync();
         await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false));
         await SignUpAsync(section, "R2", null);
+        await SignUpAsync(section, "R3", null);
 
         var second = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(1, false, false)))
             .ReadAsync<FormTeamsResult>();

@@ -92,45 +92,47 @@ public class AuthController : ControllerBase
         if (await _users.FindByEmailAsync(email) is not null)
             return Conflict(new { message = "That username is already taken." });
 
-        // Trainer is the default request; organising access needs admin approval.
+        // Trainer is the default request.
         var requested = (req.Role ?? Roles.Trainer).Trim();
         var role = requested.Equals(Roles.Manager, StringComparison.OrdinalIgnoreCase) ? Roles.Manager
                  : requested.Equals(Roles.Member, StringComparison.OrdinalIgnoreCase) ? Roles.Member
                  : Roles.Trainer;
 
-        // Optional pony club name → ClubId. Case-insensitive exact match; if
-        // no match we just leave ClubId null (we don't auto-create clubs).
-        int? clubId = null;
+        // Everyone belongs to a club (Admin accounts are made separately). A name that matches an
+        // existing club (case-insensitive) joins it; a new name creates the club.
         var clubName = (req.ClubName ?? string.Empty).Trim();
-        if (clubName.Length > 0)
-        {
-            var club = await _db.Clubs.FirstOrDefaultAsync(c => c.Name.ToLower() == clubName.ToLower());
-            if (club is not null) clubId = club.Id;
-        }
+        if (clubName.Length == 0)
+            return BadRequest(new { message = "Pony Club or team name is required." });
+        if (clubName.Length > 100)
+            return BadRequest(new { message = "Pony Club or team name must be 100 characters or fewer." });
+        var club = await _db.Clubs.FirstOrDefaultAsync(c => c.Name.ToLower() == clubName.ToLower());
+        // A new club is saved together with the account, so a failed signup leaves nothing behind.
+        club ??= new Club { Name = clubName, Region = "Custom" };
 
         var user = new AppUser
         {
             UserName = email,
             Email = email,
             FullName = fullName,
-            ClubId = clubId,
+            Club = club.Id == 0 ? club : null,
+            ClubId = club.Id == 0 ? null : club.Id,
             EmailConfirmed = true
         };
         var result = await _users.CreateAsync(user, req.Password);
         if (!result.Succeeded)
             return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
 
-        var assignedRoles = role == Roles.Trainer
-            ? new[] { Roles.Member, Roles.TrainerRequest }
+        // Organising access needs approval: trainers by an admin or their club's manager, managers by an admin.
+        var assignedRoles = role == Roles.Trainer ? new[] { Roles.Member, Roles.TrainerRequest }
+            : role == Roles.Manager ? new[] { Roles.Member, Roles.ManagerRequest }
             : new[] { role };
         var assigned = await _users.AddToRolesAsync(user, assignedRoles);
         if (!assigned.Succeeded)
             return BadRequest(new { errors = assigned.Errors.Select(e => e.Description) });
 
         var (token, expiresAt, rolesOut) = await _tokens.CreateTokenAsync(user);
-        var clubNameOut = clubId.HasValue ? (await _db.Clubs.FindAsync(clubId.Value))?.Name : null;
         return new AuthResponse(token, expiresAt,
-            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, clubNameOut, rolesOut.ToList()));
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club.Name, rolesOut.ToList()));
     }
 
     private static string Sanitise(string s)
