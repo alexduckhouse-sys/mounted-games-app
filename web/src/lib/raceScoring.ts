@@ -1,16 +1,28 @@
 import type { Heat, Race } from '../types';
+import { RESULT_STATUS, effectiveStatus } from './resultStatus';
 
 /** One team's place in the race being scored, before it is saved. */
 export interface PendingPlace {
   teamId: number;
   place: number;
   eliminated: boolean;
+  /** Why the team did not finish (see `resultStatus.ts`). Left out for a plain elimination, which is what the server assumes. */
+  status?: number;
+  /** A private note for staff. Left out to keep the note already saved; an empty string clears it. */
+  refereeNote?: string;
 }
 
 /** Non-eliminated teams take places 1..n in order, with no gaps. Eliminated teams have no place (0). */
 function renumber(list: PendingPlace[]): PendingPlace[] {
   let next = 0;
   return list.map((p) => (p.eliminated ? { ...p, place: 0 } : { ...p, place: ++next }));
+}
+
+/** The team as a finisher in `place`: it keeps its note but no longer has a reason for not finishing. */
+function finisher(p: PendingPlace, place: number): PendingPlace {
+  const rest = { ...p, place, eliminated: false };
+  delete rest.status;
+  return rest;
 }
 
 function finishers(list: PendingPlace[]): number {
@@ -33,17 +45,42 @@ export function toggleEliminated(list: PendingPlace[], teamId: number): PendingP
   if (!existing) return [...list, { teamId, place: 0, eliminated: true }];
   if (existing.eliminated) {
     const rest = list.filter((p) => p.teamId !== teamId);
-    return [...rest, { teamId, place: finishers(rest) + 1, eliminated: false }];
+    return [...rest, finisher(existing, finishers(rest) + 1)];
   }
   return renumber(list.map((p) => (p.teamId === teamId ? { ...p, eliminated: true } : p)));
 }
 
-/** The placings already saved for a race, as the scorer would have entered them. Teams sitting the race out are left out. */
-export function placesFromResults(race: Race): PendingPlace[] {
+/**
+ * Give a team that did not finish its reason (E, DNS, DNF or R), putting it in the list if it isn't there.
+ * Finished (0) brings an out team back to the end of the order, the same as swiping it back in.
+ */
+export function setStatus(list: PendingPlace[], teamId: number, status: number): PendingPlace[] {
+  const existing = list.find((p) => p.teamId === teamId);
+  if (status === RESULT_STATUS.Finished) return existing?.eliminated ? toggleEliminated(list, teamId) : list;
+  if (!existing) return [...list, { teamId, place: 0, eliminated: true, status }];
+  return renumber(list.map((p) => (p.teamId === teamId ? { ...p, eliminated: true, status } : p)));
+}
+
+/** Set a team's private note. A team with no place or reason yet has nothing to attach it to, so it is left alone. */
+export function setNote(list: PendingPlace[], teamId: number, note: string): PendingPlace[] {
+  return list.map((p) => (p.teamId === teamId ? { ...p, refereeNote: note } : p));
+}
+
+/**
+ * The placings already saved for a race, as the scorer would have entered them. Teams sitting the race out are
+ * left out. `notes` are the private notes staff have saved (from the staff-only score read), by team.
+ */
+export function placesFromResults(race: Race, notes: Readonly<Record<number, string>> = {}): PendingPlace[] {
   return race.results
     .filter((r) => !r.isSitOut)
     .sort((a, b) => (a.placing ?? 999) - (b.placing ?? 999))
-    .map((r, i) => ({ teamId: r.teamId, place: r.eliminated ? 0 : r.placing ?? i + 1, eliminated: r.eliminated }));
+    .map((r, i): PendingPlace => ({
+      teamId: r.teamId,
+      place: r.eliminated ? 0 : r.placing ?? i + 1,
+      eliminated: r.eliminated,
+      ...(r.eliminated ? { status: effectiveStatus(true, r.status) } : {}),
+      ...(notes[r.teamId] ? { refereeNote: notes[r.teamId] } : {}),
+    }));
 }
 
 /** Where a race's unsaved placings are kept on this phone, so a reload doesn't lose them. */
@@ -54,7 +91,9 @@ export function scoringDraftKey(heatId: number, raceId: number): string {
 function isPendingPlace(value: unknown): value is PendingPlace {
   const p = value as PendingPlace | null;
   return typeof p === 'object' && p !== null
-    && Number.isInteger(p.teamId) && Number.isInteger(p.place) && typeof p.eliminated === 'boolean';
+    && Number.isInteger(p.teamId) && Number.isInteger(p.place) && typeof p.eliminated === 'boolean'
+    && (p.status === undefined || Number.isInteger(p.status))
+    && (p.refereeNote === undefined || typeof p.refereeNote === 'string');
 }
 
 /** The saved draft under `key`, or null when there is none or it can't be read. */

@@ -35,6 +35,15 @@ describe('scoreCardFor', () => {
     ]);
   });
 
+  it('carries why a team did not finish, so the video card can show its letters', () => {
+    const r = race(11, 1, [4, 0, 2, 1], [2]);
+    r.results[1] = { ...r.results[1], status: 3 };
+    const card = scoreCardFor(heat([r]), 11)!;
+    expect(card.rows.filter((row) => row.eliminated)).toEqual([expect.objectContaining({ teamId: 2, status: 3 })]);
+    expect(card.rows.filter((row) => !row.eliminated).every((row) => row.status === undefined)).toBe(true);
+    expect(newlyScoredRace(heat([race(11, 1, [4, 0, 2, 1], [2])]), heat([r]))).toBe(11);
+  });
+
   it('shares places on equal totals and orders ties by name', () => {
     const card = scoreCardFor(heat([race(11, 1, [2, 2, 1, 1])]), 11)!;
     expect(card.rows.map((r) => [r.teamName, r.place])).toEqual([['England', 1], ['Ireland', 1], ['Scotland', 3], ['Wales', 3]]);

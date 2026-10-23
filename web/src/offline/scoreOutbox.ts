@@ -1,4 +1,5 @@
 import type { Heat, ResultRow } from '../types';
+import { effectiveStatus, statusLetter } from '../lib/resultStatus';
 
 /**
  * Race results saved on a scorer's phone, sent in order whenever there's
@@ -9,6 +10,10 @@ export interface Placing {
   teamId: number;
   place: number;
   eliminated: boolean;
+  /** Why the team did not finish: 1 E, 2 DNS, 3 DNF, 4 R. Left out means eliminated. */
+  status?: number;
+  /** A private note for staff. Left out keeps the saved note. */
+  refereeNote?: string;
 }
 
 export interface QueuedScore {
@@ -39,7 +44,10 @@ export type SendOutcome =
   | { kind: 'failed'; message: string };
 
 export function placingsOf(results: ResultRow[]): Placing[] {
-  return results.map((r) => ({ teamId: r.teamId, place: r.placing ?? 0, eliminated: r.eliminated }));
+  return results.map((r) => ({
+    teamId: r.teamId, place: r.placing ?? 0, eliminated: r.eliminated,
+    ...(r.eliminated ? { status: effectiveStatus(true, r.status) } : {}),
+  }));
 }
 
 /** A newer save for the same race replaces the one still waiting. */
@@ -79,7 +87,7 @@ export function settle(list: QueuedScore[], sent: QueuedScore, outcome: SendOutc
 }
 
 function samePlacings(a: Placing[], b: Placing[]): boolean {
-  const key = (places: Placing[]) => places.map((p) => `${p.teamId}:${p.eliminated ? 'E' : p.place}`).sort().join(',');
+  const key = (places: Placing[]) => places.map((p) => `${p.teamId}:${p.eliminated ? statusLetter(true, p.status) : p.place}`).sort().join(',');
   return key(a) === key(b);
 }
 
@@ -125,7 +133,7 @@ export function describePlacings(places: Placing[], names: Record<number, string
   const name = (id: number) => names[id] ?? `Team ${id}`;
   return [...places]
     .sort((a, b) => Number(a.eliminated) - Number(b.eliminated) || a.place - b.place)
-    .map((p) => p.eliminated ? `${name(p.teamId)} out` : `${ordinal(p.place)} ${name(p.teamId)}`)
+    .map((p) => p.eliminated ? `${name(p.teamId)} ${statusLetter(true, p.status) === 'E' ? 'out' : statusLetter(true, p.status)}` : `${ordinal(p.place)} ${name(p.teamId)}`)
     .join(' · ');
 }
 

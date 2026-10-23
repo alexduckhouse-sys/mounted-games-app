@@ -214,6 +214,8 @@ export interface ResultRow {
   points: number;
   /** The team had no lane this race (more teams than lanes) and sat it out. Shown as S. */
   isSitOut?: boolean;
+  /** Why a team that did not finish (eliminated is true) did not: 1 E, 2 DNS, 3 DNF, 4 R. Missing on older data, meaning E. */
+  status?: number;
 }
 
 export interface Race {

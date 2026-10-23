@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Heat } from '../types';
 import { heat, race, result } from '../test/factories';
 import {
-  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey, tapTeam, toggleEliminated, writeScoringDraft, type PendingPlace,
+  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey, setNote, setStatus, tapTeam, toggleEliminated, writeScoringDraft, type PendingPlace,
 } from './raceScoring';
 
 const places = (list: PendingPlace[]) => list.map((p) => (p.eliminated ? `${p.teamId}:out` : `${p.teamId}:${p.place}`));
@@ -146,6 +146,56 @@ describe('nextRaceToScore', () => {
   });
 });
 
+describe('setStatus', () => {
+  it('puts a team that was never tapped out with its reason', () => {
+    expect(setStatus(tapAll(1), 2, 2)).toEqual([
+      { teamId: 1, place: 1, eliminated: false },
+      { teamId: 2, place: 0, eliminated: true, status: 2 },
+    ]);
+  });
+
+  it('turns a placed team into a non-finisher and closes the gap behind it', () => {
+    const list = setStatus(tapAll(1, 2, 3), 1, 3);
+    expect(list.map((p) => `${p.teamId}:${p.eliminated ? 'out' : p.place}`)).toEqual(['1:out', '2:1', '3:2']);
+    expect(list[0].status).toBe(3);
+  });
+
+  it('changes the reason of a team that is already out', () => {
+    expect(setStatus(setStatus([], 4, 2), 4, 4)).toEqual([{ teamId: 4, place: 0, eliminated: true, status: 4 }]);
+  });
+
+  it('brings a team back as a finisher at the end of the order, dropping its reason but keeping its note', () => {
+    const out = setNote(setStatus(tapAll(1), 2, 3), 2, 'Lame');
+    expect(setStatus(out, 2, 0)).toEqual([
+      { teamId: 1, place: 1, eliminated: false },
+      { teamId: 2, place: 2, eliminated: false, refereeNote: 'Lame' },
+    ]);
+  });
+
+  it('does nothing to bring back a team that finished or was never in the list', () => {
+    const list = tapAll(1);
+    expect(setStatus(list, 1, 0)).toBe(list);
+    expect(setStatus(list, 9, 0)).toBe(list);
+  });
+
+  it('leaves a plain swipe elimination without a reason, which the server reads as eliminated', () => {
+    expect(toggleEliminated([], 5)).toEqual([{ teamId: 5, place: 0, eliminated: true }]);
+  });
+});
+
+describe('setNote', () => {
+  it('attaches a note to a team in the list and leaves the others alone', () => {
+    expect(setNote(tapAll(1, 2), 2, 'Dropped a baton')).toEqual([
+      { teamId: 1, place: 1, eliminated: false },
+      { teamId: 2, place: 2, eliminated: false, refereeNote: 'Dropped a baton' },
+    ]);
+  });
+
+  it('has nothing to attach to for a team that is not in the list', () => {
+    expect(setNote(tapAll(1), 7, 'x')).toEqual([{ teamId: 1, place: 1, eliminated: false }]);
+  });
+});
+
 describe('placesFromResults', () => {
   it('lists saved results in finishing order, with eliminated teams last and without a place', () => {
     const r = race(1, {
@@ -155,7 +205,16 @@ describe('placesFromResults', () => {
     expect(placesFromResults(r)).toEqual([
       { teamId: 1, place: 1, eliminated: false },
       { teamId: 2, place: 2, eliminated: false },
-      { teamId: 3, place: 0, eliminated: true },
+      { teamId: 3, place: 0, eliminated: true, status: 1 },
+    ]);
+  });
+
+  it('carries the reason a team did not finish, and the notes staff have saved', () => {
+    const r = race(1, { results: [result(1, 1), result(2, null, { eliminated: true, status: 3 }), result(3, null, { eliminated: true })] });
+    expect(placesFromResults(r, { 1: 'Warned for rough riding' })).toEqual([
+      { teamId: 1, place: 1, eliminated: false, refereeNote: 'Warned for rough riding' },
+      { teamId: 2, place: 0, eliminated: true, status: 3 },
+      { teamId: 3, place: 0, eliminated: true, status: 1 },
     ]);
   });
 
@@ -166,6 +225,19 @@ describe('placesFromResults', () => {
 
   it('numbers a result that has no placing by its position', () => {
     expect(placesFromResults(race(1, { results: [result(5, null)] }))).toEqual([{ teamId: 5, place: 1, eliminated: false }]);
+  });
+});
+
+describe('scoring drafts with reasons and notes', () => {
+  const key = scoringDraftKey(8, 8);
+  it('round-trips a status and a note and refuses a malformed one', () => {
+    const draft: PendingPlace[] = [{ teamId: 1, place: 0, eliminated: true, status: 2, refereeNote: 'No show' }];
+    writeScoringDraft(key, draft);
+    expect(readScoringDraft(key)).toEqual(draft);
+    localStorage.setItem(key, JSON.stringify([{ teamId: 1, place: 0, eliminated: true, status: 'DNS' }]));
+    expect(readScoringDraft(key)).toBeNull();
+    localStorage.setItem(key, JSON.stringify([{ teamId: 1, place: 1, eliminated: false, refereeNote: 5 }]));
+    expect(readScoringDraft(key)).toBeNull();
   });
 });
 

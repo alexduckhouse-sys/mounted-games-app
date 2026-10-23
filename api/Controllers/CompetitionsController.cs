@@ -465,7 +465,7 @@ public class CompetitionsController : ControllerBase
             t.Results.Sum(r => r.Points),
             t.Results.Count,
             t.Results.Count(r => r.Placing == 1 && !r.Eliminated),
-            t.Results.Count(r => r.Eliminated),
+            t.Results.Count(r => r.Eliminated && ResultStatuses.Of(r) == ResultStatus.Eliminated),
             tiers.TierOf(t.Id),
             t.EntryStatus != TeamEntryStatus.Active))
         .OrderBy(r => r.FinalTier ?? FinalsTiers.NotInFinals)

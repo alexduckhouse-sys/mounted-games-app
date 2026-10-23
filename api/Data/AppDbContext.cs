@@ -220,6 +220,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .HasForeignKey(r => r.TeamId)
                 .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(r => new { r.RaceId, r.TeamId }).IsUnique();
+            e.Property(r => r.RefereeNote).HasMaxLength(500);
         });
 
         b.Entity<DeclarationForm>(e =>

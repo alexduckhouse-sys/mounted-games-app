@@ -54,7 +54,7 @@ export interface FinalGroup {
   races: Map<number, TeamRaceResult[]>;
 }
 
-export interface TeamRaceResult { id: number; name: string; placing: number | null; eliminated: boolean; points: number }
+export interface TeamRaceResult { id: number; name: string; placing: number | null; eliminated: boolean; points: number; status?: number }
 
 export interface TeamBlock {
   key: string;
@@ -212,7 +212,7 @@ function buildFinalGroups(sessions: Session[], sectionId: number): FinalGroup[] 
       const races = new Map<number, TeamRaceResult[]>();
       for (const race of heat.races) {
         for (const result of race.results) {
-          races.set(result.teamId, [...(races.get(result.teamId) ?? []), { id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points }]);
+          races.set(result.teamId, [...(races.get(result.teamId) ?? []), { id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points, status: result.status }]);
         }
       }
       groups.push({ id: heat.id, label: finalWording.test(named) ? named : [session.name, named].filter(Boolean).join(' · '), rows, races });
@@ -246,7 +246,7 @@ function buildDetail(rows: ToplistRow[], finals: FinalGroup[], heatSessions: Ses
     heatSessions.forEach((session, index) => {
       const heats = session.heats.filter((heat) => !isFinal(session, heat) && (heat.entries.some((entry) => entry.teamId === teamId) || heat.races.some((race) => race.results.some((result) => result.teamId === teamId))));
       const races: TeamRaceResult[] = heats.flatMap((heat) => heat.races).flatMap((race) =>
-        race.results.filter((result) => result.teamId === teamId).map((result) => ({ id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points })));
+        race.results.filter((result) => result.teamId === teamId).map((result) => ({ id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points, status: result.status })));
       const labels = heats.map((heat) => heat.label?.trim()).filter(Boolean);
       blocks.push({
         key: `session-${session.id}`,

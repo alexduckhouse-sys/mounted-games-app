@@ -34,6 +34,16 @@ public enum LaneRotationMode
     MoveDown = 2
 }
 
+/// <summary>How a team's race ended. Anything but Finished scores 0 and shows its letter (E, DNS, DNF, R).</summary>
+public enum ResultStatus
+{
+    Finished = 0,
+    Eliminated = 1,
+    DidNotStart = 2,
+    DidNotFinish = 3,
+    Retired = 4
+}
+
 public enum SessionKind
 {
     Race = 0,

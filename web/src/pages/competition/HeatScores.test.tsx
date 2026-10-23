@@ -92,3 +92,21 @@ it('shows S for a team that sat a race out', () => {
 
   expect(screen.getByText('Sat out this race')).toBeInTheDocument();
 });
+
+it('shows the letters for a team that did not start, did not finish, retired or was eliminated', () => {
+  const entries = [1, 2, 3, 4].map((id) => ({ id, teamId: id, teamName: `Team ${id}`, laneIndex: id }));
+  const out = (id: number, status?: number) => ({ id, teamId: id, teamName: `Team ${id}`, placing: null, eliminated: true, points: 0, ...(status === undefined ? {} : { status }) });
+  const shownHeat = heat(16, { sessionId: 6, orderIndex: 0, label: 'Heat 1', entries,
+    races: [race(41, { name: 'Bending', orderIndex: 0, isComplete: true, results: [out(1, 2), out(2, 3), out(3, 4), out(4)] })] });
+  const shownSession = session(6, { sectionName: 'Teams Seniors', status: 1, scheduledStart: '2026-10-16T10:00:00', heats: [shownHeat] });
+  state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[shownHeat]} activeHeatId={16} /></MemoryRouter></CompactPageBarProvider>);
+
+  const cell = (name: string) => within(screen.getByRole('row', { name: new RegExp(name) })).getAllByRole('cell').find((c) => /DNS|DNF|^R|^E/.test(c.textContent ?? ''))!;
+  expect(cell('Team 1')).toHaveTextContent('DNS');
+  expect(cell('Team 2')).toHaveTextContent('DNF');
+  expect(cell('Team 3')).toHaveTextContent('R');
+  // Results saved before the choice existed have no status and were all eliminations.
+  expect(cell('Team 4')).toHaveTextContent('E');
+  expect(screen.getByText('Did not start')).toBeInTheDocument();
+});

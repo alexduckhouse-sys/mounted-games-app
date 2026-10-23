@@ -4,6 +4,7 @@ import { ChevronLeft, Printer } from 'lucide-react';
 import { api } from '../../api';
 import type { PrintableDraw, PrintableResults, PrintableScoreSheets } from './eventToolsTypes';
 import { PosterPage } from './PosterPage';
+import { statusLetter } from '../../lib/resultStatus';
 import './printEvent.css';
 
 type View = 'draw' | 'score-sheets' | 'results';
@@ -70,11 +71,11 @@ function Draw({ data }: { data: PrintableDraw }) {
   return <>{data.sessions.map((session) => <section key={session.sessionId} className="event-print-section"><h2>{session.sectionName || 'Open section'} · {session.sessionName}</h2>{session.arenaName && <p className="event-print-note">Arena: {session.arenaName}</p>}{session.heats.map((heat) => <div key={heat.heatId} className="event-print-block"><h3>{heat.label} <span>{time(heat.scheduledStart)}</span></h3><div className="event-print-table-wrap"><table><thead><tr><th>Lane</th><th>Team</th><th>Club</th><th>Races</th></tr></thead><tbody>{heat.teams.map((team, index) => <tr key={team.teamId}><td>{team.lane}</td><td>{team.teamName}</td><td>{team.clubName}</td>{index === 0 && <td rowSpan={Math.max(heat.teams.length, 1)}>{heat.races.map((race) => race.name).join(', ') || 'No races added'}</td>}</tr>)}</tbody></table></div></div>)}</section>)}</>;
 }
 
-/** A recorded result as it is written on the sheet: points, "E" for an elimination, "S" for a sit-out, nothing if the race isn't scored. */
-function scoreText(cell: { points: number | null; eliminated: boolean; isSitOut?: boolean } | undefined): string {
+/** A recorded result as it is written on the sheet: points, E, DNS, DNF or R for a team that did not finish, "S" for a sit-out, nothing if the race isn't scored. */
+function scoreText(cell: { points: number | null; eliminated: boolean; isSitOut?: boolean; status?: number } | undefined): string {
   if (!cell) return '';
   if (cell.isSitOut) return 'S';
-  if (cell.eliminated) return 'E';
+  if (cell.eliminated) return statusLetter(true, cell.status) ?? 'E';
   return cell.points === null || cell.points === undefined ? '' : String(cell.points);
 }
 

@@ -40,7 +40,8 @@ public sealed class PrintableEventService(AppDbContext db)
                     {
                         var result = r.Results.SingleOrDefault(y => y.TeamId == e.TeamId);
                         return new PrintableScoreCellDto(e.TeamId, e.Team!.DisplayName, result?.Placing, result?.Eliminated ?? false, result?.Points,
-                            e.LaneIndex, e.Team.BibDescription ?? e.Team.BibColour, result?.IsSitOut ?? false);
+                            e.LaneIndex, e.Team.BibDescription ?? e.Team.BibColour, result?.IsSitOut ?? false,
+                            result is null ? ResultStatus.Finished : ResultStatuses.Of(result));
                     }).ToArray())).ToArray()))
             .ToArray();
         return new PrintableScoreSheetsDto(ToCompetition(competition), heats);
@@ -63,7 +64,7 @@ public sealed class PrintableEventService(AppDbContext db)
                     Total = results.Sum(x => x.Points),
                     Run = results.Length,
                     Wins = results.Count(x => x.Placing == 1 && !x.Eliminated),
-                    Eliminations = results.Count(x => x.Eliminated),
+                    Eliminations = results.Count(x => x.Eliminated && ResultStatuses.Of(x) == ResultStatus.Eliminated),
                 };
             }).OrderBy(x => x.Tier).ThenByDescending(x => x.Total).ThenBy(x => x.Team.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Team.Id).ToList();
             (int Tier, int Total)? previous = null;

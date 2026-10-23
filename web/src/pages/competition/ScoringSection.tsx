@@ -1,9 +1,11 @@
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
-import { CloudOff, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Columns3 } from 'lucide-react';
+import { useState } from 'react';
+import { CloudOff, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Columns3, StickyNote } from 'lucide-react';
 import type { Heat, Race } from '../../types';
 import { bibAccent } from '../../lib/bib';
 import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
 import type { PendingPlace } from '../../lib/raceScoring';
+import { RESULT_STATUS, STATUS_CHOICES, effectiveStatus, statusLetter } from '../../lib/resultStatus';
 import { LaneRotationMode, lanesInUse } from '../../lib/lanes';
 import { displayLaneFor, sitsOutOf, teamForDisplayLane, type LaneRules } from './laneRules';
 
@@ -60,6 +62,10 @@ interface ScoringProps {
   onToggleLaneView: () => void;
   onClickTeam: (teamId: number) => void;
   onToggleElim: (teamId: number) => void;
+  /** Give a team that did not finish its reason (E, DNS, DNF, R), or 0 to bring it back as a finisher. */
+  onSetStatus?: (teamId: number, status: number) => void;
+  /** Set the private referee note for a team. Off (undefined) where notes aren't allowed, such as a scorer link. */
+  onSetNote?: (teamId: number, note: string) => void;
   onReset: () => void;
   onSubmit: () => void;
   correctionReason: string;
@@ -69,8 +75,10 @@ interface ScoringProps {
 
 export function ScoringSection({
   heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued, showResults,
-  onToggleResults, showLaneView, onToggleLaneView, onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason,
+  onToggleResults, showLaneView, onToggleLaneView, onClickTeam, onToggleElim, onSetStatus, onSetNote, onReset, onSubmit, correctionReason, onCorrectionReason,
 }: ScoringProps) {
+  // The team whose status and note panel is open. Closed by default so the common tap-in-order flow stays as it was.
+  const [statusFor, setStatusFor] = useState<number | null>(null);
   const pendingByTeam = new Map(pending.map((p) => [p.teamId, p]));
   const queuedByRace = new Map(queued.map((q) => [q.raceId, q]));
   const activeQueued = activeRace ? queuedByRace.get(activeRace.id) : undefined;
@@ -146,6 +154,7 @@ export function ScoringSection({
             {isQualifier
               ? <>Tap the first {qualifiers} teams home, in order. The rest score 1 point each; tap one of them to eliminate it (0 pts).</>
               : <>Tap a team to assign its place · swipe a tile <span className="font-semibold">downwards</span> to eliminate (0 pts).</>}
+            {onSetStatus && <> For DNS, DNF, retired or a note, use <span className="font-semibold">More</span> under a team.</>}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {heat.entries.map((e) => {
@@ -153,17 +162,41 @@ export function ScoringSection({
               const sat = sitsOutOf(heat, e, activeRaceIdx, laneRules);
               const lane = displayLaneFor(heat, e, activeRaceIdx, laneRules);
               return (
-                <ScoreTile
-                  key={e.id}
-                  teamName={e.teamName}
-                  lane={lane}
-                  colour={bibAccent(e.bibColour)}
-                  place={state?.eliminated ? undefined : state?.place}
-                  eliminated={state?.eliminated ?? false}
-                  disabled={!canScore || sat}
-                  onTap={() => onClickTeam(e.teamId)}
-                  onSwipeEliminate={() => onToggleElim(e.teamId)}
-                />
+                <div key={e.id} className="flex flex-col gap-1">
+                  <ScoreTile
+                    teamName={e.teamName}
+                    lane={lane}
+                    colour={bibAccent(e.bibColour)}
+                    place={state?.eliminated ? undefined : state?.place}
+                    eliminated={state?.eliminated ?? false}
+                    letter={state?.eliminated ? statusLetter(true, state.status) ?? 'E' : null}
+                    hasNote={Boolean(state?.refereeNote)}
+                    disabled={!canScore || sat}
+                    onTap={() => onClickTeam(e.teamId)}
+                    onSwipeEliminate={() => onToggleElim(e.teamId)}
+                  />
+                  {canScore && !sat && onSetStatus && (
+                    <>
+                      <button
+                        type="button"
+                        className="self-end text-[11px] font-semibold text-slate-500 underline-offset-2 hover:underline dark:text-slate-300"
+                        aria-expanded={statusFor === e.teamId}
+                        aria-label={`More for ${e.teamName}`}
+                        onClick={() => setStatusFor(statusFor === e.teamId ? null : e.teamId)}
+                      >
+                        More
+                      </button>
+                      {statusFor === e.teamId && (
+                        <StatusPanel
+                          teamName={e.teamName}
+                          state={state}
+                          onSetStatus={(status) => onSetStatus(e.teamId, status)}
+                          onSetNote={onSetNote ? (note) => onSetNote(e.teamId, note) : undefined}
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -230,13 +263,13 @@ function HeatResultsTable({ heat, pending, activeRaceId, pointsFor }: {
       const p = pending.find((x) => x.teamId === teamId);
       if (p) {
         return <span className={p.eliminated ? 'text-rose-600' : 'font-semibold text-brand-700 dark:text-brand-200'}>
-          {p.eliminated ? '0' : `${p.place} (${pointsFor(p.place, false)})`}
+          {p.eliminated ? `0 ${statusLetter(true, p.status) ?? 'E'}` : `${p.place} (${pointsFor(p.place, false)})`}
         </span>;
       }
     }
     const r = race.results.find((x) => x.teamId === teamId);
     if (!r) return <span className="text-slate-400">—</span>;
-    if (r.eliminated) return <span className="text-rose-500">0</span>;
+    if (r.eliminated) return <span className="text-rose-500">0 {statusLetter(true, r.status)}</span>;
     return <span className="font-semibold">{r.points}</span>;
   }
 
@@ -286,13 +319,17 @@ interface ScoreTileProps {
   colour: string;
   place?: number;
   eliminated: boolean;
+  /** E, DNS, DNF or R for a team that did not finish. */
+  letter?: string | null;
+  /** A private referee note is attached. Only the fact is shown, never the text. */
+  hasNote?: boolean;
   disabled: boolean;
   onTap: () => void;
   onSwipeEliminate: () => void;
 }
 
 function ScoreTile({
-  teamName, lane, colour, place, eliminated, disabled, onTap, onSwipeEliminate,
+  teamName, lane, colour, place, eliminated, letter, hasNote, disabled, onTap, onSwipeEliminate,
 }: ScoreTileProps) {
   function handlePanEnd(_e: unknown, info: PanInfo) {
     if (disabled) return;
@@ -332,6 +369,7 @@ function ScoreTile({
           {lane}
         </span>
         <div className="text-sm leading-tight flex-1 min-w-0">{teamName}</div>
+        {hasNote && <StickyNote className="w-3.5 h-3.5 shrink-0 opacity-80" aria-label="Has a referee note" />}
       </div>
       {!place && !eliminated && !disabled && (
         <div className="absolute bottom-1 right-2 text-[9px] opacity-40 font-normal">swipe ↓ elim</div>
@@ -352,10 +390,58 @@ function ScoreTile({
             initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
             className="absolute -top-2 -right-2 px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center gap-1"
           >
-            <AlertTriangle className="w-2.5 h-2.5" /> ELIM
+            <AlertTriangle className="w-2.5 h-2.5" /> {letter === 'E' || !letter ? 'ELIM' : letter}
           </motion.div>
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+interface StatusPanelProps {
+  teamName: string;
+  state: PendingPlace | undefined;
+  onSetStatus: (status: number) => void;
+  onSetNote?: (note: string) => void;
+}
+
+/** The less common results for one team: why it did not finish, and a private note for staff. */
+function StatusPanel({ teamName, state, onSetStatus, onSetNote }: StatusPanelProps) {
+  const current = state ? effectiveStatus(state.eliminated, state.status) : RESULT_STATUS.Finished;
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px] dark:border-slate-600 dark:bg-slate-800/60" role="group" aria-label={`Result for ${teamName}`}>
+      <div className="flex flex-wrap gap-1">
+        {STATUS_CHOICES.map((choice) => (
+          <button
+            key={choice.value}
+            type="button"
+            title={choice.label}
+            aria-pressed={current === choice.value}
+            className={`rounded px-2 py-1 font-bold ${current === choice.value ? 'bg-rose-600 text-white' : 'bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-100'}`}
+            onClick={() => onSetStatus(choice.value)}
+          >
+            {choice.letter}
+          </button>
+        ))}
+        {current !== RESULT_STATUS.Finished && (
+          <button type="button" className="rounded bg-white px-2 py-1 font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100" onClick={() => onSetStatus(RESULT_STATUS.Finished)}>
+            Finished
+          </button>
+        )}
+      </div>
+      {onSetNote && (
+        <label className="mt-2 flex flex-col gap-1 font-semibold">
+          Referee note (staff only)
+          <textarea
+            className="input min-h-14"
+            maxLength={500}
+            disabled={!state}
+            value={state?.refereeNote ?? ''}
+            placeholder={state ? 'Seen only by the organisers' : 'Give the team a place or a letter first'}
+            onChange={(event) => onSetNote(event.target.value)}
+          />
+        </label>
+      )}
+    </div>
   );
 }

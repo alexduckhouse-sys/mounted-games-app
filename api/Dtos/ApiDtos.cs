@@ -294,7 +294,9 @@ public record RaceClockRequest(DateTime? At);
 
 public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex);
 
-public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points, bool IsSitOut = false);
+/// <summary>A result as everyone sees it. Status says why a team that did not finish (Eliminated is true) did not. The referee note is never here.</summary>
+public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points, bool IsSitOut = false,
+    ResultStatus Status = ResultStatus.Finished);
 
 public record CreateHeatRequest(
     string? Label, int OrderIndex,
@@ -310,7 +312,8 @@ public record SubmitRaceResultsRequest(
     IReadOnlyList<FinishingPlaceDto> Places,
     IReadOnlyList<FinishingPlaceDto>? Expected = null,
     string? Reason = null);
-public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated);
+/// <summary>Status null means Eliminated when Eliminated is set. RefereeNote is private to staff (500 characters at most).</summary>
+public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated, ResultStatus? Status = null, string? RefereeNote = null);
 
 /// <param name="FinalTier">
 /// 0 for a team in the A Final, 1 for the B Final, and so on; null when it isn't in a lettered

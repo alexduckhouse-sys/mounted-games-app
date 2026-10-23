@@ -6,6 +6,7 @@ import { useCompetition } from '../competition/context';
 import { RefineDisclosure, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 import type { RaceScore, RaceScoreEventKind, RaceScoreHistory, ScorePlace } from './types';
 import { apiMessage } from './types';
+import { STATUS_CHOICES, effectiveStatus, statusLetter } from '../../lib/resultStatus';
 import './operations.css';
 
 export function ScoreAuditPanel(props: { raceId: number; onChanged?: () => void }) {
@@ -61,7 +62,11 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
     setMessage(null);
     try {
       await api.put(`/races/${raceId}/score`, {
-        places: draft.map((result) => ({ teamId: result.teamId, place: result.place, eliminated: result.eliminated })),
+        places: draft.map((result) => ({
+          teamId: result.teamId, place: result.place, eliminated: result.eliminated,
+          ...(result.eliminated ? { status: effectiveStatus(true, result.status) } : {}),
+          ...(result.refereeNote != null ? { refereeNote: result.refereeNote } : {}),
+        })),
         expectedRevision: score.revision,
         requestId: requestId('correction'),
         reason: correctionReason.trim(),
@@ -145,7 +150,9 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
                     <li key={result.teamId} className="ops-place">
                       <span className="rf-grow"><span className="rf-t1">Team {result.teamId}</span><span className="rf-t2">Points now {result.points}</span></span>
                       <label className="rf-fld ops-place-field">Place<input aria-label={`Place for team ${result.teamId}`} type="number" min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
-                      <label className="ops-elim"><input aria-label={`Eliminated team ${result.teamId}`} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked } : item))} />Eliminated</label>
+                      <label className="ops-elim"><input aria-label={`Eliminated team ${result.teamId}`} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked, status: event.target.checked ? effectiveStatus(true, item.status) : 0 } : item))} />Did not finish</label>
+                      {result.eliminated && <label className="rf-fld ops-place-field">Why<select aria-label={`Reason for team ${result.teamId}`} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select></label>}
+                      <label className="rf-fld ops-place-field">Referee note<input aria-label={`Referee note for team ${result.teamId}`} type="text" maxLength={500} value={result.refereeNote ?? ''} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, refereeNote: event.target.value } : item))} /></label>
                     </li>
                   ))}</ul>
                   <label className="rf-fld">Correction reason<textarea className="ops-note-input" required maxLength={1000} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} /></label>
@@ -186,5 +193,5 @@ function eventLabel(kind: RaceScoreEventKind): string {
 
 function scoreSummary(results: ScorePlace[]): string {
   if (results.length === 0) return 'No results';
-  return results.map((result) => result.eliminated ? `Team ${result.teamId}: E` : `Team ${result.teamId}: ${result.place}`).join(', ');
+  return results.map((result) => result.eliminated ? `Team ${result.teamId}: ${statusLetter(true, result.status)}` : `Team ${result.teamId}: ${result.place}`).join(', ');
 }

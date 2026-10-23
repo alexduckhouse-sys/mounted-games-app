@@ -106,7 +106,7 @@ public static class Mappings
     public static ResultDto ToDto(this Result r) => new(
         r.Id, r.TeamId,
         r.Team?.DisplayName ?? string.Empty,
-        r.Placing, r.Eliminated, r.Points, r.IsSitOut);
+        r.Placing, r.Eliminated, r.Points, r.IsSitOut, ResultStatuses.Of(r));
 
     public static RaceDto ToDto(this Race r) => new(
         r.Id, r.HeatId, r.Name, r.OrderIndex, r.IsComplete,
