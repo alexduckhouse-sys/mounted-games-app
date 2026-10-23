@@ -85,7 +85,9 @@ export function AppShell() {
             </div>
           ) : (
             <div className="mx-auto flex max-w-5xl items-center gap-2.5 py-3 pl-4 pr-3">
-              <Link to="/" className="mg-logo" aria-label="Mounted Games home">MG</Link>
+              {pageHeader?.backTo
+                ? <Link to={pageHeader.backTo} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-white" aria-label={pageHeader.backLabel ?? 'Back'}><ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.25} /></Link>
+                : <Link to="/" className="mg-logo" aria-label="Mounted Games home">MG</Link>}
               {pageHeader?.plain ? (
                 <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">
                   <h1 className="mg-display truncate text-[22px] font-bold leading-none">{pageHeader.title}</h1>

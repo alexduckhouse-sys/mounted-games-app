@@ -69,8 +69,8 @@ it('leaves out the refresh button when the page has none, and ignores usePageHea
 });
 
 it('passes on that a header is plain, for pages that belong to no competition', () => {
-  function Plain() { usePageHeader({ title: 'Following', subtitle: '5 teams · 2 events', plain: true }); return null; }
-  function ReadPlain() { const { header } = useCompactPageBarState(); return <output data-testid="plain">{header?.plain ? 'plain' : 'button'}</output>; }
+  function Plain() { usePageHeader({ title: 'Following', subtitle: '5 teams · 2 events', plain: true, backTo: '/dashboard', backLabel: 'Back to Me' }); return null; }
+  function ReadPlain() { const { header } = useCompactPageBarState(); return <output data-testid="plain">{header?.plain ? 'plain' : 'button'}|{header?.backTo}|{header?.backLabel}</output>; }
   render(<CompactPageBarProvider><ReadPlain /><Plain /></CompactPageBarProvider>);
-  expect(screen.getByTestId('plain')).toHaveTextContent('plain');
+  expect(screen.getByTestId('plain')).toHaveTextContent('plain|/dashboard|Back to Me');
 });

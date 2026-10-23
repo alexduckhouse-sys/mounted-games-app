@@ -18,9 +18,12 @@ export interface PageHeaderConfig {
   refreshLabel?: string;
   /** For pages that belong to no competition: plain text in the header, not a button that changes competition. */
   plain?: boolean;
+  /** Puts a back arrow where the MG logo is, going here. Use with `plain`. */
+  backTo?: string;
+  backLabel?: string;
 }
 
-type PageHeaderEntry = { title: string; subtitle?: string; refreshLabel?: string; refresh?: () => void; plain?: boolean };
+type PageHeaderEntry = { title: string; subtitle?: string; refreshLabel?: string; refresh?: () => void; plain?: boolean; backTo?: string; backLabel?: string };
 
 interface CompactPageBarState {
   config: CompactPageBarConfig | null;
@@ -82,14 +85,14 @@ export function usePageHeader(config: PageHeaderConfig) {
   const owner = useRef(Symbol('page-header'));
   const refresh = useRef(config.onRefresh);
   useLayoutEffect(() => { refresh.current = config.onRefresh; });
-  const { title, subtitle, refreshLabel, plain } = config;
+  const { title, subtitle, refreshLabel, plain, backTo, backLabel } = config;
   const hasRefresh = !!config.onRefresh;
   const publishHeader = context?.publishHeader;
   const clearHeader = context?.clearHeader;
   useLayoutEffect(() => {
     if (!publishHeader || !clearHeader) return;
     const ownerKey = owner.current;
-    publishHeader(ownerKey, { title, subtitle, refreshLabel, plain, refresh: hasRefresh ? () => refresh.current?.() : undefined });
+    publishHeader(ownerKey, { title, subtitle, refreshLabel, plain, backTo, backLabel, refresh: hasRefresh ? () => refresh.current?.() : undefined });
     return () => clearHeader(ownerKey);
-  }, [title, subtitle, refreshLabel, plain, hasRefresh, publishHeader, clearHeader]);
+  }, [title, subtitle, refreshLabel, plain, backTo, backLabel, hasRefresh, publishHeader, clearHeader]);
 }

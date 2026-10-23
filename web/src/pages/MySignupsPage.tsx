@@ -1,22 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarDays, CreditCard, Trophy, Check, RotateCcw, Ban, Hourglass, Users } from 'lucide-react';
 import { api } from '../api';
-import { DemoEntryPayment } from './commerce/DemoEntryPayment';
 import { useAuth } from '../auth/AuthContext';
+import { usePageHeader } from '../components/CompactPageBarContext';
+import { priceLabel } from '../lib/money';
+import { groupSignups } from '../lib/mySignups';
+import { displaySectionName } from '../lib/section';
 import type { MySignup, SignupPaymentStatus } from '../types';
+import { DemoEntryPayment } from './commerce/DemoEntryPayment';
 
-const STATUS_META: Record<SignupPaymentStatus, { label: string; icon: typeof Check; cls: string }> = {
-  0: { label: 'Awaiting payment', icon: Hourglass, cls: 'bg-[rgb(var(--mg-late-bg))] text-[rgb(var(--mg-late-ink))]' },
-  1: { label: 'Paid', icon: Check, cls: 'bg-[rgb(var(--mg-done-bg))] text-[rgb(var(--mg-heading))]' },
-  2: { label: 'Refunded', icon: RotateCcw, cls: 'bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-body))]' },
-  3: { label: 'Cancelled', icon: Ban, cls: 'bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-elim))]' },
+const STATUS: Record<SignupPaymentStatus, { label: string; cls: string }> = {
+  0: { label: 'Awaiting payment', cls: 'mg-tag-late' },
+  1: { label: 'Paid', cls: 'mg-tag-ok' },
+  2: { label: 'Refunded', cls: '' },
+  3: { label: 'Cancelled', cls: '!bg-[rgb(var(--mg-done-bg))] !text-[rgb(var(--mg-body))]' },
 };
-
-function priceLabel(minor: number): string {
-  if (!minor) return 'Free';
-  return `£${(minor / 100).toFixed(2)}`;
-}
 
 export function MySignupsPage() {
   const { user } = useAuth();
@@ -27,112 +25,84 @@ function SignupList() {
   const { user } = useAuth();
   const [signups, setSignups] = useState<MySignup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const now = useMemo(() => new Date(), []);
 
-  const reload = useCallback(() => {
+  useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     api.get<MySignup[]>('/me/signups')
-      .then((r) => { setSignups(r.data); setError(null); })
-      .catch(() => setError('Could not load your signups.'));
+      .then((r) => { if (!cancelled) { setSignups(r.data); setError(null); } })
+      .catch(() => { if (!cancelled) setError('Could not load your signups.'); });
+    return () => { cancelled = true; };
   }, [user]);
-  useEffect(() => { reload(); }, [reload]);
+
+  const waiting = signups?.filter((s) => s.status === 0).length ?? 0;
+  usePageHeader({
+    title: 'My signups',
+    subtitle: signups ? (waiting ? `${waiting} waiting for payment` : `${signups.length} ${signups.length === 1 ? 'entry' : 'entries'}`) : undefined,
+    plain: true,
+    backTo: '/dashboard',
+    backLabel: 'Back to Me',
+  });
 
   if (!user) {
     return (
-      <div className="skin mx-auto w-full max-w-[560px] py-4">
-        <div className="mg-card mg-lede flex flex-wrap items-center gap-3 p-4">
-          Sign in to see comps you've entered.
-          <Link to="/login" className="mg-btn mg-btn-primary !min-h-10 !px-4 !text-[15px]">Sign in</Link>
+      <div className="mx-auto w-full max-w-xl pt-3">
+        <div className="mg-card flex flex-wrap items-center gap-3 p-4">
+          <p className="mg-lede">Sign in to see comps you've entered.</p>
+          <Link to="/login" className="mg-btn mg-btn-primary !min-h-11 !px-4 !text-[15px]">Sign in</Link>
         </div>
       </div>
     );
   }
 
   if (signups == null && !error) {
-    return <div className="skin mx-auto w-full max-w-[560px] py-4"><div className="mg-card mg-meta p-4">Loading your signups…</div></div>;
+    return <div className="mx-auto w-full max-w-xl pt-3"><p role="status" className="mg-meta px-1">Loading your signups…</p></div>;
   }
 
+  const { comingUp, past } = groupSignups(signups ?? [], now);
   return (
-    <div className="skin mx-auto w-full max-w-[560px] space-y-3 py-4">
-      <div>
-        <h1 className="mg-h1 mg-h1-sm flex items-center gap-2">
-          <CreditCard className="h-6 w-6" aria-hidden="true" /> My signups
-        </h1>
-        <p className="mg-meta mt-1">
-          Every competition you've signed up to, and whether the organiser has marked
-          your entry paid yet.
-        </p>
-      </div>
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3">
+      {error && <div role="alert" className="mg-notice">{error}</div>}
 
-      {error && (
-        <div className="mg-notice">
-          {error}
+      {signups && signups.length === 0 && (
+        <div className="mg-card space-y-3 p-5">
+          <p className="mg-lede">You haven't signed up to any competitions yet.</p>
+          <Link to="/competitions" className="mg-btn mg-btn-primary !min-h-11 !px-4 !text-[15px]">Browse competitions</Link>
         </div>
       )}
 
-      {signups && signups.length === 0 ? (
-        <div className="mg-card mg-lede space-y-3 p-6 text-center">
-          <Trophy className="mx-auto h-8 w-8 text-[rgb(var(--mg-muted))]" aria-hidden="true" />
-          <p>You haven't signed up to any competitions yet.</p>
-          <Link to="/competitions" className="mg-btn mg-btn-primary !min-h-10 !px-4 !text-[15px]">Browse competitions</Link>
-        </div>
-      ) : (
-        <ul className="space-y-2.5">
-          {signups?.map((s) => {
-            const meta = STATUS_META[s.status];
-            const Icon = meta.icon;
-            return (
-              <li key={s.id} className="mg-card space-y-2 p-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Link
-                    to={`/competitions/${s.competitionId}`}
-                    className="mg-h2 !text-lg hover:underline"
-                  >
-                    {s.competitionName}
-                  </Link>
-                  <span className={`mg-display text-xs uppercase font-bold tracking-wide px-2 py-0.5 rounded-md flex items-center gap-1 ${meta.cls}`}>
-                    <Icon className="w-3 h-3" /> {meta.label}
-                  </span>
-                  <span className="mg-display ml-auto text-lg font-bold text-[rgb(var(--mg-heading))]">
-                    {priceLabel(s.amountMinor)}
-                  </span>
-                </div>
-                <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 text-[13px]">
-                  <div>
-                    <dt className="text-[rgb(var(--mg-muted))] uppercase font-semibold">Age group</dt>
-                    <dd className="font-medium">{s.sectionName}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-[rgb(var(--mg-muted))] uppercase font-semibold flex items-center gap-1">
-                      <CalendarDays className="w-3 h-3" /> Starts
-                    </dt>
-                    <dd>{new Date(s.competitionStart).toLocaleDateString()}</dd>
-                  </div>
-                  {s.teamName && (
-                    <div>
-                      <dt className="text-[rgb(var(--mg-muted))] uppercase font-semibold flex items-center gap-1">
-                        <Users className="w-3 h-3" /> Team
-                      </dt>
-                      <dd>{s.teamName}</dd>
-                    </div>
-                  )}
-                  {s.paidAt && (
-                    <div>
-                      <dt className="text-[rgb(var(--mg-muted))] uppercase font-semibold">Paid at</dt>
-                      <dd>{new Date(s.paidAt).toLocaleString()}</dd>
-                    </div>
-                  )}
-                </dl>
-                {s.ponyClubName && (
-                  <p className="mg-meta">Pony Club: {s.ponyClubName}</p>
-                )}
-                {s.amountMinor > 0 && (
-                  <DemoEntryPayment signupId={s.id} signupStatus={s.status} />
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {([['Coming up', comingUp], ['Past', past]] as const).map(([title, rows]) => rows.length > 0 && (
+        <section key={title} className="mg-sec" aria-label={title}>
+          <div className="mg-sec-head"><h2>{title}</h2></div>
+          <ul className="mg-lines">
+            {rows.map((s) => <SignupRow key={s.id} signup={s} />)}
+          </ul>
+        </section>
+      ))}
     </div>
+  );
+}
+
+function SignupRow({ signup: s }: { signup: MySignup }) {
+  const status = STATUS[s.status];
+  const due = s.status === 0;
+  return (
+    <li className={`flex flex-col gap-2 px-3 py-2.5 ${due ? 'mg-line-late' : ''}`}>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2.5">
+        <span className="flex min-w-0 flex-col gap-[3px]">
+          <Link to={`/competitions/${s.competitionId}`} className="truncate text-[15px] font-semibold !text-[rgb(var(--mg-ink))]">{s.competitionName}</Link>
+          <span className="text-xs text-[rgb(var(--mg-muted))]">{[displaySectionName(s.sectionName), s.teamName || s.fullName].filter(Boolean).join(' · ')}</span>
+        </span>
+        <span className="flex flex-col items-end gap-1">
+          <span className="mg-display text-lg font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{priceLabel(s.amountMinor)}</span>
+          <span className={`mg-tag !text-[11px] !font-bold ${status.cls}`}>{status.label}</span>
+        </span>
+      </div>
+      {due && <Link to={`/competitions/${s.competitionId}/details`} className="mg-btn mg-btn-primary !min-h-11 w-full !rounded-lg !text-sm">How to pay<span className="sr-only"> for {s.competitionName}</span></Link>}
+      {s.status === 1 && s.paidAt && <span className="text-xs text-[rgb(var(--mg-muted))]">Paid {new Date(s.paidAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>}
+      {s.ponyClubName && <span className="text-xs text-[rgb(var(--mg-muted))]">Pony Club: {s.ponyClubName}</span>}
+      {s.amountMinor > 0 && <DemoEntryPayment signupId={s.id} signupStatus={s.status} />}
+    </li>
   );
 }

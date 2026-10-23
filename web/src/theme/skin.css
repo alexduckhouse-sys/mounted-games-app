@@ -282,6 +282,7 @@ a.mg-row:hover, button.mg-row:hover { background: rgb(var(--mg-subtle)); }
 /* Full-bleed bands: the colour runs edge to edge while the content stays in its column. */
 .mg-band { border-image: linear-gradient(rgb(var(--mg-surface)) calc(100% - 1px), rgb(var(--mg-rule)) 0) fill 0 // 0 100vmax; }
 .mg-band-header { border-image: conic-gradient(rgb(var(--mg-header)) 0 0) fill 0 // 0 100vmax; color: #fff; }
+.mg-band-deep { border-image: conic-gradient(rgb(var(--mg-header-deep)) 0 0) fill 0 // 0 100vmax; color: #fff; }
 
 /* Compact page parts (docs/designs/more-pages): section heads, grouped lines, tags and the navy search strip. */
 .mg-sec { display: flex; flex-direction: column; gap: 6px; }
@@ -298,6 +299,8 @@ a.mg-line:hover, button.mg-line:hover { background: rgb(var(--mg-subtle)); }
 .mg-line-title { overflow: hidden; font: 600 15px/1.25 'Barlow', sans-serif; text-overflow: ellipsis; white-space: nowrap; }
 .mg-line-sub { overflow: hidden; color: rgb(var(--mg-muted)); font: 400 12px/1.25 'Barlow', sans-serif; text-overflow: ellipsis; white-space: nowrap; }
 .mg-line-time { font: 700 19px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
+.mg-small-btn { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid rgb(var(--mg-control)); border-radius: 8px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 13px/1 'Barlow', sans-serif; }
+.mg-small-btn:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 .mg-tag { display: inline-flex; flex: none; align-items: center; padding: 2px 6px; border-radius: 4px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 600 12px/1.2 'Barlow', sans-serif; }
 .mg-tag-ok { background: rgb(var(--mg-ok) / .14); color: rgb(var(--mg-ok)); }
 .mg-tag-late { background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); }

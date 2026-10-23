@@ -1,589 +1,181 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Users, FileText, Clock, Activity, CheckCircle2, KeyRound, UserPlus, X, RefreshCw, Copy, Check, Bell, BellOff, Sparkles } from 'lucide-react';
-import { api } from '../api';
+import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
-import { TrainerRequestsSection } from './admin/TrainerRequestsSection';
-import type { CompetitionDetail, Heat, Session, Team, TeamSupporter, TrainerNote } from '../types';
-import { bibAccent, bibLabel } from '../lib/bib';
-import { displaySectionName } from '../lib/section';
-import { computeTimings, formatTime, roundTo5Min } from '../lib/time';
-import { useTeamNotifications } from '../hooks/useTeamNotifications';
+import { usePageHeader } from '../components/CompactPageBarContext';
+import { useMyTeams } from '../hooks/useMyTeams';
+import { useTeamNotifications, type NotificationPermissionState } from '../hooks/useTeamNotifications';
+import { heatRowsForTeam, heatSummary, heatTime, nextHeatRow, type TeamHeatRow } from '../lib/myTeams';
 import { joinKeyFromSearch } from '../lib/sharing';
-import { JoinQr, TeamCalendarFeed } from './TeamSharing';
-import { arenaNames, arenaToShow } from '../lib/following';
+import { displaySectionName } from '../lib/section';
+import type { DeclarationForm, Team } from '../types';
+import { TrainerRequestsSection } from './admin/TrainerRequestsSection';
+import { CodeRow, JoinTeamCard, ManageTeamBlock, SupportersBlock } from './MyTeamParts';
 
-interface TeamHeatRow {
-  competitionId: number;
-  competitionName: string;
-  heatId: number;
-  label: string;
-  sessionName: string;
-  /** Only set when the competition runs more than one arena. */
-  arenaName: string | null;
-  lane: number | null;
-  scheduled: Date | null;
-  effective: Date | null;
-  shifted: boolean;
-  status: 'over' | 'live' | 'upcoming';
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** "5 riders + reserve", from the team's dec form when there is one. */
+function ridersText(form: DeclarationForm | undefined): string | null {
+  if (!form) return null;
+  const riders = form.riders.filter((r) => !r.isReserve).length;
+  const reserve = form.riders.some((r) => r.isReserve);
+  return `${plural(riders, 'rider')}${reserve ? ' + reserve' : ''}`;
+}
+
+function FormChip({ team, form }: { team: Team; form: DeclarationForm | undefined }) {
+  if (team.relationship !== 'trainer' && team.relationship !== 'manager') return null;
+  return form
+    ? <span className="mg-tag mg-tag-ok shrink-0">Dec form in</span>
+    : <span className="mg-tag shrink-0 !bg-[rgb(var(--mg-live-row))] !text-[rgb(var(--mg-elim))]">Dec form due</span>;
+}
+
+function RelationshipTag({ team }: { team: Team }) {
+  if (team.relationship === 'manager') return <span className="mg-tag shrink-0">Your club</span>;
+  if (team.relationship === 'supporter') return <span className="mg-tag shrink-0">Supporter</span>;
+  return null;
 }
 
 export function MyTeamsPage() {
-  const { hasRole } = useAuth();
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [notes, setNotes] = useState<TrainerNote[]>([]);
-  const [draft, setDraft] = useState({ title: '', body: '' });
-  const [comps, setComps] = useState<Map<number, CompetitionDetail>>(new Map());
+  const { user, hasRole } = useAuth();
+  const { search } = useLocation();
+  const { teams, forms, comps, loaded, reload } = useMyTeams();
+  const notify = useTeamNotifications(teams);
+  const [openId, setOpenId] = useState<number | null | undefined>(undefined);
+  const [joining, setJoining] = useState(() => joinKeyFromSearch(search) !== '');
+  const expandedId = openId === undefined ? teams[0]?.id ?? null : openId;
 
-  useEffect(() => {
-    api.get<Team[]>('/trainer/my-teams').then((r) => setTeams(r.data)).catch(() => {});
-    api.get<TrainerNote[]>('/trainer/notes').then((r) => setNotes(r.data)).catch(() => {});
-  }, []);
-
-  // Once we have the teams, pull each competition's detail (deduped) for timetable + heat info.
-  useEffect(() => {
-    if (teams.length === 0) return;
-    const compIds = Array.from(new Set(teams.map((t) => t.competitionId)));
-    const next = new Map<number, CompetitionDetail>();
-    Promise.all(compIds.map((id) =>
-      api.get<CompetitionDetail>(`/competitions/${id}`).then((r) => next.set(id, r.data)).catch(() => {})
-    )).then(() => setComps(new Map(next)));
-  }, [teams]);
-
-  const heatRowsByTeam = useMemo(() => {
+  const rowsByTeam = useMemo(() => {
     const out = new Map<number, TeamHeatRow[]>();
     for (const team of teams) {
       const comp = comps.get(team.competitionId);
-      if (!comp) { out.set(team.id, []); continue; }
-      // Time every session, breaks and briefings included, so a lunch break pushes the afternoon heats
-      // later; only then keep the races.
-      const timings = computeTimings(comp.sessions);
-      const sessions: Session[] = comp.sessions.filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0);
-      const arenas = arenaNames(sessions);
-      const rows: TeamHeatRow[] = [];
-      for (const sess of sessions) {
-        const heatsInOrder: Heat[] = sess.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-        const sessTiming = timings.get(sess.id);
-        heatsInOrder.forEach((h, idx) => {
-          const entry = h.entries.find((e) => e.teamId === team.id);
-          if (!entry) return;
-          const t = sessTiming?.heats[idx];
-          const allDone = h.races.length > 0 && h.races.every((r) => r.isComplete);
-          const live = sess.status === 1 && !allDone
-            && h.id === heatsInOrder.find((x) => !(x.races.length > 0 && x.races.every((r) => r.isComplete)))?.id;
-          rows.push({
-            competitionId: comp.id,
-            competitionName: comp.name,
-            heatId: h.id,
-            label: h.label ?? `Heat ${idx + 1}`,
-            sessionName: sess.name,
-            arenaName: arenaToShow(sess, arenas),
-            lane: entry.laneIndex,
-            scheduled: t?.scheduled ?? null,
-            effective: t?.effective ?? null,
-            shifted: t?.shifted ?? false,
-            status: allDone ? 'over' : live ? 'live' : 'upcoming',
-          });
-        });
-      }
-      rows.sort((a, b) => {
-        const ta = a.effective?.getTime() ?? a.scheduled?.getTime() ?? Number.MAX_SAFE_INTEGER;
-        const tb = b.effective?.getTime() ?? b.scheduled?.getTime() ?? Number.MAX_SAFE_INTEGER;
-        return ta - tb;
-      });
-      out.set(team.id, rows);
+      out.set(team.id, comp ? heatRowsForTeam(team, comp) : []);
     }
     return out;
   }, [teams, comps]);
 
-  async function saveNote() {
-    if (!draft.body.trim()) return;
-    const { data } = await api.post<TrainerNote>('/trainer/notes', draft);
-    setNotes((n) => [data, ...n]);
-    setDraft({ title: '', body: '' });
-  }
-
-  async function deleteNote(id: number) {
-    await api.delete(`/trainer/notes/${id}`);
-    setNotes((n) => n.filter((x) => x.id !== id));
-  }
-
-  const notify = useTeamNotifications(teams);
+  const club = user?.clubName || teams.find((t) => t.relationship === 'manager' || t.relationship === 'trainer')?.clubName;
+  usePageHeader({
+    title: 'My teams',
+    subtitle: [club, loaded ? plural(teams.length, 'team') : null].filter(Boolean).join(' · ') || undefined,
+    plain: true,
+    backTo: '/dashboard',
+    backLabel: 'Back to Me',
+  });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 flex-wrap">
-        <h1 className="text-2xl font-bold flex items-center gap-2 flex-1">
-          <Users className="w-6 h-6 text-brand-600" /> My Teams
-        </h1>
-        <Link to="/admin/competitions/new" className="btn-primary !py-1.5 !px-3 text-sm">
-          <Sparkles className="w-4 h-4" /> Create competition
-        </Link>
-        <NotificationToggle enabled={notify.enabled} permission={notify.permission} onChange={notify.setEnabled} />
-      </div>
-
-      <JoinTeamCard onJoined={() => api.get<Team[]>('/trainer/my-teams').then((r) => setTeams(r.data)).catch(() => {})} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {teams.map((t) => {
-          const rows = heatRowsByTeam.get(t.id) ?? [];
-          const next = rows.find((r) => r.status !== 'over');
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-2.5 pb-2 pt-3">
+      {teams.map((team) => {
+        const rows = rowsByTeam.get(team.id) ?? [];
+        const next = nextHeatRow(rows);
+        const form = forms.find((f) => f.teamId === team.id);
+        const section = displaySectionName(team.sectionName);
+        if (team.id !== expandedId) {
           return (
-            <div key={t.id} className="card p-3 space-y-2">
-              <Link
-                to={`/competitions/${t.competitionId}`}
-                className="flex items-center gap-3 hover:opacity-80 transition"
-              >
-                <span
-                  className="inline-block w-2 h-10 rounded-full shrink-0"
-                  style={{ background: bibAccent(t.bibColour) }}
-                />
-                <div className="flex-1 min-w-0">
-                  <h2 className="font-semibold text-sm truncate flex items-center gap-1.5">
-                    {t.displayName}
-                    {t.relationship === 'manager' && (
-                      <span className="text-[9px] uppercase font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
-                        Your club
-                      </span>
-                    )}
-                    {t.relationship === 'supporter' && (
-                      <span className="text-[9px] uppercase font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200">
-                        Supporter
-                      </span>
-                    )}
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-300 truncate">
-                    {displaySectionName(t.sectionName)}
-                  </p>
-                  <p className="text-[10px] text-slate-400 truncate">Bibs: {t.bibDescription || bibLabel(t.bibColour)}</p>
-                </div>
-                {next && (
-                  <div className="text-right shrink-0">
-                    <div className="text-[10px] uppercase tracking-wide text-slate-400">Next up</div>
-                    <div className="font-mono font-bold tabular-nums text-base text-brand-700 dark:text-brand-200">
-                      {formatTime(roundTo5Min(next.effective ?? next.scheduled))}
-                    </div>
-                  </div>
-                )}
-              </Link>
-
-              <div className="border-t border-slate-100 dark:border-slate-700 pt-2">
-                <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-300 mb-1 flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> All heats
-                </div>
-                {rows.length === 0 ? (
-                  <p className="text-[11px] text-slate-500 dark:text-slate-300 italic">
-                    No heats scheduled yet.
-                  </p>
-                ) : (
-                  <ul className="space-y-0.5">
-                    {rows.map((r) => (
-                      <li key={r.heatId} className="flex items-center gap-2 text-xs">
-                        <span className="font-mono tabular-nums w-12 text-slate-700 dark:text-slate-100 font-semibold">
-                          {formatTime(roundTo5Min(r.effective ?? r.scheduled))}
-                        </span>
-                        <span className="flex-1 min-w-0 truncate">
-                          {displaySectionName(r.sessionName)} · {r.label}
-                          {r.arenaName && ` · ${r.arenaName}`}
-                        </span>
-                        {r.lane != null && (
-                          <span className="shrink-0 text-[11px] text-slate-500 dark:text-slate-300">Lane {r.lane}</span>
-                        )}
-                        {r.status === 'live' && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-arena-live text-yellow-900 text-[9px] font-bold uppercase tracking-wide">
-                            <Activity className="w-2.5 h-2.5" /> In arena
-                          </span>
-                        )}
-                        {r.status === 'over' && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200 text-[9px] font-bold uppercase tracking-wide">
-                            <CheckCircle2 className="w-2.5 h-2.5" /> Over
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {t.relationship === 'manager' && (
-                <ManageTeamBlock team={t} onSaved={() => {
-                  api.get<Team[]>('/trainer/my-teams').then((r) => setTeams(r.data)).catch(() => {});
-                }} />
-              )}
-
-              {(t.relationship === 'trainer' || t.relationship === 'manager') && (
-                <SupportersBlock team={t} onTeamUpdated={() => {
-                  api.get<Team[]>('/trainer/my-teams').then((r) => setTeams(r.data)).catch(() => {});
-                }} />
-              )}
-            </div>
+            <button key={team.id} type="button" aria-expanded="false" onClick={() => setOpenId(team.id)}
+              className="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto_14px] items-center gap-x-2.5 rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] py-2 pl-3.5 pr-2.5 text-left">
+              <span className="flex min-w-0 flex-col gap-[3px]">
+                <strong className="mg-display truncate text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">{team.displayName}</strong>
+                <span className="truncate text-xs text-[rgb(var(--mg-muted))]">{[section, next ? `next ${heatTime(next)}, ${next.label}${next.arenaName ? ` · ${next.arenaName}` : ''}` : 'no heats yet'].join(' · ')}</span>
+              </span>
+              <span className="flex items-center gap-1.5"><RelationshipTag team={team} /><FormChip team={team} form={form} /></span>
+              <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
+            </button>
           );
-        })}
-        {teams.length === 0 && (
-          <div className="card p-3 text-sm text-slate-500 dark:text-slate-300">
-            No teams assigned to you yet. An organiser, or your club's team manager, can make you the trainer of a team.
-          </div>
-        )}
-      </div>
+        }
+        return (
+          <article key={team.id} aria-label={team.displayName} className="overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
+            <div className="flex items-center gap-2.5 border-b border-[rgb(var(--mg-rule-soft))] py-3 pl-3.5 pr-3">
+              <Link to={`/competitions/${team.competitionId}`} className="flex min-w-0 flex-1 flex-col gap-[3px] !text-[rgb(var(--mg-ink))]">
+                <strong className="mg-display truncate text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">{team.displayName}</strong>
+                <span className="truncate text-xs text-[rgb(var(--mg-muted))]">{[section, ridersText(form), comps.get(team.competitionId)?.name].filter(Boolean).join(' · ')}</span>
+              </Link>
+              <RelationshipTag team={team} />
+              <FormChip team={team} form={form} />
+              <button type="button" onClick={() => setOpenId(null)} aria-expanded="true" aria-label={`Hide details for ${team.displayName}`} className="flex h-11 w-9 shrink-0 items-center justify-center text-[rgb(var(--mg-faint))]"><ChevronDown className="h-4 w-4 rotate-180" aria-hidden="true" /></button>
+            </div>
+            {next ? (
+              <div className={`grid min-h-[52px] grid-cols-[44px_minmax(0,1fr)] items-center gap-x-2.5 py-1.5 pl-3.5 pr-3 ${next.delayMinutes > 0 ? 'mg-line-late' : ''}`}>
+                <span className={`mg-line-time ${next.delayMinutes > 0 ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{heatTime(next)}</span>
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase leading-none tracking-[0.08em] text-[rgb(var(--mg-muted))]">{next.status === 'live' ? 'On now' : 'Next up'}</span>
+                  <span className="truncate text-sm font-semibold">{heatSummary(next, team.sectionName)}</span>
+                </span>
+              </div>
+            ) : (
+              <p className="px-3.5 py-3 text-sm text-[rgb(var(--mg-muted))]">{rows.length ? 'All heats are finished.' : 'No heats scheduled yet.'}</p>
+            )}
+            {(team.relationship === 'trainer' || team.relationship === 'manager') && <CodeRow team={team} onTeamUpdated={reload} />}
+            <div className="flex min-h-[52px] items-center gap-2.5 border-t border-[rgb(var(--mg-rule-soft))] px-3.5 py-1.5">
+              <span className="flex flex-1 flex-col gap-0.5">
+                <span className="text-[15px] font-semibold">Heat alerts</span>
+                <span className="text-xs text-[rgb(var(--mg-muted))]">{alertsNote(notify.enabled, notify.permission)}</span>
+              </span>
+              <Switch label="Heat alerts" on={notify.enabled} disabled={notify.permission === 'denied' || notify.permission === 'unsupported'} onChange={notify.setEnabled} />
+            </div>
+            {team.bibDescription && <p className="border-t border-[rgb(var(--mg-rule-soft))] px-3.5 py-2.5 text-xs text-[rgb(var(--mg-muted))]">Bibs: {team.bibDescription}</p>}
+            {team.relationship === 'manager' && <ManageTeamBlock team={team} onSaved={reload} />}
+            {(team.relationship === 'trainer' || team.relationship === 'manager') && <SupportersBlock team={team} />}
+            {rows.length > 0 && <AllHeats rows={rows} />}
+          </article>
+        );
+      })}
+
+      {loaded && teams.length === 0 && (
+        <div className="mg-card p-4 text-sm text-[rgb(var(--mg-body))]">
+          No teams assigned to you yet. An organiser, or your club's team manager, can make you the trainer of a team.
+        </div>
+      )}
+      {!loaded && <p role="status" className="mg-meta px-1">Loading your teams…</p>}
+
+      {joining && <JoinTeamCard onJoined={reload} />}
+      {!joining && (
+        <button type="button" onClick={() => setJoining(true)} className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-dashed border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] text-sm font-semibold text-[rgb(var(--mg-heading))]">
+          <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />Join a team with a code
+        </button>
+      )}
 
       {hasRole('Manager') && <TrainerRequestsSection canReview />}
-
-      <div className="card p-5">
-        <h2 className="font-semibold flex items-center gap-2 mb-3">
-          <FileText className="w-5 h-5 text-brand-600" /> Notes
-        </h2>
-        <div className="flex flex-col sm:flex-row gap-2 mb-4">
-          <input
-            className="input sm:max-w-xs" placeholder="Title (optional)"
-            value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-          />
-          <input
-            className="input flex-1" placeholder="Write a quick note…"
-            value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })}
-            onKeyDown={(e) => e.key === 'Enter' && saveNote()}
-          />
-          <button className="btn-primary" onClick={saveNote}>Save</button>
-        </div>
-        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-          {notes.map((n) => (
-            <li key={n.id} className="py-3 flex items-start gap-3">
-              <div className="flex-1">
-                {n.title && <p className="font-semibold text-sm">{n.title}</p>}
-                <p className="text-sm whitespace-pre-wrap">{n.body}</p>
-                <p className="text-xs text-slate-500 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
-              </div>
-              <button onClick={() => deleteNote(n.id)} className="btn-ghost !py-1 !px-2 text-xs">Delete</button>
-            </li>
-          ))}
-          {notes.length === 0 && <li className="py-3 text-sm text-slate-500">No notes yet.</li>}
-        </ul>
-      </div>
     </div>
   );
 }
 
-function NotificationToggle({
-  enabled, permission, onChange,
-}: {
-  enabled: boolean;
-  permission: 'default' | 'granted' | 'denied' | 'unsupported';
-  onChange: (v: boolean) => void;
-}) {
-  const blocked = permission === 'denied' || permission === 'unsupported';
-  const subtitle = permission === 'denied' ? 'Browser permission denied'
-    : permission === 'unsupported' ? 'Not supported in this browser'
-    : enabled ? 'On — 1hr before, briefings, schedule slips' : 'Off';
+function alertsNote(enabled: boolean, permission: NotificationPermissionState): string {
+  if (permission === 'denied') return 'Browser permission denied';
+  if (permission === 'unsupported') return 'Not supported in this browser';
+  return enabled ? '60 minutes before each heat' : 'Off. Turn on for a nudge 60 minutes before each heat';
+}
+
+function Switch({ label, on, disabled, onChange }: { label: string; on: boolean; disabled: boolean; onChange: (value: boolean) => void }) {
   return (
-    <button
-      onClick={() => onChange(!enabled)}
-      disabled={blocked}
-      className={`btn-ghost !py-1.5 !px-2.5 text-xs flex items-center gap-1.5 ${
-        enabled ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-200' : ''
-      } ${blocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-      title="Browser notifications — only fire while this tab is open"
-    >
-      {enabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
-      <span className="text-left leading-tight">
-        <span className="block font-semibold">Notifications</span>
-        <span className="block text-[9px] font-normal opacity-80">{subtitle}</span>
-      </span>
+    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)}
+      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50 ${on ? 'bg-[rgb(var(--mg-button))]' : 'bg-[rgb(var(--mg-control))]'}`}>
+      <span aria-hidden="true" className={`absolute top-[3px] h-[22px] w-[22px] rounded-full bg-white transition-all ${on ? 'left-[23px]' : 'left-[3px]'}`} />
+      <span className="absolute -inset-y-2 inset-x-0" aria-hidden="true" />
     </button>
   );
 }
 
-function JoinTeamCard({ onJoined }: { onJoined: () => void }) {
-  // A scanned team QR code opens this page with the key in the address (/teams?join=KEY).
-  const { search } = useLocation();
-  const [key, setKey] = useState(() => joinKeyFromSearch(search));
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function join() {
-    if (!key.trim()) return;
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    try {
-      const { data } = await api.post<TeamSupporter>('/teams/join', { key: key.trim() });
-      setKey('');
-      if (data.status === 1) {
-        setResult(`You're now supporting ${data.teamName}.`);
-      } else {
-        setResult(`Request sent for ${data.teamName}. The trainer needs to accept.`);
-      }
-      onJoined();
-    } catch (e) {
-      const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
-      setError(typeof msg === 'string' ? msg : msg?.message ?? 'Could not join. Check the key.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="card p-3 space-y-1.5">
-      <div className="flex items-center gap-2 flex-wrap">
-        <h2 className="font-semibold text-sm flex items-center gap-1.5 flex-1">
-          <UserPlus className="w-4 h-4 text-brand-600" /> Join a team
-        </h2>
-      </div>
-      <p className="text-[11px] text-slate-500 dark:text-slate-300">
-        Got a join key from a trainer? Enter it to support a team — you'll see their schedule, dec forms and notifications.
-      </p>
-      <div className="flex gap-2">
-        <input
-          className="input flex-1 font-mono tracking-widest uppercase text-sm"
-          placeholder="ABCD1234"
-          maxLength={16}
-          value={key}
-          onChange={(e) => setKey(e.target.value.toUpperCase())}
-          onKeyDown={(e) => { if (e.key === 'Enter') join(); }}
-        />
-        <button onClick={join} disabled={busy || !key.trim()} className="btn-primary !py-1.5 !px-3 text-xs">
-          {busy ? '…' : 'Join'}
-        </button>
-      </div>
-      {result && (
-        <p className="text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
-          <Check className="w-3.5 h-3.5" /> {result}
-        </p>
-      )}
-      {error && (
-        <p className="text-xs text-rose-700 dark:text-rose-300">{error}</p>
-      )}
-    </div>
-  );
-}
-
-function SupportersBlock({ team, onTeamUpdated }: { team: Team; onTeamUpdated: () => void }) {
+function AllHeats({ rows }: { rows: TeamHeatRow[] }) {
   const [open, setOpen] = useState(false);
-  const [supporters, setSupporters] = useState<TeamSupporter[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [codeInput, setCodeInput] = useState('');
-  const [codeErr, setCodeErr] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
-
-  const fetchSupporters = useCallback(
-    () => api.get<TeamSupporter[]>(`/teams/${team.id}/supporters`).then((r) => r.data).catch(() => [] as TeamSupporter[]),
-    [team.id],
-  );
-  async function load() { setSupporters(await fetchSupporters()); }
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    fetchSupporters().then((list) => { if (!cancelled) setSupporters(list); });
-    return () => { cancelled = true; };
-  }, [open, fetchSupporters]);
-
-  async function rotate() {
-    setBusy(true);
-    try {
-      await api.post(`/teams/${team.id}/supporter-key`);
-      onTeamUpdated();
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function revoke() {
-    if (!confirm('Revoke this team code? Existing supporters stay, but no one new can join until you set a new code.')) return;
-    setBusy(true);
-    try {
-      await api.delete(`/teams/${team.id}/supporter-key`);
-      onTeamUpdated();
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function saveCustomCode() {
-    const code = codeInput.trim().toUpperCase();
-    if (code.length < 3) { setCodeErr('At least 3 characters.'); return; }
-    setBusy(true);
-    setCodeErr(null);
-    try {
-      await api.put(`/teams/${team.id}/team-code`, { code });
-      onTeamUpdated();
-      setEditing(false);
-      setCodeInput('');
-    } catch (e) {
-      const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
-      setCodeErr(typeof msg === 'string' ? msg : msg?.message ?? 'Could not set code.');
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function accept(s: TeamSupporter) {
-    await api.put(`/team-supporters/${s.id}/accept`);
-    load();
-  }
-  async function kick(s: TeamSupporter) {
-    if (!confirm(`Remove ${s.userName} as supporter?`)) return;
-    await api.delete(`/team-supporters/${s.id}`);
-    load();
-  }
-
-  const pendingCount = supporters.filter((s) => s.status === 0).length;
-  const acceptedCount = supporters.filter((s) => s.status === 1).length;
-
-  function copyKey() {
-    if (!team.supporterJoinKey) return;
-    navigator.clipboard?.writeText(team.supporterJoinKey)
-      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })
-      .catch(() => {});
-  }
-
   return (
-    <div className="border-t border-slate-100 dark:border-slate-700 pt-2 -mx-1">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full text-left text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-100 px-1 flex items-center gap-1.5"
-      >
-        <KeyRound className="w-3.5 h-3.5" /> Supporters
-        {acceptedCount > 0 && <span className="text-slate-400">· {acceptedCount}</span>}
-        {pendingCount > 0 && (
-          <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200 text-[10px] font-bold">
-            {pendingCount} pending
-          </span>
-        )}
-        <span className="ml-auto text-slate-400">{open ? '–' : '+'}</span>
+    <div className="border-t border-[rgb(var(--mg-rule-soft))]">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-h-11 w-full items-center gap-2 px-3.5 text-left text-[13px] font-semibold text-[rgb(var(--mg-heading))]">
+        All heats <span className="font-medium text-[rgb(var(--mg-muted))]">· {rows.length}</span>
+        <ChevronDown className={`ml-auto h-4 w-4 ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
       {open && (
-        <div className="px-1 mt-2 space-y-2">
-          <div className="text-[11px] text-slate-500 dark:text-slate-300">
-            Share this <strong>team code</strong> with friends — anyone signing up to a competition
-            can type it in to be linked to this team, and supporters can use it on their <em>My Teams</em> page.
-          </div>
-          {editing ? (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5">
-                <input
-                  className="input !py-1 text-sm font-mono uppercase flex-1"
-                  placeholder="STOCKPORT-A"
-                  value={codeInput}
-                  onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-                  maxLength={32}
-                  autoFocus
-                />
-                <button onClick={saveCustomCode} disabled={busy} className="btn-primary !py-1 !px-2 text-xs">
-                  <Check className="w-3.5 h-3.5" /> Save
-                </button>
-                <button onClick={() => { setEditing(false); setCodeInput(''); setCodeErr(null); }} className="btn-ghost !py-1 !px-1.5 text-xs">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <p className="text-[10px] text-slate-500">3–32 chars, letters/digits/dash/underscore only. Must be unique within this competition.</p>
-              {codeErr && <p className="text-[11px] text-rose-700 dark:text-rose-300">{codeErr}</p>}
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              {team.supporterJoinKey ? (
-                <>
-                  <code className="flex-1 font-mono text-base tracking-widest font-bold text-brand-700 dark:text-brand-200 bg-brand-50 dark:bg-brand-900/40 px-2 py-1 rounded-md text-center">
-                    {team.supporterJoinKey}
-                  </code>
-                  <button onClick={copyKey} className="btn-ghost !py-1 !px-1.5 text-xs" title="Copy">
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                  <button onClick={() => { setEditing(true); setCodeInput(team.supporterJoinKey ?? ''); }} className="btn-ghost !py-1 !px-1.5 text-xs" title="Set a custom code">
-                    Edit
-                  </button>
-                  <button onClick={rotate} disabled={busy} className="btn-ghost !py-1 !px-1.5 text-xs" title="Generate a new random code">
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={revoke} disabled={busy} className="btn-ghost !py-1 !px-1.5 text-xs text-rose-500" title="Revoke code">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button onClick={() => setEditing(true)} className="btn-primary !py-1.5 !px-3 text-xs">
-                    <KeyRound className="w-3.5 h-3.5" /> Set team code
-                  </button>
-                  <button onClick={rotate} disabled={busy} className="btn-ghost !py-1.5 !px-3 text-xs" title="Or auto-generate one">
-                    <RefreshCw className="w-3.5 h-3.5" /> Random
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-          {!editing && <JoinQr team={team} />}
-          <TeamCalendarFeed team={team} />
-          {supporters.length > 0 && (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-700/60 text-xs">
-              {supporters.map((s) => (
-                <li key={s.id} className="py-1.5 flex items-center gap-2">
-                  <span className="flex-1 min-w-0 truncate">
-                    <span className="font-semibold">{s.userName}</span>
-                    {s.userEmail && <span className="text-slate-500"> · {s.userEmail}</span>}
-                  </span>
-                  {s.status === 0 ? (
-                    <button onClick={() => accept(s)} className="btn-primary !py-0.5 !px-2 text-[11px]">
-                      <Check className="w-3 h-3" /> Accept
-                    </button>
-                  ) : (
-                    <span className="text-[9px] uppercase tracking-wide font-bold text-emerald-600 dark:text-emerald-300">
-                      Active
-                    </span>
-                  )}
-                  <button onClick={() => kick(s)} className="btn-ghost !py-0.5 !px-1 text-[11px] text-rose-500" title="Remove">
-                    <X className="w-3 h-3" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <ul className="space-y-1 px-3.5 pb-3 text-xs">
+          {rows.map((r) => (
+            <li key={r.heatId} className="flex items-center gap-2">
+              <span className="w-12 font-bold tabular-nums">{heatTime(r)}</span>
+              <span className="min-w-0 flex-1 truncate">{displaySectionName(r.sessionName)} · {r.label}{r.arenaName && ` · ${r.arenaName}`}</span>
+              {r.lane != null && <span className="shrink-0 text-[rgb(var(--mg-muted))]">Lane {r.lane}</span>}
+              {r.status === 'live' && <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-[rgb(var(--mg-red))]">In arena</span>}
+              {r.status === 'over' && <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-[rgb(var(--mg-ok))]">Over</span>}
+            </li>
+          ))}
+        </ul>
       )}
-    </div>
-  );
-}
-
-/** For a club's Team Manager: who trains the team, and what its bibs look like. */
-function ManageTeamBlock({ team, onSaved }: { team: Team; onSaved: () => void }) {
-  const [trainers, setTrainers] = useState<{ userId: string; fullName: string }[]>([]);
-  const [trainerId, setTrainerId] = useState(team.trainerUserId ?? '');
-  const [bibs, setBibs] = useState(team.bibDescription ?? '');
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    api.get<{ userId: string; fullName: string }[]>(`/clubs/${team.clubId}/trainers`)
-      .then((r) => setTrainers(r.data))
-      .catch(() => setTrainers([]));
-  }, [team.clubId]);
-
-  async function save() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await api.put(`/teams/${team.id}/trainer`, { trainerUserId: trainerId, bibDescription: bibs });
-      setMessage('Saved.');
-      onSaved();
-    } catch {
-      setMessage('Could not save. Check your connection and try again.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="border-t border-slate-100 dark:border-slate-700 pt-2 space-y-2">
-      <label className="block text-xs">
-        <span className="text-slate-500 dark:text-slate-300">Trainer</span>
-        <select className="input mt-1 text-sm" value={trainerId} onChange={(e) => setTrainerId(e.target.value)}>
-          <option value="">— no trainer yet —</option>
-          {trainers.map((tr) => <option key={tr.userId} value={tr.userId}>{tr.fullName}</option>)}
-        </select>
-      </label>
-      <label className="block text-xs">
-        <span className="text-slate-500 dark:text-slate-300">Bibs</span>
-        <input className="input mt-1 text-sm" maxLength={200} placeholder="e.g. Red bibs, numbered 1 to 5" value={bibs} onChange={(e) => setBibs(e.target.value)} />
-      </label>
-      <div className="flex items-center gap-2">
-        <button type="button" className="btn-primary !py-1.5 !px-3 text-xs" disabled={busy} onClick={save}>Save team details</button>
-        {message && <span role="status" className="text-xs text-slate-600 dark:text-slate-200">{message}</span>}
-      </div>
     </div>
   );
 }
