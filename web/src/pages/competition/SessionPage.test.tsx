@@ -255,7 +255,8 @@ describe('SessionPage', () => {
 
     it('sends the sitting-out team with no place when the race is saved', async () => {
       mount(sevenFour());
-      for (const name of ['Team 1', 'Team 2', 'Team 3']) await userEvent.click(await screen.findByText(name));
+      await screen.findByText('Team 1');
+      for (const [i, name] of ['Team 1', 'Team 2', 'Team 3'].entries()) await tapRider(name, i + 1);
       await userEvent.click(screen.getByRole('button', { name: 'Save 3 results' }));
       const outbox = JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]') as { places: { teamId: number; place: number; eliminated: boolean }[] }[];
       expect(outbox[0].places).toEqual([
@@ -277,7 +278,7 @@ describe('SessionPage', () => {
     it('only asks for the qualifying places, then eliminates anyone tapped after them', async () => {
       mount(round(1));
       expect(await screen.findByText(/Tap the first 2 teams home/)).toBeInTheDocument();
-      for (const name of ['Team 1', 'Team 2', 'Team 3']) await userEvent.click(screen.getByText(name));
+      for (const [i, name] of ['Team 1', 'Team 2', 'Team 3'].entries()) await tapRider(name, i + 1);
       expect(screen.getByText('ELIM')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Save 3 results' }));
       const outbox = JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]') as { places: { teamId: number; place: number; eliminated: boolean }[] }[];
