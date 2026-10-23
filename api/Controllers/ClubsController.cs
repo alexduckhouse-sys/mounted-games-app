@@ -28,7 +28,7 @@ public class ClubsController : ControllerBase
     }
 
     [HttpGet("{id:int}/saved-riders")]
-    [Authorize(Roles = Roles.TeamWork)]
+    [Authorize]
     public async Task<IEnumerable<SavedRiderDto>> SavedRiders(int id)
     {
         var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -36,7 +36,21 @@ public class ClubsController : ControllerBase
         var seesWholeClub = User.IsInRole(Roles.Admin) || await _db.SharesClubRosterAsync(User, id);
         return (await _db.SavedRiders
             .Where(r => r.ClubId == id && (seesWholeClub || (uid != null && r.CreatedByUserId == uid)))
-            .OrderBy(r => r.FullName).ToListAsync()).Select(r => r.ToDto());
+            .OrderBy(r => r.FullName).ThenBy(r => r.HorseName).ToListAsync()).Select(r => r.ToDto());
+    }
+
+    [HttpGet("my-saved-riders")]
+    [Authorize]
+    public async Task<IEnumerable<SavedRiderDto>> MySavedRiders()
+    {
+        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(uid)) return Array.Empty<SavedRiderDto>();
+        var clubId = await _db.ClubIdOfAsync(User);
+        var sharesClub = clubId.HasValue && (User.IsInRole(Roles.Admin) || await _db.SharesClubRosterAsync(User, clubId.Value));
+        return (await _db.SavedRiders
+            .Where(r => r.CreatedByUserId == uid || (sharesClub && r.ClubId == clubId))
+            .OrderBy(r => r.FullName).ThenBy(r => r.HorseName)
+            .ToListAsync()).Select(r => r.ToDto());
     }
 
     [HttpPost]

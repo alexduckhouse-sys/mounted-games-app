@@ -11,16 +11,57 @@ using MountedGames.Api.Services.DecForms;
 
 namespace MountedGames.Api.Controllers;
 
+public record DeclarationLockTimeDto(int CompetitionId, DateTime? DeclarationsCloseAt, bool IsClosed);
+public record SetDeclarationLockTimeRequest(DateTime? DeclarationsCloseAt);
+
 [ApiController]
 [Route("api/declaration-forms")]
 public class DeclarationFormsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly UserManager<AppUser> _users;
-    public DeclarationFormsController(AppDbContext db, UserManager<AppUser> users)
+    private readonly TimeProvider _clock;
+    public DeclarationFormsController(AppDbContext db, UserManager<AppUser> users, TimeProvider clock)
     {
         _db = db;
         _users = users;
+        _clock = clock;
+    }
+
+    private Task<DateTime?> GetDeclarationsCloseAtAsync(int competitionId) =>
+        _db.Set<CompetitionDeclarationLock>().AsNoTracking()
+            .Where(x => x.CompetitionId == competitionId).Select(x => x.DeclarationsCloseAt).SingleOrDefaultAsync();
+
+    private bool IsClosed(DateTime? closeAt) => closeAt.HasValue && _clock.GetUtcNow().UtcDateTime >= closeAt.Value;
+
+    [HttpGet("competition/{competitionId:int}/lock-time")]
+    public async Task<ActionResult<DeclarationLockTimeDto>> GetLockTime(int competitionId)
+    {
+        if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
+        var closeAt = await GetDeclarationsCloseAtAsync(competitionId);
+        return new DeclarationLockTimeDto(competitionId, closeAt, IsClosed(closeAt));
+    }
+
+    [HttpPut("competition/{competitionId:int}/lock-time")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<DeclarationLockTimeDto>> SetLockTime(int competitionId, SetDeclarationLockTimeRequest req)
+    {
+        if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
+        DateTime? closeAtUtc = req.DeclarationsCloseAt.HasValue
+            ? (req.DeclarationsCloseAt.Value.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(req.DeclarationsCloseAt.Value, DateTimeKind.Utc)
+                : req.DeclarationsCloseAt.Value.ToUniversalTime())
+            : null;
+        var settings = await _db.Set<CompetitionDeclarationLock>().FindAsync(competitionId);
+        if (settings is null)
+        {
+            settings = new CompetitionDeclarationLock { CompetitionId = competitionId };
+            _db.Add(settings);
+        }
+        settings.DeclarationsCloseAt = closeAtUtc;
+        await _db.SaveChangesAsync();
+        return new DeclarationLockTimeDto(competitionId, closeAtUtc, IsClosed(closeAtUtc));
     }
 
     [HttpGet]
@@ -127,11 +168,12 @@ public class DeclarationFormsController : ControllerBase
 
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var isAdmin = User.IsInRole(Roles.Admin);
+        var canManageCompetition = isAdmin || await _db.CanManageAsync(User, team.CompetitionId);
         // Only the team's own trainer, the Team Manager of its club, someone who organises its
         // competition, or a rider who entered this team/pair/individual entry may submit or overwrite a declaration.
         if (!isAdmin && !(userId is not null && team.TrainerUserId == userId)
             && !await _db.IsClubManagerAsync(User, team.ClubId)
-            && !await _db.CanManageAsync(User, team.CompetitionId)
+            && !canManageCompetition
             && !await HasTeamSignupAsync(userId, team))
             return Forbid();
 
@@ -159,6 +201,9 @@ public class DeclarationFormsController : ControllerBase
         var permittedSavedCount = await _db.SavedRiders.CountAsync(r => savedIds.Contains(r.Id)
             && r.ClubId == team.ClubId && (sharesRoster || (userId != null && r.CreatedByUserId == userId)));
         if (permittedSavedCount != savedIds.Length) return BadRequest(new { message = "A saved rider is not available to this account." });
+
+        if (!canManageCompetition && IsClosed(await GetDeclarationsCloseAtAsync(team.CompetitionId)))
+            return BadRequest(new { message = "Declarations have closed for this competition. Contact the organiser for changes." });
 
         // The coach's phone and the bib follow the setup too. A competition with no setup keeps the standard form, which refuses nothing new.
         var phoneText = req.TrainerPhone?.Trim();
@@ -246,33 +291,66 @@ public class DeclarationFormsController : ControllerBase
 
         if (req.SaveToRoster)
         {
-            foreach (var (r, kept) in req.Riders.Select((r, i) => (r, built[i])).Where(x => x.r.SavedRiderId is null && !x.r.IsGuestRider && !string.IsNullOrWhiteSpace(x.r.FullName)))
+            var clubRiders = await _db.SavedRiders
+                .Where(s => s.ClubId == team.ClubId && (sharesRoster || s.CreatedByUserId == userId))
+                .ToListAsync();
+            foreach (var (r, kept, index) in req.Riders.Select((r, i) => (r, built[i], i)).Where(x => !x.r.IsGuestRider && !string.IsNullOrWhiteSpace(x.r.FullName)))
             {
-                var existing = await _db.SavedRiders.FirstOrDefaultAsync(s =>
-                    s.ClubId == team.ClubId && s.FullName == r.FullName
-                    && (sharesRoster || s.CreatedByUserId == userId));
+                var fullName = r.FullName.Trim();
+                var horseName = string.IsNullOrWhiteSpace(r.HorseName) ? null : r.HorseName.Trim();
+
+                SavedRider? linked = null;
+                if (r.SavedRiderId.HasValue)
+                {
+                    linked = clubRiders.FirstOrDefault(s => s.Id == r.SavedRiderId.Value);
+                    var changedHorse = linked is not null
+                        && !string.IsNullOrWhiteSpace(linked.HorseName)
+                        && !string.IsNullOrWhiteSpace(horseName)
+                        && !string.Equals(linked.HorseName.Trim(), horseName, StringComparison.OrdinalIgnoreCase);
+                    if (!changedHorse) continue;
+                }
+
+                var rosterDob = kept.DateOfBirth ?? (config.Dob != FieldRequirement.Off && config.DobFormat == DobFormat.Full ? linked?.DateOfBirth : null);
+                var existing = clubRiders.FirstOrDefault(s =>
+                    string.Equals(s.FullName.Trim(), fullName, StringComparison.OrdinalIgnoreCase)
+                    && (string.Equals(
+                            string.IsNullOrWhiteSpace(s.HorseName) ? null : s.HorseName.Trim(),
+                            horseName,
+                            StringComparison.OrdinalIgnoreCase)
+                        || (r.SavedRiderId is null && string.IsNullOrWhiteSpace(s.HorseName))));
+
                 if (existing is null)
                 {
-                    _db.SavedRiders.Add(new SavedRider
+                    var added = new SavedRider
                     {
                         ClubId = team.ClubId,
                         CreatedByUserId = userId,
-                        FullName = r.FullName,
-                        DateOfBirth = kept.DateOfBirth,
-                        HorseName = r.HorseName,
+                        FullName = fullName,
+                        DateOfBirth = rosterDob,
+                        HorseName = horseName,
                         PonyHeightHands = kept.PonyHeightHands,
                         UseInitialOnly = r.UseInitialOnly,
                         NoFilming = r.NoFilming
-                    });
+                    };
+                    _db.SavedRiders.Add(added);
+                    clubRiders.Add(added);
+                    existing = added;
                 }
                 else
                 {
-                    existing.DateOfBirth ??= kept.DateOfBirth;
-                    existing.HorseName ??= r.HorseName;
+                    existing.DateOfBirth ??= rosterDob;
+                    existing.HorseName ??= horseName;
                     existing.PonyHeightHands ??= kept.PonyHeightHands;
                     existing.UseInitialOnly = r.UseInitialOnly;
                     existing.NoFilming = r.NoFilming;
                     existing.UpdatedAt = DateTime.UtcNow;
+                }
+                // Link a first saved entry, while retaining an explicitly selected rider's identity.
+                if (r.SavedRiderId is null)
+                {
+                    var submittedRider = form.Riders.ElementAt(index);
+                    submittedRider.SavedRiderId = existing.Id == 0 ? null : existing.Id;
+                    submittedRider.SavedRider = existing;
                 }
             }
         }
@@ -300,6 +378,10 @@ public class DeclarationFormsController : ControllerBase
                 || await HasTeamSignupAsync(userId, d.Team)));
         if (!canDelete)
             return Forbid();
+        var canManageCompetition = User.IsInRole(Roles.Admin)
+            || (d.Team is not null && await _db.CanManageAsync(User, d.Team.CompetitionId));
+        if (!canManageCompetition && d.Team is not null && IsClosed(await GetDeclarationsCloseAtAsync(d.Team.CompetitionId)))
+            return BadRequest(new { message = "Declarations have closed for this competition. Contact the organiser for changes." });
         _db.DeclarationForms.Remove(d);
         await _db.SaveChangesAsync();
         return NoContent();

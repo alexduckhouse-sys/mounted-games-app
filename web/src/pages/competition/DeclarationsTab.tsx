@@ -14,6 +14,20 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { parseConfigResponse, STANDARD_CONFIG, type DecFormConfig } from '../../lib/decFormConfig';
 
+interface LockTimeInfo {
+  competitionId: number;
+  declarationsCloseAt: string | null;
+  isClosed: boolean;
+}
+
+function toLocalDateTimeInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function readDraft(competitionId: number, teamId: number, required: number): DecFormDraft | null {
   try { return parseDraft(localStorage.getItem(decDraftKey(competitionId, teamId)), required); } catch { return null; }
 }
@@ -31,6 +45,49 @@ export function DeclarationsTab() {
   const [chosen, setChosen] = useState<number | null>(null);
   // What this competition's dec form asks. Null until it has come back; the standard form if it can't be fetched.
   const [config, setConfig] = useState<DecFormConfig | null>(null);
+
+  const [lockInfo, setLockInfo] = useState<LockTimeInfo | null>(null);
+  const [lockInput, setLockInput] = useState('');
+  const [lockBusy, setLockBusy] = useState(false);
+  const [lockError, setLockError] = useState('');
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const isOrganiser = hasRole('Admin') || canOrganise(competition);
+  const declarationsClosed = Boolean(lockInfo?.declarationsCloseAt && (lockInfo.isClosed || now >= new Date(lockInfo.declarationsCloseAt).getTime()));
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve(api.get<LockTimeInfo>(`/declaration-forms/competition/${competition.id}/lock-time`))
+      .then((r) => {
+        if (!cancelled && r?.data) {
+          setLockInfo(r.data);
+          setLockInput(toLocalDateTimeInput(r.data.declarationsCloseAt));
+        }
+      })
+      .catch(() => { if (!cancelled) setLockInfo(null); });
+    return () => { cancelled = true; };
+  }, [competition.id]);
+
+  async function updateLockTime(iso: string | null) {
+    setLockBusy(true);
+    setLockError('');
+    try {
+      const { data } = await api.put<LockTimeInfo>(
+        `/declaration-forms/competition/${competition.id}/lock-time`,
+        { declarationsCloseAt: iso },
+      );
+      setLockInfo(data);
+      setLockInput(toLocalDateTimeInput(data.declarationsCloseAt));
+    } catch {
+      setLockError('The deadline could not be saved. Please try again.');
+    } finally {
+      setLockBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!signupUserId) return;
@@ -152,7 +209,9 @@ export function DeclarationsTab() {
   const count = forms?.length ?? 0;
 
   const teamRail = desktop && user != null && myTeams.length > 1;
-  const editor = team && forms && config && (
+  const editor = declarationsClosed && !isOrganiser ? (
+    <p className="text-sm font-medium text-[rgb(var(--mg-muted))]">Declarations are locked for this competition.</p>
+  ) : team && forms && config && (
     <DecFormEditor key={team.id} competition={competition} team={team} existing={existing} draft={draft}
       priorPhone={priorPhone} onSaved={saved} config={config} />
   );
@@ -161,7 +220,7 @@ export function DeclarationsTab() {
       {forms?.length === 0 && (
         <div className="card p-3 text-xs text-[rgb(var(--mg-muted))]">No declaration forms submitted yet.</div>
       )}
-      {forms?.map((f) => <DecFormCard key={f.id} f={f} config={config ?? STANDARD_CONFIG} onDelete={() => remove(f.id)} canDelete={user != null && (hasRole('Admin') || canOrganise(competition) || f.submittedByUserId === user.id || myTeams.some((t) => t.id === f.teamId))} />)}
+      {forms?.map((f) => <DecFormCard key={f.id} f={f} config={config ?? STANDARD_CONFIG} onDelete={() => remove(f.id)} canDelete={isOrganiser || (!declarationsClosed && user != null && (f.submittedByUserId === user.id || myTeams.some((t) => t.id === f.teamId)))} />)}
     </div>
   );
   const rail = (
@@ -188,10 +247,66 @@ export function DeclarationsTab() {
     </div>
   );
 
+  const deadlineHeader = (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {isOrganiser ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs font-medium text-[rgb(var(--mg-body))]">
+              <span>Declaration deadline (set lock time)</span>
+              <input
+                type="datetime-local"
+                aria-label="Declaration deadline"
+                value={lockInput}
+                onChange={(e) => setLockInput(e.target.value)}
+                className="rounded border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-2.5 py-1.5 text-xs text-[rgb(var(--mg-ink))]"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={lockBusy || !lockInput}
+              onClick={() => void updateLockTime(lockInput ? new Date(lockInput).toISOString() : null)}
+              className="btn-ghost !px-3 !py-1.5 text-xs font-semibold"
+            >
+              Set lock time
+            </button>
+            {lockInfo?.declarationsCloseAt && (
+              <button
+                type="button"
+                disabled={lockBusy}
+                onClick={() => void updateLockTime(null)}
+                className="btn-ghost !px-3 !py-1.5 text-xs text-rose-600"
+              >
+                Clear lock time
+              </button>
+            )}
+          </div>
+        ) : <div />}
+        {exportButton}
+      </div>
+      {lockInfo?.declarationsCloseAt && (
+        <div role="status" className="mg-notice flex items-center justify-between gap-2 text-xs">
+          {declarationsClosed ? (
+            <span>
+              Declarations closed ({new Date(lockInfo.declarationsCloseAt).toLocaleString()}).
+              {!isOrganiser && ' Contact the organiser if you need an emergency change.'}
+            </span>
+          ) : (
+            <span>
+              Declaration deadline: {new Date(lockInfo.declarationsCloseAt).toLocaleString()}.
+            </span>
+          )}
+        </div>
+      )}
+
+      {lockError && <p role="alert" className="text-sm text-rose-600">{lockError}</p>}
+    </>
+  );
+
   if (teamRail) {
     return (
       <div className="flex flex-col gap-4 pt-4">
-        {exportButton}
+        {deadlineHeader}
         <PageGrid variant="left" aside={rail}>
           <div className="flex flex-col gap-4">{editor}{cards}</div>
         </PageGrid>
@@ -201,7 +316,8 @@ export function DeclarationsTab() {
 
   return (
     <div className="flex flex-col gap-4 pt-4">
-      {exportButton}
+      {deadlineHeader}
+
 
       {!user ? (
         <div className="mg-notice flex items-center gap-2.5">
@@ -209,6 +325,8 @@ export function DeclarationsTab() {
           <span className="flex-1">Sign in as a trainer to submit declaration forms for your teams.</span>
           <Link to="/login" className="mg-btn mg-btn-primary !min-h-11 !text-sm">Sign in</Link>
         </div>
+      ) : declarationsClosed && !isOrganiser ? (
+        <p className="text-sm font-medium text-[rgb(var(--mg-muted))]">Declarations are locked for this competition.</p>
       ) : myTeams.length === 0 ? (
         <p className="text-sm text-[rgb(var(--mg-muted))]">You have no teams in this competition.</p>
       ) : (

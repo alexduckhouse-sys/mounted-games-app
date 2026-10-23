@@ -32,7 +32,8 @@ public record UpdateTeamInput(
     bool? IsHorsConcours = null,
     string? BibDescription = null,
     string? Name = null,
-    string? DisplayName = null
+    string? DisplayName = null,
+    string? BibColour = null
 );
 
 [ApiController]
@@ -106,7 +107,7 @@ public class TeamsController : ControllerBase
             ClubId = club.Id,
             Suffix = suffix,
             DisplayName = display,
-            BibColour = req.BibColour ?? club.BibColour,
+            BibColour = string.IsNullOrWhiteSpace(req.BibColour) ? club.BibColour : req.BibColour.Trim(),
             TrainerUserId = trainerUserId,
             IsHorsConcours = req.IsHorsConcours,
             BibDescription = string.IsNullOrWhiteSpace(req.BibDescription) ? null : req.BibDescription.Trim(),
@@ -141,6 +142,8 @@ public class TeamsController : ControllerBase
             t.DisplayName = $"{t.Club?.Name ?? string.Empty} {t.Suffix}".Trim();
         }
         if (req.IsHorsConcours.HasValue) t.IsHorsConcours = req.IsHorsConcours.Value;
+        if (req.BibColour is not null)
+            t.BibColour = string.IsNullOrWhiteSpace(req.BibColour) ? t.Club?.BibColour : req.BibColour.Trim();
         var problem = await ApplyTrainerAndBibAsync(t, req.TrainerUserId, req.BibDescription);
         if (problem is not null) return problem;
         await _db.SaveChangesAsync();
@@ -326,9 +329,10 @@ public class TeamsController : ControllerBase
         var key = req.Key?.Trim();
         if (string.IsNullOrEmpty(key)) return BadRequest(new { message = "Join key required." });
 
+        var keyUpper = key.ToUpperInvariant();
         var team = await _db.Teams
             .Include(t => t.Competition).Include(t => t.Trainer)
-            .FirstOrDefaultAsync(t => t.SupporterJoinKey == key);
+            .FirstOrDefaultAsync(t => t.SupporterJoinKey != null && t.SupporterJoinKey.ToUpper() == keyUpper);
         if (team is null) return NotFound(new { message = "No team matches that key. Double-check with the trainer." });
 
         // Don't let the team's own trainer request to "support" their own team.

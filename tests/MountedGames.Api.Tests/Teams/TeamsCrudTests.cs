@@ -26,6 +26,22 @@ public class TeamsCrudTests : IClassFixture<ApiFactory>
         competitionSectionId = section, clubId = club, suffix, bibColour = bib, trainerUserId = trainer, isHorsConcours = horsConcours,
     };
 
+    [Fact]
+    public async Task BibColour_WhitespaceUsesClubDefault_UpdateOverrideAndResetWork()
+    {
+        var (comp, section, club) = await ArrangeAsync(clubBib: "Green");
+        var admin = await _f.AdminAsync();
+        var team = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/teams", NewTeam(section, club, bib: "  "))).ReadAsync<TeamDto>();
+        Assert.Equal("Green", team.BibColour);
+        var route = $"/api/competitions/{comp}/teams/{team.Id}";
+        var changed = await (await admin.PutAsJsonAsync(route, new { bibColour = "  Blue  " })).ReadAsync<TeamDto>();
+        Assert.Equal("Blue", changed.BibColour);
+        var untouched = await (await admin.PutAsJsonAsync(route, new { name = "Synthetic Bib Team" })).ReadAsync<TeamDto>();
+        Assert.Equal("Blue", untouched.BibColour);
+        var reset = await (await admin.PutAsJsonAsync(route, new { bibColour = " " })).ReadAsync<TeamDto>();
+        Assert.Equal("Green", reset.BibColour);
+    }
+
     // ---- list ----
 
     [Fact]
