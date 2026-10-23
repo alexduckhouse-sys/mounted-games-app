@@ -10,6 +10,7 @@ import { competitionDateText } from '../../lib/competitionDates';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
+import { ScorerLinksCard } from './ScorerLinksCard';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
 import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
@@ -188,6 +189,9 @@ export function DetailsTab() {
       {/* The owner, competition admins and site admins see who runs the event and can change it (site admins in Edit mode). */}
       {user && (mayOrganise || hasRole('Admin')) && (
         <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
+      )}
+      {user && (mayOrganise || hasRole('Admin')) && (
+        <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
       )}
 
       {/* Signup by section: signed-in users only; the public can't enter. */}

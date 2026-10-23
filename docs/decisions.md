@@ -51,6 +51,15 @@
 - Supersedes: "Existing admin-only scoring, timetable and moderation operations remain admin-only" in the 15 October entry, apart from moderation.
 - Files: `api/Auth/CompetitionStaffPolicy.cs`, `api/Auth/CompetitionAccessAttribute.cs`, `api/Controllers/CompetitionTeamController.cs`, `ScoringController`, `SessionsController`, `CompetitionsController`.
 
+## 2026-10-22: Scorer links for volunteers without accounts
+- Why: a volunteer scorer shouldn't need an account (or the shared admin key) to score one arena for a day. Accounts stay for people who run the event; links are the narrower, throwaway option decided in `docs/competitive-gaps.md` point 1.
+- Rule: anyone who can run a competition (owner, competition admin, site admin) makes a link for one arena with the scorer's name. The link can enter or replace scores for heats in that competition and arena, and read that arena's timetable. Nothing else: no clock, sign-off, reopen, timetable, finals, teams, entries, chat or private data. Anything outside its arena is 404.
+- The token is 256 random bits, kept in the URL fragment (`/score#t=…`, so it stays out of server logs and Referer headers) and sent in `X-Scorer-Token`. Only its SHA-256 hash is stored; it's shown once and never logged or returned again. Unknown 404, expired or revoked 410, missing 401, repeated unknown tokens from one address 429.
+- Expiry: the end of the day after the competition's end date by default (an event running late still works); the organiser may choose earlier, not later. Revoking is immediate. Every score the link enters is recorded as "Scorer link: {name}" in the score history (`RaceScoreEvent.ActorLabel`).
+- Rejected: a short PIN (guessable, so it would need rate limits doing the work of entropy); putting the token in the path or query (logged and sent as Referer); a link that can start and stop the clock (the clock is a staff action).
+- Migration: `AddScorerLinks` adds the `ScorerLinks` table and `RaceScoreEvent.ActorLabel`; additive only.
+- Files: `api/Entities/ScorerLink.cs`, `api/Auth/ScorerLinkAccess.cs`, `api/Controllers/ScorerLinksController.cs`, `api/Controllers/ScorerController.cs`, `web/src/pages/ScorerPage.tsx`, `web/src/pages/competition/ScorerLinksCard.tsx`, `web/src/offline/scorerLink.ts`.
+
 ## 2026-10-22: One competition admin role instead of helper jobs
 - Why: the user wants helpers to "do whatever they need to", not to be split into scorers, line judges and so on.
 - Rule: everyone on a competition's team is a competition admin, with everything the owner has for that event: day-of running, entrant sign-ups and declarations, the event shop (listing approval, manual payments and refunds), CSV team import, saved overlay looks, and adding or removing other competition admins. Nobody can remove the owner. The access check lives in `CompetitionManagers` and is shared by `[CompetitionAccess]`, commerce and event tools.

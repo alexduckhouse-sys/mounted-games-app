@@ -251,7 +251,7 @@ public class ScoringController : ControllerBase
         return tapped > utcNow || tapped < utcNow.AddMinutes(-10) ? utcNow : tapped;
     }
 
-    private static bool IsScoringConcurrency(Exception exception)
+    internal static bool IsScoringConcurrency(Exception exception)
     {
         if (exception is DbUpdateConcurrencyException) return true;
         if (exception is PostgresException postgres)

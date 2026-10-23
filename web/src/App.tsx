@@ -54,6 +54,7 @@ const SeasonPage = lazy(() => import('./pages/seasons/SeasonPage').then((module)
 const TeamProfilePage = lazy(() => import('./pages/seasons/TeamProfilePage'));
 const EventToolsPage = lazy(() => import('./pages/eventTools/EventToolsPage'));
 const PrintEventPage = lazy(() => import('./pages/eventTools/PrintEventPage'));
+const ScorerPage = lazy(() => import('./pages/ScorerPage').then((module) => ({ default: module.ScorerPage })));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then((module) => ({ default: module.PrivacyPage })));
 const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({ default: module.AccountPage })));
 const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymentPage').then((module) => ({ default: module.TestEntryPaymentPage })));
@@ -79,6 +80,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignUpPage />} />
+            <Route path="/score" element={<ScorerPage />} />
             <Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} />
             <Route element={<AppShell />}>
               <Route index element={<StartPage />} />

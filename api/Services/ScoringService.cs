@@ -56,25 +56,25 @@ public class ScoringService
 
     public Task<RaceScoreDto> ApplyVersionedAsync(
         int raceId, UpdateRaceScoreRequest request, string? actorUserId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? actorLabel = null)
     {
         if (request.Places is null)
             throw new ScoreValidationException("Places are required.");
         return ApplyCoreAsync(raceId,
             request.Places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated)).ToList(),
             actorUserId, request.ExpectedRevision, null, request.RequestId, request.Reason,
-            strictValidation: true, cancellationToken);
+            strictValidation: true, cancellationToken, actorLabel);
     }
 
     public Task<RaceScoreDto> ApplyLegacyAsync(
         int raceId, IReadOnlyList<FinishingPlaceDto> places,
         IReadOnlyList<FinishingPlaceDto>? expected, string? actorUserId, string? reason = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? actorLabel = null)
         => ApplyCoreAsync(raceId,
             places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated)).ToList(),
             actorUserId, null,
             expected?.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated)).ToList(),
-            $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken);
+            $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, actorLabel);
 
     public async Task<RaceScoreDto> GetAsync(int raceId, CancellationToken cancellationToken = default)
     {
@@ -96,7 +96,7 @@ public class ScoringService
         var events = await _db.Set<RaceScoreEvent>().AsNoTracking()
             .Where(e => e.RaceId == raceId).OrderBy(e => e.Revision).ToListAsync(cancellationToken);
         return events.Select(e => new RaceScoreHistoryDto(e.Revision, e.Kind,
-            Deserialize(e.BeforeJson), Deserialize(e.AfterJson), e.ActorUserId, e.Reason, e.CreatedAt)).ToList();
+            Deserialize(e.BeforeJson), Deserialize(e.AfterJson), e.ActorUserId, e.Reason, e.CreatedAt, e.ActorLabel)).ToList();
     }
 
     public Task<RaceScoreDto> SignOffAsync(
@@ -159,7 +159,7 @@ public class ScoringService
         int raceId, IReadOnlyList<FinishingPlace> finishingPlaces, string? actorUserId,
         int? expectedRevision, IReadOnlyList<FinishingPlace>? expectedResults,
         string requestId, string? reason, bool strictValidation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? actorLabel = null)
     {
         ValidateRequest(finishingPlaces, requestId, strictValidation);
         if (reason?.Trim().Length > 1000)
@@ -244,6 +244,7 @@ public class ScoringService
             BeforeJson = JsonSerializer.Serialize(current, Json),
             AfterJson = JsonSerializer.Serialize(after, Json),
             ActorUserId = actorUserId,
+            ActorLabel = actorLabel,
             Reason = string.IsNullOrWhiteSpace(reason) ? "Initial results recorded." : reason.Trim(),
             RequestId = requestId,
             PayloadFingerprint = payloadFingerprint,
