@@ -229,8 +229,8 @@ public class SponsorsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.OK, served.StatusCode);
         Assert.Equal(type, served.Content.Headers.ContentType!.MediaType);
         Assert.Equal(bytes, await served.Content.ReadAsByteArrayAsync());
-        Assert.Contains("immutable", served.Headers.CacheControl!.ToString());
-        Assert.Contains("public", served.Headers.CacheControl.ToString());
+        Assert.Contains("public", served.Headers.CacheControl!.ToString());
+        Assert.Contains("max-age=600", served.Headers.CacheControl.ToString());
     }
 
     public static IEnumerable<object[]> GoodLogos() =>
@@ -320,6 +320,46 @@ public class SponsorsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Null(listed[1].LogoUrl);
         // The organiser still sees everything.
         Assert.Equal(8, (await (await owner.GetAsync(Url(comp, "/manage"))).ReadAsync<List<SponsorAdminDto>>()).Count);
+    }
+
+    [Fact]
+    public async Task ALogoIsServedToThePublicOnlyWhileTheSponsorIsOnShow()
+    {
+        var (comp, owner) = await OwnedCompetitionAsync();
+        var (other, _) = await _f.ApprovedTrainerAsync();
+        var now = DateTime.UtcNow;
+        var anon = _f.CreateClient();
+        async Task<SponsorAdminDto> WithLogo(object body)
+        {
+            var sponsor = await AddAsync(owner, comp, body);
+            await PutLogoAsync(owner, comp, sponsor.Id, Png);
+            return sponsor;
+        }
+        var live = await WithLogo(Body(name: "Live"));
+        var off = await WithLogo(Body(name: "Off", enabled: false));
+        var later = await WithLogo(Body(name: "Later", starts: now.AddDays(1)));
+        var over = await WithLogo(Body(name: "Over", ends: now.AddDays(-1)));
+        var inDates = await WithLogo(Body(name: "In dates", starts: now.AddDays(-1), ends: now.AddDays(1)));
+
+        Task<HttpResponseMessage> Fetch(HttpClient client, SponsorAdminDto s) => client.GetAsync(Url(comp, $"/{s.Id}/logo?v=1"));
+        foreach (var shown in new[] { live, inDates })
+            Assert.Equal(HttpStatusCode.OK, (await Fetch(anon, shown)).StatusCode);
+        foreach (var hidden in new[] { off, later, over })
+        {
+            Assert.Equal(HttpStatusCode.NotFound, (await Fetch(anon, hidden)).StatusCode);
+            // Signed in, but not on this competition's staff.
+            Assert.Equal(HttpStatusCode.NotFound, (await Fetch(other, hidden)).StatusCode);
+            // The organiser's list still shows it.
+            var staff = await Fetch(owner, hidden);
+            Assert.Equal(HttpStatusCode.OK, staff.StatusCode);
+            Assert.Equal(Png, await staff.Content.ReadAsByteArrayAsync());
+            Assert.DoesNotContain("public", staff.Headers.CacheControl!.ToString());
+            Assert.Equal(HttpStatusCode.OK, (await Fetch(await _f.AdminAsync(), hidden)).StatusCode);
+        }
+
+        // Switching a sponsor off takes its logo away from the public at once.
+        await owner.PutAsJsonAsync(Url(comp, $"/{live.Id}"), Body(name: "Live", enabled: false));
+        Assert.Equal(HttpStatusCode.NotFound, (await Fetch(anon, live)).StatusCode);
     }
 
     [Fact]

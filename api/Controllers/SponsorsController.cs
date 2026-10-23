@@ -40,14 +40,28 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
             s.HasLogo ? $"/api/competitions/{s.CompetitionId}/sponsors/{s.Id}/logo?v={s.LogoVersion}" : null, s.Tier, s.SortOrder, s.ShowOn)).ToList();
     }
 
+    /// <summary>
+    /// A logo. The public gets it only while the sponsor is on show (enabled and inside its dates); the competition's
+    /// staff can also fetch it when it isn't, for the organiser's list.
+    /// </summary>
     [HttpGet("{sponsorId:int}/logo")]
     public async Task<IActionResult> Logo(int competitionId, int sponsorId)
     {
         var logo = await db.Sponsors.AsNoTracking().Where(s => s.Id == sponsorId && s.CompetitionId == competitionId)
-            .Select(s => new { s.LogoBytes, s.LogoContentType }).FirstOrDefaultAsync();
+            .Select(s => new { s.LogoBytes, s.LogoContentType, s.IsEnabled, s.StartsAt, s.EndsAt }).FirstOrDefaultAsync();
         if (logo?.LogoBytes is null || logo.LogoContentType is null) return NotFound();
-        // The address carries the logo's version, so a changed logo is a new address and this one may be kept for good.
-        Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        var now = time.GetUtcNow().UtcDateTime;
+        var onShow = logo.IsEnabled && (logo.StartsAt == null || logo.StartsAt <= now) && (logo.EndsAt == null || logo.EndsAt > now);
+        if (!onShow)
+        {
+            var staff = User.Identity?.IsAuthenticated == true && await db.Manageable(User).AnyAsync(c => c.Id == competitionId);
+            if (!staff) return NotFound();
+            // Private to the organiser: not for shared caches, and not kept for a year.
+            Response.Headers.CacheControl = "private, no-cache";
+            return File(logo.LogoBytes, logo.LogoContentType);
+        }
+        // Short, so a sponsor that is switched off or runs out of dates soon stops being served from caches.
+        Response.Headers.CacheControl = "public, max-age=600";
         return File(logo.LogoBytes, logo.LogoContentType);
     }
 

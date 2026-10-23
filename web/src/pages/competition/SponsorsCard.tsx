@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, Pencil, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { useCompetition } from './context';
-import { LazyImage } from '../../components/LazyImage';
+import { ImageDown } from 'lucide-react';
+import { useLiteMode } from '../../lite/LiteModeContext';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { apiMessage } from '../operations/types';
 import { LogoError, prepareLogo } from './sponsorLogo';
 import type { SponsorAdmin, SponsorTier } from '../../types';
 import {
-  SPONSOR_PLACEMENTS, SPONSOR_TIERS, dateToEnd, dateToStart, datesText, endToDate, hasPlacement, isHttpsLink, logoSrc,
+  SPONSOR_PLACEMENTS, SPONSOR_TIERS, dateToEnd, dateToStart, datesText, endToDate, hasPlacement, isHttpsLink,
   parseSponsorAdmin, parseSponsorAdmins, shownText, startToDate, withPlacement,
 } from '../../lib/sponsors';
 
@@ -33,6 +34,41 @@ const draftOf = (s: SponsorAdmin): Draft => ({
   id: s.id, name: s.name, linkUrl: s.linkUrl ?? '', tier: s.tier, showOn: s.showOn, isEnabled: s.isEnabled,
   startDate: startToDate(s.startsAt), endDate: endToDate(s.endsAt), logo: null, hadLogo: s.logoUrl !== null,
 });
+
+/**
+ * A sponsor's logo for the organiser's list. It is fetched with the organiser's sign-in, because a sponsor that is switched
+ * off or out of dates is not served to the public. In lite mode it waits for a tap, like every picture.
+ */
+function OrganiserLogo({ sponsor }: { sponsor: SponsorAdmin }) {
+  const { lite } = useLiteMode();
+  const [asked, setAsked] = useState(false);
+  const [loaded, setLoaded] = useState<{ path: string; url: string } | null>(null);
+  const path = sponsor.logoUrl;
+  const wanted = path !== null && (!lite || asked);
+
+  useEffect(() => {
+    if (!wanted || path === null) return;
+    let url: string | null = null;
+    let cancelled = false;
+    // The API's own address is already the client's base, so only the part after /api is passed.
+    api.get<Blob>(path.replace(/^\/api/, ''), { responseType: 'blob' })
+      .then(({ data }) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(data);
+        setLoaded({ path, url });
+      })
+      .catch(() => { /* the placeholder stays */ });
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
+  }, [wanted, path]);
+
+  if (path === null) return <span aria-hidden="true" className="mg-sponsor-logo flex items-center justify-center text-xs text-[rgb(var(--mg-muted))]">No logo</span>;
+  if (lite && !asked) {
+    return <button type="button" className="mg-sponsor-logo mg-tap-image mg-tap-image--compact" aria-label={`Load image: ${sponsor.name} logo`} onClick={() => setAsked(true)}><ImageDown aria-hidden="true" /></button>;
+  }
+  return loaded?.path === path
+    ? <img src={loaded.url} alt={`${sponsor.name} logo`} className="mg-sponsor-logo" />
+    : <span aria-hidden="true" className="mg-sponsor-logo flex items-center justify-center text-xs text-[rgb(var(--mg-muted))]">…</span>;
+}
 
 type ListState = { competitionId: number; items: SponsorAdmin[] } | 'error' | null;
 
@@ -165,9 +201,7 @@ export function SponsorsCard({ competitionId }: { competitionId: number }) {
               {items.map((sponsor, index) => (
                 <li key={sponsor.id} className="flex flex-col gap-2 p-3">
                   <div className="flex items-center gap-3">
-                    {sponsor.logoUrl
-                      ? <LazyImage src={logoSrc(sponsor.logoUrl, import.meta.env.VITE_API_BASE)} alt={`${sponsor.name} logo`} compact className="mg-sponsor-logo" />
-                      : <span aria-hidden="true" className="mg-sponsor-logo flex items-center justify-center text-xs text-[rgb(var(--mg-muted))]">No logo</span>}
+                    <OrganiserLogo sponsor={sponsor} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold">{sponsor.name}</span>
                       <span className="mg-meta block">

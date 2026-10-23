@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { competition } from '../../test/factories';
+import { liteWrapper } from '../../test/lite';
 import { dateToEnd, dateToStart } from '../../lib/sponsors';
 import { CompetitionContext } from './context';
 import { SponsorsCard } from './SponsorsCard';
@@ -23,6 +24,8 @@ const show = () => render(
 const serve = (...items: unknown[]) => vi.mocked(api.get).mockResolvedValue({ data: items });
 
 beforeEach(() => {
+  let blobs = 0;
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => `blob:logo-${++blobs}`), revokeObjectURL: vi.fn() }));
   serve(wire(1, { name: 'Acme Feeds', tier: 0, views: 1234, seconds: 600, logoUrl: '/api/competitions/5/sponsors/1/logo?v=1' }), wire(2, { name: 'Bridle Bros', isEnabled: false }));
 });
 
@@ -38,7 +41,9 @@ describe('SponsorsCard', () => {
     expect(first).toHaveTextContent('Shown 1,234 times · 10 min on video');
     expect(second).toHaveTextContent('Bridle Bros');
     expect(second).toHaveTextContent('Hidden');
-    expect(within(first).getByRole('img', { name: 'Acme Feeds logo' })).toHaveAttribute('src', '/api/competitions/5/sponsors/1/logo?v=1');
+    expect(api.get).toHaveBeenCalledWith('/competitions/5/sponsors/1/logo?v=1', { responseType: 'blob' });
+    expect(await within(first).findByRole('img', { name: 'Acme Feeds logo' })).toHaveAttribute('src', 'blob:logo-1');
+    expect(within(second).getByText('No logo')).toBeInTheDocument();
   });
 
   it('says so when there are none, and offers to try again when loading fails', async () => {
@@ -201,5 +206,44 @@ describe('SponsorsCard', () => {
     await user.click(screen.getByRole('button', { name: 'Delete Bridle Bros' }));
     expect(await screen.findByText('Couldn’t delete Bridle Bros. Try again.')).toBeInTheDocument();
     expect(within(screen.getByRole('list', { name: 'Sponsors' })).getAllByRole('listitem')).toHaveLength(2);
+  });
+});
+
+describe('the logos in the organiser’s list', () => {
+  const inContext = (Wrapper: ReturnType<typeof liteWrapper>) => render(
+    <Wrapper>
+      <CompetitionContext.Provider value={{ competition: competition({ id: 5 }), reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [], reloadSponsors }}>
+        <SponsorsCard competitionId={5} />
+      </CompetitionContext.Provider>
+    </Wrapper>,
+  );
+
+  it('wait for a tap in lite mode, then load with the organiser’s sign-in', async () => {
+    const user = userEvent.setup();
+    inContext(liteWrapper('on'));
+    await screen.findByRole('list', { name: 'Sponsors' });
+    expect(vi.mocked(api.get).mock.calls.some(([url]) => String(url).includes('/logo'))).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Load image: Acme Feeds logo' }));
+    expect(await screen.findByRole('img', { name: 'Acme Feeds logo' })).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith('/competitions/5/sponsors/1/logo?v=1', { responseType: 'blob' });
+  });
+
+  it('keep the placeholder if the logo cannot be fetched, and give the picture back when leaving', async () => {
+    const real = vi.mocked(api.get).getMockImplementation();
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.includes('/logo')) throw new Error('no signal');
+      return { data: [wire(1, { name: 'Acme Feeds', logoUrl: '/api/competitions/5/sponsors/1/logo?v=1' })] };
+    });
+    const failed = inContext(liteWrapper('off'));
+    await screen.findByRole('list', { name: 'Sponsors' });
+    expect(screen.queryByRole('img')).toBeNull();
+    failed.unmount();
+
+    vi.mocked(api.get).mockImplementation(real ?? (async () => ({ data: [wire(1, { logoUrl: '/api/competitions/5/sponsors/1/logo?v=1' })] })));
+    serve(wire(1, { logoUrl: '/api/competitions/5/sponsors/1/logo?v=1' }));
+    const shown = inContext(liteWrapper('off'));
+    await screen.findByRole('img');
+    shown.unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalled();
   });
 });
