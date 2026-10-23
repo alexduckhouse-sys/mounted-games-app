@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2 } from 'lucide-react';
 import { api } from '../../api';
 import type { CompetitionSection, TieBreakRule } from '../../types';
 import { cutLabel, move, TIE_BREAK_RULES, tieStatus, TieSettlement, type BoundaryTie, type FinalsBoundary } from '../../lib/tieBreak';
+import { SelectField } from '../../components/SelectField';
 
 function message(error: unknown, fallback: string) {
   const data = (error as { response?: { data?: string | { message?: string } } })?.response?.data;
@@ -49,10 +50,10 @@ export function FinalsTiePanel({ competitionId, section, rule, onRuleChange, bou
   return <div className="space-y-2">
     {section && <label className="block">
       <span className="text-xs font-semibold">Teams level on points</span>
-      <select className="input mt-1 text-sm" value={rule} disabled={busy}
+      <SelectField className="input mt-1 text-sm" value={rule} disabled={busy}
         onChange={(event) => changeRule(Number(event.target.value) as TieBreakRule)}>
         {TIE_BREAK_RULES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-      </select>
+      </SelectField>
       <span className="text-[11px] text-slate-500 dark:text-slate-300">{TIE_BREAK_RULES.find((r) => r.value === rule)?.hint}</span>
     </label>}
     {ties.map((tie) => <TieCard key={`${tie.cutoff}:${tie.settledBy}:${tie.teams.map((t) => t.id).join(',')}`} tie={tie} competitionId={competitionId} canOrder={section !== null}

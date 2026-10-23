@@ -2,6 +2,8 @@ import { Fragment } from 'react';
 import { RefineDisclosure, RefineList, RefineNote, RefineSection, RefineStatus } from '../refine/Refine';
 import type { DrawPreview } from './types';
 import { plural } from './readiness';
+import { SelectField } from '../../components/SelectField';
+import { NumberField } from '../../components/NumberField';
 
 interface SectionOption { id: number; displayName: string }
 
@@ -18,12 +20,12 @@ export function DrawSettingsForm({ sections, sectionId, seed, previewing, onSect
   return (
     <div className="ops-form">
       <label className="rf-fld">Section
-        <select value={sectionId ?? ''} onChange={(event) => onSection(Number(event.target.value))}>
+        <SelectField value={sectionId ?? ''} onChange={(event) => onSection(Number(event.target.value))}>
           {sections.map((section) => <option key={section.id} value={section.id}>{section.displayName}</option>)}
-        </select>
+        </SelectField>
       </label>
       <label className="rf-fld">Draw number
-        <input type="number" step="1" value={seed} onChange={(event) => onSeed(event.target.value)} />
+        <NumberField allowNegative  step="1" value={seed} onChange={(event) => onSeed(event.target.value)} />
       </label>
       <RefineNote>The same number gives the same draw. Change it to try a different arrangement.</RefineNote>
       <button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={onPreview} disabled={previewing || sectionId == null}>

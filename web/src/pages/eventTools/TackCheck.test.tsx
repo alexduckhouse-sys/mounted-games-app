@@ -7,6 +7,7 @@ import type { TackCheckBoard, TackCheckSection } from '../../types';
 import PrintEventPage from './PrintEventPage';
 import { TackCheckTab } from './TackCheckTab';
 import type { PrintableTackCheck } from './TackCheckPrint';
+import { chooseOption } from '../../test/select';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn() } }));
 
@@ -94,8 +95,8 @@ describe('tack check tab', () => {
     expect(screen.getByRole('form', { name: 'Team 2' })).toHaveTextContent('(HC, withdrawn)');
     const save = within(form).getByRole('button', { name: 'Save Team 1' });
     expect(save).toBeDisabled();
-    await userEvent.selectOptions(within(form).getByLabelText('Bit'), 'pass');
-    await userEvent.selectOptions(within(form).getByLabelText('Boots'), 'fail');
+    chooseOption(within(form).getByLabelText('Bit'), 'pass');
+    chooseOption(within(form).getByLabelText('Boots'), 'fail');
     await userEvent.click(save);
 
     await waitFor(() => expect(put).toHaveBeenCalledWith('/event-tools/competitions/12/tack-check/sections/5/teams/1', {
@@ -126,7 +127,7 @@ describe('tack check tab', () => {
     get.mockResolvedValueOnce({ data: board(section(), section({ sectionId: 6, sectionName: 'Open', teams: [] })) });
     renderTab();
 
-    await userEvent.selectOptions(await screen.findByLabelText('Age group'), '6');
+    chooseOption(await screen.findByLabelText('Age group'), '6');
     expect(screen.getByLabelText('Run a tack check for Open')).toBeInTheDocument();
     expect(screen.getByText('No teams in this age group yet.')).toBeInTheDocument();
   });

@@ -13,6 +13,7 @@ import { DashboardPage } from './DashboardPage';
 import { DeclarationsIndexPage } from './DeclarationsIndexPage';
 import { FormatPage } from './admin/FormatPage';
 import { ShopPage } from './ShopPage';
+import { chooseOption, selectedValue } from '../test/select';
 
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 
@@ -150,29 +151,29 @@ describe('TeamsTab new team form', () => {
   it('opens on the first section and the trainer\'s own club', async () => {
     mount();
     await userEvent.click(screen.getByRole('button', { name: /Add custom team/ }));
-    await waitFor(() => expect(screen.getByLabelText(/Club/)).toHaveValue('3'));
-    expect(screen.getByLabelText(/Section/)).toHaveValue('5');
+    await waitFor(() => expect(selectedValue(screen.getByLabelText(/Club/))).toBe('3'));
+    expect(selectedValue(screen.getByLabelText(/Section/))).toBe('5');
   });
 
   it('keeps a different club and section once picked', async () => {
     mount();
     await userEvent.click(screen.getByRole('button', { name: /Add custom team/ }));
-    await waitFor(() => expect(screen.getByLabelText(/Club/)).toHaveValue('3'));
-    await userEvent.selectOptions(screen.getByLabelText(/Club/), '4');
-    await userEvent.selectOptions(screen.getByLabelText(/Section/), '6');
-    expect(screen.getByLabelText(/Club/)).toHaveValue('4');
-    expect(screen.getByLabelText(/Section/)).toHaveValue('6');
+    await waitFor(() => expect(selectedValue(screen.getByLabelText(/Club/))).toBe('3'));
+    chooseOption(screen.getByLabelText(/Club/), '4');
+    chooseOption(screen.getByLabelText(/Section/), '6');
+    expect(selectedValue(screen.getByLabelText(/Club/))).toBe('4');
+    expect(selectedValue(screen.getByLabelText(/Section/))).toBe('6');
   });
 
   it('creates the team with the defaults and resets the form', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     mount();
     await userEvent.click(screen.getByRole('button', { name: /Add custom team/ }));
-    await waitFor(() => expect(screen.getByLabelText(/Club/)).toHaveValue('3'));
+    await waitFor(() => expect(selectedValue(screen.getByLabelText(/Club/))).toBe('3'));
     await userEvent.click(screen.getByRole('button', { name: 'Create team' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/teams', expect.objectContaining({ competitionSectionId: 5, clubId: 3, suffix: 'A' })));
     await userEvent.click(screen.getByRole('button', { name: /Add custom team/ }));
-    await waitFor(() => expect(screen.getByLabelText(/Club/)).toHaveValue('3'));
+    await waitFor(() => expect(selectedValue(screen.getByLabelText(/Club/))).toBe('3'));
   });
 });
 

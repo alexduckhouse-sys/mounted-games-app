@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import { parseLook, type OverlayLook } from '../../lib/overlays';
+import { SelectField } from '../../components/SelectField';
 
 interface SavedLook { id: number; name: string; look: OverlayLook; mine: boolean }
 
@@ -58,10 +59,10 @@ export function SavedLooks({ current, onApply, onError }: { current: OverlayLook
     <div className="flex flex-col gap-2 rounded-lg border p-3 text-sm" role="group" aria-label="Reusable looks">
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2">Saved looks
-          <select value={selected ?? ''} onChange={(event) => setSelected(event.target.value ? Number(event.target.value) : null)}>
+          <SelectField value={selected ?? ''} onChange={(event) => setSelected(event.target.value ? Number(event.target.value) : null)}>
             <option value="">{looks.length ? 'Choose a look' : 'None saved yet'}</option>
             {looks.map((l) => <option key={l.id} value={l.id}>{l.name}{l.mine ? '' : ' (shared)'}</option>)}
-          </select>
+          </SelectField>
         </label>
         <button type="button" className="mg-btn mg-btn-secondary !min-h-9" disabled={!chosen} onClick={() => chosen && onApply(chosen.look)}>Use for this event</button>
         <button type="button" className="mg-btn mg-btn-secondary !min-h-9" disabled={!chosen || busy} onClick={() => void update()}>Update saved look</button>

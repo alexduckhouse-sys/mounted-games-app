@@ -8,6 +8,8 @@ import type { RaceScore, RaceScoreEventKind, RaceScoreHistory, ScorePlace } from
 import { apiMessage } from './types';
 import { STATUS_CHOICES, effectiveStatus, statusLetter } from '../../lib/resultStatus';
 import './operations.css';
+import { SelectField } from '../../components/SelectField';
+import { NumberField } from '../../components/NumberField';
 
 export function ScoreAuditPanel(props: { raceId: number; onChanged?: () => void }) {
   const { user } = useAuth();
@@ -149,9 +151,9 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
                   <ul className="ops-places">{draft.map((result, index) => (
                     <li key={result.teamId} className="ops-place">
                       <span className="rf-grow"><span className="rf-t1">Team {result.teamId}</span><span className="rf-t2">Points now {result.points}</span></span>
-                      <label className="rf-fld ops-place-field">Place<input aria-label={`Place for team ${result.teamId}`} type="number" min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
+                      <label className="rf-fld ops-place-field">Place<NumberField aria-label={`Place for team ${result.teamId}`}  min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
                       <label className="ops-elim"><input aria-label={`Eliminated team ${result.teamId}`} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked, status: event.target.checked ? effectiveStatus(true, item.status) : 0 } : item))} />Did not finish</label>
-                      {result.eliminated && <label className="rf-fld ops-place-field">Why<select aria-label={`Reason for team ${result.teamId}`} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</select></label>}
+                      {result.eliminated && <label className="rf-fld ops-place-field">Why<SelectField aria-label={`Reason for team ${result.teamId}`} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</SelectField></label>}
                       <label className="rf-fld ops-place-field">Referee note<input aria-label={`Referee note for team ${result.teamId}`} type="text" maxLength={500} value={result.refereeNote ?? ''} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, refereeNote: event.target.value } : item))} /></label>
                     </li>
                   ))}</ul>

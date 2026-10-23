@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Eye, Pencil, SkipForward } from 'lucide-react';
 import { api } from '../../api';
 import type { QueuedScoreCard } from '../../lib/scoreCard';
+import { NumberField } from '../../components/NumberField';
 
 type Action = 'show' | 'skip' | 'edit';
 
@@ -70,7 +71,7 @@ function CardEditor({ queued, busy, onApply }: {
         </tbody>
       </table>
       <label className="flex items-center gap-2">On screen for
-        <input className="w-14 rounded border px-1" type="number" min={3} max={60} value={seconds ?? ''} placeholder="10"
+        <NumberField className="w-14 rounded border px-1"  min={3} max={60} value={seconds ?? ''} placeholder="10"
           onChange={(event) => setSeconds(event.target.value === '' ? null : Math.min(60, Math.max(3, Number(event.target.value) || 3)))} /> s</label>
       <button type="submit" className="mg-btn mg-btn-primary self-start" disabled={busy}>Apply to this card</button>
     </form>

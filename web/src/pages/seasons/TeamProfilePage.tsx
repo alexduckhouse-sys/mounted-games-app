@@ -12,6 +12,7 @@ import { buildRows, latestPerRound, seasonChoices, type SeasonDetail } from './t
 import { TeamGameStats } from './TeamGameStats';
 import type { ClubOption, CompetitionDetailOption, CompetitionSummaryOption, TeamProfile, TeamProfileHistory } from './teamProfileTypes';
 import './seasonViews.css';
+import { SelectField } from '../../components/SelectField';
 
 type ProfileTab = 'history' | 'edit' | 'link';
 
@@ -174,7 +175,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       <form onSubmit={saveProfile}>
         <fieldset disabled={busy} className="sv-fieldset sv-stack">
           <legend className="sr-only">Team details</legend>
-          <label className="rf-fld">Club<select value={clubId} onChange={(event) => setClubId(event.target.value)} required><option value="">Choose a club</option>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}<option value={NEW_CLUB}>A club that isn’t listed…</option></select></label>
+          <label className="rf-fld">Club<SelectField value={clubId} onChange={(event) => setClubId(event.target.value)} required><option value="">Choose a club</option>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}<option value={NEW_CLUB}>A club that isn’t listed…</option></SelectField></label>
           {clubId === NEW_CLUB && <label className="rf-fld">New club name<input value={newClubName} onChange={(event) => setNewClubName(event.target.value)} maxLength={150} required /></label>}
           <div className="sv-two"><label className="rf-fld">Suffix<input value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} placeholder="Optional" /></label><label className="rf-fld">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div>
         </fieldset>
@@ -274,7 +275,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       <form onSubmit={saveProfile} className="sv-stack">
         <fieldset disabled={busy} className="sv-fieldset sv-stack">
           <legend className="sr-only">Profile details</legend>
-          <label className="rf-fld">Club<select value={clubId} onChange={(event) => setClubId(event.target.value)} required disabled={identityLocked}>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}<option value={NEW_CLUB}>A club that isn’t listed…</option></select></label>
+          <label className="rf-fld">Club<SelectField value={clubId} onChange={(event) => setClubId(event.target.value)} required disabled={identityLocked}>{clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}<option value={NEW_CLUB}>A club that isn’t listed…</option></SelectField></label>
           {clubId === NEW_CLUB && <label className="rf-fld">New club name<input value={newClubName} onChange={(event) => setNewClubName(event.target.value)} maxLength={150} required disabled={identityLocked} /></label>}
           <div className="sv-two"><label className="rf-fld">Suffix<input value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} placeholder="Optional" disabled={identityLocked} /></label><label className="rf-fld">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div>
         </fieldset>
@@ -288,8 +289,8 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       <form onSubmit={linkTeam} className="sv-stack">
         <fieldset disabled={busy} className="sv-fieldset sv-stack">
           <legend className="sr-only">Event team link</legend>
-          <label className="rf-fld">Competition<select value={competitionId} onChange={(event) => chooseCompetition(event.target.value)} required><option value="">Choose a competition</option>{competitions.map((item) => <option key={item.id} value={item.id}>{item.name} · {date(item.startDate)}</option>)}</select></label>
-          <label className="rf-fld">Event team<select value={teamId} onChange={(event) => setTeamId(event.target.value)} required disabled={!competition}><option value="">Choose the matching team</option>{matchingTeams.map((team) => <option key={team.id} value={team.id}>{team.displayName}</option>)}</select></label>
+          <label className="rf-fld">Competition<SelectField value={competitionId} onChange={(event) => chooseCompetition(event.target.value)} required><option value="">Choose a competition</option>{competitions.map((item) => <option key={item.id} value={item.id}>{item.name} · {date(item.startDate)}</option>)}</SelectField></label>
+          <label className="rf-fld">Event team<SelectField value={teamId} onChange={(event) => setTeamId(event.target.value)} required disabled={!competition}><option value="">Choose the matching team</option>{matchingTeams.map((team) => <option key={team.id} value={team.id}>{team.displayName}</option>)}</SelectField></label>
           {competition && matchingTeams.length === 0 && <p className="rf-note sv-flush">There’s no unlinked team from this profile’s club in that competition.</p>}
         </fieldset>
         <RefineNote>Choose the event team yourself. The system won’t match teams by name.</RefineNote>

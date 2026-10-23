@@ -4,6 +4,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { Chevron, RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import type { SpecialAward } from './resultsBookTypes';
+import { SelectField } from '../../components/SelectField';
 
 interface SectionOption { id: number; displayName: string }
 interface AwardDraft { key: number; competitionSectionId: number | null; title: string; recipient: string; note: string }
@@ -81,10 +82,10 @@ export function ResultsBookTab({ competitionId }: { competitionId: string }) {
         <label className="rf-fld">Award<input value={award.title} maxLength={100} onChange={(event) => change(award.key, { title: event.target.value })} /></label>
         <label className="rf-fld">Winner<input value={award.recipient} maxLength={200} onChange={(event) => change(award.key, { recipient: event.target.value })} /></label>
         <label className="rf-fld">Age group
-          <select value={award.competitionSectionId ?? ''} onChange={(event) => change(award.key, { competitionSectionId: event.target.value ? Number(event.target.value) : null })}>
+          <SelectField value={award.competitionSectionId ?? ''} onChange={(event) => change(award.key, { competitionSectionId: event.target.value ? Number(event.target.value) : null })}>
             <option value="">Whole event</option>
             {sections.map((section) => <option key={section.id} value={section.id}>{section.displayName}</option>)}
-          </select>
+          </SelectField>
         </label>
         <label className="rf-fld">Note (optional)<input value={award.note} maxLength={300} onChange={(event) => change(award.key, { note: event.target.value })} /></label>
         <button type="button" className="rf-btn rf-btn-text" onClick={() => { setSaved(false); setAwards((current) => current.filter((a) => a.key !== award.key)); }}>
