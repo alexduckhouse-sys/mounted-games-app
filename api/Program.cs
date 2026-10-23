@@ -93,6 +93,8 @@ builder.Services.AddSingleton<LiveAccounts>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ScoringService>();
+builder.Services.AddSingleton<ScorerTokenGuard>();
+builder.Services.AddScoped<RaceFinalService>();
 builder.Services.AddSingleton<ILiveBroadcaster, LiveBroadcaster>();
 builder.Services.AddSingleton<VapidKeyService>();
 builder.Services.AddScoped<PushNotifier>();
@@ -121,6 +123,15 @@ builder.Services.AddHttpClient("weather", c =>
 builder.Services.AddSingleton<WeatherCache>(_ => new WeatherCache());
 builder.Services.AddHttpClient(PushNotifier.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+// Email is off unless Email:Enabled, Email:ApiKey and Email:From are all set (see Services/Email).
+builder.Services.Configure<MountedGames.Api.Services.Email.EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.AddHttpClient(MountedGames.Api.Services.Email.ResendEmailSender.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton<MountedGames.Api.Services.Email.LoggingEmailSender>();
+builder.Services.AddSingleton<MountedGames.Api.Services.Email.ResendEmailSender>();
+builder.Services.AddSingleton<MountedGames.Api.Services.Email.IEmailSender, MountedGames.Api.Services.Email.ConfiguredEmailSender>();
+builder.Services.AddScoped<MountedGames.Api.Services.Email.SignupConfirmationService>();
+builder.Services.AddScoped<MountedGames.Api.Services.Email.EmailOptInService>();
 builder.Services.AddHttpClient("geocoding", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(6);

@@ -38,16 +38,38 @@ describe('PrintEventPage', () => {
     expect(api.get).toHaveBeenCalledWith('/event-tools/competitions/12/print/results');
   });
 
-  it('keeps scoring cells blank and contains wide tables on small screens', async () => {
+  it('prints one grid per heat with lanes, bibs and the scores already recorded', async () => {
     vi.mocked(api.get).mockResolvedValueOnce({ data: {
       competition: { id: 12, name: 'Spring event', location: null, startDate: '2031-05-04T09:00:00Z', endDate: null },
-      heats: [{ heatId: 3, label: 'Heat 1', sectionName: 'Under 12', sessionName: 'Morning', scheduledStart: null, races: [{ raceId: 7, name: 'Bending', teams: [{ teamId: 4, teamName: 'North A', placing: 1, eliminated: true, points: 0 }] }] }],
+      heats: [{ heatId: 3, label: 'Heat 1', sectionName: 'Under 12', sessionName: 'Morning', scheduledStart: '2031-05-04T09:30:00Z', races: [
+        { raceId: 7, name: 'Bending', teams: [
+          { teamId: 5, teamName: 'South B', placing: null, eliminated: false, points: null, lane: 2, bib: 'Blue bibs' },
+          { teamId: 4, teamName: 'North A', placing: 1, eliminated: false, points: 5, lane: 1, bib: 'Red bibs' },
+        ] },
+        { raceId: 8, name: 'Mug', teams: [
+          { teamId: 5, teamName: 'South B', placing: null, eliminated: false, points: null, lane: 2, bib: 'Blue bibs' },
+          { teamId: 4, teamName: 'North A', placing: null, eliminated: true, points: 0, lane: 1, bib: 'Red bibs' },
+        ] },
+      ] }],
     } });
     render(<MemoryRouter initialEntries={['/event-tools/12/print/score-sheets']}><Routes><Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} /></Routes></MemoryRouter>);
 
-    const row = await screen.findByRole('row', { name: 'North A' });
-    const cells = within(row).getAllByRole('cell');
-    expect(cells.map((cell) => cell.textContent)).toEqual(['North A', '', '', '', '']);
-    expect(row.closest('.event-print-table-wrap')).not.toBeNull();
+    const headers = (await screen.findAllByRole('columnheader')).map((cell) => cell.textContent);
+    expect(headers).toEqual(['Lane', 'Team', 'Bib', '1. Bending', '2. Mug', 'Total']);
+    const rows = screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent));
+    // Lane order, scores filled in where recorded, blanks left to write in.
+    expect(rows).toEqual([['1', 'North A', 'Red bibs', '5', 'E', '5'], ['2', 'South B', 'Blue bibs', '', '', '']]);
+    expect(screen.queryByText('Time TBC')).not.toBeInTheDocument();
+  });
+
+  it('says a heat has no races when it has none, and shows Time TBC only without any time', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: {
+      competition: { id: 12, name: 'Spring event', location: null, startDate: '2031-05-04T09:00:00Z', endDate: null },
+      heats: [{ heatId: 3, label: 'Heat 1', sectionName: '', sessionName: 'Morning', scheduledStart: null, races: [] }],
+    } });
+    render(<MemoryRouter initialEntries={['/event-tools/12/print/score-sheets']}><Routes><Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} /></Routes></MemoryRouter>);
+
+    expect(await screen.findByText('No races have been added to this heat.')).toBeInTheDocument();
+    expect(screen.getByText('Time TBC')).toBeInTheDocument();
   });
 });

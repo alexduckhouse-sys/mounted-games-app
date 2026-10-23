@@ -21,12 +21,14 @@ public class ScoringController : ControllerBase
     private readonly AppDbContext _db;
     private readonly ScoringService _scoring;
     private readonly ILiveBroadcaster _live;
+    private readonly RaceFinalService _raceFinals;
 
-    public ScoringController(AppDbContext db, ScoringService scoring, ILiveBroadcaster live)
+    public ScoringController(AppDbContext db, ScoringService scoring, ILiveBroadcaster live, RaceFinalService raceFinals)
     {
         _db = db;
         _scoring = scoring;
         _live = live;
+        _raceFinals = raceFinals;
     }
 
     [HttpPost("api/races/{raceId:int}/results")]
@@ -56,7 +58,24 @@ public class ScoringController : ControllerBase
         var dto = await HeatDtoAsync(race.HeatId);
         var competitionId = race.Heat!.Session!.CompetitionId;
         await _live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto });
+        await FillRaceFinalAsync(raceId, competitionId);
         return dto;
+    }
+
+    /// <summary>
+    /// When a qualifier is scored and both qualifiers of its round are done, the round's final fills itself
+    /// from them, so the scorer doesn't have to leave the scoring page to do it.
+    /// </summary>
+    private async Task FillRaceFinalAsync(int raceId, int competitionId)
+    {
+        var sessionId = await _raceFinals.TryAutoPopulateAsync(raceId);
+        if (sessionId is null) return;
+        var session = await _db.Sessions.AsNoTracking()
+            .Include(s => s.Section)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstAsync(s => s.Id == sessionId.Value);
+        await _live.SessionUpdated(competitionId, session.ToDto());
     }
 
     [HttpGet("api/races/{raceId:int}/score")]
@@ -77,6 +96,7 @@ public class ScoringController : ControllerBase
             var score = await _scoring.ApplyVersionedAsync(raceId, request,
                 User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, cancellationToken);
             await BroadcastScore(raceId);
+            await FillRaceFinalAsync(raceId, await CompetitionIdOfRaceAsync(raceId));
             return score;
         }
         catch (KeyNotFoundException) { return NotFound(); }
@@ -149,6 +169,9 @@ public class ScoringController : ControllerBase
             heat = await HeatDtoAsync(race.HeatId),
         });
     }
+
+    private Task<int> CompetitionIdOfRaceAsync(int raceId)
+        => _db.Races.Where(r => r.Id == raceId).Select(r => r.Heat!.Session!.CompetitionId).FirstAsync();
 
     private async Task BroadcastScore(int raceId)
     {
@@ -251,7 +274,7 @@ public class ScoringController : ControllerBase
         return tapped > utcNow || tapped < utcNow.AddMinutes(-10) ? utcNow : tapped;
     }
 
-    private static bool IsScoringConcurrency(Exception exception)
+    internal static bool IsScoringConcurrency(Exception exception)
     {
         if (exception is DbUpdateConcurrencyException) return true;
         if (exception is PostgresException postgres)

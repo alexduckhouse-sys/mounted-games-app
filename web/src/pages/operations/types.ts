@@ -109,6 +109,93 @@ export interface RaceScoreHistory {
   createdAt: string;
 }
 
+/** 0 in the draw, 1 withdrawn, 2 no-show. */
+export type TeamEntryStatus = 0 | 1 | 2;
+
+export interface TeamEntry {
+  teamId: number;
+  teamName: string;
+  sectionId: number;
+  sectionName: string;
+  isHorsConcours: boolean;
+  status: TeamEntryStatus;
+  reason: string | null;
+  changedAt: string | null;
+  canReinstate: boolean;
+  redrawAvailable: boolean;
+}
+
+export interface SetTeamEntryStatusResult {
+  team: TeamEntry;
+  heatPlacesChanged: number;
+  changedSessionIds: number[];
+}
+
+export interface RedrawMove {
+  teamId: number;
+  teamName: string;
+  fromHeatId: number | null;
+  toHeatId: number | null;
+}
+
+export interface RedrawSession {
+  sessionId: number;
+  name: string;
+  protectedHeats: number;
+  before: DrawHeat[];
+  after: DrawHeat[];
+  removedHeatIds: number[];
+  moves: RedrawMove[];
+}
+
+export interface RedrawPreview {
+  sectionId: number;
+  fingerprint: string;
+  hasChanges: boolean;
+  outTeams: Array<{ teamId: number; teamName: string; status: TeamEntryStatus }>;
+  sessions: RedrawSession[];
+  notes: string[];
+  replayed: boolean;
+}
+
+export interface RiderSnapshot {
+  riderEntryId: number;
+  fullName: string;
+  isReserve: boolean;
+  isCaptain: boolean;
+  orderIndex: number;
+}
+
+export interface RiderSwap {
+  id: number;
+  declarationFormId: number;
+  teamId: number;
+  outRiderEntryId: number;
+  inRiderEntryId: number;
+  before: RiderSnapshot[];
+  after: RiderSnapshot[];
+  actorUserId: string | null;
+  reason: string;
+  overrodeLock: boolean;
+  createdAt: string;
+  replayed: boolean;
+}
+
+/** A fresh id for one attempt at a write, reused when the same attempt is retried. */
+export function newRequestId(): string {
+  const c = globalThis.crypto as Crypto | undefined;
+  return c?.randomUUID ? c.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+export function statusOf(error: unknown): number | undefined {
+  return (error as { response?: { status?: number } })?.response?.status;
+}
+
+/** True when the request never reached the server, so the user should retry rather than correct anything. */
+export function isOffline(error: unknown): boolean {
+  return (error as { response?: unknown })?.response === undefined;
+}
+
 export function apiMessage(error: unknown, fallback: string): string {
   const data = (error as { response?: { data?: { message?: string; title?: string } | string } })?.response?.data;
   if (typeof data === 'string' && data.trim()) return data;

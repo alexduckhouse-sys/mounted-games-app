@@ -11,12 +11,12 @@ public sealed class PrintableEventService(AppDbContext db)
     {
         var competition = await LoadAsync(competitionId, ct);
         if (competition is null) return null;
-        var sessions = competition.Sessions.Where(x => !x.IsBreak)
+        var sessions = competition.Sessions.Where(IsRace)
             .OrderBy(x => x.OrderIndex).ThenBy(x => x.Id)
             .Select(x => new PrintableSessionDto(
                 x.Id, x.Section?.DisplayName ?? string.Empty, x.Name, x.ArenaName, x.OrderIndex,
-                x.Heats.OrderBy(h => h.OrderIndex).ThenBy(h => h.Id).Select(h => new PrintableHeatDto(
-                    h.Id, h.Label ?? $"Heat {h.OrderIndex}", h.ScheduledStart,
+                OrderedHeats(x).Select(h => new PrintableHeatDto(
+                    h.Id, h.Label ?? $"Heat {h.OrderIndex}", HeatStart(x, h),
                     h.Entries.OrderBy(e => e.LaneIndex).Select(e => new PrintableTeamDto(
                         e.TeamId, e.Team!.DisplayName, e.Team.Club!.Name, e.Team.Suffix, e.LaneIndex)).ToArray(),
                     h.Races.OrderBy(r => r.OrderIndex).Select(r => new PrintableRaceDto(r.Id, r.Name, r.OrderIndex)).ToArray())).ToArray()))
@@ -28,17 +28,19 @@ public sealed class PrintableEventService(AppDbContext db)
     {
         var competition = await LoadAsync(competitionId, ct);
         if (competition is null) return null;
-        var heats = competition.Sessions.Where(x => !x.IsBreak)
-            .OrderBy(x => x.OrderIndex).SelectMany(x => x.Heats.OrderBy(h => h.OrderIndex).Select(h => new { Session = x, Heat = h }))
+        var heats = competition.Sessions.Where(IsRace)
+            .OrderBy(x => x.OrderIndex).ThenBy(x => x.Id)
+            .SelectMany(x => OrderedHeats(x).Select(h => new { Session = x, Heat = h }))
             .Select(x => new PrintableScoreHeatDto(
                 x.Heat.Id, x.Heat.Label ?? $"Heat {x.Heat.OrderIndex}", x.Session.Section?.DisplayName ?? string.Empty,
-                x.Session.Name, x.Heat.ScheduledStart,
+                x.Session.Name, HeatStart(x.Session, x.Heat),
                 x.Heat.Races.OrderBy(r => r.OrderIndex).Select(r => new PrintableScoreRaceDto(
                     r.Id, r.Name,
                     x.Heat.Entries.OrderBy(e => e.LaneIndex).Select(e =>
                     {
                         var result = r.Results.SingleOrDefault(y => y.TeamId == e.TeamId);
-                        return new PrintableScoreCellDto(e.TeamId, e.Team!.DisplayName, result?.Placing, result?.Eliminated ?? false, result?.Points);
+                        return new PrintableScoreCellDto(e.TeamId, e.Team!.DisplayName, result?.Placing, result?.Eliminated ?? false, result?.Points,
+                            e.LaneIndex, e.Team.BibDescription ?? e.Team.BibColour, result?.IsSitOut ?? false);
                     }).ToArray())).ToArray()))
             .ToArray();
         return new PrintableScoreSheetsDto(ToCompetition(competition), heats);
@@ -77,11 +79,41 @@ public sealed class PrintableEventService(AppDbContext db)
             }
             return new PrintableSectionResultsDto(section.Id, section.DisplayName, result);
         }).ToArray();
-        var races = competition.Sessions.Where(x => !x.IsBreak)
+        var races = competition.Sessions.Where(IsRace)
             .SelectMany(x => x.Heats).SelectMany(x => x.Races).ToArray();
         var provisional = races.Length == 0 || races.Any(x => !x.IsComplete);
         return new PrintableResultsDto(ToCompetition(competition), provisional, sections);
     }
+
+    /// <summary>Only race sessions have a draw and score sheets; breaks, briefings and custom items don't.</summary>
+    private static bool IsRace(Session s) => s.Kind == SessionKind.Race && !s.IsBreak;
+
+    private static IEnumerable<Heat> OrderedHeats(Session s) => s.Heats.OrderBy(h => h.OrderIndex).ThenBy(h => h.Id);
+
+    /// <summary>
+    /// When a heat starts: its own time if one was set, otherwise the session's start plus the length of
+    /// the heats before it (the auto-timetable only sets the session's start).
+    /// </summary>
+    private static DateTime? HeatStart(Session session, Heat heat)
+    {
+        if (heat.ScheduledStart is not null) return heat.ScheduledStart;
+        if (session.ScheduledStart is null) return null;
+        var start = session.ScheduledStart.Value;
+        foreach (var earlier in OrderedHeats(session))
+        {
+            if (earlier.Id == heat.Id) return start;
+            start = earlier.ScheduledStart is not null
+                ? earlier.ScheduledStart.Value.AddMinutes(HeatMinutes(session, earlier))
+                : start.AddMinutes(HeatMinutes(session, earlier));
+        }
+        return start;
+    }
+
+    /// <summary>The same length the timetable uses: the heat's own, else minutes per heat for each race, else 30.</summary>
+    private static int HeatMinutes(Session session, Heat heat)
+        => heat.DurationMinutes is > 0 ? heat.DurationMinutes.Value
+            : session.MinutesPerHeat is > 0 ? session.MinutesPerHeat.Value * Math.Max(1, heat.Races.Count)
+            : 30;
 
     private Task<Competition?> LoadAsync(int competitionId, CancellationToken ct)
         => db.Competitions.AsNoTracking().AsSplitQuery()

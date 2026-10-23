@@ -39,6 +39,8 @@
 .live-delete svg { width: 18px; height: 18px; }
 .live-block { grid-column: 2 / -1; display: flex; min-height: 40px; align-items: center; gap: 7px; color: rgb(var(--mg-heading)); font-size: 13px; font-weight: 600; }
 .live-block svg { width: 16px; height: 16px; }
+.live-reply { grid-column: 2 / -1; justify-self: start; min-height: 36px; color: rgb(var(--mg-heading)); font-size: 13px; font-weight: 700; text-decoration: underline; }
+.live-reply-cancel { margin-left: auto; min-height: 30px; padding: 0 8px; color: rgb(var(--mg-heading)); font-size: 13px; font-weight: 700; text-decoration: underline; }
 .live-empty { padding: 15px 12px; color: rgb(var(--mg-muted)); font-size: 14px; }
 .live-feed-state { padding: 15px 12px; color: rgb(var(--mg-muted)); font-size: 14px; }
 .live-feed-error { display: flex; min-height: 48px; flex-shrink: 0; align-items: center; gap: 8px; padding: 7px 8px 7px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font-size: 13px; line-height: 1.25; }

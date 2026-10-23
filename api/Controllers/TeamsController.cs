@@ -55,7 +55,8 @@ public class TeamsController : ControllerBase
             DisplayName = display,
             BibColour = req.BibColour ?? club.BibColour,
             TrainerUserId = trainerUserId,
-            IsHorsConcours = req.IsHorsConcours
+            IsHorsConcours = req.IsHorsConcours,
+            BibDescription = string.IsNullOrWhiteSpace(req.BibDescription) ? null : req.BibDescription.Trim(),
         };
         _db.Teams.Add(team);
         await _db.SaveChangesAsync();
@@ -81,9 +82,75 @@ public class TeamsController : ControllerBase
             t.DisplayName = $"{t.Club?.Name ?? string.Empty} {t.Suffix}".Trim();
         }
         if (req.IsHorsConcours.HasValue) t.IsHorsConcours = req.IsHorsConcours.Value;
+        var problem = await ApplyTrainerAndBibAsync(t, req.TrainerUserId, req.BibDescription);
+        if (problem is not null) return problem;
         await _db.SaveChangesAsync();
         return t.ToDto();
     }
+
+    /// <summary>
+    /// A club's Team Manager (as well as an organiser or admin) puts a trainer in charge of one of the
+    /// club's teams, and describes its bibs. An empty value clears the field.
+    /// </summary>
+    [HttpPut("/api/teams/{id:int}/trainer")]
+    [Authorize]
+    public async Task<ActionResult<TeamDto>> SetTrainer(int id, UpdateTeamRequest req)
+    {
+        var t = await _db.Teams
+            .Include(x => x.Club).Include(x => x.Section).Include(x => x.Trainer)
+            .FirstOrDefaultAsync(x => x.Id == id);
+        if (t is null) return NotFound();
+        // 404, not 403, for people who can't see the team's management.
+        if (!await CanManageTeamAsync(t)) return NotFound();
+        // A club's manager can only pick trainers of that club; an organiser or admin can pick a visiting trainer.
+        var clubOnly = !User.IsInRole(Roles.Admin) && !await _db.CanManageAsync(User, t.CompetitionId);
+        var problem = await ApplyTrainerAndBibAsync(t, req.TrainerUserId, req.BibDescription, clubOnly);
+        if (problem is not null) return problem;
+        await _db.SaveChangesAsync();
+        return t.ToDto();
+    }
+
+    /// <summary>Applies the trainer and bib description of an update. Returns an error result, or null when fine.</summary>
+    private async Task<ActionResult?> ApplyTrainerAndBibAsync(Team t, string? trainerUserId, string? bibDescription, bool clubOnly = false)
+    {
+        if (bibDescription is not null)
+            t.BibDescription = string.IsNullOrWhiteSpace(bibDescription) ? null : bibDescription.Trim();
+        if (trainerUserId is null) return null;
+        if (string.IsNullOrWhiteSpace(trainerUserId))
+        {
+            t.TrainerUserId = null;
+            t.Trainer = null;
+            return null;
+        }
+        var trainerId = trainerUserId.Trim();
+        var isTrainer = await (from userRole in _db.UserRoles
+                               join role in _db.Roles on userRole.RoleId equals role.Id
+                               where userRole.UserId == trainerId && role.Name == Roles.Trainer
+                               select userRole.UserId).AnyAsync();
+        if (!isTrainer) return BadRequest(new { message = "That person isn't an approved trainer." });
+        if (clubOnly && !await _db.Users.AnyAsync(u => u.Id == trainerId && u.ClubId == t.ClubId))
+            return BadRequest(new { message = "Choose a trainer from this club." });
+        t.TrainerUserId = trainerId;
+        t.Trainer = await _db.Users.FindAsync(trainerId);
+        return null;
+    }
+
+    /// <summary>Admins, whoever organises the competition, and the Team Manager of the team's club.</summary>
+    private async Task<bool> CanManageTeamAsync(Team t)
+        => User.IsInRole(Roles.Admin)
+            || await _db.CanManageAsync(User, t.CompetitionId)
+            || await _db.IsClubManagerAsync(User, t.ClubId);
+
+    /// <summary>The trainers of a club, for choosing who looks after a team.</summary>
+    [HttpGet("/api/clubs/{clubId:int}/trainers")]
+    [Authorize(Roles = Roles.Admin + "," + Roles.Trainer + "," + Roles.Manager)]
+    public async Task<IEnumerable<ClubTrainerDto>> ClubTrainers(int clubId)
+        => await (from u in _db.Users.AsNoTracking()
+                  join userRole in _db.UserRoles on u.Id equals userRole.UserId
+                  join role in _db.Roles on userRole.RoleId equals role.Id
+                  where u.ClubId == clubId && role.Name == Roles.Trainer
+                  orderby u.FullName
+                  select new ClubTrainerDto(u.Id, u.FullName)).ToListAsync();
 
     [HttpDelete("{id:int}")]
     [Authorize(Policy = CompetitionStaff.Policy)]
@@ -103,16 +170,18 @@ public class TeamsController : ControllerBase
     {
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId)) return Array.Empty<TeamDto>();
-        // Includes both the user's coached teams AND any team they're an accepted
-        // supporter of. Caller (My Teams page) splits on `relationship`.
+        // Includes the user's coached teams, any team they're an accepted supporter of, and, for a club's
+        // Team Manager, every team of their club. Caller (My Teams page) splits on `relationship`.
+        var managedClubId = User.IsInRole(Roles.Manager) ? await _db.ClubIdOfAsync(User) : null;
         var teams = await _db.Teams
             .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer).Include(t => t.Competition)
             .Include(t => t.Supporters)
             .Where(t => t.TrainerUserId == userId
+                || (managedClubId != null && t.ClubId == managedClubId)
                 || t.Supporters.Any(s => s.UserId == userId && s.Status == TeamSupporterStatus.Accepted))
             .OrderByDescending(t => t.Competition!.StartDate)
             .ToListAsync();
-        return teams.Select(t => t.ToDtoFor(userId));
+        return teams.Select(t => t.ToDtoFor(userId, managedClubId != null && t.ClubId == managedClubId));
     }
 
     [HttpPost("{teamId:int}/supporter-key")]
@@ -252,7 +321,8 @@ public class TeamsController : ControllerBase
         if (team is null) return (null, NotFound());
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId)) return (null, Unauthorized());
-        if (team.TrainerUserId != userId && !User.IsInRole(Roles.Admin)) return (null, Forbid());
+        if (team.TrainerUserId != userId && !User.IsInRole(Roles.Admin)
+            && !await _db.IsClubManagerAsync(User, team.ClubId)) return (null, Forbid());
         return (team, null);
     }
 
@@ -261,7 +331,8 @@ public class TeamsController : ControllerBase
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId)) return false;
         if (User.IsInRole(Roles.Admin)) return true;
-        return await _db.Teams.AnyAsync(t => t.Id == teamId && t.TrainerUserId == userId);
+        var team = await _db.Teams.AsNoTracking().FirstOrDefaultAsync(t => t.Id == teamId);
+        return team is not null && (team.TrainerUserId == userId || await _db.IsClubManagerAsync(User, team.ClubId));
     }
 
     private static string GenerateKey()

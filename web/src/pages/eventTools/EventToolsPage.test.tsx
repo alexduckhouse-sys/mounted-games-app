@@ -145,6 +145,7 @@ describe('EventToolsPage', () => {
     expect(screen.getByRole('link', { name: /Draw and lanes/ })).toHaveAttribute('href', '/event-tools/12/print/draw');
     expect(screen.getByRole('link', { name: /Score sheets/ })).toHaveAttribute('href', '/event-tools/12/print/score-sheets');
     expect(screen.getByRole('link', { name: /Results/ })).toHaveAttribute('href', '/event-tools/12/print/results');
+    expect(screen.getByRole('link', { name: /Venue poster/ })).toHaveAttribute('href', '/event-tools/12/print/poster');
   });
 
   it('marks failing import rows with a word as well as colour and blocks adding them', async () => {

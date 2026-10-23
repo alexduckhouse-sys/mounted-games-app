@@ -32,8 +32,27 @@ public class SectionSignup
     public string FullName { get; set; } = string.Empty;
     /// <summary>Pony Club branch they're representing — free text for v1.</summary>
     public string? PonyClubName { get; set; }
-    /// <summary>Optional phone / email captured for the organiser.</summary>
+    /// <summary>A custom team name ("Welsh Dragons"); riders who share one are formed into a team of that name.</summary>
+    public string? TeamName { get; set; }
+    /// <summary>A team manager or trainer entering a whole team in one go; it forms its own team named <see cref="TeamName"/>.</summary>
+    public bool IsWholeTeam { get; set; }
+    /// <summary>Optional phone number (or anything else) captured for the organiser.</summary>
     public string? ContactInfo { get; set; }
+
+    /// <summary>
+    /// Optional email address of the adult who signed up (never a rider's). The entry confirmation goes here.
+    /// Visible to the competition's staff only.
+    /// </summary>
+    public string? ContactEmail { get; set; }
+    /// <summary>Whether the entry confirmation email went out. Staff can see this; nobody else's email state is shown.</summary>
+    public EmailDeliveryStatus ConfirmationEmailStatus { get; set; }
+    public DateTime? ConfirmationEmailAt { get; set; }
+
+    /// <summary>
+    /// Client-made id for one submit of the sign-up form. A retry of the same submit (same user and section)
+    /// returns the existing entry rather than creating another and emailing again.
+    /// </summary>
+    public string? ClientRequestId { get; set; }
 
     /// <summary>Show only the surname's initial on public pages ("Oliver S.").</summary>
     public bool UseInitialOnly { get; set; }
@@ -50,4 +69,15 @@ public class SectionSignup
     public int? TeamId { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// The sign-up tick: parental consent for the riders on this entry (filming opt-outs are <see cref="NoFilming"/>)
+    /// plus acceptance of the event terms. Entries made before the tick existed have <c>false</c> and no date.
+    /// </summary>
+    public bool TermsAccepted { get; set; }
+    public DateTime? TermsAcceptedAt { get; set; }
+    public string? TermsAcceptedByUserId { get; set; }
+    public string? TermsAcceptedByName { get; set; }
+    /// <summary>Which wording was on screen (see <c>SignupTerms</c>), so the exact text can be traced later.</summary>
+    public string? TermsWordingVersion { get; set; }
 }

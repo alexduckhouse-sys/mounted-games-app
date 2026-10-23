@@ -9,6 +9,8 @@ export interface ScoreCardRow {
   /** Points this race added. */
   added: number;
   eliminated: boolean;
+  /** The team had no lane this race (more teams than lanes): shown as S, not +0. */
+  sitOut?: boolean;
   /** Place on running total; tied teams share a place. */
   place: number;
   /** Movement since the previous race, or null for the first race or no change. */
@@ -63,6 +65,7 @@ export function scoreCardFor(heat: Heat, raceId: number): ScoreCard | null {
       total: after.get(teamId) ?? 0,
       added: results.get(teamId)?.points ?? 0,
       eliminated: results.get(teamId)?.eliminated ?? false,
+      sitOut: results.get(teamId)?.isSitOut ?? false,
       place: now,
       change: scored.length < 2 || now === was ? null : now < was ? 'up' : 'down',
     };
@@ -71,7 +74,7 @@ export function scoreCardFor(heat: Heat, raceId: number): ScoreCard | null {
   return { heatId: heat.id, raceId: race.id, raceName: race.name, raceNumber: index + 1, raceCount: races.length, rows };
 }
 
-const fingerprint = (race: Race) => `${race.isComplete}|${race.results.map((r) => `${r.teamId}:${r.points}:${r.eliminated}`).sort().join(',')}`;
+const fingerprint = (race: Race) => `${race.isComplete}|${race.results.map((r) => `${r.teamId}:${r.points}:${r.eliminated}:${r.isSitOut ?? false}`).sort().join(',')}`;
 
 /**
  * The race a results update has just scored: the latest complete race whose results differ from what the

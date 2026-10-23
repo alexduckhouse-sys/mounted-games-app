@@ -79,7 +79,7 @@ describe('admin trainer requests', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'Decline' }));
-    expect(confirm).toHaveBeenCalledWith(`Decline the trainer request from ${request.fullName}? Their account will stay a member.`);
+    expect(confirm).toHaveBeenCalledWith(`Decline the request from ${request.fullName}? Their account will stay a member.`);
     expect(api.post).toHaveBeenCalledWith(`${path}/${request.userId}/decline`);
     expect(await screen.findByText('No trainer requests.')).toBeInTheDocument();
     expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === path)).toHaveLength(2);

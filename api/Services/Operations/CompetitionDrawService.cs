@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 
 namespace MountedGames.Api.Services.Operations;
 
@@ -21,7 +22,8 @@ public class CompetitionDrawService(AppDbContext db)
         if (!sectionExists) throw new KeyNotFoundException("Section not found.");
 
         var teams = await db.Teams.AsNoTracking()
-            .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == sectionId)
+            .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == sectionId
+                && t.EntryStatus == TeamEntryStatus.Active)
             .OrderBy(t => t.Id)
             .Select(t => new TeamInput(t.Id, t.DisplayName))
             .ToListAsync(cancellationToken);
@@ -47,9 +49,14 @@ public class CompetitionDrawService(AppDbContext db)
         if (sessions.SelectMany(s => s.Heats).SelectMany(h => h.Races)
             .Any(r => r.IsComplete || r.Results.Count > 0))
             throw new DrawValidationException("Scored or completed races cannot be redrawn.");
+        // One team more than the lanes is fine: the extra team sits out each race in turn. More than that,
+        // or a session that never moves teams between lanes, would leave teams that never race.
         if (sessions.Any(s => s.LanesPerHeat is > 0
-                && BalancedSizes(teams.Count, s.Heats.Count).Max() > s.LanesPerHeat.Value))
+                && BalancedSizes(teams.Count, s.Heats.Count).Max() > s.LanesPerHeat.Value + 1))
             throw new DrawValidationException("There are more teams per heat than the session's lane limit allows.");
+        if (sessions.Any(s => s.LanesPerHeat is > 0 && s.LaneRotationMode == LaneRotationMode.Stay
+                && BalancedSizes(teams.Count, s.Heats.Count).Max() > s.LanesPerHeat.Value))
+            throw new DrawValidationException("A heat with more teams than lanes needs the teams to change lane between races.");
 
         var opponentCounts = new Dictionary<(int Low, int High), int>();
         var laneCounts = teams.ToDictionary(t => t.Id, _ => new Dictionary<int, int>());
@@ -120,7 +127,7 @@ public class CompetitionDrawService(AppDbContext db)
 
     public async Task<DrawPreviewDto> ApplyAsync(
         int competitionId, int sectionId, ApplyDrawRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? actorUserId = null)
     {
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
@@ -139,6 +146,17 @@ public class CompetitionDrawService(AppDbContext db)
             foreach (var team in heat.Teams)
                 db.HeatEntries.Add(new HeatEntry { HeatId = heat.HeatId, TeamId = team.TeamId, LaneIndex = team.LaneIndex });
 
+            // A withdrawal can be undone only until a draw has been built without the team.
+            db.Set<DrawChange>().Add(new DrawChange
+            {
+                CompetitionId = competitionId,
+                SectionId = sectionId,
+                Kind = DrawChangeKind.SectionDraw,
+                RequestId = $"section-draw-{Guid.NewGuid():N}",
+                Fingerprint = preview.Fingerprint,
+                ActorUserId = actorUserId,
+                CreatedAt = DateTime.UtcNow,
+            });
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return preview;

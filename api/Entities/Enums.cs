@@ -21,6 +21,19 @@ public enum ChatMessageType
     Announcement = 2
 }
 
+/// <summary>How teams change lane from one race of a heat to the next.</summary>
+public enum LaneRotationMode
+{
+    // MoveUp is 0 on purpose: it is what every session did before this was a choice, so existing rows and
+    // new sessions need no stored default.
+    /// <summary>Every team moves up one lane after each race (the last wraps round to the first).</summary>
+    MoveUp = 0,
+    /// <summary>Every team stays in its drawn lane.</summary>
+    Stay = 1,
+    /// <summary>Every team moves down one lane after each race.</summary>
+    MoveDown = 2
+}
+
 public enum SessionKind
 {
     Race = 0,
@@ -38,4 +51,15 @@ public enum RaceRoundStage
     None = 0,
     Qualifier = 1,
     Final = 2
+}
+
+/// <summary>
+/// Whether a team is still taking part. Withdrawn and NoShow behave the same in the draw and on the
+/// timetable; the difference is only recorded for the organiser.
+/// </summary>
+public enum TeamEntryStatus
+{
+    Active = 0,
+    Withdrawn = 1,
+    NoShow = 2,
 }

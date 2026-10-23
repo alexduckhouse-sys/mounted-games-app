@@ -17,9 +17,13 @@ function finishers(list: PendingPlace[]): number {
   return list.filter((p) => !p.eliminated).length;
 }
 
-/** Tap a team: it takes the next place, or drops out of the order if it already had one. */
-export function tapTeam(list: PendingPlace[], teamId: number): PendingPlace[] {
+/**
+ * Tap a team: it takes the next place, or drops out of the order if it already had one.
+ * In a qualifier only `qualifierCap` teams are placed; once they are, tapping another team eliminates it.
+ */
+export function tapTeam(list: PendingPlace[], teamId: number, qualifierCap: number | null = null): PendingPlace[] {
   if (list.some((p) => p.teamId === teamId)) return renumber(list.filter((p) => p.teamId !== teamId));
+  if (qualifierCap != null && finishers(list) >= qualifierCap) return [...list, { teamId, place: 0, eliminated: true }];
   return [...list, { teamId, place: finishers(list) + 1, eliminated: false }];
 }
 
@@ -34,10 +38,10 @@ export function toggleEliminated(list: PendingPlace[], teamId: number): PendingP
   return renumber(list.map((p) => (p.teamId === teamId ? { ...p, eliminated: true } : p)));
 }
 
-/** The placings already saved for a race, as the scorer would have entered them. */
+/** The placings already saved for a race, as the scorer would have entered them. Teams sitting the race out are left out. */
 export function placesFromResults(race: Race): PendingPlace[] {
   return race.results
-    .slice()
+    .filter((r) => !r.isSitOut)
     .sort((a, b) => (a.placing ?? 999) - (b.placing ?? 999))
     .map((r, i) => ({ teamId: r.teamId, place: r.eliminated ? 0 : r.placing ?? i + 1, eliminated: r.eliminated }));
 }

@@ -152,6 +152,44 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task FinalsBoundary_FlagsATieOnPoints_EvenWhenOneTeamHasMoreWins()
+    {
+        var (comp, section, t) = await CompWithTeamsAsync(3);
+        // Teams 0 and 1 are level on 5 points; team 0 has the win. That is still a tie for the organiser to settle.
+        await _f.SeedScoredRaceAsync(comp, section, new (int, int?, bool, int)[] { (t[0], 1, false, 5), (t[1], 2, false, 5), (t[2], 3, false, 1) });
+        var admin = await _f.AdminAsync();
+
+        var body = await (await admin.GetAsync($"/api/competitions/{comp}/finals/boundary?topN=1&sectionId={section}")).ReadAsync<JsonElement>();
+
+        Assert.True(body.GetProperty("tied").GetBoolean());
+        Assert.Equal(1, body.GetProperty("cutoff").GetInt32());
+        Assert.Equal(2, body.GetProperty("teams").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task FinalsBoundary_ChecksEveryFinalsTier_NotJustTheLastPlace()
+    {
+        var (comp, section, t) = await CompWithTeamsAsync(4);
+        // 20, 10, 10, 1: the A/B cut (after 1 lane) falls between 20 and 10 (clean), the B/C cut after 2 is
+        // between the two on 10 and... topN 3 is clean (10 vs 1).
+        await _f.SeedScoredRaceAsync(comp, section, new (int, int?, bool, int)[]
+        {
+            (t[0], 1, false, 20), (t[1], 2, false, 10), (t[2], 3, false, 10), (t[3], 4, false, 1),
+        });
+        var admin = await _f.AdminAsync();
+
+        var clean = await (await admin.GetAsync($"/api/competitions/{comp}/finals/boundary?topN=3&sectionId={section}&lanesPerHeat=2")).ReadAsync<JsonElement>();
+        var tiedAtTier = await (await admin.GetAsync($"/api/competitions/{comp}/finals/boundary?topN=3&sectionId={section}&lanesPerHeat=1")).ReadAsync<JsonElement>();
+
+        // With two lanes the cuts are after 2 (10 v 10: tied) and after 3 (10 v 1: clean).
+        Assert.True(clean.GetProperty("tied").GetBoolean());
+        Assert.Equal(2, clean.GetProperty("cutoff").GetInt32());
+        Assert.Single(clean.GetProperty("boundaries").EnumerateArray());
+        // With one lane the cuts are after 1 (clean), 2 (tied) and 3 (clean).
+        Assert.Equal(2, tiedAtTier.GetProperty("cutoff").GetInt32());
+    }
+
+    [Fact]
     public async Task FinalsBoundary_ReportsNoTie_WhenCutoffIsClean()
     {
         var (comp, section, t) = await CompWithTeamsAsync(3);

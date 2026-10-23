@@ -10,7 +10,7 @@ import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
 import './heat.css';
 
-interface Cell { points: number; eliminated: boolean }
+interface Cell { points: number; eliminated: boolean; sitOut: boolean }
 
 /** The public heat page: who is racing, the score for every race so far and the running total. */
 export function HeatScores({ session, heats, activeHeatId }: { session: Session; heats: Heat[]; activeHeatId: number | null }) {
@@ -28,8 +28,19 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
     return timetableRows(competition.sessions, computeTimings(competition.sessions), true).find((item) => item.heat?.id === heat.id) ?? null;
   }, [competition.sessions, heat]);
   const section = displaySectionName(session.sectionName || session.name);
-  const heatLabel = heat ? heat.label || `Heat ${index + 1}` : session.name;
-  const races = useMemo(() => (heat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex), [heat]);
+  // A heat-heat-final round (Q1, Q2 and the final of one race) reads as one table: every team down the side,
+  // every race of the round across the top. Any other heat stands alone.
+  const roundHeats = useMemo(() => {
+    if (!heat) return [];
+    if (!heat.raceRoundStage || heat.raceRoundId == null) return [heat];
+    return heats.filter((item) => item.raceRoundId === heat.raceRoundId).sort((a, b) => a.orderIndex - b.orderIndex);
+  }, [heat, heats]);
+  const columns = useMemo(() => roundHeats.flatMap((item) => item.races.slice().sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((race) => ({ race, label: roundHeats.length > 1 ? (item.label ?? race.name) : race.name }))), [roundHeats]);
+  const races = useMemo(() => columns.map((column) => column.race), [columns]);
+  const heatLabel = heat
+    ? roundHeats.length > 1 ? (heat.label ?? '').replace(/\s*·\s*(Q\d|Final)$/i, '') || `Heat ${index + 1}` : heat.label || `Heat ${index + 1}`
+    : session.name;
   const status = row?.status ?? 'on-time';
   const finished = status === 'finished';
   const runningIndex = status === 'live' ? races.findIndex((race) => !race.isComplete) : -1;
@@ -51,16 +62,19 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
   const grid = useMemo(() => {
     if (!heat) return { teams: [], cells: new Map<string, Cell>() };
     const teams = new Map<number, { id: number; name: string; lane: number }>();
-    for (const entry of heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex)) {
-      teams.set(entry.teamId, { id: entry.teamId, name: entry.teamName, lane: entry.laneIndex });
+    for (const item of roundHeats) {
+      for (const entry of item.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex)) {
+        if (!teams.has(entry.teamId)) teams.set(entry.teamId, { id: entry.teamId, name: entry.teamName, lane: entry.laneIndex });
+      }
     }
     const cells = new Map<string, Cell>();
     for (const race of races) {
       for (const result of race.results) {
         if (!teams.has(result.teamId)) teams.set(result.teamId, { id: result.teamId, name: result.teamName, lane: Number.MAX_SAFE_INTEGER });
         const key = `${result.teamId}|${race.id}`;
-        const cell = cells.get(key) ?? { points: 0, eliminated: false };
+        const cell = cells.get(key) ?? { points: 0, eliminated: false, sitOut: false };
         cell.points += result.points;
+        if (result.isSitOut) cell.sitOut = true;
         if (result.eliminated && result.points === 0) cell.eliminated = true;
         cells.set(key, cell);
       }
@@ -70,7 +84,7 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
     list.sort((a, b) => (finished ? b.total - a.total : 0) || a.lane - b.lane || a.name.localeCompare(b.name));
     const ranked = list.map((team, i) => ({ ...team, position: finished ? 1 + list.findIndex((other) => other.total === team.total) : i + 1 }));
     return { teams: ranked, cells };
-  }, [heat, races, finished]);
+  }, [heat, roundHeats, races, finished]);
 
   const minWidth = 12 + (finished ? 18 : 0) + 116 + races.length * 23 + 44;
 
@@ -94,10 +108,10 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
                       </div>
                       <span>Team</span>
                     </th>
-                    {races.map((race, i) => (
-                      <th key={race.id} scope="col" className="heat-race" title={race.name}>
+                    {columns.map(({ race, label }, i) => (
+                      <th key={race.id} scope="col" className="heat-race" title={label}>
                         {i > 0 && <span aria-hidden="true" className="heat-sep" />}
-                        <span className={`heat-name ${i === runningIndex ? 'heat-name-running' : ''}`}>{race.name}{i === runningIndex && <span className="sr-only"> (running)</span>}</span>
+                        <span className={`heat-name ${i === runningIndex ? 'heat-name-running' : ''}`}>{label}{i === runningIndex && <span className="sr-only"> (running)</span>}</span>
                       </th>
                     ))}
                     <th scope="col" className="heat-pts">
@@ -115,6 +129,7 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
                         const cell = grid.cells.get(`${team.id}|${race.id}`);
                         return <td key={race.id} className={`heat-cell ${i === 0 ? 'heat-cell-first' : ''}`}>
                           {cell == null ? <><span aria-hidden="true" className="heat-dash">–</span><span className="sr-only">Not raced yet</span></>
+                            : cell.sitOut ? <><span aria-hidden="true" className="heat-dash">S</span><span className="sr-only">Sat out this race</span></>
                             : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">0</span><span className="sr-only">Eliminated</span></>
                             : cell.points}
                         </td>;
@@ -132,9 +147,9 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
       {heat && races.length > 0 && (
         <section aria-label="Races in this heat" className="mg-card px-3">
           <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-            {races.map((race, i) => (
+            {columns.map(({ race, label }, i) => (
               <li key={race.id} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate py-2">{race.name}{i === runningIndex && <span className="mg-meta"> · running</span>}</span>
+                <span className="min-w-0 flex-1 truncate py-2">{label}{i === runningIndex && <span className="mg-meta"> · running</span>}</span>
                 <RaceRulesButton raceName={race.name} className="!h-11 !w-11" />
               </li>
             ))}

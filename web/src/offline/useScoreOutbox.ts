@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { scorerApi } from './scorerLink';
 import type { Heat } from '../types';
 import { nextToSend, outcomeOfError, settle, type QueuedScore, type SendOutcome } from './scoreOutbox';
 
@@ -37,11 +38,14 @@ export function updateOutbox(change: (list: QueuedScore[]) => QueuedScore[]): bo
 
 async function send(item: QueuedScore): Promise<SendOutcome> {
   try {
-    const { data } = await api.post<Heat>(`/races/${item.raceId}/results`,
+    // A scorer link saves through its own endpoint and token; an account uses the staff endpoint.
+    const client = item.viaLink ? scorerApi : api;
+    const path = item.viaLink ? `/scorer/races/${item.raceId}/results` : `/races/${item.raceId}/results`;
+    const { data } = await client.post<Heat>(path,
       { places: item.places, expected: item.expected, ...(item.reason ? { reason: item.reason } : {}) }, { timeout: 15_000 });
     return { kind: 'saved', sessionId: item.sessionId, heat: data };
   } catch (err) {
-    return outcomeOfError(err);
+    return outcomeOfError(err, item.viaLink);
   }
 }
 

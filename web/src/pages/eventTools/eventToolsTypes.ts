@@ -70,6 +70,12 @@ export interface PrintableScoreCell {
   placing: number | null;
   eliminated: boolean;
   points: number | null;
+  /** The team's drawn lane in the heat. */
+  lane?: number;
+  /** What the team's bibs look like, if known. */
+  bib?: string | null;
+  /** The team had no lane this race and sat it out. */
+  isSitOut?: boolean;
 }
 export interface PrintableScoreRace { raceId: number; name: string; teams: PrintableScoreCell[] }
 export interface PrintableScoreHeat {
