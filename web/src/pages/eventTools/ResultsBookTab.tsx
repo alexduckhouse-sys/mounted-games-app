@@ -21,6 +21,7 @@ export function ResultsBookTab({ competitionId }: { competitionId: string }) {
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [awards, setAwards] = useState<AwardDraft[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -35,7 +36,7 @@ export function ResultsBookTab({ competitionId }: { competitionId: string }) {
       setSections(competition.data.sections ?? []);
       setAwards(list.data.map((a) => ({ key: nextKey++, competitionSectionId: a.competitionSectionId, title: a.title, recipient: a.recipient, note: a.note ?? '' })));
       setLoaded(true);
-    }).catch((caught) => { if (!cancelled) { setError(message(caught, 'Couldn’t load the awards.')); setLoaded(true); } });
+    }).catch((caught) => { if (!cancelled) { setError(message(caught, 'Couldn’t load the awards.')); setLoadFailed(true); setLoaded(true); } });
     return () => { cancelled = true; };
   }, [competitionId]);
 
@@ -73,7 +74,8 @@ export function ResultsBookTab({ competitionId }: { competitionId: string }) {
 
     <RefineSection title="Special awards" />
     {error && <div role="alert" className="mg-notice tools-msg">{error}</div>}
-    {loaded && <div className="tools-form">
+    {/* Without the saved list, saving would replace the real awards with an empty one, so the editor stays hidden. */}
+    {loaded && !loadFailed && <div className="tools-form">
       {awards.length === 0 && <RefineNote>No special awards yet. Add one for best turned out, spirit of the games and so on.</RefineNote>}
       {awards.map((award, index) => <fieldset key={award.key} className="tools-fields"><legend className="sr-only">Award {index + 1}</legend>
         <label className="rf-fld">Award<input value={award.title} maxLength={100} onChange={(event) => change(award.key, { title: event.target.value })} /></label>

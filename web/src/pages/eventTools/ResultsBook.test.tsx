@@ -154,17 +154,20 @@ describe('ResultsBookTab', () => {
     expect(await screen.findByText('Awards saved.')).toBeInTheDocument();
   });
 
-  it('shows the reason when the awards cannot be saved, and when they cannot be loaded', async () => {
+  it('shows the reason when the awards cannot be saved', async () => {
     put.mockRejectedValue({ response: { data: { message: 'An award names an age group that is not in this competition.' } } });
     const user = userEvent.setup();
     mount();
     await user.click(await screen.findByRole('button', { name: 'Save awards' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('An award names an age group');
+  });
 
+  it('says so when the awards cannot be loaded, and offers no save that would wipe them', async () => {
     get.mockReset();
     get.mockRejectedValue(new Error('offline'));
     mount();
-    expect((await screen.findAllByRole('alert')).some((a) => a.textContent === 'Couldn’t load the awards.')).toBe(true);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the awards.');
+    expect(screen.queryByRole('button', { name: 'Save awards' })).not.toBeInTheDocument();
   });
 
   it('starts with an empty list and a hint', async () => {
