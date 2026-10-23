@@ -37,22 +37,22 @@ describe('planTimetable', () => {
       eventStart: at(9), fixed: [],
       sessions: [session(1), session(2), session(3, { arena: 'Arena 2', teamCount: 4 })],
     });
-    // Session 1: 2 heats x 4 races x 10 min = 80 min.
-    expect(rows[0]).toMatchObject({ id: 1, start: at(9), end: at(10, 20), minutes: 80, sizes: [4, 4] });
-    expect(rows[1].start).toEqual(at(10, 30));
-    expect(rows[2]).toMatchObject({ id: 3, start: at(9), minutes: 40 });
+    // Session 1: 2 heats x 10 min = 20 min (minutesPerHeat is per whole heat, not per race).
+    expect(rows[0]).toMatchObject({ id: 1, start: at(9), end: at(9, 20), minutes: 20, sizes: [4, 4] });
+    expect(rows[1].start).toEqual(at(9, 30));
+    expect(rows[2]).toMatchObject({ id: 3, start: at(9), minutes: 10 });
   });
 
   it('follows the order index, not the order given', () => {
     const rows = planTimetable({ eventStart: at(9), fixed: [], sessions: [session(2, { orderIndex: 1 }), session(1, { orderIndex: 2 })] });
     expect(rows.map((row) => row.id)).toEqual([2, 1]);
-    expect(rows[1].start).toEqual(at(10, 30));
+    expect(rows[1].start).toEqual(at(9, 30));
   });
 
   it('waits for a break, whether it is for every arena or just this one', () => {
-    const lunch = { start: at(9, 30), end: at(10, 0), arena: '' };
+    const lunch = { start: at(9, 15), end: at(10, 0), arena: '' };
     const rows = planTimetable({ eventStart: at(9), fixed: [lunch], sessions: [session(1), session(2, { arena: 'Arena 2' })] });
-    // 80 minutes from 09:00 would run through lunch, so session 1 waits until 10:00.
+    // 20 minutes from 09:00 would run through lunch, so session 1 waits until 10:00.
     expect(rows[0].start).toEqual(at(10, 0));
     expect(rows[1].start).toEqual(at(10, 0));
     const onlyMain = planTimetable({ eventStart: at(9), fixed: [{ ...lunch, arena: ' MAIN ARENA ' }], sessions: [session(1), session(2, { arena: 'Arena 2' })] });
@@ -61,10 +61,10 @@ describe('planTimetable', () => {
   });
 
   it('moves past several breaks in a row, and lets a session that fits before a break go first', () => {
-    const fixed = [{ start: at(10), end: at(10, 15), arena: '' }, { start: at(10, 15), end: at(10, 30), arena: '' }];
+    const fixed = [{ start: at(9, 15), end: at(9, 30), arena: '' }, { start: at(9, 30), end: at(9, 45), arena: '' }];
     const long = planTimetable({ eventStart: at(9), fixed, sessions: [session(1)] });
-    expect(long[0].start).toEqual(at(10, 30));
-    const short = planTimetable({ eventStart: at(9), fixed, sessions: [session(1, { raceCount: 1, minutesPerHeat: 10 })] });
+    expect(long[0].start).toEqual(at(9, 45));
+    const short = planTimetable({ eventStart: at(9), fixed, sessions: [session(1, { teamCount: 4, minutesPerHeat: 10 })] });
     expect(short[0].start).toEqual(at(9));
   });
 
@@ -74,8 +74,8 @@ describe('planTimetable', () => {
     expect(rows[1].start).toEqual(at(9));
   });
 
-  it('counts heat, heat, final as three heats of one race for every race', () => {
+  it('counts heat, heat, final as three heats of minutesPerHeat', () => {
     const [row] = planTimetable({ eventStart: at(9), fixed: [], sessions: [session(1, { raceFinals: true, raceCount: 5, minutesPerHeat: 4 })] });
-    expect(row.minutes).toBe(60);
+    expect(row.minutes).toBe(12);
   });
 });

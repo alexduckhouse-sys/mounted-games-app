@@ -84,10 +84,9 @@ describe('the entry page', () => {
     expect(screen.queryByRole('button', { name: /Join/ })).not.toBeInTheDocument();
   });
 
-  it('sends the public away from toplists to the entry page until the teams are drawn', async () => {
+  it('lets the public open toplists before the draw (BUG-32)', async () => {
     mount(null, {}, '/competitions/1/toplists');
-    expect(await screen.findByRole('heading', { name: 'TEST COMP1' }, { timeout: 5000 })).toBeInTheDocument();
-    expect(screen.queryByText('Toplists')).not.toBeInTheDocument();
+    expect(await screen.findByText('Toplists', undefined, { timeout: 5000 })).toBeInTheDocument();
   });
 
   it('gives an admin the normal pages, as they organise everything', async () => {
@@ -103,9 +102,10 @@ describe('the entry page', () => {
     expect(screen.queryByRole('heading', { name: 'TEST COMP1' })).not.toBeInTheDocument();
   });
 
-  it('returns to the timetable for everyone once teams are formed', async () => {
+  it('keeps the entry page as home while teams are formed but no heats exist (BUG-32)', async () => {
     mount(null, { teams: [team(1)] });
-    expect(await screen.findByText('Timetable board')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'TEST COMP1' }, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByText('Timetable board')).not.toBeInTheDocument();
   });
 
   it('returns to the timetable once a generated timetable has heats', async () => {

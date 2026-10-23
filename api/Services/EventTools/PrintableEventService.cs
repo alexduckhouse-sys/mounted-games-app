@@ -137,10 +137,10 @@ public sealed class PrintableEventService(AppDbContext db)
         return start;
     }
 
-    /// <summary>The same length the timetable uses: the heat's own, else minutes per heat for each race, else 30.</summary>
+    /// <summary>The same length the timetable uses: the heat's own, else minutes per heat, else 30.</summary>
     private static int HeatMinutes(Session session, Heat heat)
         => heat.DurationMinutes is > 0 ? heat.DurationMinutes.Value
-            : session.MinutesPerHeat is > 0 ? session.MinutesPerHeat.Value * Math.Max(1, heat.Races.Count)
+            : session.MinutesPerHeat is > 0 ? session.MinutesPerHeat.Value
             : 30;
 
     private Task<Competition?> LoadAsync(int competitionId, CancellationToken ct)

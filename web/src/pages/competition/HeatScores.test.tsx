@@ -1,12 +1,18 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
+import { FAVOURITES_KEY } from '../../lib/favourites';
 import { competition, heat, race, session, team } from '../../test/factories';
 import { HeatScores } from './HeatScores';
+import { formatPoints } from '../../lib/formatPoints';
 
 const state = vi.hoisted(() => ({ competition: null as unknown }));
 vi.mock('./context', () => ({ useCompetition: () => ({ competition: state.competition, streams: [] }) }));
+
+afterEach(() => {
+  localStorage.clear();
+});
 
 function BarProbe() {
   const { config } = useCompactPageBarState();
@@ -55,7 +61,7 @@ it('hides the race rules and setup until clicked, then lists each race with a ru
   expect(screen.queryByRole('region', { name: 'Races in this heat' })).toBeNull();
 });
 
-it('shows a heat-heat-final round as one table of every team against every race', () => {
+it('shows a heat-heat-final session as one unified table of every team against every race round', () => {
   const q1 = heat(11, { sessionId: 9, orderIndex: 0, label: 'Bending · Q1', raceRoundId: 5, raceRoundStage: 1,
     entries: [{ id: 1, teamId: 1, teamName: 'Oak A', laneIndex: 1 }, { id: 2, teamId: 2, teamName: 'Beech B', laneIndex: 2 }],
     races: [race(21, { name: 'Bending', isComplete: true, results: [
@@ -69,22 +75,29 @@ it('shows a heat-heat-final round as one table of every team against every race'
   const final = heat(13, { sessionId: 9, orderIndex: 2, label: 'Bending · Final', raceRoundId: 5, raceRoundStage: 2,
     entries: [{ id: 4, teamId: 1, teamName: 'Oak A', laneIndex: 1 }, { id: 5, teamId: 3, teamName: 'Ash C', laneIndex: 2 }],
     races: [race(23, { name: 'Bending', isComplete: true, results: [
-      { id: 4, teamId: 3, teamName: 'Ash C', placing: 1, eliminated: false, points: 3 },
-      { id: 5, teamId: 1, teamName: 'Oak A', placing: 2, eliminated: false, points: 2 },
+      { id: 4, teamId: 3, teamName: 'Ash C', placing: 1, eliminated: false, points: 5 },
+      { id: 5, teamId: 1, teamName: 'Oak A', placing: 2, eliminated: false, points: 4 },
     ] })] });
-  const shownSession = session(9, { sectionName: 'Teams Seniors', status: 2, scheduledStart: '2026-10-16T10:00:00', heats: [q1, q2, final] });
+  const sackQ1 = heat(14, { sessionId: 9, orderIndex: 3, label: 'Sack · Q1', raceRoundId: 6, raceRoundStage: 1,
+    entries: [{ id: 6, teamId: 1, teamName: 'Oak A', laneIndex: 1 }],
+    races: [race(24, { name: 'Sack', isComplete: false, results: [] })] });
+  const sackQ2 = heat(15, { sessionId: 9, orderIndex: 4, label: 'Sack · Q2', raceRoundId: 6, raceRoundStage: 1,
+    entries: [{ id: 7, teamId: 2, teamName: 'Beech B', laneIndex: 1 }, { id: 8, teamId: 3, teamName: 'Ash C', laneIndex: 2 }],
+    races: [race(25, { name: 'Sack', isComplete: false, results: [] })] });
+  const shownSession = session(9, { sectionName: 'Teams Seniors', status: 2, scheduledStart: '2026-10-16T10:00:00', heats: [q1, q2, final, sackQ1, sackQ2] });
   state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
-  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[q1, q2, final]} activeHeatId={11} /></MemoryRouter></CompactPageBarProvider>);
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[q1, q2, final, sackQ1, sackQ2]} activeHeatId={11} /></MemoryRouter></CompactPageBarProvider>);
 
   const headers = screen.getAllByRole('columnheader').map((header) => header.textContent);
-  expect(headers.some((text) => text?.includes('Bending · Q1'))).toBe(true);
-  expect(headers.some((text) => text?.includes('Bending · Q2'))).toBe(true);
-  expect(headers.some((text) => text?.includes('Bending · Final'))).toBe(true);
-  // All three teams are on the one table, with their totals across the whole round.
+  expect(headers.some((text) => text?.includes('Bending'))).toBe(true);
+  expect(headers.some((text) => text?.includes('Sack'))).toBe(true);
+  // All three teams are on the one unified table, with their totals across the session and Q1/Q2 badges for unscored rounds.
   const oak = screen.getByRole('row', { name: /Oak A/ });
-  expect(within(oak).getAllByRole('cell').map((cell) => cell.textContent)).toContain('3');
+  expect(within(oak).getAllByRole('cell').map((cell) => cell.textContent)).toContain('4');
+  expect(within(oak).getByText('Q1')).toBeInTheDocument();
+  const beech = screen.getByRole('row', { name: /Beech B/ });
+  expect(within(beech).getByText('Q2')).toBeInTheDocument();
   expect(screen.getByRole('row', { name: /Ash C/ })).toBeInTheDocument();
-  expect(screen.getByRole('row', { name: /Beech B/ })).toBeInTheDocument();
 });
 
 it('shows S for a team that sat a race out', () => {
@@ -115,4 +128,113 @@ it('shows the letters for a team that did not start, did not finish, retired or 
   // Results saved before the choice existed have no status and were all eliminations.
   expect(cell('Team 4')).toHaveTextContent('E');
   expect(screen.getByText('Did not start')).toBeInTheDocument();
+});
+
+it('pre-fills S for sit-out races before the race is scored and orders rows by starting lane until scored', () => {
+  const entries = [
+    { id: 1, teamId: 1, teamName: 'Lane One Team', laneIndex: 1 },
+    { id: 2, teamId: 2, teamName: 'Lane Two Team', laneIndex: 2 },
+    { id: 3, teamId: 3, teamName: 'Lane Three Team', laneIndex: 3 },
+    { id: 4, teamId: 4, teamName: 'Lane Four SitOut', laneIndex: 4 },
+  ];
+  const unscoredHeat = heat(20, {
+    sessionId: 7,
+    orderIndex: 0,
+    label: 'Heat 1',
+    entries,
+    races: [race(51, { name: 'Bending', orderIndex: 0 }), race(52, { name: 'Mug', orderIndex: 1 })],
+  });
+  const s = session(7, { sectionName: 'Teams Seniors', status: 0, lanesPerHeat: 3, heats: [unscoredHeat] });
+  state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [s] });
+  const { unmount } = render(<CompactPageBarProvider><MemoryRouter><HeatScores session={s} heats={[unscoredHeat]} activeHeatId={20} /></MemoryRouter></CompactPageBarProvider>);
+
+  const rowsBefore = screen.getAllByRole('row').slice(1);
+  expect(rowsBefore.map((r) => within(r).getByRole('rowheader').textContent)).toEqual([
+    'Lane One TeamLane 1',
+    'Lane Two TeamLane 2',
+    'Lane Three TeamLane 3',
+    'Lane Four SitOutSit out',
+  ]);
+  expect(within(rowsBefore[3]).getAllByText('S').length).toBeGreaterThan(0);
+  unmount();
+
+  // Once a race is scored while live, rows re-order by heat leader.
+  const liveScoredHeat = heat(20, {
+    sessionId: 7,
+    orderIndex: 0,
+    label: 'Heat 1',
+    entries,
+    races: [
+      race(51, {
+        name: 'Bending',
+        orderIndex: 0,
+        isComplete: true,
+        results: [
+          { id: 1, teamId: 3, teamName: 'Lane Three Team', placing: 1, eliminated: false, points: 3 },
+          { id: 2, teamId: 1, teamName: 'Lane One Team', placing: 2, eliminated: false, points: 2 },
+        ],
+      }),
+      race(52, { name: 'Mug', orderIndex: 1 }),
+    ],
+  });
+  const liveSession = session(7, { sectionName: 'Teams Seniors', status: 1, lanesPerHeat: 3, heats: [liveScoredHeat] });
+  state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [liveSession] });
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={liveSession} heats={[liveScoredHeat]} activeHeatId={20} /></MemoryRouter></CompactPageBarProvider>);
+
+  const rowsAfter = screen.getAllByRole('row').slice(1);
+  expect(rowsAfter[0]).toHaveTextContent('Lane Three Team');
+  expect(rowsAfter[1]).toHaveTextContent('Lane One Team');
+});
+
+it('shows Carried Forward (CF) column on lettered Finals and includes CF in total points', () => {
+  const qualHeat = heat(30, {
+    sessionId: 10,
+    orderIndex: 0,
+    label: 'Heat 1',
+    entries: [{ id: 1, teamId: 1, teamName: 'Oak A', laneIndex: 1 }, { id: 2, teamId: 2, teamName: 'Beech B', laneIndex: 2 }],
+    races: [
+      race(60, {
+        name: 'Bending',
+        isComplete: true,
+        results: [
+          { id: 1, teamId: 1, teamName: 'Oak A', placing: 1, eliminated: false, points: 10 },
+          { id: 2, teamId: 2, teamName: 'Beech B', placing: 2, eliminated: false, points: 8 },
+        ],
+      }),
+    ],
+  });
+  const qualSession = session(10, { competitionSectionId: 1, sectionName: 'Teams Seniors', status: 2, heats: [qualHeat] });
+  const aFinalHeat = heat(31, {
+    sessionId: 11,
+    orderIndex: 0,
+    label: 'A Final',
+    entries: [{ id: 3, teamId: 1, teamName: 'Oak A', laneIndex: 1 }, { id: 4, teamId: 2, teamName: 'Beech B', laneIndex: 2 }],
+    races: [
+      race(61, {
+        name: 'Flag',
+        isComplete: true,
+        results: [
+          { id: 3, teamId: 2, teamName: 'Beech B', placing: 1, eliminated: false, points: 6 },
+          { id: 4, teamId: 1, teamName: 'Oak A', placing: 2, eliminated: false, points: 5.01 },
+        ],
+      }),
+    ],
+  });
+  const finalSession = session(11, { competitionSectionId: 1, sectionName: 'Teams Seniors', status: 2, heats: [aFinalHeat] });
+  localStorage.setItem(FAVOURITES_KEY, JSON.stringify([{ competitionId: 1, teamId: 1 }]));
+  state.competition = competition({ id: 1, name: 'Autumn Games', startDate: '2026-10-16', sessions: [qualSession, finalSession] });
+
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={finalSession} heats={[aFinalHeat]} activeHeatId={31} /></MemoryRouter></CompactPageBarProvider>);
+
+  expect(screen.getByRole('columnheader', { name: /CF/ })).toBeInTheDocument();
+  const oakRow = screen.getByRole('row', { name: /Oak A/ });
+  expect(oakRow).toHaveAttribute('data-followed', 'true');
+  // CF = 10, Flag = 5.01 (formatted as 5), Total = 15.01 (formatted as 15)
+  const oakCells = within(oakRow).getAllByRole('cell').map((c) => c.textContent);
+  expect(oakCells).toContain('10');
+  expect(oakCells).toContain('5');
+  expect(oakCells).toContain('15');
+  expect(within(oakRow).getByRole('link', { name: /Oak A/ })).toHaveAttribute('href', '/competitions/1/teams/1');
+  expect(formatPoints(24.01)).toBe('24');
+  expect(formatPoints(24.51)).toBe('24.5');
 });

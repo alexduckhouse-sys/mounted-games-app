@@ -9,6 +9,8 @@
 }
 .heat-grid .heat-rank { width: 30px; padding-left: 12px; }
 .heat-grid .heat-race { width: 23px; }
+.heat-grid .heat-cf-head { width: 28px; }
+.heat-grid td.heat-cf { color: rgb(var(--mg-muted)); background: rgb(var(--mg-subtle)); }
 .heat-grid .heat-pts { width: 48px; }
 
 .heat-grid thead th.heat-pts { text-align: center; padding-bottom: 8px; color: rgb(var(--mg-heading)); }
@@ -43,11 +45,18 @@
 }
 
 .heat-grid tbody th, .heat-grid tbody td { height: 52px; border-bottom: 1px solid rgb(var(--mg-ink)); }
+.heat-grid tbody tr.heat-row-fav { background: rgb(var(--mg-tint)); box-shadow: inset 3px 0 0 #C08308; }
 .heat-grid tbody td.heat-rank-cell { padding-left: 12px; text-align: left; font: 700 17px/1 var(--mg-font-display); color: rgb(var(--mg-muted)); }
 .heat-team {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; text-align: left;
   font: 600 14px/1.2 var(--mg-font); color: rgb(var(--mg-ink));
 }
+.heat-team-link {
+  display: flex; flex-direction: column; min-width: 0; color: inherit; text-decoration: none;
+}
+.heat-team-link:hover .heat-team-name { text-decoration: underline; }
+.heat-team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heat-team-lane { font: 500 11px/1.1 'Barlow', sans-serif; color: rgb(var(--mg-muted)); }
 .heat-grid tbody th.heat-team:first-child { padding-left: 12px; }
 .heat-cell {
   text-align: center; font: 600 16px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-ink));
@@ -59,4 +68,9 @@
   font: 700 21px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading));
 }
 .heat-dash { color: rgb(var(--mg-dash)); }
+.heat-dash.sitout, .sitout { color: rgb(var(--mg-muted)); font-weight: 700; }
+.heat-stage-badge {
+  display: inline-block; padding: 1px 3px; border-radius: 3px; background: rgb(var(--mg-tint));
+  color: rgb(var(--mg-body)); font: 700 10px/1 'Barlow Condensed', sans-serif; letter-spacing: .02em;
+}
 .heat-elim { color: rgb(var(--mg-elim)); }
