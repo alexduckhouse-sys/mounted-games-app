@@ -798,12 +798,14 @@ export interface StatsHit {
   competitions: number;
 }
 
-export interface StatsSearch {
+/** One page of the browse list for a kind; `total` counts everything matching `query`. */
+export interface StatsBrowse {
+  kind: StatsSubjectKind;
   query: string;
-  riders: StatsHit[];
-  ponies: StatsHit[];
-  teams: StatsHit[];
-  clubs: StatsHit[];
+  page: number;
+  pageSize: number;
+  total: number;
+  items: StatsHit[];
 }
 
 export interface StatsSummary {

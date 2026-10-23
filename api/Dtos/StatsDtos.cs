@@ -17,6 +17,9 @@ public record StatsSearchDto(
     IReadOnlyList<StatsHitDto> Riders, IReadOnlyList<StatsHitDto> Ponies,
     IReadOnlyList<StatsHitDto> Teams, IReadOnlyList<StatsHitDto> Clubs);
 
+/// <summary>One page of the browse list for a kind. <c>Total</c> counts every subject matching <c>Query</c>.</summary>
+public record StatsBrowseDto(StatsSubjectKind Kind, string Query, int Page, int PageSize, int Total, IReadOnlyList<StatsHitDto> Items);
+
 /// <param name="Competitions">Finished competitions that count towards the profile.</param>
 public record StatsHitDto(StatsSubjectKind Kind, string Name, string Key, int Competitions);
 

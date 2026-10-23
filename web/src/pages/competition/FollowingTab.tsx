@@ -66,8 +66,8 @@ export function FollowingTab() {
   };
   const choosing = showTeams || teams.length === 0;
 
-  return <div className="mx-auto flex max-w-xl flex-col gap-4 pb-2">
-    <div ref={listRef} className="mg-band mg-band-header relative z-10 pb-2.5 pt-0">
+  return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2">
+    <div ref={listRef} className="mg-band mg-band-header relative z-10 py-2.5">
       <button type="button" aria-expanded={listOpen} aria-controls="followed-teams" onClick={() => setListOpen(!listOpen)}
         className={`flex min-h-11 w-full items-center gap-2 rounded-lg border border-[rgb(var(--mg-header-line))] px-3 text-left text-sm font-semibold text-white ${listOpen ? 'bg-white/10' : ''}`}>
         <Star className="h-4 w-4 shrink-0 fill-[#F2C14E] text-[#F2C14E]" aria-hidden="true" />
@@ -75,7 +75,7 @@ export function FollowingTab() {
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-[rgb(var(--mg-header-sub))]">{teams.map((team) => team.displayName).join(', ')}</span>
         <ChevronDown className={`h-4 w-4 shrink-0 ${listOpen ? 'rotate-180' : ''}`} strokeWidth={2.25} aria-hidden="true" />
       </button>
-      {listOpen && <div id="followed-teams" className="absolute inset-x-0 top-[50px] overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] text-[rgb(var(--mg-ink))] shadow-[0_10px_28px_rgb(15_42_74/0.22)]">
+      {listOpen && <div id="followed-teams" className="absolute inset-x-0 top-[60px] overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] text-[rgb(var(--mg-ink))] shadow-[0_10px_28px_rgb(15_42_74/0.22)]">
         {teams.map((team) => {
           const state = next.get(team.id);
           const when = state?.kind === 'heat' ? `next ${formatTime(state.row.effective)}` : state?.kind === 'done' ? 'heats done' : 'not drawn yet';
