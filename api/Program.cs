@@ -176,8 +176,20 @@ if (args.Contains("--seed-review-competitions"))
 {
     await DbInitializer.SeedAsync(app.Services);
     using var scope = app.Services.CreateScope();
-    var count = await ReviewCompetitionSeeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), DateTime.UtcNow);
+    var count = await ReviewCompetitionSeeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), DateTime.UtcNow, DateTime.UtcNow);
     Console.WriteLine($"Created {count} demo competitions with sections, teams, timetables and sample results.");
+    return;
+}
+
+if (args.Contains("--reseed-review-competitions"))
+{
+    // Removes only the eight seeder-named events that carry the demo mark, then seeds them again from now.
+    await DbInitializer.SeedAsync(app.Services);
+    using var scope = app.Services.CreateScope();
+    var result = await ReviewCompetitionSeeder.ReseedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>(), DateTime.UtcNow);
+    Console.WriteLine($"Removed {result.Removed} demo competitions and created {result.Created} fresh ones.");
+    foreach (var name in result.Skipped)
+        Console.WriteLine($"Left \"{name}\" alone: it does not carry the demo mark, so it was not removed or replaced.");
     return;
 }
 
