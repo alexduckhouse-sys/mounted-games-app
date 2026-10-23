@@ -87,6 +87,19 @@ describe('embed requests and navigation', () => {
     expect(isEmbedRequest(new Headers({ 'X-MG-Embed': '0' }))).toBe(false);
   });
 
+  it.each([{ 'X-MG-Embed': 'true' }, { 'X-MG-Embed': '' }, { 'X-MG-Embed': '1, 1' }])('only the exact value 1 counts, not %j', (headers) => {
+    expect(isEmbedRequest(new Headers(headers))).toBe(false);
+  });
+
+  it('keeps the widget out of the cache that serves the same public reads to the app', () => {
+    // The service worker's cached route is: same origin, canCachePublicApi(path, method) and not isEmbedRequest(headers).
+    const wouldCache = (path: string, headers: Record<string, string>) => canCachePublicApi(path) && !isEmbedRequest(new Headers(headers));
+    for (const path of ['/api/competitions', '/api/competitions/42', '/api/competitions/42/standings']) {
+      expect(wouldCache(path, {})).toBe(true);
+      expect(wouldCache(path, { 'X-MG-Embed': '1' })).toBe(false);
+    }
+  });
+
   it('leaves the API, the hub and /embed/ pages to the network', () => {
     const denied = (path: string) => NAVIGATION_DENYLIST.some((rule) => rule.test(path));
     for (const path of ['/api/x', '/hubs/live', '/embed/competitions/1/standings', '/embed']) expect(denied(path)).toBe(true);
