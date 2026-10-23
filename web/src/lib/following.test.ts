@@ -52,8 +52,8 @@ describe('nextHeats and summariseNext', () => {
 
   it('describes a live heat with its age group, heat, lane and arena', () => {
     const next = nextHeats(data, new Set([1]));
-    expect(summariseNext(data.teams[0], next.get(1), arenas)).toMatchObject({ sub: 'Seniors · A Final, lane 3 · Ring 2', label: 'On now', tone: 'live' });
-    expect(summariseNext(data.teams[0], next.get(1), ['Main']).sub).toBe('Seniors · A Final, lane 3');
+    expect(summariseNext(data.teams[0], next.get(1), arenas)).toMatchObject({ sub: 'Senior Teams · A Final, lane 3 · Ring 2', label: 'On now', tone: 'live' });
+    expect(summariseNext(data.teams[0], next.get(1), ['Main']).sub).toBe('Senior Teams · A Final, lane 3');
   });
 
   it('numbers a heat that has no label, and shows how late a heat is running', () => {
