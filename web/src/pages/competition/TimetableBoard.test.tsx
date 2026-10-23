@@ -2,7 +2,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
-import { competition, heat, session } from '../../test/factories';
+import { FAVOURITES_KEY } from '../../lib/favourites';
+import { competition, heat, race, session } from '../../test/factories';
 import { dayKey } from '../../lib/timetableDay';
 import { TimetableBoard } from './TimetableBoard';
 
@@ -236,4 +237,52 @@ it('shows a session with no heats as provisional to organisers, and hides it fro
   const row = screen.getByText('Heats to follow').closest('.tt-row') as HTMLElement;
   expect(row).toHaveTextContent('Provisional');
   expect(screen.getByRole('note')).toHaveTextContent('Provisional timetable');
+});
+
+it('shows ON NOW · Race X of Y when a live heat has races, highlights followed teams, and keeps multi-arena sessions grouped chronologically by session', () => {
+  localStorage.setItem(FAVOURITES_KEY, JSON.stringify([{ competitionId: 1, teamId: 7 }]));
+  setCompetition({
+    sessions: [
+      session(1, {
+        orderIndex: 1,
+        status: 1,
+        sectionName: 'Teams Under 12',
+        arenaName: 'Arena 1',
+        scheduledStart: `${day}T09:00:00`,
+        minutesPerHeat: 15,
+        heats: [
+          heat(11, {
+            sessionId: 1,
+            orderIndex: 0,
+            label: 'U12 Heat 1',
+            entries: [{ id: 1, teamId: 7, teamName: 'Starred Team', laneIndex: 1 }],
+            races: [race(1, { isComplete: true }), race(2, { isComplete: false }), race(3, { isComplete: false })],
+          }),
+          heat(12, { sessionId: 1, orderIndex: 1, label: 'U12 Heat 2' }),
+        ],
+      }),
+      session(2, {
+        orderIndex: 2,
+        status: 0,
+        competitionSectionId: 2,
+        sectionName: 'Teams Under 15',
+        arenaName: 'Arena 2',
+        scheduledStart: `${day}T09:00:00`,
+        minutesPerHeat: 15,
+        heats: [
+          heat(21, { sessionId: 2, orderIndex: 0, label: 'U15 Heat 1' }),
+          heat(22, { sessionId: 2, orderIndex: 1, label: 'U15 Heat 2' }),
+        ],
+      }),
+    ],
+  });
+
+  const { container } = renderBoard();
+  const live = container.querySelector('.tt-live') as HTMLElement;
+  expect(live).toHaveTextContent('ON NOW · Race 2 of 3');
+  expect(live).toHaveAttribute('data-followed', 'true');
+
+  // Concurrent sessions across arenas stay grouped as single session blocks rather than splitting heat-by-heat.
+  const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+  expect(headings).toEqual(['Under 12 Teams · Session 1', 'Under 15 Teams · Session 1']);
 });

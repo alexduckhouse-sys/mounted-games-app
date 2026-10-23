@@ -854,7 +854,7 @@ public class CompetitionsController : ControllerBase
             {
                 // Independent random heat split per session — guarantees each team rides only once.
                 var groups = SplitIntoBalancedGroups(sectionTeams, maxHeatSize);
-                var sessionMinutes = groups.Count * racesPerHeat * minutes;
+                var sessionMinutes = groups.Count * minutes;
                 var sessionName = sessionsPerSection > 1
                     ? $"{section.DisplayName} · Session {sIdx}"
                     : section.DisplayName;
@@ -883,7 +883,7 @@ public class CompetitionsController : ControllerBase
                         SessionId = session.Id,
                         Label = $"Heat {gi + 1}",
                         OrderIndex = gi + 1,
-                        DurationMinutes = racesPerHeat * minutes
+                        DurationMinutes = minutes
                     };
                     _db.Heats.Add(heat);
                     await _db.SaveChangesAsync();

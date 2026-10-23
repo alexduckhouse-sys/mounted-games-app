@@ -68,6 +68,8 @@ a.tt-row:focus-visible { outline-offset: -2px; }
 .tt-key li { display: flex; align-items: center; gap: 5px; }
 .tt-chevron { color: rgb(var(--mg-faint)); }
 .tt-live { background: rgb(var(--mg-live-row)); box-shadow: inset 3px 0 0 rgb(var(--mg-red)); }
+.tt-followed:not(.tt-live) { background: rgb(var(--mg-tint)); box-shadow: inset 3px 0 0 #C08308; }
+.tt-fav-star { display: inline-block; margin-right: 4px; vertical-align: -1px; fill: #C08308; color: #C08308; }
 a.tt-live:hover { background: rgb(var(--mg-live-row)); filter: brightness(.98); }
 .tt-late .tt-time { color: rgb(var(--mg-late-time)); }
 .tt-finished { min-height: 44px; }

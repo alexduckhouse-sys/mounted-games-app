@@ -321,13 +321,19 @@ describe('loading and failure states', () => {
 });
 
 describe('embedded in the timetable', () => {
-  it('keeps the age group menu and the collapsible toplist, with the create finals button for organisers', async () => {
+  it('keeps the age group menu, 3-way sub-tabs (Draw / Heats, Heat Scores, Toplist) and the collapsible toplist, with the create finals button for organisers', async () => {
     state.manage = true;
     const user = userEvent.setup();
     renderTab('/?section=9', { toplistOnly: false });
     expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Age group' })).toBeVisible();
     expect(screen.getByRole('button', { name: /Create finals/ })).toBeVisible();
+    const sectionTabs = screen.getByRole('group', { name: 'Section view' });
+    expect(within(sectionTabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Draw / Heats', 'Heat Scores', 'Toplist']);
+    expect(screen.getByRole('region', { name: 'Draw and starting lanes' })).toBeVisible();
+    await user.click(within(sectionTabs).getByRole('button', { name: 'Heat Scores' }));
+    expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeVisible();
+    await user.click(within(sectionTabs).getByRole('button', { name: 'Draw / Heats' }));
     await user.click(screen.getByRole('button', { name: /Show Under 12 toplist/ }));
     await screen.findByRole('region', { name: 'Finals' });
     await user.click(screen.getByRole('combobox', { name: 'Age group' }));

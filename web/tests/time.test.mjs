@@ -34,11 +34,11 @@ test('orders sessions and heats without mutating the source arrays', () => {
   assert.deepEqual(sessions.map((s) => s.id), [2, 1]);
 });
 
-test('explicit heat duration takes precedence over per-race duration and the default', () => {
+test('explicit heat duration takes precedence over session minutesPerHeat and the default', () => {
   const result = computeTimings([session(1, { scheduledStart: iso('09:00'), minutesPerHeat: 4, heats: [heat(1, { durationMinutes: 10, races: [{}, {}] }), heat(2, { races: [{}, {}] }), heat(3)] })]).get(1);
   at(result.heats[1].effective, '09:10');
-  at(result.heats[2].effective, '09:18');
-  at(result.effectiveEnd, '09:22');
+  at(result.heats[2].effective, '09:14');
+  at(result.effectiveEnd, '09:18');
 });
 
 test('default heat duration is 30 minutes when no duration is configured', () => {
