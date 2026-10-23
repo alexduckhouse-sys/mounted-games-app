@@ -19,11 +19,11 @@ const drawn = (entries: HeatEntry[]): LaneRow[] => entries.slice()
 
 /**
  * Qualifier teams in the order `RaceFinalService` fills the final: Q1 first, Q2 first, Q1 second, Q2 second and so on,
- * the top `qualifiers` of each by placing, up to the session's lanes. Heats are matched to teams through their entries.
+ * the top `qualifiers` of each by placing, up to the session's lanes. Hors concours teams are skipped, as on the server.
  */
-function interleave(qualifierHeats: Heat[], qualifiers: number, lanes: number | null | undefined): LaneRow[] {
+function interleave(qualifierHeats: Heat[], qualifiers: number, lanes: number | null | undefined, hc: ReadonlySet<number>): LaneRow[] {
   const top = (heat: Heat) => heat.races.flatMap((r) => r.results)
-    .filter((r) => !r.isSitOut && !r.eliminated && (r.placing ?? 0) > 0)
+    .filter((r) => !r.isSitOut && !r.eliminated && (r.placing ?? 0) > 0 && !hc.has(r.teamId))
     .sort((a, b) => a.placing! - b.placing!)
     .slice(0, qualifiers)
     .map((r) => ({ teamId: r.teamId, teamName: heat.entries.find((e) => e.teamId === r.teamId)?.teamName ?? r.teamName, bibColour: heat.entries.find((e) => e.teamId === r.teamId)?.bibColour }));
@@ -42,7 +42,7 @@ function interleave(qualifierHeats: Heat[], qualifiers: number, lanes: number | 
  * otherwise the same pick worked out here, marked provisional). Once the final is scored, the lanes of the next heat.
  * Null when there is nothing to announce.
  */
-export function nextRoundLanes(session: Session, heat: Heat, nextHeat: Heat | null, qualifiers: number): NextLanes | null {
+export function nextRoundLanes(session: Session, heat: Heat, nextHeat: Heat | null, qualifiers: number, hcTeamIds: ReadonlySet<number> = new Set()): NextLanes | null {
   const round = session.heats.filter((h) => h.raceRoundId != null && h.raceRoundId === heat.raceRoundId);
   const qualifierHeats = round.filter((h) => h.raceRoundStage === 1).sort((a, b) => a.orderIndex - b.orderIndex);
   const final = round.find((h) => h.raceRoundStage === 2);
@@ -56,7 +56,7 @@ export function nextRoundLanes(session: Session, heat: Heat, nextHeat: Heat | nu
       title: `Lanes for ${label}`,
       note: 'Provisional. The final is filled from the qualifiers once the results are saved, and the lanes can change.',
       provisional: true,
-      rows: interleave(qualifierHeats, qualifiers, session.lanesPerHeat),
+      rows: interleave(qualifierHeats, qualifiers, session.lanesPerHeat, hcTeamIds),
     };
   }
 

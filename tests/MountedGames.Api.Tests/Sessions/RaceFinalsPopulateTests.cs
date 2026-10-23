@@ -81,6 +81,24 @@ public class RaceFinalsPopulateTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Populate_SkipsHorsConcoursTeams_SoTheNextFinisherTakesTheirPlace()
+    {
+        var a = await _f.CreateArenaAsync(6, raceFinals: true);
+        var (admin, q1, q2, fin) = await GenerateRoundAsync(a);
+        var q1t = Teams(q1); var q2t = Teams(q2);
+        await ScoreAsync(admin, q1, (q1t[0], 1, false), (q1t[1], 2, false), (q1t[2], 3, false));
+        await ScoreAsync(admin, q2, (q2t[0], 1, false), (q2t[1], 2, false), (q2t[2], 3, false));
+        // The winner of the first qualifier is marked hors concours: it keeps its result but takes no final place.
+        await _f.WithDbAsync(async db => { (await db.Teams.FindAsync(q1t[0]))!.IsHorsConcours = true; await db.SaveChangesAsync(); return 0; });
+
+        var heat = await (await admin.PostAsJsonAsync(Url(a, $"/heats/{fin.Id}/populate-race-final"), new PopulateRaceFinalRequest(2))).ReadAsync<HeatDto>();
+
+        // HC is skipped before the top two are taken, so Q1 sends its 2nd and 3rd. Session has 3 lanes.
+        Assert.DoesNotContain(q1t[0], Teams(heat));
+        Assert.Equal(new[] { q1t[1], q2t[0], q1t[2] }, Teams(heat));
+    }
+
+    [Fact]
     public async Task Populate_WithoutSessionLanes_UsesAllQualifiersThatFitTopN()
     {
         var a = await _f.CreateArenaAsync(4, raceFinals: true);

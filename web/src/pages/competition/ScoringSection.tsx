@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CloudOff, Flag, Trash2, Undo2 } from 'lucide-react';
+import { CloudOff, Flag, Printer, Trash2, Undo2 } from 'lucide-react';
 import { bibName, hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import { describePlacings, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
 import type { NextLanes } from '../../lib/nextRoundLanes';
@@ -9,6 +9,7 @@ import { summariseRace } from '../../lib/raceSummary';
 import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import { EliminationSheet, HcConfirm, HeatGrid, LaneView, NextLanesCard, RaceRules, ScoreRow, SummaryCard } from './ScoringParts';
+import { HeatPrintSheet } from './HeatPrintSheet';
 import './scoring.css';
 
 export type { PendingPlace } from '../../lib/raceScoring';
@@ -179,10 +180,16 @@ export function ScoringSection({
       </div>
 
       {races.length > 0 && (
+        <div className="flex justify-end">
+          <button type="button" className="mg-btn mg-btn-secondary" onClick={() => window.print()}><Printer className="h-4 w-4" aria-hidden="true" /> Print heat table</button>
+        </div>
+      )}
+      {races.length > 0 && (
         <HeatGrid heat={heat} races={races} activeRaceId={activeRace?.id ?? null} activeIndex={laneIdx} rules={laneRules}
           pending={pending} pointsFor={pointsFor} hcTeamIds={hcTeamIds} />
       )}
       <RaceRules races={races} />
+      {races.length > 0 && <HeatPrintSheet heat={heat} races={races} rules={laneRules} hcTeamIds={hcTeamIds} tieRule={tieRule} hatbands={laneHatbands} />}
 
       {sheet && (
         <EliminationSheet

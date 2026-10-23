@@ -71,11 +71,13 @@ describe('SessionPage', () => {
   describe('who may score', () => {
     const open = () => competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { races: [race(1, { name: 'Bending' })] })] })] });
 
-    it('shows the scoring view, the organiser tools and the score record to someone who can manage this competition', async () => {
+    it('shows the scoring view, the organiser tools, and no score record or sign-off, to someone who can manage this competition', async () => {
       mount(open());
       expect(screen.getByRole('region', { name: 'Scoring Bending' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
-      await waitFor(() => expect(api.get).toHaveBeenCalledWith('/races/1/score'));
+      expect(screen.queryByText('Score record')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Sign off/)).not.toBeInTheDocument();
+      expect(screen.queryByText('History')).not.toBeInTheDocument();
     });
 
     it('shows only the results to everyone else', () => {

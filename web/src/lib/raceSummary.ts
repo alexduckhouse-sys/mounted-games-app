@@ -133,17 +133,20 @@ function ending(input: SummaryInput, totals: TotalRow[]): { heading: string; lin
   const { heat, races, qualifiers, hcTeamIds, notes } = input;
   const nameOf = (id: number) => heat.entries.find((e) => e.teamId === id)?.teamName ?? `Team ${id}`;
   if (heat.raceRoundStage === 1) {
-    // The same pick the server makes: finishers by placing, the top N.
-    const finishers = races.flatMap((r) => r.results).filter((r) => real(r) && !r.eliminated && (r.placing ?? 0) > 0)
+    // The same pick the server makes: finishers by placing, hors concours teams skipped, the top N.
+    const all = races.flatMap((r) => r.results).filter((r) => real(r) && !r.eliminated && (r.placing ?? 0) > 0)
       .sort((a, b) => a.placing! - b.placing!);
+    const finishers = all.filter((r) => !hcTeamIds.has(r.teamId));
     const through = new Set(finishers.slice(0, qualifiers).map((r) => r.teamId));
     const lines: string[] = [];
     finishers.forEach((r, i) => {
-      const hc = hcTeamIds.has(r.teamId) ? ' (HC)' : '';
       lines.push(through.has(r.teamId)
-        ? `${nameOf(r.teamId)}${hc}: qualified ${ordinal(i + 1)}, through to the final`
-        : `${nameOf(r.teamId)}${hc}: not through. Placed ${ordinal(i + 1)} and only the top ${qualifiers} go through`);
+        ? `${nameOf(r.teamId)}: qualified ${ordinal(i + 1)}, through to the final`
+        : `${nameOf(r.teamId)}: not through. Placed ${ordinal(i + 1)} and only the top ${qualifiers} go through`);
     });
+    for (const r of all.filter((x) => hcTeamIds.has(x.teamId))) {
+      lines.push(`${nameOf(r.teamId)} (HC): hors concours, does not take a place in the final`);
+    }
     for (const r of races.flatMap((x) => x.results).filter((x) => real(x) && x.eliminated)) {
       lines.push(`${nameOf(r.teamId)}: out of the qualifier. ${reasonFor(r, notes)}`);
     }

@@ -6,18 +6,12 @@ import {
   clearScorerToken, parseScorerSession, readSavedScorerSession, readSavedScorerSessionAt, readScorerToken, scorerApi, scorerFailure,
   tokenFromHash, writeSavedScorerSession, writeScorerToken, type ScorerLoadFailure,
 } from '../offline/scorerLink';
-<<<<<<< HEAD
+import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, shouldNoticeSavedCopy } from '../offline/savedCopies';
 import { enqueue, placingsOf, type QueuedScore } from '../offline/scoreOutbox';
 import { nextRoundLanes } from '../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo';
 import { nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
-=======
-import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, shouldNoticeSavedCopy } from '../offline/savedCopies';
-import { enqueue, placingsOf } from '../offline/scoreOutbox';
-import { nextRaceToScore, placesFromResults, setStatus, tapTeam, toggleEliminated } from '../lib/raceScoring';
-import { lanesInUse } from '../lib/lanes';
->>>>>>> origin/main
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import type { Heat, ScorerSession, Session } from '../types';

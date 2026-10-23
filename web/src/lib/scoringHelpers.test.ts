@@ -91,6 +91,18 @@ describe('race summary', () => {
     expect(s.placings.find((p) => p.teamId === 2)?.hc).toBe(true);
   });
 
+  it('skips an HC team when saying who goes through, and says why', () => {
+    const q = heat(1, { raceRoundStage: 1, entries: entries('A', 'B', 'C', 'D') });
+    const only = scored(1, [[3, 1, 1], [1, 2, 1], [2, 3, 1], [4, 4, 1]]);
+    const s = summariseRace({ heat: q, races: [only], raceIndex: 0, hcTeamIds: new Set([3]), rule: 0, qualifiers: 2, notes: {} })!;
+    expect(s.ending?.lines).toEqual([
+      'A: qualified 1st, through to the final',
+      'B: qualified 2nd, through to the final',
+      'D: not through. Placed 3rd and only the top 2 go through',
+      'C (HC): hors concours, does not take a place in the final',
+    ]);
+  });
+
   it('after a qualifier says who goes through and why the others do not', () => {
     const q = heat(1, { raceRoundStage: 1, entries: entries('A', 'B', 'C', 'D', 'E') });
     const only = scored(1, [[3, 1, 1], [1, 2, 1], [2, 3, 1], [4, 4, 1], [5, null, 0, true]]);
@@ -128,6 +140,12 @@ describe('next round lanes', () => {
     expect(lanes.provisional).toBe(true);
     expect(lanes.note).toMatch(/Provisional/);
     expect(lanes.rows.map((r) => `${r.lane} ${r.teamName}`)).toEqual(['1 A', '2 Y', '3 B', '4 X']);
+  });
+
+  it('leaves HC teams out of the provisional final', () => {
+    const s = session(1, { heats: [q1, q2, finalHeat()], lanesPerHeat: 4 });
+    const lanes = nextRoundLanes(s, q1, null, 2, new Set([1]))!;
+    expect(lanes.rows.map((r) => r.teamName)).toEqual(['B', 'Y', 'C', 'X']);
   });
 
   it('stops at the number of lanes, and with no lane limit takes everyone through', () => {

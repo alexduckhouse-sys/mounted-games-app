@@ -9,7 +9,6 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { DeclarationForm, Heat, Session } from '../../types';
 import type { QueuedScore } from '../../offline/scoreOutbox';
-import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
 import { ScoringSection } from './ScoringSection';
@@ -330,7 +329,7 @@ export function SessionPage() {
     ?? competition.sessions.filter((s) => (s.kind ?? 0) === 0 && s.orderIndex > session.orderIndex).sort((a, b) => a.orderIndex - b.orderIndex).find((s) => s.heats.length > 0)?.heats
       .slice().sort((a, b) => a.orderIndex - b.orderIndex)[0]
     ?? null;
-  const nextLanes = viewHeat ? nextRoundLanes({ ...session, heats: viewHeats }, viewHeat, followingHeat, qualifiersOf(session)) : null;
+  const nextLanes = viewHeat ? nextRoundLanes({ ...session, heats: viewHeats }, viewHeat, followingHeat, qualifiersOf(session), hcTeamIds) : null;
 
   return (
     <div className="space-y-3">
@@ -392,9 +391,6 @@ export function SessionPage() {
         <HeatScores session={session} heats={orderedHeats} activeHeatId={activeHeatId} />
       )}
 
-      {canManage(competition) && activeRace && !outbox.some((item) => item.raceId === activeRace.id) && (
-        <ScoreAuditPanel raceId={activeRace.id} onChanged={reload} />
-      )}
       <AnimatePresence>
         {heatEndOverlay && (
           <HeatEndOverlay
