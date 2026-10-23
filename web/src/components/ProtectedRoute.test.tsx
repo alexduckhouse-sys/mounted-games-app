@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, type StoredAuth } from '../api';
-import { AuthProvider } from '../auth/AuthContext';
+import { AuthProvider, useAuth } from '../auth/AuthContext';
 import type { Role } from '../types';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -40,7 +40,34 @@ function renderAt(path: string, roles?: Role[]) {
 
 beforeEach(() => { vi.mocked(api.get).mockResolvedValue({ data: {} }); });
 
+function SignOutButton() {
+  const { logout } = useAuth();
+  return <button onClick={logout}>Sign out</button>;
+}
+
 describe('ProtectedRoute', () => {
+  it('lands on the timetable, not the login page, when someone signs out on a protected page', async () => {
+    signIn(['Member']);
+    document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 9, name: 'Nine' }))}; Path=/`;
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/admin/secret']}>
+          <Routes>
+            <Route path="/" element={<p>Home page</p>} />
+            <Route path="/competitions/9" element={<p>Timetable 9</p>} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/admin/secret" element={<ProtectedRoute><SignOutButton /></ProtectedRoute>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>,
+    );
+    fireEvent.click(screen.getByText('Sign out'));
+    expect(screen.getByText('Timetable 9')).toBeInTheDocument();
+    expect(screen.queryByText(/Login page/)).not.toBeInTheDocument();
+    document.cookie = 'mg.competition=; Max-Age=0; Path=/';
+  });
+
+
   it('sends a signed-out visitor to the login page, remembering where they were going', () => {
     renderAt('/admin/secret');
     expect(screen.getByText('Login page, came from /admin/secret')).toBeInTheDocument();

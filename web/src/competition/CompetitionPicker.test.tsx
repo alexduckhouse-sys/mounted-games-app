@@ -244,16 +244,16 @@ describe('CompetitionPicker: more pages', () => {
     expect(screen.getByText('Autumn Open')).toBeInTheDocument();
   });
 
-  it('keeps the saved-list notice when a later page is also a saved copy', async () => {
-    const fallback = { 'x-mg-saved-copy': '1', 'x-mg-saved-at': new Date(Date.now() - 1000).toISOString() };
+  it('keeps the old-copy notice when a later page is also a saved copy', async () => {
+    const fallback = { 'x-mg-saved-copy': '1', 'x-mg-saved-at': new Date(Date.now() - 45 * 60_000).toISOString() };
     get.mockResolvedValueOnce({ data: page([autumn], true), headers: fallback } as never)
       .mockResolvedValueOnce({ data: page([festival]), headers: {} } as never);
     renderPicker();
     await loaded('Autumn Open');
-    expect(screen.getByRole('status')).toHaveTextContent('Showing a saved list.');
+    expect(screen.getByRole('status')).toHaveTextContent('Last updated');
     await userEvent.click(screen.getByRole('button', { name: 'Load more competitions' }));
     await loaded('Weekend Fest');
-    expect(screen.getByRole('status')).toHaveTextContent('Showing a saved list.');
+    expect(screen.getByRole('status')).toHaveTextContent('Last updated');
   });
 });
 
@@ -342,20 +342,37 @@ describe('CompetitionPicker: saved copies', () => {
   });
 
   it('keeps the saved list showing when it is still better than the phone’s offline copy', async () => {
-    writeSavedCopy(savedCopyKeys.picker(false), page([festival]), savedAt(1));
-    reply(page([autumn]), swFallback(30));
+    writeSavedCopy(savedCopyKeys.picker(false), page([festival]), savedAt(45));
+    reply(page([autumn]), swFallback(90));
     renderPicker();
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Showing a saved list.'));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Last updated'));
     expect(screen.getByText('Weekend Fest')).toBeInTheDocument();
     expect(screen.queryByText('Autumn Open')).not.toBeInTheDocument();
   });
 
-  it('uses the offline copy when it is newer than the saved list', async () => {
+  it('says nothing while the saved list is only a few minutes old, even offline', async () => {
+    writeSavedCopy(savedCopyKeys.picker(false), page([festival]), savedAt(5));
+    get.mockRejectedValue(new Error('offline'));
+    renderPicker();
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    expect(screen.getByText('Weekend Fest')).toBeInTheDocument();
+    expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();
+  });
+
+  it('says when the list is old and the refresh failed, with the time and a calm line', async () => {
     writeSavedCopy(savedCopyKeys.picker(false), page([festival]), savedAt(60));
-    reply(page([autumn]), swFallback(5));
+    get.mockRejectedValue(new Error('offline'));
+    renderPicker();
+    expect(await screen.findByText('Last updated 11:00. We’ll refresh when you’re back online.')).toBeInTheDocument();
+    expect(screen.getByText('Weekend Fest')).toBeInTheDocument();
+  });
+
+  it('uses the offline copy when it is newer than the saved list', async () => {
+    writeSavedCopy(savedCopyKeys.picker(false), page([festival]), savedAt(90));
+    reply(page([autumn]), swFallback(40));
     renderPicker();
     await loaded('Autumn Open');
-    expect(screen.getByRole('status')).toHaveTextContent('Showing a saved list.');
+    expect(screen.getByRole('status')).toHaveTextContent('Last updated 11:20.');
     expect(screen.queryByText('Weekend Fest')).not.toBeInTheDocument();
   });
 
@@ -363,16 +380,30 @@ describe('CompetitionPicker: saved copies', () => {
     writeSavedCopy(savedCopyKeys.picker(false), page([festival]), savedAt(60));
     reply(page([autumn]), swFallback(undefined));
     renderPicker();
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Showing a saved list.'));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Last updated'));
     expect(screen.getByText('Weekend Fest')).toBeInTheDocument();
   });
 
   it('shows the offline copy, and does not save it as fresh, when there is no saved list', async () => {
+    reply(page([autumn]), swFallback(45));
+    renderPicker();
+    await loaded('Autumn Open');
+    expect(screen.getByRole('status')).toHaveTextContent('Last updated');
+    expect(readSavedCopy(savedCopyKeys.picker(false))).toBeNull();
+  });
+
+  it('says nothing for an offline copy that is only a few minutes old', async () => {
     reply(page([autumn]), swFallback(10));
     renderPicker();
     await loaded('Autumn Open');
-    expect(screen.getByRole('status')).toHaveTextContent('Showing a saved list.');
-    expect(readSavedCopy(savedCopyKeys.picker(false))).toBeNull();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('counts an offline copy with no readable time as old, because the refresh failed', async () => {
+    reply(page([autumn]), swFallback(undefined));
+    renderPicker();
+    await loaded('Autumn Open');
+    expect(screen.getByRole('status')).toHaveTextContent('Last updated earlier.');
   });
 });
 

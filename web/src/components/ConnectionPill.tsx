@@ -6,10 +6,16 @@ import { liveState } from '../live/connectionStatus';
 const time = (date: Date) => date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 /**
- * Says what the live connection is doing, only when it isn't working. Tapping it checks straight away.
- * `fallback` shows instead while everything is fine (the compact heat header's status badge).
+ * Says what the live connection is doing, only once it has really been lost (see `liveState`). Tapping it
+ * checks straight away. The pill floats just under the top bar so it never moves the bar's own controls.
+ * `fallback` is the compact heat header's status badge; it always shows.
  */
 export function ConnectionPill({ fallback = null }: { fallback?: ReactNode }) {
+  const pill = useConnectionPill();
+  return <>{fallback}{pill}</>;
+}
+
+function useConnectionPill(): ReactNode {
   const { status } = useConnectionStatus();
   const down = status != null && !status.connected;
   // Ticks while the live link is down, so the pill moves from hidden to reconnecting to checking.
@@ -20,9 +26,9 @@ export function ConnectionPill({ fallback = null }: { fallback?: ReactNode }) {
     return () => clearInterval(timer);
   }, [down]);
 
-  if (!status) return fallback;
+  if (!status) return null;
   const state = liveState(status, now);
-  if (state === 'live' || state === 'connecting') return fallback;
+  if (state === 'live' || state === 'connecting') return null;
 
   if (status.retrying) {
     return (

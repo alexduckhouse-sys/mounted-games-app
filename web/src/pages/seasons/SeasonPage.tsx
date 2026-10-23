@@ -10,6 +10,8 @@ import { SeasonSettingsForm } from './SeasonSettingsForm';
 import { EmbedCard } from '../competition/EmbedCard';
 import { seasonError, type PublicationView, type SeasonRoundView, type SeasonView, type StandingsView } from './seasonViewTypes';
 import './seasonViews.css';
+import { SelectField } from '../../components/SelectField';
+import { NumberField } from '../../components/NumberField';
 
 type SeasonTab = 'standings' | 'rounds' | 'settings';
 
@@ -89,8 +91,8 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
   ].filter(Boolean).join(' · ');
   return <>
     <div className="sv-filters">
-      <label className="rf-fld"><span className="sr-only">Age section</span><select disabled aria-label="Age section" title="Each season covers one age section" value={season.ageGroup}><option>{season.ageGroup}</option></select></label>
-      <label className="rf-fld"><span className="sr-only">Format</span><select disabled aria-label="Format" title="Each season covers one format" value={season.format}><option value={season.format}>{SectionFormatLabel[season.format]}</option></select></label>
+      <label className="rf-fld"><span className="sr-only">Age section</span><SelectField disabled aria-label="Age section" title="Each season covers one age section" value={season.ageGroup}><option>{season.ageGroup}</option></SelectField></label>
+      <label className="rf-fld"><span className="sr-only">Format</span><SelectField disabled aria-label="Format" title="Each season covers one format" value={season.format}><option value={season.format}>{SectionFormatLabel[season.format]}</option></SelectField></label>
     </div>
     {stale && <p className="mg-notice sv-msg">A result or points rule has changed since publication. The table stays on the published version until the organiser publishes again.</p>}
     {!table.standings.length ? <div className="sv-empty"><h2>No standings yet</h2><p>Results will appear after the first round is published.</p></div> : <>
@@ -172,10 +174,10 @@ function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => 
       <p className="rf-note sv-flush">Choose a matching section from a competition you organise.</p>
       {listError && <p role="alert" className="mg-notice">{listError} <button type="button" className="mg-text-link min-h-11" onClick={() => { setListError(''); setListAttempt((value) => value + 1); }}>Try again</button></p>}
       {actionError && <p role="alert" className="mg-notice">{actionError}</p>}
-      <label className="rf-fld">Competition<select required value={competitionId} onChange={(event) => chooseCompetition(event.target.value)}><option value="">{competitions ? 'Choose a competition' : 'Loading competitions…'}</option>{competitions?.map((competition) => <option key={competition.id} value={competition.id}>{competition.name} · {new Date(competition.startDate).getFullYear()}</option>)}</select></label>
+      <label className="rf-fld">Competition<SelectField required value={competitionId} onChange={(event) => chooseCompetition(event.target.value)}><option value="">{competitions ? 'Choose a competition' : 'Loading competitions…'}</option>{competitions?.map((competition) => <option key={competition.id} value={competition.id}>{competition.name} · {new Date(competition.startDate).getFullYear()}</option>)}</SelectField></label>
       {competitionId && detailLoading && <p role="status" className="rf-note sv-flush">Loading sections…</p>}
       {detailError && <p role="alert" className="mg-notice">{detailError} <button type="button" className="mg-text-link min-h-11" onClick={() => { setDetailLoading(true); setDetailError(''); setDetailAttempt((value) => value + 1); }}>Try again</button></p>}
-      {detail && (sections.length ? <label className="rf-fld">Section<select required value={sectionId} onChange={(event) => setSectionId(event.target.value)}><option value="">Choose a section</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.displayName}</option>)}</select></label> : <p className="rf-note sv-flush">There isn’t a matching unlinked section in this competition.</p>)}
+      {detail && (sections.length ? <label className="rf-fld">Section<SelectField required value={sectionId} onChange={(event) => setSectionId(event.target.value)}><option value="">Choose a section</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.displayName}</option>)}</SelectField></label> : <p className="rf-note sv-flush">There isn’t a matching unlinked section in this competition.</p>)}
     </fieldset>
     <button className="rf-btn rf-btn-primary" disabled={busy || !sectionId}>{busy ? 'Adding round…' : 'Add round'}</button>
   </form>;
@@ -239,7 +241,7 @@ function PublicationHistory({ base, latest }: { base: string; latest: number }) 
     catch (reason) { setError(seasonError(reason, 'This version couldn’t be loaded. Try again.')); }
     finally { setBusy(false); }
   }}>
-    <div className="sv-versions-pick"><label className="rf-fld">Version<input type="number" min={1} max={latest} required value={version} onChange={(event) => setVersion(Number(event.target.value))} disabled={busy} /></label><button className="rf-btn" disabled={busy}>{busy ? 'Loading…' : 'View version'}</button></div>
+    <div className="sv-versions-pick"><label className="rf-fld">Version<NumberField  min={1} max={latest} required value={version} onChange={(event) => setVersion(Number(event.target.value))} disabled={busy} /></label><button className="rf-btn" disabled={busy}>{busy ? 'Loading…' : 'View version'}</button></div>
     {error && <p role="alert" className="mg-notice">{error}</p>}
     {publication && <><p className="rf-note sv-flush">Version {publication.version} · published {new Date(publication.publishedAt).toLocaleString('en-GB')}</p><p className="rf-note sv-flush">{publication.rankingBasis}</p><PublicationResults publication={publication} /></>}
   </form></details>;

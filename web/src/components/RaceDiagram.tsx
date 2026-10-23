@@ -1,5 +1,7 @@
+import type { RefObject } from 'react';
 import type { DiagramElement, DiagramPos, ConeKind, ItemKind } from '../types';
-import { LANE, CENTRE_Y, pctToPx, resolveX } from './diagramGeometry';
+import { LANE, CENTRE_Y, pctToPx } from './diagramGeometry';
+import { contentsSummary, parseDiagram, placeElements, toLaneModel, type LaneModel, type PlacedElement, type Slot } from './diagramSlots';
 
 interface Props {
   diagramJson?: string | null;
@@ -7,110 +9,180 @@ interface Props {
   className?: string;
 }
 
-function parse(json?: string | null): DiagramElement[] {
-  if (!json) return [];
-  try {
-    const arr = JSON.parse(json);
-    if (!Array.isArray(arr)) return [];
-    return arr.filter((e) => e && typeof e === 'object' && typeof e.t === 'string') as DiagramElement[];
-  } catch {
-    return [];
-  }
+/** Handlers the editor passes in; the read-only diagram leaves them out. */
+export interface LaneEditing {
+  svgRef: RefObject<SVGSVGElement | null>;
+  selectedIndex: number | null;
+  activeSlotId: string | null;
+  onBackgroundDown: (e: React.PointerEvent<SVGSVGElement>) => void;
+  onElementDown: (index: number, e: React.PointerEvent<SVGGElement>) => void;
+  onMove: (e: React.PointerEvent<SVGSVGElement>) => void;
+  onUp: () => void;
+  placing: boolean;
 }
 
 /**
- * Renders an arena lane as SVG. Lane proper from the START line on the left to
- * the TOP line on the right; a "behind top" zone past x=100% where equipment
- * placed beyond the top line is drawn. Poles render along the bottom edge of
- * the lane; everything else (cones, items, ins) renders inside the lane.
+ * Renders an arena lane as SVG from the pole-based slot model (see
+ * diagramSlots.ts). Old diagrams are mapped to the nearest slot on read.
  */
 export function RaceDiagram({ diagramJson, height = 140, className }: Props) {
-  const elements = parse(diagramJson);
-  const hasMidline = elements.some((e) => e.t === 'midline');
+  const model = toLaneModel(parseDiagram(diagramJson));
+  return <LaneCanvas model={model} height={height} className={className} ariaLabel="Arena setup diagram" />;
+}
+
+const MAX_STACK = 3;
+const CHILD_GAP = 22;
+
+export function LaneCanvas({
+  model, height, className, ariaLabel, editing,
+}: {
+  model: LaneModel;
+  height: number;
+  className?: string;
+  ariaLabel: string;
+  editing?: LaneEditing;
+}) {
+  const { slots, placed } = placeElements(model);
   const laneWidth = LANE.topLineX - LANE.left;
+  const active = editing?.activeSlotId ? slots.find((s) => s.id === editing.activeSlotId) : undefined;
+
+  // Elements sharing a slot spread across the lane's height so none hides another.
+  const bySlot = new Map<string, PlacedElement[]>();
+  for (const p of placed) if (p.el.t !== 'pole') bySlot.set(p.slot.id, [...(bySlot.get(p.slot.id) ?? []), p]);
 
   return (
     <svg
+      ref={editing?.svgRef}
       viewBox="0 0 800 240"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
-      aria-label="Arena setup diagram"
+      aria-label={ariaLabel}
       className={className}
-      style={{ height: `${height}px`, width: '100%', display: 'block' }}
+      style={{ height: `${height}px`, width: '100%', display: 'block', ...(editing ? { touchAction: 'none', cursor: editing.placing ? 'crosshair' : 'default' } : {}) }}
+      onPointerDown={editing?.onBackgroundDown}
+      onPointerMove={editing?.onMove}
+      onPointerUp={editing?.onUp}
+      onPointerCancel={editing?.onUp}
     >
       <rect x="0" y="0" width="800" height="240" fill="#fef3c7" />
-      {/* lane proper */}
       <rect x={LANE.left - 10} y={LANE.top - 10} width={laneWidth + 20} height={LANE.bottom - LANE.top + 20}
             fill="#fde68a" rx="6" />
-      {/* behind-top zone (lighter) */}
       <rect x={LANE.topLineX} y={LANE.top - 10} width={LANE.beyondRight - LANE.topLineX} height={LANE.bottom - LANE.top + 20}
             fill="#fef3c7" rx="6" />
 
       <line x1={LANE.left} y1={LANE.top} x2={LANE.topLineX} y2={LANE.top} stroke="#92400e" strokeWidth="1.5" />
       <line x1={LANE.left} y1={LANE.bottom} x2={LANE.topLineX} y2={LANE.bottom} stroke="#92400e" strokeWidth="1.5" />
 
-      {/* START line (left) */}
-      <line x1={LANE.left} y1={LANE.top - 8} x2={LANE.left} y2={LANE.bottom + 8} stroke="#16a34a" strokeWidth="4" />
-      <text x={LANE.left} y={LANE.top - 18} textAnchor="middle" fontSize="14" fontWeight="700" fill="#15803d">START</text>
+      {active && (
+        <rect data-testid="active-slot" x={pctToPx(active.x) - 22} y={LANE.top - 10} width="44" height={LANE.bottom - LANE.top + 20}
+              fill="#0ea5e9" opacity="0.18" stroke="#0284c7" strokeWidth="2" strokeDasharray="5 4" rx="6" />
+      )}
+      {editing && slots.map((s) => <SlotMarker key={s.id} slot={s} />)}
 
-      {/* TOP line (right edge of lane proper) */}
+      {/* START line: thick green bar with a chequered edge so it reads as a line to cross */}
+      <rect x={LANE.left - 4} y={LANE.top - 8} width="8" height={LANE.bottom - LANE.top + 16} fill="#16a34a" data-testid="start-line" />
+      {Array.from({ length: 8 }, (_, i) => (
+        <rect key={i} x={LANE.left + (i % 2 === 0 ? -4 : 0)} y={LANE.top - 8 + i * ((LANE.bottom - LANE.top + 16) / 8)}
+              width="4" height={(LANE.bottom - LANE.top + 16) / 8} fill="#f0fdf4" />
+      ))}
+      <text x={LANE.left} y={LANE.top - 16} textAnchor="middle" fontSize="16" fontWeight="800" fill="#14532d">START</text>
+
       <line x1={LANE.topLineX} y1={LANE.top - 8} x2={LANE.topLineX} y2={LANE.bottom + 8} stroke="#dc2626" strokeWidth="4" />
-      <text x={LANE.topLineX} y={LANE.top - 18} textAnchor="middle" fontSize="14" fontWeight="700" fill="#b91c1c">TOP</text>
-
-      {/* Behind-top label */}
-      <text x={(LANE.topLineX + LANE.beyondRight) / 2} y={LANE.bottom + 22} textAnchor="middle" fontSize="10" fill="#92400e" fontStyle="italic">
-        behind top
+      <text x={LANE.topLineX} y={LANE.top - 16} textAnchor="middle" fontSize="16" fontWeight="800" fill="#991b1b">TOP</text>
+      <text x={(LANE.topLineX + LANE.beyondRight) / 2} y={LANE.bottom + 22} textAnchor="middle" fontSize="11" fill="#92400e" fontStyle="italic">
+        beyond
       </text>
 
-      {hasMidline && (
+      {model.midline && (
         <>
           <line x1={pctToPx(50)} y1={LANE.top - 4} x2={pctToPx(50)} y2={LANE.bottom + 4}
                 stroke="#475569" strokeWidth="1.5" strokeDasharray="6 6" />
-          <text x={pctToPx(50)} y={LANE.bottom + 22} textAnchor="middle" fontSize="11" fill="#475569">midline</text>
+          <text x={pctToPx(50)} y={LANE.top - 16} textAnchor="middle" fontSize="12" fill="#334155">midline</text>
         </>
       )}
 
-      {elements.map((el, i) => {
-        if (el.t === 'midline') return null;
-        const x = pctToPx(resolveX(el, elements));
-        const baseY = el.t === 'pole' ? LANE.bottom + 4 : CENTRE_Y;
-        return <DiagramNode key={i} el={el} x={x} y={baseY} />;
+      {placed.map((p) => {
+        const group = bySlot.get(p.slot.id) ?? [];
+        const at = group.indexOf(p);
+        const y = p.el.t === 'pole' ? LANE.bottom + 4 : CENTRE_Y + (at - (group.length - 1) / 2) * 36;
+        return (
+          <DiagramNode
+            key={p.index}
+            el={p.el}
+            x={pctToPx(p.x)}
+            y={y}
+            index={p.index}
+            selected={editing?.selectedIndex === p.index}
+            onDown={editing?.onElementDown}
+          />
+        );
       })}
     </svg>
   );
 }
 
+function SlotMarker({ slot }: { slot: Slot }) {
+  const x = pctToPx(slot.x);
+  if (slot.kind === 'pole') {
+    return <line x1={x} y1={LANE.top + 6} x2={x} y2={LANE.bottom - 6} stroke="#b45309" strokeWidth="1.5" strokeDasharray="3 5" opacity="0.7" />;
+  }
+  if (slot.kind === 'gap' || slot.kind === 'beyond') {
+    return <circle cx={x} cy={CENTRE_Y} r="4" fill="#d97706" opacity="0.55" />;
+  }
+  return null;
+}
+
 interface NodeProps { el: DiagramElement; x: number; y: number }
 
 /**
- * Renders a single element at (x, y). Children in `on:` stack upward —
- * each child sits ~22px above the previous one.
+ * Renders a single element at (x, y). What's on it stacks upward (about 22px
+ * per item, at most three drawn plus a "+n" marker) with a text summary such
+ * as "2 mugs" under the element.
  */
-function DiagramNode({ el, x, y }: NodeProps) {
-  if (el.t === 'midline') return null;
+function DiagramNode({
+  el, x, y, index, selected, onDown,
+}: NodeProps & { index: number; selected: boolean; onDown?: LaneEditing['onElementDown'] }) {
+  if (el.t === 'midline' || el.t === 'lane') return null;
   const label = (el as DiagramPos).label;
-  const labelY = el.t === 'pole' ? y + 28 : y + 26;
-  const labelColour = labelFor(el.t);
-  const children = (el as DiagramPos).on ?? [];
-  const childGap = 22;
+  const labelY = el.t === 'pole' ? y + 30 : y + 28;
+  const children = ((el as DiagramPos).on ?? []).filter((c) => c.t !== 'midline' && c.t !== 'lane');
+  const shown = children.slice(0, MAX_STACK);
+  const summary = contentsSummary(el);
 
   return (
-    <g>
+    <g
+      data-testid={`element-${index}`}
+      style={onDown ? { cursor: 'grab' } : undefined}
+      onPointerDown={onDown ? (e) => onDown(index, e) : undefined}
+    >
+      {onDown && <rect x={x - 26} y={y - 34 - shown.length * CHILD_GAP} width="52" height={72 + shown.length * CHILD_GAP} fill="transparent" />}
+      {selected && (
+        <rect x={x - 22} y={y - 28 - shown.length * CHILD_GAP} width="44" height={62 + shown.length * CHILD_GAP}
+              fill="none" stroke="#0284c7" strokeWidth="3" strokeDasharray="5 3" rx="8" />
+      )}
       <ElementShape el={el} x={x} y={y} />
+      {shown.map((c, i) => (
+        <ElementShape key={i} el={c} x={x} y={y - (i + 1) * CHILD_GAP} />
+      ))}
+      {children.length > shown.length && (
+        <text x={x + 16} y={y - (shown.length + 1) * CHILD_GAP + 8} fontSize="13" fontWeight="700" fill="#1e293b">+{children.length - shown.length}</text>
+      )}
       {label && (
-        <text x={x} y={labelY} textAnchor="middle" fontSize="11" fontWeight="700" fill={labelColour}>
+        <text x={x} y={labelY} textAnchor="middle" fontSize="14" fontWeight="700" fill={labelFor(el.t)}>
           {label}
         </text>
       )}
-      {children.map((c, i) => (
-        <DiagramNode key={i} el={c} x={x} y={y - (i + 1) * childGap} />
-      ))}
+      {summary && (
+        <text x={x} y={labelY + (label ? 15 : 0)} textAnchor="middle" fontSize="13" fontWeight="600" fill="#1e293b" data-testid="contents-summary">
+          {summary}
+        </text>
+      )}
     </g>
   );
 }
 
 export function ElementShape({ el, x, y }: NodeProps) {
-  if (el.t === 'midline') return null;
+  if (el.t === 'midline' || el.t === 'lane') return null;
   const kind = (el as DiagramPos).kind;
   switch (el.t) {
     case 'pole':

@@ -1,5 +1,49 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from './savedCopies';
+import {
+  isNoticeablyOld, lastUpdatedText, LIVE_SAVED_COPY_NOTICE_AFTER_MS, readSavedCopy, SAVED_COPY_NOTICE_AFTER_MS, savedCopyKeys,
+  serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy,
+} from './savedCopies';
+
+describe('saved copy notice thresholds', () => {
+  const now = new Date(2026, 9, 23, 15, 0);
+  const ago = (minutes: number) => new Date(now.getTime() - minutes * 60_000);
+
+  it('uses 30 minutes in general and 10 for live event pages', () => {
+    expect(SAVED_COPY_NOTICE_AFTER_MS).toBe(30 * 60_000);
+    expect(LIVE_SAVED_COPY_NOTICE_AFTER_MS).toBe(10 * 60_000);
+  });
+
+  it('is old only once past the threshold', () => {
+    expect(isNoticeablyOld(ago(29), now)).toBe(false);
+    expect(isNoticeablyOld(ago(30), now)).toBe(false);
+    expect(isNoticeablyOld(ago(31), now)).toBe(true);
+    expect(isNoticeablyOld(ago(11), now, LIVE_SAVED_COPY_NOTICE_AFTER_MS)).toBe(true);
+    expect(isNoticeablyOld(ago(9), now, LIVE_SAVED_COPY_NOTICE_AFTER_MS)).toBe(false);
+  });
+
+  it('reads ISO strings and millisecond times, and never calls an undated copy old by itself', () => {
+    expect(isNoticeablyOld(ago(60).toISOString(), now)).toBe(true);
+    expect(isNoticeablyOld(ago(60).getTime(), now)).toBe(true);
+    for (const undated of [null, undefined, '', 'later']) expect(isNoticeablyOld(undated, now)).toBe(false);
+  });
+
+  it('needs a failed refresh as well as an old copy', () => {
+    expect(shouldNoticeSavedCopy(ago(60), false, now)).toBe(false);
+    expect(shouldNoticeSavedCopy(ago(5), true, now)).toBe(false);
+    expect(shouldNoticeSavedCopy(ago(60), true, now)).toBe(true);
+  });
+
+  it('counts an undated copy as old only when the refresh failed', () => {
+    expect(shouldNoticeSavedCopy(null, false, now)).toBe(false);
+    expect(shouldNoticeSavedCopy('', true, now)).toBe(true);
+  });
+
+  it('words the time: clock time today, date and time on an earlier day, "earlier" when undated', () => {
+    expect(lastUpdatedText(new Date(2026, 9, 23, 14, 5), now)).toBe('Last updated 14:05');
+    expect(lastUpdatedText(new Date(2026, 9, 21, 9, 30), now)).toBe('Last updated 21 Oct, 09:30');
+    expect(lastUpdatedText(null, now)).toBe('Last updated earlier');
+  });
+});
 
 const PREFIX = 'mg.saved.v1.';
 const INDEX = `${PREFIX}index`;

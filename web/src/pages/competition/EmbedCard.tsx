@@ -6,6 +6,8 @@ import {
 } from '../../lib/embed';
 import { displaySectionName } from '../../lib/section';
 import { RefineNote, RefineSection } from '../refine/Refine';
+import { SelectField } from '../../components/SelectField';
+import { NumberField } from '../../components/NumberField';
 
 type Props =
   | { kind: 'competition'; competitionId: number; name: string; sections: { id: number; displayName: string }[] }
@@ -79,10 +81,10 @@ export function EmbedCard(props: Props) {
             {props.sections.length > 1 && (
               <label className="rf-fld" htmlFor={`${ids}-section`}>
                 Age group
-                <select id={`${ids}-section`} value={section ?? ''} onChange={(e) => setSection(e.target.value ? Number(e.target.value) : null)}>
+                <SelectField id={`${ids}-section`} value={section ?? ''} onChange={(e) => setSection(e.target.value ? Number(e.target.value) : null)}>
                   <option value="">{view === 'standings' ? 'All age groups (visitors choose)' : 'All age groups'}</option>
                   {props.sections.map((s) => <option key={s.id} value={s.id}>{displaySectionName(s.displayName)}</option>)}
-                </select>
+                </SelectField>
               </label>
             )}
           </>
@@ -109,7 +111,7 @@ export function EmbedCard(props: Props) {
           )}
           <label className="rf-fld" htmlFor={`${ids}-height`} style={{ width: 120 }}>
             Height (pixels)
-            <input id={`${ids}-height`} type="number" inputMode="numeric" min={MIN_EMBED_HEIGHT} max={MAX_EMBED_HEIGHT} step={20} value={height}
+            <NumberField id={`${ids}-height`} min={MIN_EMBED_HEIGHT} max={MAX_EMBED_HEIGHT} step={20} value={height}
               onChange={(e) => { setHeight(Number(e.target.value)); setHeightEdited(true); }}
               onBlur={() => setHeight((h) => clampEmbedHeight(h))} />
           </label>

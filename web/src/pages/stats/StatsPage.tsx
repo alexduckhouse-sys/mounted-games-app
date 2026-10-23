@@ -4,73 +4,81 @@ import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext';
 import { StatsGamesView } from '../../components/stats/StatsGamesView';
 import { StatsSummaryView } from '../../components/stats/StatsSummaryView';
-import { useStatsProfile, useStatsSearch } from '../../hooks/useStats';
+import { useStatsBrowse, useStatsProfile, type StatsBrowseLoad } from '../../hooks/useStats';
 import {
-  STATS_KIND_LABELS, STATS_MAX_QUERY, STATS_PATHS, finalLabel, formatPercent, isSearchableQuery, ordinalPlace, plural,
-  pointsOf, statsKindFromPath, statsProfileHref,
+  STATS_KIND_LABELS, STATS_MAX_QUERY, STATS_PATHS, STATS_TABS, finalLabel, formatPercent, isSearchableQuery, ordinalPlace, plural,
+  pointsOf, statsKindFromPath, statsProfileHref, tidyStatsQuery,
 } from '../../lib/stats';
-import { SectionFormatLabel, StatsSubjectKind, type StatsEntry, type StatsHit, type StatsProfile, type StatsSearch } from '../../types';
+import { SectionFormatLabel, StatsSubjectKind, type StatsEntry, type StatsHit, type StatsProfile } from '../../types';
 import { Chevron, RefineDisclosure, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 
-/** `/stats` searches; `/stats/:kind?name=` shows one rider, pony, team or club. */
+/** `/stats` browses and searches; `/stats/:kind?name=` shows one rider, pony, team or club. */
 export function StatsPage() {
   const { kind: segment } = useParams();
-  if (segment === undefined) return <StatsSearchView />;
+  if (segment === undefined) return <StatsBrowseView />;
   return <StatsProfileRoute segment={segment} />;
 }
 
-const GROUPS: { title: string; list: keyof Pick<StatsSearch, 'riders' | 'ponies' | 'teams' | 'clubs'> }[] = [
-  { title: 'Riders', list: 'riders' },
-  { title: 'Ponies', list: 'ponies' },
-  { title: 'Teams', list: 'teams' },
-  { title: 'Clubs', list: 'clubs' },
-];
-
-function StatsSearchView() {
+function StatsBrowseView() {
   const [params, setParams] = useSearchParams();
+  const kind = statsKindFromPath(params.get('kind') ?? undefined) ?? StatsSubjectKind.Rider;
   const [text, setText] = useState(() => params.get('q') ?? '');
-  const search = useStatsSearch(text);
+  const tab = STATS_TABS.find((entry) => entry.kind === kind) ?? STATS_TABS[0];
+  const list = useStatsBrowse(kind, text);
 
-  function change(value: string) {
-    setText(value);
-    // Keep the words in the address, so going back from a profile returns to the same results.
-    setParams(value.trim() ? { q: value } : {}, { replace: true });
+  // Keep the tab and words in the address, so going back from a profile returns to the same list.
+  function remember(nextKind: StatsSubjectKind, nextText: string) {
+    const next = new URLSearchParams();
+    if (nextKind !== StatsSubjectKind.Rider) next.set('kind', STATS_PATHS[nextKind]);
+    if (nextText.trim()) next.set('q', nextText);
+    setParams(next, { replace: true });
   }
 
   return <RefinePage>
-    <RefineHeader context="Across every competition" title="Rider and team stats" subtitle="Search for a rider, pony, team or club." />
+    <RefineHeader context="Across every competition" title="Rider and team stats" subtitle="Browse riders, ponies, teams and clubs, or search by name."
+      tabs={STATS_TABS.map((entry) => ({ label: entry.label, active: entry.kind === kind, onSelect: () => remember(entry.kind, text) }))}
+      tabsKind="tablist" tabsLabel="Browse by" />
     <form role="search" className="pt-3" onSubmit={(event) => event.preventDefault()}>
       <label className="rf-fld">
-        <span>Name</span>
+        <span>Search {tab.plural}</span>
         <span className="relative flex items-center">
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 h-4 w-4 text-[rgb(var(--mg-muted))]" />
-          <input type="search" value={text} onChange={(event) => change(event.target.value)} maxLength={STATS_MAX_QUERY}
-            placeholder="Rider, pony, team or club" autoComplete="off" enterKeyHint="search" className="!pl-9" />
+          <input type="search" value={text} onChange={(event) => { setText(event.target.value); remember(kind, event.target.value); }} maxLength={STATS_MAX_QUERY}
+            placeholder={`Name of a ${STATS_KIND_LABELS[kind].toLowerCase()}`} autoComplete="off" enterKeyHint="search" className="!pl-9" />
         </span>
       </label>
     </form>
-    {search.status === 'idle' && <RefineNote>{text.trim() ? 'Type at least two letters.' : 'Only finished competitions count. Riders who asked to be shown by their surname initial appear that way here too.'}</RefineNote>}
-    {search.status === 'loading' && <p role="status" className="rf-note">Searching…</p>}
-    {search.status === 'error' && <div role="alert" className="mg-notice mt-3">{search.message}</div>}
-    {search.status === 'ready' && <SearchResults search={search.data} />}
+    <div role="tabpanel" aria-label={tab.label}>
+      {text.trim().length === 1 && <RefineNote>Type at least two letters to narrow the list.</RefineNote>}
+      {list.status === 'loading' && <p role="status" className="rf-note">Loading…</p>}
+      {list.status === 'error' && <div role="alert" className="mg-notice mt-3">{list.message}</div>}
+      {list.status === 'ready' && <BrowseResults list={list} plural={tab.plural} label={tab.label} words={isSearchableQuery(text) ? tidyStatsQuery(text) : ''} />}
+    </div>
   </RefinePage>;
 }
 
-function SearchResults({ search }: { search: StatsSearch }) {
-  const groups = GROUPS.filter((group) => search[group.list].length > 0);
-  if (groups.length === 0) return <div className="py-6 text-[rgb(var(--mg-muted))]" role="status">
-    <h2 className="m-0 mb-1 font-['Barlow_Condensed',sans-serif] text-xl font-bold text-[rgb(var(--mg-heading))]">No matches</h2>
-    <p className="m-0">Nothing in a finished competition matches “{search.query}”. Check the spelling or try part of the name.</p>
+function BrowseResults({ list, plural: noun, label, words }: { list: Extract<StatsBrowseLoad, { status: 'ready' }>; plural: string; label: string; words: string }) {
+  if (list.items.length === 0) return <div className="py-6 text-[rgb(var(--mg-muted))]" role="status">
+    <h2 className="m-0 mb-1 font-['Barlow_Condensed',sans-serif] text-xl font-bold text-[rgb(var(--mg-heading))]">{words ? 'No matches' : 'No finished events yet'}</h2>
+    <p className="m-0">{words
+      ? `No ${noun} in a finished competition match “${words}”. Check the spelling or try part of the name.`
+      : 'Statistics appear here once a competition has finished and its races have been scored.'}</p>
   </div>;
-  return <>{groups.map((group) => <section key={group.list} aria-label={group.title}>
-    <RefineSection title={group.title} meta={search[group.list].length} />
-    <RefineList label={group.title}>{search[group.list].map((hit) => <HitRow key={hit.key} hit={hit} />)}</RefineList>
-  </section>)}</>;
+  const remaining = list.total - list.items.length;
+  return <>
+    <RefineSection title={label} meta={words ? `${list.total} found` : list.total} />
+    <RefineList label={label}>{list.items.map((hit) => <HitRow key={hit.key} hit={hit} />)}</RefineList>
+    {list.moreError && <div role="alert" className="mg-notice mt-3">{list.moreError}</div>}
+    {remaining > 0 && <button type="button" className="rf-btn rf-wide mt-3" disabled={list.loadingMore} onClick={list.loadMore}>
+      {list.loadingMore ? 'Loading…' : `Show more (${remaining} left)`}
+    </button>}
+    <RefineNote>Only finished competitions count. Riders who asked to be shown by their surname initial appear that way here too.</RefineNote>
+  </>;
 }
 
 function HitRow({ hit }: { hit: StatsHit }) {
   return <li><Link to={statsProfileHref(hit.kind, hit.key)} className="rf-row">
-    <span className="rf-grow"><span className="rf-t1">{hit.name}</span><span className="rf-t2">{STATS_KIND_LABELS[hit.kind]} · {plural(hit.competitions, 'competition')}</span></span>
+    <span className="rf-grow"><span className="rf-t1">{hit.name}</span><span className="rf-t2">{plural(hit.competitions, 'competition')}</span></span>
     <Chevron />
   </Link></li>;
 }
@@ -83,11 +91,11 @@ function StatsProfileRoute({ segment }: { segment: string }) {
   const valid = kind !== null && isSearchableQuery(name);
   const load = useStatsProfile(valid ? `/stats/${STATS_PATHS[kind]}?name=${encodeURIComponent(name)}` : null, user?.id ?? 'public');
   const label = kind === null ? 'Stats' : `${STATS_KIND_LABELS[kind]} stats`;
-  const back = <RefineHeader back="/stats" backLabel="Back to search" context={label} title={load.status === 'ready' ? load.data.name : name || 'Not found'} />;
+  const back = <RefineHeader back={kind === null ? '/stats' : `/stats?kind=${STATS_PATHS[kind]}`} backLabel="Back to the list" context={label} title={load.status === 'ready' ? load.data.name : name || 'Not found'} />;
 
   if (!valid || load.status === 'missing') return <RefinePage>{back}
     <div className="py-6 text-[rgb(var(--mg-muted))]"><h2 className="m-0 mb-1 font-['Barlow_Condensed',sans-serif] text-xl font-bold text-[rgb(var(--mg-heading))]">No statistics found</h2>
-      <p className="m-0">There are no finished competitions under this name. <Link to="/stats" className="font-semibold text-[rgb(var(--mg-heading))]">Search again</Link></p></div>
+      <p className="m-0">There are no finished competitions under this name. <Link to="/stats" className="font-semibold text-[rgb(var(--mg-heading))]">Browse the list</Link></p></div>
   </RefinePage>;
   if (load.status === 'error') return <RefinePage>{back}<div role="alert" className="mg-notice mt-3">{load.message}</div></RefinePage>;
   if (load.status !== 'ready') return <RefinePage>{back}<p role="status" className="rf-note">Loading statistics…</p></RefinePage>;

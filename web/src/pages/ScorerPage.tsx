@@ -3,14 +3,21 @@ import { CloudOff, Link2Off, RefreshCw } from 'lucide-react';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
 import { ScoringSection, type PendingPlace } from './competition/ScoringSection';
 import {
-  clearScorerToken, parseScorerSession, readSavedScorerSession, readScorerToken, scorerApi, scorerFailure,
+  clearScorerToken, parseScorerSession, readSavedScorerSession, readSavedScorerSessionAt, readScorerToken, scorerApi, scorerFailure,
   tokenFromHash, writeSavedScorerSession, writeScorerToken, type ScorerLoadFailure,
 } from '../offline/scorerLink';
+<<<<<<< HEAD
 import { enqueue, placingsOf, type QueuedScore } from '../offline/scoreOutbox';
 import { nextRoundLanes } from '../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo';
 import { nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
+=======
+import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, shouldNoticeSavedCopy } from '../offline/savedCopies';
+import { enqueue, placingsOf } from '../offline/scoreOutbox';
+import { nextRaceToScore, placesFromResults, setStatus, tapTeam, toggleEliminated } from '../lib/raceScoring';
+import { lanesInUse } from '../lib/lanes';
+>>>>>>> origin/main
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import type { Heat, ScorerSession, Session } from '../types';
@@ -56,6 +63,8 @@ export function ScorerPage() {
   const [session, setSession] = useState<ScorerSession | null>(() => token ? readSavedScorerSession() : null);
   const [failure, setFailure] = useState<ScorerLoadFailure | null>(token ? null : 'missing');
   const [fromSavedCopy, setFromSavedCopy] = useState(false);
+  /** When the timetable on screen last came from the server (null when unknown). */
+  const [sessionAt, setSessionAt] = useState<string | null>(() => token ? readSavedScorerSessionAt() : null);
   const [loading, setLoading] = useState(!!token);
   const outbox = useScoreOutbox();
 
@@ -68,6 +77,7 @@ export function ScorerPage() {
         setSession(parsed);
         setFailure(null);
         setFromSavedCopy(false);
+        setSessionAt(new Date().toISOString());
       })
       .catch((error: unknown) => {
         const why = scorerFailure(error);
@@ -117,12 +127,12 @@ export function ScorerPage() {
 
       {loading && !session && <p role="status" className="mg-card p-4">Loading the timetable…</p>}
 
-      {failure === 'offline' && (
+      {failure === 'offline' && !(fromSavedCopy && session && !shouldNoticeSavedCopy(sessionAt, true, new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS)) && (
         <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
           <CloudOff className="h-4 w-4 shrink-0" />
           <p className="flex-1">
             {fromSavedCopy && session
-              ? 'No signal. You’re looking at the last copy saved on this phone; scores you enter will send when you’re back online.'
+              ? `${lastUpdatedText(sessionAt)}. No signal; scores you enter will send when you’re back online.`
               : 'No signal, and nothing is saved on this phone yet. Try again when you’re back online.'}
           </p>
           <button type="button" className="btn-ghost min-h-11" onClick={() => void load()}><RefreshCw className="h-4 w-4" /> Try again</button>

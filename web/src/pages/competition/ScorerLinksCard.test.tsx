@@ -5,6 +5,7 @@ import { api } from '../../api';
 import { axiosError } from '../../test/factories';
 import type { ScorerLink, ScorerLinkList } from '../../types';
 import { ScorerLinksCard } from './ScorerLinksCard';
+import { chooseOption } from '../../test/select';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 
@@ -65,7 +66,7 @@ describe('ScorerLinksCard', () => {
     await screen.findByText('Scorer 1 · Main');
 
     await user.type(screen.getByLabelText('Scorer’s name'), '  Sam ');
-    await user.selectOptions(screen.getByLabelText('Arena'), 'Side');
+    chooseOption(screen.getByLabelText('Arena'), 'Side');
     await user.click(screen.getByRole('button', { name: 'Make scorer link' }));
 
     expect(api.post).toHaveBeenCalledWith('/competitions/5/scorer-links', { label: 'Sam', arenaName: 'Side' });

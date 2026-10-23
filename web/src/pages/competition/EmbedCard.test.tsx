@@ -2,6 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EmbedCard } from './EmbedCard';
+import { chooseOption } from '../../test/select';
 
 const sections = [{ id: 5, displayName: 'Teams Seniors' }, { id: 6, displayName: 'Teams Juniors' }];
 const snippet = () => (screen.getByLabelText('Code to paste') as HTMLTextAreaElement).value;
@@ -23,7 +24,7 @@ describe('EmbedCard for a competition', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Timetable' }));
     expect(snippet()).toContain('/embed/competitions/7/timetable"');
     expect(snippet()).toContain('height="600"');
-    await userEvent.selectOptions(screen.getByLabelText('Age group'), '6');
+    chooseOption(screen.getByLabelText('Age group'), '6');
     await userEvent.click(screen.getByRole('button', { name: 'Dark background' }));
     await userEvent.click(screen.getByLabelText('Use my club’s colour'));
     expect(snippet()).toContain('?accent=17385f&amp;theme=dark&amp;section=6');

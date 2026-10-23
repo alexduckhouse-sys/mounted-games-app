@@ -247,8 +247,7 @@ describe('ScorerPage', () => {
     expect(await screen.findByText('Scoring as Sam')).toBeInTheDocument();
   });
 
-  it('shows the saved copy when offline, and says so', async () => {
-    const user = userEvent.setup();
+  it('shows a recently saved copy when offline without any notice', async () => {
     link.get.mockResolvedValueOnce({ data: timetable() }).mockRejectedValue(axiosError());
     const first = open();
     await screen.findByText('Scoring as Sam');
@@ -256,7 +255,22 @@ describe('ScorerPage', () => {
 
     open('');
     expect(screen.getByText('Scoring as Sam')).toBeInTheDocument();
-    expect(await screen.findByText(/last copy saved on this phone/)).toBeInTheDocument();
+    await waitFor(() => expect(link.get).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No signal/)).not.toBeInTheDocument();
+  });
+
+  it('shows an old saved copy when offline, and says so', async () => {
+    const user = userEvent.setup();
+    link.get.mockResolvedValueOnce({ data: timetable() }).mockRejectedValue(axiosError());
+    const first = open();
+    await screen.findByText('Scoring as Sam');
+    first.unmount();
+    localStorage.setItem('mg.scorer.sessionAt', new Date(Date.now() - 60 * 60_000).toISOString());
+
+    open('');
+    expect(screen.getByText('Scoring as Sam')).toBeInTheDocument();
+    expect(await screen.findByText(/Last updated \d\d:\d\d\. No signal; scores you enter will send/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Try again/ }));
     await waitFor(() => expect(link.get).toHaveBeenCalledTimes(3));
   });

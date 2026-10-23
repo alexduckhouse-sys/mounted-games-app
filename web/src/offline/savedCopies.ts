@@ -79,6 +79,48 @@ export const savedCopyKeys = {
   picker: (past: boolean) => `picker.${past ? 'past' : 'upcoming'}`,
 };
 
+/**
+ * How old a saved copy must be before the page says so. A copy that is only a little old is not worth a notice:
+ * a normal load, a quick refresh or a short wobble in the signal should show nothing at all.
+ */
+export const SAVED_COPY_NOTICE_AFTER_MS = 30 * 60_000;
+/** Competition pages and scoring during an event change every few minutes, so a copy goes stale sooner. */
+export const LIVE_SAVED_COPY_NOTICE_AFTER_MS = 10 * 60_000;
+
+type SavedAtLike = Date | string | number | null | undefined;
+
+function savedAtMs(savedAt: SavedAtLike): number | null {
+  if (savedAt == null || savedAt === '') return null;
+  const ms = savedAt instanceof Date ? savedAt.getTime() : typeof savedAt === 'number' ? savedAt : Date.parse(savedAt);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** True when a dated copy is older than `thresholdMs`. An undated copy is never "noticeably old" on its own. */
+export function isNoticeablyOld(savedAt: SavedAtLike, now: Date = new Date(), thresholdMs = SAVED_COPY_NOTICE_AFTER_MS): boolean {
+  const ms = savedAtMs(savedAt);
+  return ms != null && now.getTime() - ms > thresholdMs;
+}
+
+/**
+ * Whether to tell the person they are looking at an old copy. Only when no fresh copy has arrived
+ * (`refreshFailed`) and the copy on screen is older than the threshold; an undated copy counts as old
+ * only because the refresh failed.
+ */
+export function shouldNoticeSavedCopy(savedAt: SavedAtLike, refreshFailed: boolean, now: Date = new Date(), thresholdMs = SAVED_COPY_NOTICE_AFTER_MS): boolean {
+  if (!refreshFailed) return false;
+  return savedAtMs(savedAt) == null ? true : isNoticeablyOld(savedAt, now, thresholdMs);
+}
+
+/** "Last updated 14:05" for today, "Last updated 12 Oct, 14:05" for an earlier day, "Last updated earlier" when undated. */
+export function lastUpdatedText(savedAt: SavedAtLike, now: Date = new Date()): string {
+  const ms = savedAtMs(savedAt);
+  if (ms == null) return 'Last updated earlier';
+  const at = new Date(ms);
+  const time = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (at.toDateString() === now.toDateString()) return `Last updated ${time}`;
+  return `Last updated ${at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${time}`;
+}
+
 /** When the response is the service worker's fallback copy, the time it was saved; otherwise null. */
 export function serviceWorkerSavedAt(headers: Record<string, unknown>): Date | null | 'unknown' {
   if (headers['x-mg-saved-copy'] !== '1') return null;
