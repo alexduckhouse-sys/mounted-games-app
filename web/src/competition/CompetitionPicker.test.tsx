@@ -179,31 +179,12 @@ describe('CompetitionPicker: choosing', () => {
   });
 });
 
-describe('CompetitionPicker: searching', () => {
-  const search = (text: string) => userEvent.type(screen.getByRole('searchbox', { name: 'Search competitions' }), text);
-
-  it('filters by name or venue, ignoring case and spacing', async () => {
+describe('CompetitionPicker: no search or tagline', () => {
+  it('lists the competitions without a search box or the account tagline', async () => {
     renderPicker();
     await loaded('Autumn Open');
-    await search('  HILL ');
-    expect(screen.getByText('Autumn Open')).toBeInTheDocument();
-    expect(screen.queryByText('Weekend Fest')).not.toBeInTheDocument();
-    expect(screen.queryByText('Today Cup')).not.toBeInTheDocument();
-  });
-
-  it('says nothing matches, quoting the search', async () => {
-    renderPicker();
-    await loaded('Autumn Open');
-    await search(' zzz ');
-    expect(screen.getByText('No competitions match “zzz”.')).toBeInTheDocument();
-  });
-
-  it('suggests loading more when there are more pages to search', async () => {
-    reply(page([autumn], true));
-    renderPicker();
-    await loaded('Autumn Open');
-    await search('zzz');
-    expect(screen.getByText('No competitions match “zzz”. Load more to search further.')).toBeInTheDocument();
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.queryByText(/No account needed/)).toBeNull();
   });
 });
 

@@ -12,7 +12,6 @@ public class RulebookConfiguration : IEntityTypeConfiguration<Rulebook>
         b.Property(x => x.Edition).HasMaxLength(100).IsRequired();
         b.Property(x => x.SourceUrl).HasMaxLength(2000);
         b.Property(x => x.Text).IsRequired();
-        b.HasIndex(x => new { x.CompetitionId, x.Title, x.Edition }).IsUnique();
-        b.HasOne(x => x.Competition).WithMany().HasForeignKey(x => x.CompetitionId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(x => new { x.Title, x.Edition }).IsUnique();
     }
 }

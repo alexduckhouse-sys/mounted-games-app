@@ -20,7 +20,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
   // null until the viewer picks one, so finals become the default the moment they have results.
   const [chosen, setChosen] = useState<View | null>(null);
   const [openTeam, setOpenTeam] = useState<number | null>(null);
-  const tabs: [View, string][] = [...(hasFinals ? [['finals', 'Finals'] as [View, string]] : []), ['totals', 'Totals'], ...(hasSessions ? [['sessions', 'Sessions'] as [View, string]] : [])];
+  const tabs: [View, string][] = [...(hasFinals ? [['finals', 'Finals'] as [View, string]] : []), ['totals', 'Totals'], ...(hasSessions ? [['sessions', 'By session'] as [View, string]] : [])];
   const view: View = tabs.some(([id]) => id === chosen) ? chosen! : tabs[0][0];
   const places = section?.finalistCount ?? null;
   const sheet = openTeam == null ? null : list.detail.get(openTeam) ?? null;
@@ -41,7 +41,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
         {view === 'finals' && <FinalsList groups={list.finals} onOpen={open} />}
 
         {view === 'totals' && <>
-          {places != null && places > 0 && <p className="text-[13px] font-medium leading-snug text-[rgb(var(--mg-body))]">Top {places} make the final</p>}
+          {places != null && places > 0 && <p className="text-sm font-medium leading-snug text-[rgb(var(--mg-body))]">Top {places} make the final</p>}
           <section aria-label="Totals" className="mg-card overflow-hidden">
             <ol>
               {list.rows.map((row, index) => {
@@ -49,10 +49,10 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                 const lastInRunoff = row.runoff && list.rows[index + 1]?.runoff;
                 const openRow = open(row.teamId);
                 const content = <>
-                  <span className="mg-display w-7 shrink-0 text-lg font-bold leading-none">{row.position}<span className="sr-only">{row.joint ? ' (joint)' : ''}</span></span>
+                  <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none">{row.position}<span className="sr-only">{row.joint ? ' (joint)' : ''}</span></span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
-                    <span className="truncate text-[15px] font-semibold leading-tight">{row.teamName}</span>
-                    {note && <span className="text-[12.5px] font-medium leading-none text-[rgb(var(--mg-body))]">{note}</span>}
+                    <span className="truncate text-base font-semibold leading-tight">{row.teamName}</span>
+                    {note && <span className="text-[13.5px] font-medium leading-none text-[rgb(var(--mg-body))]">{note}</span>}
                   </span>
                   <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{row.points}<span className="sr-only"> points</span></span>
                   {openRow && <ChevronRight aria-hidden="true" className="h-3 w-3 shrink-0 text-[rgb(var(--mg-dash))]" />}
@@ -78,10 +78,10 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
               <ul>
                 {list.hc.map((team) => (
                   <li key={team.teamId} className="flex min-h-11 items-center gap-2.5 border-b border-[rgb(var(--mg-rule-soft))] px-3 text-[rgb(var(--mg-muted))] last:border-b-0">
-                    <span className="mg-display w-7 shrink-0 text-lg font-bold leading-none text-[rgb(var(--mg-faint))]">HC</span>
+                    <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none text-[rgb(var(--mg-faint))]">HC</span>
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
-                      <span className="truncate text-[15px] font-semibold leading-tight">{team.teamName}</span>
-                      {team.racesLeft > 0 && <span className="text-[12.5px] font-medium leading-none">{team.racesLeft} {team.racesLeft === 1 ? 'race' : 'races'} left</span>}
+                      <span className="truncate text-base font-semibold leading-tight">{team.teamName}</span>
+                      {team.racesLeft > 0 && <span className="text-[13.5px] font-medium leading-none">{team.racesLeft} {team.racesLeft === 1 ? 'race' : 'races'} left</span>}
                     </span>
                     <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums">{team.points}<span className="sr-only"> points</span></span>
                   </li>
@@ -95,7 +95,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
           <section aria-label="Points by session" className="mg-card overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-[11px] font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-muted))]">
+                <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-muted))]">
                   <th scope="col" className="w-9 py-1.5 pl-3 text-left font-bold">#</th>
                   <th scope="col" className="py-1.5 text-left font-bold">Team</th>
                   {list.bySession.sessions.map((s) => <th key={s.id} scope="col" className="w-9 py-1.5 text-center font-bold"><abbr title={s.title} className="no-underline">{s.label}</abbr></th>)}
@@ -110,7 +110,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                   return (
                     <tr key={row.teamId} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
                       <td className="mg-display h-11 py-0 pl-3 text-base font-bold">{row.position}</td>
-                      <th scope="row" className="min-w-0 py-0 pr-2 text-left text-sm font-semibold leading-tight">
+                      <th scope="row" className="min-w-0 py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
                         {openRow ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="block min-h-11 w-full text-left font-semibold">{row.teamName}</button> : row.teamName}
                       </th>
                       {list.bySession.sessions.map((s, i) => (
@@ -118,7 +118,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                           {cells ? cells[i] : <><span aria-hidden="true" className="text-[rgb(var(--mg-dash))]">–</span><span className="sr-only">No points yet</span></>}
                         </td>
                       ))}
-                      <td className="mg-display pr-3 text-right text-[19px] font-bold tabular-nums text-[rgb(var(--mg-heading))]">{row.points}</td>
+                      <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">{row.points}</td>
                       <td aria-hidden="true">{openRow && <ChevronRight className="mr-2 h-3 w-3 text-[rgb(var(--mg-dash))]" />}</td>
                     </tr>
                   );
@@ -141,8 +141,8 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
               {list.runoff.teams.map((row, i) => (
                 <li key={row.teamId} className="flex min-h-12 items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 last:border-b-0">
                   <span className="mg-display w-12 shrink-0 text-base font-bold text-[rgb(var(--mg-muted))]">Lane {i + 1}</span>
-                  <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{row.teamName}</span>
-                  <span className="shrink-0 text-[13px] font-semibold text-[rgb(var(--mg-body))]">{row.points} pts</span>
+                  <span className="min-w-0 flex-1 truncate text-base font-semibold">{row.teamName}</span>
+                  <span className="shrink-0 text-sm font-semibold text-[rgb(var(--mg-body))]">{row.points} pts</span>
                 </li>
               ))}
             </ol>
@@ -165,12 +165,12 @@ function FinalsList({ groups, onOpen }: { groups: FinalGroup[]; onOpen: (teamId:
               const openRow = onOpen(row.teamId);
               const winner = row.place === 1;
               const content = <>
-                <span className={`mg-display w-9 shrink-0 text-[17px] font-bold leading-none ${winner ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{row.place != null ? ordinal(row.place) : <span aria-hidden="true">–</span>}</span>
+                <span className={`mg-display w-9 shrink-0 text-lg font-bold leading-none ${winner ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{row.place != null ? ordinal(row.place) : <span aria-hidden="true">–</span>}</span>
                 <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <span className="truncate text-[15px] font-semibold leading-tight">{row.teamName}</span>
+                  <span className="truncate text-base font-semibold leading-tight">{row.teamName}</span>
                   {winner && <Trophy aria-label="Winner" role="img" className="h-[13px] w-[13px] shrink-0 text-[rgb(var(--mg-late-time))]" />}
                   {row.qualifyingPosition != null && (
-                    <span className="shrink-0 rounded bg-[rgb(var(--mg-tint))] px-1.5 py-[3px] text-[11px] font-bold leading-none text-[rgb(var(--mg-body))]">
+                    <span className="shrink-0 rounded bg-[rgb(var(--mg-tint))] px-1.5 py-[3px] text-xs font-bold leading-none text-[rgb(var(--mg-body))]">
                       <span aria-hidden="true">Q{row.qualifyingPosition}</span><span className="sr-only">Qualified {ordinal(row.qualifyingPosition)}</span>
                     </span>
                   )}

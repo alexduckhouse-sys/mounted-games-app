@@ -35,36 +35,36 @@ export function DeleteAccountPanel() {
   }
 
   return (
-    <section aria-labelledby="delete-account-title" className="card space-y-3 p-4">
-      <h2 id="delete-account-title" className="text-base font-bold">Delete my account</h2>
-      <p className="text-sm">
+    <section aria-labelledby="delete-account-title" className="mg-card space-y-3 p-4">
+      <h2 id="delete-account-title" className="mg-h2">Delete my account</h2>
+      <p className="mg-lede">
         This removes your sign-in, your notes, your saved riders and your push notifications. Chat messages and
         marketplace posts you wrote stay, but show as "Deleted user". Competitions you created stay too, with no owner.
         You can't undo it.
       </p>
       {!open ? (
-        <button type="button" className="btn-ghost text-rose-700 dark:text-rose-300" onClick={() => setOpen(true)}>
+        <button type="button" className="mg-btn mg-btn-secondary" onClick={() => setOpen(true)}>
           Delete my account
         </button>
       ) : (
         <form onSubmit={submit} className="space-y-3">
-          <label className="block text-sm font-medium" htmlFor="delete-account-password">
+          <label className="mg-lede block font-semibold" htmlFor="delete-account-password">
             Enter your password to confirm
           </label>
           <input
             id="delete-account-password"
             type="password"
             autoComplete="current-password"
-            className="input w-full"
+            className="mg-field w-full px-3 !text-[rgb(var(--mg-ink))]"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          {error && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{error}</p>}
+          {error && <p role="alert" className="mg-notice">{error}</p>}
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className="btn-primary" disabled={!password || busy}>
+            <button type="submit" className="mg-btn mg-btn-primary" disabled={!password || busy}>
               {busy ? 'Deleting…' : 'Permanently delete my account'}
             </button>
-            <button type="button" className="btn-ghost" onClick={cancel} disabled={busy}>Keep my account</button>
+            <button type="button" className="mg-btn mg-btn-secondary" onClick={cancel} disabled={busy}>Keep my account</button>
           </div>
         </form>
       )}

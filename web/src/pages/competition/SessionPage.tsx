@@ -5,6 +5,7 @@ import {
   ChevronLeft, CloudOff, Flag, AlertTriangle, Trash2, Trophy, ChevronDown, ChevronUp, Coffee, Wand2, X, Clock, Columns3, ClipboardList, Users, CheckCircle2,
 } from 'lucide-react';
 import { useCompetition } from './context';
+import { RulesLink } from './RulesLink';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { DeclarationForm, Heat, HeatEntry, Race, Session } from '../../types';
@@ -293,6 +294,7 @@ export function SessionPage() {
         </Link>
         {canManage(competition) && (
           <div className="flex gap-1.5">
+            <RulesLink />
             <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
               <Wand2 className="w-3.5 h-3.5" /> Set up heats
             </button>

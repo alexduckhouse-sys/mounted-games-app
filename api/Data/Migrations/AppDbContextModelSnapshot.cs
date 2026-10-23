@@ -1164,9 +1164,6 @@ namespace MountedGames.Api.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("CompetitionId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Edition")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1193,7 +1190,7 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompetitionId", "Title", "Edition")
+                    b.HasIndex("Title", "Edition")
                         .IsUnique();
 
                     b.ToTable("Rulebook");
@@ -2499,17 +2496,6 @@ namespace MountedGames.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Race");
-                });
-
-            modelBuilder.Entity("MountedGames.Api.Entities.Operations.Rulebook", b =>
-                {
-                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
-                        .WithMany()
-                        .HasForeignKey("CompetitionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Competition");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.PushSubscription", b =>

@@ -19,18 +19,20 @@ export function ChatIndexPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
-        <MessagesSquare className="w-6 h-6 text-brand-600" /> Live feeds
+    <div className="mx-auto w-full max-w-[560px] space-y-3 py-4">
+      <h1 className="mg-h1 mg-h1-sm flex items-center gap-2">
+        <MessagesSquare className="h-6 w-6" aria-hidden="true" /> Live feeds
       </h1>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="mg-card mg-list">
         {comps.map((c) => (
-          <Link key={c.id} to={`/competitions/${c.id}/chat`} className="card p-5 hover:shadow-lg">
-            <h2 className="font-semibold">{c.name}</h2>
-            <p className="text-xs text-slate-500">{c.location}</p>
-            <p className="text-xs text-slate-500 mt-1">
-              {c.isActive && !c.isArchived ? 'Live now' : 'View history'}
-            </p>
+          <Link key={c.id} to={`/competitions/${c.id}/chat`} className="mg-row">
+            <span className="min-w-0 flex-1">
+              <span className="mg-h2 block truncate">{c.name}</span>
+              <span className="mg-meta block">{c.location}</span>
+              <span className="mg-meta block font-semibold">
+                {c.isActive && !c.isArchived ? 'Live now' : 'View history'}
+              </span>
+            </span>
           </Link>
         ))}
       </div>

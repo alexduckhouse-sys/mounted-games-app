@@ -11,24 +11,23 @@
 .tt-day { min-height: 30px; padding: 0 12px; border-radius: 6px; color: #fff; font: 600 13px/1 'Barlow', sans-serif; }
 .tt-day[aria-pressed="true"] { background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); }
 .tt-arena {
-  position: relative; display: flex; flex: 1; min-width: 0; align-items: center; gap: 6px; min-height: 36px; padding: 0 30px 0 10px;
+  display: flex; width: 100%; min-width: 0; align-items: center; gap: 6px; min-height: 36px; padding: 0 30px 0 10px; text-align: left;
   border: 1px solid rgb(var(--mg-header-line)); border-radius: 8px; color: #fff; font: 600 13px/1 'Barlow', sans-serif;
 }
-.tt-arena:focus-within { outline: 2px solid #fff; outline-offset: 2px; }
+.tt-arena-wrap { flex: 1; min-width: 0; }
+.tt-arena { position: relative; }
+.tt-arena:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .tt-arena-pin { flex: none; color: rgb(var(--mg-header-sub)); }
 .tt-arena-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-arena-live { flex: none; width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--mg-red)); }
 .tt-arena-chevron { position: absolute; right: 10px; top: 50%; margin-top: -7px; }
-/* The native menu sits invisibly over the label; 16px stops iOS zooming in when it opens. */
-.tt-arena select { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
-.tt-extra { padding: 10px 0; }
 
 .tt-body { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; }
 .tt-group { display: flex; flex-direction: column; gap: 4px; }
 .tt-group-title {
   display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 0 2px 3px; border-bottom: 1.5px solid rgb(var(--mg-heading)); text-align: left;
 }
-.tt-group-title h2 { flex: 1; margin: 0; color: rgb(var(--mg-heading)); font: 700 14px/1.1 'Barlow Condensed', sans-serif; letter-spacing: .05em; text-transform: uppercase; }
+.tt-group-title h2 { flex: 1; margin: 0; color: rgb(var(--mg-heading)); font: 700 15px/1.1 'Barlow Condensed', sans-serif; letter-spacing: .05em; text-transform: uppercase; }
 .tt-group-title > span { color: rgb(var(--mg-muted)); font: 500 12px/1 'Barlow', sans-serif; }
 .tt-group-title > .tt-summary-late { color: rgb(var(--mg-late-time)); }
 button.tt-group-title:focus-visible, .tt-collapsed:focus-visible, a.tt-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
@@ -47,18 +46,18 @@ button.tt-group-title:focus-visible, .tt-collapsed:focus-visible, a.tt-row:focus
 
 .tt-card { overflow: hidden; border: 1px solid rgb(var(--mg-rule)); border-radius: 10px; background: rgb(var(--mg-surface)); }
 .tt-row {
-  display: grid; grid-template-columns: 44px minmax(0, 1fr) 8px 14px; align-items: center; column-gap: 10px;
-  min-height: 44px; padding: 0 10px 0 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important;
+  display: grid; grid-template-columns: 52px minmax(0, 1fr) 8px 14px; align-items: center; column-gap: 10px;
+  min-height: 54px; padding: 0 10px 0 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important;
   text-decoration: none !important; transition: background .15s;
 }
 .tt-row + .tt-row { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 a.tt-row:hover { background: rgb(var(--mg-subtle)); }
 a.tt-row:focus-visible { outline-offset: -2px; }
-.tt-time { font: 700 19px/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
-.tt-event { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding: 3px 0; overflow-wrap: anywhere; }
-.tt-event strong { font-size: 15px; font-weight: 600; line-height: 1.25; }
-.tt-sub { font-size: 12px; line-height: 1.25; color: rgb(var(--mg-muted)); }
-.tt-planned { font-size: 12px; line-height: 1.25; color: rgb(var(--mg-late-time)); }
+.tt-time { font: 700 23px/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
+.tt-event { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding: 5px 0; overflow-wrap: anywhere; }
+.tt-event strong { font-size: 16px; font-weight: 600; line-height: 1.25; }
+.tt-sub { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-muted)); }
+.tt-planned { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-late-time)); }
 .tt-onnow { color: rgb(var(--mg-red)); font: 700 10px/1 'Barlow', sans-serif; letter-spacing: .06em; }
 .tt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .tt-live .tt-dot { animation: tt-pulse 1.6s ease-in-out infinite; }
@@ -68,7 +67,7 @@ a.tt-row:focus-visible { outline-offset: -2px; }
 .tt-live { background: rgb(var(--mg-live-row)); box-shadow: inset 3px 0 0 rgb(var(--mg-red)); }
 a.tt-live:hover { background: rgb(var(--mg-live-row)); filter: brightness(.98); }
 .tt-late .tt-time { color: rgb(var(--mg-late-time)); }
-.tt-finished { min-height: 36px; }
+.tt-finished { min-height: 44px; }
 .tt-finished .tt-time { color: rgb(var(--mg-faint)); }
 .tt-finished .tt-event strong { color: rgb(var(--mg-body)); }
 @keyframes tt-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(var(--mg-red) / .5); } 50% { box-shadow: 0 0 0 5px rgb(var(--mg-red) / 0); } }

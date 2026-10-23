@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
-import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
-import type { Rulebook } from './types';
+import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineStatus } from '../refine/Refine';
+import type { Rulebook, RulebookSummary } from './types';
 import { apiMessage } from './types';
 import './operations.css';
 
@@ -19,46 +19,63 @@ interface RulebookDraft {
 const emptyDraft: RulebookDraft = { id: null, title: '', edition: '', sourceUrl: '', text: '' };
 
 export function RulebooksPage() {
-  const { competition } = useCompetition();
   const { user, editorMode } = useAuth();
-  return <EventRulebooks key={`${competition.id}:${user?.id ?? ''}:${editorMode}`} />;
+  return <GlobalRulebooks key={`${user?.id ?? ''}:${editorMode}`} />;
 }
 
-function EventRulebooks() {
+/** Rulebooks are shared by every competition. The list holds titles only; a rulebook's text is fetched when it is opened. */
+function GlobalRulebooks() {
   const { competition } = useCompetition();
-  const { canEdit, canOrganise, hasRole } = useAuth();
-  const canWrite = hasRole('Admin') ? canEdit() : canOrganise(competition);
-  const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
+  const { canEdit, hasRole } = useAuth();
+  const canWrite = hasRole('Admin') && canEdit();
+  const [rulebooks, setRulebooks] = useState<RulebookSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [texts, setTexts] = useState<Record<number, Rulebook>>({});
+  const [opening, setOpening] = useState(false);
   const [draft, setDraft] = useState<RulebookDraft | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const load = useCallback(async (preferId?: number) => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get<Rulebook[]>(`/competitions/${competition.id}/rulebooks`);
+      const { data } = await api.get<RulebookSummary[]>('/rulebooks');
       setRulebooks(data);
-      setSelectedId((current) => {
-        const wanted = preferId ?? current;
-        return wanted != null && data.some((item) => item.id === wanted) ? wanted : data[0]?.id ?? null;
-      });
+      setSelectedId((current) => (current != null && data.some((item) => item.id === current) ? current : null));
     } catch (loadError) {
       setError(apiMessage(loadError, 'Couldn’t load the rulebooks. Try again.'));
     } finally {
       setLoading(false);
     }
-  }, [competition.id]);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const selected = useMemo(() => rulebooks.find((item) => item.id === selectedId) ?? null, [rulebooks, selectedId]);
+  const selected = selectedId != null ? texts[selectedId] ?? null : null;
+
+  /** Fetch one rulebook's text, once; later opens reuse it until it is edited or deleted. */
+  async function open(id: number) {
+    setSelectedId(id);
+    setDraft(null);
+    setSaved(false);
+    setError(null);
+    if (texts[id]) return;
+    setOpening(true);
+    try {
+      const { data } = await api.get<Rulebook>(`/rulebooks/${id}`);
+      setTexts((current) => ({ ...current, [id]: data }));
+    } catch (openError) {
+      setError(apiMessage(openError, 'Couldn’t load this rulebook. Try again.'));
+    } finally {
+      setOpening(false);
+    }
+  }
 
   function edit(rulebook?: Rulebook) {
     setDraft(rulebook ? {
@@ -90,11 +107,13 @@ function EventRulebooks() {
         text: draft.text.trim(),
       };
       const response = draft.id == null
-        ? await api.post<Rulebook>(`/competitions/${competition.id}/rulebooks`, payload)
-        : await api.put<Rulebook>(`/competitions/${competition.id}/rulebooks/${draft.id}`, payload);
+        ? await api.post<Rulebook>('/rulebooks', payload)
+        : await api.put<Rulebook>(`/rulebooks/${draft.id}`, payload);
       setDraft(null);
       setSaved(true);
-      await load(response.data.id);
+      setTexts((current) => ({ ...current, [response.data.id]: response.data }));
+      setSelectedId(response.data.id);
+      await load();
     } catch (saveError) {
       setError(apiMessage(saveError, 'Couldn’t save this rulebook. Check the details and try again.'));
     } finally {
@@ -107,9 +126,11 @@ function EventRulebooks() {
     setBusy(true);
     setError(null);
     try {
-      await api.delete(`/competitions/${competition.id}/rulebooks/${rulebook.id}`);
+      await api.delete(`/rulebooks/${rulebook.id}`);
       setDraft(null);
       setSaved(false);
+      setSelectedId(null);
+      setTexts((current) => Object.fromEntries(Object.entries(current).filter(([id]) => Number(id) !== rulebook.id)));
       await load();
     } catch (deleteError) {
       setError(apiMessage(deleteError, 'Couldn’t delete this rulebook. Try again.'));
@@ -131,30 +152,28 @@ function EventRulebooks() {
         context={competition.name}
         actions={actions}
         title={draft ? (draft.id == null ? 'New rulebook' : 'Edit rulebook') : 'Rulebooks'}
-        subtitle={draft ? undefined : 'Rules and event notes published by the organiser.'}
+        subtitle={draft ? undefined : 'Choose a rulebook to read it.'}
       />
 
-      {error && <p role="alert" className="mg-notice ops-alert">{error} {!draft && <button type="button" className="rf-btn rf-btn-text" onClick={() => void load()}>Try again</button>}</p>}
+      {error && <p role="alert" className="mg-notice ops-alert">{error} {!draft && <button type="button" className="rf-btn rf-btn-text" onClick={() => (selectedId != null && !selected ? void open(selectedId) : void load())}>Try again</button>}</p>}
       {saved && <p role="status" className="rf-note">Rulebook saved.</p>}
       {loading && rulebooks.length === 0 && <p role="status" className="rf-note">Loading rulebooks…</p>}
-      {!loading && rulebooks.length === 0 && !draft && !error && <RefineNote>No rulebooks have been published for this competition.</RefineNote>}
+      {!loading && rulebooks.length === 0 && !draft && !error && <RefineNote>No rulebooks have been published yet.</RefineNote>}
 
       {draft && <RulebookEditor draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={() => setDraft(null)} />}
 
       {rulebooks.length > 0 && !draft && (
         <>
-          {rulebooks.length > 1 && <>
-            <RefineSection title="Rulebooks" />
-            <RefineList as="div">
-              {rulebooks.map((item) => (
-                <button key={item.id} type="button" className="rf-row" aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => { setSelectedId(item.id); setDraft(null); setSaved(false); }}>
-                  <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className="rf-t2">{item.edition}</span></span>
-                  {selectedId === item.id && <RefineStatus tone="ok">Showing</RefineStatus>}
-                </button>
-              ))}
-            </RefineList>
-          </>}
+          <RefineList as="div">
+            {rulebooks.map((item) => (
+              <button key={item.id} type="button" className="rf-row" aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => void open(item.id)}>
+                <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className="rf-t2">{item.edition}</span></span>
+                {selectedId === item.id && <RefineStatus tone="ok">Showing</RefineStatus>}
+              </button>
+            ))}
+          </RefineList>
 
+          {opening && !selected && <p role="status" className="rf-note">Loading rulebook…</p>}
           {selected && <article className="rulebook-reader">
             <h2 className="ops-reader-title">{selected.title}</h2>
             <p className="rf-note">{selected.edition} · Updated {new Date(selected.updatedAt).toLocaleDateString('en-GB')}</p>

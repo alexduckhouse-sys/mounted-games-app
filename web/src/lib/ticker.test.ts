@@ -25,7 +25,7 @@ const racing = (extra: Partial<Session> = {}) => session([heat(1), heat(2)], { s
 describe('tickerItems: what is on now', () => {
   it('names the race using the age group and session number', () => {
     const items = tickerItems([session([heat(1, { label: 'Heat 1' })], { status: 1 })], [], now);
-    expect(items[0]).toEqual({ key: 'live-heat-1', kind: 'live', text: 'Now: Seniors Session 1 · Heat 1' });
+    expect(items[0]).toEqual({ key: 'live-heat-1', kind: 'live', text: 'Now: Seniors Session 1 · Heat 1', sessionId: 1 });
   });
 
   it('numbers an unlabelled heat from its position', () => {
@@ -57,9 +57,9 @@ describe('tickerItems: what is on now', () => {
       name: 'Seniors Finals', sectionName: 'Teams Seniors', orderIndex: 90, heats: [heat(9, { label: 'Final A', raceRoundStage: 2 })], ...extra,
     });
     expect(tickerItems([finals({ scheduledStart: at(25) })], [], now)[0])
-      .toEqual({ key: 'next-heat-9', kind: 'finals', text: `Next ${clock(25)}: Seniors Finals · Final A` });
+      .toEqual({ key: 'next-heat-9', kind: 'finals', text: `Next ${clock(25)}: Seniors Finals · Final A`, sessionId: 3 });
     expect(tickerItems([finals({ status: 1 })], [], now)[0])
-      .toEqual({ key: 'live-heat-9', kind: 'finals', text: 'Now: Seniors Finals · Final A' });
+      .toEqual({ key: 'live-heat-9', kind: 'finals', text: 'Now: Seniors Finals · Final A', sessionId: 3 });
   });
 
   it('does not repeat "finals" when the age group already says it, and falls back to the session name', () => {
@@ -179,10 +179,19 @@ describe('tickerItems: breaks and briefings', () => {
   });
 });
 
+describe('tickerItems: where a line links', () => {
+  it('points race and break lines at their session, and announcements at none', () => {
+    const items = tickerItems([racing()], [note(9, 'Gate change', 2)], now);
+    expect(items.find((item) => item.kind === 'live')?.sessionId).toBe(1);
+    expect(find(tickerItems([pause({ scheduledStart: at(10) })], [], now), 'break')?.sessionId).toBe(50);
+    expect(items.find((item) => item.kind === 'announcement')?.sessionId).toBeUndefined();
+  });
+});
+
 describe('tickerItems: results and announcements', () => {
   it('shows the latest race winner from the last half hour', () => {
     const heats = [heat(1, { finishedAt: at(-5), races: [won(1, 'Bending', 12, 'Ashdown'), won(2, 'Sock Race', 6, 'Pony Club A')] }), heat(2)];
-    expect(find(tickerItems([session(heats, { status: 1 })], [], now), 'result')).toEqual({ key: 'result-2', kind: 'result', text: 'Pony Club A won Sock Race' });
+    expect(find(tickerItems([session(heats, { status: 1 })], [], now), 'result')).toEqual({ key: 'result-2', kind: 'result', text: 'Pony Club A won Sock Race', sessionId: 1 });
   });
 
   it('keeps the earlier winner when a later race has the same finish time', () => {

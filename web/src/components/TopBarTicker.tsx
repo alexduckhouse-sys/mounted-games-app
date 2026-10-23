@@ -77,6 +77,13 @@ export function TopBarTicker() {
   const active = items[index] ?? (watchCompetitionId ? { key: 'stream', kind: 'info' as const, text: 'Live video' } : undefined);
   if (!current || !active) return null;
   const { badge, text } = badgeFor(active);
+  const feed = `/competitions/${current.id}/chat`;
+  const timetable = `/competitions/${current.id}`;
+  const linkFor = (item: TickerItem) => {
+    if (item.sessionId != null) return `${timetable}/session/${item.sessionId}`;
+    return item.kind === 'late' || item.kind === 'ontime' ? timetable : feed;
+  };
+  const labelFor = (item: TickerItem) => (item.sessionId != null ? 'Open this session' : item.kind === 'late' || item.kind === 'ontime' ? 'Open the timetable' : 'Open the live feed');
   return (
     <div ref={barRef} className="relative">
       <ul className="sr-only" aria-label="Event updates">
@@ -87,7 +94,7 @@ export function TopBarTicker() {
       </ul>
       <div className="mg-strip-bar">
         <div className="mx-auto flex w-full max-w-5xl items-stretch">
-          <Link to={`/competitions/${current.id}/chat`} aria-label="Open the live feed" title="Open the live feed" className="mg-strip min-w-0 flex-1">
+          <Link to={linkFor(active)} aria-label={labelFor(active)} title={labelFor(active)} className="mg-strip min-w-0 flex-1">
             <span key={active.key} aria-hidden="true" className="ticker-line flex w-full min-w-0 items-center gap-2.5 pl-4 pr-1">
               {badge && <span className={`mg-badge ${badge.className}`}>{badge.label}</span>}
               <span className="min-w-0 flex-1 truncate">{text}</span>
@@ -112,7 +119,7 @@ export function TopBarTicker() {
               const line = badgeFor(item);
               return (
                 <li key={item.key}>
-                  <Link to={`/competitions/${current.id}/chat`} className="mg-strip-item" onClick={() => setOpen(false)}>
+                  <Link to={linkFor(item)} className="mg-strip-item" onClick={() => setOpen(false)}>
                     {line.badge ? <span className={`mg-badge ${line.badge.className}`}>{line.badge.label}</span> : <span className="mg-badge mg-badge-soft">Info</span>}
                     <span className="min-w-0 flex-1">{line.text}</span>
                   </Link>

@@ -7,6 +7,7 @@ import {
 import { api } from '../../api';
 import type { Heat, RaceTemplate, Session } from '../../types';
 import { useCompetition } from './context';
+import { RulesLink } from './RulesLink';
 import { RaceDiagram } from '../../components/RaceDiagram';
 import { displaySectionName } from '../../lib/section';
 import { formatTime, roundTo5Min, computeTimings } from '../../lib/time';
@@ -134,6 +135,7 @@ export function ArenaPage() {
         <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
           <Activity className="w-5 h-5 text-arena-live" /> Arena setup
         </h1>
+        <RulesLink className="ml-auto" />
       </div>
       {arenaBar}
 

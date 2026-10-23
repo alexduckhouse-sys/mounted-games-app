@@ -70,9 +70,17 @@ export interface CompetitionReadiness {
   equipmentIssues: Array<{ raceName: string; message: string }>;
 }
 
+/** A list entry: the text is fetched separately when the rulebook is opened. */
+export interface RulebookSummary {
+  id: number;
+  title: string;
+  edition: string;
+  sourceUrl: string | null;
+  updatedAt: string;
+}
+
 export interface Rulebook {
   id: number;
-  competitionId: number;
   title: string;
   edition: string;
   sourceUrl: string | null;

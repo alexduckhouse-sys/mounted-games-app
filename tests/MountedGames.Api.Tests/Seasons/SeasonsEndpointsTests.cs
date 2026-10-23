@@ -32,6 +32,26 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task SeasonsForCompetition_ListsOnlySeasonsWithAnIncludedRoundThere()
+    {
+        var trainer = await _f.TrainerAsync();
+        var competitionId = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
+        var sectionId = await _f.SeedSectionAsync(competitionId, "U12 round");
+        var elsewhere = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
+        var season = await (await trainer.PostAsJsonAsync("/api/seasons", SeasonBody())).ReadAsync<SeasonDto>();
+        var anon = _f.CreateClient();
+
+        Assert.Empty(await (await anon.GetAsync($"/api/seasons/for-competition/{competitionId}")).ReadAsync<List<SeasonLinkDto>>());
+        var round = await (await trainer.PostAsJsonAsync($"/api/seasons/{season.Id}/rounds", new AddSeasonRoundRequest(sectionId))).ReadAsync<SeasonRoundDto>();
+        var linked = await (await anon.GetAsync($"/api/seasons/for-competition/{competitionId}")).ReadAsync<List<SeasonLinkDto>>();
+        Assert.Equal(season.Id, Assert.Single(linked).Id);
+        Assert.Empty(await (await anon.GetAsync($"/api/seasons/for-competition/{elsewhere}")).ReadAsync<List<SeasonLinkDto>>());
+
+        await trainer.PutAsJsonAsync($"/api/seasons/{season.Id}/rounds/{round.Id}/included", new SetSeasonRoundIncludedRequest(false));
+        Assert.Empty(await (await anon.GetAsync($"/api/seasons/for-competition/{competitionId}")).ReadAsync<List<SeasonLinkDto>>());
+    }
+
+    [Fact]
     public async Task SeasonValidation_RejectsInvalidRules()
     {
         var trainer = await _f.TrainerAsync();

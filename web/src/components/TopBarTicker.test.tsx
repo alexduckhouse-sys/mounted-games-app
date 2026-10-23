@@ -63,6 +63,16 @@ describe('TopBarTicker: what it shows', () => {
     expect(second.container.querySelector('.mg-strip-bar')).toBeNull();
   });
 
+  it('links a session line to that session', () => {
+    show([{ key: 'next-1', kind: 'next', text: 'Next 10:35: Seniors Session 2', sessionId: 7 }, live]);
+    expect(screen.getByRole('link', { name: 'Open this session' })).toHaveAttribute('href', '/competitions/1/session/7');
+  });
+
+  it('links late and on time lines to the timetable', () => {
+    show([{ key: 'late', kind: 'late', text: 'Running 10 min behind' }, live]);
+    expect(screen.getByRole('link', { name: 'Open the timetable' })).toHaveAttribute('href', '/competitions/1');
+  });
+
   it('shows the first line with its badge, linking to the live feed', () => {
     show([live, next]);
     expect(strip()).toBe('LiveSeniors Session 1 · Heat 1');

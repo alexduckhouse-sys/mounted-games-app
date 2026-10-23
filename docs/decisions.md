@@ -1,5 +1,12 @@
 # Project decisions
 
+## 2026-10-23: Rulebooks are shared by every competition
+- Why: the same rulebooks apply everywhere, so organisers were re-entering them per event.
+- Rule: `Rulebook` has no competition; `GET /api/rulebooks` lists titles only and `GET /api/rulebooks/{id}` returns the text, so the web page loads a rulebook when it is opened. Only admins add, edit or delete.
+- Migration `GlobalRulebooks`: where several competitions held the same title and edition, the newest copy is kept. Run it on Neon before the API deploys.
+- A Rules button on the scoring and arena pages opens the rulebooks page.
+- The menu's Seasons link shows only for a competition that counts towards a season (`GET /api/seasons/for-competition/{id}`).
+
 ## 2026-10-22: Deleting your own account
 - Why: people must be able to remove themselves, and the privacy page promises it. `DELETE /api/auth/me` with the current password in the body does it (the same lockout as sign-in applies to wrong guesses).
 - Refused: the shared admin account and any account with no password (admin-key sessions), with a message to ask an administrator; the last account in the Admin role.
