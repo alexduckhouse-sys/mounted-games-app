@@ -4,6 +4,7 @@ import { ChevronDown, Video } from 'lucide-react';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { tickerFocusAfterChange, type TickerItem, type TickerKind } from '../lib/ticker';
 import { useTicker } from './TickerContext';
+import { PAGE_WIDTH_CLASS, usePageWidthValue } from './PageWidth';
 
 const ROTATE_MS = 4500;
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
@@ -37,6 +38,7 @@ const prefersReducedMotion = () => window.matchMedia?.(REDUCED_MOTION).matches ?
 
 /** One line that rolls through what is on now, delays, what is next and organiser announcements. Tap for the live feed. */
 export function TopBarTicker() {
+  const cap = PAGE_WIDTH_CLASS[usePageWidthValue()];
   const { current } = useCurrentCompetition();
   // The header already shows the competition name, so the strip only appears when there is news.
   const { items, watchCompetitionId } = useTicker();
@@ -93,7 +95,7 @@ export function TopBarTicker() {
         })}
       </ul>
       <div className="mg-strip-bar">
-        <div className="mx-auto flex w-full max-w-5xl items-stretch">
+        <div className={`mx-auto flex w-full ${cap} items-stretch`}>
           <Link to={linkFor(active)} aria-label={labelFor(active)} title={labelFor(active)} className="mg-strip min-w-0 flex-1">
             <span key={active.key} aria-hidden="true" className="ticker-line flex w-full min-w-0 items-center gap-2.5 pl-4 pr-1">
               {badge && <span className={`mg-badge ${badge.className}`}>{badge.label}</span>}
@@ -114,7 +116,7 @@ export function TopBarTicker() {
       </div>
       {open && (
         <div id={panelId} className="mg-strip-panel">
-          <ul className="mx-auto flex max-w-5xl flex-col">
+          <ul className={`mx-auto flex ${cap} flex-col`}>
             {items.map((item) => {
               const line = badgeFor(item);
               return (
@@ -127,7 +129,7 @@ export function TopBarTicker() {
               );
             })}
           </ul>
-          <div className="mx-auto max-w-5xl px-4 pb-3 pt-1">
+          <div className={`mx-auto ${cap} px-4 pb-3 pt-1`}>
             <Link to={`/competitions/${current.id}/chat`} className="mg-btn mg-btn-secondary w-full !min-h-11" onClick={() => setOpen(false)}>Open the live feed</Link>
           </div>
         </div>
