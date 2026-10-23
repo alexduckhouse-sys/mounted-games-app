@@ -1,3 +1,4 @@
+import { usePageWidth } from '../components/pageWidthState';
 import { useEffect, useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, History, PinOff, Search } from 'lucide-react';
@@ -14,6 +15,7 @@ import { usePageHeader } from '../components/CompactPageBarContext';
 
 /** The events page: upcoming competitions, with the past ones a link away at the bottom. */
 export function CompetitionPicker({ past = false }: { past?: boolean }) {
+  usePageWidth('wide');
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const refresh = () => setAttempt((n) => n + 1);
@@ -80,7 +82,7 @@ function CompetitionList({ onRetry, past }: { onRetry: () => void; past: boolean
     navigate('/events');
   };
   return (
-    <section className="mg-font mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-5" aria-labelledby={headingId}>
+    <section className="mg-font mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-5 lg:max-w-none" aria-labelledby={headingId}>
       <PlainHeader past={past} />
       <h1 id={headingId} className="sr-only">{past ? 'Past competitions' : 'Competitions'}</h1>
       <div className="mg-band mg-band-header flex flex-col gap-2 pb-3 pt-0">
@@ -101,13 +103,15 @@ function CompetitionList({ onRetry, past }: { onRetry: () => void; past: boolean
         {onToday.length > 0 && (
           <section className="mg-sec" aria-label="On today">
             <div className="mg-sec-head"><h2>On today</h2></div>
-            {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} />)}
+            <div className="mg-cards-grid flex flex-col gap-1.5">
+              {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} />)}
+            </div>
           </section>
         )}
         {later.length > 0 && (
           <section className="mg-sec" aria-label={past ? 'Finished' : 'Coming up'}>
             <div className="mg-sec-head"><h2>{past ? 'Finished' : 'Coming up'}</h2></div>
-            <div className="mg-lines">
+            <div className="mg-lines mg-lines-grid">
               {later.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} />)}
             </div>
           </section>

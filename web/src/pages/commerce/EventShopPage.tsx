@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps 
 import { Link } from 'react-router-dom';
 import { MapPin } from 'lucide-react';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { PageGrid } from '../../components/PageGrid';
+import { usePageWidth } from '../../components/pageWidthState';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
@@ -30,6 +33,8 @@ const itemsText = (count: number) => `${count} ${count === 1 ? 'item' : 'items'}
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 function EventShopContent() {
+  usePageWidth('wide');
+  const desktop = useIsDesktop();
   const { competition } = useCompetition();
   const { user } = useAuth();
   const [listings, setListings] = useState<PublicCompetitionListing[] | null>(null);
@@ -177,21 +182,31 @@ function EventShopContent() {
   const groups = SHOP_ORDER
     .map((category) => ({ category, items: (listings ?? []).filter((listing) => listing.category === category) }))
     .filter((group) => group.items.length > 0);
-  return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3">
-      <ShopHeader />
-      <p className="m-0 flex items-start gap-2 rounded-lg bg-[rgb(var(--mg-tint))] px-3 py-2.5 text-[13px] leading-snug text-[rgb(var(--mg-heading))]">
-        <MapPin className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
-        <span className="flex-1">Listings approved by the organiser. {COLLECT_NOTE}</span>
-        <Link className="mg-text-link !min-h-0 shrink-0 !text-[13px]" to="/me/orders" aria-label="Your orders">Your orders</Link>
-      </p>
-      {error && <LoadError message={error} onRetry={() => void load()} />}
-      {listings == null && !error && <p role="status" className="mg-meta px-1">Loading the shop…</p>}
-      {listings && listings.length === 0 && <p className="mg-card p-4">There’s nothing in the event shop yet.</p>}
+  const basketRail = (
+    <section className="mg-card flex flex-col gap-2 p-4" aria-label="Basket">
+      <h2 className="mg-display text-[22px] font-bold uppercase leading-none tracking-[0.03em] text-[rgb(var(--mg-heading))]">Basket</h2>
+      {basketLines.length === 0 ? <p className="m-0 text-sm text-[rgb(var(--mg-muted))]">Nothing in your basket yet. Use the + buttons to add items.</p> : (
+        <>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {basketLines.map(({ listing, quantity }) => (
+              <li key={listing.id} className="flex items-baseline gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate">{listing.title} × {quantity}</span>
+                <span className="font-semibold">{pounds(listing.priceMinor * quantity)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-baseline justify-between border-t border-[rgb(var(--mg-rule-soft))] pt-2 font-bold"><span>Total</span><span>{pounds(estimatedTotal)}</span></div>
+          <button type="button" className="mg-btn mg-btn-primary" onClick={() => setView('basket')}>View basket</button>
+        </>
+      )}
+    </section>
+  );
+  const products = (
+    <div className="flex flex-col gap-4">
       {groups.map(({ category, items }) => (
         <section key={category} className="mg-sec" aria-label={CATEGORY_LABEL[category]}>
           <div className="mg-sec-head"><h2>{CATEGORY_LABEL[category]}</h2></div>
-          <ul className="mg-lines" aria-label={`${CATEGORY_LABEL[category]} for sale`}>
+          <ul className="mg-lines mg-lines-grid" aria-label={`${CATEGORY_LABEL[category]} for sale`}>
             {items.map((listing) => {
               const quantity = basket[listing.id] ?? 0;
               const soldOut = listing.stockQuantity === 0;
@@ -215,7 +230,21 @@ function EventShopContent() {
         <div className="mg-sec-head"><h2>Tack and equipment for sale</h2></div>
         <ShopClassifieds intro="Posts from other Pony Clubbers. Agree a price with the seller and collect it at the event." />
       </section>
-      {basketLines.length > 0 && (
+    </div>
+  );
+  return (
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-none">
+      <ShopHeader />
+      <p className="m-0 flex items-start gap-2 rounded-lg bg-[rgb(var(--mg-tint))] px-3 py-2.5 text-[13px] leading-snug text-[rgb(var(--mg-heading))]">
+        <MapPin className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="flex-1">Listings approved by the organiser. {COLLECT_NOTE}</span>
+        <Link className="mg-text-link !min-h-0 shrink-0 !text-[13px]" to="/me/orders" aria-label="Your orders">Your orders</Link>
+      </p>
+      {error && <LoadError message={error} onRetry={() => void load()} />}
+      {listings == null && !error && <p role="status" className="mg-meta px-1">Loading the shop…</p>}
+      {listings && listings.length === 0 && <p className="mg-card p-4">There’s nothing in the event shop yet.</p>}
+      {desktop ? <PageGrid asideLabel="Your basket" aside={basketRail}>{products}</PageGrid> : products}
+      {!desktop && basketLines.length > 0 && (
         <div role="region" aria-label="Basket summary" className="mg-basket-bar">
           <span className="flex flex-1 flex-col gap-0.5"><span className="text-xs text-[rgb(var(--mg-header-sub))]">{itemsText(basketCount)}</span><strong className="mg-display text-[22px] font-bold leading-none">{pounds(estimatedTotal)}</strong></span>
           <button type="button" className="inline-flex min-h-11 items-center rounded-lg bg-[rgb(var(--mg-red))] px-5 text-[15px] font-bold text-white" onClick={() => setView('basket')}>Review order</button>

@@ -22,7 +22,7 @@ export function SponsorsPage() {
       {groups.map((group) => (
         <section key={group.tier} aria-label={group.label}>
           <RefineSection title={group.label} />
-          <ul className="mg-sponsor-card-list lg:grid lg:grid-cols-2 lg:gap-3 xl:grid-cols-3">
+          <ul className="mg-sponsor-card-list mg-cards-grid">
             {group.sponsors.map((sponsor) => (
               <li key={sponsor.id} className="mg-card"><SponsorBadge sponsor={sponsor} large={group.tier === 0} /></li>
             ))}

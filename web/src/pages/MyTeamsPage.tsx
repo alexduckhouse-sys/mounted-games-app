@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { useMyTeams } from '../hooks/useMyTeams';
 import { useTeamNotifications, type NotificationPermissionState } from '../hooks/useTeamNotifications';
@@ -36,6 +37,7 @@ function RelationshipTag({ team }: { team: Team }) {
 }
 
 export function MyTeamsPage() {
+  usePageWidth('wide');
   const { user, hasRole } = useAuth();
   const { search } = useLocation();
   const { teams, forms, comps, loaded, reload } = useMyTeams();
@@ -63,7 +65,7 @@ export function MyTeamsPage() {
   });
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-2.5 pb-2 pt-3">
+    <div className="mg-cards-grid mg-cards-grid-2 mx-auto flex w-full max-w-xl flex-col gap-2.5 pb-2 pt-3 lg:max-w-none">
       {teams.map((team) => {
         const rows = rowsByTeam.get(team.id) ?? [];
         const next = nextHeatRow(rows);
@@ -83,7 +85,7 @@ export function MyTeamsPage() {
           );
         }
         return (
-          <article key={team.id} aria-label={team.displayName} className="overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
+          <article key={team.id} aria-label={team.displayName} className="overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] lg:col-span-2">
             <div className="flex items-center gap-2.5 border-b border-[rgb(var(--mg-rule-soft))] py-3 pl-3.5 pr-3">
               <Link to={`/competitions/${team.competitionId}`} className="flex min-w-0 flex-1 flex-col gap-[3px] !text-[rgb(var(--mg-ink))]">
                 <strong className="mg-display truncate text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">{team.displayName}</strong>

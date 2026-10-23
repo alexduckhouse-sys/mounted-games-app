@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as ImageIcon, Check, Search, ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { LazyImage } from '../components/LazyImage';
 import { priceLabel } from '../lib/money';
@@ -27,11 +28,12 @@ function timeAgo(iso: string): string {
  * (merchandise and add-ons, collected at the event). The same listings also appear inside each event's shop.
  */
 export function ShopPage() {
+  usePageWidth('wide');
   const [tab, setTab] = useState<'tack' | 'events'>('tack');
   const [query, setQuery] = useState('');
   usePageHeader({ title: 'Shop', plain: true });
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-2">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-2 lg:max-w-3xl">
       <div className="mg-band mg-band-header flex flex-col gap-2 pb-3 pt-0">
         <div className="mg-navy-switch self-start" role="group" aria-label="Shop sections">
           <button type="button" aria-pressed={tab === 'tack'} onClick={() => setTab('tack')}>Tack and kit</button>
@@ -67,7 +69,7 @@ function EventShopLinks({ query }: { query: string }) {
       {events === null ? <p role="status" className="mg-meta px-0.5">Loading events…</p>
         : events.length === 0 ? <p className="mg-card p-4">No events to shop for right now.</p>
         : shown.length === 0 ? <p className="mg-card p-4">No event shops match that search.</p>
-        : <ul className="mg-lines">
+        : <ul className="mg-lines mg-lines-grid">
           {shown.map((event) => (
             <li key={event.id}>
               <Link to={`/competitions/${event.id}/shop`} className="mg-line grid-cols-[minmax(0,1fr)_14px] !min-h-14">
