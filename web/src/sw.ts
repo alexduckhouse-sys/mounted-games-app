@@ -3,7 +3,7 @@ import { createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { NetworkFirst, NetworkOnly } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
-import { canCachePublicApi, markSavedResponse, stampPublicResponse } from './offline/cachePolicy';
+import { canCachePublicApi, isEmbedRequest, markSavedResponse, NAVIGATION_DENYLIST, stampPublicResponse } from './offline/cachePolicy';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -13,12 +13,12 @@ precacheAndRoute(self.__WB_MANIFEST);
 // A saved app shell must also serve direct links opened without a connection.
 if (import.meta.env.PROD) {
   registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), {
-    denylist: [/^\/api(?:\/|$)/, /^\/hubs(?:\/|$)/],
+    denylist: NAVIGATION_DENYLIST,
   }));
 }
 
 registerRoute(
-  ({ url, request }) => url.origin === self.location.origin && canCachePublicApi(url.pathname, request.method),
+  ({ url, request }) => url.origin === self.location.origin && canCachePublicApi(url.pathname, request.method) && !isEmbedRequest(request.headers),
   new NetworkFirst({
     cacheName: 'mg-public-api-v2',
     networkTimeoutSeconds: 3,

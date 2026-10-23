@@ -7,6 +7,7 @@ import { SectionFormatLabel, type CompetitionDetail, type CompetitionSummary } f
 import { Chevron, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus, type RefineTab } from '../refine/Refine';
 import { lastPublishedRound, positionLabels, roundStatus, shortDate } from './seasonModel';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
+import { EmbedCard } from '../competition/EmbedCard';
 import { seasonError, type PublicationView, type SeasonRoundView, type SeasonView, type StandingsView } from './seasonViewTypes';
 import './seasonViews.css';
 
@@ -70,6 +71,7 @@ function SeasonDetail({ id }: { id: string }) {
     {tab === 'settings' && canManage && <>
       <SeasonSettingsForm key={JSON.stringify(season.placePoints) + season.title + season.bestResultsToCount} value={season} onSave={async (settings) => { await api.put(`/seasons/${id}`, settings); reload(); setParams({}); }} />
       <p className="rf-note">Need to connect a team across events? <Link to="/team-profiles">Open team profiles</Link>.</p>
+      <EmbedCard kind="season" seasonId={id} title={season.title} />
     </>}
   </RefinePage>;
 }

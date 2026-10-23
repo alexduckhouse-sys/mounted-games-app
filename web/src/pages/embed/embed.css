@@ -1,0 +1,76 @@
+/*
+ * The embeddable results widget. It reads the --mg-* tokens (set by data-theme on <html>) and, when a club
+ * passes an accent colour, --emb-accent (text and lines), --emb-fill and --emb-on-fill (filled chips).
+ * Built for 320 px wide frames.
+ */
+html:has(.emb), html:has(.emb) body, html:has(.emb) #root { height: auto; min-height: 100%; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); }
+
+.emb {
+  --emb-text: rgb(var(--emb-accent, var(--mg-heading)));
+  --emb-fill-bg: rgb(var(--emb-fill, var(--mg-button)));
+  --emb-fill-fg: rgb(var(--emb-on-fill, 255 255 255));
+  display: flex; min-height: 100vh; flex-direction: column;
+  font: 400 15px/1.35 'Barlow', system-ui, sans-serif; color: rgb(var(--mg-ink)); background: rgb(var(--mg-surface));
+}
+.emb * { box-sizing: border-box; }
+.emb-head { padding: 12px 12px 8px; border-bottom: 2px solid var(--emb-text); }
+.emb-title { margin: 0; color: var(--emb-text); font: 700 22px/1.1 'Barlow Condensed', 'Barlow', sans-serif; overflow-wrap: anywhere; }
+.emb-sub { margin: 3px 0 0; color: rgb(var(--mg-muted)); font-size: 13px; }
+.emb-main { display: flex; flex: 1; flex-direction: column; gap: 10px; padding: 10px 12px 12px; }
+.emb-foot { padding: 8px 12px 10px; border-top: 1px solid rgb(var(--mg-rule-soft)); text-align: right; font-size: 12px; }
+.emb-foot a { color: rgb(var(--mg-muted)); text-decoration: underline; text-underline-offset: 2px; }
+.emb-foot a:hover { color: var(--emb-text); }
+.emb a:focus-visible, .emb button:focus-visible { outline: 2px solid var(--emb-text); outline-offset: 2px; }
+
+.emb-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.emb-chips::-webkit-scrollbar { display: none; }
+.emb-chip {
+  flex-shrink: 0; min-height: 36px; padding: 0 12px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 999px;
+  background: transparent; color: rgb(var(--mg-body)); font: 600 14px/1 'Barlow', sans-serif; cursor: pointer;
+}
+.emb-chip[aria-pressed="true"] { border-color: var(--emb-fill-bg); background: var(--emb-fill-bg); color: var(--emb-fill-fg); }
+
+.emb-note { margin: 0; color: rgb(var(--mg-muted)); font-size: 13px; }
+.emb-msg { margin: 0; padding: 14px; border: 1px solid rgb(var(--mg-rule)); border-radius: 10px; color: rgb(var(--mg-body)); }
+.emb-msg button, .emb-more {
+  min-height: 40px; margin-top: 8px; padding: 0 14px; border: 1.5px solid var(--emb-text); border-radius: 8px;
+  background: transparent; color: var(--emb-text); font: 600 14px/1 'Barlow', sans-serif; cursor: pointer;
+}
+.emb-more { align-self: center; margin-top: 0; }
+.emb-stale { margin: 0; padding: 6px 10px; border-radius: 8px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font-size: 13px; }
+
+.emb-list { margin: 0; padding: 0; list-style: none; border: 1px solid rgb(var(--mg-rule)); border-radius: 10px; overflow: hidden; }
+.emb-row { display: flex; min-height: 46px; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid rgb(var(--mg-rule-soft)); }
+.emb-row:last-child { border-bottom: 0; }
+.emb-pos { width: 28px; flex-shrink: 0; color: var(--emb-text); font: 700 20px/1 'Barlow Condensed', 'Barlow', sans-serif; }
+.emb-name { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; font-weight: 600; }
+.emb-name span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emb-name small { color: rgb(var(--mg-muted)); font-size: 12.5px; font-weight: 500; }
+.emb-pts { flex-shrink: 0; font: 700 21px/1 'Barlow Condensed', 'Barlow', sans-serif; font-variant-numeric: tabular-nums; }
+.emb-cut { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-bottom: 1px solid rgb(var(--mg-rule-soft)); color: rgb(var(--mg-muted)); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.emb-cut::before, .emb-cut::after { flex: 1; border-top: 2px dashed rgb(var(--mg-dash)); content: ''; }
+.emb-row-hc { color: rgb(var(--mg-muted)); }
+.emb-row-hc .emb-pos { color: rgb(var(--mg-faint)); font-size: 15px; }
+
+.emb-h2 { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 0; color: rgb(var(--mg-body)); font: 700 13px/1.2 'Barlow', sans-serif; letter-spacing: .05em; text-transform: uppercase; }
+.emb-h2 span { flex: 1; overflow-wrap: anywhere; }
+.emb-h2 em { flex-shrink: 0; color: rgb(var(--mg-muted)); font-size: 12px; font-style: normal; letter-spacing: 0; text-transform: none; }
+
+.emb-time { display: flex; width: 54px; flex-shrink: 0; flex-direction: column; font: 700 17px/1.1 'Barlow Condensed', 'Barlow', sans-serif; font-variant-numeric: tabular-nums; }
+.emb-time s { color: rgb(var(--mg-muted)); font-size: 12.5px; font-weight: 500; }
+.emb-dot { width: 12px; height: 12px; flex-shrink: 0; border-radius: 50%; }
+.emb-state { flex-shrink: 0; min-width: 52px; text-align: right; color: rgb(var(--mg-muted)); font-size: 12.5px; font-weight: 600; }
+.emb-row-live { background: rgb(var(--mg-live-row)); }
+.emb-row-finished { color: rgb(var(--mg-muted)); }
+
+.emb-table-wrap { overflow-x: auto; border: 1px solid rgb(var(--mg-rule)); border-radius: 10px; }
+.emb-table { width: 100%; border-collapse: collapse; }
+.emb-table th, .emb-table td { padding: 8px 8px; border-bottom: 1px solid rgb(var(--mg-rule-soft)); text-align: left; font-size: 14.5px; }
+.emb-table tr:last-child td { border-bottom: 0; }
+.emb-table thead th { color: rgb(var(--mg-muted)); font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.emb-table .emb-num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.emb-table td:first-child { color: var(--emb-text); font-weight: 700; }
+.emb-table small { display: block; color: rgb(var(--mg-muted)); font-size: 12px; }
+
+@media (prefers-reduced-motion: no-preference) { .emb-main { animation: emb-in .2s ease-out; } }
+@keyframes emb-in { from { opacity: .4; } to { opacity: 1; } }
