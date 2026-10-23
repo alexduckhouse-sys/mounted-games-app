@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
+import { initialsOf } from '../../lib/profile';
 import type { TrainerRequest } from '../../types';
+import { PartHead } from './LaptopParts';
 
 export function TrainerRequestsSection({ canReview }: { canReview: boolean }) {
   const [requests, setRequests] = useState<TrainerRequest[]>([]);
@@ -52,32 +54,34 @@ export function TrainerRequestsSection({ canReview }: { canReview: boolean }) {
   }
 
   return (
-    <section className="card p-5" aria-labelledby="trainer-requests-title">
-      <h2 id="trainer-requests-title" className="font-semibold mb-3">Trainer requests</h2>
-      {error && <div role="alert" className="mb-3 text-sm text-rose-600 dark:text-rose-300">
+    <section className="flex flex-col gap-3" aria-labelledby="trainer-requests-title">
+      <PartHead id="trainer-requests-title" title="Waiting for you" meta={requests.length > 0 ? requests.length : undefined} alert />
+      {error && <div role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">
         <p>{error}</p>
-        <button type="button" className="btn-ghost mt-2" disabled={busy || loading} onClick={refresh}>Refresh list</button>
+        <button type="button" className="mg-btn mg-btn-secondary mt-2 !min-h-11" disabled={busy || loading} onClick={refresh}>Refresh list</button>
       </div>}
-      {loading ? <p className="text-sm text-slate-500">Loading trainer requests…</p> : (
+      {loading ? <p role="status" className="mg-meta">Loading trainer requests…</p> : (
         <>
-          {!error && requests.length === 0 && <p className="text-sm text-slate-500">No trainer requests.</p>}
-          {requests.length > 0 && !canReview && <p className="mb-3 text-sm text-slate-500">Switch to edit mode to approve or decline requests.</p>}
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {requests.map((request) => (
-              <li key={request.userId} className="py-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0 break-words">
-                  <p className="font-medium">{request.fullName}{request.requestedRole === 'Manager' && <span className="ml-2 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-violet-800">Team manager</span>}</p>
-                  <p className="text-sm">{request.email}</p>
-                  <p className="text-sm text-slate-500">{request.clubName ?? 'No club given'}</p>
-                  <p className="text-xs text-slate-500">Requested <time dateTime={request.requestedAt}>{new Date(request.requestedAt).toLocaleString('en-GB')}</time></p>
-                </div>
-                {canReview && <div className="flex gap-2">
-                  <button type="button" className="btn-primary" disabled={busy || !!error} onClick={() => review(request, 'approve')}>Approve</button>
-                  <button type="button" className="btn-ghost text-rose-600" disabled={busy || !!error} onClick={() => review(request, 'decline')}>Decline</button>
-                </div>}
-              </li>
-            ))}
-          </ul>
+          {!error && requests.length === 0 && <p className="mg-card p-4 text-sm text-[rgb(var(--mg-muted))]">No trainer requests.</p>}
+          {requests.length > 0 && !canReview && <p className="mg-meta">Switch to edit mode to approve or decline requests.</p>}
+          {requests.length > 0 && (
+            <ul className="mg-card mg-list">
+              {requests.map((request) => (
+                <li key={request.userId} className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-[40px_minmax(0,1fr)_192px]">
+                  <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgb(var(--mg-tint))] text-[15px] font-bold text-[rgb(var(--mg-heading))]">{initialsOf(request.fullName, request.email)}</span>
+                  <div className="flex min-w-0 flex-col gap-[3px] break-words">
+                    <strong className="text-base font-semibold">{request.fullName}</strong>
+                    <span className="text-[13px] text-[rgb(var(--mg-muted))]">{request.requestedRole === 'Manager' ? 'Team manager' : 'Trainer'} · <span>{request.clubName ?? 'No club given'}</span></span>
+                    <span className="text-xs text-[rgb(var(--mg-muted))]">{request.email && <span>{request.email}</span>}{request.email && ' · '}Requested <time dateTime={request.requestedAt}>{new Date(request.requestedAt).toLocaleString('en-GB')}</time></span>
+                  </div>
+                  {canReview && <div className="col-span-2 grid grid-cols-2 gap-2 sm:col-span-1">
+                    <button type="button" className="mg-btn mg-btn-primary !min-h-11 !rounded-[10px]" disabled={busy || !!error} onClick={() => review(request, 'approve')}>Approve</button>
+                    <button type="button" className="mg-btn mg-btn-secondary !min-h-11 !rounded-[10px]" disabled={busy || !!error} onClick={() => review(request, 'decline')}>Decline</button>
+                  </div>}
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
     </section>

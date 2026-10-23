@@ -12,6 +12,7 @@ public class SessionsAuthTests : IClassFixture<ApiFactory>
     public static IEnumerable<object[]> StaffOnly() => new[]
     {
         new object[] { "POST", "/api/competitions/1/sessions" },
+        new object[] { "PUT", "/api/competitions/1/sessions/1" },
         new object[] { "PUT", "/api/competitions/1/sessions/1/status" },
         new object[] { "DELETE", "/api/competitions/1/sessions/1" },
         new object[] { "POST", "/api/competitions/1/sessions/1/heats" },

@@ -6,7 +6,7 @@ import { api } from '../api';
 import { MyTeamsPage } from './MyTeamsPage';
 
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ hasRole: () => false }) }));
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1', clubName: null }, hasRole: () => false }) }));
 vi.mock('../hooks/useTeamNotifications', () => ({
   useTeamNotifications: () => ({ enabled: false, permission: 'default', setEnabled: vi.fn() }),
 }));
@@ -38,6 +38,8 @@ describe('My teams sharing', () => {
 
   it('leaves the join box empty without a key in the address', async () => {
     renderAt('/teams');
+    expect(screen.queryByPlaceholderText('ABCD1234')).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Join a team with a code' }));
     expect(await screen.findByPlaceholderText('ABCD1234')).toHaveValue('');
   });
 

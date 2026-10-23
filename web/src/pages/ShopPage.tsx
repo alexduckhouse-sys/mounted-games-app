@@ -1,48 +1,54 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as ImageIcon, Check } from 'lucide-react';
+import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as ImageIcon, Check, Search, ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { usePageHeader } from '../components/CompactPageBarContext';
 import { LazyImage } from '../components/LazyImage';
+import { priceLabel } from '../lib/money';
 import type { CompetitionSummary, ShopComment, ShopPost } from '../types';
-
-function priceLabel(p?: number | null): string {
-  if (p == null) return '';
-  return `£${(p / 100).toFixed(2)}`;
-}
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const m = Math.floor(ms / 60_000);
   if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return `${m} min ago`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return `${h} h ago`;
   const d = Math.floor(h / 24);
-  return `${d}d ago`;
+  if (d === 1) return 'Yesterday';
+  if (d < 7) return `${d} days ago`;
+  return d < 14 ? 'Last week' : `${Math.floor(d / 7)} weeks ago`;
 }
 
 /**
- * The shop: event shops (merchandise and add-ons, collected at the event) and the tack and equipment
- * listings from other Pony Clubbers. The same listings also appear inside each event's shop.
+ * The shop: tack and kit listed by other Pony Clubbers, and a link to each event's own shop
+ * (merchandise and add-ons, collected at the event). The same listings also appear inside each event's shop.
  */
 export function ShopPage() {
+  const [tab, setTab] = useState<'tack' | 'events'>('tack');
+  const [query, setQuery] = useState('');
+  usePageHeader({ title: 'Shop', plain: true });
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
-        <ShoppingBag className="w-6 h-6 text-brand-600" /> Shop
-      </h1>
-      <EventShopLinks />
-      <section aria-labelledby="classifieds-title" className="space-y-3">
-        <h2 id="classifieds-title" className="text-lg font-bold">Tack and equipment</h2>
-        <ShopClassifieds />
-      </section>
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-2">
+      <div className="mg-band mg-band-header flex flex-col gap-2 pb-3 pt-0">
+        <div className="mg-navy-switch self-start" role="group" aria-label="Shop sections">
+          <button type="button" aria-pressed={tab === 'tack'} onClick={() => setTab('tack')}>Tack and kit</button>
+          <button type="button" aria-pressed={tab === 'events'} onClick={() => setTab('events')}>Event shops</button>
+        </div>
+        <label className="mg-navy-field">
+          <Search className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+          <span className="sr-only">Search the shop</span>
+          <input type="search" placeholder={tab === 'tack' ? 'Saddle, bending poles, 13.2…' : 'Event name'} value={query} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+      </div>
+      {tab === 'tack' ? <ShopClassifieds query={query} floatingSell intro="" /> : <EventShopLinks query={query} />}
     </div>
   );
 }
 
 /** The events that are on or coming up, each with a link to its own shop. */
-function EventShopLinks() {
+function EventShopLinks({ query }: { query: string }) {
   const [events, setEvents] = useState<CompetitionSummary[] | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -51,17 +57,21 @@ function EventShopLinks() {
       .catch(() => { if (!cancelled) setEvents([]); });
     return () => { cancelled = true; };
   }, []);
+  const needle = query.trim().toLowerCase();
+  const shown = events?.filter((event) => `${event.name} ${event.location ?? ''}`.toLowerCase().includes(needle)) ?? [];
   return (
-    <section aria-labelledby="event-shops-title" className="space-y-2">
-      <h2 id="event-shops-title" className="text-lg font-bold">Event shops</h2>
-      <p className="text-xs text-slate-500 dark:text-slate-300">Merchandise and add-ons from the organisers, collected at the event.</p>
-      {events === null ? <p className="text-sm text-slate-500">Loading events…</p>
-        : events.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-300">No events to shop for right now.</p>
-        : <ul className="flex flex-col gap-1.5">
-          {events.map((event) => (
+    <section aria-labelledby="event-shops-title" className="mg-sec">
+      <div className="mg-sec-head"><h2 id="event-shops-title">Event shops</h2></div>
+      <p className="mg-meta px-0.5">Merchandise and add-ons from the organisers, collected at the event.</p>
+      {events === null ? <p role="status" className="mg-meta px-0.5">Loading events…</p>
+        : events.length === 0 ? <p className="mg-card p-4">No events to shop for right now.</p>
+        : shown.length === 0 ? <p className="mg-card p-4">No event shops match that search.</p>
+        : <ul className="mg-lines">
+          {shown.map((event) => (
             <li key={event.id}>
-              <Link to={`/competitions/${event.id}/shop`} className="card flex items-center gap-2 p-3 text-sm font-semibold hover:opacity-80">
-                <ShoppingBag className="w-4 h-4 text-brand-600" aria-hidden="true" /> {event.name}
+              <Link to={`/competitions/${event.id}/shop`} className="mg-line grid-cols-[minmax(0,1fr)_14px] !min-h-14">
+                <span className="flex min-w-0 flex-col gap-0.5"><strong className="mg-line-title">{event.name}</strong>{event.location && <span className="mg-line-sub">{event.location}</span>}</span>
+                <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
               </Link>
             </li>
           ))}
@@ -70,12 +80,16 @@ function EventShopLinks() {
   );
 }
 
-/** Buy, sell or swap tack and equipment. Used on the main shop page and inside each event's shop. */
-export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment with other Pony Clubbers.' }: { intro?: string }) {
+/**
+ * Buy, sell or swap tack and equipment. Used on the main shop page (searchable, with a Sell something button
+ * pinned above the tabs) and inside each event's shop.
+ */
+export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment with other Pony Clubbers.', query = '', floatingSell = false }: { intro?: string; query?: string; floatingSell?: boolean }) {
   const { user, canEdit } = useAuth();
   const [posts, setPosts] = useState<ShopPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [openId, setOpenId] = useState<number | null>(null);
 
   // Bumping the version re-runs the fetch below; the initial load happens on mount.
   const [version, setVersion] = useState(0);
@@ -93,50 +107,57 @@ export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment 
   }, [version]);
 
   const isAdmin = canEdit();
+  const needle = query.trim().toLowerCase();
+  const shown = needle ? posts.filter((p) => `${p.title} ${p.body} ${p.authorName} ${p.ponyClubName ?? ''}`.toLowerCase().includes(needle)) : posts;
+  const buttonClass = floatingSell ? 'mg-sell-btn' : 'mg-btn mg-btn-primary !min-h-11 !px-3 !text-sm';
+  const sell = user ? (
+    <button type="button" onClick={() => setComposerOpen((v) => !v)} aria-expanded={composerOpen} className={buttonClass}>
+      {composerOpen ? <X className="h-[18px] w-[18px]" aria-hidden="true" /> : <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />}{composerOpen ? 'Cancel' : floatingSell ? 'Sell something' : 'New post'}
+    </button>
+  ) : (
+    <Link to="/login" className={buttonClass}>
+      <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />Sign in to post
+    </Link>
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 flex-wrap">
-        <p className="text-xs text-slate-500 dark:text-slate-300 flex-1">
-          {intro}
-        </p>
-        {user ? (
-          <button onClick={() => setComposerOpen((v) => !v)} className="btn-primary !py-1.5 !px-3 text-sm">
-            <Plus className="w-4 h-4" /> {composerOpen ? 'Cancel' : 'New post'}
-          </button>
-        ) : (
-          <Link to="/login" className="btn-primary !py-1.5 !px-3 text-sm">
-            <Plus className="w-4 h-4" /> Sign in to post
-          </Link>
-        )}
-      </div>
+    <div className="flex flex-col gap-3">
+      {(intro || !floatingSell) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="mg-meta flex-1">{intro}</p>
+          {!floatingSell && sell}
+        </div>
+      )}
 
       {composerOpen && user && (
         <PostComposer onPosted={() => { setComposerOpen(false); load(); }} defaultName={user.fullName} />
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading posts…</p>
+        <p role="status" className="mg-meta px-0.5">Loading posts…</p>
       ) : posts.length === 0 ? (
-        <div className="card p-6 text-center">
-          <ShoppingBag className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-          <p className="text-sm text-slate-500 dark:text-slate-300">
-            Nothing for sale yet. Be the first to post!
-          </p>
+        <div className="mg-card p-6 text-center">
+          <ShoppingBag className="mx-auto mb-2 h-8 w-8 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
+          <p className="mg-meta">Nothing for sale yet. Be the first to post!</p>
         </div>
+      ) : shown.length === 0 ? (
+        <p className="mg-card p-4">Nothing matches that search.</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {posts.map((p) => (
-            <PostCard
+        <ul className="mg-lines">
+          {shown.map((p) => (
+            <PostRow
               key={p.id}
               post={p}
+              open={openId === p.id}
+              onToggle={() => setOpenId(openId === p.id ? null : p.id)}
               isAdmin={isAdmin}
               currentUserId={user?.id ?? null}
               onChanged={load}
             />
           ))}
-        </div>
+        </ul>
       )}
+      {floatingSell && <div className="mg-sell-bar">{sell}</div>}
     </div>
   );
 }
@@ -254,10 +275,12 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
   );
 }
 
-function PostCard({
-  post, isAdmin, currentUserId, onChanged,
+function PostRow({
+  post, open, onToggle, isAdmin, currentUserId, onChanged,
 }: {
   post: ShopPost;
+  open: boolean;
+  onToggle: () => void;
   isAdmin: boolean;
   currentUserId: string | null;
   onChanged: () => void;
@@ -277,48 +300,42 @@ function PostCard({
     alert('Reported. An admin will review.');
   }
 
+  const where = [post.authorName, post.ponyClubName].filter(Boolean).join(' · ');
   return (
-    <article className={`card p-3 space-y-2 flex flex-col ${post.isDeleted ? 'opacity-60 border-rose-200' : ''}`}>
-      {post.imageBase64 && (
-        <LazyImage src={post.imageBase64} alt={post.title} className="rounded-md max-h-40 w-full object-cover" />
-      )}
-      <div className="flex items-start gap-2">
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-sm truncate">{post.title}</h3>
-          {post.priceMinor != null && (
-            <p className="text-base font-bold text-brand-700 dark:text-brand-200">{priceLabel(post.priceMinor)}</p>
-          )}
+    <li className={post.isDeleted ? 'opacity-60' : ''}>
+      <button type="button" onClick={onToggle} aria-expanded={open} className="mg-line grid-cols-[44px_minmax(0,1fr)_auto] !min-h-[64px] !gap-x-3 !py-2">
+        {post.imageBase64
+          ? <LazyImage src={post.imageBase64} alt="" className="h-11 w-11 rounded-lg object-cover" compact />
+          : <span role="img" aria-label={`No photo: ${post.title}`} className="flex h-11 w-11 items-center justify-center rounded-lg bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-faint))]"><ImageIcon className="h-[22px] w-[22px]" aria-hidden="true" /></span>}
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <strong className="text-[15px] font-semibold leading-tight">{post.title}</strong>
+          <span className="mg-line-sub">{where}</span>
+          <span className="mg-line-sub">{timeAgo(post.createdAt)}{post.isDeleted ? ' · Removed' : ''}</span>
+        </span>
+        <span className="mg-display text-lg font-bold leading-none text-[rgb(var(--mg-heading))]">{post.priceMinor != null ? priceLabel(post.priceMinor) : ''}</span>
+      </button>
+      {open && (
+        <div className="space-y-2 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] px-3 py-3">
+          {post.imageBase64 && <LazyImage src={post.imageBase64} alt={post.title} className="max-h-60 w-full rounded-md object-cover" />}
+          <p className="whitespace-pre-wrap text-sm">{post.body}</p>
+          {post.contactInfo && <p className="mg-meta">Contact: {post.contactInfo}</p>}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button onClick={() => setShowComments((v) => !v)} className="mg-small-btn gap-1.5">
+              <MessageCircle className="h-4 w-4" aria-hidden="true" /> {showComments ? 'Hide' : 'Comments'}
+              {post.commentCount > 0 && <span className="text-[rgb(var(--mg-muted))]">{post.commentCount}</span>}
+            </button>
+            <div className="ml-auto" />
+            {!post.isDeleted && !ownPost && (
+              <button onClick={report} className="mg-small-btn gap-1.5"><Flag className="h-4 w-4" aria-hidden="true" /> Report</button>
+            )}
+            {(isAdmin || ownPost) && !post.isDeleted && (
+              <button onClick={remove} className="mg-small-btn gap-1.5 !text-[rgb(var(--mg-elim))]" aria-label="Remove post"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
+            )}
+          </div>
+          {showComments && <CommentThread postId={post.id} postAuthorId={post.authorUserId ?? null} currentUserId={currentUserId} />}
         </div>
-        <span className="text-[10px] text-slate-400 shrink-0">{timeAgo(post.createdAt)}</span>
-      </div>
-      <p className="text-xs whitespace-pre-wrap text-slate-700 dark:text-slate-200 line-clamp-6">{post.body}</p>
-      <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 flex-wrap">
-        <span className="font-semibold">{post.authorName}</span>
-        {post.ponyClubName && <span>· {post.ponyClubName}</span>}
-        {post.contactInfo && <span className="truncate">· {post.contactInfo}</span>}
-      </div>
-      <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-700/60">
-        <button onClick={() => setShowComments((v) => !v)} className="btn-ghost !py-1 !px-2 text-[11px]">
-          <MessageCircle className="w-3 h-3" /> {showComments ? 'Hide' : 'Comments'}
-          {post.commentCount > 0 && <span className="ml-1 text-slate-400">{post.commentCount}</span>}
-        </button>
-        <div className="ml-auto" />
-        {!post.isDeleted && !ownPost && (
-          <button onClick={report} className="btn-ghost !py-1 !px-2 text-[11px] text-amber-600">
-            <Flag className="w-3 h-3" /> Report
-          </button>
-        )}
-        {(isAdmin || ownPost) && !post.isDeleted && (
-          <button onClick={remove} className="btn-ghost !py-1 !px-2 text-[11px] text-rose-500">
-            <Trash2 className="w-3 h-3" />
-          </button>
-        )}
-        {post.isDeleted && (
-          <span className="text-[10px] uppercase tracking-wide font-bold text-rose-500">Removed</span>
-        )}
-      </div>
-      {showComments && <CommentThread postId={post.id} postAuthorId={post.authorUserId ?? null} currentUserId={currentUserId} />}
-    </article>
+      )}
+    </li>
   );
 }
 

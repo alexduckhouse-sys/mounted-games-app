@@ -1,33 +1,47 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Settings, Trophy, Users2, Sparkles, Shield, Plus, Trash2, Pencil, BookOpen } from 'lucide-react'; // BookOpen + Pencil also used by Race-rules card
+import { Link, useNavigate } from 'react-router-dom';
+import { BookOpen, Plus } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import type { Club, CompetitionSummary } from '../types';
+import { competitionDateText } from '../lib/competitionDates';
+import { STAGE_LABEL, stageAction, stageCounts, stageOf, type Stage } from '../lib/adminStage';
 import { bibAccent, bibLabel } from '../lib/bib';
 import { TrainerRequestsSection } from './admin/TrainerRequestsSection';
 import { EmailOptInExportSection } from './admin/EmailOptInExportSection';
+import { MoreMenu, PartHead, type MenuItem } from './admin/LaptopParts';
 
 interface IpBlock { id: number; ipAddress: string; reason?: string | null; createdAt: string }
-interface RaceSummary { id: number; name: string; category?: string | null; isBuiltIn: boolean }
+
+const STAGE_CLASS: Record<Stage, string> = {
+  draft: 'bg-[rgb(var(--mg-done-bg))] text-[rgb(var(--mg-body))]',
+  entries: 'bg-[rgb(var(--mg-ok)/0.14)] text-[rgb(var(--mg-ok))]',
+  format: 'bg-[rgb(var(--mg-late-bg))] text-[rgb(var(--mg-late-ink))]',
+  ready: 'bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]',
+  live: 'bg-[rgb(var(--mg-live-row))] text-[rgb(var(--mg-elim))]',
+  finished: 'bg-[rgb(var(--mg-done-bg))] text-[rgb(var(--mg-body))]',
+};
+
+const ROW_GRID = 'grid items-center gap-x-4 sm:grid-cols-[minmax(0,1fr)_120px_64px_192px]';
 
 export function AdminPage() {
   const { canEdit, hasRole } = useAuth();
+  const navigate = useNavigate();
   const [comps, setComps] = useState<CompetitionSummary[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [blocks, setBlocks] = useState<IpBlock[]>([]);
-  const [races, setRaces] = useState<RaceSummary[]>([]);
   const [newIp, setNewIp] = useState('');
   const [newReason, setNewReason] = useState('');
   const [myIp, setMyIp] = useState<string | null>(null);
   const [blockBusy, setBlockBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const now = useMemo(() => new Date(), []);
 
   function load() {
     api.get<CompetitionSummary[]>('/competitions', { params: { includeArchived: true } }).then((r) => setComps(r.data));
     api.get<Club[]>('/clubs').then((r) => setClubs(r.data));
     api.get<IpBlock[]>('/ip-blocks').then((r) => setBlocks(r.data)).catch(() => setBlocks([]));
     api.get<{ ip: string }>('/ip-blocks/mine').then((r) => setMyIp(r.data.ip)).catch(() => setMyIp(null));
-    api.get<RaceSummary[]>('/race-templates').then((r) => setRaces(r.data)).catch(() => setRaces([]));
   }
   useEffect(load, []);
 
@@ -47,6 +61,15 @@ export function AdminPage() {
   async function removeBlock(id: number) {
     await api.delete(`/ip-blocks/${id}`);
     load();
+  }
+
+  async function setLocked(c: CompetitionSummary, locked: boolean) {
+    try {
+      await api.post(`/competitions/${c.id}/signups-locked`, { locked });
+      setNotice(`Signups ${locked ? 'locked' : 'opened again'} for ${c.name}.`);
+    } catch {
+      setNotice(`Couldn’t ${locked ? 'lock' : 'open'} signups for ${c.name}. Try again.`);
+    }
   }
 
   async function deleteComp(c: CompetitionSummary) {
@@ -73,6 +96,7 @@ export function AdminPage() {
   }
 
   const iAmBlocked = useMemo(() => myIp != null && blocks.some((b) => b.ipAddress === myIp), [myIp, blocks]);
+  const rows = useMemo(() => comps.map((c) => ({ c, stage: stageOf(c, now) })), [comps, now]);
 
   const clubsByRegion = useMemo(() => {
     const m = new Map<string, Club[]>();
@@ -84,211 +108,122 @@ export function AdminPage() {
     return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [clubs]);
 
+  function menuFor(c: CompetitionSummary): MenuItem[] {
+    return [
+      { label: 'Edit details', onSelect: () => navigate(`/admin/competitions/${c.id}`) },
+      { label: 'Lock signups', onSelect: () => void setLocked(c, true) },
+      { label: 'Open signups again', onSelect: () => void setLocked(c, false) },
+      ...(canEdit() ? [{ label: 'Delete competition', onSelect: () => void deleteComp(c), danger: true }] : []),
+    ];
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Settings className="w-6 h-6 text-brand-600" /> Admin
-        </h1>
-        <div className="flex gap-2 flex-wrap">
-          <Link to="/admin/rules" className="btn-ghost">
-            <BookOpen className="w-4 h-4" /> Race rules
-          </Link>
-          <Link to="/admin/competitions/new" className="btn-primary">
-            <Sparkles className="w-4 h-4" /> Create competition
-          </Link>
-        </div>
+    <div className="skin mx-auto flex w-full max-w-[880px] flex-col gap-9 pb-16 pt-6 sm:pt-10">
+      <div className="flex flex-wrap items-end gap-4">
+        <h1 className="mg-display flex-1 text-[44px] font-bold leading-none text-[rgb(var(--mg-heading))]">Admin</h1>
+        <Link to="/admin/rules" className="mg-btn mg-btn-secondary !min-h-[50px] !rounded-[10px] !px-4 !text-base"><BookOpen className="h-[18px] w-[18px]" aria-hidden="true" /> Race rules</Link>
+        <Link to="/admin/competitions/new" className="mg-btn mg-btn-primary !min-h-[50px] !rounded-[10px] !px-[18px] !text-base"><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" /> New competition</Link>
       </div>
 
-      {hasRole('Admin') && <TrainerRequestsSection canReview={canEdit()} />}
-      {hasRole('Admin') && <EmailOptInExportSection />}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="card p-5">
-          <h2 className="font-semibold mb-3 flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-brand-600" /> All competitions
-          </h2>
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {comps.length === 0 && (
-              <li className="py-2 text-sm text-slate-500">No competitions yet.</li>
-            )}
-            {comps.map((c) => (
-              <li key={c.id} className="py-2 flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{c.name}</p>
-                  <p className="text-xs text-slate-500 truncate">{new Date(c.startDate).toLocaleDateString()} · {c.location}</p>
-                </div>
-                <span className="pill bg-slate-100 text-slate-700 shrink-0">{c.teamCount} teams</span>
-                <Link
-                  to={`/admin/competitions/${c.id}`}
-                  className="btn-ghost !py-1 !px-2 text-xs shrink-0"
-                  title="Edit competition"
-                >
-                  <Pencil className="w-3.5 h-3.5" /> Edit
-                </Link>
-                <Link
-                  to={`/admin/competitions/${c.id}/format`}
-                  className="btn-ghost !py-1 !px-2 text-xs shrink-0 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-200"
-                  title="Lock signups and auto-form teams"
-                >
-                  <Sparkles className="w-3.5 h-3.5" /> Format
-                </Link>
-                {canEdit() && (
-                  <button
-                    onClick={() => deleteComp(c)}
-                    className="btn-ghost !py-1 !px-2 text-xs shrink-0 text-rose-600 hover:text-rose-800"
-                    title="Delete competition permanently"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Delete
-                  </button>
-                )}
-              </li>
-            ))}
+      <section aria-labelledby="ad-comps" className="flex flex-col gap-[18px]">
+        <PartHead id="ad-comps" title="Competitions" meta={rows.length ? stageCounts(rows.map((r) => r.stage)) : undefined} />
+        {notice && <p role="status" className="mg-notice">{notice}</p>}
+        <div className="mg-card overflow-visible">
+          <div aria-hidden="true" className={`${ROW_GRID} hidden border-b border-[rgb(var(--mg-rule-soft))] py-2.5 pl-4 pr-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-[rgb(var(--mg-muted))] sm:grid`}>
+            <span>Competition</span><span>Stage</span><span className="text-right">Entries</span><span />
+          </div>
+          {rows.length === 0 && <p className="px-4 py-3 text-sm text-[rgb(var(--mg-muted))]">No competitions yet.</p>}
+          <ul>
+            {rows.map(({ c, stage }, i) => {
+              const action = stageAction(stage, c.id);
+              return (
+                <li key={c.id} className={`${ROW_GRID} min-h-[68px] grid-cols-[minmax(0,1fr)_auto] gap-y-2 py-2 pl-4 pr-3 ${i ? 'border-t border-[rgb(var(--mg-rule-soft))]' : ''}`}>
+                  <span className="flex min-w-0 flex-col gap-[3px]">
+                    <strong className="truncate text-base font-semibold">{c.name}</strong>
+                    <span className="truncate text-[13px] text-[rgb(var(--mg-muted))]">{[competitionDateText(c.startDate, c.endDate), c.location].filter(Boolean).join(' · ')}</span>
+                  </span>
+                  <span className={`justify-self-start whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold max-sm:order-3 ${STAGE_CLASS[stage]}`}>{STAGE_LABEL[stage]}</span>
+                  <span className="mg-display text-right text-xl font-bold tabular-nums max-sm:order-4" aria-label={`${c.teamCount} entries`}>{c.teamCount}</span>
+                  <span className="flex items-center justify-end gap-2 max-sm:order-2">
+                    <Link to={action.to} className="inline-flex min-h-11 w-[132px] items-center justify-center rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] px-3.5 text-sm font-semibold !text-[rgb(var(--mg-ink))] hover:border-[rgb(var(--mg-heading))]">{action.label}<span className="sr-only">: {c.name}</span></Link>
+                    <MoreMenu label={`More for ${c.name}`} items={menuFor(c)} />
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
+      </section>
 
-        <div className="card p-5">
-          <h2 className="font-semibold mb-3 flex items-center gap-2">
-            <Users2 className="w-5 h-5 text-brand-600" /> Clubs ({clubs.length})
-          </h2>
-          <div className="space-y-3 max-h-[500px] overflow-y-auto">
-            {clubsByRegion.map(([region, list]) => (
-              <div key={region}>
-                <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold mb-1">{region}</div>
-                <ul className="grid grid-cols-2 gap-2">
-                  {list.map((c) => (
-                    <li key={c.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800">
-                      <span className="inline-block w-3 h-3 rounded-full shrink-0" style={{ background: bibAccent(c.bibColour) }} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{c.name}</p>
-                        <p className="text-[10px] text-slate-500 truncate">Bibs: {bibLabel(c.bibColour)}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      {hasRole('Admin') && <TrainerRequestsSection canReview={canEdit()} />}
 
-      <div className="card p-5 space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="font-semibold flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-brand-600" /> Race rules &amp; diagrams
-          </h2>
-          <span className="text-xs text-slate-500">{races.length} races in the library</span>
-          <Link to="/admin/rules" className="btn-primary !py-1.5 !px-2.5 text-xs ml-auto">
-            <Pencil className="w-3.5 h-3.5" /> Edit races
-          </Link>
-        </div>
-        <p className="text-xs text-slate-500 dark:text-slate-300">
-          Add new races, fix diagrams, edit rules. Built-in races can be re-shaped using the drag editor.
-        </p>
-        {races.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {races.slice(0, 12).map((r) => (
-              <Link
-                key={r.id}
-                to="/admin/rules"
-                className="text-[11px] px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-brand-100 dark:hover:bg-brand-900/30"
-                title={r.category ?? ''}
-              >
-                {r.name}
-                {!r.isBuiltIn && <span className="ml-1 text-[9px] text-amber-600 font-bold uppercase">custom</span>}
-              </Link>
-            ))}
-            {races.length > 12 && (
-              <Link to="/admin/rules" className="text-[11px] px-2 py-1 rounded-md text-brand-600 dark:text-brand-300 hover:underline">
-                + {races.length - 12} more →
-              </Link>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="card p-5 space-y-3">
-        <h2 className="font-semibold flex items-center gap-2">
-          <Shield className="w-5 h-5 text-rose-600" /> Chat IP blocks
-        </h2>
+      <section aria-labelledby="ad-ips" className="flex flex-col gap-[18px]">
+        <PartHead id="ad-ips" title="Blocked addresses" />
         {myIp && (
-          <div className={`rounded-md p-2 text-xs flex items-center gap-2 ${
-            iAmBlocked
-              ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-700'
-              : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800'
-          }`}>
-            <Shield className="w-3.5 h-3.5 shrink-0" />
+          <div className={`flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm ${iAmBlocked ? 'bg-[rgb(var(--mg-live-row))] text-[rgb(var(--mg-elim))]' : 'bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]'}`}>
             <span className="flex-1">
-              Your IP <span className="font-mono">{myIp}</span> is{' '}
-              <span className="font-semibold">{iAmBlocked ? 'BLOCKED' : 'NOT blocked'}</span>.
+              Your IP <span className="font-mono">{myIp}</span> is <strong>{iAmBlocked ? 'BLOCKED' : 'NOT blocked'}</strong>.
               {iAmBlocked && ' (admin posts still go through.)'}
             </span>
             {iAmBlocked && (
-              <button
-                onClick={() => {
-                  const mine = blocks.find((b) => b.ipAddress === myIp);
-                  if (mine) removeBlock(mine.id);
-                }}
-                className="btn-ghost !py-1 !px-2 text-[11px]"
-              >
-                Unblock me
-              </button>
+              <button type="button" onClick={() => { const mine = blocks.find((b) => b.ipAddress === myIp); if (mine) removeBlock(mine.id); }} className="mg-small-btn">Unblock me</button>
             )}
           </div>
         )}
-        <p className="text-xs text-slate-500 dark:text-slate-300">
-          Blocked IPs cannot post in chat. Add one below; click "Unblock" beside an entry to lift it.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <input
-            className="input flex-1 min-w-[160px] text-sm"
-            placeholder="IP address (e.g. 192.168.1.50)"
-            value={newIp}
-            onChange={(e) => setNewIp(e.target.value)}
-          />
-          <input
-            className="input flex-1 min-w-[160px] text-sm"
-            placeholder="Reason (optional)"
-            value={newReason}
-            onChange={(e) => setNewReason(e.target.value)}
-          />
-          {myIp && newIp !== myIp && (
-            <button
-              type="button"
-              onClick={() => setNewIp(myIp)}
-              className="btn-ghost !py-1.5 !px-2.5 text-[11px]"
-              title="Pre-fill with your own IP"
-            >
-              Use mine
-            </button>
-          )}
-          <button onClick={addBlock} disabled={blockBusy || !newIp.trim()} className="btn-primary !py-1.5 !px-3 text-xs">
-            <Plus className="w-3.5 h-3.5" /> Block
-          </button>
+        <div className="grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_132px]">
+          <label className="flex flex-col gap-2 text-base font-medium">IP address
+            <span className="mg-field !min-h-12"><input placeholder="192.168.1.50" value={newIp} onChange={(e) => setNewIp(e.target.value)} /></span>
+          </label>
+          <label className="flex flex-col gap-2 text-base font-medium">Reason (optional)
+            <span className="mg-field !min-h-12"><input value={newReason} onChange={(e) => setNewReason(e.target.value)} /></span>
+          </label>
+          <button type="button" onClick={addBlock} disabled={blockBusy || !newIp.trim()} className="mg-btn mg-btn-secondary !min-h-12 !rounded-[10px] !text-base">Block</button>
         </div>
+        {myIp && newIp !== myIp && (
+          <button type="button" onClick={() => setNewIp(myIp)} className="mg-small-btn self-start">Use my address</button>
+        )}
         {blocks.length === 0 ? (
-          <p className="text-xs text-slate-500">No IPs blocked.</p>
+          <p className="text-sm text-[rgb(var(--mg-muted))]">No addresses blocked. Blocked addresses can’t post in chat.</p>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          <ul className="mg-card mg-list">
             {blocks.map((b) => (
-              <li key={b.id} className="py-2 flex items-center gap-2">
-                <span className="font-mono text-xs text-slate-700 dark:text-slate-100 flex-1 truncate">
+              <li key={b.id} className="grid min-h-14 items-center gap-x-4 gap-y-1 py-1 pl-4 pr-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_132px]">
+                <strong className="truncate font-mono text-[15px] font-semibold">
                   {b.ipAddress}
-                  {b.ipAddress === myIp && <span className="ml-1 text-[10px] text-rose-500 font-semibold">(YOU)</span>}
-                </span>
-                {b.reason && <span className="text-[11px] text-slate-500 truncate">{b.reason}</span>}
-                <span className="text-[10px] text-slate-400">{new Date(b.createdAt).toLocaleDateString()}</span>
-                <button
-                  onClick={() => removeBlock(b.id)}
-                  className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-800 text-[11px] font-semibold"
-                  title="Unblock this IP"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Unblock
-                </button>
+                  {b.ipAddress === myIp && <span className="ml-1.5 text-[10px] font-bold text-[rgb(var(--mg-elim))]">(YOU)</span>}
+                </strong>
+                <span className="text-sm text-[rgb(var(--mg-muted))]">{b.reason ?? ''}{b.reason ? ' · ' : ''}{new Date(b.createdAt).toLocaleDateString('en-GB')}</span>
+                <button type="button" onClick={() => removeBlock(b.id)} className="mg-btn mg-btn-secondary !min-h-11 !rounded-[10px] !text-sm" aria-label={`Unblock ${b.ipAddress}`}>Unblock</button>
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </section>
+
+      {hasRole('Admin') && <EmailOptInExportSection />}
+
+      <section aria-labelledby="ad-clubs" className="flex flex-col gap-[18px]">
+        <PartHead id="ad-clubs" title="Clubs" meta={clubs.length} />
+        <div className="mg-card space-y-3 p-4">
+          {clubsByRegion.length === 0 && <p className="text-sm text-[rgb(var(--mg-muted))]">No clubs yet.</p>}
+          {clubsByRegion.map(([region, list]) => (
+            <div key={region}>
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[rgb(var(--mg-muted))]">{region}</div>
+              <ul className="grid gap-2 sm:grid-cols-2">
+                {list.map((c) => (
+                  <li key={c.id} className="flex items-center gap-2 rounded-lg bg-[rgb(var(--mg-subtle))] p-2">
+                    <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ background: bibAccent(c.bibColour) }} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{c.name}</p>
+                      <p className="truncate text-xs text-[rgb(var(--mg-muted))]">Bibs: {bibLabel(c.bibColour)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

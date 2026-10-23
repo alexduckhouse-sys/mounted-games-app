@@ -1,156 +1,184 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import {
-  Trophy, Users, ClipboardList, Timer,
-  Sparkles, MessagesSquare, Flag, Radio, Info, CreditCard,
-} from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
-import type { CompetitionSummary, CompetitionDetail } from '../types';
+import { usePageHeader } from '../components/CompactPageBarContext';
+import { useMyTeams } from '../hooks/useMyTeams';
+import { competitionDateText, isOnToday } from '../lib/competitionDates';
+import { eventFacts, type Fact } from '../lib/dashboard';
+import { priceLabel } from '../lib/money';
+import { heatRowsForTeam, heatTime, teamsNeedingForms } from '../lib/myTeams';
+import { isComingUp } from '../lib/mySignups';
+import { roleLabel } from '../lib/profile';
+import { dayKey } from '../lib/timetableDay';
+import { displaySectionName } from '../lib/section';
+import type { CompetitionDetail, CompetitionPickerPage, LiveStreamsResponse, MySignup } from '../types';
+import { useNeedsYou } from './profile/needsYou';
 
-type GlobalCard = { to: string; label: string; icon: typeof Trophy; needsAuth?: boolean; hideForAdmin?: boolean };
-const globalCards: GlobalCard[] = [
-  { to: '/competitions', label: 'Competitions', icon: Trophy },
-  { to: '/teams', label: 'My Teams', icon: Users, needsAuth: true },
-  { to: '/declarations', label: 'Dec Forms', icon: ClipboardList, needsAuth: true },
-  { to: '/me/signups', label: 'My Signups', icon: CreditCard, needsAuth: true, hideForAdmin: true },
-  { to: '/chat', label: 'Live Feed', icon: MessagesSquare },
-];
+const TONE = { normal: 'text-[rgb(var(--mg-ink))]', late: 'text-[rgb(var(--mg-late-time))]', muted: 'text-[rgb(var(--mg-muted))]' } as const;
 
-type SectionCard = { sub: string; label: string; icon: typeof Trophy };
-const competitionSections: SectionCard[] = [
-  { sub: '', label: 'Timetable', icon: Timer },
-  { sub: 'scoring', label: 'Age group', icon: Flag },
-  { sub: 'chat', label: 'Live Feed · Stream', icon: Radio },
-  { sub: 'details', label: 'Details', icon: Info },
-];
+function greeting(now: Date): string {
+  const hour = now.getHours();
+  return hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening';
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export function DashboardPage() {
   const { user, hasRole } = useAuth();
   const { current } = useCurrentCompetition();
-  const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
-  // The detail is stored with the competition it was fetched for, so it is ignored once focus moves on.
-  const [focused, setFocused] = useState<{ id: number; detail: CompetitionDetail | null } | null>(null);
+  const { requests } = useNeedsYou();
+  const mine = useMyTeams();
+  const now = useMemo(() => new Date(), []);
+  const [picker, setPicker] = useState<CompetitionPickerPage | null>(null);
+  const [focus, setFocus] = useState<{ id: number; detail: CompetitionDetail; viewers: LiveStreamsResponse['streams'] } | null>(null);
+  const [signups, setSignups] = useState<{ userId: string; items: MySignup[] } | null>(null);
+  const userId = user?.id ?? null;
 
   useEffect(() => {
-    api.get<CompetitionSummary[]>('/competitions').then((r) => setCompetitions(r.data)).catch(() => {});
+    let cancelled = false;
+    api.get<CompetitionPickerPage>('/competitions/picker', { params: { past: false, page: 1 } })
+      .then(({ data }) => { if (!cancelled && Array.isArray(data?.items)) setPicker(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
-  const active = competitions.find((c) => c.isActive && !c.isArchived);
-  const focusId = current?.id ?? active?.id ?? null;
-
-  const focusedDetail = focused != null && focused.id === focusId ? focused.detail : null;
+  const onToday = picker?.items.filter((item) => isOnToday(item.startDate, item.endDate, now)) ?? [];
+  const focusId = current?.id ?? onToday.find((item) => item.live)?.id ?? onToday[0]?.id ?? null;
 
   useEffect(() => {
     if (focusId == null) return;
     let cancelled = false;
-    api.get<CompetitionDetail>(`/competitions/${focusId}`)
-      .then((r) => { if (!cancelled) setFocused({ id: focusId, detail: r.data }); })
-      .catch(() => { if (!cancelled) setFocused({ id: focusId, detail: null }); });
+    Promise.all([
+      api.get<CompetitionDetail>(`/competitions/${focusId}`).then((r) => r.data),
+      api.get<LiveStreamsResponse>(`/competitions/${focusId}/streams`).then((r) => (Array.isArray(r.data?.streams) ? r.data.streams : [])).catch(() => []),
+    ]).then(([detail, viewers]) => { if (!cancelled) setFocus({ id: focusId, detail, viewers }); })
+      .catch(() => { if (!cancelled) setFocus(null); });
     return () => { cancelled = true; };
   }, [focusId]);
 
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    api.get<MySignup[]>('/me/signups').then(({ data }) => { if (!cancelled && Array.isArray(data)) setSignups({ userId, items: data }); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  const event = focus && focus.id === focusId ? focus : null;
+  const facts = event ? eventFacts(event.detail, event.viewers) : null;
+  const pickerLive = picker?.items.find((item) => item.id === focusId)?.live;
+  const live = !!facts?.isLive || !!pickerLive;
+
+  const teams = mine.teams;
+  const mySignups = signups && signups.userId === userId ? signups.items : [];
+  const awaiting = mySignups.filter((s) => s.status === 0 && isComingUp(s.competitionStart, now));
+  const needForms = teamsNeedingForms(teams, mine.forms, mine.comps, now);
+  const looked = teams.filter((team) => team.relationship === 'trainer' || team.relationship === 'manager');
+  const formsIn = looked.filter((team) => mine.forms.some((form) => form.teamId === team.id)).length;
   const isAdmin = hasRole('Admin');
-  const cards = globalCards.filter((c) => {
-    if (c.needsAuth && user == null) return false;
-    if (c.hideForAdmin && isAdmin) return false;
-    return true;
+  const needs = [
+    ...needForms.map((team) => ({ key: `form-${team.id}`, to: `/competitions/${team.competitionId}/declarations`, title: `Dec form needed: ${team.displayName}`, sub: mine.comps.get(team.competitionId)?.name ?? '', urgent: true })),
+    ...awaiting.map((s) => ({ key: `pay-${s.id}`, to: '/me/signups', title: 'Entry awaiting payment', sub: `${s.competitionName} · ${priceLabel(s.amountMinor)}`, urgent: false })),
+    ...(isAdmin ? requests.map((r) => ({ key: `req-${r.userId}`, to: '/admin', title: `Trainer request: ${r.fullName}`, sub: r.clubName ?? 'Waiting for an admin', urgent: false })) : []),
+  ];
+
+  // Heats still to run today for the teams I look after, soonest first.
+  const todayKey = dayKey(now);
+  const todays = teams.flatMap((team) => {
+    const comp = mine.comps.get(team.competitionId);
+    return comp ? heatRowsForTeam(team, comp).filter((row) => row.status !== 'over' && row.effective && dayKey(row.effective) === todayKey).map((row) => ({ team, row })) : [];
+  }).sort((a, b) => a.row.effective!.getTime() - b.row.effective!.getTime()).slice(0, 6);
+
+  const first = user?.fullName?.trim().split(/\s+/)[0];
+  usePageHeader({
+    title: user ? `${greeting(now)}${first ? `, ${first}` : ''}` : 'Mounted Games',
+    subtitle: user ? [user.clubName, roleLabel(user.roles)].filter(Boolean).join(' · ') : 'Sign in for your teams and entries',
+    plain: true,
   });
 
-  return (
-    <div className="skin mx-auto w-full max-w-[560px] space-y-4 py-4">
-      <motion.section
-        initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-        className="mg-card flex items-center gap-3 p-3"
-      >
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[rgb(var(--mg-header))] text-white">
-          <Sparkles className="h-5 w-5" aria-hidden="true" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h1 className="mg-h1 mg-h1-sm truncate">
-            {user
-              ? `Welcome back, ${user.fullName.split(' ')[0]} 👋`
-              : 'Mounted Games — live dashboard'}
-          </h1>
-          <p className="mg-meta truncate">
-            {focusedDetail
-              ? `${focusedDetail.name} ${focusedDetail.isActive ? 'is live today.' : ''}`
-              : active ? `${active.name} is live today.` : 'No live competition right now.'}
-          </p>
-        </div>
-        {focusId != null && (
-          <Link to={`/competitions/${focusId}`} className="mg-btn mg-btn-primary !min-h-10 !px-3 !text-[15px] shrink-0">
-            <Timer className="h-4 w-4" aria-hidden="true" /> Open
+  const jumps: Array<{ label: string; to: string; fact: Fact }> = facts && focusId != null ? [
+    { label: 'Timetable', to: `/competitions/${focusId}`, fact: facts.timetable },
+    { label: 'Toplists', to: `/competitions/${focusId}/toplists`, fact: facts.toplists },
+    { label: 'Live & stream', to: `/competitions/${focusId}/chat`, fact: facts.live },
+    { label: 'Details', to: `/competitions/${focusId}/details`, fact: facts.details },
+  ] : [];
+
+  const shortcuts: Array<{ to: string; label: string; meta: string }> = [
+    ...(user ? [
+      { to: '/teams', label: 'My teams', meta: plural(teams.length, 'team') },
+      { to: '/declarations', label: 'Dec forms', meta: looked.length ? `${formsIn} of ${looked.length} in` : '' },
+      ...(isAdmin ? [] : [{ to: '/me/signups', label: 'My signups', meta: String(mySignups.length) }]),
+    ] : []),
+    ...(isAdmin || hasRole('Trainer') ? [{ to: '/admin/competitions/new', label: 'Create a competition', meta: '' }] : []),
+    ...(isAdmin ? [{ to: '/admin', label: 'Admin', meta: '' }] : []),
+    { to: '/shop', label: 'Shop', meta: '' },
+    ...(user ? [] : [{ to: '/login', label: 'Sign in', meta: '' }]),
+  ];
+
+  return <div className="mx-auto flex max-w-xl flex-col gap-4 pb-2">
+    {event && (
+      <div className="mg-band mg-band-deep flex min-h-14 items-center gap-2.5 py-2">
+        {live && <span className="inline-flex h-[22px] shrink-0 items-center rounded-[4px] bg-[rgb(var(--mg-red))] px-2 text-[11px] font-bold leading-none tracking-[0.06em]">LIVE</span>}
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <strong className="truncate text-[15px] font-semibold">{event.detail.name}</strong>
+          <span className="truncate text-xs text-[rgb(var(--mg-header-sub))]">{facts!.line}</span>
+        </span>
+        <Link to={`/competitions/${event.id}`} aria-label={`Open ${event.detail.name}`} className="inline-flex min-h-11 shrink-0 items-center rounded-lg bg-white px-3.5 text-sm font-bold !text-[rgb(var(--mg-header))]">Open</Link>
+      </div>
+    )}
+
+    {jumps.length > 0 && <nav aria-label="This event" className="grid grid-cols-2 gap-1.5">
+      {jumps.map((jump) => (
+        <Link key={jump.label} to={jump.to} className="flex min-h-[60px] flex-col justify-center gap-1 rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-3 py-2 !text-[rgb(var(--mg-ink))]">
+          <span className="mg-display text-[13px] font-bold uppercase leading-none tracking-[0.06em] text-[rgb(var(--mg-heading))]">{jump.label}</span>
+          <span className={`truncate text-[13px] font-semibold ${TONE[jump.fact.tone]}`}>{jump.fact.text}</span>
+        </Link>
+      ))}
+    </nav>}
+
+    {needs.length > 0 && <section className="mg-sec" aria-label="Needs you">
+      <div className="mg-sec-head"><h2>Needs you</h2><span className="!font-bold text-[rgb(var(--mg-red))]">{needs.length}</span></div>
+      <div className="mg-lines">
+        {needs.map((item) => (
+          <Link key={item.key} to={item.to} className={`mg-line grid-cols-[minmax(0,1fr)_14px] !gap-x-2.5 ${item.urgent ? 'bg-[rgb(var(--mg-live-row))] shadow-[inset_3px_0_0_rgb(var(--mg-red))]' : ''}`}>
+            <span className="flex min-w-0 flex-col gap-0.5"><strong className="text-[15px] font-semibold">{item.title}</strong>{item.sub && <span className={`text-xs ${item.urgent ? 'text-[rgb(var(--mg-elim))]' : 'text-[rgb(var(--mg-muted))]'}`}>{item.sub}</span>}</span>
+            <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
           </Link>
-        )}
-      </motion.section>
+        ))}
+      </div>
+    </section>}
 
-      <section className="space-y-2">
-        {focusId != null && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {competitionSections.map((s, i) => (
-              <motion.div
-                key={s.label}
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: i * 0.04 }}
-              >
-                <Link
-                  to={`/competitions/${focusId}${s.sub ? `/${s.sub}` : ''}`}
-                  className="mg-card block p-2.5 hover:border-[rgb(var(--mg-heading))]"
-                >
-                  <s.icon className="mb-1.5 h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-                  <h3 className="mg-h2 !text-base">{s.label}</h3>
-                </Link>
-              </motion.div>
-            ))}
+    {todays.length > 0 && <section className="mg-sec" aria-label="Your teams today">
+      <div className="mg-sec-head"><h2>Your teams today</h2></div>
+      <div className="mg-lines">
+        {todays.map(({ team, row }) => (
+          <div key={`${team.id}-${row.heatId}`} className="mg-line grid-cols-[44px_minmax(0,1fr)] !gap-x-2.5 !min-h-12">
+            <span className={`mg-line-time ${row.delayMinutes > 0 ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{heatTime(row)}</span>
+            <span className="flex min-w-0 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
+              <strong className="text-[15px] font-semibold">{team.displayName}</strong>
+              <span className="truncate text-xs text-[rgb(var(--mg-muted))]">{[displaySectionName(team.sectionName), row.label, row.delayMinutes > 0 ? `+${row.delayMinutes} min` : ''].filter(Boolean).join(' · ')}</span>
+            </span>
           </div>
-        )}
+        ))}
+      </div>
+    </section>}
 
-        <h2 className="mg-eyebrow pt-2">App</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {cards.map((c, i) => (
-            <motion.div
-              key={c.to}
-              initial={{ y: 10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: i * 0.04 }}
-            >
-              <Link to={c.to} className="mg-card block p-3 hover:border-[rgb(var(--mg-heading))]">
-                <c.icon className="mb-2 h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-                <h3 className="mg-h2 !text-base">{c.label}</h3>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
-      </section>
+    <section className="mg-sec" aria-label="Shortcuts">
+      <div className="mg-sec-head"><h2>Shortcuts</h2></div>
+      <div className="mg-lines">
+        {shortcuts.map((link) => (
+          <Link key={link.to} to={link.to} className="mg-line grid-cols-[minmax(0,1fr)_auto_14px] !min-h-12 !gap-x-3 !py-0 !pl-3.5">
+            <span className="text-[15px] font-semibold">{link.label}</span>
+            <span className="text-xs text-[rgb(var(--mg-muted))]">{link.meta}</span>
+            <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
+          </Link>
+        ))}
+      </div>
+    </section>
 
-      <section>
-        <h2 className="mg-eyebrow mb-2">Recent competitions</h2>
-        <div className="mg-card mg-list">
-          {competitions.slice(0, 6).map((c) => (
-            <Link key={c.id} to={`/competitions/${c.id}`} className="mg-row !min-h-12">
-              <span className={`mg-badge ${c.isActive && !c.isArchived ? 'mg-badge-live' : 'mg-badge-outline'}`}>
-                  {c.isActive && !c.isArchived ? 'Live' : c.isArchived ? 'Archived' : 'Past'}
-                </span>
-              <h3 className="flex-1 truncate font-semibold">{c.name}</h3>
-              <span className="mg-meta shrink-0">
-                {new Date(c.startDate).toLocaleDateString()}
-              </span>
-            </Link>
-          ))}
-          {competitions.length === 0 && (
-            <div className="mg-lede p-3">
-              No competitions yet. {user?.roles.includes('Admin') && (
-                <Link to="/admin" className="font-semibold text-[rgb(var(--mg-heading))] underline">Create one →</Link>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
+    {!event && !picker && <p role="status" className="mg-meta px-1">Looking for what’s on today…</p>}
+    {!event && picker && focusId == null && <p className="mg-meta px-1">Nothing is on today. {picker.items[0] ? `Next up: ${picker.items[0].name}, ${competitionDateText(picker.items[0].startDate, picker.items[0].endDate)}.` : ''}</p>}
+  </div>;
 }
-

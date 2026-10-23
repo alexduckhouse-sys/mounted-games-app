@@ -15,7 +15,7 @@ public record CompetitionSummary(
 public record PickerLiveHeat(string? SectionName, string HeatLabel, string? ArenaName);
 public record CompetitionPickerItem(
     int Id, string Name, DateTime StartDate, DateTime? EndDate, string Icon,
-    string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false);
+    string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false, bool EntriesOpen = false);
 public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore);
 
 public static class CompetitionTerms
@@ -234,6 +234,9 @@ public record CreateSessionRequest(
     DateTime? ScheduledStart, int OrderIndex, string? Notes,
     bool IsBreak, int? DurationMinutes,
     SessionKind? Kind, string? Location);
+
+/// <summary>Null leaves a field as it is; an empty arena name clears the arena.</summary>
+public record UpdateSessionRequest([StringLength(120)] string? Name = null, [StringLength(80)] string? ArenaName = null, DateTime? ScheduledStart = null);
 
 public record UpdateSessionStatusRequest(SessionStatus Status);
 

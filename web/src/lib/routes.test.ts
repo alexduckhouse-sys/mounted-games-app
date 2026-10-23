@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { competitionIdFromPath } from './routes';
+import { competitionIdFromPath, hasGlobalTabs } from './routes';
 
 describe('competitionIdFromPath', () => {
   it.each([
@@ -17,4 +17,14 @@ describe('competitionIdFromPath', () => {
       expect(competitionIdFromPath(path)).toBeNull();
     },
   );
+});
+
+describe('hasGlobalTabs', () => {
+  it.each(['/', '/competitions', '/competitions/past', '/following', '/chat', '/dashboard', '/teams', '/me/signups', '/shop', '/shop/'])('is true for %s', (path) => {
+    expect(hasGlobalTabs(path)).toBe(true);
+  });
+
+  it.each(['/competitions/4', '/me', '/admin', '/login', '/declarations', '/me/account'])('is false for %s', (path) => {
+    expect(hasGlobalTabs(path)).toBe(false);
+  });
 });

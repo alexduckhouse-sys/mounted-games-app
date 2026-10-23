@@ -60,7 +60,7 @@ public class CompetitionPickerTests
         Assert.False(last.HasMore);
         Assert.Equal(5, first.Items.Concat(second.Items).Concat(last.Items).Select(c => c.Id).Distinct().Count());
         var json = JsonSerializer.SerializeToElement(first.Items[0], new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        Assert.Equal(new[] { "ageGroupCount", "endDate", "icon", "id", "isDemo", "live", "location", "name", "startDate" }, json.EnumerateObject().Select(p => p.Name).Order());
+        Assert.Equal(new[] { "ageGroupCount", "endDate", "entriesOpen", "icon", "id", "isDemo", "live", "location", "name", "startDate" }, json.EnumerateObject().Select(p => p.Name).Order());
     }
 
     private static Session RaceSession(SessionStatus status, int order, string? arena, CompetitionSection? section, params Heat[] heats) => new()
@@ -78,6 +78,37 @@ public class CompetitionPickerTests
     {
         db.ChangeTracker.Clear();
         return Assert.Single((await CompetitionPickerQuery.LoadAsync(db, past, 1, 24, Today)).Items);
+    }
+
+    [Fact]
+    public async Task PickerSaysWhichEventsAreTakingEntries()
+    {
+        await using var db = await Database();
+        var section = () => new CompetitionSection { AgeGroup = "U12", DisplayName = "Under 12", Format = SectionFormat.Teams };
+        db.Competitions.AddRange(
+            new Competition { Name = "Open", StartDate = Today.AddDays(3), Sections = { section() } },
+            new Competition { Name = "Locked", StartDate = Today.AddDays(4), SignupsLocked = true, Sections = { section() } },
+            new Competition { Name = "No age groups", StartDate = Today.AddDays(5) });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var items = (await CompetitionPickerQuery.LoadAsync(db, false, 1, 24, Today)).Items.ToDictionary(c => c.Name);
+        Assert.True(items["Open"].EntriesOpen);
+        Assert.False(items["Locked"].EntriesOpen);
+        Assert.False(items["No age groups"].EntriesOpen);
+    }
+
+    [Fact]
+    public async Task PastEventsNeverShowEntriesOpen()
+    {
+        await using var db = await Database();
+        db.Competitions.Add(new Competition
+        {
+            Name = "Finished", StartDate = Today.AddDays(-5),
+            Sections = { new CompetitionSection { AgeGroup = "U12", DisplayName = "Under 12", Format = SectionFormat.Teams } },
+        });
+        await db.SaveChangesAsync();
+        Assert.False((await Single(db, past: true)).EntriesOpen);
     }
 
     [Fact]

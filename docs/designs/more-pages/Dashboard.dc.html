@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=Barlow+Condensed:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#EFEFEF;font-family:'Barlow',system-ui,sans-serif;color:#212121}
+a{color:#17385F}a:hover{color:#0F2A4A}
+button{font:inherit;border:0;background:none;padding:0;cursor:pointer;color:inherit}
+</style>
+</helmet>
+<div style="width:390px;height:844px;display:flex;flex-direction:column;background:#F7F7F7;font-family:'Barlow',system-ui,sans-serif;color:#212121;overflow:hidden">
+<header style="background:#17385F;color:#fff;display:flex;align-items:center;gap:10px;padding:12px 12px 12px 16px;flex:none">
+<span aria-hidden="true" style="width:32px;height:32px;border-radius:6px;background:#E12A39;display:flex;align-items:center;justify-content:center;font:700 15px/1 'Barlow Condensed',sans-serif;flex:none">MG</span>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><h1 style="margin:0;font:700 22px/1 'Barlow Condensed',sans-serif">Morning, Sarah</h1><span style="font-size:13px;line-height:1.2;color:#C9D4E3">Stockport Pony Club · Trainer</span></div>
+<button aria-label="Menu" style="width:44px;height:44px;border-radius:10px;border:1px solid #3B5577;display:flex;align-items:center;justify-content:center;flex:none;color:#fff"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></button>
+</header>
+<div style="background:#0F2A4A;color:#fff;display:flex;align-items:center;gap:10px;min-height:56px;padding:8px 12px 8px 16px;flex:none">
+<span style="flex:none;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:4px;background:#E12A39;font:700 11px/1 'Barlow',sans-serif;letter-spacing:.06em">LIVE</span>
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><strong style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Hartpury Area Festival</strong><span style="font-size:12px;color:#C9D4E3">Open · Session 2, Heat 2 on now</span></span>
+<a href="FollowingEvent.dc.html" style="flex:none;display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:8px;background:#fff;color:#17385F;font-weight:700;font-size:14px;text-decoration:none">Open</a>
+</div>
+<main style="flex:1;overflow-y:auto;padding:12px 12px 20px;display:flex;flex-direction:column;gap:16px">
+<nav aria-label="This event" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px">
+<sc-for list="{{ jumps }}" as="j" hint-placeholder-count="4">
+<a href="FollowingEvent.dc.html" style="display:flex;flex-direction:column;justify-content:center;gap:4px;min-height:60px;padding:8px 12px;box-sizing:border-box;border-radius:10px;background:#fff;border:1px solid #DADADA;text-decoration:none;color:#212121"><span style="font:700 13px/1 'Barlow Condensed',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#17385F">{{ j.label }}</span><span style="font-size:13px;font-weight:600;color:{{ j.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ j.fact }}</span></a>
+</sc-for>
+</nav>
+<section style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:baseline;gap:8px;padding:0 2px 3px;border-bottom:1.5px solid #17385F"><h2 style="flex:1;margin:0;font:700 14px/1.1 'Barlow Condensed',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#17385F">Needs you</h2><span style="font:700 12px/1 'Barlow',sans-serif;color:#E12A39">2</span></div>
+<div style="background:#fff;border:1px solid #DADADA;border-radius:10px;overflow:hidden">
+<a href="MyTeams.dc.html" style="display:grid;grid-template-columns:minmax(0,1fr) 14px;align-items:center;column-gap:10px;min-height:56px;padding:6px 10px 6px 12px;background:#FDF1F2;box-shadow:inset 3px 0 0 #E12A39;text-decoration:none;color:#212121"><span style="display:flex;flex-direction:column;gap:2px"><strong style="font-size:15px;font-weight:600">Dec form needed: Stockport B</strong><span style="font-size:12px;color:#A3202C">Northern Winter League R1 · due Fri 6 Nov, 18:00</span></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+<a href="MySignups.dc.html" style="display:grid;grid-template-columns:minmax(0,1fr) 14px;align-items:center;column-gap:10px;min-height:56px;padding:6px 10px 6px 12px;border-top:1px solid #EBEBEB;text-decoration:none;color:#212121"><span style="display:flex;flex-direction:column;gap:2px"><strong style="font-size:15px;font-weight:600">Entry awaiting payment</strong><span style="font-size:12px;color:#5A6270">Bicton Arena Individuals · £18.00</span></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+</div>
+</section>
+<section style="display:flex;flex-direction:column;gap:6px">
+<h2 style="margin:0;padding:0 2px 3px;border-bottom:1.5px solid #17385F;font:700 14px/1.1 'Barlow Condensed',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#17385F">Your teams today</h2>
+<div style="background:#fff;border:1px solid #DADADA;border-radius:10px;overflow:hidden">
+<sc-for list="{{ today }}" as="r" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;column-gap:10px;min-height:48px;padding:6px 12px;box-sizing:border-box;border-top:{{ r.bt }}"><span style="font:700 19px/1 'Barlow Condensed',sans-serif;font-variant-numeric:tabular-nums;color:{{ r.c }}">{{ r.time }}</span><span style="display:flex;align-items:baseline;gap:6px;min-width:0;white-space:nowrap;overflow:hidden"><strong style="font-size:15px;font-weight:600">{{ r.team }}</strong><span style="font-size:12px;color:#5A6270;overflow:hidden;text-overflow:ellipsis">{{ r.what }}</span></span></div>
+</sc-for>
+</div>
+</section>
+<section style="display:flex;flex-direction:column;gap:6px">
+<h2 style="margin:0;padding:0 2px 3px;border-bottom:1.5px solid #17385F;font:700 14px/1.1 'Barlow Condensed',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#17385F">Shortcuts</h2>
+<div style="background:#fff;border:1px solid #DADADA;border-radius:10px;overflow:hidden">
+<sc-for list="{{ links }}" as="l" hint-placeholder-count="4">
+<a href="{{ l.href }}" style="display:grid;grid-template-columns:minmax(0,1fr) auto 14px;align-items:center;column-gap:12px;min-height:48px;padding:0 10px 0 14px;border-top:{{ l.bt }};text-decoration:none;color:#212121"><span style="font-size:15px;font-weight:600">{{ l.label }}</span><span style="font-size:12px;color:#5A6270">{{ l.meta }}</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6E7480" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+</sc-for>
+</div>
+</section>
+</main>
+<nav aria-label="Main" style="flex:none;background:#fff;border-top:1px solid #DADADA;padding:6px 4px 10px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))">
+<a href="Main.dc.html" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;font:500 12px/1 'Barlow',sans-serif;color:#5A6270;text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path></svg>Events</a>
+<a href="Following.dc.html" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;font:500 12px/1 'Barlow',sans-serif;color:#5A6270;text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"></path></svg>Following</a>
+<a href="LiveFeeds.dc.html" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;font:500 12px/1 'Barlow',sans-serif;color:#5A6270;text-decoration:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Live</a>
+<a href="Dashboard.dc.html" aria-current="page" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:52px;font:700 12px/1 'Barlow',sans-serif;color:#17385F;text-decoration:none;position:relative"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0"></path></svg>Me<span style="position:absolute;top:4px;left:calc(50% + 6px);min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:8px;background:#E12A39;color:#fff;font:700 10px/16px 'Barlow',sans-serif;text-align:center">2</span></a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+const JUMPS = [
+  ['Timetable', 'Arena 2 · 6 min late', '#8A5A00'],
+  ['Toplists', 'Stockport A 3rd in Open', '#212121'],
+  ['Live & stream', '212 watching', '#212121'],
+  ['Details', 'Hartpury College', '#5A6270'],
+];
+const TODAY = [['10:54', 'Stockport A', 'Open · Heat 3 · +6 min', '#8A5A00'], ['11:00', 'Stockport B', 'Junior · Heat 1', '#17385F'], ['15:30', 'Stockport A', 'Open · A Final', '#17385F']];
+const LINKS = [
+  ['MyTeams.dc.html', 'My teams', '3 teams', 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8'],
+  ['MyTeams.dc.html', 'Dec forms', '1 of 2 in', 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 3h6v4H9zM9 12h6M9 16h4'],
+  ['MySignups.dc.html', 'My signups', '4', 'M2 7h20v12H2zM2 11h20'],
+  ['Shop.dc.html', 'Shop', '', 'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0'],
+];
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      jumps: JUMPS.map(([label, fact, c]) => ({ label, fact, c })),
+      today: TODAY.map(([time, team, what, c], i) => ({ time, team, what, c, bt: i ? '1px solid #EBEBEB' : '0' })),
+      links: LINKS.map(([href, label, meta, d], i) => ({ href, label, meta, d, bt: i ? '1px solid #EBEBEB' : '0' })),
+    };
+  }
+}
+</script>
+</body>
+</html>

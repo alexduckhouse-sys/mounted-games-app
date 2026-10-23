@@ -6,12 +6,13 @@ import { useCurrentCompetition } from '../competition/CurrentCompetitionContext'
 import { CompetitionPickerDialog } from '../competition/CompetitionPicker';
 import { RememberCompetitionDialog } from '../competition/RememberCompetitionDialog';
 import { competitionDateText } from '../lib/competitionDates';
-import { competitionIdFromPath } from '../lib/routes';
+import { competitionIdFromPath, hasGlobalTabs } from '../lib/routes';
 import { PageLoadBoundary } from './PageLoadBoundary';
 import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';
 import { ConnectionPill } from './ConnectionPill';
 import { BottomTabs } from './BottomTabs';
+import { GlobalTabs } from './GlobalTabs';
 import { useCompetitionMeta } from './competitionMeta';
 import { PageSkeleton } from './Skeletons';
 import { useCompactPageBarState } from './CompactPageBarContext';
@@ -38,7 +39,8 @@ export function AppShell() {
   const choosingCompetition = ['/', '/competitions', '/competitions/past'].includes(location.pathname);
   const competitionId = competitionIdFromPath(location.pathname);
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
-  const publicPage = choosingCompetition || competitionId != null || onProfile || ['/chat', '/following', '/me/members'].includes(location.pathname);
+  const globalTabs = hasGlobalTabs(location.pathname);
+  const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs || location.pathname === '/me/members';
   // The tabs belong to a competition. The profile borrows the one being followed, if any.
   const tabsCompetitionId = competitionId ?? (onProfile ? current?.id ?? null : null);
   const shown = meta && meta.id === competitionId ? meta : null;
@@ -83,8 +85,15 @@ export function AppShell() {
             </div>
           ) : (
             <div className="mx-auto flex max-w-5xl items-center gap-2.5 py-3 pl-4 pr-3">
-              <Link to="/" className="mg-logo" aria-label="Mounted Games home">MG</Link>
-              {pageHeader ? (
+              {pageHeader?.backTo
+                ? <Link to={pageHeader.backTo} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-white" aria-label={pageHeader.backLabel ?? 'Back'}><ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.25} /></Link>
+                : <Link to="/" className="mg-logo" aria-label="Mounted Games home">MG</Link>}
+              {pageHeader?.plain ? (
+                <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">
+                  <h1 className="mg-display truncate text-[22px] font-bold leading-none">{pageHeader.title}</h1>
+                  {pageHeader.subtitle && <span className="mg-header-sub truncate text-[13px] leading-tight">{pageHeader.subtitle}</span>}
+                </div>
+              ) : pageHeader ? (
                 <button type="button" onClick={() => setPickerOpen(true)} className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left">
                   <span className="mg-display truncate text-[22px] font-bold leading-none">{pageHeader.title}</span>
                   <span className="mg-header-sub flex items-center gap-1 text-[13px] leading-tight">
@@ -118,7 +127,7 @@ export function AppShell() {
         {competitionId != null && <TopBarTicker />}
       </div>
       <main className={publicPage
-        ? `skin mx-auto w-full max-w-5xl flex-1 px-4 ${/\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : tabsCompetitionId != null ? 'pb-28' : 'pb-10'}`
+        ? `skin mx-auto w-full max-w-5xl flex-1 px-4 ${/\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : tabsCompetitionId != null || globalTabs ? 'pb-28' : 'pb-10'}`
         : 'mx-auto w-full max-w-5xl flex-1 px-3 py-3 sm:px-4 sm:py-5'}>
         {storageError && <p role="status" className={publicPage ? 'mg-notice mt-4' : 'mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900'}>{storageError}</p>}
         <TrainerAccountNotice />
@@ -126,6 +135,7 @@ export function AppShell() {
           <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
         </PageLoadBoundary>
       </main>
+      {globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
       {tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
       {menuOpen && <NavigationDrawer settingsOpen={menuShowsSettings} onClose={() => setMenuOpen(false)} onChangeCompetition={() => { setMenuOpen(false); setPickerOpen(true); }} />}
       {pickerOpen && <CompetitionPickerDialog onClose={() => setPickerOpen(false)} />}

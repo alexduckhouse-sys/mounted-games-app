@@ -1,23 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
-import { Receipt } from 'lucide-react';
+import { MapPin } from 'lucide-react';
+import { usePageHeader } from '../../components/CompactPageBarContext';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { LazyImage } from '../../components/LazyImage';
 import { useCompetition } from '../competition/context';
 import { ShopClassifieds } from '../ShopPage';
-import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineQty, RefineSection, RefineStatus } from '../refine/Refine';
+import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineQty, RefineStatus } from '../refine/Refine';
 import { LoadError } from './commerceUi';
 import { CATEGORY_LABEL, errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
 import { DemoPaymentFlow, OutcomeState } from './DemoPaymentFlow';
 import type { CommerceItemCategory, DemoOrderPaymentResult, EventCommerceSettings, EventOrder, FakePaymentOutcome, PublicCompetitionListing, TestPayment } from './types';
 import './commerce.css';
 
-type Filter = 'all' | CommerceItemCategory;
-const SHOP_FILTERS: Array<{ value: Filter; label: string }> = [
-  { value: 'all', label: 'All' },
-  ...([1, 2, 0, 3] as CommerceItemCategory[]).map((category) => ({ value: category, label: CATEGORY_LABEL[category] })),
-];
+/** Camping and stabling first, then kit, tickets and the rest. */
+const SHOP_ORDER: CommerceItemCategory[] = [2, 0, 1, 3];
 
 const COLLECT_NOTE = 'Collect at the event.';
 
@@ -29,7 +26,6 @@ export function EventShopPage() {
 
 type View = 'shop' | 'basket' | 'payment' | 'placed';
 
-const initials = (title: string) => title.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join('').toUpperCase() || '·';
 const itemsText = (count: number) => `${count} ${count === 1 ? 'item' : 'items'}`;
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
@@ -39,7 +35,6 @@ function EventShopContent() {
   const [listings, setListings] = useState<PublicCompetitionListing[] | null>(null);
   const [settings, setSettings] = useState<EventCommerceSettings | null>(null);
   const [basket, setBasket] = useState<Record<number, number>>({});
-  const [filter, setFilter] = useState<Filter>('all');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [order, setOrder] = useState<EventOrder | null>(null);
@@ -62,7 +57,6 @@ function EventShopContent() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const visible = useMemo(() => listings?.filter((listing) => filter === 'all' || listing.category === filter) ?? [], [filter, listings]);
   const basketLines = useMemo(() => (listings ?? [])
     .filter((listing) => (basket[listing.id] ?? 0) > 0)
     .map((listing) => ({ listing, quantity: basket[listing.id] })), [basket, listings]);
@@ -180,62 +174,64 @@ function EventShopContent() {
     );
   }
 
+  const groups = SHOP_ORDER
+    .map((category) => ({ category, items: (listings ?? []).filter((listing) => listing.category === category) }))
+    .filter((group) => group.items.length > 0);
   return (
-    <RefinePage>
-      <RefineHeader
-        context={competition.name}
-        actions={<Link className="rf-ib" to="/me/orders" aria-label="Your orders"><Receipt className="h-[22px] w-[22px]" aria-hidden="true" /></Link>}
-        title="Shop"
-        tabs={SHOP_FILTERS.map(({ value, label }) => ({ label, active: filter === value, onSelect: () => setFilter(value) }))}
-        tabsLabel="Shop categories"
-        tabsKind="tablist"
-      />
-      <div role="tabpanel" aria-label="Products">
-        <RefineNote>Listings approved by the organiser. {COLLECT_NOTE}</RefineNote>
-        {error && <LoadError message={error} onRetry={() => void load()} />}
-        {listings == null && !error && <p role="status" className="rf-note">Loading the shop…</p>}
-        {listings && listings.length === 0 && <p className="rf-note">There’s nothing in the event shop yet.</p>}
-        {listings && listings.length > 0 && visible.length === 0 && <p className="rf-note">There’s nothing in this category yet.</p>}
-        {visible.length > 0 && (
-          <>
-            <RefineSection title="On sale" meta={filter === 'all' ? undefined : CATEGORY_LABEL[filter]} />
-            <RefineList label="Items for sale">
-              {visible.map((listing) => {
-                const quantity = basket[listing.id] ?? 0;
-                const soldOut = listing.stockQuantity === 0;
-                return (
-                  <li key={listing.id} className="rf-row">
-                    {listing.imageUrl
-                      ? <LazyImage src={listing.imageUrl} alt="" className="rf-thumb" compact />
-                      : <span className="rf-thumb" aria-hidden="true">{initials(listing.title)}</span>}
-                    <span className="rf-grow">
-                      <span className="rf-t1">{listing.title}</span>
-                      <span className="rf-price">{pounds(listing.priceMinor)}</span>
-                      {listing.description && <span className="rf-t2 rf-clamp">{listing.description}</span>}
-                    </span>
-                    {soldOut ? <RefineStatus tone="warn">Sold out</RefineStatus> : quantity === 0 ? (
-                      <button type="button" className="rf-btn" aria-label={`Add ${listing.title}`} onClick={() => changeQuantity(listing, 1)}>Add</button>
-                    ) : <RefineQty name={listing.title} value={quantity} max={listing.stockQuantity ?? 99} onChange={(next) => changeQuantity(listing, next)} />}
-                  </li>
-                );
-              })}
-            </RefineList>
-          </>
-        )}
-      </div>
-      <RefineSection title="Tack and equipment for sale" />
-      <div className="px-4 pb-6">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3">
+      <ShopHeader />
+      <p className="m-0 flex items-start gap-2 rounded-lg bg-[rgb(var(--mg-tint))] px-3 py-2.5 text-[13px] leading-snug text-[rgb(var(--mg-heading))]">
+        <MapPin className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="flex-1">Listings approved by the organiser. {COLLECT_NOTE}</span>
+        <Link className="mg-text-link !min-h-0 shrink-0 !text-[13px]" to="/me/orders" aria-label="Your orders">Your orders</Link>
+      </p>
+      {error && <LoadError message={error} onRetry={() => void load()} />}
+      {listings == null && !error && <p role="status" className="mg-meta px-1">Loading the shop…</p>}
+      {listings && listings.length === 0 && <p className="mg-card p-4">There’s nothing in the event shop yet.</p>}
+      {groups.map(({ category, items }) => (
+        <section key={category} className="mg-sec" aria-label={CATEGORY_LABEL[category]}>
+          <div className="mg-sec-head"><h2>{CATEGORY_LABEL[category]}</h2></div>
+          <ul className="mg-lines" aria-label={`${CATEGORY_LABEL[category]} for sale`}>
+            {items.map((listing) => {
+              const quantity = basket[listing.id] ?? 0;
+              const soldOut = listing.stockQuantity === 0;
+              const note = [listing.description, listing.stockQuantity != null && !soldOut ? `${listing.stockQuantity} left` : null].filter(Boolean).join(' · ');
+              return (
+                <li key={listing.id} className={`grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2.5 py-2 pl-3 pr-2 ${quantity > 0 ? 'bg-[rgb(var(--mg-subtle))]' : ''}`}>
+                  <span className="flex min-w-0 flex-col gap-[3px]">
+                    <strong className="text-[15px] font-semibold">{listing.title}</strong>
+                    {note && <span className="text-xs text-[rgb(var(--mg-muted))]">{note}</span>}
+                    <span className="mg-display text-[17px] font-bold leading-none text-[rgb(var(--mg-heading))]">{pounds(listing.priceMinor)}</span>
+                  </span>
+                  {soldOut ? <RefineStatus tone="warn">Sold out</RefineStatus>
+                    : <RefineQty name={listing.title} value={quantity} max={listing.stockQuantity ?? 99} onChange={(next) => changeQuantity(listing, next)} />}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
+      <section className="mg-sec" aria-label="Tack and equipment for sale">
+        <div className="mg-sec-head"><h2>Tack and equipment for sale</h2></div>
         <ShopClassifieds intro="Posts from other Pony Clubbers. Agree a price with the seller and collect it at the event." />
-      </div>
+      </section>
       {basketLines.length > 0 && (
-        <RefineFoot aboveTabs label="Basket summary">
-          <span className="rf-grow"><span className="rf-t1">{itemsText(basketCount)}</span><span className="rf-t2">Collect at event</span></span>
-          <span className="rf-price text-lg">{pounds(estimatedTotal)}</span>
-          <button type="button" className="rf-btn rf-btn-primary" onClick={() => setView('basket')}>Review</button>
-        </RefineFoot>
+        <div role="region" aria-label="Basket summary" className="mg-basket-bar">
+          <span className="flex flex-1 flex-col gap-0.5"><span className="text-xs text-[rgb(var(--mg-header-sub))]">{itemsText(basketCount)}</span><strong className="mg-display text-[22px] font-bold leading-none">{pounds(estimatedTotal)}</strong></span>
+          <button type="button" className="inline-flex min-h-11 items-center rounded-lg bg-[rgb(var(--mg-red))] px-5 text-[15px] font-bold text-white" onClick={() => setView('basket')}>Review order</button>
+        </div>
       )}
-    </RefinePage>
+    </div>
   );
+}
+
+/** The app header for the product list: back to the shop, with the event and its date underneath. */
+function ShopHeader() {
+  const { competition } = useCompetition();
+  const start = new Date(competition.startDate);
+  const when = Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  usePageHeader({ title: 'Event shop', subtitle: [competition.name, when].filter(Boolean).join(' · '), plain: true, backTo: '/shop', backLabel: 'Back to shop' });
+  return null;
 }
 
 function OrderLines({ order }: { order: EventOrder }) {

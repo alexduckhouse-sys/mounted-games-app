@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=Barlow+Condensed:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F7F7;font-family:'Barlow',system-ui,sans-serif;color:#212121}
+a{color:#17385F}a:hover{color:#0F2A4A}
+button{font:inherit;border:0;background:none;padding:0;cursor:pointer;color:inherit}
+input{font:400 16px/1.2 'Barlow',sans-serif;color:#212121}
+</style>
+</helmet>
+<div style="min-height:900px;background:#F7F7F7;font-family:'Barlow',system-ui,sans-serif;color:#212121">
+<header style="background:#17385F;color:#fff">
+<div style="max-width:880px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px">
+<span aria-hidden="true" style="width:32px;height:32px;border-radius:6px;background:#E12A39;display:flex;align-items:center;justify-content:center;font:700 15px/1 'Barlow Condensed',sans-serif;flex:none">MG</span>
+<span style="flex:1;font:600 15px/1 'Barlow',sans-serif;color:#C9D4E3">Admin</span>
+<button aria-label="Menu" style="width:44px;height:44px;border-radius:10px;border:1px solid #3B5577;display:flex;align-items:center;justify-content:center;flex:none;color:#fff"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></button>
+</div>
+</header>
+<main style="max-width:880px;margin:0 auto;padding:40px 16px 60px;display:flex;flex-direction:column;gap:36px">
+<div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+<h1 style="flex:1;margin:0;font:700 44px/1 'Barlow Condensed',sans-serif;color:#17385F">Admin</h1>
+<a href="Admin.dc.html" style="display:inline-flex;align-items:center;gap:8px;min-height:50px;padding:0 18px;border-radius:10px;background:#17385F;color:#fff;font:600 16px/1.1 'Barlow',sans-serif;text-decoration:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New competition</a>
+</div>
+<section aria-labelledby="ad-comps" style="display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;align-items:baseline;gap:12px;padding-bottom:8px;border-bottom:2px solid #17385F"><h2 id="ad-comps" style="flex:1;margin:0;font:700 22px/1 'Barlow Condensed',sans-serif;letter-spacing:.03em;text-transform:uppercase;color:#17385F">Competitions</h2><span style="font:500 13px/1 'Barlow',sans-serif;color:#5A6270">6 upcoming · 14 past</span></div>
+<div style="background:#fff;border:1px solid #DADADA;border-radius:12px;overflow:hidden">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 120px 64px 192px;align-items:center;column-gap:16px;padding:10px 12px 10px 16px;border-bottom:1px solid #EBEBEB;font:600 11px/1 'Barlow',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#5A6270"><span>Competition</span><span>Stage</span><span style="text-align:right">Entries</span><span></span></div>
+<sc-for list="{{ comps }}" as="c" hint-placeholder-count="5">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 120px 64px 192px;align-items:center;column-gap:16px;min-height:68px;padding:8px 12px 8px 16px;border-top:{{ c.bt }}">
+<span style="display:flex;flex-direction:column;gap:3px;min-width:0"><strong style="font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.name }}</strong><span style="font-size:13px;color:#5A6270;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.dates }} · {{ c.venue }}</span></span>
+<span style="justify-self:start;padding:4px 8px;border-radius:6px;background:{{ c.bg }};color:{{ c.fg }};font-size:12px;font-weight:600;white-space:nowrap">{{ c.stage }}</span>
+<span style="text-align:right;font:700 20px/1 'Barlow Condensed',sans-serif;font-variant-numeric:tabular-nums">{{ c.entries }}</span>
+<span style="display:flex;align-items:center;justify-content:flex-end;gap:8px"><a href="Format.dc.html" style="display:inline-flex;align-items:center;justify-content:center;width:132px;box-sizing:border-box;min-height:44px;padding:0 14px;border-radius:10px;border:1.5px solid #C4C9D1;font:600 14px/1 'Barlow',sans-serif;text-decoration:none">{{ c.action }}</a><button aria-label="More for {{ c.name }}" style="width:44px;height:44px;border-radius:10px;border:1px solid #C4C9D1;display:flex;align-items:center;justify-content:center;color:#17385F"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg></button></span>
+</div>
+</sc-for>
+</div>
+</section>
+<section aria-labelledby="ad-wait" style="display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;align-items:baseline;gap:12px;padding-bottom:8px;border-bottom:2px solid #17385F"><h2 id="ad-wait" style="flex:1;margin:0;font:700 22px/1 'Barlow Condensed',sans-serif;letter-spacing:.03em;text-transform:uppercase;color:#17385F">Waiting for you</h2><span style="font:700 13px/1 'Barlow',sans-serif;color:#C8202F">3</span></div>
+<div style="background:#fff;border:1px solid #DADADA;border-radius:12px;overflow:hidden">
+<sc-for list="{{ requests }}" as="r" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:40px minmax(0,1fr) 192px;align-items:center;column-gap:16px;min-height:68px;padding:8px 12px 8px 16px;border-top:{{ r.bt }}">
+<span aria-hidden="true" style="width:40px;height:40px;border-radius:50%;background:#E3E7EC;color:#17385F;display:flex;align-items:center;justify-content:center;font:700 15px/1 'Barlow',sans-serif;flex:none">{{ r.initials }}</span>
+<span style="min-width:0;display:flex;flex-direction:column;gap:3px"><strong style="font-size:16px;font-weight:600">{{ r.name }}</strong><span style="font-size:13px;color:#5A6270">{{ r.what }}</span></span>
+<span style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"><button style="min-height:44px;border-radius:10px;background:#17385F;color:#fff;font:600 15px/1 'Barlow',sans-serif">Approve</button><button style="min-height:44px;border-radius:10px;border:1.5px solid #C4C9D1;color:#17385F;font:600 15px/1 'Barlow',sans-serif">Decline</button></span>
+</div>
+</sc-for>
+</div>
+</section>
+<section aria-labelledby="ad-ips" style="display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;align-items:baseline;gap:12px;padding-bottom:8px;border-bottom:2px solid #17385F"><h2 id="ad-ips" style="flex:1;margin:0;font:700 22px/1 'Barlow Condensed',sans-serif;letter-spacing:.03em;text-transform:uppercase;color:#17385F">Blocked addresses</h2></div>
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 132px;gap:16px;align-items:end">
+<label style="display:flex;flex-direction:column;gap:8px;font:500 16px/1 'Barlow',sans-serif">IP address<span style="display:flex;align-items:center;min-height:48px;padding:0 12px;border-radius:10px;border:1.5px solid #C4C9D1;background:#fff"><input placeholder="192.168.1.50" style="flex:1;min-width:0;border:0;outline:0;background:transparent"></span></label>
+<label style="display:flex;flex-direction:column;gap:8px;font:500 16px/1 'Barlow',sans-serif">Reason (optional)<span style="display:flex;align-items:center;min-height:48px;padding:0 12px;border-radius:10px;border:1.5px solid #C4C9D1;background:#fff"><input style="flex:1;min-width:0;border:0;outline:0;background:transparent"></span></label>
+<button style="min-height:48px;border-radius:10px;border:1.5px solid #C4C9D1;background:#fff;color:#17385F;font:600 16px/1.1 'Barlow',sans-serif">Block</button>
+</div>
+<div style="background:#fff;border:1px solid #DADADA;border-radius:12px;overflow:hidden">
+<sc-for list="{{ ips }}" as="ip" hint-placeholder-count="2">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 132px;column-gap:16px;align-items:center;min-height:56px;padding:4px 12px 4px 16px;border-top:{{ ip.bt }}"><strong style="font:600 15px/1 ui-monospace,Menlo,monospace">{{ ip.addr }}</strong><span style="font-size:14px;color:#5A6270">{{ ip.why }}</span><button style="min-height:44px;border-radius:10px;border:1.5px solid #C4C9D1;color:#17385F;font:600 14px/1 'Barlow',sans-serif">Unblock</button></div>
+</sc-for>
+</div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+const STAGE = { entries: ['Entries open', '#E6F2EA', '#1E6B3A'], format: ['Set format', '#FFF4DC', '#8A5A00'], ready: ['Ready to run', '#E3E7EC', '#17385F'], live: ['Live', '#FDF1F2', '#A3202C'], draft: ['Draft', '#ECEDEF', '#4A505A'] };
+const COMPS = [
+  ['Hartpury Area Festival', 'Hartpury College', '24–25 Oct', 'live', 42, 'Run day'],
+  ['Cheshire Halloween Pairs', 'Kelsall Hill', '31 Oct', 'format', 28, 'Format'],
+  ['Northern Winter League R1', 'Myerscough College', '7 Nov', 'entries', 17, 'Edit'],
+  ['Bicton Arena Individuals', 'Bicton Arena', '14 Nov', 'ready', 36, 'Format'],
+  ['Christmas Cracker Teams', 'Arena UK', '5 Dec', 'draft', 0, 'Edit'],
+];
+const REQ = [['JM', 'James Morgan', 'Trainer · Wirral Pony Club'], ['KP', 'Kate Price', 'Team manager · Solway Riding Club'], ['TO', 'Tom Owen', 'Trainer · Bicton PC']];
+const IPS = [['81.2.69.160', 'Spam in live feed'], ['203.0.113.24', 'Repeated sign-in attempts']];
+class Component extends DCLogic {
+  renderVals() {
+    const bt = (i) => (i ? '1px solid #EBEBEB' : '0');
+    return {
+      comps: COMPS.map(([name, venue, dates, st, entries, action], i) => ({ name, venue, dates, stage: STAGE[st][0], bg: STAGE[st][1], fg: STAGE[st][2], entries, action, bt: bt(i) })),
+      requests: REQ.map(([initials, name, what], i) => ({ initials, name, what, bt: bt(i) })),
+      ips: IPS.map(([addr, why], i) => ({ addr, why, bt: bt(i) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

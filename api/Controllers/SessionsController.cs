@@ -79,6 +79,30 @@ public class SessionsController : ControllerBase
         return s.ToDto();
     }
 
+    /// <summary>Renames a session, moves it to another arena or sets its start time. Fields left out are not changed.</summary>
+    [HttpPut("{id:int}")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> Update(int competitionId, int id, UpdateSessionRequest req)
+    {
+        var s = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+        if (req.Name is not null)
+        {
+            if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { message = "A session needs a name." });
+            s.Name = req.Name.Trim();
+        }
+        if (req.ArenaName is not null)
+            s.ArenaName = string.IsNullOrWhiteSpace(req.ArenaName) ? null : req.ArenaName.Trim();
+        if (req.ScheduledStart.HasValue) s.ScheduledStart = req.ScheduledStart.Value;
+        await _db.SaveChangesAsync();
+
+        var dto = s.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
     [HttpPut("{id:int}/status")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
