@@ -329,7 +329,7 @@ public class EntryEmailTests : IClassFixture<EmailApiFactory>
         var section = await _f.NewSectionAsync();
         var email = NewEmail();
 
-        var plain = new CreateSectionSignupRequest("Default Dan", null, null, ContactEmail: email);
+        var plain = new CreateSectionSignupRequest("Default Dan", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, ContactEmail: email);
         Assert.False(plain.EmailOptIn);
         await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), plain);
 
@@ -539,7 +539,7 @@ public class EntryEmailOffTests : IClassFixture<EmailOffApiFactory>
         var url = $"/api/competitions/{section.CompetitionId}/sections/{section.Id}/signups";
 
         var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(url,
-            new CreateSectionSignupRequest("Quiet Quentin", null, null, ContactEmail: "Jane.Doe@example.org", EmailOptIn: true,
+            new CreateSectionSignupRequest("Quiet Quentin", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, ContactEmail: "Jane.Doe@example.org", EmailOptIn: true,
                 EmailOptInVersion: EmailOptInWording.Version));
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);

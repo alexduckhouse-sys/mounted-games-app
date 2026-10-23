@@ -573,7 +573,7 @@ public class SignupTests : IClassFixture<ApiFactory>
         var section = await _f.NewSectionAsync();
         var trainer = await _f.TrainerAsync();
         foreach (var n in new[] { "R1", "R2", "R3", "R4", "R5" })
-            (await trainer.PostAsJsonAsync(Url(section), new CreateSectionSignupRequest(n, "Stockport", null, TeamName: "Stockport Stars")))
+            (await trainer.PostAsJsonAsync(Url(section), new CreateSectionSignupRequest(n, "Stockport", null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, TeamName: "Stockport Stars")))
                 .EnsureSuccessStatusCode();
         var admin = await _f.AdminAsync();
 
@@ -590,7 +590,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     {
         var section = await _f.NewSectionAsync();
         (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section),
-            new CreateSectionSignupRequest("Manager", "Stockport", null, WholeTeam: true, TeamName: "Stockport Reds")))
+            new CreateSectionSignupRequest("Manager", "Stockport", null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true, TeamName: "Stockport Reds")))
             .EnsureSuccessStatusCode();
         var admin = await _f.AdminAsync();
 
@@ -609,11 +609,11 @@ public class SignupTests : IClassFixture<ApiFactory>
         var (member, _) = await _f.SignupAsync("Member");
 
         Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(Url(pairs),
-            new CreateSectionSignupRequest("M", null, null, WholeTeam: true, TeamName: "X"))).StatusCode);
+            new CreateSectionSignupRequest("M", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true, TeamName: "X"))).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(Url(teams),
-            new CreateSectionSignupRequest("M", null, null, WholeTeam: true))).StatusCode);
+            new CreateSectionSignupRequest("M", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true))).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await member.PostAsJsonAsync(Url(teams),
-            new CreateSectionSignupRequest("M", null, null, WholeTeam: true, TeamName: "X"))).StatusCode);
+            new CreateSectionSignupRequest("M", null, null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true, TeamName: "X"))).StatusCode);
     }
 
     [Fact]
