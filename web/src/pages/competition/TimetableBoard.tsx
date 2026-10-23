@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, MapPin } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { SponsorStrip } from '../../components/SponsorStrip';
 import { computeTimings, formatTime } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
@@ -141,6 +142,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
           </ul>
         )}
         {visibleRows.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">Nothing scheduled for this day.</p>}
+        <SponsorStrip placement="Timetable" />
         {footer}
       </div>
     </div>

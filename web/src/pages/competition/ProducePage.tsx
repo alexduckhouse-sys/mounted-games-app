@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, Megaphone, Save, Trash2, X } from 'lucide-react';
+import { ChevronLeft, Megaphone, Save, SkipForward, Trash2, X } from 'lucide-react';
+import { api } from '../../api';
+import { sponsorsFor } from '../../lib/sponsors';
 import { CompetitionContext, useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { StreamOverlays } from '../../components/stream/StreamOverlays';
@@ -21,6 +23,7 @@ const ELEMENTS: { key: OverlayElement; label: string }[] = [
 const PLACE_LABELS: Record<OverlayPlace, string> = {
   'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', top: 'Top', bottom: 'Bottom', right: 'Right',
 };
+const SPONSOR_MODES: { value: OverlayMode; label: string }[] = [{ value: 0, label: 'In breaks' }, { value: 1, label: 'Always' }, { value: 2, label: 'Off' }];
 const OUTCOME: Record<Exclude<OverlaySaveResult, 'saved'>, string> = {
   conflict: 'Someone else just changed the overlays. This is their version, so make your change again if you still need it.',
   failed: 'Couldn’t save. Check your connection and try again.',
@@ -78,6 +81,17 @@ function Producer() {
     if (outcome === 'saved') done?.();
     else setNotice(OUTCOME[outcome]);
     if (outcome === 'conflict') setEdited(null);
+  }
+
+  const videoSponsors = sponsorsFor(context.sponsors ?? [], 'BreakStream');
+  const setSponsorMode = (sponsorMode: OverlayMode) => run((current) => ({ ...current, sponsorMode }));
+  async function skipSponsor() {
+    setNotice(null);
+    try {
+      await api.post(`/competitions/${competition.id}/sponsors/skip`);
+    } catch {
+      setNotice('Couldn’t skip. Check your connection and try again.');
+    }
   }
 
   const putBannerOnAir = () => run((current) => ({ ...current, bannerText: bannerText.trim(), bannerStyle, bannerArenas }));
@@ -159,6 +173,20 @@ function Producer() {
           <button type="button" className="mg-btn mg-btn-primary" disabled={busy || !bannerText.trim()} onClick={putBannerOnAir}>{overlay.bannerText ? 'Update banner' : 'Put on air'}</button>
           <button type="button" className="mg-btn mg-btn-secondary" disabled={busy || !overlay.bannerText} onClick={clearBanner}>Clear banner</button>
           <button type="button" className="mg-btn mg-btn-secondary" disabled={!bannerText.trim()} onClick={saveMessage}>Save message</button>
+        </div>
+      </section>
+
+      <section className="mg-card flex flex-col gap-3 p-4" aria-labelledby="sponsors-title">
+        <h2 id="sponsors-title" className="font-bold">Sponsors on the video</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="w-32 text-sm">Sponsor cards</span>
+          <Segmented label="Sponsor cards" options={SPONSOR_MODES} value={overlay.sponsorMode} onChange={(mode) => void setSponsorMode(mode)} />
+        </div>
+        <p className="text-sm text-[rgb(var(--mg-muted))]">
+          {videoSponsors.length === 0 ? 'No sponsors are set to show on the video during breaks.' : `${videoSponsors.length} ${videoSponsors.length === 1 ? 'sponsor' : 'sponsors'} in the break rotation, headline first.`}
+        </p>
+        <div>
+          <button type="button" className="mg-btn mg-btn-secondary !min-h-11" disabled={videoSponsors.length === 0 || overlay.sponsorMode === 2} onClick={() => void skipSponsor()}><SkipForward className="h-4 w-4" aria-hidden="true" />Skip sponsor</button>
         </div>
       </section>
 
