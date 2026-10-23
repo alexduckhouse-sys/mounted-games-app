@@ -119,11 +119,18 @@ describe('signing in', () => {
     get.mockResolvedValue({ data: stored(['Member', 'TrainerRequest']).user });
     const { result } = mount();
     await act(async () => { await result.current.signupTrainer('ann', 'pw', 'Trainer', 'Ashdown'); });
-    expect(post).toHaveBeenCalledWith('/auth/signup-trainer', { username: 'ann', password: 'pw', role: 'Trainer', clubName: 'Ashdown' });
+    expect(post).toHaveBeenCalledWith('/auth/signup-trainer', { username: 'ann', password: 'pw', role: 'Trainer', clubName: 'Ashdown', fullName: undefined });
     expect(result.current.user?.fullName).toBe('Ann Smith');
     expect(result.current.trainerNotice).toBe('requested');
     expect(result.current.hasRole('Member')).toBe(true);
     expect(result.current.canOrganise()).toBe(false);
+  });
+
+  it('sends the person\'s own name when there is one', async () => {
+    post.mockResolvedValue({ data: stored(['Member']) });
+    const { result } = mount();
+    await act(async () => { await result.current.signupTrainer('ann@example.com', 'pw', 'Member', 'Ashdown', 'Ann Smith'); });
+    expect(post).toHaveBeenCalledWith('/auth/signup-trainer', { username: 'ann@example.com', password: 'pw', role: 'Member', clubName: 'Ashdown', fullName: 'Ann Smith' });
   });
 
   it.each(['Manager', 'Member'])('does not show the trainer request notice for %s signup', async (role) => {

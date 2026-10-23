@@ -109,6 +109,17 @@ describe('ProfilePage: my club', () => {
     expect(club.getByText('Stockport PC')).toBeInTheDocument();
   });
 
+  it('gives a team manager and an admin a Members row, and nobody else', async () => {
+    mount({ roles: ['Manager'] });
+    expect(await section('My club').findByRole('link', { name: /Members/ })).toHaveAttribute('href', '/me/members');
+  });
+
+  it('shows an admin the Members row too', async () => {
+    responses['/trainer/my-teams'] = [];
+    mount({ roles: ['Admin'], clubName: null });
+    expect(section('My club').getByRole('link', { name: /Members/ })).toHaveAttribute('href', '/me/members');
+  });
+
   it('shows no dec form count without a followed competition', async () => {
     mount();
     const club = section('My club');
@@ -260,8 +271,49 @@ describe('ProfilePage: needs you', () => {
     expect(needs.getAllByRole('button', { name: 'Decline' })[0]).toBeDisabled();
   });
 
-  it('does not ask a non-admin for trainer requests', () => {
-    mount({ roles: ['Manager'] });
+  it('does not ask a trainer or a member for join requests', () => {
+    mount({ roles: ['Trainer'] });
     expect(api.get).not.toHaveBeenCalledWith('/admin/trainer-requests');
+  });
+
+  it('shows a team manager their club\'s trainer requests, and lets them answer without edit mode', async () => {
+    mount({ roles: ['Manager'] });
+    const needs = await needsSection();
+    await needs.findByText('Sam Lee');
+    expect(api.get).toHaveBeenCalledWith('/admin/trainer-requests');
+    const approve = needs.getAllByRole('button', { name: 'Approve' })[0];
+    expect(approve).toBeEnabled();
+    await userEvent.click(approve);
+    expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r1/approve');
+  });
+
+  it('says when somebody wants to be a team manager', async () => {
+    responses['/admin/trainer-requests'] = [{ ...requests[0], requestedRole: 'Manager' }, { ...requests[1], requestedRole: 'Trainer' }];
+    mount({ roles: ['Admin'], editMode: true });
+    const needs = await needsSection();
+    expect(await needs.findByText('Wants to join as a team manager')).toBeInTheDocument();
+    expect(needs.getByText('Wants to join as a trainer')).toBeInTheDocument();
+  });
+
+  it('asks for the dec forms that are still missing, linking to the form for that team', async () => {
+    responses['/trainer/my-teams'] = [
+      team(1, { competitionId: 4, displayName: 'Stockport C', needsDeclaration: true }),
+      team(2, { competitionId: 4, displayName: 'Stockport D', needsDeclaration: false }),
+      team(3, { competitionId: 9, needsDeclaration: null }),
+    ];
+    mount({ roles: ['Trainer'] });
+    const needs = await needsSection();
+    const row = needs.getByRole('link', { name: /Dec form needed: Stockport C/ });
+    expect(row).toHaveAttribute('href', '/competitions/4/declarations?team=1');
+    expect(needs.queryByText(/Stockport D/)).not.toBeInTheDocument();
+    expect(needs.getByText('1', { selector: 'span' })).toBeInTheDocument();
+  });
+
+  it('counts approvals and missing dec forms together', async () => {
+    responses['/trainer/my-teams'] = [team(1, { competitionId: 4, needsDeclaration: true })];
+    mount({ roles: ['Manager'] });
+    const needs = await needsSection();
+    await needs.findByText('Sam Lee');
+    expect(needs.getByText('3', { selector: 'span' })).toBeInTheDocument();
   });
 });

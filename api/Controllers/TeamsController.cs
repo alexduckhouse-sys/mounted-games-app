@@ -181,7 +181,18 @@ public class TeamsController : ControllerBase
                 || t.Supporters.Any(s => s.UserId == userId && s.Status == TeamSupporterStatus.Accepted))
             .OrderByDescending(t => t.Competition!.StartDate)
             .ToListAsync();
-        return teams.Select(t => t.ToDtoFor(userId, managedClubId != null && t.ClubId == managedClubId));
+        var teamIds = teams.Select(t => t.Id).ToList();
+        var declared = (await _db.DeclarationForms.AsNoTracking().Where(f => teamIds.Contains(f.TeamId)).Select(f => f.TeamId).Distinct().ToListAsync()).ToHashSet();
+        var today = DateTime.UtcNow.Date;
+        return teams.Select(t =>
+        {
+            var manages = managedClubId != null && t.ClubId == managedClubId;
+            var dto = t.ToDtoFor(userId, manages);
+            // Only the people who fill in a team's dec form are asked for it, and only until the event is over.
+            var fills = t.TrainerUserId == userId || manages;
+            var over = (t.Competition?.EndDate ?? t.Competition?.StartDate ?? today).Date < today;
+            return dto with { NeedsDeclaration = fills && !over && t.EntryStatus == TeamEntryStatus.Active && !declared.Contains(t.Id) };
+        });
     }
 
     [HttpPost("{teamId:int}/supporter-key")]

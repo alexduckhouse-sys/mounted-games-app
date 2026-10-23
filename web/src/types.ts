@@ -51,6 +51,33 @@ export interface TrainerRequest {
   requestedRole?: 'Trainer' | 'Manager';
 }
 
+/** The roles a club's people can hold, most senior first. */
+export type MemberRole = 'Manager' | 'Trainer' | 'Member';
+
+export interface ClubMember {
+  userId: string;
+  fullName: string;
+  role: MemberRole;
+  /** For a trainer: the club's teams they look after. */
+  teams: string[];
+  /** A team manager request for this person is waiting for an admin. */
+  awaitingAdmin: boolean;
+}
+
+/** `GET /clubs/{id}/members`: everyone in the club, plus the people waiting to join it. */
+export interface ClubMembers {
+  clubId: number;
+  clubName: string;
+  members: ClubMember[];
+  pending: TrainerRequest[];
+}
+
+/** `PUT /clubs/{id}/members/{userId}/role`: `awaitingAdmin` means nothing changed yet, an admin has to approve. */
+export interface ClubRoleChange {
+  role: MemberRole;
+  awaitingAdmin: boolean;
+}
+
 export interface Club {
   id: number;
   name: string;
@@ -153,6 +180,8 @@ export interface Team {
   isWithdrawn?: boolean;
   /** What the team's bibs look like, in plain words. One description for the whole team. */
   bibDescription?: string | null;
+  /** Only on `/trainer/my-teams`: the viewer fills in this team's dec form, the event isn't over, and none is in yet. */
+  needsDeclaration?: boolean | null;
 }
 
 export type TeamSupporterStatus = 0 | 1; // Pending / Accepted
@@ -413,6 +442,8 @@ export interface RiderEntry {
   useInitialOnly?: boolean;
   /** Only sent to the owning trainer and staff. */
   noFilming?: boolean;
+  /** The pony's height in hands, written as a decimal: 13.2 is 13 hands 2 inches. */
+  ponyHeightHands?: number | null;
 }
 
 /** A heat holding a rider who opted out of close-up filming. Staff only. */
@@ -447,6 +478,10 @@ export interface DeclarationForm {
   riders: RiderEntry[];
   /** The team's bib description, shown with the declaration. */
   bibDescription?: string | null;
+  /** The coach as typed on the form. Only the submitter, the trainer and staff get it. */
+  trainerName?: string | null;
+  /** When the terms were agreed; missing on forms from before the tick. Private like the rest. */
+  termsAcceptedAt?: string | null;
 }
 
 export interface SavedRider {
@@ -458,6 +493,7 @@ export interface SavedRider {
   notes?: string | null;
   useInitialOnly?: boolean;
   noFilming?: boolean;
+  ponyHeightHands?: number | null;
 }
 
 export interface TrainerNote {

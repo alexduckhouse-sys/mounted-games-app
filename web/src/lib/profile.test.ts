@@ -28,6 +28,7 @@ describe('roleLabel', () => {
 
   it('shows a waiting trainer as a request, and anyone else as a member', () => {
     expect(roleLabel(['Member', 'TrainerRequest'])).toBe('Trainer request');
+    expect(roleLabel(['Member', 'ManagerRequest'])).toBe('Team manager request');
     expect(roleLabel(['Member'])).toBe('Member');
     expect(roleLabel([])).toBe('Member');
   });

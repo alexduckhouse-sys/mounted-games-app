@@ -20,7 +20,7 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
         => new(savedId, name, dob, horse, bib, captain, reserve, order);
 
     private static SubmitDeclarationFormRequest Form(int teamId, RiderEntryInput[]? riders = null, bool save = false, string? phone = null, string? notes = null)
-        => new(teamId, notes, riders ?? new[] { Rider("Rider One") }, save, phone);
+        => new(teamId, notes, riders ?? new[] { Rider("Rider One") }, save, phone, AcceptTerms: true);
 
     private async Task SetTrainerAsync(int teamId, string? userId)
         => await _f.WithDbAsync(async db =>
@@ -461,5 +461,171 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     public async Task Delete_Returns401_WhenAnonymous()
     {
         Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().DeleteAsync($"{Url}/1")).StatusCode);
+    }
+
+    // ---- Dec form screen: terms tick, pony height, trainer name, team name ----
+
+    [Fact]
+    public async Task Submit_Returns400_WithoutTheTermsTick_AndSavesNothing()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var trainer = await CoachAsync(a);
+
+        var r = await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]) with { AcceptTerms = false });
+
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+        Assert.False(await _f.WithDbAsync(db => db.DeclarationForms.AnyAsync(d => d.TeamId == a.TeamIds[0])));
+    }
+
+    [Fact]
+    public async Task Submit_ChecksAccessBeforeTheTick()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var trainer = await _f.TrainerAsync();
+
+        var r = await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]) with { AcceptTerms = false });
+
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task Submit_RecordsWhoAgreedAndWhen_AndTheTrainerName()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var trainer = await CoachAsync(a);
+
+        var dto = await (await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]) with { TrainerName = "  Alex Morgan " })).ReadAsync<DeclarationFormDto>();
+
+        Assert.Equal("Alex Morgan", dto.TrainerName);
+        Assert.NotNull(dto.TermsAcceptedAt);
+        var stored = await _f.WithDbAsync(db => db.DeclarationForms.SingleAsync(d => d.Id == dto.Id));
+        Assert.Equal(dto.SubmittedByUserId, stored.TermsAcceptedByUserId);
+        Assert.Equal(stored.SubmittedAt, stored.TermsAcceptedAt);
+    }
+
+    [Fact]
+    public async Task Submit_DefaultsTheTrainerNameToTheAccountName()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var trainer = await CoachAsync(a);
+
+        var dto = await (await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]))).ReadAsync<DeclarationFormDto>();
+
+        Assert.Equal("Jamie Carter", dto.TrainerName);
+    }
+
+    [Fact]
+    public async Task Submit_KeepsTheTrainerNameAndTickPrivate_FromTheAnonymousList()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var trainer = await CoachAsync(a);
+        await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]) with { TrainerName = "Private Name" });
+
+        var anonymous = await (await _f.CreateClient().GetAsync($"{Url}?teamId={a.TeamIds[0]}")).ReadAsync<List<DeclarationFormDto>>();
+
+        Assert.Single(anonymous);
+        Assert.Null(anonymous[0].TrainerName);
+        Assert.Null(anonymous[0].TermsAcceptedAt);
+    }
+
+    [Fact]
+    public async Task Submit_StoresPonyHeights_AndSavesThemToTheRoster()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var trainer = await CoachAsync(a);
+        var name = $"Tall {Guid.NewGuid():N}"[..16];
+        var rider = Rider(name) with { HorseName = "Pickle", PonyHeightHands = 13.2m };
+
+        var dto = await (await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0], new[] { rider }, save: true))).ReadAsync<DeclarationFormDto>();
+
+        Assert.Equal(13.2m, dto.Riders.Single().PonyHeightHands);
+        var saved = await _f.WithDbAsync(db => db.SavedRiders.SingleAsync(s => s.FullName == name));
+        Assert.Equal(13.2m, saved.PonyHeightHands);
+        var clubId = await _f.WithDbAsync(db => db.Teams.Where(t => t.Id == a.TeamIds[0]).Select(t => t.ClubId).SingleAsync());
+        var listed = await (await trainer.GetAsync($"/api/clubs/{clubId}/saved-riders")).ReadAsync<List<SavedRiderDto>>();
+        Assert.Equal(13.2m, listed.Single(s => s.FullName == name).PonyHeightHands);
+    }
+
+    [Theory]
+    [InlineData(4.9)]
+    [InlineData(20.1)]
+    [InlineData(-13.2)]
+    public async Task Submit_Returns400_ForAPonyHeightOutsideTheSensibleRange(double hands)
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var trainer = await CoachAsync(a);
+        var rider = Rider("Odd Height") with { PonyHeightHands = (decimal)hands };
+
+        var r = await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0], new[] { rider }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task Submit_RenamesTheTeam_WhenAskedTo_AndKeepsItWhenNot()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var trainer = await CoachAsync(a);
+
+        var renamed = await (await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]) with { TeamName = "  Stockport C " })).ReadAsync<DeclarationFormDto>();
+        var unchanged = await (await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]))).ReadAsync<DeclarationFormDto>();
+
+        Assert.Equal("Stockport C", renamed.TeamName);
+        Assert.Equal("Stockport C", unchanged.TeamName);
+    }
+
+    [Fact]
+    public async Task MyTeams_FlagsTheTeamsStillNeedingADecForm()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var trainer = await CoachAsync(a);
+        await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]));
+
+        var mine = await (await trainer.GetAsync("/api/trainer/my-teams")).ReadAsync<List<TeamDto>>();
+
+        Assert.False(mine.Single(t => t.Id == a.TeamIds[0]).NeedsDeclaration);
+        Assert.True(mine.Single(t => t.Id == a.TeamIds[1]).NeedsDeclaration);
+    }
+
+    [Fact]
+    public async Task MyTeams_DoesNotAskForADecFormOnceTheEventIsOver_OrTheTeamIsOut()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var trainer = await CoachAsync(a);
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Competitions.SingleAsync(c => c.Id == a.CompetitionId)).EndDate = DateTime.UtcNow.AddDays(-3);
+            await db.SaveChangesAsync();
+        });
+
+        var over = await (await trainer.GetAsync("/api/trainer/my-teams")).ReadAsync<List<TeamDto>>();
+        Assert.All(over.Where(t => a.TeamIds.Contains(t.Id)), t => Assert.False(t.NeedsDeclaration));
+
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Competitions.SingleAsync(c => c.Id == a.CompetitionId)).EndDate = DateTime.UtcNow.AddDays(3);
+            (await db.Teams.SingleAsync(t => t.Id == a.TeamIds[1])).EntryStatus = TeamEntryStatus.Withdrawn;
+            await db.SaveChangesAsync();
+        });
+
+        var out_ = await (await trainer.GetAsync("/api/trainer/my-teams")).ReadAsync<List<TeamDto>>();
+        Assert.True(out_.Single(t => t.Id == a.TeamIds[0]).NeedsDeclaration);
+        Assert.False(out_.Single(t => t.Id == a.TeamIds[1]).NeedsDeclaration);
+    }
+
+    [Fact]
+    public async Task MyTeams_NeverAsksASupporterForADecForm()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var (supporter, auth) = await _f.SignupAsync("Member");
+        await _f.WithDbAsync(async db =>
+        {
+            db.TeamSupporters.Add(new TeamSupporter { TeamId = a.TeamIds[0], UserId = auth.User.Id, Status = TeamSupporterStatus.Accepted });
+            await db.SaveChangesAsync();
+        });
+
+        var mine = await (await supporter.GetAsync("/api/trainer/my-teams")).ReadAsync<List<TeamDto>>();
+
+        Assert.False(mine.Single(t => t.Id == a.TeamIds[0]).NeedsDeclaration);
     }
 }

@@ -63,10 +63,9 @@ export function SignUpPage() {
     if (!ready || !chosenRole || loading) return;
     setErrors({});
     try {
-      // TODO(BUG-14): the API takes one "username" and has no name field, so the name isn't sent yet (the display
-      // name is derived from the email). It also can't create a club or insist on one: an unknown club name is
-      // dropped to null, and a Manager sign-up isn't held for admin approval. Chat 11a9436f owns the server side.
-      await signupTrainer(email.trim(), password, chosenRole.api, typed);
+      // The email is the sign-in name. The API makes the club if it is new, insists on one, and holds a team
+      // manager for an admin and a trainer for the club's manager.
+      await signupTrainer(email.trim(), password, chosenRole.api, typed, name.trim());
       setSentTo({ club: typed, role: chosenRole.id });
     } catch (err) {
       const { status, message, errors: list } = problemsFrom(err);

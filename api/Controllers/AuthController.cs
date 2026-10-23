@@ -88,6 +88,10 @@ public class AuthController : ControllerBase
         // Identity needs an email-like UserName for uniqueness; synthesise one if a bare username was given.
         var email = raw.Contains('@') ? raw.ToLowerInvariant() : $"{Sanitise(raw)}@trainer.mg.local";
         var fullName = raw.Contains('@') ? raw.Split('@')[0] : raw;
+        var givenName = (req.FullName ?? string.Empty).Trim();
+        if (givenName.Length > 100)
+            return BadRequest(new { message = "Your name must be 100 characters or fewer." });
+        if (givenName.Length > 0) fullName = givenName;
 
         if (await _users.FindByEmailAsync(email) is not null)
             return Conflict(new { message = "That username is already taken." });

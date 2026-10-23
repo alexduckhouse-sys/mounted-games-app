@@ -133,7 +133,7 @@ public static class Mappings
 
     public static RiderEntryDto ToDto(this RiderEntry r) => new(
         r.Id, r.SavedRiderId, r.FullName, r.DateOfBirth, r.HorseName, r.BibColour,
-        r.IsCaptain, r.IsReserve, r.OrderIndex, r.UseInitialOnly, r.NoFilming, r.IsGuestRider);
+        r.IsCaptain, r.IsReserve, r.OrderIndex, r.UseInitialOnly, r.NoFilming, r.IsGuestRider, r.PonyHeightHands);
 
     /// <summary>
     /// The rider as a public viewer sees them: the surname shortened when the rider asked for that, and the
@@ -155,10 +155,12 @@ public static class Mappings
         includePrivate ? d.SubmittedBy?.PhoneNumber : null,
         d.SubmittedAt, includePrivate ? d.Notes : null, d.IsLocked,
         d.Riders.OrderBy(r => r.OrderIndex).Select(r => includePrivate ? r.ToDto() : r.ToPublicDto()).ToList(),
-        d.Team?.BibDescription);
+        d.Team?.BibDescription,
+        includePrivate ? d.TrainerName : null,
+        includePrivate ? d.TermsAcceptedAt : null);
 
     public static SavedRiderDto ToDto(this SavedRider r) =>
-        new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes, r.UseInitialOnly, r.NoFilming);
+        new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes, r.UseInitialOnly, r.NoFilming, r.PonyHeightHands);
 
     public static ChatMessageDto ToDto(this ChatMessage m) => new(
         m.Id, m.CompetitionId, m.UserId, m.AuthorName, m.Body, m.Type, m.Tag, m.CreatedAt, m.AdminOnly, m.RecipientUserId);

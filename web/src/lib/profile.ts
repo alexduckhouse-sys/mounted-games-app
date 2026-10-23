@@ -15,5 +15,6 @@ export function roleLabel(roles: readonly Role[]): string {
   if (roles.includes('Manager')) return 'Team manager';
   if (roles.includes('Trainer')) return 'Trainer';
   if (roles.includes('TrainerRequest')) return 'Trainer request';
+  if (roles.includes('ManagerRequest')) return 'Team manager request';
   return 'Member';
 }

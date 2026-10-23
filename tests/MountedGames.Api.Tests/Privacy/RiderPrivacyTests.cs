@@ -35,7 +35,7 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
     private async Task<int> SubmitAsync(HttpClient trainer, int teamId, params RiderEntryInput[] riders)
     {
         await ClaimAsync(trainer, teamId);
-        var r = await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(teamId, null, riders, false, null));
+        var r = await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(teamId, null, riders, false, null, AcceptTerms: true));
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         return (await r.ReadAsync<DeclarationFormDto>()).Id;
     }
@@ -98,7 +98,7 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
         var trainer = await _f.TrainerAsync();
         await ClaimAsync(trainer, a.TeamIds[0]);
         var created = await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null,
-            new[] { Rider("Oliver Smith", initial: true, noFilming: true) }, false, null));
+            new[] { Rider("Oliver Smith", initial: true, noFilming: true) }, false, null, AcceptTerms: true));
         var submitted = await created.ReadAsync<DeclarationFormDto>();
 
         Assert.Equal("Oliver Smith", submitted.Riders[0].FullName);
@@ -152,7 +152,7 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
         await ClaimAsync(trainer, a.TeamIds[0]);
         var clubId = await _f.WithDbAsync(async db => (await db.Teams.SingleAsync(t => t.Id == a.TeamIds[0])).ClubId);
         var first = await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null,
-            new[] { Rider("Roster Rider", initial: true, noFilming: true) }, true, null));
+            new[] { Rider("Roster Rider", initial: true, noFilming: true) }, true, null, AcceptTerms: true));
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
 
         var saved = (await (await trainer.GetAsync($"/api/clubs/{clubId}/saved-riders")).ReadAsync<List<SavedRiderDto>>())
@@ -162,7 +162,7 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
 
         // Picking the saved rider again, with the choices as the roster holds them, keeps them on the new entry.
         var again = await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null,
-            new[] { Rider("Roster Rider", saved.UseInitialOnly, saved.NoFilming, saved.Id) }, false, null));
+            new[] { Rider("Roster Rider", saved.UseInitialOnly, saved.NoFilming, saved.Id) }, false, null, AcceptTerms: true));
         var rider = (await again.ReadAsync<DeclarationFormDto>()).Riders[0];
         Assert.True(rider.UseInitialOnly);
         Assert.True(rider.NoFilming);
@@ -175,8 +175,8 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
         var trainer = await _f.TrainerAsync();
         await ClaimAsync(trainer, a.TeamIds[0]);
         var clubId = await _f.WithDbAsync(async db => (await db.Teams.SingleAsync(t => t.Id == a.TeamIds[0])).ClubId);
-        await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null, new[] { Rider("Changing Rider") }, true, null));
-        await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null, new[] { Rider("Changing Rider", noFilming: true) }, true, null));
+        await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null, new[] { Rider("Changing Rider") }, true, null, AcceptTerms: true));
+        await trainer.PostAsJsonAsync(Forms, new SubmitDeclarationFormRequest(a.TeamIds[0], null, new[] { Rider("Changing Rider", noFilming: true) }, true, null, AcceptTerms: true));
 
         var saved = (await (await trainer.GetAsync($"/api/clubs/{clubId}/saved-riders")).ReadAsync<List<SavedRiderDto>>())
             .Single(s => s.FullName == "Changing Rider");
@@ -191,7 +191,7 @@ public class RiderPrivacyTests : IClassFixture<ApiFactory>
         var trainer = await _f.TrainerAsync();
         await ClaimAsync(trainer, a.TeamIds[0]);
         var submitted = await (await trainer.PostAsJsonAsync(Forms,
-            new SubmitDeclarationFormRequest(a.TeamIds[0], null, new[] { new RiderEntryInput(null, "Plain Rider", null, null, null, false, false, 0) }, false, null)))
+            new SubmitDeclarationFormRequest(a.TeamIds[0], null, new[] { new RiderEntryInput(null, "Plain Rider", null, null, null, false, false, 0) }, false, null, AcceptTerms: true)))
             .ReadAsync<DeclarationFormDto>();
         Assert.False(submitted.Riders[0].UseInitialOnly);
         Assert.False(submitted.Riders[0].NoFilming);
