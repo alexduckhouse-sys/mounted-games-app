@@ -8,6 +8,7 @@ import type { DeclarationForm, RiderEntry, Team } from '../../types';
 import { toCsv, downloadCsv, safeFilename } from '../../lib/csv';
 import { decDraftKey, dobText, heightText, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
 import { DecFormEditor } from './decform/DecFormEditor';
+import { confirmDialog } from '../../components/ConfirmDialog';
 import { parseConfigResponse, STANDARD_CONFIG, type DecFormConfig } from '../../lib/decFormConfig';
 
 function readDraft(competitionId: number, teamId: number, required: number): DecFormDraft | null {
@@ -70,6 +71,8 @@ export function DeclarationsTab() {
   const priorPhone = forms?.find((f) => f.submittedByUserId === user?.id && f.submittedByPhone)?.submittedByPhone ?? undefined;
 
   async function remove(id: number) {
+    const target = forms?.find((f) => f.id === id);
+    if (!(await confirmDialog({ title: 'Delete this dec form?', message: `Delete the dec form for ${target?.teamName ?? 'this team'}? This can’t be undone.`, confirmLabel: 'Delete dec form', destructive: true }))) return;
     await api.delete(`/declaration-forms/${id}`);
     setForms((cur) => cur?.filter((f) => f.id !== id) ?? cur);
   }

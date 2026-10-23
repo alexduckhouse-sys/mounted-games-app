@@ -85,9 +85,9 @@ describe('EventToolsPage', () => {
     expect(name).toHaveValue('Autumn championship');
   });
 
-  it('keeps admin tools hidden while global edit mode is off', async () => {
+  it('keeps the tools hidden from someone who cannot organise this competition', async () => {
     vi.mocked(useAuth).mockReturnValue({
-      user: { id: 'admin' }, canOrganise: () => true, hasRole: (role: Role) => role === 'Admin', canEdit: () => false,
+      user: { id: 'admin' }, canOrganise: () => false, hasRole: (role: Role) => role === 'Admin', canEdit: () => true,
     } as unknown as ReturnType<typeof useAuth>);
     renderPage();
 

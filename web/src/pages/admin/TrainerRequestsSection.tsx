@@ -4,6 +4,7 @@ import { apiErrorMessage } from '../../lib/apiError';
 import { initialsOf } from '../../lib/profile';
 import type { TrainerRequest } from '../../types';
 import { PartHead } from './LaptopParts';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 export function TrainerRequestsSection() {
   const [requests, setRequests] = useState<TrainerRequest[]>([]);
@@ -29,7 +30,7 @@ export function TrainerRequestsSection() {
   }, []);
 
   async function review(request: TrainerRequest, action: 'approve' | 'decline') {
-    if (action === 'decline' && !window.confirm(`Decline the request from ${request.fullName}? Their account will stay a member.`)) return;
+    if (action === 'decline' && !(await confirmDialog({ title: 'Decline this request?', message: `Decline the request from ${request.fullName}? Their account will stay a member.`, confirmLabel: 'Decline request', destructive: true }))) return;
     setBusy(true);
     setError(null);
     try {

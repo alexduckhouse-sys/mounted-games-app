@@ -7,6 +7,7 @@ import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSta
 import type { Rulebook, RulebookSummary } from './types';
 import { apiMessage } from './types';
 import './operations.css';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 interface RulebookDraft {
   id: number | null;
@@ -19,15 +20,15 @@ interface RulebookDraft {
 const emptyDraft: RulebookDraft = { id: null, title: '', edition: '', sourceUrl: '', text: '' };
 
 export function RulebooksPage() {
-  const { user, editorMode } = useAuth();
-  return <GlobalRulebooks key={`${user?.id ?? ''}:${editorMode}`} />;
+  const { user } = useAuth();
+  return <GlobalRulebooks key={user?.id ?? ''} />;
 }
 
 /** Rulebooks are shared by every competition. The list holds titles only; a rulebook's text is fetched when it is opened. */
 function GlobalRulebooks() {
   const { competition } = useCompetition();
-  const { canEdit, hasRole } = useAuth();
-  const canWrite = hasRole('Admin') && canEdit();
+  const { canEdit } = useAuth();
+  const canWrite = canEdit();
   const [rulebooks, setRulebooks] = useState<RulebookSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [texts, setTexts] = useState<Record<number, Rulebook>>({});
@@ -122,7 +123,8 @@ function GlobalRulebooks() {
   }
 
   async function remove(rulebook: Rulebook) {
-    if (busy || !canWrite || !window.confirm(`Delete “${rulebook.title}”?`)) return;
+    if (busy || !canWrite) return;
+    if (!(await confirmDialog({ title: 'Delete this rulebook?', message: `Delete “${rulebook.title}”?`, confirmLabel: 'Delete rulebook', destructive: true }))) return;
     setBusy(true);
     setError(null);
     try {

@@ -9,6 +9,8 @@ export interface CompetitionCtx {
   reload: () => void;
   streams: LiveStream[];
   streamingEnabled: boolean;
+  /** True once the server has said whether streaming is set up; missing means assume it has. */
+  streamingChecked?: boolean;
   invoke: StreamInvoke;
   ready: number;
   streamMessages: { message: ChatMessage; receivedAt: number }[];

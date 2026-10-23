@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import { parseLook, type OverlayLook } from '../../lib/overlays';
 import { SelectField } from '../../components/SelectField';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 interface SavedLook { id: number; name: string; look: OverlayLook; mine: boolean }
 
@@ -49,11 +50,11 @@ export function SavedLooks({ current, onApply, onError }: { current: OverlayLook
     await api.put(`/overlay-looks/${chosen!.id}`, { name: chosen!.name, look: current });
     setLooks((all) => all.map((l) => (l.id === chosen!.id ? { ...l, look: current } : l)));
   });
-  const remove = () => run(async () => {
+  const remove = async () => { if (!(await confirmDialog({ title: 'Delete this look?', message: `Delete the look “${chosen?.name ?? ''}”?`, confirmLabel: 'Delete look', destructive: true }))) return; return run(async () => {
     await api.delete(`/overlay-looks/${chosen!.id}`);
     setLooks((all) => all.filter((l) => l.id !== chosen!.id));
     setSelected(null);
-  });
+  }); };
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-3 text-sm" role="group" aria-label="Reusable looks">

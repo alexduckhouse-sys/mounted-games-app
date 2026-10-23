@@ -15,26 +15,18 @@ interface AuthContextValue {
   /** True from a deliberate sign-out until the next sign-in, so protected pages can send the person somewhere public rather than to the sign-in page. */
   signedOut: boolean;
   hasRole: (role: Role) => boolean;
-  /**
-   * Admin "Edit mode" — when off, admin gets the public-view UI without write
-   * affordances (no Delete buttons, no Save/Score submit, no status toggles).
-   * Use `canEdit()` to gate destructive controls. Non-admin users always
-   * have this off; flipping it requires `Admin` role.
-   */
-  editorMode: boolean;
-  setEditorMode: (v: boolean) => void;
+  /** True for site admins. There is no separate edit mode: the server decides, this only shows or hides controls. */
   canEdit: () => boolean;
   /**
    * Approved trainers can act as organisers — they can create + edit
    * competitions they own. This returns true for Admins (always) and for
-   * Trainers regardless of editorMode (no view/edit toggle for trainers).
+   * Trainers who own the competition.
    * Use for organiser-only surfaces like the comp creator wizard's Save.
    */
   canOrganise: (competition?: CompetitionRef) => boolean;
   /**
    * Whether to show the controls that run one competition's day (scoring,
-   * sessions, finals, timetable). Admins need Edit mode on, as everywhere else;
-   * everyone else just needs to be able to organise that competition.
+   * sessions, finals, timetable): anyone who can organise that competition.
    */
   canManage: (competition?: CompetitionRef) => boolean;
   /** Reload the competitions this user owns or helps on, e.g. after leaving a team. */
@@ -66,21 +58,19 @@ function parseAccess(data: unknown): CompetitionAccess[] | null {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const EDITOR_MODE_KEY = 'mg.adminEditorMode';
+// Admin edit mode was removed; clear the old saved switch once.
+const OLD_EDITOR_MODE_KEY = 'mg.adminEditorMode';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    try { localStorage.removeItem(OLD_EDITOR_MODE_KEY); } catch { /* storage blocked */ }
+  }, []);
   const [auth, setAuth] = useState<StoredAuth | null>(() => readStoredAuth());
   const [loading, setLoading] = useState(false);
   const [signedOut, setSignedOut] = useState(false);
   const [notice, setNotice] = useState<{ token: string; kind: 'requested' | 'approved' } | null>(null);
   const token = auth?.token ?? null;
   const pendingApproval = auth?.user.roles.some((role) => role === 'TrainerRequest' || role === 'ManagerRequest') ?? false;
-  // Default off: admins land in safe "View only" mode and have to opt into
-  // Edit mode explicitly. Persisted so it survives navigation.
-  const [editorMode, setEditorModeState] = useState<boolean>(() => {
-    try { return !!auth && localStorage.getItem(EDITOR_MODE_KEY) === '1'; } catch { return false; }
-  });
-
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -93,7 +83,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // A dropped connection does not mean the saved login is invalid.
       if (!cancelled && error.response?.status === 401) {
         setAuth(null);
-        setEditorModeState(false);
         writeStoredAuth(null);
       }
     });
@@ -158,7 +147,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     writeStoredAuth(null);
     setAuth(null);
-    setEditorModeState(false);
     setSignedOut(true);
   }, []);
 
@@ -176,36 +164,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasRole = useCallback((role: Role) => !!user?.roles.includes(role), [user]);
 
-  // Logging out / changing identity should reset Edit mode so the next user
-  // doesn't inherit a dangerous unlocked state.
-  const userId = user?.id;
-  useEffect(() => {
-    if (!userId) {
-      try { localStorage.removeItem(EDITOR_MODE_KEY); } catch { /* quota */ }
-    }
-  }, [userId]);
-
-  const setEditorMode = useCallback((v: boolean) => {
-    // Only admins can flip the switch; non-admins are pinned to false.
-    const next = v && !!user?.roles.includes('Admin');
-    setEditorModeState(next);
-    try {
-      if (next) localStorage.setItem(EDITOR_MODE_KEY, '1');
-      else localStorage.removeItem(EDITOR_MODE_KEY);
-    } catch { /* quota */ }
-  }, [user]);
-
-  const canEdit = useCallback(() => editorMode && hasRole('Admin'), [editorMode, hasRole]);
+  const canEdit = useCallback(() => hasRole('Admin'), [hasRole]);
   // Ownership is also enforced by the API; this hides controls the viewer cannot use.
   const canOrganise = useCallback(
     (competition?: CompetitionRef) => hasRole('Admin')
       || (hasRole('Trainer') && (!competition || competition.createdByUserId === user?.id))
       || (!!user && competition?.id != null && access.some((entry) => entry.competitionId === competition.id)),
     [hasRole, user, access]);
-  // Mirrors OperationsPage: an admin must switch Edit mode on; everyone else may act once they can organise.
-  const canManage = useCallback(
-    (competition?: CompetitionRef) => (hasRole('Admin') ? canEdit() : canOrganise(competition)),
-    [hasRole, canEdit, canOrganise]);
+  const canManage = canOrganise;
 
   const value: AuthContextValue = {
     user,
@@ -218,8 +184,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     signedOut,
     hasRole,
-    editorMode,
-    setEditorMode,
     canEdit,
     canOrganise,
     canManage,

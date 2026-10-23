@@ -79,7 +79,6 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
 
   return (
     <section aria-label="Entries">
-      {!canWrite && <RefineNote>Switch on Edit mode to withdraw teams, swap riders or apply a re-draw.</RefineNote>}
       {message && <p role="status" className="ops-toast"><span>{message}</span><button type="button" className="rf-btn rf-btn-text" onClick={() => setMessage(null)}>Dismiss</button></p>}
       {loading && !entries && <p role="status" className="rf-note">Loading teams…</p>}
       {loadError && <p role="alert" className="mg-notice ops-alert">{loadError} <button type="button" className="rf-btn rf-btn-text" onClick={() => void load()}>Try again</button></p>}

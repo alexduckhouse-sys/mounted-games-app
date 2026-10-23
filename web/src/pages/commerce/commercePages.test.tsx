@@ -10,6 +10,7 @@ import { CommerceOrdersPage } from './CommerceOrdersPage';
 import { EventShopPage } from './EventShopPage';
 import { SellerCataloguePage } from './SellerCataloguePage';
 import type { EventOrder } from './types';
+import { autoConfirm } from '../../test/confirm';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: vi.fn() }));
@@ -381,6 +382,10 @@ describe('SellerCataloguePage', () => {
     render(<MemoryRouter><SellerCataloguePage /></MemoryRouter>);
     await userEvent.click(await screen.findByRole('button', { name: 'Event mug' }));
     await userEvent.click(screen.getByRole('button', { name: 'More actions for this item' }));
+    const asked = autoConfirm([false, true]);
+    await userEvent.click(screen.getByRole('button', { name: 'Archive Event mug' }));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Archive Event mug?'));
+    expect(api.delete).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Archive Event mug' }));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/commerce/catalogue/20'));
   });
@@ -414,13 +419,13 @@ describe('ownership and demo states', () => {
     expect(get).not.toHaveBeenCalled();
   });
 
-  it('keeps admin shop mutations disabled in view-only mode', async () => {
+  it('lets an admin change shop settings and orders with no edit mode', async () => {
     auth.mockReturnValue({
       ...viewer,
       user: { ...viewer.user, id: 'admin', roles: ['Admin'] },
       canOrganise: vi.fn(() => true),
       hasRole: vi.fn((role: string) => role === 'Admin'),
-      canEdit: vi.fn(() => false),
+      canEdit: vi.fn(() => true),
     } as unknown as ReturnType<typeof useAuth>);
     get.mockImplementation(async (url) => {
       if (String(url).endsWith('/listings/manage')) return { data: [{
@@ -436,12 +441,12 @@ describe('ownership and demo states', () => {
     });
     render(<CommerceManagementPage />);
 
-    expect(await screen.findByRole('button', { name: 'Approve' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Reject' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Approve' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled();
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(screen.getByRole('button', { name: 'Manual' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Demo' })).toBeDisabled();
-    expect(screen.getByText(/Admin view only is on/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Manual' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Demo' })).toBeEnabled();
+    expect(screen.queryByText(/edit mode/i)).not.toBeInTheDocument();
   });
 
   it('labels demo purchases, opens the receipt and keeps sales separate', async () => {

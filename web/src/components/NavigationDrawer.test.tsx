@@ -97,7 +97,11 @@ describe('NavigationDrawer: when no competition is followed', () => {
 
   it('invites a visitor to sign in', () => {
     mount();
-    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    const signIn = screen.getByRole('link', { name: 'Sign in' });
+    expect(signIn).toHaveAttribute('href', '/login');
+    expect(signIn).toHaveClass('mg-btn-primary');
+    // It leads the menu as a button rather than sitting in the list of links.
+    expect(screen.getByRole('navigation', { name: 'Main navigation' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(screen.getByText('For trainers, organisers and stewards')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Account and management' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Notifications/)).not.toBeInTheDocument();
@@ -259,9 +263,9 @@ describe('NavigationDrawer: signed in', () => {
     expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 
-  it('shows an admin the admin page too', () => {
+  it('shows an admin the site admin section of the dashboard too', () => {
     mount({ roles: ['Admin', 'Trainer'] });
-    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['Admin', '/admin']]);
+    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['Site admin', '/me#site-admin']]);
   });
 
   it('shows extra links published by the current page', () => {

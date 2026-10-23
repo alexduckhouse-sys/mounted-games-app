@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionHelper, CompetitionTeam } from '../../types';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { apiMessage } from '../operations/types';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 /** Keeps a wrong or partial response from reaching the screen. */
 function parseTeam(data: unknown): CompetitionTeam | null {
@@ -19,7 +20,7 @@ type TeamState = { competitionId: number; team: CompetitionTeam } | 'error' | nu
 
 /**
  * Who runs one competition. The owner and every competition admin can add and remove competition admins
- * (a site admin only in Edit mode, via `canWrite`), and anyone on the team can leave. The API decides; this only hides what won't work.
+ * (via `canWrite`), and anyone on the team can leave. The API decides; this only hides what won't work.
  */
 export function CompetitionTeamCard({ competitionId, canWrite = true }: { competitionId: number; canWrite?: boolean }) {
   const { user, refreshAccess } = useAuth();
@@ -68,6 +69,7 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
 
   async function remove(helper: CompetitionHelper) {
     if (busy) return;
+    if (!(await confirmDialog({ title: 'Remove from the team?', message: `Remove ${helper.name} from the team? They lose access to this competition.`, confirmLabel: 'Remove from team', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {
@@ -83,6 +85,7 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
 
   async function leave(helper: CompetitionHelper) {
     if (busy) return;
+    if (!(await confirmDialog({ title: 'Leave this team?', message: 'Leave this team? You will lose access to this competition.', confirmLabel: 'Leave team', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {

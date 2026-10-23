@@ -6,6 +6,7 @@ import type { CreatedScorerLink, ScorerLink, ScorerLinkList } from '../../types'
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { apiMessage } from '../operations/types';
 import { SelectField } from '../../components/SelectField';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 /** Keeps a wrong or partial response from reaching the screen. */
 function parseList(data: unknown): ScorerLinkList | null {
@@ -106,7 +107,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
 
   async function revoke(link: ScorerLink) {
     if (busy) return;
-    if (!window.confirm(`Withdraw ${link.label}’s link? It stops working straight away.`)) return;
+    if (!(await confirmDialog({ title: 'Withdraw this link?', message: `Withdraw ${link.label}’s link? It stops working straight away.`, confirmLabel: 'Withdraw link', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {

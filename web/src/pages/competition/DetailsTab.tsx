@@ -25,6 +25,7 @@ import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignu
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { confirmDialog } from '../../components/ConfirmDialog';
 
 function priceLabel(minor?: number | null): string {
   if (!minor) return 'Free';
@@ -211,7 +212,7 @@ export function DetailsTab() {
         </>
       )}
 
-      {/* The owner, competition admins and site admins see who runs the event and can change it (site admins in Edit mode). */}
+      {/* The owner, competition admins and site admins see who runs the event and can change it. */}
       {user && (mayOrganise || hasRole('Admin')) && (
         <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
       )}
@@ -480,7 +481,7 @@ function SignupRow({ signup, isDemo, onChanged }: { signup: SectionSignup; isDem
     onChanged();
   }
   async function remove() {
-    if (!confirm(`Delete signup for ${signup.fullName}? This can't be undone.`)) return;
+    if (!(await confirmDialog({ title: 'Delete this signup?', message: `Delete signup for ${signup.fullName}? This can't be undone.`, confirmLabel: 'Delete signup', destructive: true }))) return;
     await api.delete(`/signups/${signup.id}`);
     onChanged();
   }

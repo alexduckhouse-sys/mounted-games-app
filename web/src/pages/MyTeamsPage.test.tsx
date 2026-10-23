@@ -9,6 +9,7 @@ import { formatTime, roundTo5Min } from '../lib/time';
 import { MyTeamsPage } from './MyTeamsPage';
 import { chooseOption, optionLabels } from '../test/select';
 
+import { autoConfirm } from '../test/confirm';
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -151,7 +152,7 @@ describe('MyTeamsPage layout', () => {
   it('can make a random code, turn the code off, and cancel', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     vi.mocked(api.delete).mockResolvedValue({ data: {} });
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true);
+    autoConfirm([false, true]);
     mount();
     await userEvent.click(await screen.findByRole('button', { name: /Change/ }));
     await userEvent.click(screen.getByRole('button', { name: 'New random code' }));

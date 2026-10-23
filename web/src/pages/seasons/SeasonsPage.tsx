@@ -10,8 +10,8 @@ import { seasonError, type SeasonView } from './seasonViewTypes';
 import './seasonViews.css';
 
 export function SeasonsPage() {
-  const { user, canOrganise, hasRole, canEdit } = useAuth();
-  const canCreate = canOrganise() && (!hasRole('Admin') || canEdit());
+  const { user, canOrganise } = useAuth();
+  const canCreate = canOrganise();
   const [seasons, setSeasons] = useState<SeasonView[] | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);

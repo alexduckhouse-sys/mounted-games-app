@@ -9,6 +9,7 @@ import { MembersPage } from './MembersPage';
 import { NeedsYouProvider } from './profile/NeedsYouProvider';
 import { chooseOption, optionLabels } from '../test/select';
 
+import { autoConfirm } from '../test/confirm';
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -33,14 +34,13 @@ const club = (): ClubMembers => ({
 
 let members: ClubMembers;
 
-function mount(options: { roles?: string[]; clubId?: number | null; editMode?: boolean } = {}) {
+function mount(options: { roles?: string[]; clubId?: number | null } = {}) {
   const roles = options.roles ?? ['Manager'];
   const auth: StoredAuth = {
     token: 't', expiresAt: new Date(Date.now() + 60_000).toISOString(),
     user: { id: 'me', email: 'alex@example.com', fullName: 'Alex Morgan', clubId: options.clubId === undefined ? 7 : options.clubId, clubName: options.clubId === null ? null : 'Stockport PC', roles },
   };
   localStorage.setItem('mg.auth', JSON.stringify(auth));
-  if (options.editMode) localStorage.setItem('mg.adminEditorMode', '1');
   return render(
     <MemoryRouter initialEntries={['/me/members']}>
       <AuthProvider><NeedsYouProvider>
@@ -72,7 +72,7 @@ beforeEach(() => {
   vi.mocked(api.post).mockResolvedValue({ data: {} });
   vi.mocked(api.put).mockResolvedValue({ data: { role: 'Trainer', awaitingAdmin: false } });
   vi.mocked(api.delete).mockResolvedValue({ data: {} });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  autoConfirm(true);
 });
 
 describe('MembersPage: the list', () => {
@@ -142,7 +142,7 @@ describe('MembersPage: waiting for you', () => {
 
   it('says when somebody asked to be a team manager', async () => {
     members.pending = [{ ...request, requestedRole: 'Manager' }];
-    mount({ roles: ['Admin'], editMode: true });
+    mount({ roles: ['Admin'] });
     expect(await screen.findByText('Wants to join as a team manager')).toBeInTheDocument();
   });
 
@@ -246,19 +246,20 @@ describe('MembersPage: a person\'s row', () => {
   });
 
   it('removes a person from the club after asking', async () => {
+    const asked = autoConfirm(true);
     const user = userEvent.setup();
     mount();
     await screen.findByText('Kerry Hall');
     await user.click(row('Kerry Hall'));
     await user.click(screen.getByRole('button', { name: 'Remove from club' }));
-    expect(window.confirm).toHaveBeenCalledWith('Remove Kerry Hall from Stockport PC?');
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Remove Kerry Hall from Stockport PC?'));
     expect(api.delete).toHaveBeenCalledWith('/clubs/7/members/kh');
     await waitFor(() => expect(screen.queryByText('Kerry Hall')).not.toBeInTheDocument());
     expect(group('Members').getByText('Mel Dunn')).toBeInTheDocument();
   });
 
   it('keeps them when the question is answered no', async () => {
-    vi.mocked(window.confirm).mockReturnValue(false);
+    autoConfirm(false);
     const user = userEvent.setup();
     mount();
     await screen.findByText('Kerry Hall');
@@ -289,7 +290,7 @@ describe('MembersPage: a person\'s row', () => {
 
 describe('MembersPage: an admin', () => {
   it('chooses the club, and sees its people', async () => {
-    mount({ roles: ['Admin'], clubId: null, editMode: true });
+    mount({ roles: ['Admin'], clubId: null });
     const select = await screen.findByLabelText('Club');
     expect(screen.queryByRole('region', { name: 'Trainers' })).not.toBeInTheDocument();
     await waitFor(() => expect(optionLabels(select)).toHaveLength(3));
@@ -302,7 +303,7 @@ describe('MembersPage: an admin', () => {
 
   it('opens team managers too', async () => {
     const user = userEvent.setup();
-    mount({ roles: ['Admin'], clubId: null, editMode: true });
+    mount({ roles: ['Admin'], clubId: null });
     await screen.findByLabelText('Club');
     await waitFor(() => expect(optionLabels(screen.getByLabelText('Club'))).toHaveLength(3));
     chooseOption(screen.getByLabelText('Club'), 'Wirral PC');
@@ -310,19 +311,19 @@ describe('MembersPage: an admin', () => {
     expect(screen.getByRole('group', { name: 'Role for Wendy Ross' })).toBeInTheDocument();
   });
 
-  it('keeps the buttons off until edit mode is on', async () => {
+  it('lets an admin use the buttons straight away, with no edit mode to switch on', async () => {
     const user = userEvent.setup();
-    mount({ roles: ['Admin'], editMode: false });
+    mount({ roles: ['Admin'] });
     const waiting = await waitingFor();
-    expect((await waiting.findAllByRole('button', { name: 'Approve' }))[0]).toBeDisabled();
-    expect(waiting.getAllByRole('button', { name: 'Decline' })[0]).toBeDisabled();
+    expect((await waiting.findAllByRole('button', { name: 'Approve' }))[0]).toBeEnabled();
+    expect(waiting.getAllByRole('button', { name: 'Decline' })[0]).toBeEnabled();
     await user.click(row('Jo Hughes'));
-    expect(within(screen.getByRole('group', { name: 'Role for Jo Hughes' })).getByRole('button', { name: 'Member' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Remove from club' })).toBeDisabled();
+    expect(within(screen.getByRole('group', { name: 'Role for Jo Hughes' })).getByRole('button', { name: 'Member' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Remove from club' })).toBeEnabled();
   });
 
   it('asks nothing until a club is chosen', async () => {
-    mount({ roles: ['Admin'], clubId: null, editMode: true });
+    mount({ roles: ['Admin'], clubId: null });
     await screen.findByLabelText('Club');
     expect(api.get).not.toHaveBeenCalledWith(expect.stringMatching(/^\/clubs\/\d+\/members$/));
   });

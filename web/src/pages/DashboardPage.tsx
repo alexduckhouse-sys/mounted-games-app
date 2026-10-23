@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
@@ -15,7 +15,7 @@ import { roleLabel } from '../lib/profile';
 import { dayKey } from '../lib/timetableDay';
 import { displaySectionName } from '../lib/section';
 import type { CompetitionDetail, CompetitionPickerPage, LiveStreamsResponse, MySignup } from '../types';
-import { useNeedsYou } from './profile/needsYou';
+import { QuickActions } from './dashboard/QuickActions';
 
 const TONE = { normal: 'text-[rgb(var(--mg-ink))]', late: 'text-[rgb(var(--mg-late-time))]', muted: 'text-[rgb(var(--mg-muted))]' } as const;
 
@@ -29,7 +29,6 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 export function DashboardPage() {
   const { user, hasRole } = useAuth();
   const { current } = useCurrentCompetition();
-  const { requests } = useNeedsYou();
   const mine = useMyTeams();
   const now = useMemo(() => new Date(), []);
   const [picker, setPicker] = useState<CompetitionPickerPage | null>(null);
@@ -81,7 +80,6 @@ export function DashboardPage() {
   const needs = [
     ...needForms.map((team) => ({ key: `form-${team.id}`, to: `/competitions/${team.competitionId}/declarations`, title: `Dec form needed: ${team.displayName}`, sub: mine.comps.get(team.competitionId)?.name ?? '', urgent: true })),
     ...awaiting.map((s) => ({ key: `pay-${s.id}`, to: '/me/signups', title: 'Entry awaiting payment', sub: `${s.competitionName} · ${priceLabel(s.amountMinor)}`, urgent: false })),
-    ...(isAdmin ? requests.map((r) => ({ key: `req-${r.userId}`, to: '/admin', title: `Trainer request: ${r.fullName}`, sub: r.clubName ?? 'Waiting for an admin', urgent: false })) : []),
   ];
 
   // Heats still to run today for the teams I look after, soonest first.
@@ -111,13 +109,20 @@ export function DashboardPage() {
       { to: '/declarations', label: 'Dec forms', meta: looked.length ? `${formsIn} of ${looked.length} in` : '' },
       ...(isAdmin ? [] : [{ to: '/me/signups', label: 'My signups', meta: String(mySignups.length) }]),
     ] : []),
-    ...(isAdmin || hasRole('Trainer') ? [{ to: '/admin/competitions/new', label: 'Create a competition', meta: '' }] : []),
-    ...(isAdmin ? [{ to: '/admin', label: 'Admin', meta: '' }] : []),
     { to: '/shop', label: 'Shop', meta: '' },
-    ...(user ? [] : [{ to: '/login', label: 'Sign in', meta: '' }]),
   ];
 
+  // Admins get the whole dashboard on the Me page.
+  if (isAdmin) return <Navigate to="/me" replace />;
+
   return <div className="mx-auto flex max-w-xl flex-col gap-4 pb-2">
+    {!user && (
+      <div className="mg-card flex flex-col gap-2 p-3.5">
+        <Link to="/login" className="mg-btn mg-btn-primary !min-h-12 !text-base">Sign in</Link>
+        <p className="text-center text-[13px] text-[rgb(var(--mg-muted))]">For trainers, organisers and stewards</p>
+      </div>
+    )}
+
     {event && (
       <div className="mg-band mg-band-deep flex min-h-14 items-center gap-2.5 py-2">
         {live && <span className="inline-flex h-[22px] shrink-0 items-center rounded-[4px] bg-[rgb(var(--mg-red))] px-2 text-[11px] font-bold leading-none tracking-[0.06em]">LIVE</span>}
@@ -164,6 +169,8 @@ export function DashboardPage() {
         ))}
       </div>
     </section>}
+
+    {user && hasRole('Trainer') && <QuickActions focus={picker?.items.find((item) => item.id === focusId) ?? null} today={onToday.length > 0} />}
 
     <section className="mg-sec" aria-label="Shortcuts">
       <div className="mg-sec-head"><h2>Shortcuts</h2></div>

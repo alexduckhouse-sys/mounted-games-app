@@ -6,6 +6,7 @@ import type { Placing, QueuedScore } from '../offline/scoreOutbox';
 import { heat } from '../test/factories';
 import { ScoreOutboxPanel } from './ScoreOutboxPanel';
 
+import { autoConfirm } from '../test/confirm';
 vi.mock('../api', () => ({ api: { post: vi.fn() } }));
 const post = vi.mocked(api.post);
 
@@ -113,14 +114,13 @@ describe('ScoreOutboxPanel', () => {
 
     it('deletes the results only after the scorer confirms', async () => {
       failed();
-      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const confirm = autoConfirm([false, true]);
       render(<ScoreOutboxPanel competitionId={1} />);
       await userEvent.click(screen.getByRole('button', { name: 'Delete mine' }));
-      expect(confirm).toHaveBeenCalledWith('Delete your results for Heat 1 · Barrel Race?');
+      await waitFor(() => expect(confirm).toHaveBeenCalledWith('Delete your results for Heat 1 · Barrel Race?'));
       expect(stored()).toHaveLength(1);
-      confirm.mockReturnValue(true);
       await userEvent.click(screen.getByRole('button', { name: 'Delete mine' }));
-      expect(stored()).toEqual([]);
+      await waitFor(() => expect(stored()).toEqual([]));
     });
   });
 

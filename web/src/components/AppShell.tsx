@@ -1,6 +1,6 @@
 import { Suspense, useLayoutEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, Lock, Unlock, Menu, RotateCw } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Menu, RotateCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { RememberCompetitionDialog } from '../competition/RememberCompetitionDialog';
@@ -22,7 +22,7 @@ import { initialsOf } from '../lib/profile';
 import { useNeedsYou } from '../pages/profile/needsYou';
 
 export function AppShell() {
-  const { user, hasRole, editorMode, setEditorMode, canOrganise } = useAuth();
+  const { user, canOrganise } = useAuth();
   const { current, rememberChoice, storageError } = useCurrentCompetition();
   const { meta } = useCompetitionMeta();
   const { config: compactBar, header: pageHeader } = useCompactPageBarState();
@@ -74,11 +74,6 @@ export function AppShell() {
                 </span>
               } />
               <LiteChip onOpen={openLiteSettings} short />
-              {hasRole('Admin') && (
-                <button onClick={() => setEditorMode(!editorMode)} className="mg-nav-btn" aria-label={editorMode ? 'Switch to view mode' : 'Switch to edit mode'} aria-pressed={editorMode}>
-                  {editorMode ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                </button>
-              )}
               <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
             </div>
           ) : (
@@ -113,11 +108,6 @@ export function AppShell() {
               <ConnectionPill />
               {!user && choosingCompetition && <Link to="/login" className="mg-nav-btn">Sign in</Link>}
               <LiteChip onOpen={openLiteSettings} />
-              {hasRole('Admin') && (
-                <button onClick={() => setEditorMode(!editorMode)} className="mg-nav-btn" aria-label={editorMode ? 'Switch to view mode' : 'Switch to edit mode'} aria-pressed={editorMode}>
-                  {editorMode ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                </button>
-              )}
               <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
             </div>
           )}

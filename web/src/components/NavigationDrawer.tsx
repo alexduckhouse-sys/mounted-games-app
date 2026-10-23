@@ -74,7 +74,7 @@ export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = fa
   // Account and club links (teams, dec forms, signups, shop, sign out) live on the profile page now.
   const accountLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: !!user },
-    { to: '/admin', label: 'Admin', icon: Settings, show: hasRole('Admin') },
+    { to: '/me#site-admin', label: 'Site admin', icon: Settings, show: hasRole('Admin') },
   ].filter((item) => item.show);
   const selectedSection = location.pathname === `${base}/scoring` ? new URLSearchParams(location.search).get('section') : null;
   return (
@@ -92,6 +92,12 @@ export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = fa
         </div>
 
         <div className="flex flex-1 flex-col gap-5 p-4">
+          {!user && (
+            <div className="flex flex-col gap-2 rounded-xl bg-[rgb(var(--mg-tint))] p-3">
+              <NavLink to="/login" onClick={onClose} className="mg-btn mg-btn-primary !min-h-12 !text-base">Sign in</NavLink>
+              <p className="text-center text-[13px] text-[rgb(var(--mg-muted))]">For trainers, organisers and stewards</p>
+            </div>
+          )}
           {user && (
             <Link to="/me" onClick={onClose} className="flex min-h-14 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 !no-underline hover:!no-underline">
               <span aria-hidden="true" className="mg-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-base font-bold leading-none text-[rgb(var(--mg-surface))]">{initialsOf(user.fullName, user.email)}</span>
@@ -166,12 +172,6 @@ export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = fa
           )}
         </div>
 
-        {!user && (
-          <div className="flex flex-col gap-2 border-t border-[rgb(var(--mg-rule-soft))] p-4">
-            <NavLink to="/login" onClick={onClose} className="mg-btn mg-btn-primary">Sign in</NavLink>
-            <p className="text-center text-[13px] text-[rgb(var(--mg-muted))]">For trainers, organisers and stewards</p>
-          </div>
-        )}
       </div>
     </dialog>
   );

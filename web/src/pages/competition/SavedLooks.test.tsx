@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { DEFAULT_LOOK } from '../../lib/overlays';
 import { SavedLooks } from './SavedLooks';
 import { chooseOption, optionLabels, selectedValue } from '../../test/select';
+import { autoConfirm } from '../../test/confirm';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 
@@ -59,8 +60,12 @@ describe('SavedLooks', () => {
     choose('1');
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update saved look' })); });
     expect(api.put).toHaveBeenCalledWith('/overlay-looks/1', { name: 'EGUK Champs', look: expect.objectContaining({ accent: '#ff0000' }) });
+    const asked = autoConfirm([false, true]);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete' })); });
-    expect(api.delete).toHaveBeenCalledWith('/overlay-looks/1');
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Delete the look “EGUK Champs”?'));
+    expect(api.delete).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete' })); });
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/overlay-looks/1'));
     expect(optionLabels(box())).not.toContain('EGUK Champs');
   });
 

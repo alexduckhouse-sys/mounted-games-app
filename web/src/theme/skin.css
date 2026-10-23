@@ -452,3 +452,17 @@ a.mg-sponsor:focus-visible { outline: 3px solid rgb(var(--mg-heading)); outline-
 .mg-select-placeholder { color: rgb(var(--mg-faint)); }
 .mg-select-caret { flex: none; opacity: .7; }
 .mg-field .mg-select { border: 0; background: transparent; padding: 0; }
+
+/* Confirmation dialog: covers the whole screen, blurred and dimmed. Destructive ones are red in every theme. */
+.mg-confirm-backdrop { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgb(0 0 0 / 0.5); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.mg-confirm { width: min(100%, 440px); overflow: hidden; border-radius: 16px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 24px 64px rgb(0 0 0 / 0.4); }
+.mg-confirm-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: rgb(var(--mg-header)); color: #fff; }
+.mg-confirm-head h2 { margin: 0; font-size: 19px; font-weight: 700; line-height: 1.2; }
+.mg-confirm-danger .mg-confirm-head { background: rgb(var(--mg-elim)); }
+.mg-confirm-body { margin: 0; padding: 16px 18px 4px; font-size: 16px; line-height: 1.45; }
+.mg-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 16px 18px 18px; }
+.mg-confirm-actions .mg-btn { min-height: 46px; flex: 1 1 140px; }
+.mg-btn-danger { background: rgb(var(--mg-elim)); border-color: rgb(var(--mg-elim)); color: #fff !important; }
+.mg-btn-danger:hover:not(:disabled) { filter: brightness(1.1); }
+.mg-confirm-type { display: flex; flex-direction: column; gap: 6px; padding: 12px 18px 0; font-size: 14px; }
+.mg-confirm-type input { min-height: 44px; padding: 0 12px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 10px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font-size: 16px; }

@@ -2,13 +2,14 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../api';
-import { AuthProvider } from '../auth/AuthContext';
-import type { TrainerRequest } from '../types';
-import { AdminPage } from './AdminPage';
+import { api } from '../../api';
+import { AuthProvider } from '../../auth/AuthContext';
+import type { TrainerRequest } from '../../types';
+import { SiteAdmin } from './SiteAdmin';
 
-vi.mock('../api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../api')>()),
+import { autoConfirm } from '../../test/confirm';
+vi.mock('../../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api')>()),
   api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
 }));
 
@@ -20,13 +21,12 @@ const request: TrainerRequest = {
 let requests: TrainerRequest[];
 let failLoad: boolean;
 
-function mount(roles = ['Admin'], editMode = true) {
+function mount(roles = ['Admin']) {
   localStorage.setItem('mg.auth', JSON.stringify({
     token: 'test-token', expiresAt: '2099-01-01T00:00:00Z',
     user: { id: 'test-admin', fullName: 'Test Admin', email: 'admin@example.com', roles },
   }));
-  if (editMode) localStorage.setItem('mg.adminEditorMode', '1');
-  return render(<AuthProvider><MemoryRouter><AdminPage /></MemoryRouter></AuthProvider>);
+  return render(<AuthProvider><MemoryRouter><SiteAdmin /></MemoryRouter></AuthProvider>);
 }
 
 beforeEach(() => {
@@ -76,7 +76,7 @@ describe('admin trainer requests', () => {
   });
 
   it('confirms decline before submitting and refreshing', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirm = autoConfirm(true);
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'Decline' }));
     expect(confirm).toHaveBeenCalledWith(`Decline the request from ${request.fullName}? Their account will stay a member.`);
@@ -86,7 +86,7 @@ describe('admin trainer requests', () => {
   });
 
   it('does nothing if decline is cancelled', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    autoConfirm(false);
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'Decline' }));
     expect(api.post).not.toHaveBeenCalled();
@@ -107,7 +107,7 @@ describe('admin trainer requests', () => {
   });
 
   it.each(['Approve', 'Decline'])('shows %s errors inline without removing the request', async (action) => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    autoConfirm(true);
     vi.mocked(api.post).mockRejectedValue(new Error('conflict'));
     mount();
     await userEvent.click(await screen.findByRole('button', { name: action }));
@@ -140,9 +140,9 @@ describe('admin trainer requests', () => {
     expect(await screen.findByText('No trainer requests.')).toBeInTheDocument();
   });
 
-  it('lets an admin approve a request without switching on edit mode, team manager requests included', async () => {
+  it('lets an admin approve a request straight away, team manager requests included', async () => {
     requests = [{ ...request, requestedRole: 'Manager' }];
-    mount(['Admin'], false);
+    mount(['Admin']);
     expect(await screen.findByText(request.fullName)).toBeInTheDocument();
     expect(screen.getByText(/Team manager/)).toBeInTheDocument();
     expect(screen.queryByText(/Switch to edit mode to approve/)).not.toBeInTheDocument();
@@ -152,7 +152,7 @@ describe('admin trainer requests', () => {
 
   it("shows the server's message when approving fails", async () => {
     vi.mocked(api.post).mockRejectedValue({ response: { status: 404, data: { message: 'That request has already been dealt with.' } } });
-    mount(['Admin'], false);
+    mount(['Admin']);
     await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('That request has already been dealt with.');
   });
@@ -236,24 +236,35 @@ describe('admin competitions', () => {
     expect(await screen.findByText(/Couldn’t lock signups for Northern Winter League R1/)).toBeInTheDocument();
   });
 
-  it('deletes only after the name is typed in full, and only in edit mode', async () => {
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValueOnce('wrong').mockReturnValueOnce('Christmas Cracker Teams');
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+  it('deletes only after the name is typed in full, in a red confirmation', async () => {
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'More for Christmas Cracker Teams' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Delete competition' }));
-    expect(alertSpy).toHaveBeenCalledWith('Name did not match — nothing deleted.');
+    const dialog = await screen.findByRole('alertdialog', { name: /Delete “Christmas Cracker Teams” forever\?/ });
+    expect(dialog).toHaveClass('mg-confirm-danger');
+    const confirm = within(dialog).getByRole('button', { name: 'Delete competition' });
+    expect(confirm).toBeDisabled();
+    await userEvent.type(within(dialog).getByRole('textbox'), 'wrong');
+    expect(confirm).toBeDisabled();
     expect(api.delete).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'More for Christmas Cracker Teams' }));
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete competition' }));
-    expect(prompt).toHaveBeenCalledTimes(2);
-    expect(api.delete).toHaveBeenCalledWith('/competitions/3');
+    await userEvent.clear(within(dialog).getByRole('textbox'));
+    await userEvent.type(within(dialog).getByRole('textbox'), 'Christmas Cracker Teams');
+    await userEvent.click(confirm);
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/3'));
   });
 
-  it('keeps Delete out of the menu in view mode', async () => {
-    mount(['Admin'], false);
+  it('deletes nothing when the confirmation is cancelled', async () => {
+    mount();
     await userEvent.click(await screen.findByRole('button', { name: 'More for Christmas Cracker Teams' }));
-    expect(screen.queryByRole('menuitem', { name: 'Delete competition' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete competition' }));
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  it('shows the whole menu to an admin with no edit mode to switch on', async () => {
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: 'More for Christmas Cracker Teams' }));
+    expect(screen.getByRole('menuitem', { name: 'Delete competition' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Edit details' })).toBeInTheDocument();
   });
 

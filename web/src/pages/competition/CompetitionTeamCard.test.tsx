@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import type { CompetitionHelper, CompetitionTeam } from '../../types';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
+import { autoConfirm } from '../../test/confirm';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 const auth = vi.hoisted(() => ({ userId: 'owner-1', refreshAccess: vi.fn() }));
@@ -48,7 +49,7 @@ describe('CompetitionTeamCard', () => {
     expect(screen.queryByText('Owner')).not.toBeInTheDocument();
   });
 
-  it('hides the controls from an admin who has not turned Edit mode on', async () => {
+  it('hides the controls when the viewer cannot write', async () => {
     render(<CompetitionTeamCard competitionId={5} canWrite={false} />);
     await screen.findByText('Hana Helper');
     expect(screen.getAllByText('Competition admin')).toHaveLength(2);
@@ -118,8 +119,12 @@ describe('CompetitionTeamCard', () => {
     vi.mocked(api.delete).mockResolvedValue({ data: null });
     render(<CompetitionTeamCard competitionId={5} />);
     await screen.findByText('Hana Helper');
+    const asked = autoConfirm([false, true]);
     await user.click(screen.getByRole('button', { name: 'Remove Hana Helper' }));
-    expect(api.delete).toHaveBeenCalledWith('/competitions/5/team/h1');
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Remove Hana Helper from the team? They lose access to this competition.'));
+    expect(api.delete).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Remove Hana Helper' }));
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/5/team/h1'));
     await waitFor(() => expect(screen.queryByText('Hana Helper')).not.toBeInTheDocument());
     expect(screen.getByText('Lee Line')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Removed Hana Helper.');
@@ -131,6 +136,7 @@ describe('CompetitionTeamCard', () => {
     vi.mocked(api.delete).mockRejectedValue(new Error('offline'));
     render(<CompetitionTeamCard competitionId={5} />);
     await screen.findByText('Hana Helper');
+    autoConfirm(true);
     await user.click(screen.getByRole('button', { name: 'Remove Hana Helper' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t remove Hana Helper');
     expect(screen.getByText('Hana Helper')).toBeInTheDocument();
@@ -152,8 +158,12 @@ describe('CompetitionTeamCard', () => {
       const user = userEvent.setup();
       vi.mocked(api.delete).mockResolvedValue({ data: null });
       render(<CompetitionTeamCard competitionId={5} />);
+      const asked = autoConfirm([false, true]);
       await user.click(await screen.findByRole('button', { name: 'Leave this team' }));
-      expect(api.delete).toHaveBeenCalledWith('/competitions/5/team/h1');
+      await waitFor(() => expect(asked).toHaveBeenCalledWith('Leave this team? You will lose access to this competition.'));
+      expect(api.delete).not.toHaveBeenCalled();
+      await user.click(screen.getByRole('button', { name: 'Leave this team' }));
+      await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/5/team/h1'));
       await waitFor(() => expect(auth.refreshAccess).toHaveBeenCalledTimes(1));
       expect(screen.getByRole('status')).toHaveTextContent('You’ve left this team.');
       expect(screen.queryByRole('button', { name: 'Leave this team' })).not.toBeInTheDocument();
@@ -163,6 +173,7 @@ describe('CompetitionTeamCard', () => {
       const user = userEvent.setup();
       vi.mocked(api.delete).mockRejectedValue(new Error('offline'));
       render(<CompetitionTeamCard competitionId={5} />);
+      autoConfirm(true);
       await user.click(await screen.findByRole('button', { name: 'Leave this team' }));
       expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t leave the team');
       expect(auth.refreshAccess).not.toHaveBeenCalled();

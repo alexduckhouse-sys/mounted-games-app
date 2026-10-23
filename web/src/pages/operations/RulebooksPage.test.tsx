@@ -5,10 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { RulebooksPage } from './RulebooksPage';
 
-const auth = vi.hoisted(() => ({ editorMode: true, admin: true }));
+const auth = vi.hoisted(() => ({ admin: true }));
 
+import { autoConfirm } from '../../test/confirm';
 vi.mock('../competition/context', () => ({ useCompetition: () => ({ competition: { id: 7, name: 'Sample Games', createdByUserId: 'owner' } }) }));
-vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ editorMode: auth.editorMode, canEdit: () => auth.editorMode, canOrganise: () => true, hasRole: () => auth.admin }) }));
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canEdit: () => auth.admin, canOrganise: () => true, hasRole: () => auth.admin }) }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 
 const handbook = { id: 2, title: 'Event handbook', edition: '2030', sourceUrl: null, updatedAt: '2030-01-01T00:00:00Z' };
@@ -27,7 +28,6 @@ const mount = () => render(<MemoryRouter><RulebooksPage /></MemoryRouter>);
 describe('RulebooksPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    auth.editorMode = true;
     auth.admin = true;
     serve([handbook]);
   });
@@ -93,14 +93,14 @@ describe('RulebooksPage', () => {
     expect(screen.getByLabelText('Rulebook text')).toBeInTheDocument();
   });
 
-  it('closes the editor when an admin returns to view mode', async () => {
+  it('lets an admin add a rulebook straight away, and shows no Add button to anyone else', async () => {
     const user = userEvent.setup();
     const page = mount();
     await user.click(await screen.findByRole('button', { name: 'Add rulebook' }));
     expect(screen.getByLabelText('Rulebook text')).toBeInTheDocument();
-    auth.editorMode = false;
-    page.rerender(<MemoryRouter><RulebooksPage /></MemoryRouter>);
-    expect(screen.queryByLabelText('Rulebook text')).not.toBeInTheDocument();
+    page.unmount();
+    auth.admin = false;
+    mount();
     expect(await screen.findByRole('button', { name: /^Event handbook/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add rulebook' })).not.toBeInTheDocument();
   });
@@ -123,7 +123,7 @@ describe('RulebooksPage', () => {
   it('edits and deletes the open rulebook', async () => {
     vi.mocked(api.put).mockResolvedValue({ data: { ...texts['/rulebooks/2'] as object, title: 'Handbook v2', text: 'Changed.' } });
     vi.mocked(api.delete).mockResolvedValue({ data: null });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    autoConfirm(true);
     const user = userEvent.setup();
     mount();
     await user.click(await screen.findByRole('button', { name: /^Event handbook/ }));

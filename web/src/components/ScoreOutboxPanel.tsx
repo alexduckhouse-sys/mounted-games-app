@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CloudOff, AlertTriangle } from 'lucide-react';
 import { describePlacings, discard, overrule, retry, type QueuedScore } from '../offline/scoreOutbox';
 import { flushOutbox, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
+import { confirmDialog } from './ConfirmDialog';
 
 /** Results saved on this phone that haven't reached the server yet, and any that need a decision. */
 export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
@@ -46,7 +47,7 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
             <textarea className="input" maxLength={1000} value={reasons[q.raceId] ?? q.reason ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [q.raceId]: event.target.value }))} />
           </label>
           <div className="flex flex-wrap gap-2">
-            <button className="btn-ghost min-h-11" onClick={() => { if (confirm(`Delete your results for ${q.label}?`)) update((l) => discard(l, q.raceId)); }}>Delete mine</button>
+            <button className="btn-ghost min-h-11" onClick={async () => { if (await confirmDialog({ title: 'Delete your results?', message: `Delete your results for ${q.label}?`, confirmLabel: 'Delete results', destructive: true })) update((l) => discard(l, q.raceId)); }}>Delete mine</button>
             <button className="btn-primary min-h-11" onClick={() => update((l) => retry(l, q.raceId, (reasons[q.raceId] ?? q.reason ?? '').trim() || undefined))}>Try again</button>
           </div>
         </div>

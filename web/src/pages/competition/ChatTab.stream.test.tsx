@@ -6,41 +6,41 @@ import { api } from '../../api';
 import { chat, competition } from '../../test/factories';
 import { flush } from '../../test/streamFakes';
 
-const context = vi.hoisted(() => ({ enabled: false, organiser: true, edit: false, roles: [] as string[], streamUrl: 'https://youtu.be/old' as string | null, messages: [] as unknown[], reload: vi.fn() }));
+const context = vi.hoisted(() => ({ enabled: false, organiser: true, roles: [] as string[], streamUrl: 'https://youtu.be/old' as string | null, messages: [] as unknown[], reload: vi.fn() }));
+import { autoConfirm } from '../../test/confirm';
 vi.mock('./context', () => ({ useCompetition: () => ({ competition: competition({ streamUrl: context.streamUrl, organiserName: 'Example Club', paymentDestination: 'Example payment instructions' }), reload: context.reload, streams: [], streamingEnabled: context.enabled, invoke: vi.fn(), ready: 1, streamMessages: [] }) }));
-vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ user: context.roles.length > 0 ? { id: 'fake-user', roles: context.roles } : null, canEdit: () => context.edit, hasRole: (role: string) => context.roles.includes(role), canOrganise: () => context.organiser }) }));
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ user: context.roles.length > 0 ? { id: 'fake-user', roles: context.roles } : null, canEdit: () => context.roles.includes('Admin'), hasRole: (role: string) => context.roles.includes(role), canOrganise: () => context.organiser }) }));
 vi.mock('../../live/useLiveHub', () => ({ useLiveHub: () => ({ connected: true }) }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
-beforeEach(() => { Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() }); context.enabled = false; context.organiser = true; context.edit = false; context.roles = ['Admin']; context.streamUrl = 'https://youtu.be/old'; context.messages = []; context.reload.mockReset(); vi.mocked(api.get).mockImplementation(async () => ({ data: context.messages })); vi.mocked(api.put).mockResolvedValue({}); vi.mocked(api.post).mockResolvedValue({}); vi.mocked(api.delete).mockResolvedValue({}); });
-it('requires admin edit mode but lets an owning trainer change the stream fallback', async () => {
+beforeEach(() => { Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() }); context.enabled = false; context.organiser = true; context.roles = ['Admin']; context.streamUrl = 'https://youtu.be/old'; context.messages = []; context.reload.mockReset(); vi.mocked(api.get).mockImplementation(async () => ({ data: context.messages })); vi.mocked(api.put).mockResolvedValue({}); vi.mocked(api.post).mockResolvedValue({}); vi.mocked(api.delete).mockResolvedValue({}); });
+it('lets an admin or an owning trainer change the stream fallback, but not a trainer who cannot organise', async () => {
   const { rerender } = render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
   expect(screen.getByText('Stream link is set')).toBeVisible();
-  expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
-  context.edit = true; rerender(<MemoryRouter><ChatTab /></MemoryRouter>); expect(screen.getByRole('button', { name: 'Change' })).toBeVisible();
-  context.roles = ['Trainer']; context.edit = false; context.enabled = false; rerender(<MemoryRouter><ChatTab /></MemoryRouter>);
+  expect(screen.getByRole('button', { name: 'Change' })).toBeVisible();
+  context.roles = ['Trainer']; context.enabled = false; rerender(<MemoryRouter><ChatTab /></MemoryRouter>);
   expect(screen.getByRole('button', { name: 'Change' })).toBeVisible();
   context.organiser = false; rerender(<MemoryRouter><ChatTab /></MemoryRouter>); expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
 });
 
-it('closes stream settings when edit mode is lost and does not reopen or save stale input', async () => {
-  context.edit = true;
+it('closes stream settings when the right to manage the stream is lost and does not reopen or save stale input', async () => {
+  context.roles = ['Trainer'];
   const { rerender } = render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
   fireEvent.click(screen.getByRole('button', { name: 'Change' }));
   fireEvent.change(screen.getByPlaceholderText('https://youtu.be/… or https://twitch.tv/channel'), { target: { value: 'https://youtu.be/stale' } });
 
-  context.edit = false;
+  context.organiser = false;
   rerender(<MemoryRouter><ChatTab /></MemoryRouter>);
   expect(screen.queryByRole('dialog', { name: 'Stream settings' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
   expect(api.put).not.toHaveBeenCalled();
 
-  context.edit = true;
+  context.organiser = true;
   rerender(<MemoryRouter><ChatTab /></MemoryRouter>);
   expect(screen.queryByRole('dialog', { name: 'Stream settings' })).toBeNull();
   expect(api.put).not.toHaveBeenCalled();
 });
 it('saves and clears only the stream URL using the dedicated endpoint', async () => {
-  context.edit = true; render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
   fireEvent.click(screen.getByRole('button', { name: 'Change' }));
   fireEvent.change(screen.getByPlaceholderText('https://youtu.be/… or https://twitch.tv/channel'), { target: { value: 'https://youtu.be/new' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' })); await act(flush);
@@ -79,7 +79,7 @@ it('keeps trainer posts private through the existing chat endpoint', async () =>
 });
 
 it('replaces the existing banner when an admin pins another one', async () => {
-  context.edit = true;
+ 
   context.messages = [chat(8, { body: 'Old banner', tag: 'banner' })];
   vi.mocked(api.post).mockResolvedValueOnce({ data: chat(9, { body: 'New banner', tag: 'banner' }) });
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
@@ -102,7 +102,7 @@ it('shows send and unpin failures without leaving rejected action promises', asy
   expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t send that post');
   unmount();
 
-  context.roles = ['Admin']; context.edit = true; context.messages = [chat(9, { body: 'Pinned note', tag: 'banner' })];
+  context.roles = ['Admin']; context.messages = [chat(9, { body: 'Pinned note', tag: 'banner' })];
   vi.mocked(api.delete).mockRejectedValueOnce(new Error('offline'));
   const adminView = render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
   fireEvent.click(screen.getByRole('button', { name: 'Unpin' }));
@@ -111,19 +111,38 @@ it('shows send and unpin failures without leaving rejected action promises', asy
 
   context.messages = [chat(10, { body: 'General update' })];
   vi.mocked(api.delete).mockRejectedValueOnce(new Error('offline'));
-  vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
+  autoConfirm([true]);
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
   fireEvent.click(screen.getByRole('button', { name: 'Delete: General update' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t delete that announcement');
 });
 
-it('keeps admin view mode read-only and explains how to post', async () => {
+it('lets an admin post an announcement straight away, with no edit mode note', async () => {
   context.roles = ['Admin'];
-  context.edit = false;
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  expect(screen.queryByRole('textbox')).toBeNull();
-  expect(screen.getByText('Turn Edit mode on to post an announcement or pin a banner.')).toBeVisible();
-  expect(api.post).not.toHaveBeenCalled();
+  expect(screen.queryByText(/Edit mode/i)).toBeNull();
+  fireEvent.change(screen.getByPlaceholderText('Write an announcement…'), { target: { value: 'Briefing at nine' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' })); await act(flush);
+  expect(api.post).toHaveBeenCalled();
+});
+
+it('gives organisers a clear Go live button, whether or not streaming is switched on', async () => {
+  context.roles = ['Admin']; context.enabled = true;
+  const { rerender } = render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  const goLive = screen.getByRole('link', { name: /Go live from this device/ });
+  expect(goLive).toHaveAttribute('href', '/competitions/1/broadcast');
+  expect(screen.queryByText(/Streaming isn’t set up yet/)).toBeNull();
+
+  context.enabled = false; rerender(<MemoryRouter><ChatTab /></MemoryRouter>);
+  expect(screen.queryByRole('link', { name: /Go live from this device/ })).toBeNull();
+  expect(screen.getByText('Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.')).toBeVisible();
+});
+
+it('does not tell the public streaming is not set up', async () => {
+  context.roles = [];
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  expect(screen.queryByText(/Streaming isn’t set up yet/)).toBeNull();
+  expect(screen.queryByRole('link', { name: /Go live/ })).toBeNull();
 });
 
 it('shows a failed announcement load separately and retries it', async () => {
@@ -151,7 +170,7 @@ it('traps focus in the announcement sheet and restores the All button', async ()
 });
 
 it('reports stream-link failures, preserves the input and restores focus on close', async () => {
-  context.edit = true;
+ 
   vi.mocked(api.put).mockRejectedValue(new Error('offline'));
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
   const opener = screen.getByRole('button', { name: 'Change' });

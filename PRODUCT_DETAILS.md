@@ -131,11 +131,8 @@ scoring to post-event standings — on phones in a field.
 - Public `/shop` page with image posts (client-side resized, base64),
   public + private comment threads, reports, IP-block enforcement.
 
-### Admin: View only vs Edit mode
-- Admins land in View only — destructive controls are hidden until they
-  flip Edit mode in the header.
-- Trainers (organisers) don't have this toggle — they're always-on for
-  their own comps.
+### Admin dashboard
+- Admins see one dashboard on Me: what needs them, quick actions, today's events and site admin. There is no Edit mode switch.
 
 ### Offline + PWA
 - Installable home-screen app, brand-colour splash.

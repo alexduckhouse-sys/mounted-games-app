@@ -32,18 +32,18 @@ function useWideScreen(): boolean {
 
 export function OperationsPage() {
   const { competition } = useCompetition();
-  const { user, canOrganise, canEdit, hasRole } = useAuth();
+  const { user, canOrganise } = useAuth();
   if (!user || !canOrganise(competition)) {
     return <div className="mx-auto w-full max-w-4xl py-4 mg-font"><p role="alert" className="mg-card p-4">You don’t have access to competition operations.</p></div>;
   }
-  const canWrite = hasRole('Admin') ? canEdit() : true;
-  return <OperationsPageContent key={`${competition.id}:${user.id}`} canWrite={canWrite} />;
+  return <OperationsPageContent key={`${competition.id}:${user.id}`} />;
 }
 
 type View = 'checks' | 'equipment' | 'draw' | 'entries';
 type Sheet = 'more' | 'draw' | null;
 
-function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
+function OperationsPageContent() {
+  const canWrite = true; // anyone who can organise this competition may change it; the API decides
   const { competition, reload: reloadCompetition } = useCompetition();
   const wide = useWideScreen();
   const [view, setView] = useState<View>('checks');
@@ -241,7 +241,6 @@ function OperationsPageContent({ canWrite }: { canWrite: boolean }) {
     <RefinePage className={wide ? 'ops-wide' : ''}>
       <RefineHeader back={back} backLabel="Back to event" context={context} actions={actions} title={title} subtitle={subtitle} tabs={tabs} tabsLabel="Event tools" tabsKind="tablist" />
 
-      {!canWrite && <RefineNote>Switch on Edit mode to save checklist changes or apply a draw.</RefineNote>}
       {loadError && (!readiness || shownView !== 'checks') && <p role="alert" className="mg-notice ops-alert">{loadError} <button type="button" className="rf-btn rf-btn-text" onClick={() => void loadReadiness()}>Try again</button></p>}
       {saveError && <p role="alert" className="mg-notice ops-alert">{saveError}</p>}
       {loadingReadiness && !readiness && <p role="status" className="rf-note">Checking competition details…</p>}

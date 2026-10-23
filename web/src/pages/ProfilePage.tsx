@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Bell, ChevronRight, ClipboardList, Contact, CreditCard, Landmark, LogOut, Package, Pencil, ShoppingBag, UserCog, UserRound, Users, type LucideIcon } from 'lucide-react';
 import { api } from '../api';
 import { signOutDestination } from '../auth/signOutDestination';
@@ -7,21 +7,29 @@ import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
 import { initialsOf, roleLabel } from '../lib/profile';
-import type { DeclarationForm, Team, TrainerRequest } from '../types';
+import type { DeclarationForm, Team } from '../types';
 import { useNeedsYou } from './profile/needsYou';
+import { NeedsYouPanel } from './dashboard/NeedsYouPanel';
+import { QuickActions } from './dashboard/QuickActions';
+import { SiteAdmin } from './dashboard/SiteAdmin';
+import { TodaysEvents } from './dashboard/TodaysEvents';
+import { useTodaysEvents } from './dashboard/useTodaysEvents';
 
 const NO_TEAMS: Team[] = [];
 
-/** Who I am, what needs me, my club and my account, in one place (the Me tab). */
+/**
+ * Who I am, what needs me, my club and my account, in one place (the Me tab). For an admin this is the whole dashboard:
+ * what needs them, quick actions, today's events and the site admin sections, in a grid on a laptop.
+ */
 export function ProfilePage() {
   const { user, hasRole, logout } = useAuth();
   const { current } = useCurrentCompetition();
-  const { requests, decForms: missing, teams, count, review, reviewError } = useNeedsYou();
+  const { teams } = useNeedsYou();
+  const location = useLocation();
   const navigate = useNavigate();
   const notify = useTeamNotifications(NO_TEAMS);
   const [savedRiders, setSavedRiders] = useState<number | null>(null);
   const [forms, setForms] = useState<DeclarationForm[] | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
 
   const userId = user?.id;
   const clubId = user?.clubId ?? null;
@@ -42,9 +50,18 @@ export function ProfilePage() {
     return () => { cancelled = true; };
   }, [userId, competitionId]);
 
+  const isAdmin = hasRole('Admin');
+  const organiser = isAdmin || hasRole('Trainer') || hasRole('Manager');
+  const events = useTodaysEvents(organiser);
+
+  // /admin sends people here with #site-admin; the section exists only once the page has drawn.
+  const wantsSiteAdmin = isAdmin && location.hash === '#site-admin';
+  useEffect(() => {
+    if (wantsSiteAdmin) document.getElementById('site-admin')?.scrollIntoView?.();
+  }, [wantsSiteAdmin]);
+
   if (!user) return null;
 
-  const isAdmin = hasRole('Admin');
   const runsClub = isAdmin || hasRole('Manager');
   const showClub = isAdmin || clubId != null || hasRole('Trainer') || hasRole('Manager') || (teams?.length ?? 0) > 0;
   const showTeams = !isAdmin || (teams?.length ?? 0) > 0;
@@ -52,62 +69,8 @@ export function ProfilePage() {
   const submitted = teamsHere.filter((t) => forms?.some((f) => f.teamId === t.id)).length;
   const decFormCount = forms && teamsHere.length > 0 ? `${submitted} of ${teamsHere.length}` : undefined;
 
-  async function decide(request: TrainerRequest, action: 'approve' | 'decline') {
-    setFailed(null);
-    if (!(await review(request, action))) setFailed(request.userId);
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="mg-band flex items-center gap-3.5 py-4">
-        <div className="mg-display flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-[22px] font-bold leading-none text-[rgb(var(--mg-surface))]" aria-hidden="true">
-          {initialsOf(user.fullName, user.email)}
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h1 className="mg-display truncate text-[26px] font-bold leading-none text-[rgb(var(--mg-heading))]">{user.fullName || user.email}</h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mg-badge bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]">{roleLabel(user.roles)}</span>
-            {user.clubName && <span className="text-sm text-[rgb(var(--mg-muted))]">{user.clubName}</span>}
-          </div>
-        </div>
-        <Link to="/me/account" className="mg-icon-btn" aria-label="Account details"><Pencil aria-hidden="true" className="h-[18px] w-[18px]" /></Link>
-      </div>
-
-      {count > 0 && (
-        <Section title="Needs you" aside={String(count)}>
-          {requests.map((request) => (
-            <div key={request.userId} className="mg-card flex flex-col gap-2.5 px-3.5 py-3">
-              <div className="flex items-center gap-3">
-                <span aria-hidden="true" className="mg-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-late-bg))] text-[15px] font-bold text-[rgb(var(--mg-late-ink))]">
-                  {initialsOf(request.fullName, request.email)}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-base font-semibold leading-tight">{request.fullName}</div>
-                  <div className="text-sm text-[rgb(var(--mg-muted))]">Wants to join as {request.requestedRole === 'Manager' ? 'a team manager' : 'a trainer'}</div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button type="button" className="mg-btn mg-btn-primary !min-h-11 flex-1 !text-[15px]"
-                  onClick={() => decide(request, 'approve')}>Approve</button>
-                <button type="button" className="mg-btn mg-btn-secondary !min-h-11 flex-1 !text-[15px]"
-                  onClick={() => decide(request, 'decline')}>Decline</button>
-              </div>
-              {failed === request.userId && <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">{reviewError ?? 'Could not update this request. Try again.'}</p>}
-            </div>
-          ))}
-          {missing.map((t) => (
-            <Link key={t.id} to={`/competitions/${t.competitionId}/declarations?team=${t.id}`}
-              className="flex min-h-[60px] items-center gap-3 rounded-xl bg-[rgb(var(--mg-live-row))] px-3.5 text-[rgb(var(--mg-elim))]">
-              <ClipboardList aria-hidden="true" className="h-6 w-6 shrink-0" />
-              <span className="min-w-0 flex-1 truncate text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">Dec form needed: {t.displayName}</span>
-              <ChevronRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
-            </Link>
-          ))}
-        </Section>
-      )}
-
-      {showClub && (
-        <Section title="My club" aside={user.clubName ?? undefined}>
+  const clubSection = showClub && (
+<Section title="My club" aside={user.clubName ?? undefined}>
           <div className="mg-card mg-list">
             {showTeams && <ListRow to="/teams" icon={Users} label="Teams" count={teams ? String(teams.length) : undefined} />}
             {clubId != null && <ListRow icon={Contact} label="Saved riders" count={savedRiders != null ? String(savedRiders) : undefined} />}
@@ -116,9 +79,10 @@ export function ProfilePage() {
             {runsClub && <ListRow to="/me/payouts" icon={Landmark} label="Payouts" />}
           </div>
         </Section>
-      )}
+  );
 
-      <Section title="Account">
+  const accountSection = (
+    <Section title="Account">
         <div className="mg-card mg-list">
           <button type="button" role="switch" aria-checked={notify.enabled} disabled={notify.permission === 'denied' || notify.permission === 'unsupported'}
             onClick={() => { void notify.setEnabled(!notify.enabled); }}
@@ -139,6 +103,46 @@ export function ProfilePage() {
           </button>
         </div>
       </Section>
+  );
+
+  return (
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+      <div className="mg-band flex items-center gap-3.5 py-4">
+        <div className="mg-display flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-[22px] font-bold leading-none text-[rgb(var(--mg-surface))]" aria-hidden="true">
+          {initialsOf(user.fullName, user.email)}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <h1 className="mg-display truncate text-[26px] font-bold leading-none text-[rgb(var(--mg-heading))]">{user.fullName || user.email}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mg-badge bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]">{roleLabel(user.roles)}</span>
+            {user.clubName && <span className="text-sm text-[rgb(var(--mg-muted))]">{user.clubName}</span>}
+          </div>
+        </div>
+        <Link to="/me/account" className="mg-icon-btn" aria-label="Account details"><Pencil aria-hidden="true" className="h-[18px] w-[18px]" /></Link>
+      </div>
+
+      {isAdmin ? (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="flex flex-col gap-6 lg:col-span-2">
+            <NeedsYouPanel events={events.week} />
+            <TodaysEvents events={events.week} loaded={events.loaded} />
+          </div>
+          <div className="flex flex-col gap-6">
+            <QuickActions focus={events.focus} today={events.today.length > 0} />
+            {clubSection}
+            {accountSection}
+          </div>
+        </div>
+      ) : (
+        <>
+          <NeedsYouPanel events={events.week} />
+          <QuickActions focus={events.focus} today={events.today.length > 0} />
+          {clubSection}
+          {accountSection}
+        </>
+      )}
+
+      {isAdmin && <SiteAdmin />}
     </div>
   );
 }
