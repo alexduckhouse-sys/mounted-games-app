@@ -38,6 +38,8 @@ const detailed: StatsProfile = {
     },
   ],
   partnerships: [{ riderName: 'Oliver S.', ponyName: 'Bramble', entries: 2, competitions: 2 }],
+  clubs: [{ clubName: 'North', entries: 2, competitions: 2, firstDate: '2030-10-01', lastDate: '2031-04-12' }],
+  seasons: [{ seasonId: 2031, seasonName: '2031 Season', year: 2031, rank: 1, points: 3, eventsEntered: 1 }],
 };
 
 function renderAt(path: string) {
@@ -171,7 +173,9 @@ describe('StatsPage profile', () => {
     expect(within(competitions).getByText(/A Final\. Point quota 50% \(3 of 6 points over 2 races\)/)).toBeInTheDocument();
     expect(within(competitions).getByText('2nd of 6')).toBeInTheDocument();
     expect(within(competitions).getAllByText('HC')).toHaveLength(2);
-    expect(within(screen.getByRole('list', { name: 'Ponies ridden' })).getByText('Bramble')).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Ponies ridden' })).getByRole('link', { name: 'Bramble' })).toHaveAttribute('href', '/stats/ponies?name=bramble');
+    expect(within(screen.getByRole('list', { name: 'Clubs represented' })).getByRole('link', { name: /North/ })).toHaveAttribute('href', '/stats/clubs?name=north');
+    expect(within(screen.getByRole('list', { name: 'Seasons' })).getByText('2031 Season')).toBeInTheDocument();
   });
 
   it.each([

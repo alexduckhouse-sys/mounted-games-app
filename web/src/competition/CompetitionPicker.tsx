@@ -12,6 +12,7 @@ import { displaySectionName } from '../lib/section';
 import { lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
 import { CompetitionListSkeleton } from '../components/Skeletons';
 import { usePageHeader } from '../components/CompactPageBarContext';
+import { useNeedsYou } from '../pages/profile/needsYou';
 
 /** The events page: upcoming competitions, with the past ones a link away at the bottom. */
 export function CompetitionPicker({ past = false }: { past?: boolean }) {
@@ -35,9 +36,13 @@ function PlainHeader({ past }: { past: boolean }) {
 function CompetitionList({ onRetry, past }: { onRetry: () => void; past: boolean }) {
   const headingId = useId();
   const { current, setCurrent, forget } = useCurrentCompetition();
+  const { teams: myTeams } = useNeedsYou();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [yearFilter, setYearFilter] = useState('all');
+  const [regionFilter, setRegionFilter] = useState('all');
+  const [mineOnly, setMineOnly] = useState(false);
   // The first page this phone saw last time shows while the list refreshes.
   const [saved] = useState(() => readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(past)));
   const [state, setState] = useState({ items: saved?.data.items ?? [] as CompetitionPickerItem[], page: 0, hasMore: false, error: false, savedCopy: !!saved, savedAt: saved?.savedAt ?? null as string | null });
@@ -68,8 +73,17 @@ function CompetitionList({ onRetry, past }: { onRetry: () => void; past: boolean
     return () => controller.abort();
   }, [past, page, saved]);
 
+  const years = Array.from(new Set(state.items.map((item) => new Date(item.startDate).getFullYear()).filter((y) => !Number.isNaN(y)))).sort((a, b) => b - a);
+  const regions = Array.from(new Set(state.items.map((item) => item.location?.trim() ?? '').filter(Boolean))).sort();
+  const myCompIds = new Set((myTeams ?? []).map((t) => t.competitionId));
   const query = search.trim().toLowerCase();
-  const matches = query ? state.items.filter((item) => `${item.name} ${item.location ?? ''}`.toLowerCase().includes(query)) : state.items;
+  const matches = state.items.filter((item) => {
+    if (query && !`${item.name} ${item.location ?? ''}`.toLowerCase().includes(query)) return false;
+    if (yearFilter !== 'all' && String(new Date(item.startDate).getFullYear()) !== yearFilter) return false;
+    if (regionFilter !== 'all' && (item.location?.trim() ?? '') !== regionFilter) return false;
+    if (mineOnly && !myCompIds.has(item.id)) return false;
+    return true;
+  });
   const now = new Date();
   const onToday = past ? [] : matches.filter((item) => isOnToday(item.startDate, item.endDate, now));
   const later = matches.filter((item) => !onToday.includes(item));
@@ -91,6 +105,27 @@ function CompetitionList({ onRetry, past }: { onRetry: () => void; past: boolean
           <span className="sr-only">Search competitions</span>
           <input type="search" placeholder="Name or venue" value={search} onChange={(event) => setSearch(event.target.value)} />
         </label>
+        {past && (
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Archive filters">
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-white">
+              <span>Year</span>
+              <select aria-label="Filter by year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="rounded bg-white/15 px-2 py-1 text-xs text-white">
+                <option value="all">All years</option>
+                {years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+              </select>
+            </label>
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-white">
+              <span>Region</span>
+              <select aria-label="Filter by region" value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} className="rounded bg-white/15 px-2 py-1 text-xs text-white">
+                <option value="all">All regions</option>
+                {regions.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            <button type="button" aria-pressed={mineOnly} onClick={() => setMineOnly((v) => !v)} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${mineOnly ? 'bg-white text-[rgb(var(--mg-heading))]' : 'bg-white/15 text-white'}`}>
+              My club / competitions I rode in
+            </button>
+          </div>
+        )}
         {past && <Link to="/events" className="inline-flex min-h-11 items-center gap-1 self-start text-[13px] font-semibold !text-white !no-underline"><ChevronLeft className="h-4 w-4" aria-hidden="true" />Back to upcoming competitions</Link>}
       </div>
       {current && (

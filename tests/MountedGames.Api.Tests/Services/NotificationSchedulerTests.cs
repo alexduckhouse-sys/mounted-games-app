@@ -78,6 +78,33 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Tick_PushesPerTeamHeatAndLane_WhenSessionHasHeatEntries()
+    {
+        using var s = await ArrangeAsync();
+        await _f.InDbAsync(async db =>
+        {
+            var session = new Session
+            {
+                CompetitionId = s.Section.CompetitionId,
+                CompetitionSectionId = s.Section.Id,
+                Name = "Session 1",
+                Kind = SessionKind.Race,
+                Status = SessionStatus.Upcoming,
+                ScheduledStart = DateTime.UtcNow.AddMinutes(58),
+            };
+            var heat = new Heat { Label = "Heat 2", OrderIndex = 2 };
+            heat.Entries.Add(new HeatEntry { TeamId = s.TeamId, LaneIndex = 3 });
+            session.Heats.Add(heat);
+            db.Sessions.Add(session);
+            await db.SaveChangesAsync();
+        });
+
+        await NewScheduler().TickAsync(CancellationToken.None);
+
+        Assert.Equal(1, s.Push.Received);
+    }
+
+    [Fact]
     public async Task Tick_SaysNothing_AboutARaceSessionThatOnlyHasAnEstimatedStart()
     {
         using var s = await ArrangeAsync();

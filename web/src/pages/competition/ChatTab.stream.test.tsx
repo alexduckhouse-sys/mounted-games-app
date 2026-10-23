@@ -69,6 +69,23 @@ it('shows a read-only latest-three feed, pinned banner and all-announcements she
   expect(fullMessage.closest('.live-announcement-list-full')).not.toBeNull();
 });
 
+it('shows Live heat scores by default below the stream and lets viewers switch to Timetable, Toplist and Announcements & chat', async () => {
+  context.roles = [];
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  const tablist = screen.getByRole('tablist', { name: 'Stream companion view' });
+  expect(screen.getByRole('tab', { name: 'Live heat scores' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tabpanel', { name: 'Live heat scores' })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('tab', { name: 'Timetable' }));
+  expect(screen.getByRole('tabpanel', { name: 'Timetable' })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('tab', { name: 'Toplist' }));
+  expect(screen.getByRole('tabpanel', { name: 'Toplist' })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('tab', { name: 'Announcements & chat' }));
+  expect(tablist).toBeInTheDocument();
+});
+
 it('keeps trainer posts private through the existing chat endpoint', async () => {
   context.roles = ['Trainer'];
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);

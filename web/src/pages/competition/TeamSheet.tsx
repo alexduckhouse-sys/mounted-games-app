@@ -4,11 +4,18 @@ import { X } from 'lucide-react';
 import { ordinal, type TeamBlock, type TeamDetail } from '../../lib/toplist';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { formatPoints } from '../../lib/formatPoints';
+import { statsProfileHref } from '../../lib/stats';
+import { StatsSubjectKind } from '../../types';
 
 const eyebrow = 'text-[10px] font-bold uppercase tracking-[0.08em]';
 
+export interface TeamSheetRider {
+  fullName: string;
+  horseName?: string | null;
+}
+
 /** A team's points by session and its final, as a bottom sheet. Esc or the backdrop closes it and focus goes back to the row. */
-export function TeamSheet({ detail, sectionName, onClose }: { detail: TeamDetail; sectionName: string | null; onClose: () => void }) {
+export function TeamSheet({ detail, sectionName, riders, onClose }: { detail: TeamDetail; sectionName: string | null; riders?: TeamSheetRider[]; onClose: () => void }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   useEffect(() => { closeRef.current = onClose; });
@@ -45,7 +52,9 @@ export function TeamSheet({ detail, sectionName, onClose }: { detail: TeamDetail
         <span aria-hidden="true" className="mx-auto h-1 w-9 shrink-0 rounded-sm bg-[rgb(var(--mg-control))]" />
         <div className="sticky -top-2 z-[1] -mx-4 -mt-1.5 flex items-start gap-2.5 border-b border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-4 pb-2.5 pt-1.5">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <h2 id="team-sheet-title" className="mg-display text-2xl font-bold leading-none text-[rgb(var(--mg-heading))]">{detail.teamName}</h2>
+            <h2 id="team-sheet-title" className="mg-display text-2xl font-bold leading-none text-[rgb(var(--mg-heading))]">
+              <a href={statsProfileHref(StatsSubjectKind.Team, detail.teamName.trim().toLowerCase())} className="!text-inherit !no-underline hover:!underline">{detail.teamName}</a>
+            </h2>
             {sub && <p className="text-[13px] font-medium leading-snug text-[rgb(var(--mg-muted))]">{sub}</p>}
           </div>
           <button type="button" onClick={onClose} aria-label="Close team breakdown" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[rgb(var(--mg-control))] text-[rgb(var(--mg-heading))]"><X aria-hidden="true" className="h-4 w-4" /></button>
@@ -67,6 +76,20 @@ export function TeamSheet({ detail, sectionName, onClose }: { detail: TeamDetail
             </div>
           )}
         </div>
+
+        {riders && riders.length > 0 && (
+          <section aria-label="Riders and ponies" className="flex flex-col gap-1">
+            <span className={`${eyebrow} text-[rgb(var(--mg-muted))]`}>Riders & ponies</span>
+            <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              {riders.map((r, i) => (
+                <li key={`${r.fullName}-${i}`}>
+                  <a href={statsProfileHref(StatsSubjectKind.Rider, r.fullName.trim().toLowerCase())} className="font-semibold text-[rgb(var(--mg-heading))]">{r.fullName}</a>
+                  {r.horseName && <> on <a href={statsProfileHref(StatsSubjectKind.Pony, r.horseName.trim().toLowerCase())} className="text-[rgb(var(--mg-body))]">{r.horseName}</a></>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {detail.blocks.map((block) => <Block key={block.key} block={block} />)}
       </div>

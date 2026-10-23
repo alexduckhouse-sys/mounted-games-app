@@ -86,7 +86,7 @@ export function isStatsBrowse(value: unknown): value is StatsBrowse {
 /** Guards a profile reply. Lists may be null (the summary-only view) but the summary must be there. */
 export function isStatsProfile(value: unknown): value is StatsProfile {
   if (!isRecord(value) || typeof value.name !== 'string' || typeof value.kind !== 'number' || !isRecord(value.summary)) return false;
-  const lists = ['games', 'bestGames', 'worstGames', 'entries', 'partnerships'];
+  const lists = ['games', 'bestGames', 'worstGames', 'entries', 'partnerships', 'clubs', 'seasons'];
   return typeof value.summary.entries === 'number' && lists.every((list) => value[list] == null || Array.isArray(value[list]));
 }
 
@@ -95,6 +95,13 @@ export interface StatsTile { label: string; value: string; detail: string }
 /** The headline tiles of a profile, in reading order. */
 export function summaryTiles(summary: StatsSummary): StatsTile[] {
   const podiums = summary.firsts + summary.seconds + summary.thirds;
+  const bFinals = summary.bFinals ?? 0;
+  const cFinals = summary.cFinals ?? 0;
+  const finalsDetail = summary.entriesWithFinals === 0
+    ? 'No finals run'
+    : bFinals > 0 || cFinals > 0
+      ? `A ${summary.aFinals} · B ${bFinals} · C ${cFinals} (of ${summary.entriesWithFinals})`
+      : `${summary.aFinals} of ${summary.entriesWithFinals} with finals`;
   return [
     {
       label: 'Competitions', value: String(summary.competitions),
@@ -107,7 +114,7 @@ export function summaryTiles(summary: StatsSummary): StatsTile[] {
     },
     {
       label: 'A Final', value: formatPercent(summary.aFinalPercent),
-      detail: summary.entriesWithFinals === 0 ? 'No finals run' : `${summary.aFinals} of ${summary.entriesWithFinals} with finals`,
+      detail: finalsDetail,
     },
     { label: 'Point quota', value: formatPercent(summary.pointQuotaPercent), detail: pointsOf(summary.points, summary.maxPoints) },
     { label: 'Races won', value: formatPercent(summary.winPercent), detail: `${summary.wins} of ${plural(summary.races, 'race')}` },

@@ -257,6 +257,11 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
 
         var partnership = Assert.Single(profile.Partnerships!);
         Assert.Equal((s.OllyShown, s.Pony, 2, 2), (partnership.RiderName, partnership.PonyName, partnership.Entries, partnership.Competitions));
+
+        var club = Assert.Single(profile.Clubs!);
+        Assert.Equal((s.Club, 2, 2), (club.ClubName, club.Entries, club.Competitions));
+        var season = Assert.Single(profile.Seasons!);
+        Assert.Equal((1, 2), (season.Rank, season.EventsEntered));
     }
 
     [Fact]

@@ -8,7 +8,7 @@ namespace MountedGames.Api.Services;
 /// Heat-heat-final: two qualifier heats feed a final. The top finishers of each qualifier are
 /// interleaved (Q1 first, Q2 first, Q1 second, ...) into the final's lanes.
 /// </summary>
-public sealed class RaceFinalService(AppDbContext db)
+public sealed class RaceFinalService(AppDbContext db, PushNotifier? push = null)
 {
     /// <summary>How many teams go through from each qualifier when the session doesn't say.</summary>
     public const int DefaultQualifiers = 3;
@@ -67,6 +67,33 @@ public sealed class RaceFinalService(AppDbContext db)
         foreach (var teamId in interleaved)
             db.HeatEntries.Add(new HeatEntry { HeatId = finalHeat.Id, TeamId = teamId, LaneIndex = lane++ });
         await db.SaveChangesAsync(ct);
+
+        if (push is not null && interleaved.Count > 0)
+        {
+            try
+            {
+                var teamNames = await db.Teams.AsNoTracking()
+                    .Where(t => interleaved.Contains(t.Id))
+                    .ToDictionaryAsync(t => t.Id, t => t.DisplayName, ct);
+                var heatLabel = !string.IsNullOrWhiteSpace(finalHeat.Label) ? finalHeat.Label! : $"Heat {finalHeat.OrderIndex}";
+                var compId = finalHeat.Session?.CompetitionId ?? 0;
+                var url = compId > 0 ? $"/competitions/{compId}" : null;
+                var messages = interleaved.Select((teamId, idx) =>
+                {
+                    var name = teamNames.GetValueOrDefault(teamId, $"Team {teamId}");
+                    return (teamId, new PushPayload(
+                        Title: "Finals draw published",
+                        Body: $"You are in the {heatLabel}, Lane {idx + 1} ({name})",
+                        Tag: $"finals-draw:{finalHeat.Id}:{teamId}",
+                        Url: url));
+                });
+                await push.NotifyPerTeamAsync(messages, ct);
+            }
+            catch
+            {
+                // Never fail final population if push notification delivery fails.
+            }
+        }
         return null;
     }
 

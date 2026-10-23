@@ -10,7 +10,7 @@ import { useDialogFocus } from '../../components/useDialogFocus';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { LiveVideo } from '../../components/stream/LiveVideo';
-import type { ChatMessage, LiveStream } from '../../types';
+import type { ChatMessage, CompetitionDetail, LiveStream } from '../../types';
 import './chat.css';
 import { confirmDialog } from '../../components/ConfirmDialog';
 
@@ -234,6 +234,7 @@ function ChatTabSession() {
         <>
           <div className="live-col live-col-rail">
         <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
+        <StreamCompanionPanel competition={competition} />
       {banner && (
         <div className="live-banner" role="status">
           <Megaphone aria-hidden="true" />
@@ -297,6 +298,7 @@ function ChatTabSession() {
         <>
           <div className="live-col live-col-main">
       <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
+      <StreamCompanionPanel competition={competition} />
           </div>
           <div className="live-col live-col-rail">
       {banner && (
@@ -379,6 +381,104 @@ function AnnouncementList({ messages, staff, canModerate, onDelete, onBlock, onR
     </AnimatePresence>
     {messages.length === 0 && <p className="live-empty">Nothing posted yet.</p>}
   </div>;
+}
+
+type CompanionView = 'scores' | 'timetable' | 'toplist' | 'announcements';
+
+function StreamCompanionPanel({ competition }: { competition: CompetitionDetail }) {
+  const [view, setView] = useState<CompanionView>('scores');
+  const raceSessions = competition.sessions.filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0);
+  const liveSession = raceSessions.find((s) => s.status === 1) ?? raceSessions[0];
+  const orderedHeats = liveSession ? [...liveSession.heats].sort((a, b) => a.orderIndex - b.orderIndex) : [];
+  const activeHeat = orderedHeats.find((h) => !(h.races.length > 0 && h.races.every((r) => r.isComplete))) ?? orderedHeats[0];
+
+  const standings = competition.teams
+    .filter((t) => !t.isHorsConcours && !t.isWithdrawn)
+    .map((t) => {
+      const points = raceSessions
+        .flatMap((s) => s.heats)
+        .flatMap((h) => h.races)
+        .filter((r) => r.isComplete)
+        .flatMap((r) => r.results)
+        .filter((res) => res.teamId === t.id)
+        .reduce((sum, res) => sum + res.points, 0);
+      return { id: t.id, name: t.displayName, section: t.sectionName, points };
+    })
+    .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+
+  return (
+    <section aria-label="Stream companion" className="flex flex-col gap-2">
+      <div role="tablist" aria-label="Stream companion view" className="mg-seg flex flex-wrap gap-1">
+        {([
+          ['scores', 'Live heat scores'],
+          ['timetable', 'Timetable'],
+          ['toplist', 'Toplist'],
+          ['announcements', 'Announcements & chat'],
+        ] as const).map(([key, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {view === 'scores' && (
+        <div role="tabpanel" aria-label="Live heat scores" className="mg-card p-3 text-sm">
+          {activeHeat && liveSession ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <strong>{liveSession.name} · {activeHeat.label || `Heat ${activeHeat.orderIndex}`}</strong>
+                <Link to={`/competitions/${competition.id}/session/${liveSession.id}`} className="mg-text-link text-xs">Full heat scores</Link>
+              </div>
+              <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+                {[...activeHeat.entries].sort((a, b) => a.laneIndex - b.laneIndex).map((entry) => {
+                  const pts = activeHeat.races.filter((r) => r.isComplete).flatMap((r) => r.results).filter((res) => res.teamId === entry.teamId).reduce((sum, res) => sum + res.points, 0);
+                  return (
+                    <li key={entry.id} className="flex items-center justify-between py-1.5">
+                      <span>Lane {entry.laneIndex} · <strong>{entry.teamName}</strong></span>
+                      <span className="font-bold tabular-nums">{pts} pts</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : (
+            <p className="m-0 text-[rgb(var(--mg-muted))]">No heat is running right now.</p>
+          )}
+        </div>
+      )}
+      {view === 'timetable' && (
+        <div role="tabpanel" aria-label="Timetable" className="mg-card p-3 text-sm">
+          {competition.sessions.length > 0 ? (
+            <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+              {competition.sessions.map((s) => (
+                <li key={s.id} className="flex items-center justify-between py-1.5">
+                  <Link to={`/competitions/${competition.id}/session/${s.id}`} className="font-semibold">{s.name}</Link>
+                  <span className="text-xs text-[rgb(var(--mg-muted))]">{s.heats.length} {s.heats.length === 1 ? 'heat' : 'heats'}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="m-0 text-[rgb(var(--mg-muted))]">No sessions scheduled yet.</p>
+          )}
+        </div>
+      )}
+      {view === 'toplist' && (
+        <div role="tabpanel" aria-label="Toplist" className="mg-card p-3 text-sm">
+          {standings.length > 0 ? (
+            <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+              {standings.slice(0, 10).map((row, idx) => (
+                <li key={row.id} className="flex items-center justify-between py-1.5">
+                  <span>{idx + 1}. <strong>{row.name}</strong></span>
+                  <span className="font-bold tabular-nums">{row.points} pts</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="m-0 text-[rgb(var(--mg-muted))]">No standings yet.</p>
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function AnnouncementRow({ message, staff, canModerate, onDelete, onBlock, onReply, reduceMotion }: {

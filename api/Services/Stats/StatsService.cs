@@ -237,6 +237,8 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         var placed = entryTeams.Where(t => places.ContainsKey(t.TeamId)).Select(t => places[t.TeamId]).ToList();
         var finalsEntries = placed.Count(p => p.SectionHasFinals);
         var aFinals = placed.Count(p => p.FinalTier == 0);
+        var bFinals = placed.Count(p => p.FinalTier == 1);
+        var cFinals = placed.Count(p => p.FinalTier == 2);
         var wins = raceScope.Count(IsWin);
         var points = raceScope.Sum(r => r.Points);
         var maxPoints = raceScope.Sum(MaxFor);
@@ -246,7 +248,8 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             placed.Count == 0 ? null : Math.Round(placed.Average(p => p.Place), 1, MidpointRounding.AwayFromZero),
             finalsEntries, placed.Count(p => p.FinalTier is not null), aFinals, StatsNames.Percent(aFinals, finalsEntries),
             raceScope.Count, wins, StatsNames.Percent(wins, raceScope.Count),
-            points, maxPoints, StatsNames.Percent(points, maxPoints));
+            points, maxPoints, StatsNames.Percent(points, maxPoints),
+            bFinals, cFinals);
 
         if (!viewer.SignedIn)
             return new StatsProfileDto(kind, name, key, false, allFormats, summary, null, null, null, null, null);
@@ -304,7 +307,32 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             : Partnerships(kept.Where(m => m.RiderName is not null && m.PonyName is not null)
                 .Select(m => (m.RiderName!, m.PonyName!, teamById[m.TeamId].CompetitionId, m.TeamId)));
 
-        return new StatsProfileDto(kind, name, key, true, allFormats, summary, games, best, worst, entries, partnerships);
+        var clubs = kind == StatsSubjectKind.Club ? [] : entries
+            .Where(e => !string.IsNullOrWhiteSpace(e.ClubName))
+            .GroupBy(e => StatsNames.Normalise(e.ClubName))
+            .Select(g => new StatsClubDto(
+                StatsNames.Tidy(g.First().ClubName),
+                g.Count(),
+                g.Select(e => e.CompetitionId).Distinct().Count(),
+                g.Min(e => e.StartDate).ToString("yyyy-MM-dd"),
+                g.Max(e => e.StartDate).ToString("yyyy-MM-dd")))
+            .OrderByDescending(c => c.Competitions).ThenByDescending(c => c.Entries)
+            .ThenBy(c => c.ClubName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var seasons = entries
+            .GroupBy(e => e.StartDate.Year)
+            .OrderByDescending(g => g.Key)
+            .Select(g => new StatsSeasonStandingDto(
+                g.Key,
+                $"{g.Key} Season",
+                g.Key,
+                g.Where(e => e.Place.HasValue).Select(e => e.Place).Min(),
+                g.Sum(e => e.Points),
+                g.Select(e => e.CompetitionId).Distinct().Count()))
+            .ToList();
+
+        return new StatsProfileDto(kind, name, key, true, allFormats, summary, games, best, worst, entries, partnerships, clubs, seasons);
     }
 
     private static bool IsWin(ResultRow r) => r.Placing == 1 && !r.Eliminated;

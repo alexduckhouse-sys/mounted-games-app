@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Info, X } from 'lucide-react';
 import { equipmentFromDiagram } from '../lib/raceEquipment';
@@ -10,7 +10,7 @@ import './race-rules.css';
 type Result = { key: string; template: RaceTemplate | null } | { key: string; failed: true };
 
 /** An info button that opens a sheet with a race's rules and equipment. */
-export function RaceRulesButton({ raceName, className = '' }: { raceName: string; className?: string }) {
+export function RaceRulesButton({ raceName, className = '', label }: { raceName: string; className?: string; label?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -61,7 +61,7 @@ export function RaceRulesButton({ raceName, className = '' }: { raceName: string
 
   return <>
     <button ref={buttonRef} type="button" className={`race-rules-btn ${className}`} aria-label={`Rules for ${raceName}`} aria-haspopup="dialog" aria-expanded={open} onClick={(event) => { event.stopPropagation(); setOpen(true); }}>
-      <Info aria-hidden="true" className="h-4 w-4" />
+      {label ?? <Info aria-hidden="true" className="h-4 w-4" />}
     </button>
     {open && createPortal(
       <div className="race-rules-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}>
@@ -81,6 +81,16 @@ export function RaceRulesButton({ raceName, className = '' }: { raceName: string
             {equipment.length > 0 && <section aria-label="Equipment"><h3>Equipment</h3>
               <ul>{equipment.map((item) => <li key={item.label}>{item.count > 1 ? `${item.count} × ` : ''}{item.label}</li>)}</ul>
             </section>}
+            {(template.summary || template.rules || equipment.length > 0) && (
+              <section aria-label="How to win & common eliminations">
+                <h3>How to win &amp; common eliminations</h3>
+                <ul>
+                  <li>First rider/team across the finish line with all lane equipment upright wins.</li>
+                  <li>Handovers and dismounts must happen behind the start/finish or changeover line.</li>
+                  <li>Common eliminations: knocked pole or equipment left down, missed changeover, or crossing outside the lane markers.</li>
+                </ul>
+              </section>
+            )}
             {!template.summary && !template.rules && equipment.length === 0 && <p>No rules have been added for this race yet.</p>}
           </div>}
         </div>

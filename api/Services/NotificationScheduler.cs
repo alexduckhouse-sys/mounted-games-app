@@ -80,7 +80,7 @@ public class NotificationScheduler : BackgroundService
         var horizonEnd = now.AddMinutes(90);
         var sessions = await db.Sessions
             .Include(s => s.Section)
-            .Include(s => s.Heats)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
             .Where(s => s.ScheduledStart != null
                 && s.ScheduledStart >= horizonStart
                 && s.ScheduledStart <= horizonEnd
@@ -97,8 +97,15 @@ public class NotificationScheduler : BackgroundService
             // estimate (made in the competition creator), so it says nothing to anyone until heats exist.
             if (kind == SessionKind.Race && s.Heats.Count > 0 && minsAhead is <= 60 and > 55)
             {
-                await FireForSession(db, push, s, "1h", $"1 hour to {s.Name}",
-                    $"Starts at {UkTime(s.ScheduledStart.Value):HH:mm} — {s.Section?.DisplayName ?? "—"}.", ct);
+                if (s.Heats.Any(h => h.Entries.Count > 0))
+                {
+                    await FireForSessionHeats(db, push, s, ct);
+                }
+                else
+                {
+                    await FireForSession(db, push, s, "1h", $"1 hour to {s.Name}",
+                        $"Starts at {UkTime(s.ScheduledStart.Value):HH:mm} — {s.Section?.DisplayName ?? "—"}.", ct);
+                }
             }
             // 30 minutes before a briefing.
             if (kind == SessionKind.Briefing && minsAhead is <= 30 and > 25)
@@ -107,6 +114,30 @@ public class NotificationScheduler : BackgroundService
                     s.Name, ct);
             }
         }
+    }
+
+    private async Task FireForSessionHeats(
+        AppDbContext db, PushNotifier push, Session s, CancellationToken ct)
+    {
+        var messages = new List<(int TeamId, PushPayload Payload)>();
+        var timeText = $"{UkTime(s.ScheduledStart!.Value):HH:mm}";
+        foreach (var h in s.Heats.OrderBy(h => h.OrderIndex))
+        {
+            var heatLabel = !string.IsNullOrWhiteSpace(h.Label) ? h.Label! : $"Heat {h.OrderIndex}";
+            foreach (var entry in h.Entries.OrderBy(e => e.LaneIndex))
+            {
+                var dedupeKey = $"1h:{s.Id}:h{h.Id}:t{entry.TeamId}";
+                if (!_fired.Add(dedupeKey)) continue;
+                var teamName = entry.Team?.DisplayName ?? $"Team {entry.TeamId}";
+                messages.Add((entry.TeamId, new PushPayload(
+                    Title: "60 minutes until your heat",
+                    Body: $"{teamName} — {s.Name} ({heatLabel}, Lane {entry.LaneIndex}) starts around {timeText}.",
+                    Tag: dedupeKey,
+                    Url: $"/competitions/{s.CompetitionId}")));
+            }
+        }
+        if (messages.Count > 0)
+            await push.NotifyPerTeamAsync(messages, ct);
     }
 
     private async Task FireForSession(

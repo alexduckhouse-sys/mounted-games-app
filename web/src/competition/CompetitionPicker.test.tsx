@@ -7,6 +7,7 @@ import { readSavedCopy, savedCopyKeys, writeSavedCopy } from '../offline/savedCo
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { CompetitionPicker } from './CompetitionPicker';
 import { CurrentCompetitionProvider, useCurrentCompetition } from './CurrentCompetitionContext';
+import { NeedsYouContext } from '../pages/profile/needsYou';
 
 vi.mock('../api', () => ({ api: { get: vi.fn() } }));
 const get = vi.mocked(api.get);
@@ -233,6 +234,32 @@ describe('CompetitionPicker: search and tags', () => {
     const onToday = screen.getByRole('region', { name: 'On today' });
     expect(onToday).toHaveTextContent('Entries open');
     expect(onToday).not.toHaveTextContent('Demo event');
+  });
+
+  it('filters past competitions by year, region and my club / competitions I rode in', async () => {
+    const older: CompetitionPickerItem = { id: 9, name: 'Summer Classic', startDate: '2025-07-10T09:00:00', endDate: null, icon: 'gb', location: 'York' };
+    reply(page([today, autumn, older]));
+    render(
+      <MemoryRouter initialEntries={['/competitions/past']}>
+        <NeedsYouContext.Provider value={{ requests: [], teams: [{ id: 10, competitionId: 9 }] as never, decForms: [], count: 0, review: async () => false }}>
+          <CurrentCompetitionProvider><CompetitionPicker past /></CurrentCompetitionProvider>
+        </NeedsYouContext.Provider>
+      </MemoryRouter>,
+    );
+    await loaded('Autumn Open');
+    await userEvent.selectOptions(screen.getByLabelText('Filter by year'), '2025');
+    expect(screen.getByText('Summer Classic')).toBeInTheDocument();
+    expect(screen.queryByText('Autumn Open')).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText('Filter by year'), 'all');
+    await userEvent.selectOptions(screen.getByLabelText('Filter by region'), 'Hillside');
+    expect(screen.getByText('Autumn Open')).toBeInTheDocument();
+    expect(screen.queryByText('Summer Classic')).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText('Filter by region'), 'all');
+    await userEvent.click(screen.getByRole('button', { name: 'My club / competitions I rode in' }));
+    expect(screen.getByText('Summer Classic')).toBeInTheDocument();
+    expect(screen.queryByText('Autumn Open')).not.toBeInTheDocument();
   });
 });
 

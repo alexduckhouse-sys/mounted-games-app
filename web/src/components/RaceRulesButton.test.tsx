@@ -35,7 +35,13 @@ describe('RaceRulesButton', () => {
     expect(screen.getByRole('region', { name: 'Rules' })).toHaveTextContent('Go up the lane.');
     expect(screen.getByRole('region', { name: 'Equipment' })).toHaveTextContent('2 × Pole');
     expect(screen.getByRole('region', { name: 'Equipment' })).toHaveTextContent('Mug');
+    expect(screen.getByRole('region', { name: 'How to win & common eliminations' })).toHaveTextContent('Common eliminations');
     expect(button).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('supports a custom label for race header triggers', () => {
+    render(<RaceRulesButton raceName="Bending" label="Bending" />);
+    expect(screen.getByRole('button', { name: 'Rules for Bending' })).toHaveTextContent('Bending');
   });
 
   it('closes on Escape and returns focus to the button', async () => {
