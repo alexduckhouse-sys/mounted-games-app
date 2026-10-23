@@ -18,9 +18,3 @@ export function hasGlobalTabs(pathname: string): boolean {
   const path = globalTabsPath(pathname);
   return GLOBAL_EVENTS.includes(path) || GLOBAL_ME.includes(path) || path === '/following' || path === '/chat';
 }
-
-/** The statistics hub (`/stats` and `/stats/:kind`): a public page in the EGUK look, without the global tab bar. */
-export function isStatsPath(pathname: string): boolean {
-  const path = globalTabsPath(pathname);
-  return path === '/stats' || path.startsWith('/stats/');
-}

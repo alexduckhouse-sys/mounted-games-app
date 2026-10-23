@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { competitionIdFromPath, hasGlobalTabs, isStatsPath } from './routes';
+import { competitionIdFromPath, hasGlobalTabs } from './routes';
 
 describe('competitionIdFromPath', () => {
   it.each([
@@ -26,15 +26,5 @@ describe('hasGlobalTabs', () => {
 
   it.each(['/competitions/4', '/me', '/admin', '/login', '/declarations', '/me/account'])('is false for %s', (path) => {
     expect(hasGlobalTabs(path)).toBe(false);
-  });
-});
-
-describe('isStatsPath', () => {
-  it.each(['/stats', '/stats/', '/stats/riders', '/stats/clubs/'])('is true for %s', (path) => {
-    expect(isStatsPath(path)).toBe(true);
-  });
-
-  it.each(['/', '/statsx', '/me/stats', '/competitions/4'])('is false for %s', (path) => {
-    expect(isStatsPath(path)).toBe(false);
   });
 });

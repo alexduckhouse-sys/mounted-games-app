@@ -22,10 +22,10 @@ public class StatsBrowseTests : IClassFixture<ApiFactory>
 
     /// <summary>One team with one form in an event, scored once unless <paramref name="scored"/> is false.</summary>
     private Task<int> SeedAsync(string competition, DateTime start, SectionFormat format, string club, string team, Rider[] riders,
-        bool locked = true, bool scored = true, bool demo = false)
+        bool locked = true, bool scored = true, bool demo = false, bool archived = false)
         => _f.WithDbAsync(async db =>
         {
-            var comp = new Competition { Name = competition, StartDate = start };
+            var comp = new Competition { Name = competition, StartDate = start, IsArchived = archived };
             db.Competitions.Add(comp);
             await db.SaveChangesAsync();
             if (demo) db.Set<EventCommerceSettings>().Add(new EventCommerceSettings { CompetitionId = comp.Id, IsDemo = true });
@@ -189,7 +189,11 @@ public class StatsBrowseTests : IClassFixture<ApiFactory>
         await SeedAsync($"Demo{u}", DateTime.UtcNow.Date.AddDays(-4), SectionFormat.Individual, $"Club{u}", $"Demo{u} Team", [new Rider($"Demo{u} Rider", $"DemoPony{u}")], demo: true);
         // A demo event that hasn't been scored still doesn't count, like any other.
         await SeedAsync($"DemoLater{u}", DateTime.UtcNow.Date.AddDays(14), SectionFormat.Individual, $"Club{u}", $"Later{u} Team", [new Rider($"Later{u} Rider")], demo: true, scored: false);
+        var h = Id();
+        // An archived demo event (how the history seed is marked) counts even when its dates are ahead.
+        await SeedAsync($"Hist{h}", DateTime.UtcNow.Date.AddDays(400), SectionFormat.Individual, $"Club{h}", $"Hist{h} Team", [new Rider($"Hist{h} Rider")], demo: true, archived: true);
         var anon = _f.CreateClient();
+        Assert.Equal([$"Hist{h} Rider"], (await GetAsync(anon, Browse(0, $"hist{h}"))).Items.Select(i => i.Name));
 
         Assert.Equal([$"Demo{u} Rider"], (await GetAsync(anon, Browse(0, u))).Items.Select(i => i.Name));
         Assert.Equal([$"DemoPony{u}"], (await GetAsync(anon, Browse(1, u))).Items.Select(i => i.Name));
