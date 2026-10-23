@@ -16,9 +16,11 @@ export interface PageHeaderConfig {
   subtitle?: string;
   onRefresh?: () => void;
   refreshLabel?: string;
+  /** For pages that belong to no competition: plain text in the header, not a button that changes competition. */
+  plain?: boolean;
 }
 
-type PageHeaderEntry = { title: string; subtitle?: string; refreshLabel?: string; refresh?: () => void };
+type PageHeaderEntry = { title: string; subtitle?: string; refreshLabel?: string; refresh?: () => void; plain?: boolean };
 
 interface CompactPageBarState {
   config: CompactPageBarConfig | null;
@@ -80,14 +82,14 @@ export function usePageHeader(config: PageHeaderConfig) {
   const owner = useRef(Symbol('page-header'));
   const refresh = useRef(config.onRefresh);
   useLayoutEffect(() => { refresh.current = config.onRefresh; });
-  const { title, subtitle, refreshLabel } = config;
+  const { title, subtitle, refreshLabel, plain } = config;
   const hasRefresh = !!config.onRefresh;
   const publishHeader = context?.publishHeader;
   const clearHeader = context?.clearHeader;
   useLayoutEffect(() => {
     if (!publishHeader || !clearHeader) return;
     const ownerKey = owner.current;
-    publishHeader(ownerKey, { title, subtitle, refreshLabel, refresh: hasRefresh ? () => refresh.current?.() : undefined });
+    publishHeader(ownerKey, { title, subtitle, refreshLabel, plain, refresh: hasRefresh ? () => refresh.current?.() : undefined });
     return () => clearHeader(ownerKey);
-  }, [title, subtitle, refreshLabel, hasRefresh, publishHeader, clearHeader]);
+  }, [title, subtitle, refreshLabel, plain, hasRefresh, publishHeader, clearHeader]);
 }

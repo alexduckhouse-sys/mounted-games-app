@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { ChevronRight, Search, X } from 'lucide-react';
 import { api } from '../api';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
@@ -10,7 +10,7 @@ import { competitionDateText, isOnToday } from '../lib/competitionDates';
 import { displaySectionName } from '../lib/section';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
 import { CompetitionListSkeleton } from '../components/Skeletons';
-import { DemoEventBadge } from '../components/DemoEventNotice';
+import { usePageHeader } from '../components/CompactPageBarContext';
 
 export function CompetitionPicker({ onClose, past = false }: { onClose?: () => void; past?: boolean }) {
   const [attempt, setAttempt] = useState(0);
@@ -24,11 +24,18 @@ export function CompetitionPicker({ onClose, past = false }: { onClose?: () => v
   return <CompetitionList key={`${past}-${attempt}`} past={past} onClose={onClose} onRetry={() => setAttempt((n) => n + 1)} />;
 }
 
+/** The app header says "Competitions" while the picker is a page (not while it is the change-competition dialog). */
+function PlainHeader() {
+  usePageHeader({ title: 'Competitions', plain: true });
+  return null;
+}
+
 function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onRetry: () => void; past: boolean }) {
   const headingId = useId();
   const { current, setCurrent } = useCurrentCompetition();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
   // The first page this phone saw last time shows while the list refreshes.
   const [saved] = useState(() => readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(past)));
   const [state, setState] = useState({ items: saved?.data.items ?? [] as CompetitionPickerItem[], page: 0, hasMore: false, error: false, savedCopy: !!saved });
@@ -58,7 +65,8 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
     return () => controller.abort();
   }, [past, page, saved]);
 
-  const matches = state.items;
+  const query = search.trim().toLowerCase();
+  const matches = query ? state.items.filter((item) => `${item.name} ${item.location ?? ''}`.toLowerCase().includes(query)) : state.items;
   const now = new Date();
   const onToday = past ? [] : matches.filter((item) => isOnToday(item.startDate, item.endDate, now));
   const later = matches.filter((item) => !onToday.includes(item));
@@ -68,26 +76,39 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
     onClose?.();
   };
   return (
-    <section className="mg-font mx-auto flex w-full max-w-xl flex-col gap-[22px] py-6" aria-labelledby={headingId}>
-      <div className="flex items-start gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <h1 id={headingId} className="mg-h1">{past ? 'Past competitions' : 'Pick a competition'}</h1>
-          {past && <p className="mg-lede">Results and toplists from earlier events.</p>}
+    <section className={`mg-font mx-auto flex w-full max-w-xl flex-col ${onClose ? 'gap-3.5 py-4' : 'gap-3.5 pb-5'}`} aria-labelledby={headingId}>
+      {!onClose && <PlainHeader />}
+      {onClose ? (
+        <div className="flex items-center gap-3">
+          <h1 id={headingId} className="mg-h2 min-w-0 flex-1">{past ? 'Past competitions' : 'Pick a competition'}</h1>
+          <button autoFocus onClick={onClose} className="mg-icon-btn" aria-label="Close competition picker"><X className="h-5 w-5" /></button>
         </div>
-        {onClose && <button autoFocus onClick={onClose} className="mg-icon-btn" aria-label="Close competition picker"><X className="h-5 w-5" /></button>}
+      ) : (
+        <h1 id={headingId} className="sr-only">{past ? 'Past competitions' : 'Competitions'}</h1>
+      )}
+      <div className={`${onClose ? 'rounded-xl bg-[rgb(var(--mg-header))] p-3' : 'mg-band mg-band-header pb-3 pt-0'} flex flex-col gap-2`}>
+        <label className="mg-navy-field">
+          <Search className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+          <span className="sr-only">Search competitions</span>
+          <input type="search" placeholder="Name or venue" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </label>
+        <div className="mg-navy-switch self-start">
+          <Link to="/competitions" onClick={onClose} aria-current={past ? undefined : 'page'}>Upcoming</Link>
+          <Link to="/competitions/past" onClick={onClose} aria-current={past ? 'page' : undefined}>Past</Link>
+        </div>
       </div>
       {state.savedCopy && !loading && <p role="status" className="mg-notice">Showing a saved list. It will refresh when your connection returns.</p>}
-      <div className="flex flex-col gap-[22px]" aria-busy={loading}>
+      <div className="flex flex-col gap-3.5" aria-busy={loading}>
         {onToday.length > 0 && (
-          <section className="flex flex-col gap-2.5" aria-label="On today">
-            <h2 className="mg-eyebrow">On today</h2>
+          <section className="mg-sec" aria-label="On today">
+            <div className="mg-sec-head"><h2>On today</h2></div>
             {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} />)}
           </section>
         )}
         {later.length > 0 && (
-          <section className="flex flex-col gap-2.5" aria-label={past ? 'Finished' : 'Coming up'}>
-            <h2 className="mg-eyebrow">{past ? 'Finished' : 'Coming up'}</h2>
-            <div className="mg-card mg-list">
+          <section className="mg-sec" aria-label={past ? 'Finished' : 'Coming up'}>
+            <div className="mg-sec-head"><h2>{past ? 'Finished' : 'Coming up'}</h2></div>
+            <div className="mg-lines">
               {later.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} />)}
             </div>
           </section>
@@ -95,61 +116,70 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
         {loading && (state.items.length === 0 ? <CompetitionListSkeleton /> : <p role="status" className="mg-meta py-3 text-center">Checking for changes…</p>)}
         {!loading && state.error && <div className="mg-card flex flex-col items-start gap-3 p-4" role="alert"><p>Couldn’t load competitions. Check your connection and try again.</p><button className="mg-btn mg-btn-primary" onClick={onRetry}>Try again</button></div>}
         {!loading && !state.error && state.items.length === 0 && <p className="mg-card p-4">{past ? 'No past competitions yet.' : 'No competitions available yet.'}</p>}
+        {!loading && !state.error && state.items.length > 0 && matches.length === 0 && <p className="mg-card p-4">No competitions match that search.{state.hasMore ? ' Load more to search further back.' : ''}</p>}
         {!loading && !state.error && state.hasMore && <button className="mg-btn mg-btn-secondary w-full" onClick={() => setPage((value) => value + 1)}>Load more competitions</button>}
       </div>
-      <Link to={past ? '/competitions' : '/competitions/past'} onClick={onClose} className="mg-text-link">{past ? 'Upcoming competitions' : 'Past competitions'}</Link>
     </section>
   );
 }
 
-/** "Seniors Heat 2 in the arena", or "… in Main arena" when the arena has a name. */
+/** "Open · Heat 2 on now in Arena 2", or "Heat 1 on now in the arena" when nothing more is known. */
 function liveLine(live: NonNullable<CompetitionPickerItem['live']>) {
-  const what = [displaySectionName(live.sectionName), live.heatLabel].filter(Boolean).join(' ');
-  return `${what} in ${live.arenaName ? live.arenaName : 'the arena'}`;
+  const section = displaySectionName(live.sectionName);
+  return `${section ? `${section} · ` : ''}${live.heatLabel} on now in ${live.arenaName ? live.arenaName : 'the arena'}`;
+}
+
+/** The small tags on a list row: entries open, or a demo event. */
+function Tags({ competition }: { competition: CompetitionPickerItem }) {
+  return (
+    <>
+      {competition.entriesOpen && <span className="mg-tag mg-tag-ok">Entries open</span>}
+      {competition.isDemo && <span className="mg-tag">Demo event</span>}
+    </>
+  );
 }
 
 function TodayCard({ competition, selected, onChoose }: { competition: CompetitionPickerItem; selected: boolean; onChoose: () => void }) {
-  const groups = competition.ageGroupCount ?? 0;
-  const details = [
-    competitionDateText(competition.startDate, competition.endDate),
-    competition.location?.trim(),
-    groups > 0 ? `${groups} age ${groups === 1 ? 'group' : 'groups'}` : null,
-  ].filter(Boolean).join(' · ');
+  const details = [competition.location?.trim(), competitionDateText(competition.startDate, competition.endDate)].filter(Boolean).join(' · ');
   return (
-    <button aria-pressed={selected} onClick={onChoose} className={`mg-card flex w-full flex-col gap-3 !border-[1.5px] p-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgb(var(--mg-heading))] ${competition.live ? '!border-[rgb(var(--mg-red))]' : '!border-[rgb(var(--mg-control))]'}`}>
-      {competition.live && (
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="mg-badge mg-badge-live">Live</span>
-          <span className="min-w-0 truncate text-[13px] font-medium text-[rgb(var(--mg-muted))]">{liveLine(competition.live)}</span>
-        </span>
-      )}
-      <span className="flex flex-col gap-1">
-        {competition.isDemo && <DemoEventBadge className="self-start" />}
-        <span className="mg-display break-words text-2xl font-bold leading-tight text-[rgb(var(--mg-heading))]">{competition.name}</span>
-        {details && <span className="text-sm leading-snug text-[rgb(var(--mg-body))]">{details}</span>}
+    <div className={`mg-card flex flex-col gap-1.5 !rounded-[10px] py-3 pl-3.5 pr-3 ${competition.live ? 'shadow-[inset_3px_0_0_rgb(var(--mg-red))]' : ''}`}>
+      <span className="flex min-w-0 items-center gap-2">
+        {competition.live && <span className="mg-badge mg-badge-live !h-5 !rounded-[4px] !px-[7px] text-[11px] font-bold tracking-[0.06em]">LIVE</span>}
+        <strong className="min-w-0 flex-1 break-words text-base font-bold leading-tight">{competition.name}</strong>
       </span>
-      <span className="mg-btn mg-btn-primary self-start">{selected ? 'Back to timetable' : 'Open timetable'}</span>
-    </button>
+      {details && <span className="mg-meta">{details}</span>}
+      {competition.live && <span className="text-[13px]">{liveLine(competition.live)}</span>}
+      {(competition.entriesOpen || competition.isDemo) && <span className="flex flex-wrap gap-1.5"><Tags competition={competition} /></span>}
+      <button aria-pressed={selected} onClick={onChoose} className="mg-btn mg-btn-primary mt-1 !min-h-11 w-full !rounded-lg !text-[15px]">
+        Open competition<span className="sr-only">: {competition.name}</span>
+        <ChevronRight className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
 function CompetitionRow({ competition, past, selected, onChoose }: { competition: CompetitionPickerItem; past: boolean; selected: boolean; onChoose: () => void }) {
   const start = new Date(competition.startDate);
-  const multiDay = !!competition.endDate && competitionDateText(competition.startDate, competition.endDate) !== competitionDateText(competition.startDate, null);
   const venue = competition.location?.trim();
+  const multiDay = !!competition.endDate && competitionDateText(competition.startDate, competition.endDate) !== competitionDateText(competition.startDate, null);
   const when = past || multiDay || !venue ? competitionDateText(competition.startDate, competition.endDate, past) : null;
   return (
-    <button aria-pressed={selected} onClick={onChoose} className={`mg-row ${selected ? 'shadow-[inset_4px_0_0_rgb(var(--mg-heading))]' : ''}`}>
-      <span aria-hidden="true" className="flex w-11 shrink-0 flex-col items-center gap-0.5 text-[rgb(var(--mg-heading))]">
+    <button aria-pressed={selected} onClick={onChoose} className={`mg-line grid-cols-[44px_minmax(0,1fr)_14px] !min-h-[60px] !gap-x-3 !py-2 ${selected ? 'shadow-[inset_4px_0_0_rgb(var(--mg-heading))]' : ''}`}>
+      <span aria-hidden="true" className="flex flex-col items-center gap-0.5 text-[rgb(var(--mg-heading))]">
         <span className="mg-display text-[22px] font-bold leading-none">{Number.isNaN(start.getTime()) ? '–' : start.getDate()}</span>
-        <span className="text-[11px] font-bold uppercase leading-none tracking-[0.06em]">{Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString('en-GB', { month: 'short' })}</span>
+        <span className="text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-[rgb(var(--mg-muted))]">{Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString('en-GB', { month: 'short' })}</span>
       </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <span className="break-words text-base font-semibold leading-tight">{competition.name}</span>
-        {competition.isDemo && <DemoEventBadge className="self-start" />}
-        <span className="mg-meta">{[when, venue].filter(Boolean).join(' · ')}</span>
+      <span className="flex min-w-0 flex-col gap-[3px]">
+        <span className="flex min-w-0 items-center gap-2">
+          <strong className="mg-line-title min-w-0 !font-semibold">{competition.name}</strong>
+          {competitionIcon(competition.icon).id !== 'flag' && <CompetitionIcon id={competition.icon} labelled className="shrink-0 text-base" />}
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-[rgb(var(--mg-muted))]">
+          <span className="min-w-0 truncate">{[when, venue].filter(Boolean).join(' · ')}</span>
+          <Tags competition={competition} />
+        </span>
       </span>
-      {competitionIcon(competition.icon).id !== 'flag' && <CompetitionIcon id={competition.icon} labelled className="text-xl" />}
+      <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
       {selected && <span className="sr-only">(current competition)</span>}
     </button>
   );

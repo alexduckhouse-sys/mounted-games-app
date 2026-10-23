@@ -106,6 +106,8 @@ export interface CompetitionPickerItem {
   live?: { sectionName?: string | null; heatLabel: string; arenaName?: string | null } | null;
   /** A sample event: its payments are tests only. */
   isDemo?: boolean;
+  /** Taking entries: not locked, and it has age groups to enter. */
+  entriesOpen?: boolean;
 }
 
 export interface CompetitionPickerPage {

@@ -22,7 +22,8 @@ public static class CompetitionPickerQuery
         // Project in SQL: no sections, teams, sessions or results are fetched, only a section count.
         var items = await ordered.ThenBy(c => c.Id).Skip((page - 1) * pageSize).Take(pageSize + 1)
             .Select(c => new CompetitionPickerItem(c.Id, c.Name, c.StartDate, c.EndDate, c.Icon, c.Location, c.Sections.Count, null,
-                db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == c.Id && x.IsDemo)))
+                db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == c.Id && x.IsDemo),
+                !past && !c.SignupsLocked && c.Sections.Any()))
             .ToListAsync(ct);
         var pageItems = items.Take(pageSize).ToList();
         if (!past) await AttachLiveAsync(db, pageItems, todayUtc, ct);

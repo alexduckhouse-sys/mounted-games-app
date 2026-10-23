@@ -18,23 +18,67 @@ function mount(extra: Partial<CompetitionCtx> = {}, comp = data) {
 describe('FollowingTab', () => {
   it('lets a signed-out visitor search, star and unstar a team', async () => {
     mount();
-    expect(screen.getByText(/No sign-in needed/)).toBeInTheDocument();
+    expect(screen.getByText(/no sign-in is needed/)).toBeInTheDocument();
     await userEvent.type(screen.getByRole('searchbox'), 'Blue');
     expect(screen.queryByRole('button', { name: 'Follow Example Red' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Follow Example Blue' }));
     expect(screen.getByRole('heading', { name: 'Next heats' })).toBeInTheDocument();
-    expect(screen.getByText('On now')).toBeInTheDocument();
-    expect(screen.getByText('4 pts · 1 race')).toBeInTheDocument();
+    expect(screen.getByText('ON NOW')).toBeInTheDocument();
+    expect(screen.getByText('4 pts')).toBeInTheDocument();
+    expect(screen.getByText('1 race')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Lane 2/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=1');
+    await userEvent.click(screen.getByRole('button', { name: /Following 1 team/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Unfollow Example Blue' }));
     expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();
+  });
+  it('lists the followed teams in a drop-down with their next heat, and adds more from it', async () => {
+    localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1},{"competitionId":1,"teamId":2}]');
+    mount();
+    const toggle = screen.getByRole('button', { name: /Following 2 teams/ });
+    expect(toggle).toHaveTextContent('Example Blue, Example Red');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'Add teams' })).not.toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(/^Seniors · next /)).toBeInTheDocument();
+    expect(screen.getByText('Seniors · not drawn yet')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add teams' }));
+    expect(screen.queryByRole('button', { name: 'Add teams' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Choose teams' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Close team picker' }));
+    expect(screen.queryByRole('region', { name: 'Choose teams' })).not.toBeInTheDocument();
+  });
+  it('closes the drop-down on Escape and on a tap outside it', async () => {
+    localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1}]');
+    mount();
+    const toggle = screen.getByRole('button', { name: /Following 1 team/ });
+    await userEvent.click(toggle);
+    await userEvent.keyboard('{Escape}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
+    await userEvent.click(document.body);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+  it('shows a late heat in amber with its delay and planned time', () => {
+    localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1}]');
+    const entries = [{ id: 1, teamId: 1, teamName: 'Example Blue', laneIndex: 2 }];
+    const slow = competition({ teams: data.teams, sessions: [session(1, { status: 1, scheduledStart: '2026-07-01T09:00:00Z', startedAt: '2026-07-01T09:08:00Z', heats: [
+      heat(1, { startedAt: '2026-07-01T09:08:00Z', races: [race(1)] }),
+      heat(2, { entries }),
+    ] })] });
+    mount({}, slow);
+    const link = screen.getByRole('link', { name: /Example Blue/ });
+    expect(link).toHaveAttribute('href', '/competitions/1/session/1?heat=2');
+    expect(link).toHaveTextContent('+8 ·');
+    expect(link.querySelector('s')).not.toBeNull();
+    expect(link.className).toContain('mg-line-late');
   });
   it('never labels a saved running heat as live and allows refresh', async () => {
     localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1}]');
     const reload = vi.fn();
     mount({ isStale: true, updatedAt: null, reload });
-    expect(screen.getByText('Was in arena')).toBeInTheDocument();
-    expect(screen.queryByText('On now')).not.toBeInTheDocument();
+    expect(screen.getByText('WAS IN ARENA')).toBeInTheDocument();
+    expect(screen.queryByText('ON NOW')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Time unavailable');
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     expect(reload).toHaveBeenCalledOnce();
@@ -70,6 +114,7 @@ describe('FollowingTab', () => {
     expect(screen.getByRole('list', { name: 'Clubs' }).querySelectorAll('li')).toHaveLength(2);
     await userEvent.click(screen.getByRole('button', { name: 'Follow club Hill Pony Club' }));
     expect(JSON.parse(localStorage.getItem(FAVOURITES_KEY)!)).toEqual([1, 2, 3].map((teamId) => ({ competitionId: 1, teamId })));
+    await userEvent.click(screen.getByRole('button', { name: /Following 3 teams/ }));
     expect(screen.getByRole('button', { name: 'Unfollow Hill Pair' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Add teams' }));
     expect(screen.getByRole('button', { name: 'Follow club Vale Pony Club' })).toHaveAttribute('aria-pressed', 'false');

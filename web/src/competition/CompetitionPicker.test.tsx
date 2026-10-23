@@ -46,7 +46,7 @@ describe('CompetitionPicker: the list', () => {
     renderPicker();
     await loaded('Autumn Open');
     expect(get).toHaveBeenCalledWith('/competitions/picker', { params: { past: false, page: 1 }, signal: expect.any(AbortSignal) });
-    expect(screen.getByRole('heading', { level: 1, name: 'Pick a competition' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Competitions' })).toBeInTheDocument();
   });
 
   it('shows a placeholder while the first load is under way', () => {
@@ -60,9 +60,10 @@ describe('CompetitionPicker: the list', () => {
     await loaded('Autumn Open');
     const onToday = screen.getByRole('region', { name: 'On today' });
     expect(within(onToday).getByText('Today Cup')).toBeInTheDocument();
-    expect(within(onToday).getByText('Sat 17 – Sun 18 Oct · Ashdown · 3 age groups')).toBeInTheDocument();
-    expect(within(onToday).getByText('Live')).toBeInTheDocument();
-    expect(within(onToday).getByText('Seniors Heat 2 in Main arena')).toBeInTheDocument();
+    expect(within(onToday).getByText('Ashdown · Sat 17 – Sun 18 Oct')).toBeInTheDocument();
+    expect(within(onToday).getByText('LIVE')).toBeInTheDocument();
+    expect(within(onToday).getByText('Seniors · Heat 2 on now in Main arena')).toBeInTheDocument();
+    expect(within(onToday).getByRole('button', { name: 'Open competition: Today Cup' })).toBeInTheDocument();
     const later = screen.getByRole('region', { name: 'Coming up' });
     expect(within(later).getAllByRole('button').map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
     expect(within(later).queryByText('Today Cup')).not.toBeInTheDocument();
@@ -71,15 +72,15 @@ describe('CompetitionPicker: the list', () => {
   it('describes a live competition’s heat without an arena name or age group', async () => {
     reply(page([{ ...today, live: { heatLabel: 'Heat 1' }, ageGroupCount: 1, location: null }]));
     renderPicker();
-    expect(await loaded('Heat 1 in the arena')).toBeInTheDocument();
-    expect(screen.getByText('Sat 17 – Sun 18 Oct · 1 age group')).toBeInTheDocument();
+    expect(await loaded('Heat 1 on now in the arena')).toBeInTheDocument();
+    expect(screen.getByText('Sat 17 – Sun 18 Oct')).toBeInTheDocument();
   });
 
   it('leaves out the live line and age group count when there is nothing to say', async () => {
     reply(page([{ ...today, live: null, ageGroupCount: 0, location: '  ' }]));
     renderPicker();
     await loaded('Today Cup');
-    expect(screen.queryByText('Live')).not.toBeInTheDocument();
+    expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
     expect(screen.getByText('Sat 17 – Sun 18 Oct')).toBeInTheDocument();
   });
 
@@ -116,13 +117,15 @@ describe('CompetitionPicker: the list', () => {
     expect(screen.queryByRole('region', { name: 'On today' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Finished' })).toBeInTheDocument();
     expect(screen.getByText('Sat 7 Nov 2026 · Hillside')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Upcoming competitions' })).toHaveAttribute('href', '/competitions');
+    expect(screen.getByRole('link', { name: 'Upcoming' })).toHaveAttribute('href', '/competitions');
+    expect(screen.getByRole('link', { name: 'Past' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('links upcoming competitions to the past ones', async () => {
     renderPicker();
     await loaded('Autumn Open');
-    expect(screen.getByRole('link', { name: 'Past competitions' })).toHaveAttribute('href', '/competitions/past');
+    expect(screen.getByRole('link', { name: 'Past' })).toHaveAttribute('href', '/competitions/past');
+    expect(screen.getByRole('link', { name: 'Upcoming' })).toHaveAttribute('aria-current', 'page');
   });
 
   it.each([
@@ -152,12 +155,12 @@ describe('CompetitionPicker: choosing', () => {
     expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/3|Weekend Fest');
   });
 
-  it('marks the current competition and offers to go back to its timetable', async () => {
+  it('marks the current competition', async () => {
     renderPicker();
     await loaded('Autumn Open');
-    expect(screen.getByRole('button', { name: /Today Cup.*Open timetable/ })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /Today Cup/ }));
-    expect(screen.getByRole('button', { name: /Today Cup.*Back to timetable/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Open competition: Today Cup/ })).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(screen.getByRole('button', { name: /Open competition: Today Cup/ }));
+    expect(screen.getByRole('button', { name: /Open competition: Today Cup/ })).toHaveAttribute('aria-pressed', 'true');
     await userEvent.click(screen.getByRole('button', { name: /Autumn Open/ }));
     expect(screen.getByRole('button', { name: /Autumn Open.*current competition/ })).toHaveAttribute('aria-pressed', 'true');
   });
@@ -168,7 +171,7 @@ describe('CompetitionPicker: choosing', () => {
     await loaded('Autumn Open');
     await userEvent.click(screen.getByRole('button', { name: 'Close competition picker' }));
     expect(onClose).toHaveBeenCalledTimes(1);
-    await userEvent.click(screen.getByRole('link', { name: 'Past competitions' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Past' }));
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
@@ -179,12 +182,43 @@ describe('CompetitionPicker: choosing', () => {
   });
 });
 
-describe('CompetitionPicker: no search or tagline', () => {
-  it('lists the competitions without a search box or the account tagline', async () => {
+describe('CompetitionPicker: search and tags', () => {
+  it('finds a competition by name or by venue, and says so when nothing matches', async () => {
     renderPicker();
     await loaded('Autumn Open');
-    expect(screen.queryByRole('searchbox')).toBeNull();
-    expect(screen.queryByText(/No account needed/)).toBeNull();
+    const box = screen.getByRole('searchbox', { name: 'Search competitions' });
+    expect(box).toHaveAttribute('placeholder', 'Name or venue');
+    await userEvent.type(box, 'hillside');
+    expect(screen.getByText('Autumn Open')).toBeInTheDocument();
+    expect(screen.queryByText('Weekend Fest')).not.toBeInTheDocument();
+    expect(screen.queryByText('Today Cup')).not.toBeInTheDocument();
+    await userEvent.clear(box);
+    await userEvent.type(box, 'weekend');
+    expect(screen.getByText('Weekend Fest')).toBeInTheDocument();
+    await userEvent.clear(box);
+    await userEvent.type(box, 'zzz');
+    expect(screen.getByText('No competitions match that search.')).toBeInTheDocument();
+  });
+
+  it('offers to load more when a search finds nothing and there are more pages', async () => {
+    reply(page([autumn], true));
+    renderPicker();
+    await loaded('Autumn Open');
+    await userEvent.type(screen.getByRole('searchbox'), 'zzz');
+    expect(screen.getByText(/Load more to search further back/)).toBeInTheDocument();
+  });
+
+  it('tags a competition taking entries and a demo event', async () => {
+    reply(page([{ ...autumn, entriesOpen: true }, { ...festival, isDemo: true }, { ...today, entriesOpen: true, isDemo: true }]));
+    renderPicker();
+    await loaded('Autumn Open');
+    const later = screen.getByRole('region', { name: 'Coming up' });
+    expect(within(later).getByRole('button', { name: /Autumn Open/ })).toHaveTextContent('Entries open');
+    expect(within(later).getByRole('button', { name: /Weekend Fest/ })).toHaveTextContent('Demo event');
+    expect(within(later).getByRole('button', { name: /Weekend Fest/ })).not.toHaveTextContent('Entries open');
+    const onToday = screen.getByRole('region', { name: 'On today' });
+    expect(onToday).toHaveTextContent('Entries open');
+    expect(onToday).toHaveTextContent('Demo event');
   });
 });
 
