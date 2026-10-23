@@ -159,7 +159,9 @@ public record CreateSectionSignupRequest(
     bool EmailOptIn = false, string? EmailOptInVersion = null,
     [MaxLength(64)] string? RequestId = null,
     string? TeamName = null, bool WholeTeam = false,
-    IReadOnlyList<string>? TeamMembers = null);
+    IReadOnlyList<string>? TeamMembers = null,
+    [Range(0, 100)] int StablesCount = 0, [StringLength(200)] string? StablingClubOrTeam = null,
+    [StringLength(20)] string? PaymentMethod = null, bool IsWaitlist = false, [Range(1, 20)] int TeamsCount = 1);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 

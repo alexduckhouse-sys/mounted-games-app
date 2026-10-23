@@ -912,6 +912,183 @@ public class SignupTests : IClassFixture<ApiFactory>
         Assert.True(await _f.InDbAsync(db => db.Teams.AnyAsync(t => t.Id == usedTeamId)));
     }
 
+    [Fact]
+    public async Task Create_WhenEntriesCloseAtInPast_RejectsPublicButAllowsAdminLateEntry()
+    {
+        var section = await _f.NewSectionAsync();
+        var admin = await _f.AdminAsync();
+
+        var putRes = await admin.PutAsJsonAsync(
+            $"/api/competitions/{section.CompetitionId}/entry-settings",
+            new { entriesCloseAt = DateTime.UtcNow.AddDays(-1) });
+        Assert.Equal(HttpStatusCode.OK, putRes.StatusCode);
+
+        var (entrant, _) = await _f.SignupAsync();
+        var blocked = await entrant.PostAsJsonAsync(Url(section), Entry("Late Rider"));
+        Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
+
+        var lateAdmin = await admin.PostAsJsonAsync(Url(section), Entry("Admin Late Entry"));
+        Assert.Equal(HttpStatusCode.OK, lateAdmin.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_WithStables_AppearsInOrganiserStablingListGroupedByClub()
+    {
+        var section = await _f.NewSectionAsync();
+        var (c1, _) = await _f.SignupAsync();
+        var (c2, _) = await _f.SignupAsync();
+
+        var s1 = await c1.PostAsJsonAsync(
+            Url(section),
+            Entry("Rider One") with { StablesCount = 2, StablingClubOrTeam = "Cheshire PC" });
+        var s2 = await c2.PostAsJsonAsync(
+            Url(section),
+            Entry("Rider Two") with { StablesCount = 3, StablingClubOrTeam = "Cheshire PC" });
+        Assert.Equal(HttpStatusCode.OK, s1.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, s2.StatusCode);
+
+        var admin = await _f.AdminAsync();
+        var stablingRes = await admin.GetAsync($"/api/competitions/{section.CompetitionId}/stabling");
+        Assert.Equal(HttpStatusCode.OK, stablingRes.StatusCode);
+        var body = await stablingRes.Content.ReadAsStringAsync();
+        Assert.Contains("\"totalStables\":5", body);
+        Assert.Contains("Cheshire PC", body);
+    }
+
+    [Fact]
+    public async Task MarkPaid_MarksBacsSignupPaidAndTriggersFormTeams()
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 2500);
+        var trainer = await _f.TrainerAsync();
+        var createRes = await trainer.PostAsJsonAsync(
+            Url(section),
+            Entry("BACS Manager") with { TeamName = "Welsh Dragons", WholeTeam = true, PaymentMethod = "bacs" });
+        Assert.Equal(HttpStatusCode.OK, createRes.StatusCode);
+        var created = await createRes.ReadAsync<SectionSignupDto>();
+        Assert.Equal(SignupPaymentStatus.Pending, created.Status);
+
+        var admin = await _f.AdminAsync();
+        var markRes = await admin.PostAsJsonAsync(
+            $"/api/competitions/{section.CompetitionId}/signups/{created.Id}/mark-paid",
+            new { });
+        Assert.Equal(HttpStatusCode.OK, markRes.StatusCode);
+
+        var teams = await _f.InDbAsync(db => db.Teams.Where(t => t.CompetitionSectionId == section.Id).ToListAsync());
+        Assert.Single(teams);
+        Assert.Equal("Welsh Dragons", teams[0].DisplayName);
+    }
+
+    [Fact]
+    public async Task WithdrawMySignup_BeforeDraw_FreesSpotRemovesUndrawnTeamAndMarksRefundPending()
+    {
+        var section = await _f.NewSectionAsync(max: 1, priceMinor: 2000);
+        var trainer = await _f.TrainerAsync();
+        var createRes = await trainer.PostAsJsonAsync(
+            Url(section),
+            Entry("Withdrawing Manager") with { TeamName = "Temp Team", WholeTeam = true });
+        var created = await createRes.ReadAsync<SectionSignupDto>();
+
+        var admin = await _f.AdminAsync();
+        await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/signups/{created.Id}/mark-paid", new { });
+        Assert.True(await _f.InDbAsync(db => db.Teams.AnyAsync(t => t.CompetitionSectionId == section.Id)));
+
+        var withdrawRes = await trainer.PostAsJsonAsync($"/api/my/signups/{created.Id}/withdraw", new { });
+        Assert.Equal(HttpStatusCode.OK, withdrawRes.StatusCode);
+        var withdrawBody = await withdrawRes.Content.ReadAsStringAsync();
+        Assert.Contains("\"isWithdrawn\":true", withdrawBody);
+        Assert.Contains("\"refundPending\":true", withdrawBody);
+
+        // Un-drawn team is removed and the spot in the section is freed.
+        Assert.False(await _f.InDbAsync(db => db.Teams.AnyAsync(t => t.CompetitionSectionId == section.Id)));
+
+        var (nextEntrant, _) = await _f.SignupAsync();
+        var nextRes = await nextEntrant.PostAsJsonAsync(Url(section), Entry("Replacement Rider"));
+        Assert.Equal(HttpStatusCode.OK, nextRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task WithdrawMySignup_AfterDraw_ReturnsConflict()
+    {
+        var section = await _f.NewSectionAsync();
+        var (entrant, _) = await _f.SignupAsync();
+        var createRes = await entrant.PostAsJsonAsync(Url(section), Entry("Drawn Rider"));
+        var created = await createRes.ReadAsync<SectionSignupDto>();
+
+        await _f.InDbAsync(async db =>
+        {
+            var club = new Club { Name = "Drawn Club" };
+            var team = new Team
+            {
+                CompetitionId = section.CompetitionId,
+                CompetitionSectionId = section.Id,
+                Club = club,
+                Suffix = "A",
+                DisplayName = "Drawn Club A",
+            };
+            var session = new Session { CompetitionId = section.CompetitionId, Name = "Session 1" };
+            var heat = new Heat { Session = session, Label = "Heat 1" };
+            heat.Entries.Add(new HeatEntry { Team = team });
+            db.Heats.Add(heat);
+            await db.SaveChangesAsync();
+        });
+
+        var withdrawRes = await entrant.PostAsJsonAsync($"/api/my/signups/{created.Id}/withdraw", new { });
+        Assert.Equal(HttpStatusCode.Conflict, withdrawRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_WaitlistWhenSectionFull_SucceedsWithZeroAmountAndSkipsTeamFormation()
+    {
+        var section = await _f.NewSectionAsync(max: 1, priceMinor: 1500);
+        var (c1, _) = await _f.SignupAsync();
+        var (c2, _) = await _f.SignupAsync();
+
+        var first = await c1.PostAsJsonAsync(Url(section), Entry("Full Spot Rider"));
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var firstDto = await first.ReadAsync<SectionSignupDto>();
+
+        var waitlistRes = await c2.PostAsJsonAsync(
+            Url(section),
+            Entry("Waitlist Rider") with { IsWaitlist = true });
+        Assert.Equal(HttpStatusCode.OK, waitlistRes.StatusCode);
+        var waitlisted = await waitlistRes.ReadAsync<MountedGames.Api.Controllers.SectionSignupExtendedDto>();
+        Assert.True(waitlisted.IsWaitlist);
+        Assert.Equal(0, waitlisted.AmountMinor);
+
+        var admin = await _f.AdminAsync();
+        await admin.PutAsJsonAsync($"/api/signups/{firstDto.Id}/status", new UpdateSignupStatusRequest(SignupPaymentStatus.Paid));
+        var formRes = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false)))
+            .ReadAsync<FormTeamsResult>();
+        Assert.Single(formRes.Created);
+    }
+
+    [Fact]
+    public async Task Create_MultipleTeamsWholeTeam_MultipliesPriceAndExpandsIntoTeams()
+    {
+        var section = await _f.NewSectionAsync(max: 4, priceMinor: 3000);
+        var trainer = await _f.TrainerAsync();
+        var res = await trainer.PostAsJsonAsync(
+            Url(section),
+            Entry("Multi Manager", club: "Monmouthshire") with
+            {
+                TeamName = "Monmouthshire A, Monmouthshire B",
+                WholeTeam = true,
+                TeamsCount = 2,
+            });
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var created = await res.ReadAsync<MountedGames.Api.Controllers.SectionSignupExtendedDto>();
+        Assert.Equal(6000, created.AmountMinor);
+        Assert.Equal(2, created.TeamsCount);
+
+        var admin = await _f.AdminAsync();
+        await admin.PutAsJsonAsync($"/api/signups/{created.Id}/status", new UpdateSignupStatusRequest(SignupPaymentStatus.Paid));
+        var formed = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false)))
+            .ReadAsync<FormTeamsResult>();
+        Assert.Equal(2, formed.Created.Count);
+        Assert.Contains(formed.Created, t => t.DisplayName == "Monmouthshire A");
+        Assert.Contains(formed.Created, t => t.DisplayName == "Monmouthshire B");
+    }
+
     // ---- arrange helpers ----
 
     private Task<int> ArrangeTeamAsync(CompetitionSection section, string joinKey)

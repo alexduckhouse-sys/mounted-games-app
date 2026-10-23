@@ -417,14 +417,17 @@ public class CompetitionsController : ControllerBase
 
     /// <summary>Entries that count towards a section's cap (paid and pending), by section id.</summary>
     private async Task<Dictionary<int, int>> ActiveSignupCountsAsync(int competitionId)
-        => await _db.SectionSignups.AsNoTracking()
+    {
+        var rows = await _db.SectionSignups.AsNoTracking()
             .Where(s => s.Section!.CompetitionId == competitionId
                 && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
                 && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
-                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && x.IsWithdrawn))
-            .GroupBy(s => s.CompetitionSectionId)
-            .Select(g => new { g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.Key, x => x.Count);
+                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || x.IsWaitlist)))
+            .Select(s => new { s.CompetitionSectionId,
+                Count = _db.Set<SignupExtras>().Where(x => x.SignupId == s.Id).Select(x => (int?)x.TeamsCount).FirstOrDefault() ?? 1 })
+            .ToListAsync();
+        return rows.GroupBy(s => s.CompetitionSectionId).ToDictionary(g => g.Key, g => g.Sum(s => s.Count));
+    }
 
     [HttpPut("{id:int}/sections/{sectionId:int}")]
     [Authorize(Policy = CompetitionStaff.Policy)]
