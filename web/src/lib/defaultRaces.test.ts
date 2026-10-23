@@ -1,19 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import source from '../pages/admin/CompetitionEditor.tsx?raw';
 import { AREA_JUNIORS, AREA_PAIRS, AREA_SENIORS, ZONE_JUNIORS, ZONE_PAIRS, ZONE_SENIORS, defaultRaceList, scopeOf } from './defaultRaces';
 
-function listNamed(name: string): string[] {
-  const match = new RegExp(`const ${name} = \\[([\\s\\S]*?)\\n\\];`).exec(source);
-  if (!match) throw new Error(`${name} not found`);
-  return [...match[1].matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]);
-}
-
 describe('default race lists', () => {
-  it.each([
-    ['ZONE_SENIORS', ZONE_SENIORS], ['ZONE_JUNIORS', ZONE_JUNIORS], ['ZONE_PAIRS', ZONE_PAIRS],
-    ['AREA_SENIORS', AREA_SENIORS], ['AREA_JUNIORS', AREA_JUNIORS], ['AREA_PAIRS', AREA_PAIRS],
-  ])('%s matches the competition editor', (name, list) => {
-    expect(list).toEqual(listNamed(name));
+  it.each([['ZONE_PAIRS', ZONE_PAIRS], ['AREA_PAIRS', AREA_PAIRS]])('%s has no race twice in a row', (_name, list) => {
+    expect(list.length).toBeGreaterThan(5);
+    list.forEach((race, i) => {
+      if (i > 0) expect(race, `${race} at position ${i + 1}`).not.toBe(list[i - 1]);
+    });
+  });
+
+  it('lists the Zone and Area pairs races once each', () => {
+    expect(ZONE_PAIRS).toEqual([
+      'Bending', 'Hollywood Bowl Boule & Bucket', 'Bottle', 'Litter', 'Tally Ho Farm Ball & Socket', 'STRUK Pole',
+      'PGSports UK Shopping Spree', 'Stepping Stones', 'EGUK Mug Changes', '5 Flag',
+    ]);
+    expect(AREA_PAIRS).toEqual([
+      'Bending', '2 Mug', 'Old Sock', 'Tally Ho Farm Ball & Socket', 'PGUK Pyramid', 'Hollywood Bowl Bottle', 'Stepping Stones', 'EGUK 5 Flag',
+    ]);
+  });
+
+  it('keeps the senior and junior lists', () => {
+    expect(ZONE_SENIORS).toHaveLength(10);
+    expect(ZONE_JUNIORS).toHaveLength(8);
+    expect(AREA_SENIORS).toHaveLength(8);
+    expect(AREA_JUNIORS).toHaveLength(7);
   });
 
   it('picks pairs for pairs, juniors and novices for the junior list, and the seniors list otherwise', () => {

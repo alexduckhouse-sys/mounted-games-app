@@ -16,7 +16,8 @@ public static class Mappings
         c.IsActive, c.IsArchived,
         c.Sections?.Count ?? 0,
         c.Teams?.Count ?? 0,
-        c.Sessions?.Count ?? 0);
+        c.Sessions?.Count ?? 0,
+        c.Sessions?.Count(s => s.Heats.Count > 0) ?? 0);
 
     /// <param name="activeSignups">Paid and pending entries: the ones that count towards <c>MaxParticipants</c>.</param>
     public static CompetitionSectionDto ToDto(this CompetitionSection s, int activeSignups = 0) =>
@@ -129,7 +130,7 @@ public static class Mappings
         s.StreamUrl, s.LanesPerHeat,
         s.MinutesPerHeat, s.RaceOrderAlternating,
         s.Heats.OrderBy(h => h.OrderIndex).Select(h => h.ToDto()).ToList(),
-        s.LaneRotationMode, s.QualifiersPerHeat);
+        s.LaneRotationMode, s.QualifiersPerHeat, PlannedRaceList.Read(s.PlannedRaces));
 
     public static RiderEntryDto ToDto(this RiderEntry r) => new(
         r.Id, r.SavedRiderId, r.FullName, r.DateOfBirth, r.HorseName, r.BibColour,

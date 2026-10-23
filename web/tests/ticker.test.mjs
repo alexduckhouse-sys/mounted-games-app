@@ -16,12 +16,12 @@ const find = (items, kind) => items.find((item) => item.kind === kind);
 
 test('says what is on now using the age group and session number', () => {
   const items = tickerItems([session([heat(1, { label: 'Heat 1' })], { status: 1 })], [], now);
-  assert.deepEqual(items[0], { key: 'live-heat-1', kind: 'live', text: 'Now: Seniors Session 1 · Heat 1', sessionId: 1 });
+  assert.deepEqual(items[0], { key: 'live-heat-1', kind: 'live', text: 'Now: Senior Teams Session 1 · Heat 1', sessionId: 1 });
 });
 
 test('the live heat is the first one not yet finished', () => {
   const items = tickerItems([session([heat(1, { finishedAt: at(-20) }), heat(2), heat(3)], { status: 1 })], [], now);
-  assert.equal(find(items, 'live').text, 'Now: Seniors Session 1 · Heat 2');
+  assert.equal(find(items, 'live').text, 'Now: Senior Teams Session 1 · Heat 2');
 });
 
 test('on time while racing to schedule, followed by the next heat and its start time', () => {
@@ -29,7 +29,7 @@ test('on time while racing to schedule, followed by the next heat and its start 
   const items = tickerItems(sessions, [], now);
   assert.deepEqual(kinds(items), ['live', 'ontime', 'next']);
   assert.equal(items[1].text, 'On time');
-  assert.equal(items[2].text, `Next ${clock(20)}: Seniors Session 1 · Heat 2`);
+  assert.equal(items[2].text, `Next ${clock(20)}: Senior Teams Session 1 · Heat 2`);
 });
 
 test('running behind when the session started late', () => {
@@ -43,7 +43,7 @@ test('running behind when nothing has started and the first heat is overdue', ()
   const items = tickerItems([session([heat(1), heat(2)], { scheduledStart: at(-30) })], [], now);
   assert.deepEqual(kinds(items), ['late', 'next']);
   assert.equal(items[0].text, 'Running 30 min behind');
-  assert.equal(items[1].text, `Next ${clock(-30)}: Seniors Session 1 · Heat 1`);
+  assert.equal(items[1].text, `Next ${clock(-30)}: Senior Teams Session 1 · Heat 1`);
 });
 
 test('a small delay does not count as running behind', () => {
@@ -63,7 +63,7 @@ test('a break coming up shows its name and start time; the next heat after it is
   ];
   const items = tickerItems(sessions, [], now);
   assert.deepEqual(kinds(items), ['live', 'ontime', 'next', 'break']);
-  assert.equal(items[2].text, `Next ${clock(60)}: Juniors Session 1 · Heat 1`);
+  assert.equal(items[2].text, `Next ${clock(60)}: Junior Teams Session 1 · Heat 1`);
   assert.equal(items[3].text, `Lunch break ${clock(15)}`);
 });
 
@@ -94,9 +94,9 @@ test('a briefing is labelled as one', () => {
 test('finals get their own kind, titled by age group, when next or live', () => {
   const finals = (extra) => session([heat(9, { label: 'Final A', raceRoundStage: 2 })], { id: 3, name: 'Seniors Finals', orderIndex: 90, ...extra });
   const next = tickerItems([finals({ scheduledStart: at(25) })], [], now);
-  assert.deepEqual(next[0], { key: 'next-heat-9', kind: 'finals', text: `Next ${clock(25)}: Seniors Finals · Final A`, sessionId: 3 });
+  assert.deepEqual(next[0], { key: 'next-heat-9', kind: 'finals', text: `Next ${clock(25)}: Senior Teams Finals · Final A`, sessionId: 3 });
   const live = tickerItems([finals({ status: 1 })], [], now);
-  assert.deepEqual(live[0], { key: 'live-heat-9', kind: 'finals', text: 'Now: Seniors Finals · Final A', sessionId: 3 });
+  assert.deepEqual(live[0], { key: 'live-heat-9', kind: 'finals', text: 'Now: Senior Teams Finals · Final A', sessionId: 3 });
 });
 
 test('the latest race winner from the last half hour', () => {
@@ -121,7 +121,7 @@ test('lists only recent announcements, newest first, capped at three', () => {
 test('fresh announcements lead; older ones come after the timetable lines', () => {
   const sessions = [session([heat(1), heat(2)], { status: 1, scheduledStart: at(-10), startedAt: at(-10) })];
   const items = tickerItems(sessions, [note(1, 'Arena 2 closed', 90), note(2, 'Lunch moved to 1pm', 3)], now);
-  assert.deepEqual(texts(items), ['Lunch moved to 1pm', 'Now: Seniors Session 1 · Heat 1', 'On time', `Next ${clock(20)}: Seniors Session 1 · Heat 2`, 'Arena 2 closed']);
+  assert.deepEqual(texts(items), ['Lunch moved to 1pm', 'Now: Senior Teams Session 1 · Heat 1', 'On time', `Next ${clock(20)}: Senior Teams Session 1 · Heat 2`, 'Arena 2 closed']);
 });
 
 test('falls back to the competition name when there is nothing else to say', () => {

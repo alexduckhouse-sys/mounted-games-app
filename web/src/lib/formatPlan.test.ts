@@ -73,4 +73,9 @@ describe('planTimetable', () => {
     expect(rows[0]).toMatchObject({ minutes: 0, sizes: [] });
     expect(rows[1].start).toEqual(at(9));
   });
+
+  it('counts heat, heat, final as three heats of one race for every race', () => {
+    const [row] = planTimetable({ eventStart: at(9), fixed: [], sessions: [session(1, { raceFinals: true, raceCount: 5, minutesPerHeat: 4 })] });
+    expect(row.minutes).toBe(60);
+  });
 });

@@ -196,8 +196,8 @@ describe('isGroupFinished and groupMaxDelay', () => {
 });
 
 describe('sessionTitle', () => {
-  it('combines the age group without "Teams" and its session number', () => {
-    expect(sessionTitle(session(1, { sectionName: 'Teams Seniors' }), new Map([[1, 3]]))).toBe('Seniors Session 3');
+  it('combines the age group, the format and its session number', () => {
+    expect(sessionTitle(session(1, { sectionName: 'Teams Seniors' }), new Map([[1, 3]]))).toBe('Senior Teams Session 3');
   });
 
   it('uses the session name when there is no age group, and session 1 when unnumbered', () => {

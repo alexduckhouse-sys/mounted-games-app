@@ -33,5 +33,12 @@ public class Session
     /// <summary>Heat-heat-final: how many teams go through from each qualifier to the final. Null means the default (3).</summary>
     public int? QualifiersPerHeat { get; set; }
 
+    /// <summary>
+    /// The races this session will run in each heat (a JSON array of names), chosen before any heat exists, for
+    /// example in the competition creator. Null means not chosen yet. Generating heats can start from it; once
+    /// heats exist their races are the truth.
+    /// </summary>
+    public string? PlannedRaces { get; set; }
+
     public ICollection<Heat> Heats { get; set; } = new List<Heat>();
 }
