@@ -85,6 +85,21 @@ export interface CreatorDraft {
   termsText: string;
   sections: SectionDraft[];
   breaks: BreakDraft[];
+  /** Hatband colour per lane, index 0 being lane 1. Lanes the person hasn't set take the default order. */
+  laneHatbands: string[];
+}
+
+export const HATBAND_COLOURS = ['Red', 'White', 'Blue', 'Yellow', 'Green', 'Black', 'Orange', 'Pink'];
+export const MAX_LANES = 20;
+
+/** How many lanes the competition needs: the largest heat across the age groups. */
+export function laneCount(sections: readonly SectionDraft[]): number {
+  return Math.max(1, Math.min(MAX_LANES, Math.max(0, ...sections.map((s) => wholeNumber(s.maxTeamsPerHeat) ?? lanesFor(s.format)))));
+}
+
+/** The hatband for each lane: what was chosen, else the next colour in the default order. */
+export function hatbandsFor(draft: Pick<CreatorDraft, 'sections' | 'laneHatbands'>): string[] {
+  return Array.from({ length: laneCount(draft.sections) }, (_, i) => draft.laneHatbands[i]?.trim() || HATBAND_COLOURS[i % HATBAND_COLOURS.length]);
 }
 
 export function defaultSection(): SectionDraft {
@@ -99,7 +114,7 @@ export function defaultDraft(today: Date = new Date()): CreatorDraft {
     step: 0, name: '', icon: 'flag', organiserName: '',
     startDate: today.toISOString().slice(0, 10), startTime: '09:00', endDate: '', endTime: '17:00',
     location: '', postcode: '', what3Words: '', appleMapsUrl: '', lat: '', lon: '', description: '', paymentDestination: '', termsText: '',
-    sections: [defaultSection()], breaks: [],
+    sections: [defaultSection()], breaks: [], laneHatbands: [],
   };
 }
 
@@ -279,5 +294,6 @@ export function readDraft(raw: unknown, today: Date = new Date()): CreatorDraft 
     description: text(r.description), paymentDestination: text(r.paymentDestination), termsText: text(r.termsText),
     sections,
     breaks: Array.isArray(r.breaks) ? r.breaks.map(readBreak) : [],
+    laneHatbands: Array.isArray(r.laneHatbands) ? r.laneHatbands.filter((x): x is string => typeof x === 'string') : [],
   };
 }

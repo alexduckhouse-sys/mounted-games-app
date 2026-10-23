@@ -1,6 +1,7 @@
 import { describeHeats } from '../../../lib/formatPlan';
 import { MAX_SESSIONS, resizeSessions, sectionLocked, sectionName, setRaceFinals, type CreatorDraft, type SectionDraft } from '../../../lib/creatorDraft';
 import { durationText, estimateText, sectionEstimate } from '../../../lib/creatorPlan';
+import { HatbandEditor } from './Hatbands';
 import { NumberBox, SelectBox, StepIntro, TextBox, type StepProps } from './parts';
 
 export function StructureStep({ draft, change, problems, clear, templates, teamCounts }: StepProps<CreatorDraft> & {
@@ -70,6 +71,7 @@ export function StructureStep({ draft, change, problems, clear, templates, teamC
             </div>
           );
         })}
+        <HatbandEditor draft={draft} change={change} />
       </div>
     </section>
   );

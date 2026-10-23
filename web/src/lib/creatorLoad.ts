@@ -67,6 +67,7 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
     description: c.description ?? '', paymentDestination: c.paymentDestination ?? '', termsText: c.termsText ?? '',
     sections: sections.length > 0 ? sections : [defaultSection()],
     breaks,
+    laneHatbands: c.laneHatbands ?? [],
   };
 }
 

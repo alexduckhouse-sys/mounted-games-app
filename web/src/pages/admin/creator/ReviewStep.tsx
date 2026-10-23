@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { competitionDateText } from '../../../lib/competitionDates';
-import { parseFinalistCount, priceGbpToMinor, sectionName, type CreatorDraft } from '../../../lib/creatorDraft';
+import { hatbandsFor, parseFinalistCount, priceGbpToMinor, sectionName, type CreatorDraft } from '../../../lib/creatorDraft';
 import { durationText, plannedSessions, provisionalTimetable } from '../../../lib/creatorPlan';
 import type { FixedItem } from '../../../lib/formatPlan';
 import { formatTime } from '../../../lib/time';
 import { BreakForm } from './BreakForm';
+import { HatbandList } from './Hatbands';
 import { Pill, StepIntro, type StepProps } from './parts';
 
 const money = (pence: number) => (pence === 0 ? 'Free' : `£${(pence / 100).toFixed(2)}`);
@@ -48,6 +49,11 @@ export function ReviewStep({ draft, change, problems, teamCounts, real }: StepPr
           </li>
         ))}
       </ul>
+
+      <div className="flex flex-col gap-2">
+        <strong className="text-[15px]">Hatbands</strong>
+        <HatbandList hatbands={hatbandsFor(draft)} />
+      </div>
 
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3 border-b-2 border-[rgb(var(--mg-heading))] pb-2">

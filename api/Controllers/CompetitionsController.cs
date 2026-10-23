@@ -145,7 +145,7 @@ public class CompetitionsController : ControllerBase
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
             c.SignupsLocked, c.Icon, c.CreatedByUserId,
-            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText);
+            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText, LaneHatbands: PlannedRaceList.Read(c.LaneHatbands));
     }
 
     /// <summary>
@@ -188,7 +188,7 @@ public class CompetitionsController : ControllerBase
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             c.StreamUrl, c.OrganiserName, c.PaymentDestination,
             c.SignupsLocked, c.Icon, c.CreatedByUserId,
-            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText);
+            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText, LaneHatbands: PlannedRaceList.Read(c.LaneHatbands));
     }
 
     internal sealed record SessionOutline(int Id, string? ArenaName, SessionStatus Status, int OrderIndex);
@@ -256,6 +256,7 @@ public class CompetitionsController : ControllerBase
             OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
             TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim(),
+            LaneHatbands = PlannedRaceList.Write(req.LaneHatbands),
             StartDate = req.StartDate,
             EndDate = req.EndDate,
             CreatedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
@@ -301,6 +302,7 @@ public class CompetitionsController : ControllerBase
         c.OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim();
         c.PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
         c.TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim();
+        if (req.LaneHatbands is not null) c.LaneHatbands = PlannedRaceList.Write(req.LaneHatbands);
         c.StartDate = req.StartDate;
         c.EndDate = req.EndDate;
         c.IsActive = req.IsActive;
@@ -921,6 +923,6 @@ public class CompetitionsController : ControllerBase
             refreshed.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
             refreshed.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             refreshed.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
-            IsDemo: await IsDemoCompetitionAsync(refreshed.Id), TermsText: refreshed.TermsText);
+            IsDemo: await IsDemoCompetitionAsync(refreshed.Id), TermsText: refreshed.TermsText, LaneHatbands: PlannedRaceList.Read(refreshed.LaneHatbands));
     }
 }

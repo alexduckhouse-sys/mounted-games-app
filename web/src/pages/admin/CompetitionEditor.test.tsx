@@ -246,6 +246,33 @@ describe('CompetitionEditor: structure and timing', () => {
   });
 });
 
+describe('CompetitionEditor: hatbands', () => {
+  it('lists a lane for the biggest heat with the default colours, and lets each be changed or typed', async () => {
+    seed('structure', { sections: [{ ...defaultSection(), maxTeamsPerHeat: '4' }, { ...defaultSection(), ageGroup: 'Open', maxTeamsPerHeat: '5' }] });
+    mount();
+    const group = screen.getByRole('group', { name: 'Hatbands' });
+    expect(within(group).getByLabelText('Lane 1')).toHaveValue('Red');
+    expect(within(group).getByLabelText('Lane 2')).toHaveValue('White');
+    expect(within(group).getByLabelText('Lane 5')).toHaveValue('Green');
+    expect(within(group).queryByLabelText('Lane 6')).not.toBeInTheDocument();
+    await userEvent.selectOptions(within(group).getByLabelText('Lane 1'), 'Pink');
+    await userEvent.selectOptions(within(group).getByLabelText('Lane 2'), 'Type your own…');
+    await userEvent.type(within(group).getByLabelText('Hatband colour for lane 2'), 'Purple');
+    expect(stored().laneHatbands).toEqual(['Pink', 'Purple', 'Blue', 'Yellow', 'Green']);
+    await userEvent.selectOptions(within(group).getByLabelText('Lane 2'), 'Black');
+    expect(stored().laneHatbands[1]).toBe('Black');
+  });
+
+  it('shows them on the review step and sends them when creating', async () => {
+    seed('review', { laneHatbands: ['Pink'] });
+    mount();
+    expect(within(screen.getByRole('list', { name: 'Hatbands by lane' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Lane 1 · Pink', 'Lane 2 · White', 'Lane 3 · Blue', 'Lane 4 · Yellow', 'Lane 5 · Green', 'Lane 6 · Black']);
+    await userEvent.click(createButton());
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions', expect.objectContaining({ laneHatbands: ['Pink', 'White', 'Blue', 'Yellow', 'Green', 'Black'] })));
+  });
+});
+
 describe('CompetitionEditor: races', () => {
   it('can be skipped: sessions say they are left for later and nothing is required', async () => {
     seed('races');

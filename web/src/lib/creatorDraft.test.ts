@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  defaultDraft, defaultSection, firstProblemStep, isLocked, MAX_SESSIONS, minutesOf, heatSizeOf, newSessionName, parseFinalistCount, parseMaxParticipants,
+  defaultDraft, defaultSection, firstProblemStep, hatbandsFor, laneCount, isLocked, MAX_SESSIONS, minutesOf, heatSizeOf, newSessionName, parseFinalistCount, parseMaxParticipants,
   priceGbpToMinor, readDraft, resizeSessions, sectionLocked, sectionName, setFormat, setRaceFinals, STEP_IDS, validateStep, wholeNumber,
   type CreatorDraft,
 } from './creatorDraft';
@@ -156,5 +156,27 @@ describe('readDraft', () => {
 
   it('has a step id for every step', () => {
     expect(STEP_IDS).toHaveLength(7);
+  });
+});
+
+describe('hatbands', () => {
+  it('needs a lane for every team in the biggest heat, between 1 and 20', () => {
+    expect(laneCount([defaultSection()])).toBe(6);
+    expect(laneCount([defaultSection(), { ...defaultSection(), maxTeamsPerHeat: '8' }])).toBe(8);
+    expect(laneCount([{ ...defaultSection(), format: 1, maxTeamsPerHeat: '' }])).toBe(4);
+    expect(laneCount([{ ...defaultSection(), maxTeamsPerHeat: '99' }])).toBe(20);
+    expect(laneCount([])).toBe(1);
+  });
+
+  it('uses the default order for lanes with no choice, and keeps what was chosen', () => {
+    const d = draft({ laneHatbands: ['Pink', ' ', 'Teal'] });
+    expect(hatbandsFor(d)).toEqual(['Pink', 'White', 'Teal', 'Yellow', 'Green', 'Black']);
+    expect(hatbandsFor(draft({ sections: [{ ...defaultSection(), maxTeamsPerHeat: '10' }] }))).toHaveLength(10);
+    expect(hatbandsFor(draft({ sections: [{ ...defaultSection(), maxTeamsPerHeat: '10' }] }))[8]).toBe('Red');
+  });
+
+  it('is read back from a stored draft, ignoring anything that is not text', () => {
+    expect(readDraft({ name: 'x', sections: [], laneHatbands: ['Red', 4, 'Blue'] })!.laneHatbands).toEqual(['Red', 'Blue']);
+    expect(readDraft({ name: 'x', sections: [], laneHatbands: 'no' })!.laneHatbands).toEqual([]);
   });
 });

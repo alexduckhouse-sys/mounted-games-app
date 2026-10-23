@@ -47,7 +47,8 @@ public record CompetitionDetail(
     string? CreatedByUserId = null,
     bool StaffChatEnabled = true,
     bool IsDemo = false,
-    string? TermsText = null);
+    string? TermsText = null,
+    IReadOnlyList<string>? LaneHatbands = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -59,7 +60,8 @@ public record CreateCompetitionRequest(
     string? OrganiserName = null,
     string? PaymentDestination = null,
     [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null,
-    [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null);
+    [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null,
+    IReadOnlyList<string>? LaneHatbands = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -72,7 +74,9 @@ public record UpdateCompetitionRequest(
     string? OrganiserName = null,
     string? PaymentDestination = null,
     [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null,
-    [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null);
+    [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null,
+    /// <summary>Null leaves the hatbands as they are; an empty list clears them.</summary>
+    IReadOnlyList<string>? LaneHatbands = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 

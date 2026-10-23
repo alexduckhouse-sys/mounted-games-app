@@ -1,6 +1,6 @@
 import { api } from '../../../api';
 import {
-  heatSizeOf, minutesOf, parseFinalistCount, parseMaxParticipants, priceGbpToMinor, sectionName, type CreatorDraft,
+  hatbandsFor, heatSizeOf, minutesOf, parseFinalistCount, parseMaxParticipants, priceGbpToMinor, sectionName, type CreatorDraft,
 } from '../../../lib/creatorDraft';
 import { realFixedItems } from '../../../lib/creatorLoad';
 import { breakWindow, plannedSessions, provisionalTimetable } from '../../../lib/creatorPlan';
@@ -37,6 +37,7 @@ export function basicsPayload(draft: CreatorDraft) {
     organiserName: draft.organiserName.trim() || null,
     paymentDestination: draft.paymentDestination.trim() || null,
     termsText: draft.termsText.trim() || null,
+    laneHatbands: hatbandsFor(draft),
     startDate: start,
     endDate: hasEnd ? new Date(`${draft.endDate || draft.startDate}T${draft.endTime || '17:00'}`).toISOString() : null,
   };

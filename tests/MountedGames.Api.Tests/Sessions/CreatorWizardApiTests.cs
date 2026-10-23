@@ -207,6 +207,26 @@ public class CreatorWizardApiTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task LaneHatbands_AreSetWhenCreating_KeptWhenOmitted_AndClearedByAnEmptyList()
+    {
+        var admin = await _f.AdminAsync();
+        var created = await (await admin.PostAsJsonAsync("/api/competitions",
+            new CreateCompetitionRequest($"Hatbands {Guid.NewGuid():N}", null, null, null, null, null, null, DateTime.UtcNow.AddDays(5), null,
+                LaneHatbands: [" Red ", "White", ""]))).ReadAsync<CompetitionSummary>();
+        async Task<CompetitionDetail> Get() => await (await admin.GetAsync($"/api/competitions/{created.Id}")).ReadAsync<CompetitionDetail>();
+        Assert.Equal(new[] { "Red", "White" }, (await Get()).LaneHatbands);
+
+        UpdateCompetitionRequest Update(IReadOnlyList<string>? hatbands) =>
+            new("Hatbands", null, null, null, null, null, null, DateTime.UtcNow.AddDays(5), null, true, false, LaneHatbands: hatbands);
+        await admin.PutAsJsonAsync($"/api/competitions/{created.Id}", Update(null));
+        Assert.Equal(new[] { "Red", "White" }, (await Get()).LaneHatbands);
+        await admin.PutAsJsonAsync($"/api/competitions/{created.Id}", Update(["Blue", "Yellow", "Green"]));
+        Assert.Equal(new[] { "Blue", "Yellow", "Green" }, (await Get()).LaneHatbands);
+        await admin.PutAsJsonAsync($"/api/competitions/{created.Id}", Update([]));
+        Assert.Null((await Get()).LaneHatbands);
+    }
+
+    [Fact]
     public async Task AnExistingSqliteDatabaseGainsPlannedRaces_WithoutLosingData()
     {
         var a = await _f.CreateArenaAsync(2);

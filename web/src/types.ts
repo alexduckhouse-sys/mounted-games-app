@@ -318,6 +318,8 @@ export interface CompetitionDetail {
   isDemo?: boolean;
   /** The organiser's terms and conditions as plain text; empty means the sign-up form shows a placeholder. */
   termsText?: string | null;
+  /** The hatband colour in each lane, index 0 being lane 1; set when the competition is created. Null when not set. */
+  laneHatbands?: string[] | null;
 }
 
 export interface MySignup {

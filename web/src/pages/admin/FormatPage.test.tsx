@@ -115,6 +115,20 @@ describe('On the day', () => {
   });
 });
 
+describe('On the day: hatbands', () => {
+  it('shows which hatband goes with which lane when the creator set them, and nothing when it did not', async () => {
+    mount();
+    await region('Timetable');
+    expect(screen.queryByRole('list', { name: 'Hatbands by lane' })).not.toBeInTheDocument();
+  });
+
+  it('lists them', async () => {
+    comp = build({ laneHatbands: ['Red', 'White', 'Blue'] });
+    mount();
+    expect((await screen.findAllByRole('listitem')).some((li) => li.textContent === 'Lane 3 · Blue')).toBe(true);
+  });
+});
+
 describe('On the day: breaks and briefings', () => {
   it('lists them, adds one to the timetable and removes one after asking', async () => {
     mount();

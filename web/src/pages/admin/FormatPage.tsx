@@ -12,6 +12,7 @@ import { formatTime } from '../../lib/time';
 import type { CompetitionDetail, CompetitionSection, FormTeamsResult, SectionSignup, Session } from '../../types';
 import { SessionKind } from '../../types';
 import { BreakForm } from './creator/BreakForm';
+import { HatbandList } from './creator/Hatbands';
 import { Pill } from './creator/parts';
 import { PartHead } from './LaptopParts';
 import { RaceListDialog } from './RaceListDialog';
@@ -340,6 +341,13 @@ export function FormatPage() {
           ))}
         </ul>
       </section>
+
+      {competition.laneHatbands && competition.laneHatbands.length > 0 && (
+        <section aria-labelledby="fm-hatbands" className="flex flex-col gap-4">
+          <PartHead id="fm-hatbands" title="Hatbands by lane" />
+          <HatbandList hatbands={competition.laneHatbands} />
+        </section>
+      )}
 
       <section aria-labelledby="fm-breaks" className="flex flex-col gap-4">
         <PartHead id="fm-breaks" title="Breaks and briefings" />

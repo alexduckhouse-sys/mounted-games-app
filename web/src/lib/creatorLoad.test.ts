@@ -11,12 +11,12 @@ describe('draftFromCompetition', () => {
   it('opens a competition with nothing planned: one session per age group, races left for later', () => {
     const d = draftFromCompetition(competition({
       name: 'Old', startDate: '2026-06-01T08:30:00', endDate: '2026-06-02T16:00:00', icon: undefined, organiserName: 'Pony Club', location: 'Field',
-      latitude: 51.5, longitude: -1.2, what3Words: 'a.b.c', termsText: 'T', paymentDestination: 'Bank', description: 'Notes',
+      latitude: 51.5, longitude: -1.2, what3Words: 'a.b.c', termsText: 'T', paymentDestination: 'Bank', description: 'Notes', laneHatbands: ['Blue', 'Red'],
       sections: [sec(5, { priceMinor: 1250, maxParticipants: 20, finalistCount: 6, runoffRaceName: '2 Flag', usesRaceFinals: true })],
     }));
     expect(d).toMatchObject({
       name: 'Old', icon: 'flag', startDate: '2026-06-01', startTime: '08:30', endDate: '2026-06-02', endTime: '16:00', organiserName: 'Pony Club',
-      lat: '51.5', lon: '-1.2', what3Words: 'a.b.c', termsText: 'T', paymentDestination: 'Bank', description: 'Notes', step: 0,
+      lat: '51.5', lon: '-1.2', what3Words: 'a.b.c', termsText: 'T', paymentDestination: 'Bank', description: 'Notes', step: 0, laneHatbands: ['Blue', 'Red'],
     });
     expect(d.sections[0]).toMatchObject({
       existingId: 5, ageGroup: 'Seniors', priceGbp: '12.50', maxParticipants: '20', finalistCount: '6', runoffRaceName: '2 Flag', usesRaceFinals: true,
