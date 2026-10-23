@@ -165,7 +165,7 @@ export function TeamsTab() {
               return (
                 <div key={t.id}
                   className={`p-2.5 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-50 flex items-center gap-2 shadow-soft ${
-                    t.isHorsConcours ? 'opacity-70' : ''
+                    t.isHorsConcours || t.isWithdrawn ? 'opacity-70' : ''
                   }`}>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm truncate flex items-center gap-1.5">
@@ -173,6 +173,11 @@ export function TeamsTab() {
                       {hasDec && (
                         <span title="Dec form submitted" className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200 text-[9px] font-semibold">
                           <ClipboardList className="w-2.5 h-2.5" /> DEC
+                        </span>
+                      )}
+                      {t.isWithdrawn && (
+                        <span title="Withdrawn from the rest of the event" className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 text-[9px] font-semibold">
+                          Withdrawn
                         </span>
                       )}
                       {t.isHorsConcours && (

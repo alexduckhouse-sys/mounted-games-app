@@ -145,6 +145,8 @@ export interface Team {
   relationship?: 'trainer' | 'supporter' | null;
   /** Join key — set only when the viewer is the trainer of this team. */
   supporterJoinKey?: string | null;
+  /** Withdrawn or no-show. Public; the reason is organiser-only. */
+  isWithdrawn?: boolean;
 }
 
 export type TeamSupporterStatus = 0 | 1; // Pending / Accepted
@@ -354,6 +356,8 @@ export interface StandingRow {
   eliminations: number;
   /** 0 for the A Final, 1 for the B Final and so on; null when the team is in no lettered final. */
   finalTier?: number | null;
+  /** Scored points stand, but the team is out of the rest of the event. */
+  withdrawn?: boolean;
 }
 
 export interface ChatMessage {

@@ -364,6 +364,8 @@ sessions taking the MAX per (kind, bucket).
 
 An event’s Details page links to Readiness & draw. Organisers can preview a seeded section draw, inspect repeated opponents and lane counts, then apply it while the source data is unchanged. Started or scored races cannot be redrawn. Readiness brings declarations, unpaid entries, timetable overlaps and the equipment checklist together.
 
+The Entries view under Event checks lists every team with its status. An organiser can withdraw a team or mark a no-show (with a reason only organisers see), reinstate it until a draw has been applied since, and swap a reserve in for a rider on the current declaration (a locked declaration needs an explicit override and a reason; each swap is audited with before, after, who and when). A team going out leaves every heat that hasn't been scored, and the public timetable shows the heats that remain. A re-draw preview then shows before and after for the unscored heats of the section (heats merged, sizes balanced, lanes closed up, empty heats removed) and applies only when the organiser confirms. Scored, signed-off and started heats and finals are never touched, a withdrawn team keeps the points it scored, and it is left out of finals seeding.
+
 Rulebooks are ordinary text attached to a competition, with a title, edition and optional source link. Everyone can read them; the organiser can edit them.
 
 The scoring screen keeps a revision history. Corrections need a reason, including changes waiting offline and decisions to replace another phone’s result. Completed results can be signed off; reopening them also needs a reason. Shared placings retain the existing points for that place; no points-sharing rule is introduced.

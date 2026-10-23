@@ -62,5 +62,58 @@ public static class OperationsSqliteSchema
         );
 
         CREATE UNIQUE INDEX IF NOT EXISTS "IX_Rulebook_CompetitionId_Title_Edition" ON "Rulebook" ("CompetitionId", "Title", "Edition");
+
+        CREATE TABLE IF NOT EXISTS "TeamStatusEvent" (
+            "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            "CompetitionId" INTEGER NOT NULL,
+            "TeamId" INTEGER NOT NULL,
+            "Status" INTEGER NOT NULL,
+            "Reason" TEXT NOT NULL,
+            "ActorUserId" TEXT,
+            "RemovedEntriesJson" TEXT NOT NULL,
+            "CreatedAt" TEXT NOT NULL,
+            CONSTRAINT "FK_TeamStatusEvent_Teams_TeamId" FOREIGN KEY ("TeamId") REFERENCES "Teams" ("Id") ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS "IX_TeamStatusEvent_CompetitionId" ON "TeamStatusEvent" ("CompetitionId");
+
+        CREATE INDEX IF NOT EXISTS "IX_TeamStatusEvent_TeamId_Id" ON "TeamStatusEvent" ("TeamId", "Id");
+
+        CREATE TABLE IF NOT EXISTS "DrawChange" (
+            "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            "CompetitionId" INTEGER NOT NULL,
+            "SectionId" INTEGER NOT NULL,
+            "Kind" INTEGER NOT NULL,
+            "RequestId" TEXT NOT NULL,
+            "Fingerprint" TEXT NOT NULL,
+            "ActorUserId" TEXT,
+            "ResultJson" TEXT NOT NULL,
+            "CreatedAt" TEXT NOT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_DrawChange_CompetitionId_RequestId" ON "DrawChange" ("CompetitionId", "RequestId");
+
+        CREATE INDEX IF NOT EXISTS "IX_DrawChange_CompetitionId_SectionId" ON "DrawChange" ("CompetitionId", "SectionId");
+
+        CREATE TABLE IF NOT EXISTS "RiderSwapEvent" (
+            "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            "CompetitionId" INTEGER NOT NULL,
+            "DeclarationFormId" INTEGER NOT NULL,
+            "TeamId" INTEGER NOT NULL,
+            "OutRiderEntryId" INTEGER NOT NULL,
+            "InRiderEntryId" INTEGER NOT NULL,
+            "BeforeJson" TEXT NOT NULL,
+            "AfterJson" TEXT NOT NULL,
+            "ActorUserId" TEXT,
+            "Reason" TEXT NOT NULL,
+            "OverrodeLock" INTEGER NOT NULL,
+            "RequestId" TEXT NOT NULL,
+            "CreatedAt" TEXT NOT NULL,
+            CONSTRAINT "FK_RiderSwapEvent_DeclarationForms_DeclarationFormId" FOREIGN KEY ("DeclarationFormId") REFERENCES "DeclarationForms" ("Id") ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS "IX_RiderSwapEvent_CompetitionId" ON "RiderSwapEvent" ("CompetitionId");
+
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_RiderSwapEvent_DeclarationFormId_RequestId" ON "RiderSwapEvent" ("DeclarationFormId", "RequestId");
         """);
 }

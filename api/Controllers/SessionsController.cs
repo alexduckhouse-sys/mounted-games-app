@@ -135,6 +135,8 @@ public class SessionsController : ControllerBase
         var s = await _db.Sessions.FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
+        if (await OutTeamNamesAsync(competitionId, req.TeamIds) is { Count: > 0 } outNames)
+            return Conflict(new { message = $"{string.Join(", ", outNames)} can't be added to a heat while withdrawn." });
 
         var heat = new Heat
         {
@@ -175,7 +177,7 @@ public class SessionsController : ControllerBase
         if (s is null) return NotFound();
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
 
-        var teamIds = req.TeamIds.Distinct().ToList();
+        var teamIds = await WithoutOutTeamsAsync(competitionId, req.TeamIds.Distinct().ToList());
         var raceNames = req.RaceNames.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
         if (teamIds.Count == 0 || raceNames.Count == 0)
             return BadRequest("At least one team and one race name are required.");
@@ -263,9 +265,12 @@ public class SessionsController : ControllerBase
             .ToListAsync();
         if (siblings.Count < 2) return BadRequest("Both qualifier heats must exist before populating the final.");
 
+        // A team that has since withdrawn keeps its result but doesn't go through to the final.
+        var outIds = (await OutTeamIdsAsync(competitionId, siblings.SelectMany(h => h.Races).SelectMany(r => r.Results).Select(r => r.TeamId))).ToHashSet();
+
         int?[] TopPlacings(Heat h) => h.Races
             .SelectMany(r => r.Results)
-            .Where(r => !r.Eliminated && r.Placing.HasValue)
+            .Where(r => !r.Eliminated && r.Placing.HasValue && !outIds.Contains(r.TeamId))
             .OrderBy(r => r.Placing!.Value)
             .Take(req.TopN)
             .Select(r => (int?)r.TeamId)
@@ -338,6 +343,10 @@ public class SessionsController : ControllerBase
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
         if (!await TeamsBelongAsync(competitionId, req.Assignments.SelectMany(a => a.TeamIds))) return BadRequest(new { message = "Some of those teams aren't in this competition." });
+        // A withdrawn team may stay in a heat it is already in (scored before it went out), not be moved into one.
+        var alreadyIn = s.Heats.SelectMany(h => h.Entries).Select(e => e.TeamId).ToHashSet();
+        if (await OutTeamNamesAsync(competitionId, req.Assignments.SelectMany(a => a.TeamIds).Where(t => !alreadyIn.Contains(t))) is { Count: > 0 } outNames)
+            return Conflict(new { message = $"{string.Join(", ", outNames)} can't be added to a heat while withdrawn. Nothing was saved." });
 
         var teamForLabel = new Dictionary<string, List<int>>();
         foreach (var a in req.Assignments)
@@ -452,7 +461,7 @@ public class SessionsController : ControllerBase
         if (s is null) return NotFound();
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
 
-        var teamIds = req.TeamIds.Distinct().ToList();
+        var teamIds = await WithoutOutTeamsAsync(competitionId, req.TeamIds.Distinct().ToList());
         var raceNames = req.RaceNames.Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
         if (teamIds.Count == 0 || raceNames.Count == 0)
             return BadRequest("At least one team and one race name are required.");
@@ -517,6 +526,28 @@ public class SessionsController : ControllerBase
         for (var i = 0; i < shuffled.Count; i++)
             groups[i % groupCount].Add(shuffled[i]);
         return groups;
+    }
+
+    private async Task<List<int>> OutTeamIdsAsync(int competitionId, IEnumerable<int> teamIds)
+    {
+        var ids = teamIds.Distinct().ToList();
+        return ids.Count == 0 ? [] : await _db.Teams
+            .Where(t => t.CompetitionId == competitionId && ids.Contains(t.Id) && t.EntryStatus != TeamEntryStatus.Active)
+            .Select(t => t.Id).ToListAsync();
+    }
+
+    private async Task<List<string>> OutTeamNamesAsync(int competitionId, IEnumerable<int> teamIds)
+    {
+        var ids = teamIds.Distinct().ToList();
+        return ids.Count == 0 ? [] : await _db.Teams
+            .Where(t => t.CompetitionId == competitionId && ids.Contains(t.Id) && t.EntryStatus != TeamEntryStatus.Active)
+            .OrderBy(t => t.Id).Select(t => t.DisplayName).ToListAsync();
+    }
+
+    private async Task<List<int>> WithoutOutTeamsAsync(int competitionId, List<int> teamIds)
+    {
+        var outIds = (await OutTeamIdsAsync(competitionId, teamIds)).ToHashSet();
+        return teamIds.Where(t => !outIds.Contains(t)).ToList();
     }
 
     /// <summary>

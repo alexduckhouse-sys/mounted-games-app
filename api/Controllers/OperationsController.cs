@@ -39,7 +39,7 @@ public class OperationsController(
         try
         {
             return await new CompetitionDrawService(db)
-                .ApplyAsync(competitionId, sectionId, request, cancellationToken);
+                .ApplyAsync(competitionId, sectionId, request, cancellationToken, User.FindFirstValue(ClaimTypes.NameIdentifier));
         }
         catch (KeyNotFoundException) { return NotFound(); }
         catch (DrawChangedException ex) { return Conflict(new { message = ex.Message }); }

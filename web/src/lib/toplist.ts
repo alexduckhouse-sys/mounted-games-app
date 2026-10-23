@@ -14,6 +14,8 @@ export interface ToplistRow {
   /** Points to pass the last finalist, for teams below the line that still have races to ride. */
   needed: number | null;
   racesLeft: number;
+  /** Withdrawn or no-show: what they scored stays, they ride no more. */
+  withdrawn: boolean;
 }
 
 export interface Toplist {
@@ -129,7 +131,7 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   const rows: ToplistRow[] = ordered.map((row) => {
     const position = ordered.findIndex((other) => level(other, row)) + 1;
     const joint = ordered.filter((other) => level(other, row)).length > 1;
-    return { teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position, joint, runoff: false, out: false, needed: null, racesLeft: racesLeft.get(row.teamId) ?? 0 };
+    return { teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position, joint, runoff: false, out: false, needed: null, racesLeft: racesLeft.get(row.teamId) ?? 0, withdrawn: row.withdrawn === true };
   });
 
   // Until someone has scored, everyone is level and a cut-off line would mean nothing.
@@ -270,6 +272,7 @@ function buildDetail(rows: ToplistRow[], finals: FinalGroup[], heatSessions: Ses
 
 /** The small line under a team's name, or null when there is nothing worth saying. */
 export function toplistNote(row: ToplistRow): string | null {
+  if (row.withdrawn) return 'Withdrawn';
   if (row.runoff) return `Joint ${ordinal(row.position)} · run-off`;
   if (row.needed != null) return `${row.needed} needed to make the final`;
   if (row.racesLeft > 0) return `${row.racesLeft} ${row.racesLeft === 1 ? 'race' : 'races'} left`;

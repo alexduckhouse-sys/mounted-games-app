@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 
 namespace MountedGames.Api.Services.Operations;
 
@@ -21,7 +22,8 @@ public class CompetitionDrawService(AppDbContext db)
         if (!sectionExists) throw new KeyNotFoundException("Section not found.");
 
         var teams = await db.Teams.AsNoTracking()
-            .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == sectionId)
+            .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == sectionId
+                && t.EntryStatus == TeamEntryStatus.Active)
             .OrderBy(t => t.Id)
             .Select(t => new TeamInput(t.Id, t.DisplayName))
             .ToListAsync(cancellationToken);
@@ -120,7 +122,7 @@ public class CompetitionDrawService(AppDbContext db)
 
     public async Task<DrawPreviewDto> ApplyAsync(
         int competitionId, int sectionId, ApplyDrawRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? actorUserId = null)
     {
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
@@ -139,6 +141,17 @@ public class CompetitionDrawService(AppDbContext db)
             foreach (var team in heat.Teams)
                 db.HeatEntries.Add(new HeatEntry { HeatId = heat.HeatId, TeamId = team.TeamId, LaneIndex = team.LaneIndex });
 
+            // A withdrawal can be undone only until a draw has been built without the team.
+            db.Set<DrawChange>().Add(new DrawChange
+            {
+                CompetitionId = competitionId,
+                SectionId = sectionId,
+                Kind = DrawChangeKind.SectionDraw,
+                RequestId = $"section-draw-{Guid.NewGuid():N}",
+                Fingerprint = preview.Fingerprint,
+                ActorUserId = actorUserId,
+                CreatedAt = DateTime.UtcNow,
+            });
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return preview;

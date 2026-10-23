@@ -298,6 +298,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "SectionSignups", "TermsAcceptedByName", "TEXT NULL");
         await EnsureColumnAsync(db, "SectionSignups", "TermsWordingVersion", "TEXT NULL");
 
+        await EnsureColumnAsync(db, "Teams", "EntryStatus", "INTEGER NOT NULL DEFAULT 0");
         await Operations.OperationsSqliteSchema.EnsureAsync(db);
         await EnsureColumnAsync(db, "RaceScoreEvent", "ActorLabel", "TEXT NULL");
 

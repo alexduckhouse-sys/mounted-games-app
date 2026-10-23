@@ -39,3 +39,14 @@ public enum RaceRoundStage
     Qualifier = 1,
     Final = 2
 }
+
+/// <summary>
+/// Whether a team is still taking part. Withdrawn and NoShow behave the same in the draw and on the
+/// timetable; the difference is only recorded for the organiser.
+/// </summary>
+public enum TeamEntryStatus
+{
+    Active = 0,
+    Withdrawn = 1,
+    NoShow = 2,
+}

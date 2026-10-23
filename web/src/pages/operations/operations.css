@@ -90,3 +90,22 @@
 .ops-history { align-items: flex-start; }
 .ops-history .rf-t2 { margin-top: 2px; }
 .ops-reason { display: block; margin-top: 4px; }
+
+/* Entries: withdrawals, no-shows, swaps and the re-draw preview */
+.ops-entry { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.ops-entry:first-child { border-top: 0; }
+.ops-entry-head { border: 0; }
+.ops-entry-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 16px 12px; background: rgb(var(--mg-surface)); }
+.ops-entry-actions .rf-btn { min-height: 44px; }
+.ops-pick { border: 0; margin: 0; padding: 0; }
+.ops-pick legend { font-size: 13px; font-weight: 600; color: rgb(var(--mg-body)); padding: 0 0 4px; }
+.ops-change { margin-top: 8px; }
+.ops-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+@media (max-width: 420px) { .ops-cols { grid-template-columns: 1fr; } }
+.ops-col { min-width: 0; padding: 8px 10px; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-rule)); border-radius: 8px; }
+.ops-col-title { margin: 0 0 6px; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--mg-muted)); }
+.ops-heat + .ops-heat { margin-top: 8px; }
+.ops-heat-name { margin: 0 0 2px; font-weight: 600; }
+.ops-heat ol { margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.ops-heat li { display: flex; align-items: baseline; gap: 6px; min-height: 24px; overflow-wrap: anywhere; }
+.ops-heat .ops-lane-no { width: 16px; font-size: 13px; }

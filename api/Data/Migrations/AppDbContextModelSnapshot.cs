@@ -1072,6 +1072,53 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("LiveStreams");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.DrawChange", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequestId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SectionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("CompetitionId", "SectionId");
+
+                    b.ToTable("DrawChange");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.EquipmentAcknowledgement", b =>
                 {
                     b.Property<int>("Id")
@@ -1198,6 +1245,66 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("RaceScoreState");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.RiderSwapEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AfterJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("BeforeJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DeclarationFormId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("InRiderEntryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OutRiderEntryId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("OverrodeLock")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RequestId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.HasIndex("DeclarationFormId", "RequestId")
+                        .IsUnique();
+
+                    b.ToTable("RiderSwapEvent");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.Rulebook", b =>
                 {
                     b.Property<int>("Id")
@@ -1239,6 +1346,47 @@ namespace MountedGames.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Rulebook");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.TeamStatusEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RemovedEntriesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.HasIndex("TeamId", "Id");
+
+                    b.ToTable("TeamStatusEvent");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.OverlayLook", b =>
@@ -2232,6 +2380,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int>("EntryStatus")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsHorsConcours")
                         .HasColumnType("boolean");
 
@@ -2632,6 +2783,17 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Race");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.RiderSwapEvent", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.DeclarationForm", "DeclarationForm")
+                        .WithMany()
+                        .HasForeignKey("DeclarationFormId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DeclarationForm");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.Rulebook", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
@@ -2641,6 +2803,17 @@ namespace MountedGames.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Competition");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.TeamStatusEvent", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Team");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.PushSubscription", b =>
