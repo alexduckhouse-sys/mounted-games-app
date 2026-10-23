@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Clock, Trophy, MessageSquare, Info, ArrowLeftRight, X, Settings, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight } from 'lucide-react';
+import { Clock, Trophy, MessageSquare, Info, ArrowLeftRight, X, Settings, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight, BarChart3 } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES } from '../theme/themes';
@@ -133,6 +133,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
             <button onClick={onChangeCompetition} className={itemClass(false)}><ArrowLeftRight className={iconClass(false)} />Change competition</button>
             {(seasons === null || seasons.length > 0) && <NavLink to={seasonsTo} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>}
             <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
+            <NavLink to="/stats" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><BarChart3 className={iconClass(isActive)} />Rider and team stats</>}</NavLink>
             <button onClick={() => setSettingsOpen((v) => !v)} className={itemClass(settingsOpen)} aria-expanded={settingsOpen}><SlidersHorizontal className={iconClass(settingsOpen)} />Settings</button>
             {settingsOpen && (
               <section aria-label="Settings" className="mt-2 flex flex-col gap-4 rounded-xl border border-[rgb(var(--mg-rule))] p-3">

@@ -1,0 +1,416 @@
+using Microsoft.EntityFrameworkCore;
+using MountedGames.Api.Data;
+using MountedGames.Api.Dtos;
+using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Entities.Seasons;
+
+namespace MountedGames.Api.Services.Stats;
+
+/// <param name="SignedIn">Signed-in viewers get the detail lists; everyone else gets the summary only.</param>
+/// <param name="SeesFullNames">Site admins see riders' full names even when a rider asked for initials only.</param>
+public readonly record struct StatsViewer(bool SignedIn, bool SeesFullNames);
+
+/// <summary>
+/// The cross-competition statistics hub: riders, ponies, teams and clubs, matched by name (see
+/// <see cref="StatsNames"/>). It reads only what public pages already show:
+/// <list type="bullet">
+/// <item>finished competitions (archived, past their last day, or every race scored) that are not demo events;</item>
+/// <item>riders and ponies from each team's latest locked declaration form, the one the public sees;</item>
+/// <item>results of completed races, never a referee's note; sit-outs are left out.</item>
+/// </list>
+/// Places come from <see cref="StandingsService"/>, so hors concours teams have none. A rider who asked for
+/// initials only is matched on the shortened name for anyone who isn't a site admin, so their surname finds nothing.
+/// </summary>
+public sealed class StatsService(AppDbContext db, StandingsService standings)
+{
+    public const int HitsPerKind = 8;
+    private const int MaxSearchRows = 2000;
+    private const int MaxProfileRows = 5000;
+
+    private sealed record RiderRow(string FullName, bool UseInitialOnly, string? HorseName, bool IsReserve, int TeamId, int CompetitionId, SectionFormat Format);
+    private sealed record NameRow(string Name, int CompetitionId, int TeamId);
+    private sealed record Membership(int TeamId, string? RiderName, string? PonyName, bool IsReserve);
+    private sealed record TeamRow(int TeamId, string TeamName, string ClubName, bool IsHorsConcours, int CompetitionId,
+        string CompetitionName, DateTime StartDate, int SectionId, string SectionName, SectionFormat Format);
+    private sealed record ResultRow(int TeamId, string RaceName, int SessionId, string SessionName, int SessionOrder,
+        RaceRoundStage Stage, int? Placing, bool Eliminated, int Points);
+    private sealed record Placing(int Place, int TeamsPlaced, int? FinalTier, bool SectionHasFinals);
+
+    // ----- search -----
+
+    /// <summary>Null when the query is too short, too long or has no letters to match.</summary>
+    public async Task<StatsSearchDto?> SearchAsync(string? query, StatsViewer viewer, CancellationToken ct = default)
+    {
+        var q = StatsNames.Normalise(query);
+        if (!StatsNames.IsValidQuery(q)) return null;
+        var tokens = StatsNames.Tokens(q);
+
+        var riders = await RiderRows(RidersNamed(tokens), MaxSearchRows).ToListAsync(ct);
+        var ponies = await RiderRows(PoniesNamed(tokens), MaxSearchRows).ToListAsync(ct);
+        var teams = await TeamsNamed(tokens)
+            .OrderByDescending(t => t.Competition!.StartDate).Take(MaxSearchRows)
+            .Select(t => new NameRow(t.DisplayName, t.CompetitionId, t.Id)).ToListAsync(ct);
+        var clubs = await ClubsNamed(tokens)
+            .OrderByDescending(t => t.Competition!.StartDate).Take(MaxSearchRows)
+            .Select(t => new NameRow(t.Club!.Name, t.CompetitionId, t.Id)).ToListAsync(ct);
+
+        var counted = await CountedCompetitionsAsync(
+            riders.Select(r => r.CompetitionId).Concat(ponies.Select(r => r.CompetitionId))
+                .Concat(teams.Select(t => t.CompetitionId)).Concat(clubs.Select(t => t.CompetitionId)), ct);
+
+        return new StatsSearchDto(
+            StatsNames.Tidy(query),
+            Hits(StatsSubjectKind.Rider, riders.Where(Counts).Select(r => new NameRow(
+                RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames), r.CompetitionId, r.TeamId)), q, counted),
+            Hits(StatsSubjectKind.Pony, ponies.Where(Counts).Select(r => new NameRow(r.HorseName!, r.CompetitionId, r.TeamId)), q, counted),
+            Hits(StatsSubjectKind.Team, teams, q, counted),
+            Hits(StatsSubjectKind.Club, clubs, q, counted));
+    }
+
+    private static List<StatsHitDto> Hits(StatsSubjectKind kind, IEnumerable<NameRow> rows, string q, HashSet<int> counted)
+        => rows.Where(r => counted.Contains(r.CompetitionId))
+            .Select(r => (Name: StatsNames.Tidy(r.Name), Key: StatsNames.Normalise(r.Name), r.CompetitionId))
+            // The database filter is loose (words, dots trimmed); this is the real match, on the name the viewer may see.
+            .Where(r => r.Key.Contains(q, StringComparison.Ordinal))
+            .GroupBy(r => r.Key)
+            .Select(g => new StatsHitDto(kind, g.First().Name, g.Key, g.Select(x => x.CompetitionId).Distinct().Count()))
+            .OrderByDescending(h => h.Key == q).ThenByDescending(h => h.Competitions)
+            .ThenBy(h => h.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(HitsPerKind)
+            .ToList();
+
+    /// <summary>A reserve in an individual or pairs entry didn't ride, so the entry isn't theirs (or their pony's).</summary>
+    private static bool Counts(RiderRow row) => !row.IsReserve || row.Format == SectionFormat.Teams;
+
+    // ----- profiles -----
+
+    public async Task<StatsProfileDto?> RiderAsync(string? name, StatsViewer viewer, CancellationToken ct = default)
+    {
+        var key = StatsNames.Normalise(name);
+        if (!StatsNames.IsValidQuery(key)) return null;
+        var rows = await RiderRows(RidersNamed(StatsNames.Tokens(key)), MaxProfileRows).ToListAsync(ct);
+        var mine = rows
+            .Select(r => (Row: r, Shown: StatsNames.Tidy(RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames))))
+            .Where(x => StatsNames.Normalise(x.Shown) == key)
+            .ToList();
+        if (mine.Count == 0) return null;
+        var memberships = mine.Select(x => new Membership(x.Row.TeamId, x.Shown, PonyName(x.Row.HorseName), x.Row.IsReserve)).ToList();
+        return await BuildAsync(StatsSubjectKind.Rider, mine[0].Shown, key, memberships, viewer, ct);
+    }
+
+    public async Task<StatsProfileDto?> PonyAsync(string? name, StatsViewer viewer, CancellationToken ct = default)
+    {
+        var key = StatsNames.Normalise(name);
+        if (!StatsNames.IsValidQuery(key)) return null;
+        var rows = await RiderRows(PoniesNamed(StatsNames.Tokens(key)), MaxProfileRows).ToListAsync(ct);
+        var mine = rows.Where(r => StatsNames.Normalise(r.HorseName) == key).ToList();
+        if (mine.Count == 0) return null;
+        var memberships = mine.Select(r => new Membership(r.TeamId,
+            StatsNames.Tidy(RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames)), StatsNames.Tidy(r.HorseName), r.IsReserve)).ToList();
+        return await BuildAsync(StatsSubjectKind.Pony, memberships[0].PonyName!, key, memberships, viewer, ct);
+    }
+
+    public async Task<StatsProfileDto?> TeamAsync(string? name, StatsViewer viewer, CancellationToken ct = default)
+    {
+        var key = StatsNames.Normalise(name);
+        if (!StatsNames.IsValidQuery(key)) return null;
+        var rows = await TeamsNamed(StatsNames.Tokens(key))
+            .OrderByDescending(t => t.Competition!.StartDate).Take(MaxProfileRows)
+            .Select(t => new NameRow(t.DisplayName, t.CompetitionId, t.Id)).ToListAsync(ct);
+        return await TeamsProfileAsync(StatsSubjectKind.Team, key, rows, viewer, ct);
+    }
+
+    public async Task<StatsProfileDto?> ClubAsync(string? name, StatsViewer viewer, CancellationToken ct = default)
+    {
+        var key = StatsNames.Normalise(name);
+        if (!StatsNames.IsValidQuery(key)) return null;
+        var rows = await ClubsNamed(StatsNames.Tokens(key))
+            .OrderByDescending(t => t.Competition!.StartDate).Take(MaxProfileRows)
+            .Select(t => new NameRow(t.Club!.Name, t.CompetitionId, t.Id)).ToListAsync(ct);
+        return await TeamsProfileAsync(StatsSubjectKind.Club, key, rows, viewer, ct);
+    }
+
+    /// <summary>A season team profile: the event teams an organiser linked to it, so no name matching is needed.</summary>
+    public async Task<StatsProfileDto?> TeamProfileAsync(Guid id, StatsViewer viewer, CancellationToken ct = default)
+    {
+        var profile = await db.Set<TeamProfile>().AsNoTracking()
+            .Where(p => p.Id == id)
+            .Select(p => new { p.DisplayName, Teams = p.EventTeams.Select(e => e.TeamId).ToList() })
+            .SingleOrDefaultAsync(ct);
+        if (profile is null) return null;
+        var memberships = profile.Teams.Select(teamId => new Membership(teamId, null, null, false)).ToList();
+        return await BuildAsync(StatsSubjectKind.Team, StatsNames.Tidy(profile.DisplayName), id.ToString(), memberships, viewer, ct);
+    }
+
+    private async Task<StatsProfileDto?> TeamsProfileAsync(StatsSubjectKind kind, string key, List<NameRow> rows, StatsViewer viewer, CancellationToken ct)
+    {
+        var mine = rows.Where(r => StatsNames.Normalise(r.Name) == key).ToList();
+        if (mine.Count == 0) return null;
+        var memberships = mine.Select(r => new Membership(r.TeamId, null, null, false)).ToList();
+        return await BuildAsync(kind, StatsNames.Tidy(mine[0].Name), key, memberships, viewer, ct);
+    }
+
+    private async Task<StatsProfileDto> BuildAsync(
+        StatsSubjectKind kind, string name, string key, List<Membership> memberships, StatsViewer viewer, CancellationToken ct)
+    {
+        var allFormats = kind is StatsSubjectKind.Team or StatsSubjectKind.Club;
+        var teamIds = memberships.Select(m => m.TeamId).Distinct().ToList();
+        var teams = teamIds.Count == 0 ? [] : await db.Teams.AsNoTracking()
+            .Where(t => teamIds.Contains(t.Id))
+            .Select(t => new TeamRow(t.Id, t.DisplayName, t.Club != null ? t.Club.Name : string.Empty, t.IsHorsConcours,
+                t.CompetitionId, t.Competition!.Name, t.Competition.StartDate,
+                t.CompetitionSectionId, t.Section != null ? t.Section.DisplayName : string.Empty,
+                t.Section != null ? t.Section.Format : SectionFormat.Teams))
+            .ToListAsync(ct);
+        var counted = await CountedCompetitionsAsync(teams.Select(t => t.CompetitionId), ct);
+        var teamById = teams.Where(t => counted.Contains(t.CompetitionId)).ToDictionary(t => t.TeamId);
+        var kept = memberships
+            .Where(m => teamById.TryGetValue(m.TeamId, out var t) && (!m.IsReserve || t.Format == SectionFormat.Teams))
+            .ToList();
+        var entryTeams = kept.Select(m => m.TeamId).Distinct().Select(id => teamById[id])
+            .OrderByDescending(t => t.StartDate).ThenBy(t => t.CompetitionName).ThenBy(t => t.SectionName).ThenBy(t => t.TeamId)
+            .ToList();
+        var ids = entryTeams.Select(t => t.TeamId).ToList();
+
+        var results = ids.Count == 0 ? [] : await db.Results.AsNoTracking()
+            .Where(r => ids.Contains(r.TeamId) && r.Race!.IsComplete && !r.IsSitOut)
+            .Select(r => new ResultRow(r.TeamId, r.Race!.Name, r.Race.Heat!.SessionId, r.Race.Heat.Session!.Name,
+                r.Race.Heat.Session.OrderIndex, r.Race.Heat.RaceRoundStage, r.Placing, r.Eliminated, r.Points))
+            .ToListAsync(ct);
+        var sessionIds = results.Select(r => r.SessionId).Distinct().ToList();
+        var bases = await SessionBasesAsync(sessionIds, ct);
+        // The winner's points: one in a race-finals qualifier, otherwise the session's largest field. Never below
+        // what was actually given, so a quota can't pass 100% if a heat was resized after scoring.
+        int MaxFor(ResultRow r) => Math.Max(r.Stage == RaceRoundStage.Qualifier ? 1 : bases.GetValueOrDefault(r.SessionId), r.Points);
+        var places = await PlacesAsync(entryTeams.Where(t => !t.IsHorsConcours).ToList(), ct);
+
+        var raceScope = results.Where(r => allFormats || teamById[r.TeamId].Format != SectionFormat.Teams).ToList();
+        var placed = entryTeams.Where(t => places.ContainsKey(t.TeamId)).Select(t => places[t.TeamId]).ToList();
+        var finalsEntries = placed.Count(p => p.SectionHasFinals);
+        var aFinals = placed.Count(p => p.FinalTier == 0);
+        var wins = raceScope.Count(IsWin);
+        var points = raceScope.Sum(r => r.Points);
+        var maxPoints = raceScope.Sum(MaxFor);
+        var summary = new StatsSummaryDto(
+            entryTeams.Select(t => t.CompetitionId).Distinct().Count(), entryTeams.Count, placed.Count,
+            placed.Count(p => p.Place == 1), placed.Count(p => p.Place == 2), placed.Count(p => p.Place == 3),
+            placed.Count == 0 ? null : Math.Round(placed.Average(p => p.Place), 1, MidpointRounding.AwayFromZero),
+            finalsEntries, placed.Count(p => p.FinalTier is not null), aFinals, StatsNames.Percent(aFinals, finalsEntries),
+            raceScope.Count, wins, StatsNames.Percent(wins, raceScope.Count),
+            points, maxPoints, StatsNames.Percent(points, maxPoints));
+
+        if (!viewer.SignedIn)
+            return new StatsProfileDto(kind, name, key, false, allFormats, summary, null, null, null, null, null);
+
+        var games = raceScope
+            .GroupBy(r => StatsNames.Normalise(r.RaceName))
+            .Select(g =>
+            {
+                var gameWins = g.Count(IsWin);
+                var gamePoints = g.Sum(r => r.Points);
+                var gameMax = g.Sum(MaxFor);
+                return new StatsGameDto(StatsNames.Tidy(g.First().RaceName), g.Count(), gameWins, StatsNames.Percent(gameWins, g.Count()),
+                    g.Count(r => r.Eliminated), gamePoints, gameMax, StatsNames.Percent(gamePoints, gameMax));
+            })
+            .OrderByDescending(g => g.PointQuotaPercent ?? -1).ThenByDescending(g => g.Races)
+            .ThenBy(g => g.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        // Best and worst never overlap: with five games, the top three are best and the other two worst.
+        var bestCount = Math.Min(3, (games.Count + 1) / 2);
+        var best = games.Take(bestCount).Select(g => g.Name).ToList();
+        var worst = games.Skip(bestCount).Reverse().Take(3).Select(g => g.Name).ToList();
+
+        var sessionTables = await SessionTablesAsync(sessionIds, ct);
+        var resultsByTeam = results.ToLookup(r => r.TeamId);
+        var membersByTeam = kept.ToLookup(m => m.TeamId);
+        var entries = entryTeams.Select(t =>
+        {
+            var teamResults = resultsByTeam[t.TeamId].ToList();
+            var placing = places.GetValueOrDefault(t.TeamId);
+            var sessions = teamResults
+                .GroupBy(r => r.SessionId)
+                .OrderBy(g => g.First().SessionOrder).ThenBy(g => g.Key)
+                .Select(g =>
+                {
+                    var table = sessionTables.GetValueOrDefault(g.Key) ?? [];
+                    var mine = g.Sum(r => r.Points);
+                    int? rank = t.IsHorsConcours ? null : 1 + table.Count(other => other.Value > mine);
+                    return new StatsSessionDto(g.Key, g.First().SessionName, mine, g.Sum(MaxFor), rank, table.Count);
+                })
+                .ToList();
+            var members = membersByTeam[t.TeamId].ToList();
+            var teamPoints = teamResults.Sum(r => r.Points);
+            var teamMax = teamResults.Sum(MaxFor);
+            return new StatsEntryDto(
+                t.CompetitionId, t.CompetitionName, t.StartDate, t.SectionId, t.SectionName, t.Format,
+                t.TeamId, t.TeamName, t.ClubName, t.IsHorsConcours,
+                kind == StatsSubjectKind.Pony ? JoinNames(members.Select(m => m.RiderName)) : null,
+                kind == StatsSubjectKind.Rider ? JoinNames(members.Select(m => m.PonyName)) : null,
+                placing?.Place, placing?.TeamsPlaced ?? 0, placing?.FinalTier,
+                teamResults.Count, teamPoints, teamMax, StatsNames.Percent(teamPoints, teamMax), sessions);
+        }).ToList();
+
+        var partnerships = allFormats
+            ? await TeamPartnershipsAsync(teamById, ids, viewer, ct)
+            : Partnerships(kept.Where(m => m.RiderName is not null && m.PonyName is not null)
+                .Select(m => (m.RiderName!, m.PonyName!, teamById[m.TeamId].CompetitionId, m.TeamId)));
+
+        return new StatsProfileDto(kind, name, key, true, allFormats, summary, games, best, worst, entries, partnerships);
+    }
+
+    private static bool IsWin(ResultRow r) => r.Placing == 1 && !r.Eliminated;
+
+    private static string? JoinNames(IEnumerable<string?> names)
+    {
+        var list = names.Where(n => !string.IsNullOrEmpty(n)).Select(n => n!)
+            .DistinctBy(StatsNames.Normalise).ToList();
+        return list.Count == 0 ? null : string.Join(" / ", list);
+    }
+
+    private static string? PonyName(string? horse)
+    {
+        var tidy = StatsNames.Tidy(horse);
+        return tidy.Length == 0 ? null : tidy;
+    }
+
+    private async Task<List<StatsPartnershipDto>> TeamPartnershipsAsync(
+        Dictionary<int, TeamRow> teamById, List<int> ids, StatsViewer viewer, CancellationToken ct)
+    {
+        if (ids.Count == 0) return [];
+        var riders = await PublicRiders()
+            .Where(r => ids.Contains(r.DeclarationForm!.TeamId) && r.HorseName != null)
+            .Select(r => new { r.FullName, r.UseInitialOnly, r.HorseName, r.DeclarationForm!.TeamId })
+            .ToListAsync(ct);
+        return Partnerships(riders
+            .Where(r => PonyName(r.HorseName) is not null)
+            .Select(r => (StatsNames.Tidy(RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames)),
+                PonyName(r.HorseName)!, teamById[r.TeamId].CompetitionId, r.TeamId)));
+    }
+
+    private static List<StatsPartnershipDto> Partnerships(IEnumerable<(string Rider, string Pony, int CompetitionId, int TeamId)> pairs)
+        => pairs
+            .GroupBy(p => (StatsNames.Normalise(p.Rider), StatsNames.Normalise(p.Pony)))
+            .Select(g => new StatsPartnershipDto(g.First().Rider, g.First().Pony,
+                g.Select(p => p.TeamId).Distinct().Count(), g.Select(p => p.CompetitionId).Distinct().Count()))
+            .OrderByDescending(p => p.Entries).ThenBy(p => p.RiderName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(p => p.PonyName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    // ----- queries -----
+
+    /// <summary>Riders on each team's latest locked declaration form: the one public pages show.</summary>
+    private IQueryable<RiderEntry> PublicRiders() => db.RiderEntries.AsNoTracking()
+        .Where(r => r.DeclarationForm!.IsLocked
+            && r.DeclarationFormId == db.DeclarationForms
+                .Where(f => f.TeamId == r.DeclarationForm.TeamId && f.IsLocked)
+                .OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id)
+                .Select(f => f.Id).FirstOrDefault()
+            && !db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == r.DeclarationForm.Team!.CompetitionId && x.IsDemo));
+
+    private IQueryable<Team> PublicTeams() => db.Teams.AsNoTracking()
+        .Where(t => !db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == t.CompetitionId && x.IsDemo));
+
+    // Each token is copied into its own local so every Where captures its own word.
+    private IQueryable<RiderEntry> RidersNamed(IReadOnlyList<string> tokens)
+    {
+        var q = PublicRiders();
+        foreach (var token in tokens) { var word = token; q = q.Where(r => r.FullName.ToLower().Contains(word)); }
+        return q;
+    }
+
+    private IQueryable<RiderEntry> PoniesNamed(IReadOnlyList<string> tokens)
+    {
+        var q = PublicRiders().Where(r => r.HorseName != null);
+        foreach (var token in tokens) { var word = token; q = q.Where(r => r.HorseName!.ToLower().Contains(word)); }
+        return q;
+    }
+
+    private IQueryable<Team> TeamsNamed(IReadOnlyList<string> tokens)
+    {
+        var q = PublicTeams();
+        foreach (var token in tokens) { var word = token; q = q.Where(t => t.DisplayName.ToLower().Contains(word)); }
+        return q;
+    }
+
+    private IQueryable<Team> ClubsNamed(IReadOnlyList<string> tokens)
+    {
+        var q = PublicTeams().Where(t => t.Club != null);
+        foreach (var token in tokens) { var word = token; q = q.Where(t => t.Club!.Name.ToLower().Contains(word)); }
+        return q;
+    }
+
+    private static IQueryable<RiderRow> RiderRows(IQueryable<RiderEntry> q, int max) => q
+        .OrderByDescending(r => r.DeclarationForm!.Team!.Competition!.StartDate).ThenByDescending(r => r.Id)
+        .Take(max)
+        .Select(r => new RiderRow(r.FullName, r.UseInitialOnly, r.HorseName, r.IsReserve,
+            r.DeclarationForm!.TeamId, r.DeclarationForm.Team!.CompetitionId, r.DeclarationForm.Team.Section!.Format));
+
+    /// <summary>
+    /// The competitions whose results count: not a demo event, at least one race scored, and either over (archived
+    /// or past its last day) or with every race scored. One query for any number of competitions.
+    /// </summary>
+    private async Task<HashSet<int>> CountedCompetitionsAsync(IEnumerable<int> competitionIds, CancellationToken ct)
+    {
+        var ids = competitionIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+        var today = DateTime.UtcNow.Date;
+        var rows = await db.Competitions.AsNoTracking()
+            .Where(c => ids.Contains(c.Id) && !db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == c.Id && x.IsDemo))
+            .Select(c => new
+            {
+                c.Id,
+                Over = c.IsArchived || (c.EndDate ?? c.StartDate) < today,
+                Scored = db.Races.Any(r => r.Heat!.Session!.CompetitionId == c.Id && r.IsComplete),
+                Open = db.Races.Any(r => r.Heat!.Session!.CompetitionId == c.Id && !r.IsComplete
+                    && r.Heat.Session.Kind == SessionKind.Race && !r.Heat.Session.IsBreak),
+            })
+            .ToListAsync(ct);
+        return rows.Where(r => r.Scored && (r.Over || !r.Open)).Select(r => r.Id).ToHashSet();
+    }
+
+    /// <summary>Each session's largest field, as <see cref="ScoringService.GetSessionBaseAsync"/> works it out.</summary>
+    private async Task<Dictionary<int, int>> SessionBasesAsync(List<int> sessionIds, CancellationToken ct)
+    {
+        if (sessionIds.Count == 0) return [];
+        var heats = await db.Heats.AsNoTracking()
+            .Where(h => sessionIds.Contains(h.SessionId))
+            .Select(h => new { h.SessionId, Size = h.Entries.Count, Lanes = h.Session!.LanesPerHeat })
+            .ToListAsync(ct);
+        return heats.GroupBy(h => h.SessionId)
+            .ToDictionary(g => g.Key, g => g.Max(h => LaneRotation.LanesInUse(h.Size, h.Lanes)));
+    }
+
+    /// <summary>Session points of every team in each session (hors concours left out), for a rank.</summary>
+    private async Task<Dictionary<int, Dictionary<int, int>>> SessionTablesAsync(List<int> sessionIds, CancellationToken ct)
+    {
+        if (sessionIds.Count == 0) return [];
+        var rows = await db.Results.AsNoTracking()
+            .Where(r => sessionIds.Contains(r.Race!.Heat!.SessionId) && r.Race.IsComplete && !r.Team!.IsHorsConcours)
+            .Select(r => new { r.Race!.Heat!.SessionId, r.TeamId, r.Points })
+            .GroupBy(r => new { r.SessionId, r.TeamId })
+            .Select(g => new { g.Key.SessionId, g.Key.TeamId, Points = g.Sum(r => r.Points) })
+            .ToListAsync(ct);
+        return rows.GroupBy(r => r.SessionId)
+            .ToDictionary(g => g.Key, g => g.ToDictionary(r => r.TeamId, r => r.Points));
+    }
+
+    /// <summary>
+    /// Final places from the standings themselves (one call per age group entered), so finals tiers, tie rules
+    /// and any bonus points stay exactly as the standings page shows them.
+    /// </summary>
+    private async Task<Dictionary<int, Placing>> PlacesAsync(List<TeamRow> teams, CancellationToken ct)
+    {
+        var places = new Dictionary<int, Placing>();
+        foreach (var section in teams.GroupBy(t => (t.CompetitionId, t.SectionId)))
+        {
+            var rows = await standings.RowsAsync(section.Key.CompetitionId, section.Key.SectionId, ct);
+            var hasFinals = rows.Any(r => r.FinalTier is not null);
+            var wanted = section.Select(t => t.TeamId).ToHashSet();
+            for (var i = 0; i < rows.Count; i++)
+                if (wanted.Contains(rows[i].TeamId))
+                    places[rows[i].TeamId] = new Placing(i + 1, rows.Count, rows[i].FinalTier, hasFinals);
+        }
+        return places;
+    }
+}
