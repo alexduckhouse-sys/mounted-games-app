@@ -39,7 +39,11 @@ public record UserProfile(
     string FullName,
     int? ClubId,
     string? ClubName,
-    IReadOnlyList<string> Roles);
+    IReadOnlyList<string> Roles,
+    bool EmailConfirmed = true);
+
+/// <summary>Opened from the link in the confirmation email.</summary>
+public record ConfirmEmailRequest(string UserId, string Token);
 
 public record TrainerRequestDto(
     string UserId,

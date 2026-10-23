@@ -316,3 +316,30 @@ describe('admin edit mode', () => {
     expect(removeItem).toHaveBeenCalled();
   });
 });
+
+describe('refreshUser', () => {
+  it('picks up a confirmed email address and saves it', async () => {
+    localStorage.setItem('mg.auth', JSON.stringify(stored(['Member'], { emailConfirmed: false })));
+    const { result } = mount();
+    expect(result.current.user?.emailConfirmed).toBe(false);
+    get.mockResolvedValue({ data: { ...stored(['Member']).user, emailConfirmed: true } });
+    await act(async () => { await result.current.refreshUser(); });
+    expect(result.current.user?.emailConfirmed).toBe(true);
+    expect(JSON.parse(localStorage.getItem('mg.auth')!).user.emailConfirmed).toBe(true);
+  });
+
+  it('ignores a profile for someone else, a failure, and being signed out', async () => {
+    signIn();
+    const { result } = mount();
+    get.mockResolvedValue({ data: { ...stored().user, id: 'other', emailConfirmed: false } });
+    await act(async () => { await result.current.refreshUser(); });
+    expect(result.current.user?.id).toBe('u1');
+    get.mockRejectedValue(new Error('offline'));
+    await act(async () => { await result.current.refreshUser(); });
+    expect(result.current.user?.id).toBe('u1');
+    act(() => result.current.logout());
+    get.mockResolvedValue({ data: stored().user });
+    await act(async () => { await result.current.refreshUser(); });
+    expect(result.current.user).toBeNull();
+  });
+});

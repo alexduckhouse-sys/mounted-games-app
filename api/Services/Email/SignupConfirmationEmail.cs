@@ -138,9 +138,15 @@ public class SignupConfirmationService(
         }
     }
 
-    private string? SiteOrigin()
+    private string? SiteOrigin() => EmailSite.Origin(options.Value, configuration);
+}
+
+/// <summary>The website's address (scheme and host) for links in emails, or null when it isn't set or isn't a plain http(s) address.</summary>
+public static class EmailSite
+{
+    public static string? Origin(EmailOptions options, IConfiguration configuration)
     {
-        var raw = options.Value.SiteUrl;
+        var raw = options.SiteUrl;
         if (string.IsNullOrWhiteSpace(raw)) raw = configuration["Sharing:PublicBaseUrl"];
         if (string.IsNullOrWhiteSpace(raw) || raw.Length > 300) return null;
         if (!Uri.TryCreate(raw.Trim(), UriKind.Absolute, out var uri)) return null;

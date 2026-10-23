@@ -24,6 +24,9 @@ public class ApiFactory : WebApplicationFactory<Program>
 
     public StubHttp Http { get; } = new();
 
+    /// <summary>Stands in for DNS: every domain has mail unless a test says otherwise.</summary>
+    public FakeDomainChecker Domains { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -41,6 +44,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimits:GeocodePerMinute", "100000");
         builder.UseSetting("RateLimits:SponsorExposurePerMinute", "100000");
         builder.UseSetting("RateLimits:StatsPerMinute", "100000");
+        builder.UseSetting("RateLimits:EmailResendPerMinute", "100000");
         builder.ConfigureServices(services =>
         {
             var scheduler = services.Single(d => d.ImplementationType == typeof(NotificationScheduler));
@@ -50,6 +54,10 @@ public class ApiFactory : WebApplicationFactory<Program>
             services.Remove(services.Single(d => d.ImplementationType == typeof(IpRetentionSweeper)));
 
             services.AddTransient<IStartupFilter, TestIpStartupFilter>();
+
+            // Sign-up checks that an address's domain takes mail; tests never query real DNS.
+            services.RemoveAll<MountedGames.Api.Services.Email.IEmailDomainChecker>();
+            services.AddSingleton<MountedGames.Api.Services.Email.IEmailDomainChecker>(Domains);
 
             services.ConfigureAll<HttpClientFactoryOptions>(o =>
                 o.HttpMessageHandlerBuilderActions.Add(b => b.PrimaryHandler = Http));

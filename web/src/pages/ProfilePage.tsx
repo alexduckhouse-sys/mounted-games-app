@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Bell, ChevronRight, ClipboardList, Contact, CreditCard, LogOut, Package, Pencil, ShoppingBag, UserCog, UserRound, Users, type LucideIcon } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { EmailConfirmBanner } from '../components/EmailConfirmBanner';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
 import { initialsOf, roleLabel } from '../lib/profile';
@@ -73,6 +74,8 @@ export function ProfilePage() {
         </div>
         <Link to="/me/account" className="mg-icon-btn" aria-label="Account details"><Pencil aria-hidden="true" className="h-[18px] w-[18px]" /></Link>
       </div>
+
+      <EmailConfirmBanner />
 
       {count > 0 && (
         <Section title="Needs you" aside={String(count)}>

@@ -12,6 +12,8 @@ interface AuthContextValue {
   /** `username` is the email; `fullName` is the person's own name (without it the API uses the start of the email). */
   signupTrainer: (username: string, password: string, role?: string, clubName?: string, fullName?: string) => Promise<void>;
   logout: () => void;
+  /** Re-reads the signed-in person's profile, e.g. after they confirm their email address. */
+  refreshUser: () => Promise<void>;
   hasRole: (role: Role) => boolean;
   /**
    * Admin "Edit mode" — when off, admin gets the public-view UI without write
@@ -149,6 +151,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const { data } = await api.get<UserProfile>('/auth/me');
+      setAuth((cur) => {
+        if (!cur || cur.user.id !== data.id) return cur;
+        const next = { ...cur, user: { ...cur.user, ...data } };
+        writeStoredAuth(next);
+        return next;
+      });
+    } catch {
+      // A dropped connection leaves what we already know.
+    }
+  }, []);
+
   const logout = useCallback(() => {
     writeStoredAuth(null);
     setAuth(null);
@@ -164,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clubId: auth.user.clubId,
       clubName: auth.user.clubName,
       roles: auth.user.roles as Role[],
+      emailConfirmed: auth.user.emailConfirmed,
     };
   }, [auth]);
 
@@ -209,6 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithAdminKey,
     signupTrainer,
     logout,
+    refreshUser,
     hasRole,
     editorMode,
     setEditorMode,

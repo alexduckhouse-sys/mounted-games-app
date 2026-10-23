@@ -12,6 +12,8 @@ export interface StoredAuth {
     clubId: number | null;
     clubName: string | null;
     roles: string[];
+    /** False until the email address is confirmed; missing on saved logins from before this existed. */
+    emailConfirmed?: boolean;
   };
 }
 

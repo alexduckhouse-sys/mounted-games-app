@@ -48,7 +48,7 @@ describe('SignUpPage', () => {
     for (const label of ['Your name', 'Email', 'Password', 'Club']) expect(screen.getByLabelText(label)).toBeInTheDocument();
     expect(screen.getAllByRole('radio').map((radio) => radio.textContent)).toEqual(['Rider or parent', 'Trainer', 'Team manager']);
     expect(screen.queryByLabelText(/Username/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/PBKDF2|at least 8|number, a lowercase/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/PBKDF2/i)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
     expect(screen.getByRole('link', { name: 'Close' })).toHaveAttribute('href', '/');
   });
@@ -174,7 +174,7 @@ describe('SignUpPage', () => {
     await fill(user);
     await user.click(screen.getByRole('button', { name: 'Create account' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Password is required.');
-    expect(screen.getByLabelText('Password')).toHaveAccessibleDescription('Password is required.');
+    expect(screen.getByLabelText('Password')).toHaveAccessibleDescription(/^Password is required\./);
   });
 
   it('shows any other failure above the button, without losing what was typed', async () => {
@@ -206,5 +206,113 @@ describe('SignUpPage', () => {
   it('links to the privacy page', () => {
     mount();
     expect(screen.getByRole('link', { name: 'How we use your information' })).toHaveAttribute('href', '/privacy');
+  });
+
+  describe('password checklist', () => {
+    const rowOf = (text: string) => screen.getByText(text).closest('li')!;
+
+    it('lists every rule from the start, with "special character" and never "non-alphanumeric"', () => {
+      mount();
+      const rows = within(screen.getByRole('list', { name: 'Password requirements' })).getAllByRole('listitem');
+      expect(rows.map((r) => r.textContent)).toEqual([
+        'At least 8 characters (not met yet)', 'A number (not met yet)', 'A lowercase letter (not met yet)', 'A special character (like ! ? # @ £) (not met yet)',
+      ]);
+      expect(document.body.textContent).not.toMatch(/alphanumeric/i);
+      expect(screen.getByLabelText('Password')).toHaveAccessibleDescription(/Your password needs/);
+    });
+
+    it('ticks each rule as it is met while typing, and announces the count politely', async () => {
+      const user = userEvent.setup();
+      mount();
+      const input = screen.getByLabelText('Password');
+      await user.type(input, 'abcdefgh');
+      expect(rowOf('At least 8 characters').dataset.met).toBe('true');
+      expect(rowOf('A lowercase letter').dataset.met).toBe('true');
+      expect(rowOf('A number').dataset.met).toBe('false');
+      expect(rowOf('A special character (like ! ? # @ £)').dataset.met).toBe('false');
+      expect(screen.getByText('2 of 4 password requirements met.')).toHaveAttribute('aria-live', 'polite');
+      await user.type(input, '1!');
+      expect(screen.getByText('All password requirements met.')).toBeInTheDocument();
+      await user.clear(input);
+      expect(rowOf('A number').dataset.met).toBe('false');
+    });
+
+    it('keeps Create account off until every rule is met', async () => {
+      const user = userEvent.setup();
+      mount();
+      await fill(user);
+      const submit = screen.getByRole('button', { name: 'Create account' });
+      expect(submit).toBeEnabled();
+      await user.clear(screen.getByLabelText('Password'));
+      await user.type(screen.getByLabelText('Password'), 'Passw0rdxx');
+      expect(submit).toBeDisabled();
+    });
+
+    it('shows the server rule failures in friendly words, from the error codes', async () => {
+      vi.mocked(api.post).mockRejectedValue({ response: { status: 400, data: {
+        errors: ['Passwords must have at least one non alphanumeric character.'], errorCodes: ['PasswordRequiresNonAlphanumeric'] } } });
+      const user = userEvent.setup();
+      mount();
+      await fill(user);
+      await user.click(screen.getByRole('button', { name: 'Create account' }));
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Your password needs a special character (like ! ? # @ £).');
+      expect(alert.textContent).not.toMatch(/alphanumeric/i);
+    });
+
+    it('rewrites an older "non-alphanumeric" message from the server', async () => {
+      vi.mocked(api.post).mockRejectedValue({ response: { status: 400, data: { message: 'Password needs a non-alphanumeric character.' } } });
+      const user = userEvent.setup();
+      mount();
+      await fill(user);
+      await user.click(screen.getByRole('button', { name: 'Create account' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Password needs a special character.');
+    });
+  });
+
+  describe('email checks', () => {
+    it('suggests the right domain for a common typo, and fixes it on request', async () => {
+      const user = userEvent.setup();
+      mount();
+      const email = screen.getByLabelText('Email');
+      await user.type(email, 'sam@gmial.com');
+      expect(screen.queryByText(/Did you mean/)).not.toBeInTheDocument();
+      await user.tab();
+      expect(await screen.findByText(/Did you mean/)).toHaveTextContent('Did you mean gmail.com?');
+      await user.click(screen.getByRole('button', { name: 'Use sam@gmail.com' }));
+      expect(email).toHaveValue('sam@gmail.com');
+      expect(screen.queryByText(/Did you mean/)).not.toBeInTheDocument();
+    });
+
+    it('flags an address that cannot be real once the person leaves the field', async () => {
+      const user = userEvent.setup();
+      mount();
+      const email = screen.getByLabelText('Email');
+      await user.type(email, 'sam@gmail');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await user.tab();
+      expect(await screen.findByRole('alert')).toHaveTextContent("That doesn't look like a valid email address.");
+      expect(email).toHaveAttribute('aria-invalid', 'true');
+      await user.type(email, '.com');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('shows the server verdict on the domain or a throwaway address under the email field', async () => {
+      vi.mocked(api.post).mockRejectedValue({ response: { status: 400, data: { message: "We couldn't find a mailbox for that address's domain. Check the spelling after the @.", code: 'email_domain' } } });
+      const user = userEvent.setup();
+      mount();
+      await fill(user);
+      await user.click(screen.getByRole('button', { name: 'Create account' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent("couldn't find a mailbox");
+      expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('says a confirmation link was emailed once the request is sent', async () => {
+      const user = userEvent.setup();
+      mount();
+      await fill(user);
+      await user.click(screen.getByRole('button', { name: 'Create account' }));
+      expect(await screen.findByText(/emailed you a link to confirm your address/)).toBeInTheDocument();
+    });
   });
 });

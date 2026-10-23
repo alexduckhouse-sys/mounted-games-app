@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Plus, Send } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { PasswordChecklist } from '../components/PasswordChecklist';
+import { isRealisticEmail, suggestEmailFix } from '../lib/emailCheck';
+import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import type { Club } from '../types';
 import { AuthFrame } from './auth/AuthFrame';
 import { Field } from './auth/Field';
@@ -18,9 +21,14 @@ const ROLES: { id: RoleId; label: string; api: 'Member' | 'Trainer' | 'Manager';
 interface FieldErrors { email?: string; password?: string; form?: string }
 
 /** The error text the API sent back, if any. */
-function problemsFrom(err: unknown): { status?: number; message?: string; errors?: string[] } {
-  const response = (err as { response?: { status?: number; data?: { message?: string; errors?: string[] } } })?.response;
-  return { status: response?.status, message: response?.data?.message, errors: response?.data?.errors };
+function problemsFrom(err: unknown): { status?: number; message?: string; code?: string; passwordErrors: string[] } {
+  const response = (err as { response?: { status?: number; data?: { message?: string; code?: string; errors?: unknown; errorCodes?: unknown } } })?.response;
+  return {
+    status: response?.status,
+    message: response?.data?.message,
+    code: response?.data?.code,
+    passwordErrors: friendlyPasswordErrors(response?.data),
+  };
 }
 
 /** Create an account, then show who will approve it. */
@@ -30,6 +38,8 @@ export function SignUpPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [emailLeft, setEmailLeft] = useState(false);
+  const rulesId = useId();
   const [club, setClub] = useState('');
   const [clubPicked, setClubPicked] = useState(false);
   const [role, setRole] = useState<RoleId | null>(null);
@@ -50,7 +60,9 @@ export function SignUpPage() {
   }, [clubs, typed]);
   const exact = clubs.some((c) => c.name.toLowerCase() === typed.toLowerCase());
   const chosenRole = ROLES.find((r) => r.id === role) ?? null;
-  const ready = name.trim() !== '' && email.trim() !== '' && password !== '' && typed !== '' && clubPicked && chosenRole !== null;
+  const emailOk = isRealisticEmail(email);
+  const emailFix = suggestEmailFix(email);
+  const ready = name.trim() !== '' && emailOk && passwordMeetsRules(password) && typed !== '' && clubPicked && chosenRole !== null;
   const approver = chosenRole?.byAdmins ? 'Mounted Games admins' : `${typed}'s team manager`;
 
   function pickClub(value: string) {
@@ -68,10 +80,11 @@ export function SignUpPage() {
       await signupTrainer(email.trim(), password, chosenRole.api, typed, name.trim());
       setSentTo({ club: typed, role: chosenRole.id });
     } catch (err) {
-      const { status, message, errors: list } = problemsFrom(err);
+      const { status, message, code, passwordErrors } = problemsFrom(err);
       if (status === 409) setErrors({ email: 'An account with that email already exists.' });
-      else if (list?.length) setErrors({ password: list.join(' ') });
-      else if (status === 400 && message?.toLowerCase().includes('password')) setErrors({ password: message });
+      else if (code?.startsWith('email_') && message) setErrors({ email: message });
+      else if (passwordErrors.length) setErrors({ password: passwordErrors.join(' ') });
+      else if (status === 400 && message?.toLowerCase().includes('password')) setErrors({ password: message.replace(/non-?\s?alphanumeric/gi, 'special') });
       else setErrors({ form: message ?? 'Could not create the account. Try again.' });
     }
   }
@@ -85,6 +98,9 @@ export function SignUpPage() {
           <h1 className="mg-h1 !text-[34px]">Request sent to {sentTo.club}</h1>
           <p className="text-[17px] leading-[1.45] text-[rgb(var(--mg-body))]">
             {sent.byAdmins ? 'Mounted Games admins' : 'Your team manager'} will approve you as {sent.sentence}. We'll let you know when it's done.
+          </p>
+          <p className="text-[15px] leading-[1.45] text-[rgb(var(--mg-body))]">
+            We've also emailed you a link to confirm your address. You can carry on without it for now.
           </p>
           <div className="mt-auto flex flex-col gap-2.5">
             <Link to="/competitions" className="mg-btn mg-btn-primary">Follow a competition</Link>
@@ -103,22 +119,37 @@ export function SignUpPage() {
         <Field label="Your name">
           {({ id }) => <div className="mg-field"><input id={id} value={name} autoComplete="name" autoFocus onChange={(e) => setName(e.target.value)} /></div>}
         </Field>
-        <Field label="Email" error={errors.email}>
-          {({ id, invalid, describedBy }) => (
-            <div className="mg-field" data-invalid={invalid}>
-              <input id={id} type="email" value={email} autoComplete="email" aria-invalid={invalid} aria-describedby={describedBy}
-                onChange={(e) => { setEmail(e.target.value); setErrors((cur) => ({ ...cur, email: undefined })); }} />
-            </div>
+        <div className="flex flex-col gap-1.5">
+          <Field label="Email" error={errors.email ?? (emailLeft && email.trim() !== '' && !emailOk ? "That doesn't look like a valid email address." : null)}>
+            {({ id, invalid, describedBy }) => (
+              <div className="mg-field" data-invalid={invalid}>
+                <input id={id} type="email" value={email} autoComplete="email" aria-invalid={invalid} aria-describedby={describedBy}
+                  onBlur={() => setEmailLeft(true)}
+                  onChange={(e) => { setEmail(e.target.value); setErrors((cur) => ({ ...cur, email: undefined })); }} />
+              </div>
+            )}
+          </Field>
+          {emailLeft && emailFix && (
+            <p role="status" className="m-0 text-sm text-[rgb(var(--mg-body))]">
+              Did you mean <strong>{emailFix.slice(emailFix.lastIndexOf('@') + 1)}</strong>?{' '}
+              <button type="button" className="font-semibold text-[rgb(var(--mg-heading))] underline" onClick={() => setEmail(emailFix)}>
+                Use {emailFix}
+              </button>
+            </p>
           )}
-        </Field>
-        <Field label="Password" error={errors.password}>
-          {({ id, invalid, describedBy }) => (
-            <div className="mg-field" data-invalid={invalid}>
-              <input id={id} type="password" value={password} autoComplete="new-password" aria-invalid={invalid} aria-describedby={describedBy}
-                onChange={(e) => { setPassword(e.target.value); setErrors((cur) => ({ ...cur, password: undefined })); }} />
-            </div>
-          )}
-        </Field>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          <Field label="Password" error={errors.password}>
+            {({ id, invalid, describedBy }) => (
+              <div className="mg-field" data-invalid={invalid}>
+                <input id={id} type="password" value={password} autoComplete="new-password" aria-invalid={invalid}
+                  aria-describedby={[describedBy, rulesId].filter(Boolean).join(' ')}
+                  onChange={(e) => { setPassword(e.target.value); setErrors((cur) => ({ ...cur, password: undefined })); }} />
+              </div>
+            )}
+          </Field>
+          <PasswordChecklist password={password} id={rulesId} />
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <Field label="Club">

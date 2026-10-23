@@ -14,6 +14,8 @@ export interface UserProfile {
   clubId: number | null;
   clubName: string | null;
   roles: Role[];
+  /** False until the person opens the link in the confirmation email. Missing means confirmed (older accounts). */
+  emailConfirmed?: boolean;
 }
 
 /** One competition the signed-in user owns (`owner`) or is a competition admin of. */
