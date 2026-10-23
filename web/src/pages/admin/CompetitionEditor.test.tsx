@@ -39,7 +39,7 @@ const nextButton = () => screen.getByText('Next', { selector: 'button' });
 const createButton = () => screen.getByText('Create competition', { selector: 'button' });
 const next = () => userEvent.click(nextButton());
 const step = (name: string) => screen.getByLabelText(new RegExp(`^${name}`));
-const STEPS: readonly (typeof STEP_IDS)[number][] = ['about', 'when', 'sections', 'structure', 'races', 'payment', 'review'];
+const STEPS: readonly (typeof STEP_IDS)[number][] = ['about', 'when', 'sections', 'structure', 'races', 'dec', 'payment', 'review'];
 
 /** Puts a draft in storage so a test can start at any step with sensible values. */
 function seed(step: (typeof STEPS)[number], extra: Partial<CreatorDraft> = {}, key = draftKey) {
@@ -67,10 +67,10 @@ describe('CompetitionEditor: the steps', () => {
     mount();
     expect(screen.getByRole('heading', { level: 1, name: 'New competition' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'About the competition' })).toBeInTheDocument();
-    expect(screen.getByText(/Step 1 of 7/)).toBeInTheDocument();
+    expect(screen.getByText(/Step 1 of 8/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
     const steps = within(screen.getByRole('navigation', { name: 'Steps' })).getAllByRole('button');
-    expect(steps.map((b) => b.getAttribute('aria-label'))).toEqual(['About', 'When & where', 'Sections', 'Structure & timing', 'Races', 'Payment & notes', 'Review']);
+    expect(steps.map((b) => b.getAttribute('aria-label'))).toEqual(['About', 'When & where', 'Sections', 'Structure & timing', 'Races', 'Dec form', 'Payment & notes', 'Review']);
     expect(steps[0]).toHaveAttribute('aria-current', 'step');
     expect(steps[1]).toBeDisabled();
     for (const label of ['Name', 'Icon', 'Organiser']) expect(screen.getByLabelText(label)).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('CompetitionEditor: the steps', () => {
     await userEvent.type(screen.getByLabelText('Name'), 'Spring Games');
     await next();
     expect(screen.getByRole('heading', { level: 2, name: 'When and where' })).toBeInTheDocument();
-    expect(screen.getByText(/Step 2 of 7/)).toBeInTheDocument();
+    expect(screen.getByText(/Step 2 of 8/)).toBeInTheDocument();
     await userEvent.click(screen.getByText('Back', { selector: 'button' }));
     expect(screen.getByLabelText('Name')).toHaveValue('Spring Games');
     // A step already reached can be opened from the list.
@@ -98,7 +98,7 @@ describe('CompetitionEditor: the steps', () => {
   it('walks to the review step, where Next turns into Create', async () => {
     mount();
     await userEvent.type(screen.getByLabelText('Name'), 'Spring Games');
-    for (let i = 0; i < 6; i += 1) await next();
+    for (let i = 0; i < 7; i += 1) await next();
     expect(screen.getByRole('heading', { level: 2, name: 'Review' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
     expect(createButton()).toBeInTheDocument();
@@ -280,6 +280,9 @@ describe('CompetitionEditor: races', () => {
     mount();
     const group = screen.getByRole('group', { name: 'Races for Senior Teams' });
     expect(group).toHaveTextContent('Left for later (planning for about 10 races)');
+    await next();
+    expect(screen.getByRole('heading', { level: 2, name: 'Dec form' })).toBeInTheDocument();
+    expect(screen.getByText(/A new competition starts with the basics/)).toBeInTheDocument();
     await next();
     expect(screen.getByRole('heading', { level: 2, name: 'Payment and notes' })).toBeInTheDocument();
   });

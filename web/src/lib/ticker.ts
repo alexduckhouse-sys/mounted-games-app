@@ -158,7 +158,15 @@ export function tickerItems(sessions: Session[], announcements: ChatMessage[], n
   items.push(...recent.filter((item) => !item.fresh).map(announcement));
 
   if (items.length === 0 && fallback?.trim()) items.push({ key: 'info', kind: 'info', text: oneLine(fallback) });
-  return items.slice(0, MAX_TICKER_ITEMS);
+  // The same line twice (a re-sent announcement, or two arenas on the same race) shows once.
+  const seen = new Set<string>();
+  const unique = items.filter((item) => {
+    const id = `${item.kind}|${item.text.trim().toLowerCase()}`;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  return unique.slice(0, MAX_TICKER_ITEMS);
 }
 
 /** True when both lists would show the same lines, so the ticker need not re-render. */

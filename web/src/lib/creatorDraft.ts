@@ -12,10 +12,10 @@ export const DEFAULT_MINUTES = 10;
 export const lanesFor = (format: number) => (format === 1 ? 4 : 6);
 export const MAX_SESSIONS = 6;
 
-export const STEP_IDS = ['about', 'when', 'sections', 'structure', 'races', 'payment', 'review'] as const;
+export const STEP_IDS = ['about', 'when', 'sections', 'structure', 'races', 'dec', 'payment', 'review'] as const;
 export type StepId = typeof STEP_IDS[number];
 export const STEP_LABEL: Record<StepId, string> = {
-  about: 'About', when: 'When & where', sections: 'Sections', structure: 'Structure & timing', races: 'Races', payment: 'Payment & notes', review: 'Review',
+  about: 'About', when: 'When & where', sections: 'Sections', structure: 'Structure & timing', races: 'Races', dec: 'Dec form', payment: 'Payment & notes', review: 'Review',
 };
 
 export interface SessionDraft {

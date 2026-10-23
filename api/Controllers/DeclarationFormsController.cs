@@ -7,6 +7,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.DecForms;
 
 namespace MountedGames.Api.Controllers;
 
@@ -47,7 +48,9 @@ public class DeclarationFormsController : ControllerBase
             q = q.Where(d => d.TeamId == teamId);
 
         var helping = await HelpingAsync(uid);
-        return (await q.OrderByDescending(d => d.SubmittedAt).ToListAsync()).Select(d => d.ToDto(CanReadPrivate(d, helping)));
+        var forms = await q.OrderByDescending(d => d.SubmittedAt).ToListAsync();
+        var entryNames = await EntryTeamNamesAsync(forms.Select(d => d.TeamId));
+        return forms.Select(d => d.ToDto(CanReadPrivate(d, helping), entryNames.GetValueOrDefault(d.TeamId)));
     }
 
     [HttpGet("{id:int}")]
@@ -61,7 +64,20 @@ public class DeclarationFormsController : ControllerBase
         if (d is null) return NotFound();
         var canRead = CanReadPrivate(d, await HelpingAsync(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value));
         if (!d.IsLocked && !canRead) return NotFound();
-        return d.ToDto(canRead);
+        return d.ToDto(canRead, (await EntryTeamNamesAsync([d.TeamId])).GetValueOrDefault(d.TeamId));
+    }
+
+    /// <summary>
+    /// The team name each team's entrants gave when they entered (the first named entry, if several), so a dec form is
+    /// clearly the one for that entry even if the form's own team name is edited later. Public like the team's name.
+    /// </summary>
+    private async Task<Dictionary<int, string>> EntryTeamNamesAsync(IEnumerable<int> teamIds)
+    {
+        var ids = teamIds.Distinct().ToArray();
+        var rows = await _db.SectionSignups.AsNoTracking()
+            .Where(s => s.TeamId != null && ids.Contains(s.TeamId.Value) && s.TeamName != null && s.TeamName != "")
+            .OrderBy(s => s.CreatedAt).Select(s => new { TeamId = s.TeamId!.Value, s.TeamName }).ToListAsync();
+        return rows.GroupBy(r => r.TeamId).ToDictionary(g => g.Key, g => g.First().TeamName!);
     }
 
     /// <summary>The competitions this user is a competition admin of.</summary>
@@ -102,6 +118,19 @@ public class DeclarationFormsController : ControllerBase
         if (req.Riders.Any(r => r.PonyHeightHands is { } hh && (hh < MinPonyHands || hh > MaxPonyHands)))
             return BadRequest(new { message = $"A pony's height must be between {MinPonyHands} and {MaxPonyHands} hands." });
 
+        // What this competition asks for. A competition that never set one up keeps the standard form, with nothing newly refused.
+        var explicitConfig = DecFormConfig.Parse(team.Competition?.DecFormConfigJson);
+        var config = explicitConfig ?? DecFormConfig.Standard;
+        var year = DateTime.UtcNow.Year;
+        var built = new List<RiderEntry>();
+        foreach (var r in req.Riders)
+        {
+            var entry = new RiderEntry { PonyHeightHands = r.PonyHeightHands, DateOfBirth = r.DateOfBirth, HorseName = r.HorseName };
+            if (DecFormRules.Apply(config, explicitConfig is null, r, r.IsReserve, entry, year) is { } problem)
+                return BadRequest(new { message = problem });
+            built.Add(entry);
+        }
+
         // A club's team managers and trainers share its saved riders; anyone else uses the riders they saved.
         var sharesRoster = isAdmin || await _db.SharesClubRosterAsync(User, team.ClubId);
         var savedIds = req.Riders.Where(r => r.SavedRiderId.HasValue).Select(r => r.SavedRiderId!.Value).Distinct().ToArray();
@@ -109,10 +138,28 @@ public class DeclarationFormsController : ControllerBase
             && r.ClubId == team.ClubId && (sharesRoster || (userId != null && r.CreatedByUserId == userId)));
         if (permittedSavedCount != savedIds.Length) return BadRequest(new { message = "A saved rider is not available to this account." });
 
-        var submitter = userId is null ? null : await _users.FindByIdAsync(userId);
-        if (!string.IsNullOrWhiteSpace(req.TrainerPhone) && submitter is not null && submitter.PhoneNumber != req.TrainerPhone)
+        // The coach's phone and the bib follow the setup too. A competition with no setup keeps the standard form, which refuses nothing new.
+        var phoneText = req.TrainerPhone?.Trim();
+        string? trainerPhone = null;
+        if (config.TrainerPhone != FieldRequirement.Off)
         {
-            submitter.PhoneNumber = req.TrainerPhone.Trim();
+            if (string.IsNullOrEmpty(phoneText))
+            {
+                if (config.TrainerPhone == FieldRequirement.Required && explicitConfig is not null)
+                    return BadRequest(new { message = "The trainer's phone number is needed." });
+            }
+            else if (explicitConfig is null) trainerPhone = phoneText.Length > 40 ? phoneText[..40] : phoneText; // the standard form keeps what was typed, as before
+            else if (PhoneNumbers.TryNormalise(phoneText, out var phone)) trainerPhone = phone;
+            else
+                return BadRequest(new { message = "Enter the trainer's phone number as a UK or Irish number, like 07123 456789." });
+        }
+        if (config.Bib == FieldRequirement.Required && explicitConfig is not null && string.IsNullOrWhiteSpace(req.BibDescription))
+            return BadRequest(new { message = "The bib or number is needed." });
+
+        var submitter = userId is null ? null : await _users.FindByIdAsync(userId);
+        if (trainerPhone is not null && submitter is not null && submitter.PhoneNumber != trainerPhone)
+        {
+            submitter.PhoneNumber = trainerPhone;
             await _users.UpdateAsync(submitter);
         }
 
@@ -120,7 +167,7 @@ public class DeclarationFormsController : ControllerBase
         var teamName = req.TeamName?.Trim();
         if (!string.IsNullOrEmpty(teamName)) team.DisplayName = teamName;
 
-        if (req.BibDescription is not null)
+        if (req.BibDescription is not null && config.Bib != FieldRequirement.Off)
             team.BibDescription = string.IsNullOrWhiteSpace(req.BibDescription) ? null : req.BibDescription.Trim();
 
         // One declaration per team: submitting again updates it instead of adding a second form.
@@ -143,19 +190,27 @@ public class DeclarationFormsController : ControllerBase
         form.SubmittedAt = DateTime.UtcNow;
         form.Notes = req.Notes;
         form.IsLocked = true;
+        form.TrainerPhone = trainerPhone;
         form.TrainerName = string.IsNullOrWhiteSpace(req.TrainerName) ? submitter?.FullName : req.TrainerName.Trim();
         form.TermsAcceptedAt = form.SubmittedAt;
         form.TermsAcceptedByUserId = userId;
         var order = 0;
-        foreach (var r in req.Riders)
+        for (var i = 0; i < req.Riders.Count; i++)
         {
+            var r = req.Riders[i];
+            var kept = built[i];
             form.Riders.Add(new RiderEntry
             {
                 SavedRiderId = r.SavedRiderId,
                 FullName = r.FullName,
-                DateOfBirth = r.DateOfBirth,
+                DateOfBirth = kept.DateOfBirth,
                 HorseName = r.HorseName,
-                PonyHeightHands = r.PonyHeightHands,
+                PonyHeightHands = kept.PonyHeightHands,
+                BirthYear = kept.BirthYear, AgeGroup = kept.AgeGroup, WeightKg = kept.WeightKg,
+                PonyPassportNumber = kept.PonyPassportNumber, PonyAge = kept.PonyAge,
+                MembershipNumber = kept.MembershipNumber, EmergencyContactName = kept.EmergencyContactName,
+                EmergencyContactPhone = kept.EmergencyContactPhone, MedicalNotes = kept.MedicalNotes,
+                CustomValuesJson = kept.CustomValuesJson, FlagsJson = kept.FlagsJson,
                 BibColour = string.IsNullOrWhiteSpace(r.BibColour) ? null : r.BibColour.Trim(),
                 IsCaptain = r.IsCaptain,
                 IsReserve = r.IsReserve,
@@ -169,7 +224,7 @@ public class DeclarationFormsController : ControllerBase
 
         if (req.SaveToRoster)
         {
-            foreach (var r in req.Riders.Where(r => r.SavedRiderId is null && !r.IsGuestRider && !string.IsNullOrWhiteSpace(r.FullName)))
+            foreach (var (r, kept) in req.Riders.Select((r, i) => (r, built[i])).Where(x => x.r.SavedRiderId is null && !x.r.IsGuestRider && !string.IsNullOrWhiteSpace(x.r.FullName)))
             {
                 var existing = await _db.SavedRiders.FirstOrDefaultAsync(s =>
                     s.ClubId == team.ClubId && s.FullName == r.FullName
@@ -181,18 +236,18 @@ public class DeclarationFormsController : ControllerBase
                         ClubId = team.ClubId,
                         CreatedByUserId = userId,
                         FullName = r.FullName,
-                        DateOfBirth = r.DateOfBirth,
+                        DateOfBirth = kept.DateOfBirth,
                         HorseName = r.HorseName,
-                        PonyHeightHands = r.PonyHeightHands,
+                        PonyHeightHands = kept.PonyHeightHands,
                         UseInitialOnly = r.UseInitialOnly,
                         NoFilming = r.NoFilming
                     });
                 }
                 else
                 {
-                    existing.DateOfBirth ??= r.DateOfBirth;
+                    existing.DateOfBirth ??= kept.DateOfBirth;
                     existing.HorseName ??= r.HorseName;
-                    existing.PonyHeightHands ??= r.PonyHeightHands;
+                    existing.PonyHeightHands ??= kept.PonyHeightHands;
                     existing.UseInitialOnly = r.UseInitialOnly;
                     existing.NoFilming = r.NoFilming;
                     existing.UpdatedAt = DateTime.UtcNow;
@@ -204,7 +259,7 @@ public class DeclarationFormsController : ControllerBase
 
         await _db.Entry(form).Reference(f => f.Team).LoadAsync();
         await _db.Entry(form).Reference(f => f.SubmittedBy).LoadAsync();
-        return form.ToDto(includePrivate: true);
+        return form.ToDto(includePrivate: true, (await EntryTeamNamesAsync([form.TeamId])).GetValueOrDefault(form.TeamId));
     }
 
     [HttpDelete("{id:int}")]

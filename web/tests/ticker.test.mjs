@@ -164,3 +164,8 @@ test('sameTickerItems compares by content', () => {
   assert.equal(sameTickerItems(a, [{ ...a[0], text: 'Running 7 min behind' }]), false);
   assert.equal(sameTickerItems(a, []), false);
 });
+
+test('the same announcement sent twice shows once', () => {
+  const items = tickerItems([], [note(1, 'Lunch is in the marquee', 2), note(2, 'Lunch is in the marquee ', 1)], now);
+  assert.deepEqual(texts(items), ['Lunch is in the marquee']);
+});

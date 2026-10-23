@@ -155,7 +155,7 @@ describe('readDraft', () => {
   });
 
   it('has a step id for every step', () => {
-    expect(STEP_IDS).toHaveLength(7);
+    expect(STEP_IDS).toHaveLength(8);
   });
 });
 

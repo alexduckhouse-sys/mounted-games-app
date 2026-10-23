@@ -9,6 +9,7 @@ import { draftFromCompetition, realFixedItems, teamCountsOf } from '../../lib/cr
 import { loadRaceTemplates } from '../../lib/raceTemplates';
 import type { CompetitionDetail, PayoutsTo } from '../../types';
 import { AboutStep } from './creator/AboutStep';
+import { DecFormStep } from './creator/DecFormStep';
 import { PaymentNotesStep } from './creator/PaymentNotesStep';
 import { RacesStep } from './creator/RacesStep';
 import { ReviewStep } from './creator/ReviewStep';
@@ -200,6 +201,7 @@ export function CompetitionEditor() {
           {step === 'sections' && <SectionsStep {...props} />}
           {step === 'structure' && <StructureStep {...props} templates={templates} teamCounts={teamCounts} />}
           {step === 'races' && <RacesStep {...props} templates={templates} />}
+          {step === 'dec' && <DecFormStep competitionId={isEdit ? editingId : null} canChange={mayOrganise} />}
           {step === 'payment' && <PaymentNotesStep {...props} payoutsTo={isEdit ? competition?.payoutsTo ?? null : clubPayouts} canSetUpPayouts={hasRole('Manager') || hasRole('Admin')} />}
           {step === 'review' && <ReviewStep {...props} teamCounts={teamCounts} real={real} />}
         </div>

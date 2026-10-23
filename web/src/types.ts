@@ -596,6 +596,21 @@ export interface RiderEntry {
   noFilming?: boolean;
   /** The pony's height in hands, written as a decimal: 13.2 is 13 hands 2 inches. */
   ponyHeightHands?: number | null;
+  // The answers below depend on what the organiser asks for. They are personal data about a child, so only staff and the
+  // submitting trainer are sent them; a public page never has any of them.
+  birthYear?: number | null;
+  ageGroup?: string | null;
+  weightKg?: number | null;
+  ponyPassportNumber?: string | null;
+  ponyAge?: number | null;
+  membershipNumber?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  medicalNotes?: string | null;
+  /** The organiser's own questions, keyed by field id. */
+  customValues?: Record<string, string | null> | null;
+  /** Plain-English notes where an answer broke the organiser's number rules. Staff and the submitter only. */
+  flags?: string[] | null;
 }
 
 /** A heat holding a rider who opted out of close-up filming. Staff only. */
@@ -634,6 +649,12 @@ export interface DeclarationForm {
   trainerName?: string | null;
   /** When the terms were agreed; missing on forms from before the tick. Private like the rest. */
   termsAcceptedAt?: string | null;
+  /** The team name the entrant gave when entering, so the form is clearly the one for that entry. Public, like the team's name. */
+  entryTeamName?: string | null;
+  /** The coach's phone number for this team. Staff and the submitter only. */
+  trainerPhone?: string | null;
+  /** How many riders on the form broke a rule. Staff and the submitter only; 0 for everyone else. */
+  flagCount?: number;
 }
 
 export interface SavedRider {

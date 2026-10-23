@@ -18,6 +18,7 @@ import { CompactPageBarProvider } from './components/CompactPageBarContext';
 import { StartPage } from './pages/StartPage';
 import { CompetitionPage } from './pages/CompetitionPage';
 import { AfterDrawOnly, CompetitionHome } from './pages/competition/CompetitionHome';
+import { ScrollToTop } from './components/ScrollToTop';
 import './App.css';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
@@ -81,6 +82,7 @@ export default function App() {
         <CompetitionMetaProvider>
         <CompactPageBarProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <PageLoadBoundary page="app">
           <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
           <Routes>
