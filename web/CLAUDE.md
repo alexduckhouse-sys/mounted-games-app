@@ -9,7 +9,7 @@ React 19 + TypeScript + Vite PWA, used mostly on phones in fields with one bar o
 - `src/live/`: SignalR hook, `recoverConnection` (backoff and rejoin) and the Cloudflare stream publisher, viewer and runtime. `src/components/stream/`: the stream UI.
 - `src/pages/{commerce,operations,seasons,eventTools}/`: feature pages, with feature types kept next to them (`*Types.ts`).
 - `src/test/`: Vitest setup, `factories.ts`, `streamFakes.ts`. `tests/*.test.mjs`: the node test suite.
-- `middleware.ts` (Vercel edge, `/api/*` only) and `vercel.json` (rewrites, headers, build command).
+- `middleware.ts` (Vercel routing middleware: `/api/*` visitor IP, plus link-preview pages for crawlers on `/`, `/competitions/*` and `/team-profiles/*`) and `vercel.json` (rewrites, headers, build command).
 
 ## Commands (`web/`)
 
@@ -40,6 +40,12 @@ Lint must be clean: CI runs it. Vitest coverage has a **97% gate** (lines, state
   - To mock auth, the API and the hub together, copy `pages/competition/ChatTab.auth.test.tsx`.
   - For WebRTC fakes, use `src/test/streamFakes.ts`.
 
+## Sharing
+
+- **QR codes:** `components/QrCode.tsx` draws inline SVG from `lib/qr.ts` (`uqr`, MIT, no dependencies); no QR data leaves the browser. Always black on white with a quiet zone, whatever the theme.
+- **Venue poster:** `pages/eventTools/PosterPage.tsx`, reached as `/event-tools/:id/print/poster`; public event data only, shown to `canOrganise(competition)`. Styles live in `printEvent.css` (A4 and phone).
+- **Calendar:** the Details tab links straight to `/api/competitions/:id/calendar.ics?site=<origin>` (the service worker never handles `/api`). A team's feed link is made on My Teams (`pages/TeamSharing.tsx`), shown once, and opens as `webcal://`. A team QR carries `/teams?join=KEY`, which fills the join box; `ProtectedRoute` keeps the query string through sign-in.
+
 ## Gotchas
 
 - **Roles:** `canEdit()` = Admin **and** edit mode on. `canOrganise(comp)` = Admin, or the Trainer who owns `comp`; it ignores edit mode. Manager isn't in any route guard. `ChatTab.tsx` shows how to combine them. UI checks only hide controls; the API decides.
@@ -47,7 +53,7 @@ Lint must be clean: CI runs it. Vitest coverage has a **97% gate** (lines, state
 - **Staff-only chat:** messages with `adminOnly` are hidden from non-staff. Trainer messaging appears only when `competition.staffChatEnabled === true` (the API's confirmation that it stays private). Keep that gate.
 - **Storage:** keys are prefixed `mg.` (e.g. `mg.auth`, `mg.theme`, `mg.outbox.scores`, `mg.saved.v1.*`, `mg.draft.*`). The current competition uses sessionStorage plus the `mg.competition` cookie. Wrap storage access in `try/catch`, as existing code does. Window events: `mg:outbox`, `mg:heat-saved`, `mg:favourites`.
 - **Headers:** CSP and other headers in `vercel.json` must match `api/Security/SecurityHeadersMiddleware.cs` (`SecurityTests` checks this). No `*` and no `unsafe-eval`. The live hub URL is hard-coded in both the `buildCommand` (`VITE_LIVE_HUB_URL`) and CSP `connect-src`, so a host move must change both.
-- **`middleware.ts`** imports with `.js` extensions because Vercel runs it unbundled. It forwards the visitor IP with `MG_PROXY_KEY`.
+- **`middleware.ts`** imports with `.js` extensions because Vercel runs it unbundled. It forwards the visitor IP with `MG_PROXY_KEY`. For link-preview crawlers (`isPreviewCrawler` in `lib/shareCard.ts`; search engines are left out on purpose) it returns a tags-only page and falls back to the app if the API is slow. Anything shown in those tags must be public and goes through `escapeHtml`. A new crawler-visible route needs an entry in the `matcher` and in `sharePageFor`.
 - **PWA:** the service worker also runs under `npm run dev` (`devOptions.enabled`). New versions prompt with `window.confirm`, suppressed while broadcasting. Never add an authenticated or per-user GET to the public cache.
 - **Streams:** the browser never sees Cloudflare credentials. Viewers negotiate through the hub (`WatchStream`), publishers over HTTP. Updates carry a `generation`; `lib/streams.ts` ignores older ones and drops ended streams (`status === 2`). Details are in `../docs/specs/live-stream.md`.
 - **Dates:** ISO UTC from the API, shown in the device's zone with `en-GB` text. Don't find day boundaries by slicing strings.

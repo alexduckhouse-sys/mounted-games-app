@@ -35,6 +35,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<ShopPost> ShopPosts => Set<ShopPost>();
     public DbSet<ShopComment> ShopComments => Set<ShopComment>();
     public DbSet<ShopReport> ShopReports => Set<ShopReport>();
+    public DbSet<CalendarHeatVersion> CalendarHeatVersions => Set<CalendarHeatVersion>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -157,6 +158,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .WithMany(u => u.CoachedTeams)
                 .HasForeignKey(t => t.TrainerUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+            e.Property(t => t.CalendarFeedTokenHash).HasMaxLength(64);
         });
 
         b.Entity<Session>(e =>
@@ -282,6 +284,15 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             e.Property(r => r.Name).HasMaxLength(150).IsRequired();
             e.HasIndex(r => r.Name).IsUnique();
+        });
+
+        b.Entity<CalendarHeatVersion>(e =>
+        {
+            e.Property(v => v.Fingerprint).HasMaxLength(64).IsRequired();
+            e.HasOne<Heat>().WithMany().HasForeignKey(v => v.HeatId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Team>().WithMany().HasForeignKey(v => v.TeamId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(v => new { v.HeatId, v.TeamId }).IsUnique();
+            e.HasIndex(v => v.TeamId);
         });
 
         b.Entity<TeamSupporter>(e =>

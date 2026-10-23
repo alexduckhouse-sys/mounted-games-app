@@ -30,7 +30,8 @@ export default defineConfig({
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         // Admin tools need a connection; don't download them for every spectator.
-        globIgnores: ['**/BroadcastPage-*.js', '**/CompetitionEditor-*.js', '**/FormatPage-*.js', '**/RulesPage-*.js', '**/AdminPage-*.js'],
+        // The link-preview image is only for crawlers.
+        globIgnores: ['og/**', '**/BroadcastPage-*.js', '**/CompetitionEditor-*.js', '**/FormatPage-*.js', '**/RulesPage-*.js', '**/AdminPage-*.js'],
       },
       devOptions: {
         enabled: true,

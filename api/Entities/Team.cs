@@ -30,6 +30,13 @@ public class Team
     /// </summary>
     public string? SupporterJoinKey { get; set; }
 
+    /// <summary>
+    /// SHA-256 (hex) of the token in this team's calendar feed link. The token itself is shown once, when the
+    /// trainer creates or regenerates the link, and is never stored. Null while the feed is off.
+    /// </summary>
+    public string? CalendarFeedTokenHash { get; set; }
+    public DateTime? CalendarFeedTokenCreatedAt { get; set; }
+
     public ICollection<DeclarationForm> DeclarationForms { get; set; } = new List<DeclarationForm>();
     public ICollection<HeatEntry> HeatEntries { get; set; } = new List<HeatEntry>();
     public ICollection<Result> Results { get; set; } = new List<Result>();

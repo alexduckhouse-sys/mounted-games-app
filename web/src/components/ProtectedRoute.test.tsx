@@ -47,6 +47,11 @@ describe('ProtectedRoute', () => {
     expect(screen.queryByText('Secret page')).not.toBeInTheDocument();
   });
 
+  it('keeps the query string, so a scanned team QR code still carries its join key through sign-in', () => {
+    renderAt('/admin/secret?join=ABCD2345');
+    expect(screen.getByText('Login page, came from /admin/secret?join=ABCD2345')).toBeInTheDocument();
+  });
+
   it('shows the page to any signed-in user when no roles are required', () => {
     signIn(['Member']);
     renderAt('/admin/secret');

@@ -12,7 +12,7 @@ export function ProtectedRoute({
 }) {
   const { user } = useAuth();
   const loc = useLocation();
-  if (!user) return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
+  if (!user) return <Navigate to="/login" replace state={{ from: loc.pathname + loc.search }} />;
   if (roles && !roles.some((r) => user.roles.includes(r))) return <Navigate to="/" replace />;
   return <>{children}</>;
 }

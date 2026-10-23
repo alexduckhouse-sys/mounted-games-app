@@ -166,6 +166,22 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "CompetitionSections", "FinalistCount", "INTEGER NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "UsesRaceFinals", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Teams", "SupporterJoinKey", "TEXT NULL");
+        await EnsureColumnAsync(db, "Teams", "CalendarFeedTokenHash", "TEXT NULL");
+        await EnsureColumnAsync(db, "Teams", "CalendarFeedTokenCreatedAt", "TEXT NULL");
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "CalendarHeatVersions" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_CalendarHeatVersions" PRIMARY KEY AUTOINCREMENT,
+                "HeatId" INTEGER NOT NULL,
+                "TeamId" INTEGER NOT NULL,
+                "Fingerprint" TEXT NOT NULL,
+                "Sequence" INTEGER NOT NULL,
+                "ModifiedAt" TEXT NOT NULL,
+                CONSTRAINT "FK_CalendarHeatVersions_Heats_HeatId" FOREIGN KEY ("HeatId") REFERENCES "Heats" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_CalendarHeatVersions_Teams_TeamId" FOREIGN KEY ("TeamId") REFERENCES "Teams" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_CalendarHeatVersions_HeatId_TeamId" ON "CalendarHeatVersions" ("HeatId", "TeamId");
+            CREATE INDEX IF NOT EXISTS "IX_CalendarHeatVersions_TeamId" ON "CalendarHeatVersions" ("TeamId");
+            """);
         await db.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS ""TeamSupporters"" (
                 ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_TeamSupporters"" PRIMARY KEY AUTOINCREMENT,
