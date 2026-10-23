@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Clock, Trophy, MessageSquare, Info, ArrowLeftRight, X, Settings, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight, BarChart3 } from 'lucide-react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Clock, Trophy, MessageSquare, Info, ArrowLeftRight, X, Settings, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight, BarChart3, PinOff } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES } from '../theme/themes';
@@ -21,9 +21,10 @@ const itemClass = (active: boolean) => `flex min-h-12 w-full items-center gap-3 
   : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`;
 const iconClass = (active: boolean) => `h-5 w-5 shrink-0 ${active ? '' : 'text-[rgb(var(--mg-muted))]'}`;
 
-export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: startWithSettings = false }: { onClose: () => void; onChangeCompetition: () => void; settingsOpen?: boolean }) {
+export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = false }: { onClose: () => void; settingsOpen?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const { current, rememberChoice, setRememberChoice } = useCurrentCompetition();
+  const { current, rememberChoice, setRememberChoice, forget } = useCurrentCompetition();
+  const navigate = useNavigate();
   const { user, hasRole } = useAuth();
   const { extras } = useNavExtras();
   const { meta } = useCompetitionMeta();
@@ -58,17 +59,17 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
     dialog?.showModal();
     return () => { dialog?.close(); document.body.style.overflow = overflow; };
   }, []);
-  const base = current ? `/competitions/${current.id}` : '/competitions';
+  const base = current ? `/competitions/${current.id}` : '/events';
   const shown = meta && current && meta.id === current.id ? meta : null;
   const subtitle = shown ? [competitionDateText(shown.startDate, shown.endDate), shown.location?.trim()].filter(Boolean).join(' · ') : '';
   const links = [
     { to: current ? `${base}/following` : '/following', label: 'Following', icon: Star, end: true, badge: false },
     { to: base, label: 'Timetable', icon: Clock, end: true, badge: false },
-    { to: current ? `${base}/toplists` : '/competitions', label: 'Toplists', icon: Trophy, end: true, badge: false },
-    { to: current ? `${base}/chat` : '/chat', label: 'Live feed & stream', icon: MessageSquare, end: true, badge: !!shown?.live },
+    { to: current ? `${base}/toplists` : '/events', label: 'Toplists', icon: Trophy, end: true, badge: false },
+    ...(current ? [{ to: `${base}/chat`, label: 'Live feed & stream', icon: MessageSquare, end: true, badge: !!shown?.live }] : []),
     { to: current ? `${base}/shop` : '/shop', label: 'Event shop', icon: ShoppingBag, end: true, badge: false },
-    { to: current ? `${base}/rulebooks` : '/competitions', label: 'Rulebooks', icon: BookOpen, end: true, badge: false },
-    { to: current ? `${base}/details` : '/competitions', label: 'Details & entries', icon: Info, end: true, badge: false },
+    { to: current ? `${base}/rulebooks` : '/events', label: 'Rulebooks', icon: BookOpen, end: true, badge: false },
+    { to: current ? `${base}/details` : '/events', label: 'Details & entries', icon: Info, end: true, badge: false },
   ];
   // Account and club links (teams, dec forms, signups, shop, sign out) live on the profile page now.
   const accountLinks = [
@@ -130,7 +131,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
           <div className="h-px bg-[rgb(var(--mg-rule-soft))]" />
 
           <div className="flex flex-col">
-            <button onClick={onChangeCompetition} className={itemClass(false)}><ArrowLeftRight className={iconClass(false)} />Change competition</button>
+            <NavLink to="/events" end onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ArrowLeftRight className={iconClass(isActive)} />Change competition</>}</NavLink>
             {(seasons === null || seasons.length > 0) && <NavLink to={seasonsTo} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>}
             <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
             <NavLink to="/stats" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><BarChart3 className={iconClass(isActive)} />Rider and team stats</>}</NavLink>
@@ -150,6 +151,7 @@ export function NavigationDrawer({ onClose, onChangeCompetition, settingsOpen: s
                   <h3 className="px-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Options</h3>
                   <SettingSwitch icon={CloudSun} label="Show weather" checked={showWeather} onChange={toggleWeather} />
                   {current && <SettingSwitch icon={Pin} label="Remember this competition on this device" checked={rememberChoice === 'remember'} onChange={() => setRememberChoice(rememberChoice === 'remember' ? 'visit' : 'remember')} />}
+                  {current && <button onClick={() => { forget(); onClose(); navigate('/events'); }} className={itemClass(false)}><PinOff className={iconClass(false)} />Forget this competition</button>}
                 </div>
                 <NavLink to="/privacy" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShieldCheck className={iconClass(isActive)} />Privacy</>}</NavLink>
               </section>

@@ -25,7 +25,7 @@
 - Money: test payments are flagged (`TestPaymentRecord.IsTest`) and `RealIncome.ForCompetitionAsync` is the one place for organiser totals and the committee report; it returns nothing for demo events and skips test orders. The organiser's signup list and CSV label demo payments as test.
 - Rejected: a new "isDemo" column on competitions (a second mark to keep in step); card-style inputs that accept test numbers (the page should never look like it collects card details).
 - Not changed: the shop checkout still uses the older card-style demo form (`DemoPaymentFlow`); its API answers 409 rather than 403 on a real event.
-- Files: `web/src/pages/commerce/TestEntryPaymentPage.tsx`, `DemoEntryPayment.tsx`, `web/src/components/DemoEventNotice.tsx`, `api/Controllers/CommerceController.cs`, `api/Services/Commerce/RealIncome.cs`, `api/Services/ReviewCompetitionSeeder.cs`.
+- Files: `web/src/pages/commerce/TestEntryPaymentPage.tsx`, `DemoEntryPayment.tsx`, `api/Controllers/CommerceController.cs`, `api/Services/Commerce/RealIncome.cs`, `api/Services/ReviewCompetitionSeeder.cs`.
 
 ## 2026-10-22: Sign-up terms tick and organiser terms text
 - Why: the app streams juniors live, and entries recorded no acceptance of terms or parental consent. The filming opt-out itself is the `NoFilming` choice (rider privacy, PR #63); this adds the consent and terms side without replacing it.
