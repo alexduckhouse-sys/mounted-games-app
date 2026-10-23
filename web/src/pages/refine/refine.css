@@ -1,6 +1,8 @@
 /* Shared building blocks for the event-platform refinement (docs/designs/event-platform-refinement-handoff.md).
    One level of lists, status as coloured text, sheets for rare edits. Everything reads --mg-* tokens, so all themes work. */
 
+/* On signed-in routes AppShell's <main> has top padding, which showed the page background as a white bar between the app header and the header band. The band should butt up against the app header. */
+main:has(> .rf-page:first-child) { padding-top: 0; }
 .rf-page { font-family: 'Barlow', system-ui, sans-serif; color: rgb(var(--mg-ink)); }
 
 /* Header band: back / context / actions, then the title, an optional line and underline tabs. */
