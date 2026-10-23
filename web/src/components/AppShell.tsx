@@ -22,7 +22,7 @@ import { initialsOf } from '../lib/profile';
 import { useNeedsYou } from '../pages/profile/needsYou';
 
 export function AppShell() {
-  const { user, hasRole, editorMode, setEditorMode } = useAuth();
+  const { user, hasRole, editorMode, setEditorMode, canOrganise } = useAuth();
   const { current, rememberChoice, storageError } = useCurrentCompetition();
   const { meta } = useCompetitionMeta();
   const { config: compactBar, header: pageHeader } = useCompactPageBarState();
@@ -134,7 +134,7 @@ export function AppShell() {
         </PageLoadBoundary>
       </main>
       {globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
-      {tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
+      {tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} entryOnly={meta?.id === tabsCompetitionId && !!meta.entryPhase && !canOrganise({ id: meta.id, createdByUserId: meta.createdByUserId })} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
       {menuOpen && <NavigationDrawer settingsOpen={menuShowsSettings} onClose={() => setMenuOpen(false)} />}
       {current && !choosingCompetition && rememberChoice === 'ask' && !menuOpen && <RememberCompetitionDialog />}
     </div>

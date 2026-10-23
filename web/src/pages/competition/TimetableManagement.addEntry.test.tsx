@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { competition, session } from '../../test/factories';
 import { api } from '../../api';
 import { TimetableManagement } from './TimetableManagement';
+import { chooseOption, optionLabels } from '../../test/select';
 
 const state = vi.hoisted(() => ({ value: null as unknown }));
 vi.mock('./context', () => ({ useCompetition: () => state.value }));
@@ -36,8 +37,7 @@ it('has no arena picker for a single-arena competition and saves no arena', asyn
 it('offers each arena plus all arenas, defaulting to all arenas (null)', async () => {
   show(['Arena 1', 'Arena 2', ' Arena 2 ', null]);
   fireEvent.click(screen.getByRole('button', { name: /Break/ }));
-  const picker = screen.getByRole('combobox', { name: 'Arena' }) as HTMLSelectElement;
-  expect([...picker.options].map((o) => o.text)).toEqual(['All arenas', 'Arena 1', 'Arena 2']);
+  expect(optionLabels(screen.getByRole('combobox', { name: 'Arena' }))).toEqual(['All arenas', 'Arena 1', 'Arena 2']);
   fireEvent.click(screen.getByRole('button', { name: /Add to timetable/ }));
   await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
   expect(vi.mocked(api.post).mock.calls[0][1]).toMatchObject({ arenaName: null });
@@ -46,7 +46,7 @@ it('offers each arena plus all arenas, defaulting to all arenas (null)', async (
 it('saves the chosen arena on a break', async () => {
   show(['Arena 1', 'Arena 2']);
   fireEvent.click(screen.getByRole('button', { name: /Break/ }));
-  fireEvent.change(screen.getByRole('combobox', { name: 'Arena' }), { target: { value: 'Arena 2' } });
+  chooseOption(screen.getByRole('combobox', { name: 'Arena' }), 'Arena 2');
   fireEvent.click(screen.getByRole('button', { name: /Add to timetable/ }));
   await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
   expect(vi.mocked(api.post).mock.calls[0][1]).toMatchObject({ arenaName: 'Arena 2' });

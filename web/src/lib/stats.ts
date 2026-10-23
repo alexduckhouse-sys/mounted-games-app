@@ -1,4 +1,4 @@
-import type { StatsHit, StatsProfile, StatsSearch, StatsSubjectKind, StatsSummary } from '../types';
+import type { StatsBrowse, StatsHit, StatsProfile, StatsSubjectKind, StatsSummary } from '../types';
 
 /** The API's limits on a search or profile name (`StatsNames` in the API). */
 export const STATS_MIN_QUERY = 2;
@@ -59,10 +59,13 @@ export function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-/** All the hits in one list, riders first, as the search shows them. */
-export function allHits(search: StatsSearch): StatsHit[] {
-  return [...search.riders, ...search.ponies, ...search.teams, ...search.clubs];
-}
+/** The filter tabs on the stats page, in order. `plural` is the lower-case word used in prompts and messages. */
+export const STATS_TABS: { kind: StatsSubjectKind; label: string; plural: string }[] = [
+  { kind: 0, label: 'Riders', plural: 'riders' },
+  { kind: 1, label: 'Ponies', plural: 'ponies' },
+  { kind: 2, label: 'Teams', plural: 'teams' },
+  { kind: 3, label: 'Clubs', plural: 'clubs' },
+];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -73,9 +76,10 @@ function isHit(value: unknown): value is StatsHit {
     && typeof value.kind === 'number' && typeof value.competitions === 'number';
 }
 
-/** Guards the search reply: an HTML page or a half-loaded body is not a search result. */
-export function isStatsSearch(value: unknown): value is StatsSearch {
-  return isRecord(value) && ['riders', 'ponies', 'teams', 'clubs'].every((list) => Array.isArray(value[list]) && (value[list] as unknown[]).every(isHit));
+/** Guards a browse reply: an HTML page or a half-loaded body is not a list. */
+export function isStatsBrowse(value: unknown): value is StatsBrowse {
+  return isRecord(value) && typeof value.page === 'number' && typeof value.total === 'number'
+    && Array.isArray(value.items) && value.items.every(isHit);
 }
 
 /** Guards a profile reply. Lists may be null (the summary-only view) but the summary must be there. */

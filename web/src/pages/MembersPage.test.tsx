@@ -7,6 +7,7 @@ import { AuthProvider } from '../auth/AuthContext';
 import type { ClubMember, ClubMembers } from '../types';
 import { MembersPage } from './MembersPage';
 import { NeedsYouProvider } from './profile/NeedsYouProvider';
+import { chooseOption, optionLabels } from '../test/select';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
@@ -288,15 +289,14 @@ describe('MembersPage: a person\'s row', () => {
 
 describe('MembersPage: an admin', () => {
   it('chooses the club, and sees its people', async () => {
-    const user = userEvent.setup();
     mount({ roles: ['Admin'], clubId: null, editMode: true });
     const select = await screen.findByLabelText('Club');
     expect(screen.queryByRole('region', { name: 'Trainers' })).not.toBeInTheDocument();
-    await waitFor(() => expect(within(select).getAllByRole('option')).toHaveLength(3));
-    await user.selectOptions(select, 'Wirral PC');
+    await waitFor(() => expect(optionLabels(select)).toHaveLength(3));
+    chooseOption(select, 'Wirral PC');
     expect(await screen.findByText('Will Ash')).toBeInTheDocument();
     expect(screen.getByText('Wirral PC', { selector: 'p' })).toBeInTheDocument();
-    await user.selectOptions(select, '');
+    chooseOption(select, '');
     expect(screen.queryByText('Will Ash')).not.toBeInTheDocument();
   });
 
@@ -304,8 +304,8 @@ describe('MembersPage: an admin', () => {
     const user = userEvent.setup();
     mount({ roles: ['Admin'], clubId: null, editMode: true });
     await screen.findByLabelText('Club');
-    await waitFor(() => expect(within(screen.getByLabelText('Club')).getAllByRole('option')).toHaveLength(3));
-    await user.selectOptions(screen.getByLabelText('Club'), 'Wirral PC');
+    await waitFor(() => expect(optionLabels(screen.getByLabelText('Club'))).toHaveLength(3));
+    chooseOption(screen.getByLabelText('Club'), 'Wirral PC');
     await user.click(await screen.findByRole('button', { name: /Wendy Ross/ }));
     expect(screen.getByRole('group', { name: 'Role for Wendy Ross' })).toBeInTheDocument();
   });

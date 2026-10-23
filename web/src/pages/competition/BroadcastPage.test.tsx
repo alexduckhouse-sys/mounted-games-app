@@ -6,6 +6,7 @@ import type { PublisherSnapshot } from '../../live/streamPublisher';
 import { setBroadcasting } from '../../pwa';
 import { competition, session } from '../../test/factories';
 import { asMedia, deferred, FakeMediaStream, fakePeerConstructor, FakeTrack, flush } from '../../test/streamFakes';
+import { chooseOption, optionLabels } from '../../test/select';
 
 const state = vi.hoisted(() => ({ organiser: true, enabled: true, snapshot: {} as PublisherSnapshot, listener: () => {}, streams: [] as unknown[] }));
 const publisher = vi.hoisted(() => ({
@@ -43,8 +44,8 @@ it('captures from a tap, lists capture inputs, supports named arenas and angles 
   show(); expect(publisher.capture).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('checkbox')); await settle();
   fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle(); expect(publisher.capture).toHaveBeenCalledWith(false);
-  expect(screen.getByRole('option', { name: 'USB capture' })).toBeVisible(); expect(screen.getByText(/Check families know/)).toBeVisible();
-  fireEvent.change(screen.getByRole('combobox', { name: 'Camera' }), { target: { value: 'usb' } }); await settle(); expect(publisher.switchCamera).toHaveBeenCalledWith('usb');
+  expect(optionLabels(screen.getByRole('combobox', { name: 'Camera' }))).toContain('USB capture'); expect(screen.getByText(/Check families know/)).toBeVisible();
+  chooseOption(screen.getByRole('combobox', { name: 'Camera' }), 'usb'); await settle(); expect(publisher.switchCamera).toHaveBeenCalledWith('usb');
   fireEvent.click(screen.getByRole('button', { name: 'Flip camera' })); await settle(); expect(publisher.switchCamera).toHaveBeenLastCalledWith();
   fireEvent.click(screen.getAllByRole('button', { name: 'Other…' })[0]);
   fireEvent.change(screen.getByRole('textbox', { name: 'Arena name' }), { target: { value: 'Practice' } });

@@ -5,6 +5,7 @@ import { scorerLinkUrl } from '../../offline/scorerLink';
 import type { CreatedScorerLink, ScorerLink, ScorerLinkList } from '../../types';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { apiMessage } from '../operations/types';
+import { SelectField } from '../../components/SelectField';
 
 /** Keeps a wrong or partial response from reaching the screen. */
 function parseList(data: unknown): ScorerLinkList | null {
@@ -143,9 +144,9 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
                   <input type="text" required maxLength={60} autoComplete="off" value={label} onChange={(event) => setLabel(event.target.value)} />
                 </label>
                 <label className="rf-fld">Arena
-                  <select value={chosenArena} onChange={(event) => setArena(event.target.value)}>
+                  <SelectField value={chosenArena} onChange={(event) => setArena(event.target.value)}>
                     {list.arenas.map((name) => <option key={name} value={name}>{name}</option>)}
-                  </select>
+                  </SelectField>
                 </label>
                 <label className="rf-fld">Stops working at (optional)
                   <input

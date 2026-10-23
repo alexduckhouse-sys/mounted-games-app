@@ -8,6 +8,7 @@ import { dateToEnd, dateToStart } from '../../lib/sponsors';
 import { CompetitionContext } from './context';
 import { SponsorsCard } from './SponsorsCard';
 import { prepareLogo } from './sponsorLogo';
+import { chooseOption, selectedValue } from '../../test/select';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('./sponsorLogo', async (original) => ({ ...(await original<typeof import('./sponsorLogo')>()), prepareLogo: vi.fn() }));
@@ -76,7 +77,7 @@ describe('SponsorsCard', () => {
     expect(within(form).getByRole('button', { name: 'Add sponsor' })).toBeDisabled();
     await user.type(within(form).getByLabelText('Name'), '  New Co ');
     await user.type(within(form).getByLabelText('Link (https)'), 'https://new.example');
-    await user.selectOptions(within(form).getByLabelText('Tier'), 'Headline');
+    chooseOption(within(form).getByLabelText('Tier'), 'Headline');
     await user.click(within(form).getByRole('checkbox', { name: /Video breaks/ }));
     await user.click(within(form).getByRole('checkbox', { name: /Results/ }));
     await user.type(within(form).getByLabelText('First day (optional)'), '2026-11-01');
@@ -119,7 +120,7 @@ describe('SponsorsCard', () => {
     await user.click(screen.getByRole('button', { name: 'Edit Acme Feeds' }));
     const form = screen.getByRole('form', { name: 'Edit Acme Feeds' });
     expect(within(form).getByLabelText('Name')).toHaveValue('Acme Feeds');
-    expect(within(form).getByLabelText('Tier')).toHaveValue('0');
+    expect(selectedValue(within(form).getByLabelText('Tier'))).toBe('0');
     await user.click(within(form).getByRole('button', { name: 'Remove logo' }));
     expect(api.delete).toHaveBeenCalledWith('/competitions/5/sponsors/1/logo');
     await waitFor(() => expect(within(form).queryByRole('button', { name: 'Remove logo' })).toBeNull());

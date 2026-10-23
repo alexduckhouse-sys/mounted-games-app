@@ -4,6 +4,8 @@ import { RefineDisclosure, RefineFoot, RefineList, RefineNote, RefineSection } f
 import { ordinal } from './seasonModel';
 import { seasonError, type SeasonSettings } from './seasonViewTypes';
 import './seasonViews.css';
+import { SelectField } from '../../components/SelectField';
+import { NumberField } from '../../components/NumberField';
 
 const initial: SeasonSettings = {
   title: '', year: new Date().getFullYear(), format: 2, ageGroup: '',
@@ -85,8 +87,8 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
           <legend className="sr-only">Season details</legend>
           <label className="rf-fld">Season name<input required maxLength={200} value={draft.title} onChange={(e) => patch({ title: e.target.value })} /></label>
           <div className="sv-two">
-            <label className="rf-fld">Year<input type="number" inputMode="numeric" required min={2000} max={2200} value={draft.year} onChange={(e) => patch({ year: e.target.value })} /></label>
-            <label className="rf-fld">Format<select value={draft.format} onChange={(e) => patch({ format: Number(e.target.value) as SectionFormat })}>{([2, 1, 3] as SectionFormat[]).map((format) => <option key={format} value={format}>{SectionFormatLabel[format]}</option>)}</select></label>
+            <label className="rf-fld">Year<NumberField required min={2000} max={2200} value={draft.year} onChange={(e) => patch({ year: e.target.value })} /></label>
+            <label className="rf-fld">Format<SelectField value={draft.format} onChange={(e) => patch({ format: Number(e.target.value) as SectionFormat })}>{([2, 1, 3] as SectionFormat[]).map((format) => <option key={format} value={format}>{SectionFormatLabel[format]}</option>)}</SelectField></label>
           </div>
           <label className="rf-fld">Age group<input required maxLength={50} value={draft.ageGroup} onChange={(e) => patch({ ageGroup: e.target.value })} placeholder="For example, Seniors" /></label>
           <p className="rf-note sv-flush">Use the same age group and format as the competition sections you want to include.</p>
@@ -109,7 +111,7 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
       <RefineDisclosure title="Results that count" sub={bestSummary}>
         <fieldset disabled={busy} className="sv-fieldset sv-body">
           <legend className="sr-only">Results that count</legend>
-          <label className="rf-fld">Best results to count<input type="number" inputMode="numeric" min={1} max={1000} value={draft.best} onChange={(e) => patch({ best: e.target.value })} placeholder="Leave blank to count every round" /></label>
+          <label className="rf-fld">Best results to count<NumberField min={1} max={1000} value={draft.best} onChange={(e) => patch({ best: e.target.value })} placeholder="Leave blank to count every round" /></label>
         </fieldset>
       </RefineDisclosure>
       <RefineDisclosure title="Ties" sub="Share the place (=3, then 5th)">

@@ -155,7 +155,7 @@ export function AdminPage() {
         </div>
       </section>
 
-      {hasRole('Admin') && <TrainerRequestsSection canReview={canEdit()} />}
+      {hasRole('Admin') && <TrainerRequestsSection />}
 
       <section aria-labelledby="ad-ips" className="flex flex-col gap-[18px]">
         <PartHead id="ad-ips" title="Blocked addresses" />
