@@ -227,6 +227,9 @@ public record CreateSessionRequest(
     bool IsBreak, int? DurationMinutes,
     SessionKind? Kind, string? Location);
 
+/// <summary>Null leaves a field as it is; an empty arena name clears the arena.</summary>
+public record UpdateSessionRequest([StringLength(120)] string? Name = null, [StringLength(80)] string? ArenaName = null, DateTime? ScheduledStart = null);
+
 public record UpdateSessionStatusRequest(SessionStatus Status);
 
 public record UpdateSessionLanesRequest(int? LanesPerHeat);

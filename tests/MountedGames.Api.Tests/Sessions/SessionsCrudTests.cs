@@ -215,6 +215,49 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
+    // ---- Update ----
+
+    [Fact]
+    public async Task Update_RenamesMovesAndTimesASession_LeavingOtherFieldsAlone()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var start = new DateTime(2030, 6, 1, 9, 30, 0, DateTimeKind.Utc);
+
+        var r = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}"), new UpdateSessionRequest("  Seniors · Session 2  ", " Arena 2 ", start));
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var dto = await r.ReadAsync<SessionDto>();
+        Assert.Equal("Seniors · Session 2", dto.Name);
+        Assert.Equal("Arena 2", dto.ArenaName);
+        Assert.Equal(start, dto.ScheduledStart);
+
+        var again = await (await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}"), new UpdateSessionRequest(ArenaName: ""))).ReadAsync<SessionDto>();
+        Assert.Equal("Seniors · Session 2", again.Name);
+        Assert.True(string.IsNullOrEmpty(again.ArenaName));
+        Assert.Equal(start, again.ScheduledStart);
+    }
+
+    [Fact]
+    public async Task Update_Refuses_ABlankName()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var r = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}"), new UpdateSessionRequest("   "));
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_Returns404_WhenSessionIsMissingOrInAnotherCompetition()
+    {
+        var a = await _f.CreateArenaAsync();
+        var b = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.PutAsJsonAsync(Url(a, "/999999"), new UpdateSessionRequest("x"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.PutAsJsonAsync(Url(b, $"/{a.SessionId}"), new UpdateSessionRequest("x"))).StatusCode);
+    }
+
     // ---- Delete ----
 
     [Fact]
