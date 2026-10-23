@@ -827,6 +827,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("CreatedByUserId")
                         .HasColumnType("text");
 
+                    b.Property<string>("DecFormConfigJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
@@ -1856,7 +1859,17 @@ namespace MountedGames.Api.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AgeGroup")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
                     b.Property<string>("BibColour")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("BirthYear")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CustomValuesJson")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("DateOfBirth")
@@ -1864,6 +1877,17 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int>("DeclarationFormId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("EmergencyContactName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("EmergencyContactPhone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("FlagsJson")
+                        .HasColumnType("text");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -1882,6 +1906,14 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<bool>("IsReserve")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("MedicalNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("MembershipNumber")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
                     b.Property<bool>("NoFilming")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1890,9 +1922,16 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("PonyAge")
+                        .HasColumnType("integer");
+
                     b.Property<decimal?>("PonyHeightHands")
                         .HasPrecision(4, 1)
                         .HasColumnType("numeric(4,1)");
+
+                    b.Property<string>("PonyPassportNumber")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
 
                     b.Property<int?>("SavedRiderId")
                         .HasColumnType("integer");
@@ -1901,6 +1940,10 @@ namespace MountedGames.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<decimal?>("WeightKg")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
 
                     b.HasKey("Id");
 
