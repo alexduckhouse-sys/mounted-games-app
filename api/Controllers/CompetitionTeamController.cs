@@ -12,7 +12,7 @@ namespace MountedGames.Api.Controllers;
 
 public record CompetitionAccessDto(int CompetitionId, bool Owner);
 public record TeamOwnerDto(string UserId, string Name);
-public record TeamHelperDto(string UserId, string Name, string Email, DateTime AddedAt);
+public record TeamHelperDto(string UserId, string Name, string Email, DateTime AddedAt, bool EmailConfirmed = true);
 public record CompetitionTeamDto(TeamOwnerDto? Owner, IReadOnlyList<TeamHelperDto> Helpers);
 public record AddHelperRequest([Required, EmailAddress, StringLength(256)] string Email);
 
@@ -52,7 +52,7 @@ public class CompetitionTeamController(AppDbContext db, UserManager<AppUser> use
             : await db.Users.AsNoTracking().Where(u => u.Id == ownerId).Select(u => new TeamOwnerDto(u.Id, u.FullName)).FirstOrDefaultAsync();
         var helpers = await db.CompetitionCollaborators.AsNoTracking().Where(c => c.CompetitionId == competitionId)
             .OrderBy(c => c.AddedAt)
-            .Select(c => new TeamHelperDto(c.UserId, c.User!.FullName, c.User.Email ?? "", c.AddedAt))
+            .Select(c => new TeamHelperDto(c.UserId, c.User!.FullName, c.User.Email ?? "", c.AddedAt, c.User.EmailConfirmed))
             .ToListAsync();
         return new CompetitionTeamDto(owner, helpers);
     }
@@ -80,7 +80,7 @@ public class CompetitionTeamController(AppDbContext db, UserManager<AppUser> use
             db.CompetitionCollaborators.Add(helper);
             await db.SaveChangesAsync();
         }
-        return new TeamHelperDto(user.Id, user.FullName, user.Email ?? "", helper.AddedAt);
+        return new TeamHelperDto(user.Id, user.FullName, user.Email ?? "", helper.AddedAt, user.EmailConfirmed);
     }
 
     /// <summary>Any competition admin can remove another, or leave; the owner isn't on this list and can't be removed.</summary>

@@ -223,3 +223,13 @@ describe('CompetitionTeamCard', () => {
     expect(api.get).toHaveBeenLastCalledWith('/competitions/6/team');
   });
 });
+
+describe('CompetitionTeamCard unconfirmed email', () => {
+  it('tells the organiser when an admin email has not been confirmed, without blocking them', async () => {
+    serve(team({ helpers: [{ ...helper('h1', 'Hana Helper'), emailConfirmed: false }, helper('h2', 'Lee Line')] }));
+    render(<CompetitionTeamCard competitionId={5} />);
+    const list = await screen.findByRole('list', { name: 'People on this team' });
+    expect(within(list).getAllByText('(unconfirmed email)')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Remove Hana Helper' })).toBeInTheDocument();
+  });
+});

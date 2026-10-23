@@ -77,7 +77,8 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
         var m = SignupConfirmationEmail.Build(Signup(), comp, section, "a@example.org", "https://mg.example.org/competitions/3", OptInOutcome.NotAsked, null);
 
         Assert.Equal("Your entry for Spring Games", m.Subject);
-        Assert.Contains("Hello Alice Rider,", m.TextBody);
+        Assert.StartsWith("Hello,", m.TextBody);
+        Assert.DoesNotContain("Alice Rider", m.TextBody);
         Assert.Contains("Date: Sunday 14 March 2027", m.TextBody);
         Assert.Contains("Entry fee: £15.00", m.TextBody);
         Assert.Contains("Bank 12-34-56", m.TextBody);

@@ -33,6 +33,7 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 builder.Services
     .AddIdentity<AppUser, IdentityRole>(o =>
     {
+        // Keep in step with web/src/lib/passwordRules.ts (a test on each side pins them).
         o.Password.RequireDigit = true;
         o.Password.RequireLowercase = true;
         o.Password.RequireUppercase = false;
@@ -134,6 +135,17 @@ builder.Services.AddSingleton<MountedGames.Api.Services.Email.ResendEmailSender>
 builder.Services.AddSingleton<MountedGames.Api.Services.Email.IEmailSender, MountedGames.Api.Services.Email.ConfiguredEmailSender>();
 builder.Services.AddScoped<MountedGames.Api.Services.Email.SignupConfirmationService>();
 builder.Services.AddScoped<MountedGames.Api.Services.Email.EmailOptInService>();
+builder.Services.AddSingleton<MountedGames.Api.Services.Email.EmailConfirmationTokens>();
+builder.Services.AddScoped<MountedGames.Api.Services.Email.AccountEmailService>();
+// Does an address's domain take mail? Short timeout, one retry; a DNS failure lets the sign-up through.
+builder.Services.AddSingleton<DnsClient.ILookupClient>(_ => new DnsClient.LookupClient(new DnsClient.LookupClientOptions
+{
+    Timeout = TimeSpan.FromSeconds(2),
+    Retries = 1,
+    UseCache = true,
+    ThrowDnsErrors = false,
+}));
+builder.Services.AddSingleton<MountedGames.Api.Services.Email.IEmailDomainChecker, MountedGames.Api.Services.Email.DnsEmailDomainChecker>();
 builder.Services.AddHttpClient("geocoding", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(6);

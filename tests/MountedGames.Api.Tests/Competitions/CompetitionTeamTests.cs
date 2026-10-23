@@ -64,6 +64,25 @@ public class CompetitionTeamTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task TheTeamList_FlagsAnAdminWhoseEmailIsNotConfirmed_WithoutBlockingThem()
+    {
+        var (arena, _, _, owner, _) = await OwnedAsync();
+        var (_, helperAuth) = await _f.SignupAsync("Member");
+        await _f.InDbAsync(async db =>
+        {
+            (await db.Users.FindAsync(helperAuth.User.Id))!.EmailConfirmed = false;
+            await db.SaveChangesAsync();
+        });
+
+        var added = await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email });
+        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+        Assert.False((await added.ReadAsync<TeamHelperDto>()).EmailConfirmed);
+
+        var team = await owner.GetFromJsonAsync<CompetitionTeamDto>(Team(arena.CompetitionId));
+        Assert.False(Assert.Single(team!.Helpers).EmailConfirmed);
+    }
+
+    [Fact]
     public async Task CompetitionAdminsManageTheTeam_AndCanLeave()
     {
         var (arena, _, _, owner, ownerEmail) = await OwnedAsync();

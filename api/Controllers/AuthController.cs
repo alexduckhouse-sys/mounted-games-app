@@ -9,7 +9,9 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Security;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Email;
 
 namespace MountedGames.Api.Controllers;
 
@@ -53,7 +55,7 @@ public class AuthController : ControllerBase
         var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
         var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
         return new AuthResponse(token, expiresAt,
-            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList()));
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed));
     }
 
     [EnableRateLimiting("auth")]
@@ -71,13 +73,16 @@ public class AuthController : ControllerBase
 
         var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
         return new AuthResponse(token, expiresAt,
-            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, null, roles.ToList()));
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, null, roles.ToList(), user.EmailConfirmed));
     }
 
     [EnableRateLimiting("auth")]
     [HttpPost("signup-trainer")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> SignupTrainer(SignupTrainerRequest req)
+    public async Task<ActionResult<AuthResponse>> SignupTrainer(
+        SignupTrainerRequest req,
+        [FromServices] IEmailDomainChecker domains,
+        [FromServices] AccountEmailService accountEmail)
     {
         var raw = (req.Username ?? string.Empty).Trim();
         if (raw.Length == 0)
@@ -86,8 +91,18 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Password is required." });
 
         // Identity needs an email-like UserName for uniqueness; synthesise one if a bare username was given.
-        var email = raw.Contains('@') ? raw.ToLowerInvariant() : $"{Sanitise(raw)}@trainer.mg.local";
-        var fullName = raw.Contains('@') ? raw.Split('@')[0] : raw;
+        var realEmail = raw.Contains('@');
+        var email = raw.ToLowerInvariant();
+        if (realEmail)
+        {
+            if (!EmailValidation.TryNormalise(raw, out email))
+                return EmailRejected(EmailProblem.Format);
+            if (EmailValidation.IsDisposable(EmailValidation.DomainOf(email)))
+                return EmailRejected(EmailProblem.Disposable);
+        }
+        else
+            email = $"{Sanitise(raw)}@trainer.mg.local";
+        var fullName = realEmail ? email.Split('@')[0] : raw;
         var givenName = (req.FullName ?? string.Empty).Trim();
         if (givenName.Length > 100)
             return BadRequest(new { message = "Your name must be 100 characters or fewer." });
@@ -95,6 +110,10 @@ public class AuthController : ControllerBase
 
         if (await _users.FindByEmailAsync(email) is not null)
             return Conflict(new { message = "That username is already taken." });
+
+        // The domain has to be able to receive mail. A DNS failure is logged by the checker and lets the sign-up through.
+        if (realEmail && await domains.CheckAsync(EmailValidation.DomainOf(email), HttpContext.RequestAborted) == DomainMail.NoMail)
+            return EmailRejected(EmailProblem.NoMailServer);
 
         // Trainer is the default request.
         var requested = (req.Role ?? Roles.Trainer).Trim();
@@ -120,11 +139,12 @@ public class AuthController : ControllerBase
             FullName = fullName,
             Club = club.Id == 0 ? club : null,
             ClubId = club.Id == 0 ? null : club.Id,
-            EmailConfirmed = true
+            // A made-up username address can't receive mail, so only a real one is left to confirm.
+            EmailConfirmed = !realEmail
         };
         var result = await _users.CreateAsync(user, req.Password);
         if (!result.Succeeded)
-            return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
+            return PasswordProblems(result);
 
         // Organising access needs approval: trainers by an admin or their club's manager, managers by an admin.
         var assignedRoles = role == Roles.Trainer ? new[] { Roles.Member, Roles.TrainerRequest }
@@ -134,10 +154,30 @@ public class AuthController : ControllerBase
         if (!assigned.Succeeded)
             return BadRequest(new { errors = assigned.Errors.Select(e => e.Description) });
 
+        // Inline and best effort: the sender never throws, and a failed send never undoes the account.
+        // Sign-in isn't blocked while unconfirmed; the app shows a banner with a resend button.
+        if (realEmail) await accountEmail.SendConfirmationAsync(user);
+
         var (token, expiresAt, rolesOut) = await _tokens.CreateTokenAsync(user);
         return new AuthResponse(token, expiresAt,
-            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club.Name, rolesOut.ToList()));
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club.Name, rolesOut.ToList(), user.EmailConfirmed));
     }
+
+    private BadRequestObjectResult EmailRejected(EmailProblem problem)
+        => BadRequest(new { message = EmailValidation.Message(problem), code = problem switch
+        {
+            EmailProblem.Disposable => "email_disposable",
+            EmailProblem.NoMailServer => "email_domain",
+            _ => "email_invalid",
+        } });
+
+    /// <summary>A 400 with the friendly wording per rule (never Identity's own "non-alphanumeric"), plus the raw codes.</summary>
+    private BadRequestObjectResult PasswordProblems(IdentityResult result)
+        => BadRequest(new
+        {
+            errors = result.Errors.Select(PasswordRules.Friendly).Distinct(),
+            errorCodes = result.Errors.Select(e => e.Code),
+        });
 
     private static string Sanitise(string s)
     {
@@ -164,7 +204,7 @@ public class AuthController : ControllerBase
         };
         var result = await _users.CreateAsync(user, req.Password);
         if (!result.Succeeded)
-            return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
+            return PasswordProblems(result);
 
         var role = string.IsNullOrWhiteSpace(req.Role) ? Roles.Trainer : req.Role;
         if (!Roles.All.Contains(role))
@@ -174,7 +214,7 @@ public class AuthController : ControllerBase
         var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
         var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
         return new AuthResponse(token, expiresAt,
-            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList()));
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed));
     }
 
     /// <summary>
@@ -210,6 +250,52 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Opens the link from the confirmation email. No sign-in needed. A wrong user, a wrong or old token and an
+    /// expired one all get the same answer, so it can't be used to find out who has an account.
+    /// </summary>
+    [EnableRateLimiting("auth")]
+    [HttpPost("confirm-email")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ConfirmEmail(ConfirmEmailRequest req, [FromServices] EmailConfirmationTokens tokens)
+    {
+        var user = string.IsNullOrWhiteSpace(req.UserId) ? null : await _users.FindByIdAsync(req.UserId);
+        if (user is null || !tokens.IsValid(user, req.Token))
+            return BadRequest(new { message = "This confirmation link has expired or isn't valid. Sign in and ask for a new one." });
+        if (!user.EmailConfirmed)
+        {
+            user.EmailConfirmed = true;
+            var saved = await _users.UpdateAsync(user);
+            if (!saved.Succeeded) return StatusCode(500, new { message = "Could not confirm your email. Try again." });
+        }
+        return Ok(new { confirmed = true });
+    }
+
+    /// <summary>Sends the confirmation email again to the signed-in person. Limited to a few a minute per person.</summary>
+    [EnableRateLimiting(RequestLimits.EmailResendPolicy)]
+    [HttpPost("resend-confirmation")]
+    [Authorize]
+    public async Task<IActionResult> ResendConfirmation([FromServices] AccountEmailService accountEmail)
+    {
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        if (user.EmailConfirmed) return Ok(new { status = "AlreadyConfirmed" });
+        // Made-up usernames and the shared admin account have no mailbox to write to.
+        if (string.IsNullOrEmpty(user.Email) || user.Email.EndsWith(".mg.local", StringComparison.OrdinalIgnoreCase))
+            return Ok(new { status = "NotSent" });
+        var result = await accountEmail.SendConfirmationAsync(user);
+        // The per-account cap lives in the database, so it holds whatever the rate limiter allows.
+        if (result is ConfirmationResult.TooSoon or ConfirmationResult.DailyLimit)
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                status = result.ToString(),
+                message = result == ConfirmationResult.DailyLimit
+                    ? "We've sent enough confirmation emails today. Try again tomorrow."
+                    : "We sent one a moment ago. Check your inbox and spam folder, or try again in a couple of minutes.",
+            });
+        return Ok(new { status = result.ToString() });
+    }
+
     [HttpGet("me")]
     [Authorize]
     public async Task<ActionResult<UserProfile>> Me()
@@ -218,6 +304,6 @@ public class AuthController : ControllerBase
         if (user is null) return Unauthorized();
         var roles = await _users.GetRolesAsync(user);
         var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
-        return new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList());
+        return new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed);
     }
 }

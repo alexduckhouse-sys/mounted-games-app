@@ -130,7 +130,7 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
               <li key={helper.userId} className="flex flex-wrap items-center justify-between gap-2 p-3">
                 <span className="min-w-0">
                   <span className="block font-medium">{helper.name}</span>
-                  {helper.email && <span className="mg-meta block break-all">{helper.email}</span>}
+                  {helper.email && <span className="mg-meta block break-all">{helper.email}{helper.emailConfirmed === false && <span className="font-semibold"> (unconfirmed email)</span>}</span>}
                 </span>
                 {mayEdit && helper.userId !== user?.id ? (
                   <button type="button" className="mg-btn mg-btn-secondary" disabled={busy} aria-label={`Remove ${helper.name}`} onClick={() => void remove(helper)}>Remove</button>

@@ -4,6 +4,7 @@ import { Bell, ChevronRight, ClipboardList, Contact, CreditCard, Landmark, LogOu
 import { api } from '../api';
 import { signOutDestination } from '../auth/signOutDestination';
 import { useAuth } from '../auth/AuthContext';
+import { EmailConfirmBanner } from '../components/EmailConfirmBanner';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
 import { initialsOf, roleLabel } from '../lib/profile';
@@ -120,6 +121,8 @@ export function ProfilePage() {
         </div>
         <Link to="/me/account" className="mg-icon-btn" aria-label="Account details"><Pencil aria-hidden="true" className="h-[18px] w-[18px]" /></Link>
       </div>
+
+      <EmailConfirmBanner />
 
       {isAdmin ? (
         <div className="grid gap-6 lg:grid-cols-3">

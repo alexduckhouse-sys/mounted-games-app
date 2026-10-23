@@ -62,6 +62,7 @@ const EventToolsPage = lazy(() => import('./pages/eventTools/EventToolsPage'));
 const PrintEventPage = lazy(() => import('./pages/eventTools/PrintEventPage'));
 const ScorerPage = lazy(() => import('./pages/ScorerPage').then((module) => ({ default: module.ScorerPage })));
 const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage').then((module) => ({ default: module.UnsubscribePage })));
+const ConfirmEmailPage = lazy(() => import('./pages/ConfirmEmailPage').then((module) => ({ default: module.ConfirmEmailPage })));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then((module) => ({ default: module.PrivacyPage })));
 const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({ default: module.AccountPage })));
 const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymentPage').then((module) => ({ default: module.TestEntryPaymentPage })));
@@ -154,6 +155,7 @@ export default function App() {
               } />
               <Route path="privacy" element={<PrivacyPage />} />
               <Route path="unsubscribe" element={<UnsubscribePage />} />
+              <Route path="confirm-email" element={<ConfirmEmailPage />} />
               <Route path="me/account"element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
               <Route path="me/signups" element={
                 <ProtectedRoute><MySignupsPage /></ProtectedRoute>

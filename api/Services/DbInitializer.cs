@@ -212,6 +212,8 @@ public static class DbInitializer
             CREATE UNIQUE INDEX IF NOT EXISTS ""IX_RaceTemplates_Name"" ON ""RaceTemplates"" (""Name"");
         ");
         await EnsureColumnAsync(db, "SavedRiders", "CreatedByUserId", "TEXT NULL");
+        await EnsureColumnAsync(db, "AspNetUsers", "LastConfirmationSentAt", "TEXT NULL");
+        await EnsureColumnAsync(db, "AspNetUsers", "ConfirmationsSentToday", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Teams", "IsHorsConcours", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "ChatMessages", "IpAddress", "TEXT NULL");
         await EnsureColumnAsync(db, "ChatMessages", "AdminOnly", "INTEGER NOT NULL DEFAULT 0");
