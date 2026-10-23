@@ -21,7 +21,7 @@ import { TermsTickBox } from '../../components/TermsTickBox';
 import { CONSENT_VERSION } from '../../lib/termsTick';
 import { EntryEmailFields, type EntryEmail } from '../../components/EntryEmailFields';
 import { EMAIL_OPT_IN_VERSION, confirmationEmailLabel, looksLikeEmail, newRequestId } from '../../lib/emailOptIn';
-import type { CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
+import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
 import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
 import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
 import { usePageHeader } from '../../components/CompactPageBarContext';
@@ -40,7 +40,7 @@ const SIGNUP_STATUS: Record<SignupPaymentStatus, { label: string; tone: StatusTo
 
 export function DetailsTab() {
   const { competition, reload, sponsors } = useCompetition();
-  const { canEdit, canManage, canOrganise, hasRole, user } = useAuth();
+  const { canManage, canOrganise, hasRole, user } = useAuth();
   const [signupResult, setSignupResult] = useState<{ key: string; items: SectionSignup[] } | null>(null);
   const signupKey = `${competition.id}:${user?.id ?? ''}`;
   const mayOrganise = canOrganise(competition);
@@ -218,41 +218,54 @@ export function DetailsTab() {
 
       <SponsorStrip placement="Details" />
 
-      {/* Signup by section: signed-in users only; the public can't enter. */}
-      {user && competition.sections.length > 0 && (
-        <>
-          <RefineSection title="Enter the competition" meta={competition.paymentDestination ? <>Pay to <span className="font-mono">{competition.paymentDestination}</span></> : undefined} />
-          <div className="grid grid-cols-2 gap-2">
-            {competition.sections.map((sec) => (
-              <SectionSignupCard
-                key={sec.id}
-                competitionId={competition.id}
-                section={sec}
-                allSignups={allSignups}
-                signupsLocked={!!competition.signupsLocked}
-                isDemo={!!competition.isDemo}
-                paymentDestination={competition.paymentDestination ?? null}
-                termsText={competition.termsText ?? null}
-                competitionName={competition.name}
-                onChanged={() => { refreshSignups(); reload(); }}
-                canManage={canEdit() || mayOrganise}
-                hideJoin={hasRole('Admin')}
-                countsKnown={mayOrganise}
-              />
-            ))}
-          </div>
-        </>
-      )}
+      <EnterCompetition competition={competition} allSignups={allSignups} mayOrganise={mayOrganise} onChanged={() => { refreshSignups(); reload(); }} />
 
       {user && <EquipmentBlock competitionId={competition.id} />}
     </div>
   );
 }
 
+/**
+ * The per-section entry cards: Join, Sign in to enter, Full or Entries closed. Shown on the Details tab and as the
+ * main content of the entry page. Anyone can see it; signing in is asked for only when they press the button.
+ */
+export function EnterCompetition({ competition, allSignups, mayOrganise, onChanged }: {
+  competition: CompetitionDetail;
+  allSignups: SectionSignup[];
+  mayOrganise: boolean;
+  onChanged: () => void;
+}) {
+  const { canEdit } = useAuth();
+  if (competition.sections.length === 0) return null;
+  return (
+    <>
+      <RefineSection title="Enter the competition" meta={competition.paymentDestination ? <>Pay to <span className="font-mono">{competition.paymentDestination}</span></> : undefined} />
+      <div className="grid grid-cols-2 gap-2">
+        {competition.sections.map((sec) => (
+          <SectionSignupCard
+            key={sec.id}
+            competitionId={competition.id}
+            section={sec}
+            allSignups={allSignups}
+            signupsLocked={!!competition.signupsLocked}
+            isDemo={!!competition.isDemo}
+            paymentDestination={competition.paymentDestination ?? null}
+            termsText={competition.termsText ?? null}
+            competitionName={competition.name}
+            onChanged={onChanged}
+            canManage={canEdit() || mayOrganise}
+            countsKnown={mayOrganise}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
 function SectionSignupCard({
   competitionId, section, allSignups, signupsLocked,
   competitionName, isDemo, termsText,
-  onChanged, canManage, hideJoin, countsKnown,
+  onChanged, canManage, countsKnown,
 }: {
   competitionId: number;
   section: CompetitionSection;
@@ -265,8 +278,6 @@ function SectionSignupCard({
   competitionName: string;
   onChanged: () => void;
   canManage: boolean;
-  /** True when the viewer is an admin — hide the Join CTA + form, keep manage list. */
-  hideJoin: boolean;
   /** Only organisers receive the signup list, so places taken is only known to them. */
   countsKnown: boolean;
 }) {
@@ -370,14 +381,12 @@ function SectionSignupCard({
           : full ? 'Full' : max ? `${seatsLeft} of ${max} places left` : `${takenSeats} entered · no limit`}
         {known && <span className="sr-only">. {takenSeats} in{max ? `, ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left` : `, ${signups.length} signup${signups.length === 1 ? '' : 's'}`}</span>}
       </span>
-      {hideJoin ? (
-        <p className="rf-note !p-0 italic">Admin view — entrants only.</p>
-      ) : signupsLocked ? (
+      {signupsLocked ? (
         <p className="rf-note !p-0 italic">Entries closed.</p>
       ) : full ? (
         <span className="flex min-h-9 items-center justify-center rounded-lg bg-[rgb(var(--mg-subtle))] text-[13px] font-semibold text-[rgb(var(--mg-muted))]">Full</span>
       ) : !user ? (
-        <Link to="/login" className="mg-btn mg-btn-primary w-full !min-h-11">Sign in to enter</Link>
+        <Link to="/login" state={{ from: `/competitions/${competitionId}/enter` }} className="mg-btn mg-btn-primary w-full !min-h-11">Sign in to enter</Link>
       ) : !open ? (
         <button type="button" onClick={() => setOpen(true)} className="mg-btn mg-btn-primary w-full !min-h-11">
           <Trophy className="h-4 w-4" aria-hidden="true" /> Join {section.priceMinor ? `(${priceLabel(section.priceMinor)})` : ''}
