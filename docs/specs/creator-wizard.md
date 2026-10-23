@@ -16,6 +16,7 @@ Everything structural is decided when the competition is created: age groups, fo
 | 2 | When & where | start and end date and time, venue, postcode, what3words |
 | 3 | Sections | per age group: age group (presets or "Type your own…"), format (Pairs, Teams, Individual), price, max entries |
 | 4 | Structure & timing | per section: standard or heat-heat-final, number of sessions (one for HHF), teams through to the final, run-off race; minutes per race, max teams per heat, arena |
+| 4b | Hatbands | in the Structure step: a hatband colour for each lane (as many lanes as the biggest heat), default order red, white, blue, yellow, green, black; pick from the list or type your own. Shown on the review step and the On the day page |
 | 5 | Races | per session: pick from the standard lists or the race library, or skip and leave it for later |
 | 6 | Payment & notes | where fees go, notes for riders, terms (its own component, `PaymentNotesStep`, so the club payouts change merges easily) |
 | 7 | Review | summary, estimated timetable marked "Provisional", breaks and briefings, warnings |
@@ -51,7 +52,7 @@ A section's name follows one rule everywhere: the age group (a plural word such 
 
 ## Data and API changes
 
-- `Session.PlannedRaces` (nullable JSON array of names, `TEXT`): the race list chosen before heats exist. `SessionDto.PlannedRaces`. **One migration**: `AddSessionPlannedRaces`, with its idempotent SQL script and a SQLite guard in `DbInitializer` (`EnsureColumnAsync`).
+- `Session.PlannedRaces` (nullable JSON array of names, `TEXT`): the race list chosen before heats exist. `SessionDto.PlannedRaces`. `Competition.LaneHatbands` (nullable JSON array of colour names, index 0 is lane 1; `CompetitionDetail.laneHatbands`). **One migration**, `AddCreatorWizardColumns` (both columns), with its idempotent SQL script and SQLite guards in `DbInitializer` (`EnsureColumnAsync`).
 - `CreateSessionRequest` gains optional `LanesPerHeat`, `MinutesPerHeat`, `PlannedRaces`. `UpdateSessionRequest` gains optional `LanesPerHeat`, `MinutesPerHeat`, `DurationMinutes` (heatless sessions only), `PlannedRaces`.
 - `CompetitionSummary.HeatedSessionCount`.
 - Section names: `SectionNaming`; `AddSection` ignores a client-sent name when there is an age group; `UpdateSection` re-applies the rule.

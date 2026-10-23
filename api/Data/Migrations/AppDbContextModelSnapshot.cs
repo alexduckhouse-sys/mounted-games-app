@@ -729,6 +729,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<bool>("IsArchived")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("LaneHatbands")
+                        .HasColumnType("text");
+
                     b.Property<double?>("Latitude")
                         .HasColumnType("double precision");
 
@@ -2317,6 +2320,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
+
+                    b.Property<string>("PlannedRaces")
+                        .HasColumnType("text");
 
                     b.Property<int?>("QualifiersPerHeat")
                         .HasColumnType("integer");
