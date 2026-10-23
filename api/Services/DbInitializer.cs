@@ -26,6 +26,7 @@ public static class DbInitializer
         }
 
         await SeedReferenceDataAsync(db, roles);
+        await NormaliseSectionNamesAsync(db);
         var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         if (!scope.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment()
             || !(configuration.GetValue<bool?>("Database:SeedDemoData") ?? db.Database.IsSqlite()))
@@ -35,6 +36,24 @@ public static class DbInitializer
             return;
         }
         await SeedDemoDataAsync(db, users);
+    }
+
+    /// <summary>
+    /// Brings every age group's stored name in line with <see cref="SectionNaming"/> ("Junior Individuals", "Open Teams").
+    /// Idempotent: only rows whose name differs are written, so it costs one read of a small table after the first run.
+    /// </summary>
+    public static async Task NormaliseSectionNamesAsync(AppDbContext db)
+    {
+        var sections = await db.CompetitionSections.ToListAsync();
+        var changed = false;
+        foreach (var section in sections)
+        {
+            var name = SectionNaming.Of(section);
+            if (name.Length == 0 || name == section.DisplayName) continue;
+            section.DisplayName = name.Length > 150 ? name[..150] : name;
+            changed = true;
+        }
+        if (changed) await db.SaveChangesAsync();
     }
 
     private static async Task EnsureSharedAdminAsync(UserManager<AppUser> users)
@@ -162,6 +181,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "ChatMessages", "RecipientUserId", "TEXT NULL");
         await EnsureColumnAsync(db, "Sessions", "LaneRotationMode", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Sessions", "QualifiersPerHeat", "INTEGER NULL");
+        await EnsureColumnAsync(db, "Sessions", "PlannedRaces", "TEXT NULL");
         await EnsureColumnAsync(db, "Results", "IsSitOut", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Results", "Status", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Results", "RefereeNote", "TEXT NULL");

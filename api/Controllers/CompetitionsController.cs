@@ -107,7 +107,7 @@ public class CompetitionsController : ControllerBase
         var q = _db.Competitions
             .Include(c => c.Sections)
             .Include(c => c.Teams)
-            .Include(c => c.Sessions)
+            .Include(c => c.Sessions).ThenInclude(s => s.Heats)
             .AsQueryable();
         if (!includeArchived) q = q.Where(c => !c.IsArchived);
         return (await q.OrderByDescending(c => c.StartDate).ToListAsync()).Select(c => c.ToSummary());
@@ -361,9 +361,10 @@ public class CompetitionsController : ControllerBase
     public async Task<ActionResult<CompetitionSectionDto>> AddSection(int id, CreateSectionRequest req)
     {
         if (!await _db.Competitions.AnyAsync(c => c.Id == id)) return NotFound();
-        var display = string.IsNullOrWhiteSpace(req.DisplayName)
-            ? $"{req.Format} {req.AgeGroup}".Trim()
-            : req.DisplayName!;
+        // One naming rule (age group, then the format in the plural). A name sent by a client is only a fallback.
+        var display = string.IsNullOrWhiteSpace(req.AgeGroup)
+            ? (string.IsNullOrWhiteSpace(req.DisplayName) ? SectionNaming.FormatPlural(req.Format) : req.DisplayName!)
+            : SectionNaming.DisplayName(req.Format, req.AgeGroup);
         var section = new CompetitionSection
         {
             CompetitionId = id,
@@ -401,6 +402,8 @@ public class CompetitionsController : ControllerBase
         var section = await _db.CompetitionSections.FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == id);
         if (section is null) return NotFound();
         section.RunoffRaceName = string.IsNullOrWhiteSpace(req.RunoffRaceName) ? null : req.RunoffRaceName.Trim();
+        // Saving brings an older name in line with the naming rule.
+        section.DisplayName = SectionNaming.Of(section) is { Length: > 0 } named ? named : section.DisplayName;
         if (req.UsesRaceFinals.HasValue) section.UsesRaceFinals = req.UsesRaceFinals.Value;
         if (req.TieBreakRule.HasValue) section.TieBreakRule = req.TieBreakRule.Value;
         if (req.PriceMinor.HasValue) section.PriceMinor = Math.Max(0, req.PriceMinor.Value);
