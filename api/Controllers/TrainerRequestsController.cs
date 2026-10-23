@@ -52,8 +52,14 @@ public class TrainerRequestsController(AppDbContext db, UserManager<AppUser> use
     [HttpPost("{userId}/decline")]
     public Task<IActionResult> Decline(string userId, CancellationToken ct) => Review(userId, false, ct);
 
-    private async Task<IActionResult> Review(string userId, bool approve, CancellationToken ct)
+    // Postgres runs with a retrying execution strategy, which refuses a transaction started outside it. Run the whole
+    // decision inside the strategy, starting from a clean change tracker in case it is retried.
+    private Task<IActionResult> Review(string userId, bool approve, CancellationToken ct)
+        => db.Database.CreateExecutionStrategy().ExecuteAsync(() => ReviewOnceAsync(userId, approve, ct));
+
+    private async Task<IActionResult> ReviewOnceAsync(string userId, bool approve, CancellationToken ct)
     {
+        db.ChangeTracker.Clear();
         // Identity saves each role change separately. Keep the decision atomic.
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         var user = await users.FindByIdAsync(userId);

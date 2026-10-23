@@ -31,7 +31,12 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
     public async Task<bool> IsLastAdminAsync(AppUser user, string adminRole)
         => await users.IsInRoleAsync(user, adminRole) && (await users.GetUsersInRoleAsync(adminRole)).Count <= 1;
 
-    public async Task<AccountDeletionOutcome> DeleteAsync(AppUser user, CancellationToken ct = default)
+    public Task<AccountDeletionOutcome> DeleteAsync(AppUser user, CancellationToken ct = default)
+        => db.Database.CreateExecutionStrategy().ExecuteAsync(() => DeleteOnceAsync(user, ct));
+
+    // Postgres runs with a retrying execution strategy, which refuses a transaction started outside it. Run the whole
+    // deletion inside the strategy, starting from a clean change tracker in case it is retried.
+    private async Task<AccountDeletionOutcome> DeleteOnceAsync(AppUser user, CancellationToken ct)
     {
         var id = user.Id;
         await using var tx = await db.Database.BeginTransactionAsync(ct);
