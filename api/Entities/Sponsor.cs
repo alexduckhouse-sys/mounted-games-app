@@ -8,8 +8,21 @@ public enum SponsorPlacement
     Timetable = 1,
     Results = 2,
     Details = 4,
-    /// <summary>The sponsor banner drawn over the live video.</summary>
+    /// <summary>A small logo drawn over the live video, at any time.</summary>
     Stream = 8,
+    /// <summary>Sponsor cards (logo and name) drawn over the live video while the timetable is on a break or briefing.</summary>
+    BreakStream = 16,
+    /// <summary>The competition's own sponsor page.</summary>
+    SponsorPage = 32,
+}
+
+public static class SponsorPlacements
+{
+    /// <summary>Every defined placement. Add a new <see cref="SponsorPlacement"/> value and this follows.</summary>
+    public static readonly SponsorPlacement All = Enum.GetValues<SponsorPlacement>().Aggregate(SponsorPlacement.None, (all, p) => all | p);
+
+    /// <summary>True for exactly one defined placement (what an exposure count refers to).</summary>
+    public static bool IsSingle(SponsorPlacement p) => p != SponsorPlacement.None && (p & (p - 1)) == 0 && (p & ~All) == 0;
 }
 
 public enum SponsorTier { Headline = 0, Major = 1, Supporter = 2 }
