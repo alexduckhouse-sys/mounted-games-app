@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Megaphone, VolumeX } from 'lucide-react';
 import { OverlayChips, ProducerBanner, ScoreCardOverlay } from './OverlayExtras';
+import { SponsorOverlay } from './SponsorOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
 import { lookStyle } from '../../lib/overlays';
 import type { ChatMessage, LiveStream } from '../../types';
@@ -38,6 +39,7 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
     </div>}
     <ProducerBanner stream={stream} overlay={overlay} look={look} />
     <ScoreCardOverlay stream={stream} overlay={overlay} look={look} cards={scoreCards} />
+    <SponsorOverlay arenaName={stream.arenaName} track={stream.id !== 0} />
     {announcement && <div className="absolute left-3 right-3 top-14 flex justify-center"><StreamNotice key={`${announcement.message.id}-${announcement.receivedAt}`} {...announcement} /></div>}
     {reconnecting && stream.status !== 1 && <div role="status" className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep)/0.7)]"><h3 className="text-2xl font-bold">Reconnecting…</h3><p className="text-sm">The signal dropped. Trying again.</p></div>}
     {stream.status === 1 && <div role="status" className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep))]"><span className="mg-logo mb-3">MG</span><h3 className="text-3xl font-bold">Back soon</h3><p>The camera is being moved.</p><p className="mt-3 text-xs">{stream.arenaName} · {stream.angleName}</p></div>}
