@@ -16,12 +16,13 @@ import { ScoringSection } from './ScoringSection';
 import { bibAccent } from '../../lib/bib';
 import { enqueue, placingsOf } from '../../offline/scoreOutbox';
 import {
-  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
+  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, setNote, setStatus, tapTeam, toggleEliminated,
   writeScoringDraft, type PendingPlace,
 } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 import { LANE_ROTATION_LABELS, LaneRotationMode, lanesInUse, type LaneRotationModeValue } from '../../lib/lanes';
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
+import { useRaceNotes } from './useRaceNotes';
 
 function formatTime(d: Date | null): string {
   if (!d) return '—';
@@ -123,7 +124,11 @@ export function SessionPage() {
   // or else nothing. Until the scorer changes something, a finished race simply shows its saved results.
   const scoringDraftKey = activeHeatId && activeRaceId ? draftKeyFor(activeHeatId, activeRaceId) : null;
   const draftRace = orderedRaces.find((r) => r.id === activeRaceId) ?? null;
-  const savedPlaces = useMemo(() => (draftRace?.isComplete ? placesFromResults(draftRace) : []), [draftRace]);
+  // Referee notes aren't in the public results, so staff read them separately when correcting a scored race.
+  const savedNotes = useRaceNotes(
+    draftRace?.id ?? null, canManage(competition) && draftRace?.isComplete === true,
+    draftRace?.results.map((r) => `${r.teamId}:${r.placing}:${r.status ?? 0}`).join(',') ?? '');
+  const savedPlaces = useMemo(() => (draftRace?.isComplete ? placesFromResults(draftRace, savedNotes) : []), [draftRace, savedNotes]);
   const [pendingState, setPendingState] = useState<{ key: string | null; places: PendingPlace[]; edited: boolean }>(
     { key: null, places: [], edited: false },
   );
@@ -217,6 +222,14 @@ export function SessionPage() {
     setPending((cur) => toggleEliminated(cur, teamId));
   }
 
+  function changeStatus(teamId: number, status: number) {
+    setPending((cur) => setStatus(cur, teamId, status));
+  }
+
+  function changeNote(teamId: number, note: string) {
+    setPending((cur) => setNote(cur, teamId, note));
+  }
+
   function resetPending() { setPending([]); }
 
 
@@ -305,6 +318,8 @@ export function SessionPage() {
               onToggleLaneView={() => setShowLaneView((s) => !s)}
               onClickTeam={clickTeam}
               onToggleElim={toggleElim}
+              onSetStatus={changeStatus}
+              onSetNote={changeNote}
               onReset={resetPending}
               onSubmit={submit}
               correctionReason={activeRace ? correctionReasons[activeRace.id] ?? '' : ''}

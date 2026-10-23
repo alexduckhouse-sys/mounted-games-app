@@ -9,7 +9,9 @@ import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { CompetitionSection, Heat, Session, SessionKind as SessionKindType } from '../../types';
-import { SessionKind } from '../../types';
+import { SessionKind, TieBreakRule } from '../../types';
+import type { FinalsBoundary } from '../../lib/tieBreak';
+import { FinalsTiePanel } from './FinalsTiePanel';
 import { bibAccent } from '../../lib/bib';
 import { computeTimings, roundTo5Min, formatTime, type SessionTiming, type HeatTiming } from '../../lib/time';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
@@ -1134,21 +1136,21 @@ function CreateFinalsModal({
   const [scaffoldOnly, setScaffoldOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [boundary, setBoundary] = useState<{ tied: boolean; teams?: { id: number; name: string; total: number; wins: number }[]; cutoff?: number } | null>(null);
+  const [boundary, setBoundary] = useState<FinalsBoundary | null>(null);
+  const [boundaryVersion, setBoundaryVersion] = useState(0);
+  const [rules, setRules] = useState<Record<number, TieBreakRule>>({});
+  const section = sectionId === '' ? null : sections.find((s) => s.id === sectionId) ?? null;
 
-  // Re-check the qualification boundary whenever topN or section changes.
+  // Re-check every finals cut whenever the size of the finals, the section or a tie's settlement changes.
   useEffect(() => {
     let cancelled = false;
-    const params: Record<string, number> = { topN };
+    const params: Record<string, number> = { topN, lanesPerHeat: lanes };
     if (sectionId !== '') params.sectionId = sectionId;
-    api.get<{ tied: boolean; teams?: { id: number; name: string; total: number; wins: number }[]; cutoff?: number }>(
-      `/competitions/${competitionId}/finals/boundary`,
-      { params }
-    )
+    api.get<FinalsBoundary>(`/competitions/${competitionId}/finals/boundary`, { params })
       .then((r) => { if (!cancelled) setBoundary(r.data); })
       .catch(() => { if (!cancelled) setBoundary(null); });
     return () => { cancelled = true; };
-  }, [competitionId, topN, sectionId]);
+  }, [competitionId, topN, lanes, sectionId, boundaryVersion]);
 
   async function submit() {
     const races = raceNames.split('\n').map((r) => r.trim()).filter(Boolean);
@@ -1275,22 +1277,14 @@ function CreateFinalsModal({
             </span>
           </label>
 
-          {boundary?.tied && boundary.teams && (
-            <div className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-md p-2 space-y-1">
-              <div className="font-semibold flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" /> Tie at the qualification boundary
-              </div>
-              <p>
-                {boundary.teams.length} teams are tied on points at the cut-off (top {boundary.cutoff}).
-                Order of qualification will be effectively random unless you break the tie first.
-              </p>
-              <ul className="list-disc list-inside">
-                {boundary.teams.map((t) => (
-                  <li key={t.id}>{t.name} — {t.total} pts, {t.wins} wins</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <FinalsTiePanel
+            competitionId={competitionId}
+            section={section}
+            rule={section ? rules[section.id] ?? section.tieBreakRule ?? TieBreakRule.Countback : TieBreakRule.Countback}
+            onRuleChange={(id, rule) => setRules((current) => ({ ...current, [id]: rule }))}
+            boundary={boundary}
+            onChanged={() => setBoundaryVersion((v) => v + 1)}
+          />
           {error && (
             <div className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 rounded-md p-2">
               {error}

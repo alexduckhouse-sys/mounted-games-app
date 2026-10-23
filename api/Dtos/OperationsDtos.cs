@@ -1,3 +1,4 @@
+using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Operations;
 
 namespace MountedGames.Api.Dtos;
@@ -15,7 +16,9 @@ public record DrawFairnessDto(
 public record DrawPreviewDto(int SectionId, int Seed, string Fingerprint,
     IReadOnlyList<DrawSessionDto> Sessions, DrawFairnessDto Fairness);
 
-public record ScorePlaceDto(int TeamId, int Place, bool Eliminated, int Points, bool IsSitOut = false);
+/// <summary>A result as staff see it: ResultDto plus the referee's private note.</summary>
+public record ScorePlaceDto(int TeamId, int Place, bool Eliminated, int Points, bool IsSitOut = false,
+    ResultStatus Status = ResultStatus.Finished, string? RefereeNote = null);
 public record UpdateRaceScoreRequest(
     IReadOnlyList<FinishingPlaceDto>? Places, int ExpectedRevision,
     string RequestId, string? Reason);

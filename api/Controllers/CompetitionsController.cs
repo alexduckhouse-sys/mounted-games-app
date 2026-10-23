@@ -377,6 +377,7 @@ public class CompetitionsController : ControllerBase
                 ? req.MaxParticipants
                 : null,
             FinalistCount = req.FinalistCount,
+            TieBreakRule = req.TieBreakRule,
         };
         _db.CompetitionSections.Add(section);
         await _db.SaveChangesAsync();
@@ -401,6 +402,7 @@ public class CompetitionsController : ControllerBase
         if (section is null) return NotFound();
         section.RunoffRaceName = string.IsNullOrWhiteSpace(req.RunoffRaceName) ? null : req.RunoffRaceName.Trim();
         if (req.UsesRaceFinals.HasValue) section.UsesRaceFinals = req.UsesRaceFinals.Value;
+        if (req.TieBreakRule.HasValue) section.TieBreakRule = req.TieBreakRule.Value;
         if (req.PriceMinor.HasValue) section.PriceMinor = Math.Max(0, req.PriceMinor.Value);
         if (req.MaxParticipants.HasValue)
             section.MaxParticipants = req.MaxParticipants.Value > 0 ? req.MaxParticipants.Value : null;
@@ -448,33 +450,9 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpGet("{id:int}/standings")]
-    public async Task<ActionResult<IReadOnlyList<StandingRow>>> Standings(int id, [FromQuery] int? sectionId = null)
-    {
-        var teamsQ = _db.Teams
-            .Include(t => t.Club)
-            .Include(t => t.Results).ThenInclude(r => r.Race)
-            .Where(t => t.CompetitionId == id && !t.IsHorsConcours);
-        if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
-
-        var teams = await teamsQ.ToListAsync();
-        var tiers = await FinalsTiers.LoadAsync(_db, id);
-
-        // Once finals exist, the final a team is in decides its place before points do.
-        var rows = teams.Select(t => new StandingRow(
-            t.Id, t.DisplayName, t.Club?.Name ?? string.Empty, t.BibColour,
-            t.Results.Sum(r => r.Points),
-            t.Results.Count,
-            t.Results.Count(r => r.Placing == 1 && !r.Eliminated),
-            t.Results.Count(r => r.Eliminated),
-            tiers.TierOf(t.Id),
-            t.EntryStatus != TeamEntryStatus.Active))
-        .OrderBy(r => r.FinalTier ?? FinalsTiers.NotInFinals)
-        .ThenByDescending(r => r.TotalPoints)
-        .ThenByDescending(r => r.Wins)
-        .ToList();
-
-        return rows;
-    }
+    public async Task<ActionResult<IReadOnlyList<StandingRow>>> Standings(int id,
+        [FromServices] StandingsService standings, [FromQuery] int? sectionId = null)
+        => await standings.RowsAsync(id, sectionId, HttpContext.RequestAborted);
 
     [HttpPost("{id:int}/shift-day")]
     [Authorize(Policy = CompetitionStaff.Policy)]
@@ -506,49 +484,117 @@ public class CompetitionsController : ControllerBase
     {
         if (topN < 1) return BadRequest(new { message = "topN must be >= 1." });
         lanesPerHeat = Math.Clamp(lanesPerHeat, 1, 50);
-        var teamsQ = _db.Teams
-            .Include(t => t.Results)
-            .Where(t => t.CompetitionId == id && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active);
-        if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
-
-        var teams = await teamsQ.ToListAsync();
-        var ordered = teams
-            .Select(t => new
-            {
-                t.Id,
-                Name = t.DisplayName,
-                Total = t.Results.Sum(r => r.Points),
-                Wins = t.Results.Count(r => r.Placing == 1 && !r.Eliminated)
-            })
-            .OrderByDescending(x => x.Total)
-            .ThenByDescending(x => x.Wins)
-            .ToList();
-        if (ordered.Count <= topN)
+        var (ties, ranked, names) = await RankForFinalsAsync(id, sectionId);
+        if (ranked.Count <= topN)
             return new { tied = false, message = "All teams qualify; no boundary tie." };
 
-        // Every cut between finals (A/B, B/C, ... and the last place that goes through) can be tied.
-        // A tie is teams level on points: finishing more races first doesn't settle it, so it is
-        // flagged for the organiser to decide (a run-off, a countback on wins, or by hand).
+        // Every cut between finals (A/B, B/C, ... and the last place that goes through) can be tied. Only teams
+        // level on points count as a tie; the age group's rule may then settle it, or the organiser has to.
         var cutoffs = Enumerable.Range(1, topN / lanesPerHeat).Select(k => k * lanesPerHeat).Append(topN).Distinct().OrderBy(c => c).ToList();
         var boundaries = new List<BoundaryTie>();
         foreach (var cutoff in cutoffs)
         {
-            if (cutoff >= ordered.Count) continue;
-            var lastIn = ordered[cutoff - 1];
-            if (lastIn.Total != ordered[cutoff].Total) continue;
-            var tied = ordered
-                .Where(o => o.Total == lastIn.Total)
-                .Select(o => new { o.Id, o.Name, o.Total, o.Wins })
-                .ToList<object>();
-            boundaries.Add(new BoundaryTie(cutoff, lastIn.Total, lastIn.Wins, tied));
+            if (cutoff >= ranked.Count) continue;
+            var lastIn = ranked[cutoff - 1];
+            var firstOut = ranked[cutoff];
+            if (lastIn.Total != firstOut.Total) continue;
+            var level = ranked.Where(o => o.Total == lastIn.Total).ToList();
+            var settlement = ties.Settle(level, lastIn, firstOut);
+            var tied = level
+                .Select(o => { var position = ranked.IndexOf(o) + 1; return new BoundaryTeam(o.TeamId, names[o.TeamId], o.Total, o.Wins, position, position <= cutoff); })
+                .ToList();
+            boundaries.Add(new BoundaryTie(cutoff, lastIn.Total, lastIn.Wins, tied, ties.RuleOf(level), settlement, settlement != TieSettlement.Open));
         }
         if (boundaries.Count == 0) return new { tied = false };
+        string? runoffRace = sectionId.HasValue
+            ? await _db.CompetitionSections.Where(s => s.Id == sectionId.Value && s.CompetitionId == id).Select(s => s.RunoffRaceName).FirstOrDefaultAsync()
+            : null;
         // The first tied cut is reported at the top level, as before; every tied cut is in `boundaries`.
         var first = boundaries[0];
-        return new { tied = true, cutoff = first.Cutoff, totalAtCutoff = first.TotalAtCutoff, winsAtCutoff = first.WinsAtCutoff, teams = first.Teams, boundaries };
+        return new
+        {
+            tied = true, cutoff = first.Cutoff, totalAtCutoff = first.TotalAtCutoff, winsAtCutoff = first.WinsAtCutoff, teams = first.Teams,
+            boundaries, unsettled = boundaries.Any(b => !b.Settled), runoffRaceName = runoffRace,
+        };
     }
 
-    private sealed record BoundaryTie(int Cutoff, int TotalAtCutoff, int WinsAtCutoff, IReadOnlyList<object> Teams);
+    private sealed record BoundaryTeam(int Id, string Name, int Total, int Wins, int Position, bool GoesThrough);
+    private sealed record BoundaryTie(int Cutoff, int TotalAtCutoff, int WinsAtCutoff, IReadOnlyList<BoundaryTeam> Teams,
+        TieBreakRule Rule, TieSettlement SettledBy, bool Settled);
+
+    /// <summary>Active, non-HC teams in finals order: points, then the age group's tie-break or the organiser's order.</summary>
+    private async Task<(TieBreaker Ties, List<TieFacts> Ranked, Dictionary<int, string> Names)> RankForFinalsAsync(int competitionId, int? sectionId)
+    {
+        var teamsQ = _db.Teams.AsNoTracking()
+            .Include(t => t.Results)
+            .Where(t => t.CompetitionId == competitionId && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active);
+        if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
+        var teams = await teamsQ.ToListAsync(HttpContext.RequestAborted);
+        var ties = await TieBreaker.LoadAsync(_db, competitionId, HttpContext.RequestAborted);
+        // Tack check bonus points count here as they do in the standings, so finals are seeded from the table people see.
+        var bonus = await Services.TackCheck.TackCheckBonus.ForCompetitionAsync(_db, competitionId, HttpContext.RequestAborted);
+        var facts = teams.Select(t => ties.Facts(t.Id, t.CompetitionSectionId, t.Results, t.Results.Sum(r => r.Points) + bonus.GetValueOrDefault(t.Id)));
+        return (ties, ties.Rank(facts), teams.ToDictionary(t => t.Id, t => t.DisplayName));
+    }
+
+    /// <summary>
+    /// Sets the organiser's order for teams level on points (after a run-off, or decided by hand), best first.
+    /// It must name every active team in the age group on that total, so a tie is never half ordered.
+    /// </summary>
+    [HttpPut("{id:int}/finals/tie-order")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
+    public async Task<IActionResult> SetTieOrder(int id, SetTieOrderRequest req)
+    {
+        var teamIds = req.TeamIds ?? [];
+        if (teamIds.Count < 2 || teamIds.Distinct().Count() != teamIds.Count)
+            return BadRequest(new { message = "List at least two different teams, best first." });
+        // Totals as the standings count them, tack check bonus included.
+        var bonus = await Services.TackCheck.TackCheckBonus.ForCompetitionAsync(_db, id, HttpContext.RequestAborted);
+        var teams = (await _db.Teams.AsNoTracking()
+            .Where(t => t.CompetitionId == id && teamIds.Contains(t.Id))
+            .Select(t => new { t.Id, t.CompetitionSectionId, t.IsHorsConcours, t.EntryStatus, Points = t.Results.Sum(r => r.Points) })
+            .ToListAsync())
+            .Select(t => new { t.Id, t.CompetitionSectionId, t.IsHorsConcours, t.EntryStatus, Total = t.Points + bonus.GetValueOrDefault(t.Id) })
+            .ToList();
+        if (teams.Count != teamIds.Count) return BadRequest(new { message = "Every team must be in this competition." });
+        if (teams.Any(t => t.IsHorsConcours || t.EntryStatus != TeamEntryStatus.Active))
+            return BadRequest(new { message = "Hors concours and withdrawn teams don't take part in ties." });
+        var sectionId = teams[0].CompetitionSectionId;
+        if (teams.Any(t => t.CompetitionSectionId != sectionId))
+            return BadRequest(new { message = "The teams must all be in the same age group." });
+        var total = teams[0].Total;
+        if (teams.Any(t => t.Total != total))
+            return Conflict(new { message = "These teams are no longer level on points. Check the standings and try again." });
+
+        var levelIds = (await _db.Teams.AsNoTracking()
+            .Where(t => t.CompetitionId == id && t.CompetitionSectionId == sectionId
+                && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active)
+            .Select(t => new { t.Id, Points = t.Results.Sum(r => r.Points) })
+            .ToListAsync())
+            .Where(t => t.Points + bonus.GetValueOrDefault(t.Id) == total)
+            .Select(t => t.Id)
+            .ToList();
+        if (!levelIds.ToHashSet().SetEquals(teamIds))
+            return Conflict(new { message = $"Order every team on {total} points in this age group together.", teamIds = levelIds });
+
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _db.FinalsTieOrders.RemoveRange(await _db.FinalsTieOrders.Where(o => teamIds.Contains(o.TeamId)).ToListAsync());
+        for (var i = 0; i < teamIds.Count; i++)
+            _db.FinalsTieOrders.Add(new FinalsTieOrder { CompetitionId = id, TeamId = teamIds[i], Points = total, Position = i + 1, SetByUserId = userId });
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    /// <summary>Clears the organiser's order for these teams, so their age group's rule decides again.</summary>
+    [HttpDelete("{id:int}/finals/tie-order")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
+    public async Task<IActionResult> ClearTieOrder(int id, [FromQuery] int[] teamIds)
+    {
+        await _db.FinalsTieOrders.Where(o => o.CompetitionId == id && teamIds.Contains(o.TeamId)).ExecuteDeleteAsync();
+        return NoContent();
+    }
 
     [HttpPost("{id:int}/finals")]
     [Authorize(Policy = CompetitionStaff.Policy)]
@@ -564,25 +610,8 @@ public class CompetitionsController : ControllerBase
         if (req.CompetitionSectionId.HasValue && !await SectionInCompetitionAsync(id, req.CompetitionSectionId.Value))
             return BadRequest("Section not found in this competition.");
 
-        var teamsQ = _db.Teams
-            .Include(t => t.Results)
-            .Where(t => t.CompetitionId == id && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active);
-        if (req.CompetitionSectionId.HasValue)
-            teamsQ = teamsQ.Where(t => t.CompetitionSectionId == req.CompetitionSectionId.Value);
-
-        var teams = await teamsQ.ToListAsync();
-        var top = teams
-            .Select(t => new
-            {
-                t.Id,
-                Total = t.Results.Sum(r => r.Points),
-                Wins = t.Results.Count(r => r.Placing == 1 && !r.Eliminated)
-            })
-            .OrderByDescending(x => x.Total)
-            .ThenByDescending(x => x.Wins)
-            .Take(req.TopN)
-            .Select(x => x.Id)
-            .ToList();
+        var (_, ranked, _) = await RankForFinalsAsync(id, req.CompetitionSectionId);
+        var top = ranked.Take(req.TopN).Select(x => x.TeamId).ToList();
 
         if (top.Count == 0) return BadRequest("No teams with results to seed finals.");
 
@@ -737,23 +766,8 @@ public class CompetitionsController : ControllerBase
         if (heats.Any(h => h.Entries.Count > 0))
             return BadRequest(new { message = "Heats already have teams. Clear them first via heat assignments." });
 
-        var teamsQ = _db.Teams
-            .Include(t => t.Results)
-            .Where(t => t.CompetitionId == id && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active);
-        if (session.CompetitionSectionId.HasValue)
-            teamsQ = teamsQ.Where(t => t.CompetitionSectionId == session.CompetitionSectionId.Value);
-        var teams = await teamsQ.ToListAsync();
-        var ordered = teams
-            .Select(t => new
-            {
-                t.Id,
-                Total = t.Results.Sum(r => r.Points),
-                Wins = t.Results.Count(r => r.Placing == 1 && !r.Eliminated)
-            })
-            .OrderByDescending(x => x.Total)
-            .ThenByDescending(x => x.Wins)
-            .Select(x => x.Id)
-            .ToList();
+        var (_, ranked, _) = await RankForFinalsAsync(id, session.CompetitionSectionId);
+        var ordered = ranked.Select(x => x.TeamId).ToList();
         if (ordered.Count == 0) return BadRequest(new { message = "No teams with results to seed finals." });
 
         var perHeat = session.LanesPerHeat ?? 6;

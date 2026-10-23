@@ -76,6 +76,8 @@ export interface PrintableScoreCell {
   bib?: string | null;
   /** The team had no lane this race and sat it out. */
   isSitOut?: boolean;
+  /** Why a team that did not finish did not: 1 E, 2 DNS, 3 DNF, 4 R. */
+  status?: number;
 }
 export interface PrintableScoreRace { raceId: number; name: string; teams: PrintableScoreCell[] }
 export interface PrintableScoreHeat {
@@ -100,6 +102,8 @@ export interface PrintableResultRow {
   racesRun: number;
   wins: number;
   eliminations: number;
+  /** Tack check bonus points, already in `totalPoints`. */
+  bonusPoints?: number;
 }
 export interface PrintableSectionResults {
   competitionSectionId: number;

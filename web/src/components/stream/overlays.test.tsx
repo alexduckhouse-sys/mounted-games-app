@@ -116,6 +116,19 @@ describe('score card on the video', () => {
   const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
   beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(START); });
 
+  it('shows the letters for a team that did not start, did not finish or retired', () => {
+    const base = card();
+    const withLetters: QueuedScoreCard = { ...base, card: { ...base.card, rows: [
+      { teamId: 1, teamName: 'Oak A', total: 5, added: 0, eliminated: true, status: 2, place: 1, change: null },
+      { teamId: 2, teamName: 'Ash B', total: 4, added: 0, eliminated: true, status: 3, place: 2, change: null },
+      { teamId: 3, teamName: 'Elm C', total: 3, added: 0, eliminated: true, status: 4, place: 3, change: null },
+    ] } };
+    show({ scoreCardDelaySeconds: 4, scoreCardSeconds: 10 }, { scoreCards: [withLetters] });
+    tick(4_000);
+    const rows = within(screen.getByRole('region', { name: /Results/ })).getAllByRole('listitem');
+    expect(rows.map((row) => row.textContent)).toEqual(['1Oak ADNS5', '2Ash BDNF4', '3Elm CR3']);
+  });
+
   it('appears after the delay with the whole heat table, then goes', () => {
     show({ scoreCardDelaySeconds: 4, scoreCardSeconds: 10 }, { scoreCards: [card()] });
     expect(screen.queryByRole('region')).toBeNull();

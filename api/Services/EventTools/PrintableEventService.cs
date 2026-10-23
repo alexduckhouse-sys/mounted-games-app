@@ -40,7 +40,8 @@ public sealed class PrintableEventService(AppDbContext db)
                     {
                         var result = r.Results.SingleOrDefault(y => y.TeamId == e.TeamId);
                         return new PrintableScoreCellDto(e.TeamId, e.Team!.DisplayName, result?.Placing, result?.Eliminated ?? false, result?.Points,
-                            e.LaneIndex, e.Team.BibDescription ?? e.Team.BibColour, result?.IsSitOut ?? false);
+                            e.LaneIndex, e.Team.BibDescription ?? e.Team.BibColour, result?.IsSitOut ?? false,
+                            result is null ? ResultStatus.Finished : ResultStatuses.Of(result));
                     }).ToArray())).ToArray()))
             .ToArray();
         return new PrintableScoreSheetsDto(ToCompetition(competition), heats);
@@ -51,6 +52,7 @@ public sealed class PrintableEventService(AppDbContext db)
         var competition = await LoadAsync(competitionId, ct);
         if (competition is null) return null;
         var tiers = FinalsTiers.From(competition.Sessions);
+        var bonus = await TackCheck.TackCheckBonus.ForCompetitionAsync(db, competitionId, ct);
         var sections = competition.Sections.OrderBy(x => x.DisplayName).Select(section =>
         {
             var rows = section.Teams.Where(x => !x.IsHorsConcours).Select(team =>
@@ -60,10 +62,11 @@ public sealed class PrintableEventService(AppDbContext db)
                 {
                     Team = team,
                     Tier = tiers.SortKey(team.Id),
-                    Total = results.Sum(x => x.Points),
+                    Total = results.Sum(x => x.Points) + bonus.GetValueOrDefault(team.Id),
+                    Bonus = bonus.GetValueOrDefault(team.Id),
                     Run = results.Length,
                     Wins = results.Count(x => x.Placing == 1 && !x.Eliminated),
-                    Eliminations = results.Count(x => x.Eliminated),
+                    Eliminations = results.Count(x => x.Eliminated && ResultStatuses.Of(x) == ResultStatus.Eliminated),
                 };
             }).OrderBy(x => x.Tier).ThenByDescending(x => x.Total).ThenBy(x => x.Team.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Team.Id).ToList();
             (int Tier, int Total)? previous = null;
@@ -75,7 +78,7 @@ public sealed class PrintableEventService(AppDbContext db)
                 if (previous != (rows[i].Tier, rows[i].Total)) rank = i + 1;
                 previous = (rows[i].Tier, rows[i].Total);
                 result.Add(new PrintableResultRowDto(rank, rows[i].Team.Id, rows[i].Team.DisplayName,
-                    rows[i].Team.Club?.Name ?? string.Empty, rows[i].Total, rows[i].Run, rows[i].Wins, rows[i].Eliminations));
+                    rows[i].Team.Club?.Name ?? string.Empty, rows[i].Total, rows[i].Run, rows[i].Wins, rows[i].Eliminations, rows[i].Bonus));
             }
             return new PrintableSectionResultsDto(section.Id, section.DisplayName, result);
         }).ToArray();
@@ -83,6 +86,31 @@ public sealed class PrintableEventService(AppDbContext db)
             .SelectMany(x => x.Heats).SelectMany(x => x.Races).ToArray();
         var provisional = races.Length == 0 || races.Any(x => !x.IsComplete);
         return new PrintableResultsDto(ToCompetition(competition), provisional, sections);
+    }
+
+    /// <summary>
+    /// Every team of every section with its declared riders and ponies, so the organiser can check the entries
+    /// before the event. Staff only: it shows riders' full names.
+    /// </summary>
+    public async Task<PrintableEntriesDto?> EntriesAsync(int competitionId, CancellationToken ct)
+    {
+        var competition = await db.Competitions.AsNoTracking().AsSplitQuery()
+            .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.Club)
+            .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.DeclarationForms).ThenInclude(x => x.Riders)
+            .SingleOrDefaultAsync(x => x.Id == competitionId, ct);
+        if (competition is null) return null;
+        var sections = competition.Sections.OrderBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id)
+            .Select(section => new PrintableEntriesSectionDto(section.Id, section.DisplayName,
+                section.Teams.OrderBy(t => t.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Id).Select(team =>
+                {
+                    var form = team.DeclarationForms.OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id).FirstOrDefault();
+                    var riders = (form?.Riders ?? []).OrderBy(r => r.IsReserve).ThenBy(r => r.OrderIndex).ThenBy(r => r.Id)
+                        .Select(r => new PrintableEntryRiderDto(r.FullName, string.IsNullOrWhiteSpace(r.HorseName) ? null : r.HorseName.Trim(),
+                            r.IsCaptain, r.IsReserve, r.IsGuestRider)).ToArray();
+                    return new PrintableEntryTeamDto(team.Id, team.DisplayName, team.Club?.Name ?? string.Empty,
+                        team.BibDescription ?? team.BibColour, team.EntryStatus != TeamEntryStatus.Active, team.IsHorsConcours, riders);
+                }).ToArray())).ToArray();
+        return new PrintableEntriesDto(ToCompetition(competition), sections);
     }
 
     /// <summary>Only race sessions have a draw and score sheets; breaks, briefings and custom items don't.</summary>

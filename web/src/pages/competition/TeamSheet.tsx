@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { ordinal, type TeamBlock, type TeamDetail } from '../../lib/toplist';
+import { statusLabel, statusLetter } from '../../lib/resultStatus';
 
 const eyebrow = 'text-[10px] font-bold uppercase tracking-[0.08em]';
 
@@ -91,7 +92,7 @@ function Block({ block }: { block: TeamBlock }) {
               {block.races.map((race) => (
                 <li key={race.id} className="flex min-h-10 items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 last:border-b-0">
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">{race.name}</span>
-                  <span className="shrink-0 text-[13px] font-medium text-[rgb(var(--mg-body))]">{race.eliminated ? 'Eliminated' : race.placing != null ? ordinal(race.placing) : '–'}</span>
+                  <span className="shrink-0 text-[13px] font-medium text-[rgb(var(--mg-body))]">{race.eliminated ? <><span aria-hidden="true" title={statusLabel(true, race.status) ?? undefined}>{statusLetter(true, race.status)}</span><span className="sr-only">{statusLabel(true, race.status)}</span></> : race.placing != null ? ordinal(race.placing) : '–'}</span>
                   <span className="mg-display w-9 shrink-0 text-right text-lg font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{race.points}<span className="sr-only"> points</span></span>
                 </li>
               ))}

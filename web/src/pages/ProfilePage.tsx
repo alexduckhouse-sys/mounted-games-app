@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, ChevronRight, ClipboardList, Contact, CreditCard, LogOut, Package, Pencil, ShoppingBag, UserRound, Users, type LucideIcon } from 'lucide-react';
+import { Bell, ChevronRight, ClipboardList, Contact, CreditCard, LogOut, Package, Pencil, ShoppingBag, UserCog, UserRound, Users, type LucideIcon } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
@@ -15,10 +15,9 @@ const NO_TEAMS: Team[] = [];
 export function ProfilePage() {
   const { user, hasRole, canEdit, logout } = useAuth();
   const { current } = useCurrentCompetition();
-  const { requests, count, review } = useNeedsYou();
+  const { requests, decForms: missing, teams, count, review } = useNeedsYou();
   const navigate = useNavigate();
   const notify = useTeamNotifications(NO_TEAMS);
-  const [teams, setTeams] = useState<Team[] | null>(null);
   const [savedRiders, setSavedRiders] = useState<number | null>(null);
   const [forms, setForms] = useState<DeclarationForm[] | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -26,13 +25,6 @@ export function ProfilePage() {
   const userId = user?.id;
   const clubId = user?.clubId ?? null;
   const competitionId = current?.id ?? null;
-
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    api.get<Team[]>('/trainer/my-teams').then((r) => { if (!cancelled && Array.isArray(r.data)) setTeams(r.data); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [userId]);
 
   useEffect(() => {
     if (!userId || clubId == null) return;
@@ -52,6 +44,9 @@ export function ProfilePage() {
   if (!user) return null;
 
   const isAdmin = hasRole('Admin');
+  const runsClub = isAdmin || hasRole('Manager');
+  // The admin lock on edit mode guards the admin's own changes; a team manager has no such switch.
+  const locked = isAdmin && !canEdit();
   const showClub = isAdmin || clubId != null || hasRole('Trainer') || hasRole('Manager') || (teams?.length ?? 0) > 0;
   const showTeams = !isAdmin || (teams?.length ?? 0) > 0;
   const teamsHere = competitionId == null ? [] : (teams ?? NO_TEAMS).filter((t) => t.competitionId === competitionId);
@@ -89,17 +84,25 @@ export function ProfilePage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-base font-semibold leading-tight">{request.fullName}</div>
-                  <div className="text-sm text-[rgb(var(--mg-muted))]">Wants to join as a trainer</div>
+                  <div className="text-sm text-[rgb(var(--mg-muted))]">Wants to join as {request.requestedRole === 'Manager' ? 'a team manager' : 'a trainer'}</div>
                 </div>
               </div>
               <div className="flex gap-2">
-                <button type="button" className="mg-btn mg-btn-primary !min-h-11 flex-1 !text-[15px]" disabled={!canEdit()} title={canEdit() ? undefined : 'Switch to edit mode'}
+                <button type="button" className="mg-btn mg-btn-primary !min-h-11 flex-1 !text-[15px]" disabled={locked} title={locked ? 'Switch to edit mode' : undefined}
                   onClick={() => decide(request, 'approve')}>Approve</button>
-                <button type="button" className="mg-btn mg-btn-secondary !min-h-11 flex-1 !text-[15px]" disabled={!canEdit()} title={canEdit() ? undefined : 'Switch to edit mode'}
+                <button type="button" className="mg-btn mg-btn-secondary !min-h-11 flex-1 !text-[15px]" disabled={locked} title={locked ? 'Switch to edit mode' : undefined}
                   onClick={() => decide(request, 'decline')}>Decline</button>
               </div>
               {failed === request.userId && <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">Could not update this request. Try again.</p>}
             </div>
+          ))}
+          {missing.map((t) => (
+            <Link key={t.id} to={`/competitions/${t.competitionId}/declarations?team=${t.id}`}
+              className="flex min-h-[60px] items-center gap-3 rounded-xl bg-[rgb(var(--mg-live-row))] px-3.5 text-[rgb(var(--mg-elim))]">
+              <ClipboardList aria-hidden="true" className="h-6 w-6 shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">Dec form needed: {t.displayName}</span>
+              <ChevronRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
+            </Link>
           ))}
         </Section>
       )}
@@ -110,6 +113,7 @@ export function ProfilePage() {
             {showTeams && <ListRow to="/teams" icon={Users} label="Teams" count={teams ? String(teams.length) : undefined} />}
             {clubId != null && <ListRow icon={Contact} label="Saved riders" count={savedRiders != null ? String(savedRiders) : undefined} />}
             <ListRow to="/declarations" icon={ClipboardList} label="Dec forms" count={decFormCount} />
+            {runsClub && <ListRow to="/me/members" icon={UserCog} label="Members" />}
           </div>
         </Section>
       )}

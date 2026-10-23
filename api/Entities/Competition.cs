@@ -45,6 +45,11 @@ public class Competition
     /// </summary>
     public string? TermsText { get; set; }
 
+    /// <summary>
+    /// When true, stewards tick off each pony's passport and vaccinations on arrival (event tools, staff only).
+    /// </summary>
+    public bool EnablePassportCheck { get; set; }
+
     public string? CreatedByUserId { get; set; }
     public AppUser? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

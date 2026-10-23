@@ -121,7 +121,7 @@ describe('SignUpPage', () => {
     expect(await screen.findByRole('heading', { name: 'Request sent to Stockport Pony Club' })).toBeInTheDocument();
     expect(screen.getByText(new RegExp(sentence.replace('.', '\\.')))).toBeInTheDocument();
     expect(api.post).toHaveBeenCalledWith('/auth/signup-trainer', {
-      username: 'sam@example.com', password: 'Passw0rd!x', role: apiRole, clubName: 'Stockport Pony Club',
+      username: 'sam@example.com', password: 'Passw0rd!x', role: apiRole, clubName: 'Stockport Pony Club', fullName: 'Sam Lee',
     });
   });
 

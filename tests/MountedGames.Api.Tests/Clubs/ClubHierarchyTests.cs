@@ -231,9 +231,9 @@ public class ClubHierarchyTests : IClassFixture<ApiFactory>
         var teamId = await _f.SeedTeamAsync(comp, section, await ClubIdAsync(club));
 
         var first = await (await manager.PostAsJsonAsync("/api/declaration-forms",
-            new SubmitDeclarationFormRequest(teamId, "first", new[] { Rider("A"), Rider("B"), Rider("Guest G", guest: true) }, false, null, "Red bibs"))).ReadAsync<DeclarationFormDto>();
+            new SubmitDeclarationFormRequest(teamId, "first", new[] { Rider("A"), Rider("B"), Rider("Guest G", guest: true) }, false, null, "Red bibs", AcceptTerms: true))).ReadAsync<DeclarationFormDto>();
         var second = await (await manager.PostAsJsonAsync("/api/declaration-forms",
-            new SubmitDeclarationFormRequest(teamId, "second", new[] { Rider("A"), Rider("C") }, false, null, "Blue bibs"))).ReadAsync<DeclarationFormDto>();
+            new SubmitDeclarationFormRequest(teamId, "second", new[] { Rider("A"), Rider("C") }, false, null, "Blue bibs", AcceptTerms: true))).ReadAsync<DeclarationFormDto>();
 
         Assert.Equal(first.Id, second.Id);
         Assert.Equal("Blue bibs", second.BibDescription);
@@ -258,7 +258,7 @@ public class ClubHierarchyTests : IClassFixture<ApiFactory>
             await db.SaveChangesAsync();
         });
 
-        await manager.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("A") }, false, null));
+        await manager.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("A") }, false, null, AcceptTerms: true));
 
         Assert.Equal(1, await _f.WithDbAsync(db => db.DeclarationForms.CountAsync(f => f.TeamId == teamId)));
     }
@@ -270,7 +270,7 @@ public class ClubHierarchyTests : IClassFixture<ApiFactory>
         var (comp, section) = await NewCompetitionAsync();
         var teamId = await _f.SeedTeamAsync(comp, section, await _f.SeedClubAsync());
 
-        var r = await otherManager.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("A") }, false, null));
+        var r = await otherManager.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("A") }, false, null, AcceptTerms: true));
 
         Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
     }
@@ -289,7 +289,7 @@ public class ClubHierarchyTests : IClassFixture<ApiFactory>
         var teamId = await _f.SeedTeamAsync(comp, section, clubId, trainerUserId: trainerAuth.User.Id);
 
         // The trainer submits and saves a new rider to the club roster.
-        await trainer.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("Shared Rider") }, true, null));
+        await trainer.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("Shared Rider") }, true, null, AcceptTerms: true));
 
         var seenByManager = await (await manager.GetAsync($"/api/clubs/{clubId}/saved-riders")).ReadAsync<List<SavedRiderDto>>();
         var seenByOther = await (await otherManager.GetAsync($"/api/clubs/{clubId}/saved-riders")).ReadAsync<List<SavedRiderDto>>();
@@ -298,10 +298,10 @@ public class ClubHierarchyTests : IClassFixture<ApiFactory>
 
         // The manager can declare using the trainer's saved rider.
         var saved = seenByManager.Single(r => r.FullName == "Shared Rider");
-        var used = await manager.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("Shared Rider", savedId: saved.Id) }, false, null));
+        var used = await manager.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("Shared Rider", savedId: saved.Id) }, false, null, AcceptTerms: true));
         Assert.Equal(HttpStatusCode.OK, used.StatusCode);
         // Saving the same rider again updates the club's one entry instead of adding a second.
-        await manager.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("Shared Rider") }, true, null));
+        await manager.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("Shared Rider") }, true, null, AcceptTerms: true));
         Assert.Equal(1, await _f.WithDbAsync(db => db.SavedRiders.CountAsync(r => r.ClubId == clubId && r.FullName == "Shared Rider")));
     }
 
@@ -314,7 +314,7 @@ public class ClubHierarchyTests : IClassFixture<ApiFactory>
         var (comp, section) = await NewCompetitionAsync();
         var teamId = await _f.SeedTeamAsync(comp, section, clubId);
 
-        await manager.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("Borrowed Rider", guest: true) }, true, null));
+        await manager.PostAsJsonAsync("/api/declaration-forms", new SubmitDeclarationFormRequest(teamId, null, new[] { Rider("Borrowed Rider", guest: true) }, true, null, AcceptTerms: true));
 
         Assert.False(await _f.WithDbAsync(db => db.SavedRiders.AnyAsync(r => r.ClubId == clubId)));
     }

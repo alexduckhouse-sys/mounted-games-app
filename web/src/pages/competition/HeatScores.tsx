@@ -8,9 +8,10 @@ import { displaySectionName } from '../../lib/section';
 import { timetableRows } from '../../lib/timetableRows';
 import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
+import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import './heat.css';
 
-interface Cell { points: number; eliminated: boolean; sitOut: boolean }
+interface Cell { points: number; eliminated: boolean; sitOut: boolean; status?: number }
 
 /** The public heat page: who is racing, the score for every race so far and the running total. */
 export function HeatScores({ session, heats, activeHeatId }: { session: Session; heats: Heat[]; activeHeatId: number | null }) {
@@ -75,7 +76,7 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
         const cell = cells.get(key) ?? { points: 0, eliminated: false, sitOut: false };
         cell.points += result.points;
         if (result.isSitOut) cell.sitOut = true;
-        if (result.eliminated && result.points === 0) cell.eliminated = true;
+        if (result.eliminated && result.points === 0) { cell.eliminated = true; cell.status = result.status; }
         cells.set(key, cell);
       }
     }
@@ -130,7 +131,7 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
                         return <td key={race.id} className={`heat-cell ${i === 0 ? 'heat-cell-first' : ''}`}>
                           {cell == null ? <><span aria-hidden="true" className="heat-dash">–</span><span className="sr-only">Not raced yet</span></>
                             : cell.sitOut ? <><span aria-hidden="true" className="heat-dash">S</span><span className="sr-only">Sat out this race</span></>
-                            : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">0</span><span className="sr-only">Eliminated</span></>
+                            : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">{statusLetter(true, cell.status)}</span><span className="sr-only">{statusLabel(true, cell.status)}</span></>
                             : cell.points}
                         </td>;
                       })}

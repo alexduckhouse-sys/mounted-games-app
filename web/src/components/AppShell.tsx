@@ -40,7 +40,7 @@ export function AppShell() {
   const competitionId = competitionIdFromPath(location.pathname);
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
   const globalTabs = hasGlobalTabs(location.pathname);
-  const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs;
+  const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs || location.pathname === '/me/members';
   // The tabs belong to a competition. The profile borrows the one being followed, if any.
   const tabsCompetitionId = competitionId ?? (onProfile ? current?.id ?? null : null);
   const shown = meta && meta.id === competitionId ? meta : null;

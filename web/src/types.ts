@@ -51,6 +51,33 @@ export interface TrainerRequest {
   requestedRole?: 'Trainer' | 'Manager';
 }
 
+/** The roles a club's people can hold, most senior first. */
+export type MemberRole = 'Manager' | 'Trainer' | 'Member';
+
+export interface ClubMember {
+  userId: string;
+  fullName: string;
+  role: MemberRole;
+  /** For a trainer: the club's teams they look after. */
+  teams: string[];
+  /** A team manager request for this person is waiting for an admin. */
+  awaitingAdmin: boolean;
+}
+
+/** `GET /clubs/{id}/members`: everyone in the club, plus the people waiting to join it. */
+export interface ClubMembers {
+  clubId: number;
+  clubName: string;
+  members: ClubMember[];
+  pending: TrainerRequest[];
+}
+
+/** `PUT /clubs/{id}/members/{userId}/role`: `awaitingAdmin` means nothing changed yet, an admin has to approve. */
+export interface ClubRoleChange {
+  role: MemberRole;
+  awaitingAdmin: boolean;
+}
+
 export interface Club {
   id: number;
   name: string;
@@ -78,6 +105,15 @@ export const SessionKind = {
   Break: 1 as SessionKind,
   Briefing: 2 as SessionKind,
   Custom: 3 as SessionKind,
+};
+
+/** How an age group settles teams level on points at a finals cut-off or on the podium. 0 Countback, 1 LastRace, 2 RunOff, 3 Manual. */
+export type TieBreakRule = 0 | 1 | 2 | 3;
+export const TieBreakRule = {
+  Countback: 0 as TieBreakRule,
+  LastRace: 1 as TieBreakRule,
+  RunOff: 2 as TieBreakRule,
+  Manual: 3 as TieBreakRule,
 };
 
 export type ChatMessageType = 0 | 1 | 2;
@@ -122,6 +158,8 @@ export interface CompetitionSection {
   ageGroup: string;
   displayName: string;
   runoffRaceName?: string | null;
+  /** How teams level on points are settled; missing means countback. */
+  tieBreakRule?: TieBreakRule;
   /** How many teams go through to the final, set by the organiser; null when not set. */
   finalistCount?: number | null;
   usesRaceFinals?: boolean;
@@ -155,6 +193,8 @@ export interface Team {
   isWithdrawn?: boolean;
   /** What the team's bibs look like, in plain words. One description for the whole team. */
   bibDescription?: string | null;
+  /** Only on `/trainer/my-teams`: the viewer fills in this team's dec form, the event isn't over, and none is in yet. */
+  needsDeclaration?: boolean | null;
 }
 
 export type TeamSupporterStatus = 0 | 1; // Pending / Accepted
@@ -187,6 +227,8 @@ export interface ResultRow {
   points: number;
   /** The team had no lane this race (more teams than lanes) and sat it out. Shown as S. */
   isSitOut?: boolean;
+  /** Why a team that did not finish (eliminated is true) did not: 1 E, 2 DNS, 3 DNF, 4 R. Missing on older data, meaning E. */
+  status?: number;
 }
 
 export interface Race {
@@ -382,6 +424,81 @@ export interface StandingRow {
   finalTier?: number | null;
   /** Scored points stand, but the team is out of the rest of the event. */
   withdrawn?: boolean;
+  /** Tack check bonus points, already included in `totalPoints`. */
+  bonusPoints?: number;
+}
+
+/** Matches `TackCheckMode`: 0 pass or fail only, 1 a separate Tack & Turnout table, 2 bonus points in the standings. */
+export type TackCheckMode = 0 | 1 | 2;
+
+export interface TackCheckSector { id: number; name: string }
+export interface TackCheckMark { sectorId: number; passed: boolean | null; points: number | null }
+
+export interface TackCheckTeam {
+  teamId: number;
+  teamName: string;
+  clubName: string;
+  isHorsConcours: boolean;
+  withdrawn: boolean;
+  marks: TackCheckMark[];
+  total: number;
+  passed: number;
+  failed: number;
+}
+
+export interface TackCheckSection {
+  sectionId: number;
+  sectionName: string;
+  /** False until the organiser saves a set-up; the sectors are then the defaults, with id 0. */
+  configured: boolean;
+  isEnabled: boolean;
+  mode: TackCheckMode;
+  maxPoints: number;
+  sectors: TackCheckSector[];
+  teams: TackCheckTeam[];
+}
+
+export interface TackCheckBoard { competitionId: number; sections: TackCheckSection[] }
+
+export interface TackLeaderboardRow {
+  /** Shared by teams level on points; null for hors concours teams, listed last. */
+  rank: number | null;
+  teamId: number;
+  teamName: string;
+  clubName: string;
+  points: (number | null)[];
+  total: number;
+  isHorsConcours: boolean;
+}
+
+export interface TackLeaderboardSection {
+  sectionId: number;
+  sectionName: string;
+  mode: TackCheckMode;
+  maxPoints: number;
+  sectors: string[];
+  rows: TackLeaderboardRow[];
+}
+
+export interface TackLeaderboard { sections: TackLeaderboardSection[] }
+
+export interface PassportCheckPony { ponyName: string; riders: string[]; checkedAt: string | null; checkedByName: string | null }
+
+export interface PassportCheckTeam {
+  teamId: number;
+  teamName: string;
+  clubName: string;
+  withdrawn: boolean;
+  isHorsConcours: boolean;
+  hasDeclaration: boolean;
+  ponies: PassportCheckPony[];
+}
+
+export interface PassportCheckBoard {
+  enabled: boolean;
+  checked: number;
+  total: number;
+  sections: { sectionId: number; sectionName: string; teams: PassportCheckTeam[] }[];
 }
 
 export interface ChatMessage {
@@ -415,6 +532,8 @@ export interface RiderEntry {
   useInitialOnly?: boolean;
   /** Only sent to the owning trainer and staff. */
   noFilming?: boolean;
+  /** The pony's height in hands, written as a decimal: 13.2 is 13 hands 2 inches. */
+  ponyHeightHands?: number | null;
 }
 
 /** A heat holding a rider who opted out of close-up filming. Staff only. */
@@ -449,6 +568,10 @@ export interface DeclarationForm {
   riders: RiderEntry[];
   /** The team's bib description, shown with the declaration. */
   bibDescription?: string | null;
+  /** The coach as typed on the form. Only the submitter, the trainer and staff get it. */
+  trainerName?: string | null;
+  /** When the terms were agreed; missing on forms from before the tick. Private like the rest. */
+  termsAcceptedAt?: string | null;
 }
 
 export interface SavedRider {
@@ -460,6 +583,7 @@ export interface SavedRider {
   notes?: string | null;
   useInitialOnly?: boolean;
   noFilming?: boolean;
+  ponyHeightHands?: number | null;
 }
 
 export interface TrainerNote {
@@ -641,4 +765,121 @@ export interface SponsorAdmin extends Sponsor {
   /** Times shown, and seconds on screen (video), over all places and days. */
   views: number;
   seconds: number;
+}
+
+/** What a statistics profile is about: 0 rider, 1 pony, 2 team, 3 club (`StatsSubjectKind` in the API). */
+export type StatsSubjectKind = 0 | 1 | 2 | 3;
+export const StatsSubjectKind = {
+  Rider: 0 as StatsSubjectKind,
+  Pony: 1 as StatsSubjectKind,
+  Team: 2 as StatsSubjectKind,
+  Club: 3 as StatsSubjectKind,
+};
+
+/** A search result. `key` is what the profile endpoint takes as `name`. */
+export interface StatsHit {
+  kind: StatsSubjectKind;
+  name: string;
+  key: string;
+  /** Finished competitions that count towards the profile. */
+  competitions: number;
+}
+
+export interface StatsSearch {
+  query: string;
+  riders: StatsHit[];
+  ponies: StatsHit[];
+  teams: StatsHit[];
+  clubs: StatsHit[];
+}
+
+export interface StatsSummary {
+  competitions: number;
+  entries: number;
+  /** Entries with a final place (hors concours teams have none). */
+  placedEntries: number;
+  firsts: number;
+  seconds: number;
+  thirds: number;
+  averagePlace: number | null;
+  /** Placed entries in an age group that ran lettered finals. */
+  entriesWithFinals: number;
+  finalsReached: number;
+  aFinals: number;
+  aFinalPercent: number | null;
+  races: number;
+  wins: number;
+  winPercent: number | null;
+  points: number;
+  maxPoints: number;
+  pointQuotaPercent: number | null;
+}
+
+export interface StatsGame {
+  name: string;
+  races: number;
+  wins: number;
+  winPercent: number | null;
+  /** Eliminated, did not start, did not finish or retired. */
+  nonFinishes: number;
+  points: number;
+  maxPoints: number;
+  pointQuotaPercent: number | null;
+}
+
+export interface StatsSession {
+  sessionId: number;
+  name: string;
+  points: number;
+  maxPoints: number;
+  /** Null for a hors concours team. */
+  rank: number | null;
+  teams: number;
+}
+
+export interface StatsEntry {
+  competitionId: number;
+  competitionName: string;
+  startDate: string;
+  sectionId: number;
+  sectionName: string;
+  format: SectionFormat;
+  teamId: number;
+  teamName: string;
+  clubName: string;
+  isHorsConcours: boolean;
+  riderName: string | null;
+  ponyName: string | null;
+  place: number | null;
+  teamsPlaced: number;
+  /** 0 for the A Final, 1 for the B Final, and so on. */
+  finalTier: number | null;
+  races: number;
+  points: number;
+  maxPoints: number;
+  pointQuotaPercent: number | null;
+  sessions: StatsSession[];
+}
+
+export interface StatsPartnership {
+  riderName: string;
+  ponyName: string;
+  entries: number;
+  competitions: number;
+}
+
+/** Everyone gets `summary`; the lists are null unless the viewer is signed in (`detailed`). */
+export interface StatsProfile {
+  kind: StatsSubjectKind;
+  name: string;
+  key: string;
+  detailed: boolean;
+  /** False for riders and ponies: their race and game figures come from individual and pairs competitions only. */
+  raceFiguresAllFormats: boolean;
+  summary: StatsSummary;
+  games: StatsGame[] | null;
+  bestGames: string[] | null;
+  worstGames: string[] | null;
+  entries: StatsEntry[] | null;
+  partnerships: StatsPartnership[] | null;
 }

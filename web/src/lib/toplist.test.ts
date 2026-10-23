@@ -9,7 +9,7 @@ const heat = (id: number, teamIds: number[], races: Heat['races'], extra: Partia
 const session = (id: number, heats: Heat[], extra: Partial<Session> = {}) => baseSession(id, { competitionSectionId: SECTION, sectionName: 'Seniors', name: 'Seniors heats', heats, ...extra });
 const scored = (id: number, ...pairs: [teamId: number, points: number][]) => race(id, { isComplete: true, results: pairs.map(([teamId, points]) => result(teamId, 1, { points })) });
 const team = (id: number, extra: Parameters<typeof baseTeam>[1] = {}) => baseTeam(id, { competitionSectionId: SECTION, ...extra });
-const row = (extra: Partial<ToplistRow>): ToplistRow => ({ teamId: 1, teamName: 'T', points: 0, position: 1, joint: false, runoff: false, out: false, needed: null, racesLeft: 0, withdrawn: false, ...extra });
+const row = (extra: Partial<ToplistRow>): ToplistRow => ({ teamId: 1, teamName: 'T', points: 0, position: 1, joint: false, runoff: false, out: false, needed: null, racesLeft: 0, withdrawn: false, bonus: 0, ...extra });
 
 describe('ordinal', () => {
   it('reads naturally, including the teens', () => {
@@ -64,6 +64,14 @@ describe('buildToplist withdrawn teams', () => {
     const list = buildToplist([{ ...standing(1, 10), withdrawn: true }, standing(2, 8)], [], [], SECTION, null);
     expect(list.rows.map((r) => [r.teamId, r.points, r.withdrawn])).toEqual([[1, 10, true], [2, 8, false]]);
     expect(toplistNote(list.rows[0])).toBe('Withdrawn');
+  });
+});
+
+describe('toplist note with tack bonus points', () => {
+  it('says how many of the points are tack bonus, alongside any other note', () => {
+    expect(toplistNote(row({ bonus: 1 }))).toBe('1 tack bonus point');
+    expect(toplistNote(row({ bonus: 3, withdrawn: true }))).toBe('Withdrawn · 3 tack bonus points');
+    expect(toplistNote(row({}))).toBeNull();
   });
 });
 
@@ -149,6 +157,24 @@ describe('buildToplist from sessions', () => {
     const list = buildToplist([standing(1, 5)], [doneHeats, decided], [], SECTION, null);
     expect(list.bySession.sessions.map((s) => s.label)).toEqual(['S1', 'F']);
     expect(list.bySession.cells.get(1)).toEqual([2, 3]);
+  });
+
+  it('adds a tack bonus column after finals so the columns still add up to the total', () => {
+    const decided = session(3, [heat(3, [1], [scored(4, [1, 3])], { raceRoundStage: 2 })], { name: 'Seniors' });
+    const list = buildToplist([{ ...standing(1, 9), bonusPoints: 4 }, standing(2, 1), { ...standing(8, 2), bonusPoints: 2 }], [doneHeats, decided], [], SECTION, null);
+    expect(list.bySession.sessions.map((s) => s.label)).toEqual(['S1', 'F', 'T']);
+    expect(list.bySession.sessions[2].title).toBe('Tack check bonus points');
+    expect(list.bySession.cells.get(1)).toEqual([2, 3, 4]);
+    expect(list.bySession.cells.get(2)).toEqual([1, 0, 0]);
+    // A team with only bonus points still gets a row of cells.
+    expect(list.bySession.cells.get(8)).toEqual([0, 0, 2]);
+    expect(list.rows.find((r) => r.teamId === 1)?.bonus).toBe(4);
+  });
+
+  it('has no tack bonus column when nobody has bonus points', () => {
+    const list = buildToplist([{ ...standing(1, 2), bonusPoints: 0 }], [doneHeats], [], SECTION, null);
+    expect(list.bySession.sessions.map((s) => s.label)).toEqual(['S1']);
+    expect(list.rows[0].bonus).toBe(0);
   });
 
   it('shows a finals-only team with zeroes in its session columns', () => {

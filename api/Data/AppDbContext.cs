@@ -39,6 +39,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<ShopComment> ShopComments => Set<ShopComment>();
     public DbSet<ShopReport> ShopReports => Set<ShopReport>();
     public DbSet<CalendarHeatVersion> CalendarHeatVersions => Set<CalendarHeatVersion>();
+    public DbSet<SpecialAward> SpecialAwards => Set<SpecialAward>();
+    public DbSet<FinalsTieOrder> FinalsTieOrders => Set<FinalsTieOrder>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -115,6 +117,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
         b.Entity<SavedRider>(e =>
         {
             e.Property(r => r.FullName).HasMaxLength(200).IsRequired();
+            e.Property(r => r.PonyHeightHands).HasPrecision(4, 1);
             e.HasOne(r => r.Club)
                 .WithMany(c => c.SavedRiders)
                 .HasForeignKey(r => r.ClubId)
@@ -219,10 +222,12 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .HasForeignKey(r => r.TeamId)
                 .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(r => new { r.RaceId, r.TeamId }).IsUnique();
+            e.Property(r => r.RefereeNote).HasMaxLength(500);
         });
 
         b.Entity<DeclarationForm>(e =>
         {
+            e.Property(d => d.TrainerName).HasMaxLength(200);
             e.HasOne(d => d.Team)
                 .WithMany(t => t.DeclarationForms)
                 .HasForeignKey(d => d.TeamId)
@@ -243,6 +248,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
         b.Entity<RiderEntry>(e =>
         {
             e.Property(r => r.FullName).HasMaxLength(200).IsRequired();
+            e.Property(r => r.PonyHeightHands).HasPrecision(4, 1);
             e.HasOne(r => r.DeclarationForm)
                 .WithMany(d => d.Riders)
                 .HasForeignKey(r => r.DeclarationFormId)

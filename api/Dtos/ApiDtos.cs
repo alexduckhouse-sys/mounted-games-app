@@ -114,12 +114,18 @@ public record CompetitionSectionDto(
     int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName,
     string? RunoffRaceName, bool UsesRaceFinals, int PriceMinor,
     int? MaxParticipants = null, int? FinalistCount = null,
-    int ActiveSignupsCount = 0);
+    int ActiveSignupsCount = 0, TieBreakRule TieBreakRule = TieBreakRule.Countback);
 public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName,
     string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0,
-    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null);
+    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null,
+    [EnumDataType(typeof(TieBreakRule))] TieBreakRule TieBreakRule = TieBreakRule.Countback);
+/// <param name="TieBreakRule">Omitted leaves the rule as it is.</param>
 public record UpdateSectionRequest(string? RunoffRaceName, bool? UsesRaceFinals = null, int? PriceMinor = null,
-    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null);
+    int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null,
+    [EnumDataType(typeof(TieBreakRule))] TieBreakRule? TieBreakRule = null);
+
+/// <summary>Teams level on points, best first: every active team in the age group on that total.</summary>
+public record SetTieOrderRequest(IReadOnlyList<int> TeamIds);
 
 public record SectionSignupDto(
     int Id, int CompetitionSectionId, string SectionName,
@@ -184,7 +190,9 @@ public record TeamDto(
     string? SupporterJoinKey = null,
     /// <summary>Withdrawn or no-show. Public on purpose; the reason is organiser-only.</summary>
     bool IsWithdrawn = false,
-    string? BibDescription = null);
+    string? BibDescription = null,
+    /// <summary>Set only on the my-teams list: the viewer looks after this team, its event hasn't finished, and it has no dec form yet.</summary>
+    bool? NeedsDeclaration = null);
 
 public record CreateTeamRequest(
     int CompetitionSectionId, int ClubId, string Suffix,
@@ -295,7 +303,9 @@ public record RaceClockRequest(DateTime? At);
 
 public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex);
 
-public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points, bool IsSitOut = false);
+/// <summary>A result as everyone sees it. Status says why a team that did not finish (Eliminated is true) did not. The referee note is never here.</summary>
+public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, int Points, bool IsSitOut = false,
+    ResultStatus Status = ResultStatus.Finished);
 
 public record CreateHeatRequest(
     string? Label, int OrderIndex,
@@ -311,7 +321,8 @@ public record SubmitRaceResultsRequest(
     IReadOnlyList<FinishingPlaceDto> Places,
     IReadOnlyList<FinishingPlaceDto>? Expected = null,
     string? Reason = null);
-public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated);
+/// <summary>Status null means Eliminated when Eliminated is set. RefereeNote is private to staff (500 characters at most).</summary>
+public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated, ResultStatus? Status = null, string? RefereeNote = null);
 
 /// <param name="FinalTier">
 /// 0 for a team in the A Final, 1 for the B Final, and so on; null when it isn't in a lettered
@@ -320,7 +331,7 @@ public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated);
 public record StandingRow(
     int TeamId, string TeamName, string ClubName, string? BibColour,
     int TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null,
-    bool Withdrawn = false);
+    bool Withdrawn = false, int BonusPoints = 0);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,
@@ -328,26 +339,37 @@ public record DeclarationFormDto(
     DateTime SubmittedAt,
     string? Notes, bool IsLocked,
     IReadOnlyList<RiderEntryDto> Riders,
-    string? BibDescription = null);
+    string? BibDescription = null,
+    string? TrainerName = null,
+    DateTime? TermsAcceptedAt = null);
 
 public record RiderEntryDto(
     int Id, int? SavedRiderId, string FullName, DateTime? DateOfBirth,
     string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex,
-    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false);
+    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false,
+    decimal? PonyHeightHands = null);
 
+/// <param name="AcceptTerms">The submitter ticked "I agree to the terms and conditions". A dec form is refused without it.</param>
+/// <param name="TrainerName">The coach's name as typed; it defaults to the submitter's account name.</param>
+/// <param name="TeamName">A new name for the team, or null to keep its name.</param>
 public record SubmitDeclarationFormRequest(
     int TeamId, string? Notes, IReadOnlyList<RiderEntryInput> Riders, bool SaveToRoster,
     string? TrainerPhone,
-    [StringLength(200)] string? BibDescription = null);
+    [StringLength(200)] string? BibDescription = null,
+    bool AcceptTerms = false,
+    [StringLength(200)] string? TrainerName = null,
+    [StringLength(150)] string? TeamName = null);
 
+/// <param name="PonyHeightHands">Hands as a decimal (13.2 is 13 hands 2 inches), between 5 and 20.</param>
 public record RiderEntryInput(
     int? SavedRiderId, string FullName, DateTime? DateOfBirth,
     string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex,
-    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false);
+    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false,
+    decimal? PonyHeightHands = null);
 
 public record SavedRiderDto(
     int Id, int ClubId, string FullName, DateTime? DateOfBirth, string? HorseName, string? Notes,
-    bool UseInitialOnly = false, bool NoFilming = false);
+    bool UseInitialOnly = false, bool NoFilming = false, decimal? PonyHeightHands = null);
 
 public record ChatMessageDto(
     int Id, int CompetitionId, string? UserId, string AuthorName,

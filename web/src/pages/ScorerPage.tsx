@@ -7,7 +7,7 @@ import {
   tokenFromHash, writeSavedScorerSession, writeScorerToken, type ScorerLoadFailure,
 } from '../offline/scorerLink';
 import { enqueue, placingsOf } from '../offline/scoreOutbox';
-import { nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
+import { nextRaceToScore, placesFromResults, setStatus, tapTeam, toggleEliminated } from '../lib/raceScoring';
 import { lanesInUse } from '../lib/lanes';
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
@@ -191,6 +191,10 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
     setPending(toggleEliminated(shown, teamId));
   }
 
+  function changeStatus(teamId: number, status: number) {
+    setPending(setStatus(shown, teamId, status));
+  }
+
   function submit() {
     if (!activeRace || !heat) return;
     const reason = reasons[activeRace.id]?.trim();
@@ -265,6 +269,7 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
           onToggleLaneView={() => setShowLaneView((s) => !s)}
           onClickTeam={clickTeam}
           onToggleElim={toggleElim}
+          onSetStatus={changeStatus}
           onReset={() => setPending([])}
           onSubmit={submit}
           correctionReason={activeRace ? reasons[activeRace.id] ?? '' : ''}
