@@ -61,11 +61,11 @@ describe('CompetitionEditor: the one-page layout', () => {
   it('has the fields from the design', () => {
     mount();
     for (const label of ['Name', 'Icon', 'Organiser', 'Starts', 'Start time', 'Ends', 'End time', 'Venue', 'Postcode', 'what3words (optional)',
-      'Where entry fees go (optional)', 'Notes for riders (optional)']) {
+      'How riders pay for now (optional)', 'Notes for riders (optional)']) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
     expect(screen.getByLabelText('Ends').parentElement).toHaveTextContent('Same day');
-    expect(screen.getByLabelText('Where entry fees go (optional)')).toHaveAttribute('placeholder', 'Bank details or PayPal');
+    expect(screen.getByLabelText('How riders pay for now (optional)')).toHaveAttribute('placeholder', 'Bank details or PayPal');
   });
 
   it('starts with one section row, with the table columns, and a row to add another', async () => {
@@ -143,7 +143,7 @@ describe('CompetitionEditor: publishing', () => {
     await userEvent.type(screen.getByLabelText('Venue'), 'Tatton Park, Knutsford');
     fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2026-10-24' } });
     fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '08:30' } });
-    await userEvent.type(screen.getByLabelText('Where entry fees go (optional)'), 'PayPal: pay@example.com');
+    await userEvent.type(screen.getByLabelText('How riders pay for now (optional)'), 'PayPal: pay@example.com');
     await userEvent.type(screen.getByLabelText('Notes for riders (optional)'), 'Bring a hat');
     const row = screen.getByRole('group', { name: 'Section 1' });
     await userEvent.selectOptions(within(row).getByLabelText('Format'), 'Pairs');
@@ -359,12 +359,54 @@ describe('CompetitionEditor: editing', () => {
     });
   });
 
+  it('says where entry fees are paid out, from the event itself', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/competitions/7') return { data: { ...saved, payoutsTo: { clubName: 'Cheshire PC', maskedAccount: '\u2022\u2022\u2022\u20221234', ready: true } } };
+      if (url === '/auth/me') return { data: {} };
+      if (url === '/competitions/access') return { data: [] };
+      throw new Error(`unexpected GET ${url}`);
+    });
+    mount('/admin/competitions/7');
+    expect(await screen.findByText('Entry fees are paid out to Cheshire PC \u2014 \u2022\u2022\u2022\u20221234 \u00b7 Ready')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Set up payouts' })).not.toBeInTheDocument();
+    expect(screen.getByText('Test mode: no real money moves yet.')).toBeInTheDocument();
+  });
+
+  it('links an admin to Set up payouts when the club is not ready', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/competitions/7') return { data: { ...saved, payoutsTo: { clubName: 'Cheshire PC', maskedAccount: null, ready: false } } };
+      if (url === '/auth/me') return { data: {} };
+      if (url === '/competitions/access') return { data: [] };
+      throw new Error(`unexpected GET ${url}`);
+    });
+    mount('/admin/competitions/7');
+    expect(await screen.findByText(/Cheshire PC hasn't finished setting up payouts yet/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Set up payouts' })).toHaveAttribute('href', '/me/payouts');
+  });
+
+  it('asks a trainer to get their manager to set payouts up, using the club summary for a new event', async () => {
+    signIn(['Trainer']);
+    const auth = JSON.parse(localStorage.getItem('mg.auth')!);
+    auth.user.clubId = 5;
+    localStorage.setItem('mg.auth', JSON.stringify(auth));
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/clubs/5/payouts/summary') return { data: { clubName: 'Cheshire PC', maskedAccount: null, ready: false } };
+      if (url === '/auth/me') return { data: {} };
+      if (url === '/competitions/access') return { data: [] };
+      throw new Error(`unexpected GET ${url}`);
+    });
+    mount();
+    expect(await screen.findByText(/Cheshire PC hasn't finished setting up payouts yet/)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Set up payouts' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Ask your club.s manager/)).toBeInTheDocument();
+  });
+
   it('loads the competition into the same page', async () => {
     mount('/admin/competitions/7');
     expect(await screen.findByRole('heading', { level: 1, name: 'Edit competition' })).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toHaveValue('Autumn Area');
     expect(screen.getByLabelText('Organiser')).toHaveValue('Cheshire PC');
-    expect(screen.getByLabelText('Where entry fees go (optional)')).toHaveValue('Bank 12-34');
+    expect(screen.getByLabelText('How riders pay for now (optional)')).toHaveValue('Bank 12-34');
     expect(screen.getByLabelText('Notes for riders (optional)')).toHaveValue('Notes');
     expect(screen.getByLabelText('Venue')).toHaveValue('Tatton');
     expect(screen.getByLabelText('Price')).toHaveValue(45);

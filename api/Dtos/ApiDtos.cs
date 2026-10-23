@@ -46,7 +46,8 @@ public record CompetitionDetail(
     string? CreatedByUserId = null,
     bool StaffChatEnabled = true,
     bool IsDemo = false,
-    string? TermsText = null);
+    string? TermsText = null,
+    PayoutsToDto? PayoutsTo = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CalendarDays, ChevronDown, MapPinCheck, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { CompetitionIcon } from '../../competition/CompetitionIcon';
 import { EMOJI_COMPETITION_ICONS, FLAG_COMPETITION_ICONS } from '../../competition/icons';
 import { useAuth } from '../../auth/AuthContext';
-import type { CompetitionDetail, CompetitionSection } from '../../types';
+import type { CompetitionDetail, CompetitionSection, PayoutsTo } from '../../types';
+import { payoutsLine } from '../../lib/payouts';
 import { Field } from '../auth/Field';
 import { MAX_TERMS_LENGTH } from '../../lib/termsTick';
 
@@ -264,7 +265,7 @@ function clockTime(iso: string): string {
 
 export function CompetitionEditor() {
   const navigate = useNavigate();
-  const { canOrganise } = useAuth();
+  const { canOrganise, user, hasRole } = useAuth();
   const { id } = useParams<{ id: string }>();
   const editingId = id ? parseInt(id, 10) : null;
   const isEdit = editingId != null;
@@ -312,6 +313,8 @@ export function CompetitionEditor() {
   const [organiserName, setOrganiserName] = useState(persisted?.organiserName ?? '');
   const [paymentDestination, setPaymentDestination] = useState(persisted?.paymentDestination ?? '');
   const [termsText, setTermsText] = useState(persisted?.termsText ?? '');
+  // Where entry fees are paid out (the organiser's club). Read-only here: it is set up on the Payouts page.
+  const [payoutsTo, setPayoutsTo] = useState<PayoutsTo | null>(null);
   // The last postcode / what3words pair that was looked up, and how that went.
   const [geo, setGeo] = useState<{ key: string; status: 'ok' | 'none' | 'failed' } | null>(null);
 
@@ -347,6 +350,22 @@ export function CompetitionEditor() {
       what3Words, postcode, appleMapsUrl, lat, lon, description,
       organiserName, paymentDestination, termsText, sections]);
 
+  // The payouts line comes from the event itself when editing, otherwise from the signed-in person's club.
+  const clubId = user?.clubId ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    const url = isEdit && editingId ? `/competitions/${editingId}/first-view` : clubId != null ? `/clubs/${clubId}/payouts/summary` : null;
+    if (!url || (isEdit && !persisted)) return; // A fresh edit load sets it from the full competition below.
+    api.get<CompetitionDetail | PayoutsTo>(url).then((r) => {
+      if (cancelled) return;
+      const d = r.data as CompetitionDetail & PayoutsTo;
+      const found = isEdit ? d.payoutsTo : typeof d?.clubName === 'string' ? d : null;
+      setPayoutsTo(found ?? null);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `persisted` is only read on the first run.
+  }, [isEdit, editingId, clubId]);
+
   useEffect(() => {
     // Skip the server fetch on edit if we already have a local draft — the user
     // hasn't finished editing yet and we don't want to clobber their changes.
@@ -371,6 +390,7 @@ export function CompetitionEditor() {
         setOrganiserName(c.organiserName ?? '');
         setPaymentDestination(c.paymentDestination ?? '');
         setTermsText(c.termsText ?? '');
+        setPayoutsTo(c.payoutsTo ?? null);
         setSections(c.sections.length > 0 ? c.sections.map((s) => existingToDraft(s, c)) : [defaultSection()]);
       })
       .catch(() => setError('Could not load competition.'))
@@ -770,7 +790,23 @@ export function CompetitionEditor() {
 
       <section aria-labelledby="ce-notes" className="flex flex-col gap-[18px]">
         <PartHead n={5} id="ce-notes" title="Payment and notes" />
-        <Field label={<>Where entry fees go <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>}>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold text-[rgb(var(--mg-body))]">Where entry fees go</span>
+          <div className="mg-card flex flex-col gap-1 px-3.5 py-3 text-base" data-testid="payouts-to">
+            {payoutsTo?.ready ? (
+              <p>{payoutsLine(payoutsTo)}</p>
+            ) : (
+              <p>
+                {payoutsTo ? payoutsLine(payoutsTo) : 'Payouts go to your club once it has set them up.'}{' '}
+                {hasRole('Manager') || hasRole('Admin')
+                  ? <Link to="/me/payouts" className="mg-text-link font-semibold">Set up payouts</Link>
+                  : <span className="text-[rgb(var(--mg-muted))]">Ask your club&rsquo;s manager to set them up.</span>}
+              </p>
+            )}
+            <p className="text-sm text-[rgb(var(--mg-muted))]">Test mode: no real money moves yet.</p>
+          </div>
+        </div>
+        <Field label={<>How riders pay for now <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>}>
           {({ id: fieldId }) => (
             <div className={fieldClass}>
               <input id={fieldId} value={paymentDestination} placeholder="Bank details or PayPal" autoComplete="off" onChange={(e) => setPaymentDestination(e.target.value)} />
