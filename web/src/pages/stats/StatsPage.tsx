@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { PageGrid } from '../../components/PageGrid';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { Search } from 'lucide-react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
@@ -34,11 +36,9 @@ function StatsBrowseView() {
     setParams(next, { replace: true });
   }
 
-  return <RefinePage>
-    <RefineHeader context="Across every competition" title="Rider and team stats" subtitle="Browse riders, ponies, teams and clubs, or search by name."
-      tabs={STATS_TABS.map((entry) => ({ label: entry.label, active: entry.kind === kind, onSelect: () => remember(entry.kind, text) }))}
-      tabsKind="tablist" tabsLabel="Browse by" />
-    <form role="search" className="pt-3" onSubmit={(event) => event.preventDefault()}>
+  const desktop = useIsDesktop();
+  const searchForm = (
+    <form role="search" className={desktop ? '' : 'pt-3'} onSubmit={(event) => event.preventDefault()}>
       <label className="rf-fld">
         <span>Search {tab.plural}</span>
         <span className="relative flex items-center">
@@ -48,12 +48,38 @@ function StatsBrowseView() {
         </span>
       </label>
     </form>
+  );
+  const results = (
     <div role="tabpanel" aria-label={tab.label}>
       {text.trim().length === 1 && <RefineNote>Type at least two letters to narrow the list.</RefineNote>}
       {list.status === 'loading' && <p role="status" className="rf-note">Loading…</p>}
       {list.status === 'error' && <div role="alert" className="mg-notice mt-3">{list.message}</div>}
       {list.status === 'ready' && <BrowseResults list={list} plural={tab.plural} label={tab.label} words={isSearchableQuery(text) ? tidyStatsQuery(text) : ''} />}
     </div>
+  );
+  const rail = (
+    <div className="flex flex-col gap-3">
+      <nav aria-label="Browse by" className="mg-card overflow-hidden">
+        <ul className="m-0 list-none p-0">
+          {STATS_TABS.map((entry) => (
+            <li key={entry.kind} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
+              <button type="button" aria-current={entry.kind === kind ? 'page' : undefined} onClick={() => remember(entry.kind, text)}
+                className={`flex min-h-11 w-full items-center px-3 text-left text-[15px] ${entry.kind === kind ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`}>
+                {entry.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+      {searchForm}
+    </div>
+  );
+
+  return <RefinePage wide>
+    <RefineHeader context="Across every competition" title="Rider and team stats" subtitle="Browse riders, ponies, teams and clubs, or search by name."
+      tabs={desktop ? undefined : STATS_TABS.map((entry) => ({ label: entry.label, active: entry.kind === kind, onSelect: () => remember(entry.kind, text) }))}
+      tabsKind="tablist" tabsLabel="Browse by" />
+    {desktop ? <div className="pt-4"><PageGrid variant="left" aside={rail} asideLabel="Filters">{results}</PageGrid></div> : <>{searchForm}{results}</>}
   </RefinePage>;
 }
 

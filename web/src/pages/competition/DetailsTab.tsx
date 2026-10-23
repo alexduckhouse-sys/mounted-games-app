@@ -14,6 +14,7 @@ import { CompetitionTeamCard } from './CompetitionTeamCard';
 import { EmbedCard } from './EmbedCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { SponsorsCard } from './SponsorsCard';
+import { usePageWidth } from '../../components/pageWidthState';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { hasPlacement } from '../../lib/sponsors';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
@@ -40,6 +41,7 @@ const SIGNUP_STATUS: Record<SignupPaymentStatus, { label: string; tone: StatusTo
 };
 
 export function DetailsTab() {
+  usePageWidth('wide');
   const { competition, reload, sponsors } = useCompetition();
   const { canManage, canOrganise, hasRole, user } = useAuth();
   const [signupResult, setSignupResult] = useState<{ key: string; items: SectionSignup[] } | null>(null);
@@ -100,9 +102,10 @@ export function DetailsTab() {
   const longDescription = (competition.description?.length ?? 0) > 140;
 
   return (
-    <div className="rf-page mx-auto flex w-full max-w-3xl flex-col gap-2.5 pb-4 pt-3">
+    <div className="rf-page mx-auto flex w-full max-w-3xl flex-col gap-2.5 pb-4 pt-3 lg:block lg:max-w-none lg:columns-2 lg:gap-x-6">
       <h1 className="sr-only">Details &amp; entries</h1>
 
+      <div className="flex flex-col gap-2.5 lg:mb-5 lg:break-inside-avoid">
       <div className="mg-card flex flex-col gap-4 p-4">
         <div>
           <h2 className="mg-display text-2xl font-bold leading-[1.1] text-[rgb(var(--mg-heading))]">{competition.name}</h2>
@@ -141,7 +144,9 @@ export function DetailsTab() {
           {infoRow(<Users className="h-4 w-4" />, 'Teams', competition.teams.length)}
         </dl>
       </div>
+      </div>
 
+      <div className="flex flex-col gap-2.5 lg:mb-5 lg:break-inside-avoid">
       <RefineSection title="Event links" />
       <RefineList label="Event links">
         {linkRow('../shop', 'Event shop')}
@@ -160,10 +165,11 @@ export function DetailsTab() {
         {mayOrganise && linkRow('../shop/manage', 'Manage event shop')}
         {mayOrganise && linkRow('../operations', 'Readiness & draw')}
       </RefineList>
+      </div>
 
       {/* Entry controls (co-organisers and admins): lock signups, jump to the format wizard, CSV export. */}
       {mayOrganise && competition.sections.length > 0 && (
-        <>
+        <div className="flex flex-col gap-2.5 lg:mb-5 lg:break-inside-avoid">
           <RefineSection title="Organiser tools" />
           <div className="rf-list flex flex-col gap-2 p-3">
             <div className="flex flex-wrap gap-2">
@@ -209,24 +215,24 @@ export function DetailsTab() {
               </p>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* The owner, competition admins and site admins see who runs the event and can change it. */}
       {user && (mayOrganise || hasRole('Admin')) && (
-        <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
+        <div className="lg:mb-5 lg:break-inside-avoid"><CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} /></div>
       )}
       {user && (mayOrganise || hasRole('Admin')) && (
-        <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
+        <div className="lg:mb-5 lg:break-inside-avoid"><ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} /></div>
       )}
 
-      {mayOrganise && <SponsorsCard competitionId={competition.id} />}
+      {mayOrganise && <div className="lg:mb-5 lg:break-inside-avoid"><SponsorsCard competitionId={competition.id} /></div>}
       {/* Owner, competition admins and site admins can put live results on their own website. */}
-      {mayOrganise && <EmbedCard kind="competition" competitionId={competition.id} name={competition.name} sections={competition.sections} />}
+      {mayOrganise && <div className="lg:mb-5 lg:break-inside-avoid"><EmbedCard kind="competition" competitionId={competition.id} name={competition.name} sections={competition.sections} /></div>}
 
       <SponsorStrip placement="Details" />
 
-      <EnterCompetition competition={competition} allSignups={allSignups} mayOrganise={mayOrganise} onChanged={() => { refreshSignups(); reload(); }} />
+      <div className="flex flex-col gap-2.5 lg:mb-5 lg:break-inside-avoid"><EnterCompetition competition={competition} allSignups={allSignups} mayOrganise={mayOrganise} onChanged={() => { refreshSignups(); reload(); }} /></div>
 
       {user && <EquipmentBlock competitionId={competition.id} />}
     </div>

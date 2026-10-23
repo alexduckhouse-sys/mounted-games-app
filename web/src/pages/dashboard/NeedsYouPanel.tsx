@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, ClipboardList, CreditCard, Landmark } from 'lucide-react';
+import { ChevronRight, ClipboardList, CreditCard, Flag, Landmark } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { initialsOf } from '../../lib/profile';
@@ -11,11 +11,13 @@ import { confirmDialog } from '../../components/ConfirmDialog';
 interface Attention {
   /** Events with entries still waiting to be paid or confirmed. */
   pendingEntries: { id: number; name: string; count: number }[];
+  /** Events with dec forms that broke a rule the organiser set (teams with at least one flag). */
+  flaggedForms: { id: number; name: string; count: number }[];
   /** True when the person's club can't take payouts yet. */
   payoutsNotReady: boolean;
 }
 
-const NONE: Attention = { pendingEntries: [], payoutsNotReady: false };
+const NONE: Attention = { pendingEntries: [], flaggedForms: [], payoutsNotReady: false };
 
 /** Work that is waiting on an organiser: unpaid entries for events this week, and the club's payout set-up. */
 function useAttention(events: CompetitionPickerItem[]): Attention {
@@ -34,11 +36,14 @@ function useAttention(events: CompetitionPickerItem[]): Attention {
       Promise.all(mine.map((event) => api.get<SectionSignup[]>(`/competitions/${event.id}/signups`)
         .then(({ data }) => ({ id: event.id, name: event.name, count: Array.isArray(data) ? data.filter((s) => s.status === 0).length : 0 }))
         .catch(() => ({ id: event.id, name: event.name, count: 0 })))),
+      Promise.all(mine.map((event) => api.get<unknown[]>(`/competitions/${event.id}/dec-form-flags`)
+        .then(({ data }) => ({ id: event.id, name: event.name, count: Array.isArray(data) ? data.length : 0 }))
+        .catch(() => ({ id: event.id, name: event.name, count: 0 })))),
       checkPayouts
         ? api.get<PayoutsTo>(`/clubs/${clubId}/payouts/summary`).then(({ data }) => data?.ready === false).catch(() => false)
         : Promise.resolve(false),
-    ]).then(([entries, payoutsNotReady]) => {
-      if (!cancelled) setFound({ key, value: { pendingEntries: entries.filter((e) => e.count > 0), payoutsNotReady } });
+    ]).then(([entries, flags, payoutsNotReady]) => {
+      if (!cancelled) setFound({ key, value: { pendingEntries: entries.filter((e) => e.count > 0), flaggedForms: flags.filter((e) => e.count > 0), payoutsNotReady } });
     });
     return () => { cancelled = true; };
     // `key` stands for the user, club and event list.
@@ -56,7 +61,7 @@ export function NeedsYouPanel({ events = [] }: { events?: CompetitionPickerItem[
   const { requests, decForms, review, reviewError } = useNeedsYou();
   const attention = useAttention(events);
   const [failed, setFailed] = useState<string | null>(null);
-  const count = requests.length + decForms.length + attention.pendingEntries.length + (attention.payoutsNotReady ? 1 : 0);
+  const count = requests.length + decForms.length + attention.pendingEntries.length + attention.flaggedForms.length + (attention.payoutsNotReady ? 1 : 0);
 
   async function decide(request: TrainerRequest, action: 'approve' | 'decline') {
     setFailed(null);
@@ -95,6 +100,12 @@ export function NeedsYouPanel({ events = [] }: { events?: CompetitionPickerItem[
         <NeedsLink key={`entries-${entry.id}`} to={`/competitions/${entry.id}/details`} sub={entry.name}
           icon={<CreditCard aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-heading))]" />}>
           {entry.count} {entry.count === 1 ? 'entry' : 'entries'} waiting for payment
+        </NeedsLink>
+      ))}
+      {attention.flaggedForms.map((entry) => (
+        <NeedsLink key={`flags-${entry.id}`} to={`/competitions/${entry.id}/declarations`} sub={entry.name}
+          icon={<Flag aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-late-time))]" />}>
+          {entry.count} dec {entry.count === 1 ? 'form' : 'forms'} flagged
         </NeedsLink>
       ))}
       {attention.payoutsNotReady && (

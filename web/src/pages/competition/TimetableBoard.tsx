@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, MapPin } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { Dropdown } from '../../components/Dropdown';
+import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { computeTimings, formatTime } from '../../lib/time';
@@ -26,6 +27,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   lead?: ReactNode;
   footer?: ReactNode;
 } = {}) {
+  usePageWidth('wide');
   const { competition, reload, updatedAt } = useCompetition();
   const { canOrganise } = useAuth();
   const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
@@ -91,7 +93,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
     const heading = group.title ?? group.rows[0]?.session.name;
     if (collapsed) {
       const range = `${formatTime(group.rows[0].effective)}–${formatTime(group.rows[group.rows.length - 1].effective)}`;
-      return <section key={group.key} aria-label={heading}>
+      return <section key={group.key} aria-label={heading} className="tt-cell">
         <button type="button" className="tt-collapsed" aria-expanded="false" onClick={() => toggleDone(group.key)}>
           <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS.finished }} aria-hidden="true" />
           <span className="tt-collapsed-copy"><strong>{heading}</strong> · {group.rows.length} finished</span>

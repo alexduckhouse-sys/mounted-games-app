@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Plus, Star } from 'lucide-react';
 import { Dropdown } from '../../components/Dropdown';
+import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { useFavourites } from '../../hooks/useFavourites';
 import { arenaNames, arenaToShow, followedHeats, heatName, nextHeats, type FollowedHeat } from '../../lib/following';
@@ -15,6 +16,7 @@ import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, shouldNoticeSavedCopy
 const dayText = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
 export function FollowingTab() {
+  usePageWidth('wide');
   const { competition, updatedAt, isStale, reload } = useCompetition();
   const { favourites, error, toggle, setMany } = useFavourites();
   const [search, setSearch] = useState('');
@@ -66,7 +68,7 @@ export function FollowingTab() {
   };
   const choosing = showTeams || teams.length === 0;
 
-  return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2">
+  return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 lg:max-w-3xl">
     <div ref={listRef} className="mg-band mg-band-header relative z-10 py-2.5">
       <button type="button" aria-expanded={listOpen} aria-controls="followed-teams" onClick={() => setListOpen(!listOpen)}
         className={`flex min-h-11 w-full items-center gap-2 rounded-lg border border-[rgb(var(--mg-header-line))] px-3 text-left text-sm font-semibold text-white ${listOpen ? 'bg-white/10' : ''}`}>

@@ -1,3 +1,4 @@
+import { usePageWidth } from '../../components/pageWidthState';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -47,6 +48,7 @@ function heatIsComplete(heat: Heat): boolean {
 }
 
 export function SessionPage() {
+  usePageWidth('wide');
   const { sessionId } = useParams<{ sessionId: string }>();
   const [searchParams] = useSearchParams();
   const requestedHeat = Number(searchParams.get('heat'));

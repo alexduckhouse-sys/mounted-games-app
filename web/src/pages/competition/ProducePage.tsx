@@ -15,6 +15,7 @@ import { SavedLooks } from './SavedLooks';
 import { FilmingBanner } from '../../components/FilmingBanner';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
+import { usePageWidth } from '../../components/pageWidthState';
 
 const STYLES: { value: OverlayBannerStyle; label: string }[] = [{ value: 0, label: 'Ticker' }, { value: 1, label: 'Lower bar' }, { value: 2, label: 'Alert' }];
 const MODES: { value: OverlayMode; label: string }[] = [{ value: 0, label: 'Auto' }, { value: 1, label: 'On' }, { value: 2, label: 'Off' }];
@@ -50,6 +51,7 @@ function Segmented<T extends number | string>({ label, options, value, onChange 
 
 /** The producer screen: banners, the now-racing strip, score card timing and the event's look, for every arena. */
 export function ProducePage() {
+  usePageWidth('full');
   const { competition } = useCompetition();
   const { canOrganise } = useAuth();
   if (!canOrganise(competition)) return <p className="pt-6">Only the event’s organisers can change what viewers see.</p>;
@@ -124,7 +126,7 @@ function Producer() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 py-4">
+    <div className="mx-auto flex w-full flex-col gap-4 py-4">
       <div className="flex items-center gap-2">
         <Link to={`/competitions/${competition.id}/chat`} className="mg-nav-btn !px-0" aria-label="Back to Live & stream"><ChevronLeft className="h-5 w-5" /></Link>
         <h1 className="mg-h1 mg-h1-sm flex-1">Producer</h1>
@@ -139,6 +141,8 @@ function Producer() {
 
       <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
 
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(380px,2fr)] lg:items-start lg:gap-6">
+      <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-1">
       <section className="mg-card flex flex-col gap-3 p-4" aria-labelledby="banner-title">
         <div className="flex items-center justify-between gap-2">
           <h2 id="banner-title" className="flex items-center gap-2 font-bold"><Megaphone className="h-4 w-4" aria-hidden="true" />Banner</h2>
@@ -243,7 +247,9 @@ function Producer() {
         </div>
       </section>
 
-      <section aria-labelledby="preview-title" className="flex flex-col gap-2">
+      </div>
+
+      <section aria-labelledby="preview-title" className="flex flex-col gap-2 lg:sticky lg:top-[calc(var(--mg-shell-h,104px)+16px)] lg:col-start-1 lg:row-start-1">
         <h2 id="preview-title" className="font-bold">Preview</h2>
         <div className="relative aspect-video overflow-hidden rounded-xl bg-[rgb(var(--mg-header-deep))]" aria-hidden="true">
           <CompetitionContext.Provider value={{ ...context, overlay: previewOverlay }}>
@@ -251,6 +257,7 @@ function Producer() {
           </CompetitionContext.Provider>
         </div>
       </section>
+      </div>
     </div>
   );
 }

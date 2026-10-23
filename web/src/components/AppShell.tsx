@@ -6,6 +6,8 @@ import { useCurrentCompetition } from '../competition/CurrentCompetitionContext'
 import { RememberCompetitionDialog } from '../competition/RememberCompetitionDialog';
 import { competitionDateText } from '../lib/competitionDates';
 import { competitionIdFromPath, hasGlobalTabs } from '../lib/routes';
+import { PageWidthProvider } from './PageWidth';
+import { PAGE_WIDTH_CLASS, type PageWidth } from './pageWidthState';
 import { PageLoadBoundary } from './PageLoadBoundary';
 import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';
@@ -22,6 +24,11 @@ import { initialsOf } from '../lib/profile';
 import { useNeedsYou } from '../pages/profile/needsYou';
 
 export function AppShell() {
+  return <PageWidthProvider>{(width) => <Shell width={width} />}</PageWidthProvider>;
+}
+
+function Shell({ width }: { width: PageWidth }) {
+  const cap = PAGE_WIDTH_CLASS[width];
   const { user, canOrganise } = useAuth();
   const { current, rememberChoice, storageError } = useCurrentCompetition();
   const { meta } = useCompetitionMeta();
@@ -62,7 +69,7 @@ export function AppShell() {
       <div ref={barRef} className="sticky top-0 z-30">
         <header className="mg-header">
           {compactBar ? (
-            <div className="mg-compact-bar mx-auto max-w-5xl">
+            <div className={`mg-compact-bar mx-auto ${cap}`}>
               <Link to={compactBar.backTo} className="mg-nav-btn !px-0" aria-label="Back to timetable"><ChevronLeft className="h-5 w-5" /></Link>
               <div className="mg-compact-copy">
                 <span className="mg-compact-title">{compactBar.title}</span>
@@ -77,7 +84,7 @@ export function AppShell() {
               <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
             </div>
           ) : (
-            <div className="mx-auto flex max-w-5xl items-center gap-2.5 py-3 pl-4 pr-3">
+            <div className={`mx-auto flex ${cap} items-center gap-2.5 py-3 pl-4 pr-3`}>
               {pageHeader?.backTo
                 ? <Link to={pageHeader.backTo} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-white" aria-label={pageHeader.backLabel ?? 'Back'}><ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.25} /></Link>
                 : <Link to="/events" className="mg-logo" aria-label="Mounted Games home">MG</Link>}
@@ -115,8 +122,8 @@ export function AppShell() {
         {competitionId != null && <TopBarTicker />}
       </div>
       <main className={publicPage
-        ? `skin mx-auto w-full max-w-5xl flex-1 px-4 ${/\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : tabsCompetitionId != null || globalTabs ? 'pb-28' : 'pb-10'}`
-        : 'mx-auto w-full max-w-5xl flex-1 px-3 py-3 sm:px-4 sm:py-5'}>
+        ? `skin mx-auto w-full ${cap} flex-1 px-4 ${/\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : tabsCompetitionId != null || globalTabs ? 'pb-28' : 'pb-10'}`
+        : `mx-auto w-full ${cap} flex-1 px-3 py-3 sm:px-4 sm:py-5`}>
         {storageError && <p role="status" className={publicPage ? 'mg-notice mt-4' : 'mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900'}>{storageError}</p>}
         <TrainerAccountNotice />
         <PageLoadBoundary page={location.pathname}>

@@ -75,3 +75,11 @@ a.tt-live:hover { background: rgb(var(--mg-live-row)); filter: brightness(.98); 
 .tt-finished .tt-event strong { color: rgb(var(--mg-body)); }
 @keyframes tt-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(var(--mg-red) / .5); } 50% { box-shadow: 0 0 0 5px rgb(var(--mg-red) / 0); } }
 @media (prefers-reduced-motion: reduce) { .tt-live .tt-dot { animation: none; } .tt-row { transition: none; } }
+
+/* Laptop: the board uses the page width, and session blocks sit two across. Everything else spans the row. */
+@media (min-width: 1024px) {
+  .timetable-board { max-width: none; }
+  .tt-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px 24px; padding-top: 16px; }
+  .tt-body > * { grid-column: 1 / -1; }
+  .tt-body > .tt-group, .tt-body > .tt-cell { grid-column: auto; }
+}

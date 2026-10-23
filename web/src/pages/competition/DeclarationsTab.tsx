@@ -9,6 +9,9 @@ import { toCsv, downloadCsv, safeFilename } from '../../lib/csv';
 import { decDraftKey, dobText, heightText, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
 import { DecFormEditor } from './decform/DecFormEditor';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { PageGrid } from '../../components/PageGrid';
+import { usePageWidth } from '../../components/pageWidthState';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { parseConfigResponse, STANDARD_CONFIG, type DecFormConfig } from '../../lib/decFormConfig';
 
 function readDraft(competitionId: number, teamId: number, required: number): DecFormDraft | null {
@@ -16,6 +19,8 @@ function readDraft(competitionId: number, teamId: number, required: number): Dec
 }
 
 export function DeclarationsTab() {
+  usePageWidth('wide');
+  const desktop = useIsDesktop();
   const { competition } = useCompetition();
   const { user, hasRole, canOrganise } = useAuth();
   const [params] = useSearchParams();
@@ -128,13 +133,57 @@ export function DeclarationsTab() {
 
   const count = forms?.length ?? 0;
 
+  const teamRail = desktop && user != null && myTeams.length > 1;
+  const editor = team && forms && config && (
+    <DecFormEditor key={team.id} competition={competition} team={team} existing={existing} draft={draft}
+      priorPhone={priorPhone} onSaved={saved} config={config} />
+  );
+  const cards = (
+    <div className={`grid grid-cols-1 gap-2 ${teamRail ? 'xl:grid-cols-2' : 'lg:grid-cols-2'}`}>
+      {forms?.length === 0 && (
+        <div className="card p-3 text-xs text-[rgb(var(--mg-muted))]">No declaration forms submitted yet.</div>
+      )}
+      {forms?.map((f) => <DecFormCard key={f.id} f={f} config={config ?? STANDARD_CONFIG} onDelete={() => remove(f.id)} canDelete={user != null} />)}
+    </div>
+  );
+  const rail = (
+    <nav aria-label="Teams" className="mg-card overflow-hidden">
+      <h2 className="mg-display border-b-2 border-[rgb(var(--mg-heading))] px-3 py-2 text-[15px] font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-heading))]">Your teams</h2>
+      <ul className="m-0 max-h-[70dvh] list-none overflow-y-auto p-0">
+        {myTeams.map((t) => (
+          <li key={t.id} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
+            <button type="button" aria-pressed={team?.id === t.id} onClick={() => setChosen(t.id)}
+              className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-[15px] ${team?.id === t.id ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`}>
+              <span className="min-w-0 flex-1 truncate">{t.displayName}</span>
+              {forms?.some((f) => f.teamId === t.id) && <Check aria-label="Dec form sent" className="h-4 w-4 shrink-0" />}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+  const exportButton = (
+    <div className="flex justify-end">
+      <button onClick={exportCsv} disabled={count === 0} className="btn-ghost !px-2.5 !py-1.5 text-xs" title="Download all submitted dec forms as CSV">
+        <Download className="h-3.5 w-3.5" /> Export CSV ({count})
+      </button>
+    </div>
+  );
+
+  if (teamRail) {
+    return (
+      <div className="flex flex-col gap-4 pt-4">
+        {exportButton}
+        <PageGrid variant="left" aside={rail}>
+          <div className="flex flex-col gap-4">{editor}{cards}</div>
+        </PageGrid>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 pt-4">
-      <div className="flex justify-end">
-        <button onClick={exportCsv} disabled={count === 0} className="btn-ghost !px-2.5 !py-1.5 text-xs" title="Download all submitted dec forms as CSV">
-          <Download className="h-3.5 w-3.5" /> Export CSV ({count})
-        </button>
-      </div>
+      {exportButton}
 
       {!user ? (
         <div className="mg-notice flex items-center gap-2.5">
@@ -156,19 +205,11 @@ export function DeclarationsTab() {
               ))}
             </div>
           )}
-          {team && forms && config && (
-            <DecFormEditor key={team.id} competition={competition} team={team} existing={existing} draft={draft}
-              priorPhone={priorPhone} onSaved={saved} config={config} />
-          )}
+          {editor}
         </>
       )}
 
-      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-        {forms?.length === 0 && (
-          <div className="card p-3 text-xs text-[rgb(var(--mg-muted))]">No declaration forms submitted yet.</div>
-        )}
-        {forms?.map((f) => <DecFormCard key={f.id} f={f} config={config ?? STANDARD_CONFIG} onDelete={() => remove(f.id)} canDelete={user != null} />)}
-      </div>
+      {cards}
     </div>
   );
 }

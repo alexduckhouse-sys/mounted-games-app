@@ -9,6 +9,9 @@ import type { Heat, RaceTemplate, Session } from '../../types';
 import { useCompetition } from './context';
 import { RulesLink } from './RulesLink';
 import { RaceDiagram } from '../../components/RaceDiagram';
+import { PageGrid } from '../../components/PageGrid';
+import { usePageWidth } from '../../components/pageWidthState';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { displaySectionName } from '../../lib/section';
 import { formatTime, roundTo5Min, computeTimings } from '../../lib/time';
 
@@ -52,6 +55,8 @@ function ArenaBar({ arenas, selected, onChoose }: { arenas: string[]; selected: 
 }
 
 export function ArenaPage() {
+  usePageWidth('wide');
+  const desktop = useIsDesktop();
   const { competition } = useCompetition();
   const [templates, setTemplates] = useState<RaceTemplate[]>([]);
   const arenas = useMemo(
@@ -139,6 +144,29 @@ export function ArenaPage() {
       </div>
       {arenaBar}
 
+      <PageGrid aside={(
+      <div className="card p-3">
+        <div className="text-xs uppercase tracking-wide text-slate-500 mb-1.5">All races in this heat</div>
+        <div className="flex flex-wrap gap-1.5 lg:flex-col lg:gap-1">
+          {orderedRaces.map((r, i) => (
+            <button
+              key={r.id}
+              onClick={() => setOffsetTo(i - (baseIdx >= 0 ? baseIdx : 0))}
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition lg:min-h-10 lg:px-3 lg:text-left lg:text-sm ${
+                i === activeIdx
+                  ? 'bg-brand-600 text-white'
+                  : r.isComplete
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-100'
+              }`}
+            >
+              {i + 1}. {r.name}
+            </button>
+          ))}
+        </div>
+      </div>
+      )} asideLabel="Races in this heat">
+        <div className="space-y-3">
       <div className="card p-3 flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="text-xs uppercase tracking-wide text-slate-500">Heat in arena</div>
@@ -181,7 +209,7 @@ export function ArenaPage() {
                   initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <RaceDiagram diagramJson={template.diagramJson} height={200} />
+                  <RaceDiagram diagramJson={template.diagramJson} height={desktop ? 340 : 200} />
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -223,27 +251,8 @@ export function ArenaPage() {
           {nextRace ? <>Next race · {nextRace.name} <ArrowRight className="w-4 h-4" /></> : <>End of heat</>}
         </button>
       </div>
-
-      <div className="card p-3">
-        <div className="text-xs uppercase tracking-wide text-slate-500 mb-1.5">All races in this heat</div>
-        <div className="flex flex-wrap gap-1.5">
-          {orderedRaces.map((r, i) => (
-            <button
-              key={r.id}
-              onClick={() => setOffsetTo(i - (baseIdx >= 0 ? baseIdx : 0))}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition ${
-                i === activeIdx
-                  ? 'bg-brand-600 text-white'
-                  : r.isComplete
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
-                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-100'
-              }`}
-            >
-              {i + 1}. {r.name}
-            </button>
-          ))}
         </div>
-      </div>
+      </PageGrid>
     </div>
   );
 }

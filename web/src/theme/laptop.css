@@ -1,0 +1,9 @@
+/* Laptop helpers: lists of rows become a grid of cards, card lists become columns. Phones are untouched.
+   Imported after skin.css so these win at equal specificity. Colours come from the --mg-* tokens only. */
+@media (min-width: 1024px) {
+  .mg-lines.mg-lines-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; overflow: visible; border: 0; border-radius: 0; background: transparent; }
+  .mg-lines.mg-lines-grid > * { border: 1px solid rgb(var(--mg-rule)); border-radius: 10px; }
+  .mg-lines.mg-lines-grid > * + * { border-top: 1px solid rgb(var(--mg-rule)); }
+  .mg-cards-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: start; }
+  .mg-cards-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

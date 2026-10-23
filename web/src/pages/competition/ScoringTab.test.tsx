@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { competition, heat, race, result, session, standing, team } from '../../test/factories';
 import type { Heat, Session, StandingRow } from '../../types';
@@ -124,6 +124,28 @@ describe('the age group select', () => {
     setCompetition([], { sections: [] });
     renderTab('/', { toplistOnly: true });
     expect(screen.getByText('No age groups yet.')).toBeVisible();
+  });
+});
+
+describe('the age group rail on a laptop', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('lists every age group down the left instead of the menu, and switches on a click', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    const user = userEvent.setup();
+    renderTab();
+    const rail = await screen.findByRole('navigation', { name: 'Age groups' });
+    expect(within(rail).getByRole('button', { name: /Under 12/ })).toHaveAttribute('aria-current', 'true');
+    expect(within(rail).getByRole('button', { name: /Under 14/ })).not.toHaveAttribute('aria-current');
+    expect(screen.queryByRole('button', { name: /^Age group/ })).not.toBeInTheDocument();
+    await user.click(within(rail).getByRole('button', { name: /Under 14/ }));
+    await waitFor(() => expect(screen.getByTestId('search').textContent).toBe('?section=10'));
+  });
+
+  it('wraps the timetable board too when it is not the toplist page', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    renderTab('/?section=9', { toplistOnly: false });
+    expect(await screen.findByRole('navigation', { name: 'Age groups' })).toBeInTheDocument();
   });
 });
 

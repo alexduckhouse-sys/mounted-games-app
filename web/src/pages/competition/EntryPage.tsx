@@ -10,6 +10,8 @@ import { Chevron, RefineList } from '../refine/Refine';
 import { useCompetition } from './context';
 import { EnterCompetition } from './DetailsTab';
 import type { ReactNode } from 'react';
+import { PageGrid } from '../../components/PageGrid';
+import { usePageWidth } from '../../components/pageWidthState';
 
 /**
  * The whole of a new competition's public face while entries are open: what and when, then one card per age group
@@ -17,6 +19,7 @@ import type { ReactNode } from 'react';
  * (see `competitionPhase`). Also reachable at `/competitions/:id/enter` once the event has started.
  */
 export function EntryPage() {
+  usePageWidth('wide');
   const { competition, reload } = useCompetition();
   const { canOrganise, user } = useAuth();
   const mayOrganise = canOrganise(competition);
@@ -51,7 +54,8 @@ export function EntryPage() {
   );
 
   return (
-    <div className="rf-page mx-auto flex w-full max-w-3xl flex-col gap-2.5 pb-4 pt-3">
+    <div className="rf-page mx-auto w-full max-w-3xl pb-4 pt-3 lg:max-w-none">
+      <PageGrid railFirst className="!gap-2.5 lg:!gap-6" aside={(
       <div className="mg-card flex flex-col gap-4 p-4">
         <div>
           <span className="mg-badge bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]">{competition.signupsLocked ? 'Entries closed' : 'Entries open'}</span>
@@ -65,6 +69,8 @@ export function EntryPage() {
           {fee && row(<Ticket className="h-4 w-4" />, 'Entry fee', fee)}
         </dl>
       </div>
+      )} asideLabel="About this event">
+      <div className="flex flex-col gap-2.5">
 
       {competition.signupsLocked && (
         <p role="status" className="mg-notice flex items-center gap-2"><Lock className="h-4 w-4 shrink-0" aria-hidden="true" /> Entries for this event are closed.</p>
@@ -87,6 +93,8 @@ export function EntryPage() {
           </Link>
         </li>
       </RefineList>
+      </div>
+      </PageGrid>
     </div>
   );
 }

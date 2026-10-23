@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Star } from 'lucide-react';
 import { api } from '../api';
+import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { useFavourites } from '../hooks/useFavourites';
 import { competitionDateText, isOnToday } from '../lib/competitionDates';
@@ -13,14 +14,17 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const TIME_COLOUR = { ok: 'text-[rgb(var(--mg-heading))]', late: 'text-[rgb(var(--mg-late-time))]', live: 'text-[rgb(var(--mg-red))]', wait: 'text-[rgb(var(--mg-faint))]' } as const;
 
 export function FollowingPage() {
+  usePageWidth('wide');
   const { favourites, error } = useFavourites();
   const ids = [...new Set(favourites.map((item) => item.competitionId))];
   const [limit, setLimit] = useState(12);
   usePageHeader({ title: 'Following', subtitle: favourites.length ? `${plural(favourites.length, 'team')} · ${plural(ids.length, 'event')}` : undefined, plain: true });
-  return <div className="mx-auto flex max-w-xl flex-col gap-4 pb-2 pt-3">
+  return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-none">
     {error && <p role="alert" className="mg-notice">{error}</p>}
     {!ids.length && <div className="mg-card space-y-3 p-5"><h2 className="font-bold">No starred teams yet</h2><p>Open a competition and star the teams you want to follow. Stars are saved on this device.</p></div>}
-    {ids.slice(0, limit).map((id) => <FollowingEvent key={id} id={id} teamIds={favourites.filter((item) => item.competitionId === id).map((item) => item.teamId)} />)}
+    <div className="mg-cards-grid mg-cards-grid-2 flex flex-col gap-4 empty:hidden">
+      {ids.slice(0, limit).map((id) => <FollowingEvent key={id} id={id} teamIds={favourites.filter((item) => item.competitionId === id).map((item) => item.teamId)} />)}
+    </div>
     {ids.length > limit && <button className="mg-btn mg-btn-secondary" onClick={() => setLimit(limit + 12)}>Show more events</button>}
     <Link to="/events" className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-dashed border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] text-sm font-semibold !text-[rgb(var(--mg-heading))]">
       <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />{ids.length ? 'Follow teams at another event' : 'Choose a competition'}
