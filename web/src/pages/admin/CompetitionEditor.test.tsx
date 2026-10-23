@@ -47,11 +47,11 @@ beforeEach(() => {
 });
 
 describe('CompetitionEditor: the one-page layout', () => {
-  it('shows five numbered parts and no wizard steps, review or helper text', () => {
+  it('shows six numbered parts and no wizard steps, review or helper text', () => {
     mount();
     expect(screen.getByRole('heading', { level: 1, name: 'New competition' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'About the competition', 'When', 'Where', 'What people can enter', 'Payment and notes',
+      'About the competition', 'When', 'Where', 'What people can enter', 'Payment and notes', 'Dec form',
     ]);
     expect(screen.queryByText(/Review|Next|Basics/)).not.toBeInTheDocument();
     expect(screen.queryByText(/auto-saved|Finalise|Teams in the final|Look up coordinates/)).not.toBeInTheDocument();

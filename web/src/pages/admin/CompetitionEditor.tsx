@@ -9,6 +9,7 @@ import type { CompetitionDetail, CompetitionSection, PayoutsTo } from '../../typ
 import { payoutsLine } from '../../lib/payouts';
 import { Field } from '../auth/Field';
 import { MAX_TERMS_LENGTH } from '../../lib/termsTick';
+import { DecFormConfigEditor } from './DecFormConfig';
 
 type Format = 1 | 2 | 3;
 const FORMAT_LABEL: Record<Format, string> = { 1: 'Pairs', 2: 'Teams', 3: 'Individual' };
@@ -830,6 +831,13 @@ export function CompetitionEditor() {
             </div>
           )}
         </Field>
+      </section>
+
+      <section aria-labelledby="ce-dec" className="flex flex-col gap-[18px]">
+        <PartHead n={6} id="ce-dec" title="Dec form" />
+        {isEdit && editingId != null
+          ? <DecFormConfigEditor competitionId={editingId} readOnly={!mayOrganise} />
+          : <p className="text-[15px] text-[rgb(var(--mg-body))]">Once the competition is published you can choose what its dec form asks for, such as weight, pony passport numbers or your own questions. Until then trainers see the standard form.</p>}
       </section>
 
       <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
