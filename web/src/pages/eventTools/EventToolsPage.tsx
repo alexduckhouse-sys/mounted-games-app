@@ -8,6 +8,8 @@ import type { CloneCompetitionResult, CsvTeamImportPreview } from './eventToolsT
 import { ResultsBookTab } from './ResultsBookTab';
 import { TackCheckTab } from './TackCheckTab';
 import { PassportCheckTab } from './PassportCheckTab';
+import { PageGrid } from '../../components/PageGrid';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
 import './eventTools.css';
 
 interface CompetitionForTools {
@@ -40,6 +42,7 @@ export default function EventToolsPage() {
 
 function EventToolsPageContent({ competitionId }: { competitionId: string }) {
   const { user, hasRole, canOrganise } = useAuth();
+  const desktop = useIsDesktop();
   const fileRef = useRef<HTMLInputElement>(null);
   const [competition, setCompetition] = useState<CompetitionForTools | null>(null);
   const [tab, setTab] = useState<ToolTab>('import');
@@ -141,17 +144,31 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
     { to: 'poster', title: 'Venue poster', detail: 'Name, date, venue and a QR code to this event’s page' },
   ];
 
-  return <RefinePage className="tools-page">
-    <RefineHeader
+  const toolRail = (
+    <nav aria-label="Organiser tools" className="mg-card overflow-hidden">
+      <ul className="m-0 list-none p-0">
+        {tabs.map((item) => (
+          <li key={item.id} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
+            <button type="button" aria-current={tab === item.id ? 'page' : undefined} onClick={() => selectTab(item.id)}
+              className={`flex min-h-11 w-full items-center px-3 text-left text-[15px] ${tab === item.id ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`}>
+              {item.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+  const header = <RefineHeader
       back={`/competitions/${competitionId}`}
       backLabel="Back to event"
       context={competition.name}
       title="Organiser tools"
       subtitle="Choose the job you need. Each tool works separately."
-      tabs={tabs.map((item) => ({ label: item.label, active: tab === item.id, onSelect: () => selectTab(item.id) }))}
+      tabs={desktop ? undefined : tabs.map((item) => ({ label: item.label, active: tab === item.id, onSelect: () => selectTab(item.id) }))}
       tabsLabel="Organiser tools"
       tabsKind="tablist"
-    />
+    />;
+  const content = <>
     {error && <div role="alert" className="mg-notice tools-msg">{error}</div>}
     {success && <div role="status" className="tools-success"><CheckCircle2 className="h-5 w-5" aria-hidden="true" />{success}</div>}
 
@@ -222,5 +239,10 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
     {tab === 'results' && <ResultsBookTab competitionId={competitionId} />}
     {tab === 'tack' && <TackCheckTab competitionId={competitionId} />}
     {tab === 'passport' && <PassportCheckTab competitionId={competitionId} />}
+  </>;
+
+  return <RefinePage className="tools-page" wide>
+    {header}
+    {desktop ? <PageGrid variant="left" aside={toolRail}>{content}</PageGrid> : content}
   </RefinePage>;
 }

@@ -1,11 +1,14 @@
 import { useEffect, useId, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
+import { usePageWidth } from '../../components/pageWidthState';
 import './refine.css';
 
 /** Wraps a refined page so its tokens and type apply. Pass `aboveTabs` on competition pages that show the bottom tabs. */
-export function RefinePage({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`skin rf-page mx-auto w-full max-w-3xl ${className}`.trim()}>{children}</div>;
+export function RefinePage({ children, className = '', wide = false }: { children: ReactNode; className?: string; wide?: boolean }) {
+  // `wide` pages lay themselves out in columns on a laptop, so they take the room the shell allows.
+  usePageWidth(wide ? 'wide' : 'default');
+  return <div className={`skin rf-page mx-auto w-full max-w-3xl ${wide ? 'lg:max-w-none' : ''} ${className}`.trim()}>{children}</div>;
 }
 
 export interface RefineTab { label: string; to?: string; active: boolean; onSelect?: () => void }
