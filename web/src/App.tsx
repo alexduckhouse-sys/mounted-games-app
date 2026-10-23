@@ -39,7 +39,6 @@ const SponsorsPage = lazy(() => import('./pages/competition/SponsorsPage').then(
 const FollowingTab = lazy(() => import('./pages/competition/FollowingTab').then((module) => ({ default: module.FollowingTab })));
 const MyTeamsPage = lazy(() => import('./pages/MyTeamsPage').then((module) => ({ default: module.MyTeamsPage })));
 const DeclarationsIndexPage = lazy(() => import('./pages/DeclarationsIndexPage').then((module) => ({ default: module.DeclarationsIndexPage })));
-const ChatIndexPage = lazy(() => import('./pages/ChatIndexPage').then((module) => ({ default: module.ChatIndexPage })));
 const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })));
 const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
@@ -126,7 +125,7 @@ export default function App() {
               <Route path="stats/:kind" element={<StatsPage />} />
               <Route path="event-tools/:competitionId" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EventToolsPage /></ProtectedRoute>} />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
-              <Route path="chat" element={<ChatIndexPage />} />
+              <Route path="chat" element={<Navigate to="/events" replace />} />
               <Route path="shop" element={<ShopPage />} />
               <Route path="me" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="me/members" element={<ProtectedRoute roles={['Manager', 'Admin']}><MembersPage /></ProtectedRoute>} />

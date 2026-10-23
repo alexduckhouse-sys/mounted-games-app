@@ -50,7 +50,6 @@ function Probe() {
 }
 
 const onClose = vi.fn();
-const onChangeCompetition = vi.fn();
 
 function mount(options: Options = {}) {
   if (options.roles) {
@@ -65,7 +64,7 @@ function mount(options: Options = {}) {
     <MemoryRouter initialEntries={[options.path ?? '/']}>
       <AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider>
         <Seed meta={options.meta} groups={options.groups} extras={options.extras} />
-        <NavigationDrawer onClose={onClose} onChangeCompetition={onChangeCompetition} />
+        <NavigationDrawer onClose={onClose} />
         <Probe />
       </CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider>
     </MemoryRouter>,
@@ -75,7 +74,6 @@ const links = (name: string) => within(screen.getByRole('navigation', { name }))
 
 beforeEach(() => {
   onClose.mockClear();
-  onChangeCompetition.mockClear();
   vi.mocked(api.get).mockResolvedValue({ data: {} });
   vi.mocked(getWeather).mockResolvedValue({ current: { temperature_2m: 16, weather_code: 0 } });
 });
@@ -90,10 +88,10 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(document.body.style.overflow).toBe('auto');
   });
 
-  it('sends the competition links to the picker or the general feed', () => {
+  it('sends the competition links to the events list, and leaves out live stream', () => {
     mount();
     expect(links('Main navigation')).toEqual([
-      ['Following', '/following'], ['Timetable', '/competitions'], ['Toplists', '/competitions'], ['Live feed & stream', '/chat'], ['Event shop', '/shop'], ['Rulebooks', '/competitions'], ['Details & entries', '/competitions'],
+      ['Following', '/following'], ['Timetable', '/events'], ['Toplists', '/events'], ['Event shop', '/shop'], ['Rulebooks', '/events'], ['Details & entries', '/events'],
     ]);
   });
 
@@ -118,10 +116,11 @@ describe('NavigationDrawer: when no competition is followed', () => {
 
   it('offers to change competition and see past ones', async () => {
     mount();
-    await userEvent.click(screen.getByRole('button', { name: 'Change competition' }));
-    expect(onChangeCompetition).toHaveBeenCalledTimes(1);
-    await userEvent.click(screen.getByRole('link', { name: 'Past competitions' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Change competition' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('probe')).toHaveTextContent('/events');
+    await userEvent.click(screen.getByRole('link', { name: 'Past competitions' }));
+    expect(onClose).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/past');
   });
 

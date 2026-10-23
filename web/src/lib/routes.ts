@@ -4,7 +4,7 @@ export function competitionIdFromPath(pathname: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-/** Pages that belong to no competition and show the Events, Following, Live, Me tabs. */
+/** Pages that belong to no competition and show the Events, Following, Me tabs. */
 /** `/events` always shows the list; `/` only does unless a competition is remembered. */
 export const GLOBAL_EVENTS = ['/', '/events', '/competitions', '/competitions/past'];
 export const GLOBAL_ME = ['/dashboard', '/teams', '/me/signups', '/shop'];
@@ -17,5 +17,5 @@ export function globalTabsPath(pathname: string): string {
 /** True for the pages that carry the global tab bar. */
 export function hasGlobalTabs(pathname: string): boolean {
   const path = globalTabsPath(pathname);
-  return GLOBAL_EVENTS.includes(path) || GLOBAL_ME.includes(path) || path === '/following' || path === '/chat';
+  return GLOBAL_EVENTS.includes(path) || GLOBAL_ME.includes(path) || path === '/following';
 }

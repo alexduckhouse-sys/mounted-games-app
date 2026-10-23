@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, PinOff, Search, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, History, PinOff, Search } from 'lucide-react';
 import { api } from '../api';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
@@ -12,7 +12,8 @@ import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } fr
 import { CompetitionListSkeleton } from '../components/Skeletons';
 import { usePageHeader } from '../components/CompactPageBarContext';
 
-export function CompetitionPicker({ onClose, past = false }: { onClose?: () => void; past?: boolean }) {
+/** The events page: upcoming competitions, with the past ones a link away at the bottom. */
+export function CompetitionPicker({ past = false }: { past?: boolean }) {
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const refresh = () => setAttempt((n) => n + 1);
@@ -21,16 +22,15 @@ export function CompetitionPicker({ onClose, past = false }: { onClose?: () => v
       window.removeEventListener('online', refresh);
     };
   }, []);
-  return <CompetitionList key={`${past}-${attempt}`} past={past} onClose={onClose} onRetry={() => setAttempt((n) => n + 1)} />;
+  return <CompetitionList key={`${past}-${attempt}`} past={past} onRetry={() => setAttempt((n) => n + 1)} />;
 }
 
-/** The app header says "Competitions" while the picker is a page (not while it is the change-competition dialog). */
-function PlainHeader() {
-  usePageHeader({ title: 'Competitions', plain: true });
+function PlainHeader({ past }: { past: boolean }) {
+  usePageHeader({ title: past ? 'Past competitions' : 'Competitions', plain: true });
   return null;
 }
 
-function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onRetry: () => void; past: boolean }) {
+function CompetitionList({ onRetry, past }: { onRetry: () => void; past: boolean }) {
   const headingId = useId();
   const { current, setCurrent, forget } = useCurrentCompetition();
   const navigate = useNavigate();
@@ -73,36 +73,24 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
   const choose = (competition: CompetitionPickerItem) => {
     setCurrent({ id: competition.id, name: competition.name });
     navigate(`/competitions/${competition.id}`);
-    onClose?.();
   };
   const forgetCurrent = () => {
     forget();
     navigate('/events');
-    onClose?.();
   };
   return (
-    <section className={`mg-font mx-auto flex w-full max-w-xl flex-col ${onClose ? 'gap-3.5 py-4' : 'gap-3.5 pb-5'}`} aria-labelledby={headingId}>
-      {!onClose && <PlainHeader />}
-      {onClose ? (
-        <div className="flex items-center gap-3">
-          <h1 id={headingId} className="mg-h2 min-w-0 flex-1">{past ? 'Past competitions' : 'Pick a competition'}</h1>
-          <button autoFocus onClick={onClose} className="mg-icon-btn" aria-label="Close competition picker"><X className="h-5 w-5" /></button>
-        </div>
-      ) : (
-        <h1 id={headingId} className="sr-only">{past ? 'Past competitions' : 'Competitions'}</h1>
-      )}
-      <div className={`${onClose ? 'rounded-xl bg-[rgb(var(--mg-header))] p-3' : 'mg-band mg-band-header pb-3 pt-0'} flex flex-col gap-2`}>
+    <section className="mg-font mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-5" aria-labelledby={headingId}>
+      <PlainHeader past={past} />
+      <h1 id={headingId} className="sr-only">{past ? 'Past competitions' : 'Competitions'}</h1>
+      <div className="mg-band mg-band-header flex flex-col gap-2 pb-3 pt-0">
         <label className="mg-navy-field">
           <Search className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
           <span className="sr-only">Search competitions</span>
           <input type="search" placeholder="Name or venue" value={search} onChange={(event) => setSearch(event.target.value)} />
         </label>
-        <div className="mg-navy-switch self-start">
-          <Link to="/competitions" onClick={onClose} aria-current={past ? undefined : 'page'}>Upcoming</Link>
-          <Link to="/competitions/past" onClick={onClose} aria-current={past ? 'page' : undefined}>Past</Link>
-        </div>
+        {past && <Link to="/events" className="inline-flex min-h-11 items-center gap-1 self-start text-[13px] font-semibold !text-white !no-underline"><ChevronLeft className="h-4 w-4" aria-hidden="true" />Back to upcoming competitions</Link>}
       </div>
-      {onClose && current && (
+      {current && (
         <button type="button" onClick={forgetCurrent} className="mg-btn mg-btn-secondary w-full">
           <PinOff className="h-4 w-4" aria-hidden="true" />Forget this competition<span className="sr-only">: {current.name}</span>
         </button>
@@ -128,6 +116,7 @@ function CompetitionList({ onClose, onRetry, past }: { onClose?: () => void; onR
         {!loading && !state.error && state.items.length === 0 && <p className="mg-card p-4">{past ? 'No past competitions yet.' : 'No competitions available yet.'}</p>}
         {!loading && !state.error && state.items.length > 0 && matches.length === 0 && <p className="mg-card p-4">No competitions match that search.{state.hasMore ? ' Load more to search further back.' : ''}</p>}
         {!loading && !state.error && state.hasMore && <button className="mg-btn mg-btn-secondary w-full" onClick={() => setPage((value) => value + 1)}>Load more competitions</button>}
+        {!past && <Link to="/competitions/past" className="mg-btn mg-btn-secondary w-full"><History className="h-4 w-4" aria-hidden="true" />See past competitions</Link>}
       </div>
     </section>
   );
@@ -139,14 +128,9 @@ function liveLine(live: NonNullable<CompetitionPickerItem['live']>) {
   return `${section ? `${section} · ` : ''}${live.heatLabel} on now in ${live.arenaName ? live.arenaName : 'the arena'}`;
 }
 
-/** The small tags on a list row: entries open, or a demo event. */
+/** The small tag on a list row: entries open. */
 function Tags({ competition }: { competition: CompetitionPickerItem }) {
-  return (
-    <>
-      {competition.entriesOpen && <span className="mg-tag mg-tag-ok">Entries open</span>}
-      {competition.isDemo && <span className="mg-tag">Demo event</span>}
-    </>
-  );
+  return competition.entriesOpen ? <span className="mg-tag mg-tag-ok">Entries open</span> : null;
 }
 
 function TodayCard({ competition, selected, onChoose }: { competition: CompetitionPickerItem; selected: boolean; onChoose: () => void }) {
@@ -159,7 +143,7 @@ function TodayCard({ competition, selected, onChoose }: { competition: Competiti
       </span>
       {details && <span className="mg-meta">{details}</span>}
       {competition.live && <span className="text-[13px]">{liveLine(competition.live)}</span>}
-      {(competition.entriesOpen || competition.isDemo) && <span className="flex flex-wrap gap-1.5"><Tags competition={competition} /></span>}
+      {competition.entriesOpen && <span className="flex flex-wrap gap-1.5"><Tags competition={competition} /></span>}
       <button aria-pressed={selected} onClick={onChoose} className="mg-btn mg-btn-primary mt-1 !min-h-11 w-full !rounded-lg !text-[15px]">
         Open competition<span className="sr-only">: {competition.name}</span>
         <ChevronRight className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" />
@@ -193,14 +177,4 @@ function CompetitionRow({ competition, past, selected, onChoose }: { competition
       {selected && <span className="sr-only">(current competition)</span>}
     </button>
   );
-}
-
-export function CompetitionPickerDialog({ onClose }: { onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const dialog = ref.current;
-    dialog?.showModal();
-    return () => dialog?.close();
-  }, []);
-  return <dialog ref={ref} onCancel={onClose} aria-label="Select a competition" className="m-auto max-h-[90dvh] w-[calc(100%-1.5rem)] max-w-lg overflow-y-auto rounded-2xl bg-[rgb(var(--mg-ground))] px-4 text-[rgb(var(--mg-ink))] shadow-xl backdrop:bg-[rgb(var(--mg-overlay)/0.55)]"><CompetitionPicker onClose={onClose} /></dialog>;
 }

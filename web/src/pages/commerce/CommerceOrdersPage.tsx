@@ -152,7 +152,7 @@ function CommerceOrdersContent() {
   return (
     <RefinePage>
       <RefineHeader
-        back="/competitions"
+        back="/events"
         backLabel="Back to competitions"
         context="Shop"
         title="Your orders"

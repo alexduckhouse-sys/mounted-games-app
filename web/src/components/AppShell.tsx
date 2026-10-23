@@ -3,7 +3,6 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, Lock, Unlock, Menu, RotateCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
-import { CompetitionPickerDialog } from '../competition/CompetitionPicker';
 import { RememberCompetitionDialog } from '../competition/RememberCompetitionDialog';
 import { competitionDateText } from '../lib/competitionDates';
 import { competitionIdFromPath, hasGlobalTabs } from '../lib/routes';
@@ -27,7 +26,6 @@ export function AppShell() {
   const { current, rememberChoice, storageError } = useCurrentCompetition();
   const { meta } = useCompetitionMeta();
   const { config: compactBar, header: pageHeader } = useCompactPageBarState();
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   // The Lite mode chip opens the menu with its settings showing.
   const [menuShowsSettings, setMenuShowsSettings] = useState(false);
@@ -94,20 +92,20 @@ export function AppShell() {
                   {pageHeader.subtitle && <span className="mg-header-sub truncate text-[13px] leading-tight">{pageHeader.subtitle}</span>}
                 </div>
               ) : pageHeader ? (
-                <button type="button" onClick={() => setPickerOpen(true)} className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left">
+                <Link to="/events" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
                   <span className="mg-display truncate text-[22px] font-bold leading-none">{pageHeader.title}</span>
                   <span className="mg-header-sub flex items-center gap-1 text-[13px] leading-tight">
                     <span className="truncate">{pageHeader.subtitle ?? title ?? 'Mounted Games'}</span>
                     <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
                   </span>
                   <span className="sr-only">. Change competition</span>
-                </button>
+                </Link>
               ) : title ? (
-                <button type="button" onClick={() => setPickerOpen(true)} className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left">
+                <Link to="/events" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
                   <span className="mg-display truncate text-lg font-bold leading-tight">{title}</span>
                   {subtitle && <span className="mg-header-sub truncate text-[13px] leading-tight">{subtitle}</span>}
                   <span className="sr-only">. Change competition</span>
-                </button>
+                </Link>
               ) : (
                 <span className="min-w-0 flex-1 truncate text-base font-semibold">Mounted Games</span>
               )}
@@ -137,9 +135,8 @@ export function AppShell() {
       </main>
       {globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
       {tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
-      {menuOpen && <NavigationDrawer settingsOpen={menuShowsSettings} onClose={() => setMenuOpen(false)} onChangeCompetition={() => { setMenuOpen(false); setPickerOpen(true); }} />}
-      {pickerOpen && <CompetitionPickerDialog onClose={() => setPickerOpen(false)} />}
-      {current && !choosingCompetition && rememberChoice === 'ask' && !pickerOpen && !menuOpen && <RememberCompetitionDialog />}
+      {menuOpen && <NavigationDrawer settingsOpen={menuShowsSettings} onClose={() => setMenuOpen(false)} />}
+      {current && !choosingCompetition && rememberChoice === 'ask' && !menuOpen && <RememberCompetitionDialog />}
     </div>
   );
 }

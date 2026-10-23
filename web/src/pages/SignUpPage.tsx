@@ -87,7 +87,7 @@ export function SignUpPage() {
             {sent.byAdmins ? 'Mounted Games admins' : 'Your team manager'} will approve you as {sent.sentence}. We'll let you know when it's done.
           </p>
           <div className="mt-auto flex flex-col gap-2.5">
-            <Link to="/competitions" className="mg-btn mg-btn-primary">Follow a competition</Link>
+            <Link to="/events" className="mg-btn mg-btn-primary">Follow a competition</Link>
             <Link to="/me" className="mg-btn mg-btn-secondary">Go to my profile</Link>
           </div>
         </div>
