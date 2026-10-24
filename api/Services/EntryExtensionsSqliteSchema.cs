@@ -8,8 +8,9 @@ public static class EntryExtensionsSqliteSchema
     // Definitions also allow databases created by the original request-time SQL to be adopted.
     private static readonly (string Table, string Columns, string Definition, int ForeignKeys)[] Tables =
     [
-        ("SignupMatchmaking", "\"SignupId\", \"LookingForPair\", \"LookingForGuestRiders\", \"WaitingForGuestSpot\", \"PairRequestFromSignupId\", \"PairRequestToSignupId\", \"PairRequestStatus\"", """
+        ("SignupMatchmaking", "\"DeclarationAccessGranted\", \"SignupId\", \"LookingForPair\", \"LookingForGuestRiders\", \"WaitingForGuestSpot\", \"PairRequestFromSignupId\", \"PairRequestToSignupId\", \"PairRequestStatus\"", """
             "SignupId" INTEGER NOT NULL PRIMARY KEY,
+            "DeclarationAccessGranted" INTEGER NOT NULL DEFAULT 0,
             "LookingForPair" INTEGER NOT NULL DEFAULT 0,
             "LookingForGuestRiders" INTEGER NOT NULL DEFAULT 0,
             "WaitingForGuestSpot" INTEGER NOT NULL DEFAULT 0,
@@ -53,6 +54,9 @@ public static class EntryExtensionsSqliteSchema
         {
             var createSql = $"CREATE TABLE IF NOT EXISTS \"{table}\" ({definition});";
             await db.Database.ExecuteSqlRawAsync(createSql);
+            if (table == "SignupMatchmaking"
+                && await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_table_info('SignupMatchmaking') WHERE name = 'DeclarationAccessGranted'").SingleAsync() == 0)
+                await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"SignupMatchmaking\" ADD COLUMN \"DeclarationAccessGranted\" INTEGER NOT NULL DEFAULT 0;");
             var count = await db.Database.SqlQuery<int>($"SELECT COUNT(*) AS \"Value\" FROM pragma_foreign_key_list({table})").SingleAsync();
             if (count == foreignKeys) continue;
 

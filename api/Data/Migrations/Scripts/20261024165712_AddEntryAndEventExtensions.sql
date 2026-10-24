@@ -24,6 +24,7 @@ BEGIN
         "WaitingForGuestSpot" integer NOT NULL DEFAULT 0, "PairRequestFromSignupId" integer NULL,
         "PairRequestToSignupId" integer NULL, "PairRequestStatus" text NULL
     );
+    ALTER TABLE "SignupMatchmaking" ADD COLUMN IF NOT EXISTS "DeclarationAccessGranted" integer NOT NULL DEFAULT 0;
     DO $adopt$
     DECLARE existing_key text;
     BEGIN

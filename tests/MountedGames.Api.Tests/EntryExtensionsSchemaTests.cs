@@ -95,6 +95,7 @@ public class EntryExtensionsSchemaTests
         db.ChangeTracker.Clear();
         var match = await db.Set<SignupMatchmaking>().SingleAsync();
         Assert.Equal(owner.Id, match.SignupId);
+        Assert.False(match.DeclarationAccessGranted);
         Assert.True(match.LookingForPair && match.LookingForGuestRiders && match.WaitingForGuestSpot);
         Assert.Equal(partner.Id, match.PairRequestFromSignupId);
         Assert.Equal(partner.Id, match.PairRequestToSignupId);
@@ -124,6 +125,30 @@ public class EntryExtensionsSchemaTests
         await db.SectionSignups.Where(x => x.Id == owner.Id).ExecuteDeleteAsync();
         Assert.Empty(await db.Set<SignupMatchmaking>().ToListAsync());
         Assert.Empty(await db.Set<SignupExtras>().ToListAsync());
+    }
+
+    [Fact]
+    public async Task ExistingMappedTableGainsAccessFlagDefaultingToDenied()
+    {
+        using var factory = new ApiFactory();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var signup = new SectionSignup { CompetitionSectionId = await db.CompetitionSections.Select(s => s.Id).FirstAsync(), FullName = "Synthetic entry" };
+        db.Add(signup);
+        await db.SaveChangesAsync();
+        db.Add(new SignupMatchmaking { SignupId = signup.Id, LookingForPair = true });
+        await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"SignupMatchmaking\" DROP COLUMN \"DeclarationAccessGranted\";");
+        await EntryExtensionsSqliteSchema.EnsureAsync(db);
+        db.ChangeTracker.Clear();
+        var match = await db.Set<SignupMatchmaking>().SingleAsync();
+        Assert.False(match.DeclarationAccessGranted);
+        Assert.True(match.LookingForPair);
+        match.DeclarationAccessGranted = true;
+        await db.SaveChangesAsync();
+        await EntryExtensionsSqliteSchema.EnsureAsync(db);
+        db.ChangeTracker.Clear();
+        Assert.True((await db.Set<SignupMatchmaking>().SingleAsync()).DeclarationAccessGranted);
     }
 
     [Fact]
