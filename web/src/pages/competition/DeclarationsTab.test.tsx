@@ -336,10 +336,39 @@ describe('DeclarationsTab: the dec form', () => {
     expect(riders[2].useInitialOnly).toBe(true);
   });
 
-  it('needs only two riders for a pair and one for an individual', async () => {
+  it('needs only two riders for a pair and one for an individual, with no reserve slot', async () => {
     mount({ teams: [team(8, { competitionId: 4, competitionSectionId: 6, clubId: 1, displayName: 'Pair A', trainerUserId: 'u1' })] });
     expect(await screen.findByText('0 of 2 riders added')).toBeInTheDocument();
-    expect(slotButtons()).toHaveLength(3);
+    expect(slotButtons()).toHaveLength(2);
+  });
+
+  it('allows a four-rider team to submit without a fifth rider', async () => {
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    await user.click(within(slotButtons()[0]).getByRole('button'));
+    for (const name of ['Ella Hughes', 'Oliver Smith', 'Maisie Clarke', 'Harry Wood']) {
+      await user.click(screen.getByRole('button', { name }));
+      await user.click(screen.getByRole('button', { name: 'Add rider' }));
+    }
+    await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
+    const submit = screen.getByRole('button', { name: 'Submit dec form' });
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    await waitFor(() => expect(state.post).toHaveBeenCalledTimes(1));
+    expect(state.post.mock.calls[0][1].riders).toHaveLength(4);
+  });
+
+  it('lets a self-entered Rider open and submit a dec form for their linked team', async () => {
+    state.user = { id: 'u-rider', fullName: 'Sam Rider', email: 'sam@example.com', clubId: null, clubName: '', roles: ['Rider'] };
+    state.get.mockImplementation(async (url: string) => {
+      if (url === '/declaration-forms') return { data: forms };
+      if (url === '/me/signups') return { data: [{ id: 101, competitionId: 4, competitionSectionId: 6, teamId: 8, fullName: 'Sam Rider', status: 1, declarationAccessGranted: true }] };
+      if (url === '/clubs/1/saved-riders') return { data: [] };
+      throw new Error(`unexpected ${url}`);
+    });
+    mount({ teams: [team(8, { competitionId: 4, competitionSectionId: 6, clubId: 1, displayName: 'Sam Rider & Pat Lee', trainerUserId: null })] });
+    expect(await screen.findByRole('heading', { name: 'Sam Rider & Pat Lee' })).toBeInTheDocument();
   });
 
   it('lets the trainer pick between teams, and takes ?team= from the profile link', async () => {
@@ -483,17 +512,22 @@ describe('DeclarationsTab: around the form', () => {
     expect(await screen.findByText('No declaration forms submitted yet.')).toBeInTheDocument();
   });
 
-  it('removes a form from the list when it is deleted', async () => {
+  it('removes a form from the list when it is deleted by an authorised user, and hides delete for other clubs', async () => {
     const user = userEvent.setup();
-    forms = [{ id: 9, teamId: 70, teamName: 'Other Club A', competitionId: 4, competitionName: 'x', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] }];
+    forms = [
+      { id: 9, teamId: 7, teamName: 'Stockport C', competitionId: 4, competitionName: 'x', submittedByUserId: 'u1', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] },
+      { id: 10, teamId: 70, teamName: 'Other Club A', competitionId: 4, competitionName: 'x', submittedByUserId: 'u-other', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] },
+    ];
     mount();
+    expect(await screen.findByRole('heading', { name: 'Other Club A' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete the dec form for Other Club A' })).not.toBeInTheDocument();
     const asked = autoConfirm([false, true]);
-    await user.click(await screen.findByRole('button', { name: 'Delete the dec form for Other Club A' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('Delete the dec form for Other Club A? This can’t be undone.'));
+    await user.click(await screen.findByRole('button', { name: 'Delete the dec form for Stockport C' }));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Delete the dec form for Stockport C? This can’t be undone.'));
     expect(state.del).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Delete the dec form for Other Club A' }));
+    await user.click(screen.getByRole('button', { name: 'Delete the dec form for Stockport C' }));
     await waitFor(() => expect(state.del).toHaveBeenCalledWith('/declaration-forms/9'));
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Other Club A' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete the dec form for Stockport C' })).not.toBeInTheDocument());
   });
 
   it('exports the forms as a CSV with height and trainer columns', async () => {

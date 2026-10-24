@@ -1,11 +1,12 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import type { MySignup } from '../types';
-import { MySignupsPage } from './MySignupsPage';
+import { MySignupsPage, type ExtendedMySignup } from './MySignupsPage';
 
-vi.mock('../api', () => ({ api: { get: vi.fn() } }));
+vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 const auth = vi.hoisted(() => ({ user: { id: 'u1' } as { id: string } | null }));
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: auth.user }) }));
 vi.mock('./commerce/DemoEntryPayment', () => ({ DemoEntryPayment: ({ signupId }: { signupId: number }) => <span>demo payment {signupId}</span> }));
@@ -85,5 +86,25 @@ describe('MySignupsPage', () => {
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
     mount();
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load your signups.');
+  });
+
+  it('lets a rider accept an incoming pair-up request', async () => {
+    const incoming: ExtendedMySignup = {
+      ...signup(5, { sectionName: 'Open Pairs', amountMinor: 900 }),
+      lookingForPair: true,
+      pairRequestFromSignupId: 4,
+      pairRequestFromName: 'Alice Partner',
+      pairRequestFromClub: 'Cheshire PC',
+      pairRequestStatus: 'Pending',
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: [incoming] });
+    vi.mocked(api.post).mockResolvedValue({
+      data: { ...incoming, lookingForPair: false, teamId: 22, teamName: 'Alice Partner & Ellie Hart', pairRequestStatus: 'Accepted' },
+    });
+    mount();
+    expect(await screen.findByText(/Pair request from Alice Partner/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Accept pair' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/5/pair-respond', { accept: true }));
+    expect(await screen.findByText(/Alice Partner & Ellie Hart/)).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
@@ -61,5 +62,18 @@ describe('TeamsTab trainers', () => {
     }));
     render(<MemoryRouter><TeamsTab /></MemoryRouter>);
     expect(await screen.findByText('2 flagged')).toBeInTheDocument();
+  });
+  it('allows creating a custom team with free-text club and team name without a required suffix', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    render(<MemoryRouter><TeamsTab /></MemoryRouter>);
+    await userEvent.click(screen.getByRole('button', { name: /Add custom team/ }));
+    await userEvent.type(screen.getByPlaceholderText('e.g. Stockport PC'), 'New Valley PC');
+    await userEvent.type(screen.getByPlaceholderText('e.g. Welsh Dragons (optional)'), 'Valley Flyers');
+    await userEvent.click(screen.getByRole('button', { name: /Create team/ }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/teams', expect.objectContaining({
+      clubName: 'New Valley PC',
+      name: 'Valley Flyers',
+      suffix: '',
+    })));
   });
 });

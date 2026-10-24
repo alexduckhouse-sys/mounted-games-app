@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.DeclarationForms;
@@ -223,6 +224,139 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
         var r = await rider.PostAsJsonAsync(Url, Form(1));
 
         Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task Submit_RiderWithLinkedSignupCanSubmitAndDeleteOwnForm()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var admin = await _f.AdminAsync();
+        var email = $"rider{Guid.NewGuid():N}"[..14] + "@mg.local";
+        var reg = await admin.PostAsJsonAsync("/api/auth/register", new RegisterRequest(email, "Passw0rd!x", "Solo Rider", Roles.Rider, null));
+        reg.EnsureSuccessStatusCode();
+        var auth = await reg.ReadAsync<AuthResponse>();
+        var rider = _f.WithToken(auth.Token);
+
+        await _f.WithDbAsync(async db =>
+        {
+            var team = await db.Teams.SingleAsync(t => t.Id == a.TeamIds[0]);
+            db.SectionSignups.Add(new SectionSignup
+            {
+                CompetitionSectionId = team.CompetitionSectionId,
+                UserId = auth.User.Id,
+                FullName = "Solo Rider",
+                TeamId = team.Id,
+                Status = SignupPaymentStatus.Paid,
+                AmountMinor = 2500
+            });
+            await db.SaveChangesAsync();
+            var signupId = await db.SectionSignups.Where(s => s.UserId == auth.User.Id && s.TeamId == team.Id).Select(s => s.Id).SingleAsync();
+            db.Add(new SignupMatchmaking { SignupId = signupId, DeclarationAccessGranted = true });
+            await db.SaveChangesAsync();
+        });
+
+        var ok = await rider.PostAsJsonAsync(Url, Form(a.TeamIds[0]));
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        var dto = await ok.ReadAsync<DeclarationFormDto>();
+
+        var forbidden = await rider.PostAsJsonAsync(Url, Form(a.TeamIds[1]));
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        var del = await rider.DeleteAsync($"{Url}/{dto.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, del.StatusCode);
+    }
+
+    [Fact]
+    public async Task PublicSupporterCode_DoesNotGrantDeclarationReadOrWriteAccess()
+    {
+        var arena = await _f.CreateArenaAsync(1);
+        var (entrant, _) = await _f.SignupAsync("Member");
+        var formId = await SeedFormAsync(arena.TeamIds[0], true);
+        var code = "synthetic-public-code-" + Guid.NewGuid().ToString("N");
+        var sectionId = await _f.WithDbAsync(async db =>
+        {
+            var team = await db.Teams.SingleAsync(t => t.Id == arena.TeamIds[0]);
+            team.SupporterJoinKey = code;
+            var form = await db.DeclarationForms.SingleAsync(f => f.Id == formId);
+            form.TrainerName = "Private Synthetic Trainer";
+            await db.SaveChangesAsync();
+            return team.CompetitionSectionId;
+        });
+        var signup = await entrant.PostAsJsonAsync($"/api/competitions/{arena.CompetitionId}/sections/{sectionId}/signups", new
+        {
+            fullName = "Synthetic Supporter", teamCode = code,
+            acceptTerms = true, consentVersion = SignupTerms.WordingVersion,
+        });
+        signup.EnsureSuccessStatusCode();
+        Assert.Equal(arena.TeamIds[0], (await signup.ReadAsync<SectionSignupDto>()).TeamId);
+        var get = await (await entrant.GetAsync($"{Url}/{formId}")).ReadAsync<DeclarationFormDto>();
+        Assert.Null(get.TrainerName);
+        var list = await (await entrant.GetAsync($"{Url}?teamId={arena.TeamIds[0]}")).ReadAsync<List<DeclarationFormDto>>();
+        Assert.Null(Assert.Single(list).TrainerName);
+        Assert.Equal(HttpStatusCode.Forbidden, (await entrant.PostAsJsonAsync(Url, Form(arena.TeamIds[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await entrant.DeleteAsync($"{Url}/{formId}")).StatusCode);
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.DeclarationForms.SingleAsync(f => f.Id == formId)).IsLocked = false;
+            await db.SaveChangesAsync();
+        });
+        Assert.Equal(HttpStatusCode.NotFound, (await entrant.GetAsync($"{Url}/{formId}")).StatusCode);
+        Assert.Empty(await (await entrant.GetAsync($"{Url}?teamId={arena.TeamIds[0]}")).ReadAsync<List<DeclarationFormDto>>());
+    }
+
+    [Fact]
+    public async Task OrganiserFormedEntry_GrantsAccessToDraftsAndSubmission()
+    {
+        var section = await _f.NewSectionAsync(SectionFormat.Individual, priceMinor: 0);
+        var (entrant, _) = await _f.SignupAsync("Member");
+        (await entrant.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/sections/{section.Id}/signups", new
+        {
+            fullName = "Synthetic Entrant", acceptTerms = true, consentVersion = SignupTerms.WordingVersion,
+        })).EnsureSuccessStatusCode();
+        var admin = await _f.AdminAsync();
+        var formed = await (await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/sections/{section.Id}/form-teams", new FormTeamsFromSignupsRequest(null, false, false))).ReadAsync<FormTeamsResult>();
+        var team = Assert.Single(formed.Created);
+        var formId = await SeedFormAsync(team.Id, false);
+        Assert.Equal(HttpStatusCode.OK, (await entrant.GetAsync($"{Url}/{formId}")).StatusCode);
+        Assert.Single(await (await entrant.GetAsync($"{Url}?teamId={team.Id}")).ReadAsync<List<DeclarationFormDto>>());
+        Assert.Equal(HttpStatusCode.OK, (await entrant.PostAsJsonAsync(Url, Form(team.Id))).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(false, SignupPaymentStatus.Paid, false)]
+    [InlineData(true, SignupPaymentStatus.Cancelled, false)]
+    [InlineData(true, SignupPaymentStatus.Refunded, false)]
+    [InlineData(true, SignupPaymentStatus.Paid, true)]
+    public async Task DeclarationAccess_RequiresAnActiveExplicitTeamLink(bool linked, SignupPaymentStatus status, bool withdrawn)
+    {
+        var arena = await _f.CreateArenaAsync(1);
+        var (client, auth) = await _f.SignupAsync("Member");
+        var formId = await SeedFormAsync(arena.TeamIds[0], true);
+        await _f.WithDbAsync(async db =>
+        {
+            var team = await db.Teams.SingleAsync(t => t.Id == arena.TeamIds[0]);
+            var form = await db.DeclarationForms.SingleAsync(f => f.Id == formId);
+            form.TrainerName = "Private Test Trainer";
+            var signup = new SectionSignup
+            {
+                CompetitionSectionId = team.CompetitionSectionId, UserId = auth.User.Id,
+                FullName = team.DisplayName, TeamName = team.DisplayName,
+                TeamId = linked ? team.Id : null, Status = status,
+            };
+            db.Add(signup);
+            await db.SaveChangesAsync();
+            db.Add(new SignupMatchmaking { SignupId = signup.Id, DeclarationAccessGranted = true });
+            await db.SaveChangesAsync();
+            if (withdrawn)
+            {
+                db.Add(new SignupExtras { SignupId = signup.Id, IsWithdrawn = true });
+                await db.SaveChangesAsync();
+            }
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(Url, Form(arena.TeamIds[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync($"{Url}/{formId}")).StatusCode);
+        var visible = await (await client.GetAsync($"{Url}/{formId}")).ReadAsync<DeclarationFormDto>();
+        Assert.Null(visible.TrainerName);
     }
 
     [Fact]

@@ -419,7 +419,9 @@ public class CompetitionsController : ControllerBase
     private async Task<Dictionary<int, int>> ActiveSignupCountsAsync(int competitionId)
         => await _db.SectionSignups.AsNoTracking()
             .Where(s => s.Section!.CompetitionId == competitionId
-                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending))
+                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
+                && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
+                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && x.IsWithdrawn))
             .GroupBy(s => s.CompetitionSectionId)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count);

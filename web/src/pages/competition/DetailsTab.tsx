@@ -322,7 +322,7 @@ function SectionSignupCard({
   // Paid and pending entries both take a seat (the API counts them the same way). Only organisers load the
   // signup list, so everyone else reads the count the API sends with the section.
   const takenSeats = allSignups.length > 0
-    ? signups.filter((s) => s.status === 0 || s.status === 1).length
+    ? signups.filter((s) => (s.status === 0 || s.status === 1) && !(s as SectionSignup & { waitingForGuestSpot?: boolean }).waitingForGuestSpot).length
     : section.activeSignupsCount ?? 0;
   const known = countsKnown || section.activeSignupsCount != null;
   const max = section.maxParticipants;
@@ -362,8 +362,47 @@ function SectionSignupCard({
           <Trophy className="h-4 w-4" aria-hidden="true" /> Join {section.priceMinor ? `(${priceLabel(section.priceMinor)})` : ''}
         </button>
       )}
+      {full && !signupsLocked && section.format === 2 && <Link className="mg-btn mg-btn-secondary !min-h-11" to={`/competitions/${competitionId}/enter/${section.id}`} state={{ from: location.pathname, waitingForGuestSpot: true }}>Wait for a Guest Ride Spot (Free)</Link>}
+      <MatchmakingBoard competitionId={competitionId} section={section} />
     </div>
   );
+}
+
+interface MatchingEntry {
+  signupId: number; competitionSectionId: number; fullName: string; ponyClubName?: string | null;
+  teamName?: string | null; lookingForPair: boolean; lookingForGuestRiders: boolean;
+  waitingForGuestSpot: boolean; teamId?: number | null;
+}
+interface MatchingSignup { id: number; competitionSectionId: number; teamId?: number | null; lookingForPair?: boolean; status: number }
+
+function MatchmakingBoard({ competitionId, section }: { competitionId: number; section: CompetitionSection }) {
+  const { user } = useAuth();
+  const userId = user?.id;
+  const [entries, setEntries] = useState<MatchingEntry[]>([]);
+  const [mine, setMine] = useState<MatchingSignup[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    api.get<MatchingEntry[]>(`/competitions/${competitionId}/matchmaking`).then(({ data }) => { if (!cancelled) setEntries(Array.isArray(data) ? data : []); }).catch(() => { if (!cancelled) setEntries([]); });
+    if (userId) api.get<MatchingSignup[]>('/me/signups').then(({ data }) => { if (!cancelled) setMine(Array.isArray(data) ? data : []); }).catch(() => { if (!cancelled) setMine([]); });
+    return () => { cancelled = true; };
+  }, [competitionId, userId]);
+  const seekers = entries.filter((e) => e.competitionSectionId === section.id);
+  const own = user ? mine.find((e) => e.competitionSectionId === section.id && e.lookingForPair && !e.teamId && (e.status === 0 || e.status === 1)) : undefined;
+  async function requestPair(targetSignupId: number) {
+    if (!own || busy) return;
+    setBusy(true); setNotice(null);
+    try { await api.post(`/my/signups/${own.id}/pair-request`, { targetSignupId }); setNotice('Pair-up request sent.'); }
+    catch { setNotice('Could not send the pair-up request. Check your entries and try again.'); }
+    finally { setBusy(false); }
+  }
+  return seekers.length > 0 ? <div className="mt-2 flex flex-col gap-2 text-sm">
+    {seekers.filter((e) => e.lookingForPair && !e.teamId).map((e) => <div key={e.signupId}><span>Looking for a Pair: {e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}</span>{own && own.id !== e.signupId && <button type="button" className="mg-btn mg-btn-secondary !min-h-11" disabled={busy} onClick={() => void requestPair(e.signupId)}>Request pair-up with {e.fullName}</button>}</div>)}
+    {seekers.filter((e) => e.lookingForGuestRiders).map((e) => <p key={e.signupId}>Looking for Guest Riders: {e.teamName || e.fullName}</p>)}
+    {seekers.filter((e) => e.waitingForGuestSpot && !e.teamId).map((e) => <p key={e.signupId}>Waiting for a Guest Ride Spot: {e.fullName}</p>)}
+    {notice && <p role="status">{notice}</p>}
+  </div> : null;
 }
 
 /**
@@ -407,8 +446,9 @@ export function SectionEntryPage() {
 
 function SectionEntryForm({ section, backTarget }: { section: CompetitionSection; backTarget: string }) {
   const { competition, reload } = useCompetition();
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, canOrganise } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [fullName, setFullName] = useState('');
   const [ponyClub, setPonyClub] = useState('');
@@ -419,13 +459,19 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
   const [teamCode, setTeamCode] = useState('');
   const [teamName, setTeamName] = useState('');
   const [wholeTeam, setWholeTeam] = useState(false);
+  const [lookingForPair, setLookingForPair] = useState(false);
+  const [lookingForGuestRiders, setLookingForGuestRiders] = useState(false);
+  const [waitingForGuestSpot, setWaitingForGuestSpot] = useState(section.format === 2 && !!(location.state as { waitingForGuestSpot?: boolean } | null)?.waitingForGuestSpot);
   const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const canEnterWholeTeam = section.format === 2 && (hasRole('Manager') || hasRole('Trainer'));
+  const canEnterWholeTeam = section.format === 2 && (hasRole('Manager') || hasRole('Trainer') || hasRole('Admin') || canOrganise(competition));
   const enteringWholeTeam = wholeTeam && canEnterWholeTeam;
+  const guestWaiting = section.format === 2 && !enteringWholeTeam && waitingForGuestSpot;
+  const pairSeeking = section.format === 1 && lookingForPair;
+  const effectivePriceMinor = guestWaiting ? 0 : pairSeeking ? Math.floor((section.priceMinor ?? 0) / 2) : section.priceMinor;
   const isDemo = !!competition.isDemo;
   const max = section.maxParticipants;
   const takenSeats = section.activeSignupsCount ?? 0;
@@ -448,15 +494,18 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
         emailOptIn: !!emailText && entryEmail.optIn,
         emailOptInVersion: emailText && entryEmail.optIn ? EMAIL_OPT_IN_VERSION : null,
         requestId: requestId.current,
-        teamCode: teamCode.trim() || null,
-        teamName: teamName.trim() || null,
+        teamCode: section.format === 3 || guestWaiting ? null : teamCode.trim() || null,
+        teamName: section.format === 3 || guestWaiting ? null : teamName.trim() || null,
+        lookingForPair: pairSeeking,
+        lookingForGuestRiders: enteringWholeTeam && lookingForGuestRiders,
+        waitingForGuestSpot: guestWaiting,
         wholeTeam: enteringWholeTeam,
         useInitialOnly: privacy.useInitialOnly,
         noFilming: privacy.noFilming,
         acceptTerms: privacy.agreed,
         consentVersion: CONSENT_VERSION,
       });
-      setFullName(''); setPonyClub(''); setContact(''); setTeamCode(''); setTeamName(''); setWholeTeam(false);
+      setFullName(''); setPonyClub(''); setContact(''); setTeamCode(''); setTeamName(''); setWholeTeam(false); setLookingForPair(false); setLookingForGuestRiders(false); setWaitingForGuestSpot(false);
       setEntryEmail({ email: '', optIn: false });
       requestId.current = null;
       setPrivacy({ useInitialOnly: false, noFilming: false });
@@ -488,7 +537,7 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
               Enter {section.displayName}
             </h1>
           </div>
-          <span className="mg-display text-xl font-bold text-[rgb(var(--mg-heading))]">{priceLabel(section.priceMinor)}</span>
+          <span className="mg-display text-xl font-bold text-[rgb(var(--mg-heading))]">{priceLabel(effectivePriceMinor)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-[rgb(var(--mg-muted))]">
           <span>
@@ -502,7 +551,7 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
 
       {competition.signupsLocked && !done ? (
         <p role="status" className="mg-notice">Entries are closed for this competition.</p>
-      ) : full && !done ? (
+      ) : full && !guestWaiting && !done ? (
         <p role="status" className="mg-notice">This section is full.</p>
       ) : !user ? (
         <div className="mg-card flex flex-col gap-3 p-4 sm:p-5">
@@ -519,13 +568,16 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
           </div>
           <label className="rf-fld">Phone<input type="tel" autoComplete="tel" placeholder="Phone (optional)" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
           <EntryEmailFields value={entryEmail} onChange={setEntryEmail} />
+          {section.format === 1 && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={lookingForPair} onChange={(e) => setLookingForPair(e.target.checked)} />Looking for a Pair (Pay 50%)</label>}
+          {section.format === 2 && !enteringWholeTeam && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={waitingForGuestSpot} onChange={(e) => setWaitingForGuestSpot(e.target.checked)} />Wait for a Guest Ride Spot (Free)</label>}
+          {enteringWholeTeam && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={lookingForGuestRiders} onChange={(e) => setLookingForGuestRiders(e.target.checked)} />Looking for Guest Riders</label>}
           {canEnterWholeTeam && (
             <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
               <input type="checkbox" checked={wholeTeam} onChange={(e) => setWholeTeam(e.target.checked)} />
               Enter a whole team
             </label>
           )}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {section.format !== 3 && !guestWaiting && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="rf-fld">{enteringWholeTeam ? 'Team name' : 'Team name (optional)'}
               <input placeholder={enteringWholeTeam ? 'e.g. Welsh Dragons' : 'Riders with the same team name are put together'} value={teamName} onChange={(e) => setTeamName(e.target.value)} />
             </label>
@@ -537,8 +589,8 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
                 onChange={(e) => setTeamCode(e.target.value)}
               />
             </label>
-          </div>
-          <p className="-mt-1 text-xs text-[rgb(var(--mg-muted))]">The team name carries through to your team’s dec form, so organisers can match the two up.</p>
+          </div>}
+          {section.format !== 3 && !guestWaiting && <p className="-mt-1 text-xs text-[rgb(var(--mg-muted))]">The team name carries through to your team’s dec form, so organisers can match the two up.</p>}
           <RiderPrivacyFields termsText={competition.termsText} value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
           <div className="flex gap-2">
             <button
