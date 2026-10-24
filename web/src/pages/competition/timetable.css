@@ -1,5 +1,5 @@
 /* Public timetable (TimetableBoard). Colours come from the theme tokens in theme/skin.css. */
-.timetable-board { width: 100%; max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; font-family: 'Barlow', system-ui, sans-serif; }
+.timetable-board { width: 100%; max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; font-family: var(--mg-font); }
 
 /* Day and arena choices: one navy strip under the app header, full width and sticky below it. */
 .tt-strip {
@@ -10,11 +10,11 @@
 .mg-band-header + .tt-strip { padding-top: 0; }
 .tt-strip :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .tt-days { display: flex; flex: none; gap: 2px; padding: 3px; border-radius: 8px; background: rgb(255 255 255 / .1); }
-.tt-day { min-height: 30px; padding: 0 12px; border-radius: 6px; color: #fff; font: 600 13px/1 'Barlow', sans-serif; }
+.tt-day { min-height: 30px; padding: 0 12px; border-radius: 6px; color: #fff; font: 600 13px/1 var(--mg-font); }
 .tt-day[aria-pressed="true"] { background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); }
 .tt-arena {
   display: flex; width: 100%; min-width: 0; align-items: center; gap: 6px; min-height: 36px; padding: 0 30px 0 10px; text-align: left;
-  border: 1px solid rgb(var(--mg-header-line)); border-radius: 8px; color: #fff; font: 600 13px/1 'Barlow', sans-serif;
+  border: 1px solid rgb(var(--mg-header-line)); border-radius: 8px; color: #fff; font: 600 13px/1 var(--mg-font);
 }
 .tt-arena-wrap { flex: 1; min-width: 0; }
 .tt-arena { position: relative; }
@@ -29,24 +29,24 @@
 .tt-group-title {
   display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 0 2px 3px; border-bottom: 1.5px solid rgb(var(--mg-heading)); text-align: left;
 }
-.tt-group-title h2 { flex: 1; margin: 0; color: rgb(var(--mg-heading)); font: 700 15px/1.1 'Barlow Condensed', sans-serif; letter-spacing: .05em; text-transform: uppercase; }
-.tt-group-title > span { color: rgb(var(--mg-muted)); font: 500 12px/1 'Barlow', sans-serif; }
+.tt-group-title h2 { flex: 1; margin: 0; color: rgb(var(--mg-heading)); font: 700 15px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; }
+.tt-group-title > span { color: rgb(var(--mg-muted)); font: 500 12px/1 var(--mg-font); }
 .tt-group-title > .tt-summary-late { color: rgb(var(--mg-late-time)); }
 button.tt-group-title:focus-visible, .tt-collapsed:focus-visible, a.tt-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 
 /* A finished group folds into one dashed line below the active ones. */
-.tt-divider { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; color: rgb(var(--mg-muted)); font: 700 12px/1 'Barlow', sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+.tt-divider { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; color: rgb(var(--mg-muted)); font: 700 12px/1 var(--mg-font); letter-spacing: .08em; text-transform: uppercase; }
 .tt-divider > span { flex: 1; height: 1px; background: rgb(var(--mg-rule)); }
 .tt-collapsed {
   display: flex; width: 100%; min-height: 36px; align-items: center; gap: 8px; padding: 0 10px; border: 1px dashed rgb(var(--mg-dash)); border-radius: 8px;
-  color: rgb(var(--mg-faint)); font: 500 13px/1 'Barlow', sans-serif; text-align: left;
+  color: rgb(var(--mg-faint)); font: 500 13px/1 var(--mg-font); text-align: left;
 }
 .tt-collapsed-copy { flex: 1; min-width: 0; }
 .tt-collapsed-copy strong { color: rgb(var(--mg-body)); font-weight: 600; }
-.tt-collapsed-range { font: 600 14px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; }
+.tt-collapsed-range { font: 600 14px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; }
 .tt-collapsed-chevron { flex: none; }
 
-.tt-card { overflow: hidden; border: 1px solid rgb(var(--mg-rule)); border-radius: 10px; background: rgb(var(--mg-surface)); }
+.tt-card { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
 .tt-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr) 8px 14px; align-items: center; column-gap: 10px;
   min-height: 54px; padding: 0 10px 0 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important;
@@ -55,13 +55,13 @@ button.tt-group-title:focus-visible, .tt-collapsed:focus-visible, a.tt-row:focus
 .tt-row + .tt-row { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 a.tt-row:hover { background: rgb(var(--mg-subtle)); }
 a.tt-row:focus-visible { outline-offset: -2px; }
-.tt-time { font: 700 23px/1 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
+.tt-time { font: 700 23px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
 .tt-event { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding: 5px 0; overflow-wrap: anywhere; }
 .tt-event strong { font-size: 16px; font-weight: 600; line-height: 1.25; }
 .tt-sub { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-muted)); }
 .tt-planned { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-late-time)); }
-.tt-onnow { color: rgb(var(--mg-red)); font: 700 10px/1 'Barlow', sans-serif; letter-spacing: .06em; }
-.tt-provisional-note { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 500 14px/1.35 'Barlow', sans-serif; }
+.tt-onnow { color: rgb(var(--mg-red)); font: 700 10px/1 var(--mg-font); letter-spacing: .06em; }
+.tt-provisional-note { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 500 14px/1.35 var(--mg-font); }
 .tt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .tt-live .tt-dot { animation: tt-pulse 1.6s ease-in-out infinite; }
 .tt-key { display: flex; flex-wrap: wrap; gap: 4px 12px; list-style: none; padding: 0; margin: 2px 0 0; font-size: 12px; color: rgb(var(--mg-muted)); }

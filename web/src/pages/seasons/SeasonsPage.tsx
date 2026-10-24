@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { ResultsStatsNav } from '../../components/ResultsStatsNav';
 import { SectionFormatLabel } from '../../types';
 import { Chevron, RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
@@ -41,6 +42,7 @@ export function SeasonsPage() {
 
   const years = seasons ? [...new Set(seasons.map((season) => season.year))].sort((a, b) => b - a) : [];
   return <RefinePage>
+    <ResultsStatsNav />
     <RefineHeader
       context="Published standings" title="Seasons"
       actions={canCreate ? <Link className="rf-btn" to="?new=1"><Plus className="h-4 w-4" aria-hidden="true" />Create season</Link> : undefined}

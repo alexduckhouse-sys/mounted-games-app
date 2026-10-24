@@ -8,6 +8,7 @@ import { RaceDiagram } from '../../components/RaceDiagram';
 import { DiagramEditor } from '../../components/DiagramEditor';
 import { FieldDrop, PartHead } from './LaptopParts';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { RulebooksPanel } from '../operations/RulebooksPage';
 
 type DraftForm = {
   id: number | null;
@@ -27,10 +28,48 @@ function Labelled({ label, children, className = '' }: { label: string; children
 }
 
 /**
- * The race library. Each race is a row; opening one shows its rules and diagram, and for an admin
- * turns the row into the editor.
+ * The race library and rulebooks editor. Each race is a row; opening one shows its rules and diagram,
+ * and for an admin turns the row into the editor. The Rulebooks tab opens the global rulebooks.
  */
 export function RulesPage() {
+  const [tab, setTab] = useState<'races' | 'rulebooks'>('races');
+
+  return (
+    <div className="skin mx-auto flex w-full max-w-[880px] flex-col gap-7 pb-16 pt-6 sm:pt-10">
+      <div className="flex flex-wrap items-end gap-4">
+        <h1 className="mg-display flex-1 text-[44px] font-bold leading-none text-[rgb(var(--mg-heading))]">
+          {tab === 'races' ? 'Race rules' : 'Rulebooks'}
+        </h1>
+        <Link to="/admin" className="mg-btn mg-btn-secondary !min-h-[50px] !rounded-[10px] !px-4 !text-base">Admin</Link>
+      </div>
+
+      <div role="tablist" aria-label="Rules and rulebooks" className="flex gap-2 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'races'}
+          onClick={() => setTab('races')}
+          className={`mg-btn !min-h-11 !rounded-[10px] !px-4 !text-[15px] ${tab === 'races' ? 'mg-btn-primary' : 'mg-btn-secondary'}`}
+        >
+          Game rules
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'rulebooks'}
+          onClick={() => setTab('rulebooks')}
+          className={`mg-btn !min-h-11 !rounded-[10px] !px-4 !text-[15px] ${tab === 'rulebooks' ? 'mg-btn-primary' : 'mg-btn-secondary'}`}
+        >
+          Rulebooks
+        </button>
+      </div>
+
+      {tab === 'races' ? <RaceRulesLibrary /> : <RulebooksPanel />}
+    </div>
+  );
+}
+
+export function RaceRulesLibrary() {
   const { canEdit } = useAuth();
   const [list, setList] = useState<RaceTemplate[]>([]);
   const [search, setSearch] = useState('');
@@ -144,14 +183,12 @@ export function RulesPage() {
   );
 
   return (
-    <div className="skin mx-auto flex w-full max-w-[880px] flex-col gap-7 pb-16 pt-6 sm:pt-10">
-      <div className="flex flex-wrap items-end gap-4">
-        <h1 className="mg-display flex-1 text-[44px] font-bold leading-none text-[rgb(var(--mg-heading))]">Race rules</h1>
-        <Link to="/admin" className="mg-btn mg-btn-secondary !min-h-[50px] !rounded-[10px] !px-4 !text-base">Admin</Link>
-        {canEdit() && (
+    <div className="flex flex-col gap-4">
+      {canEdit() && (
+        <div className="flex justify-end">
           <button type="button" onClick={startNew} className="mg-btn mg-btn-primary !min-h-[50px] !rounded-[10px] !px-[18px] !text-base"><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" /> New race</button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
         <label className="mg-field !min-h-12">

@@ -8,7 +8,6 @@ import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
-import { ShopClassifieds } from '../ShopPage';
 import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineQty, RefineStatus } from '../refine/Refine';
 import { LoadError } from './commerceUi';
 import { CATEGORY_LABEL, errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
@@ -226,10 +225,6 @@ function EventShopContent() {
           </ul>
         </section>
       ))}
-      <section className="mg-sec" aria-label="Tack and equipment for sale">
-        <div className="mg-sec-head"><h2>Tack and equipment for sale</h2></div>
-        <ShopClassifieds intro="Posts from other Pony Clubbers. Agree a price with the seller and collect it at the event." />
-      </section>
     </div>
   );
   return (

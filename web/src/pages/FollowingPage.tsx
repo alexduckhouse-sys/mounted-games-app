@@ -15,11 +15,21 @@ const TIME_COLOUR = { ok: 'text-[rgb(var(--mg-heading))]', late: 'text-[rgb(var(
 
 export function FollowingPage() {
   usePageWidth('wide');
+  const { favourites } = useFavourites();
+  const ids = [...new Set(favourites.map((item) => item.competitionId))];
+  usePageHeader({ title: 'Following', subtitle: favourites.length ? `${plural(favourites.length, 'team')} · ${plural(ids.length, 'event')}` : undefined, plain: true });
+  return (
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-none">
+      <FollowingTeamsSection />
+    </div>
+  );
+}
+
+export function FollowingTeamsSection() {
   const { favourites, error } = useFavourites();
   const ids = [...new Set(favourites.map((item) => item.competitionId))];
   const [limit, setLimit] = useState(12);
-  usePageHeader({ title: 'Following', subtitle: favourites.length ? `${plural(favourites.length, 'team')} · ${plural(ids.length, 'event')}` : undefined, plain: true });
-  return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-none">
+  return <div className="flex flex-col gap-4">
     {error && <p role="alert" className="mg-notice">{error}</p>}
     {!ids.length && <div className="mg-card space-y-3 p-5"><h2 className="font-bold">No starred teams yet</h2><p>Open a competition and star the teams you want to follow. Stars are saved on this device.</p></div>}
     <div className="mg-cards-grid mg-cards-grid-2 flex flex-col gap-4 empty:hidden">

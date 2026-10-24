@@ -1,81 +1,43 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { CheckCircle2, Upload } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { api } from '../../api';
-import { useAuth } from '../../auth/AuthContext';
-import { Chevron, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
+import { Chevron, RefineFoot, RefineList, RefineNote, RefineSection, RefineStatus } from '../refine/Refine';
 import type { CloneCompetitionResult, CsvTeamImportPreview } from './eventToolsTypes';
-import { ResultsBookTab } from './ResultsBookTab';
-import { TackCheckTab } from './TackCheckTab';
-import { PassportCheckTab } from './PassportCheckTab';
-import { PageGrid } from '../../components/PageGrid';
-import { useIsDesktop } from '../../hooks/useMediaQuery';
 import './eventTools.css';
 
-interface CompetitionForTools {
+export interface CompetitionForTools {
   id: number;
   name: string;
-  startDate: string;
-  endDate: string | null;
-  createdByUserId: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
 }
-
-type ToolTab = 'import' | 'duplicate' | 'print' | 'results' | 'tack' | 'passport';
 
 function message(error: unknown, fallback: string) {
   const candidate = error as { response?: { data?: { detail?: string; title?: string } } };
   return candidate.response?.data?.detail ?? candidate.response?.data?.title ?? fallback;
 }
 
-function localInput(value: string | null) {
+function localInput(value: string | null | undefined) {
   if (!value) return '';
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
 export default function EventToolsPage() {
   const { competitionId = '' } = useParams();
-  const { user } = useAuth();
-  return <EventToolsPageContent key={`${competitionId}:${user?.id ?? 'public'}`} competitionId={competitionId} />;
+  return <Navigate to={`/competitions/${competitionId}/operations`} replace />;
 }
 
-function EventToolsPageContent({ competitionId }: { competitionId: string }) {
-  const { user, hasRole, canOrganise } = useAuth();
-  const desktop = useIsDesktop();
+export function TeamImportPanel({ competitionId, onImported }: { competitionId: string; onImported?: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [competition, setCompetition] = useState<CompetitionForTools | null>(null);
-  const [tab, setTab] = useState<ToolTab>('import');
   const [csv, setCsv] = useState('club,suffix,section\n');
   const [preview, setPreview] = useState<CsvTeamImportPreview | null>(null);
-  const [cloneName, setCloneName] = useState('');
-  const [cloneStart, setCloneStart] = useState('');
-  const [cloneEnd, setCloneEnd] = useState('');
-  const [cloneResult, setCloneResult] = useState<CloneCompetitionResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<'preview' | 'apply' | 'clone' | null>(null);
+  const [busy, setBusy] = useState<'preview' | 'apply' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [loadAttempt, setLoadAttempt] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.get<CompetitionForTools>(`/competitions/${competitionId}`)
-      .then(({ data }) => {
-        if (cancelled) return;
-        setCompetition(data);
-        setCloneName(`${data.name} copy`);
-        setCloneStart(localInput(data.startDate));
-        setCloneEnd(localInput(data.endDate));
-      })
-      .catch((caught) => { if (!cancelled) setError(message(caught, 'Couldn’t load this competition.')); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [competitionId, user?.id, loadAttempt]);
-
-  function selectTab(next: ToolTab) {
-    setTab(next); setError(null); setSuccess(null);
-  }
 
   function changeCsv(value: string) {
     setCsv(value); setPreview(null); setSuccess(null);
@@ -101,77 +63,24 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
     if (!preview) return;
     setBusy('apply'); setError(null); setSuccess(null);
     try {
-      const { data } = await api.post<{ createdCount: number }>(`/event-tools/competitions/${competitionId}/team-import/apply`, { csv, fingerprint: preview.fingerprint, previewVersion: preview.previewVersion });
-      setSuccess(`${data.createdCount} ${data.createdCount === 1 ? 'team' : 'teams'} added.`); setPreview(null);
+      const { data } = await api.post<{ createdCount: number }>(`/event-tools/competitions/${competitionId}/team-import/apply`, {
+        csv, fingerprint: preview.fingerprint, previewVersion: preview.previewVersion,
+      });
+      setSuccess(`${data.createdCount} ${data.createdCount === 1 ? 'team' : 'teams'} added.`);
+      setPreview(null);
+      onImported?.();
     } catch (caught) {
-      setError(message(caught, 'Couldn’t add these teams. Preview the CSV again before retrying.')); setPreview(null);
+      setError(message(caught, 'Couldn’t add these teams. Preview the CSV again before retrying.'));
+      setPreview(null);
     } finally { setBusy(null); }
   }
 
-  async function cloneCompetition(event: FormEvent) {
-    event.preventDefault();
-    setBusy('clone'); setError(null); setSuccess(null); setCloneResult(null);
-    try {
-      const { data } = await api.post<CloneCompetitionResult>(`/event-tools/competitions/${competitionId}/clone`, {
-        name: cloneName, startDate: new Date(cloneStart).toISOString(), endDate: cloneEnd ? new Date(cloneEnd).toISOString() : null,
-      });
-      setCloneResult(data); setSuccess(`${data.name} is ready to edit.`);
-    } catch (caught) { setError(message(caught, 'Couldn’t duplicate this competition.')); }
-    finally { setBusy(null); }
-  }
-
-  if (loading) return <RefinePage><p role="status" className="rf-note tools-pad">Loading organiser tools…</p></RefinePage>;
-  if (!competition) return <RefinePage><div role="alert" className="tools-pad"><p className="mg-notice">{error ?? 'Competition not found.'} <button type="button" className="rf-btn rf-btn-text" onClick={() => { setLoading(true); setError(null); setLoadAttempt((value) => value + 1); }}>Try again</button></p></div></RefinePage>;
-  if (!canOrganise(competition)) return <RefinePage><div role="alert" className="tools-pad"><p className="mg-notice">These tools are available to this competition’s organiser.</p></div></RefinePage>;
-
   const hasErrors = preview?.rows.some((row) => row.errors.length > 0) ?? false;
-  // Duplicating makes a new competition the caller owns, so it needs a trainer (or admin) account.
-  const mayDuplicate = hasRole('Admin') || hasRole('Trainer');
-  const tabs: { id: ToolTab; label: string }[] = [
-    { id: 'import', label: 'Import teams' },
-    ...(mayDuplicate ? [{ id: 'duplicate' as const, label: 'Duplicate event' }] : []),
-    { id: 'print', label: 'Print sheets' },
-    { id: 'results', label: 'Results book' },
-    { id: 'tack', label: 'Tack check' },
-    { id: 'passport', label: 'Passport check' },
-  ];
-  const printSheets = [
-    { to: 'entries', title: 'Entry list', detail: 'Every team with its riders and ponies, to check before the day' },
-    { to: 'draw', title: 'Draw and lanes', detail: 'Sessions, heats, lanes and race order' },
-    { to: 'score-sheets', title: 'Score sheets', detail: 'Blank placing, elimination and points columns' },
-    { to: 'results', title: 'Results', detail: 'Current section standings, marked provisional when unfinished' },
-    { to: 'tack-check', title: 'Tack check forms', detail: 'One form per age group, with each team’s riders, ponies and a column per sector' },
-    { to: 'poster', title: 'Venue poster', detail: 'Name, date, venue and a QR code to this event’s page' },
-  ];
 
-  const toolRail = (
-    <nav aria-label="Organiser tools" className="mg-card overflow-hidden">
-      <ul className="m-0 list-none p-0">
-        {tabs.map((item) => (
-          <li key={item.id} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
-            <button type="button" aria-current={tab === item.id ? 'page' : undefined} onClick={() => selectTab(item.id)}
-              className={`flex min-h-11 w-full items-center px-3 text-left text-[15px] ${tab === item.id ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`}>
-              {item.label}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-  const header = <RefineHeader
-      back={`/competitions/${competitionId}`}
-      backLabel="Back to event"
-      context={competition.name}
-      title="Organiser tools"
-      tabs={desktop ? undefined : tabs.map((item) => ({ label: item.label, active: tab === item.id, onSelect: () => selectTab(item.id) }))}
-      tabsLabel="Organiser tools"
-      tabsKind="tablist"
-    />;
-  const content = <>
-    {error && <div role="alert" className="mg-notice tools-msg">{error}</div>}
-    {success && <div role="status" className="tools-success"><CheckCircle2 className="h-5 w-5" aria-hidden="true" />{success}</div>}
-
-    {tab === 'import' && <section aria-labelledby="import-title">
+  return (
+    <section aria-labelledby="import-title">
+      {error && <div role="alert" className="mg-notice tools-msg">{error}</div>}
+      {success && <div role="status" className="tools-success"><CheckCircle2 className="h-5 w-5" aria-hidden="true" />{success}</div>}
       <RefineSection title="Import teams from CSV" />
       <h2 id="import-title" className="sr-only">Import teams from CSV</h2>
       <RefineNote>Use the columns <strong>club</strong>, <strong>suffix</strong> and <strong>section</strong>. Nothing is added until you review the preview.</RefineNote>
@@ -201,17 +110,44 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
           <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={hasErrors || busy !== null} onClick={applyImport}>{busy === 'apply' ? 'Adding teams…' : `Add ${preview.validRows} ${preview.validRows === 1 ? 'team' : 'teams'}`}</button>
         </RefineFoot>
       </>}
-    </section>}
+    </section>
+  );
+}
 
-    {tab === 'duplicate' && mayDuplicate && <section aria-labelledby="duplicate-title">
+export function DuplicateEventPanel({ competition }: { competition: CompetitionForTools }) {
+  const [cloneName, setCloneName] = useState(`${competition.name} copy`);
+  const [cloneStart, setCloneStart] = useState(() => localInput(competition.startDate));
+  const [cloneEnd, setCloneEnd] = useState(() => localInput(competition.endDate));
+  const [cloneResult, setCloneResult] = useState<CloneCompetitionResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  async function cloneCompetition(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true); setError(null); setSuccess(null); setCloneResult(null);
+    try {
+      const startIso = cloneStart ? new Date(cloneStart).toISOString() : new Date().toISOString();
+      const { data } = await api.post<CloneCompetitionResult>(`/event-tools/competitions/${competition.id}/clone`, {
+        name: cloneName, startDate: startIso, endDate: cloneEnd ? new Date(cloneEnd).toISOString() : null,
+      });
+      setCloneResult(data); setSuccess(`${data.name} is ready to edit.`);
+    } catch (caught) { setError(message(caught, 'Couldn’t duplicate this competition.')); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <section aria-labelledby="duplicate-title">
+      {error && <div role="alert" className="mg-notice tools-msg">{error}</div>}
+      {success && <div role="status" className="tools-success"><CheckCircle2 className="h-5 w-5" aria-hidden="true" />{success}</div>}
       <RefineSection title="Duplicate event setup" />
       <h2 id="duplicate-title" className="sr-only">Duplicate event setup</h2>
       <RefineNote>Sections, teams, sessions, heats and races are copied. Results, declarations, payments and team claim details stay with the original event.</RefineNote>
-      <form className="tools-form" onSubmit={cloneCompetition}><fieldset disabled={busy !== null} className="tools-fields"><legend className="sr-only">New event details</legend>
+      <form className="tools-form" onSubmit={cloneCompetition}><fieldset disabled={busy} className="tools-fields"><legend className="sr-only">New event details</legend>
         <label className="rf-fld">New competition name<input value={cloneName} onChange={(event) => setCloneName(event.target.value)} maxLength={200} required /></label>
         <label className="rf-fld">Starts<input type="datetime-local" value={cloneStart} onChange={(event) => setCloneStart(event.target.value)} required /></label>
         <label className="rf-fld">Ends<input type="datetime-local" value={cloneEnd} onChange={(event) => setCloneEnd(event.target.value)} /></label>
-        <button className="rf-btn rf-btn-primary rf-wide">{busy === 'clone' ? 'Duplicating…' : 'Duplicate setup'}</button>
+        <button className="rf-btn rf-btn-primary rf-wide">{busy ? 'Duplicating…' : 'Duplicate setup'}</button>
       </fieldset></form>
       {cloneResult && <>
         <RefineSection title="New event" />
@@ -222,24 +158,29 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
           </Link>
         </RefineList>
       </>}
-    </section>}
+    </section>
+  );
+}
 
-    {tab === 'print' && <section aria-labelledby="print-title">
+const PRINT_SHEETS = [
+  { to: 'entries', title: 'Entry list', detail: 'Every team with its riders and ponies, to check before the day' },
+  { to: 'draw', title: 'Draw and lanes', detail: 'Sessions, heats, lanes and race order' },
+  { to: 'score-sheets', title: 'Score sheets', detail: 'Blank placing, elimination and points columns' },
+  { to: 'results', title: 'Results', detail: 'Current section standings, marked provisional when unfinished' },
+  { to: 'tack-check', title: 'Tack check forms', detail: 'One form per age group, with each team’s riders, ponies and a column per sector' },
+  { to: 'poster', title: 'Venue poster', detail: 'Name, date, venue and a QR code to this event’s page' },
+];
+
+export function PrintSheetsPanel({ competitionId }: { competitionId: string }) {
+  return (
+    <section aria-labelledby="print-title">
       <RefineSection title="Print event sheets" />
       <h2 id="print-title" className="sr-only">Print event sheets</h2>
       <nav aria-label="Printable event sheets"><RefineList as="div">
-        {printSheets.map((sheet) => <Link key={sheet.to} className="rf-row" to={`/event-tools/${competitionId}/print/${sheet.to}`}>
+        {PRINT_SHEETS.map((sheet) => <Link key={sheet.to} className="rf-row" to={`/event-tools/${competitionId}/print/${sheet.to}`}>
           <span className="rf-grow"><span className="rf-t1">{sheet.title}</span><span className="rf-t2">{sheet.detail}</span></span><Chevron />
         </Link>)}
       </RefineList></nav>
-    </section>}
-    {tab === 'results' && <ResultsBookTab competitionId={competitionId} />}
-    {tab === 'tack' && <TackCheckTab competitionId={competitionId} />}
-    {tab === 'passport' && <PassportCheckTab competitionId={competitionId} />}
-  </>;
-
-  return <RefinePage className="tools-page" wide>
-    {header}
-    {desktop ? <PageGrid variant="left" aside={toolRail}>{content}</PageGrid> : content}
-  </RefinePage>;
+    </section>
+  );
 }

@@ -13,7 +13,7 @@ export function GlobalTabs({ meCount = 0 }: { meCount?: number }) {
   const tabs = [
     { to: '/events', label: 'Events', icon: CalendarDays, active: GLOBAL_EVENTS.includes(path) },
     { to: '/following', label: 'Following', icon: Star, active: path === '/following' },
-    { to: '/dashboard', label: 'Me', icon: UserRound, active: GLOBAL_ME.includes(path) && path !== '/shop' },
+    { to: '/me', label: 'Me', icon: UserRound, active: GLOBAL_ME.includes(path) && path !== '/shop' },
   ];
   return (
     <nav aria-label="Main" className="mg-tabs">

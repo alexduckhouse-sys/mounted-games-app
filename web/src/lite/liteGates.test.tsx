@@ -8,7 +8,6 @@ import { AuthProvider } from '../auth/AuthContext';
 import { CurrentCompetitionProvider, useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { AgeGroupsProvider } from '../components/AgeGroupsContext';
 import { CompetitionMetaProvider } from '../components/CompetitionMetaContext';
-import { ForecastBadge } from '../components/ForecastBadge';
 import { NavExtrasProvider } from '../components/NavExtrasContext';
 import { NavigationDrawer } from '../components/NavigationDrawer';
 import { LiveVideo } from '../components/stream/LiveVideo';
@@ -46,7 +45,6 @@ describe('weather in lite mode', () => {
         <WeatherBadge />
         <WeatherNow lat={54} lon={-2} />
         <WeatherAt lat={54} lon={-2} when="2026-10-24T09:00:00Z" />
-        <ForecastBadge lat={54} lon={-2} date="2026-10-24" />
       </Venue></CurrentCompetitionProvider></Lite>,
     );
     await settled();
@@ -60,11 +58,10 @@ describe('weather in lite mode', () => {
       <Normal>
         <WeatherNow lat={54} lon={-2} />
         <WeatherAt lat={54} lon={-2} when="2026-10-24T09:00:00Z" />
-        <ForecastBadge lat={54} lon={-2} date="2026-10-24" />
       </Normal>,
     );
     await settled();
-    expect(getWeather).toHaveBeenCalledTimes(3);
+    expect(getWeather).toHaveBeenCalledTimes(2);
   });
 });
 

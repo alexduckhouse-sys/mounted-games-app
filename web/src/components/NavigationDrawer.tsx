@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Clock, Trophy, MessageSquare, Info, ArrowLeftRight, X, Settings, LayoutDashboard, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight, BarChart3, PinOff } from 'lucide-react';
+import { ArrowLeftRight, X, Settings, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight, BarChart3, PinOff, Trophy } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { THEMES } from '../theme/themes';
@@ -63,17 +63,12 @@ export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = fa
   const shown = meta && current && meta.id === current.id ? meta : null;
   const subtitle = shown ? [competitionDateText(shown.startDate, shown.endDate), shown.location?.trim()].filter(Boolean).join(' · ') : '';
   const links = [
-    { to: current ? `${base}/following` : '/following', label: 'Following', icon: Star, end: true, badge: false },
-    { to: base, label: 'Timetable', icon: Clock, end: true, badge: false },
-    { to: current ? `${base}/toplists` : '/events', label: 'Toplists', icon: Trophy, end: true, badge: false },
-    ...(current ? [{ to: `${base}/chat`, label: 'Live feed & stream', icon: MessageSquare, end: true, badge: !!shown?.live }] : []),
-    { to: current ? `${base}/shop` : '/shop', label: 'Event shop', icon: ShoppingBag, end: true, badge: false },
-    { to: current ? `${base}/rulebooks` : '/events', label: 'Rulebooks', icon: BookOpen, end: true, badge: false },
-    { to: current ? `${base}/details` : '/events', label: 'Details & entries', icon: Info, end: true, badge: false },
+    { to: current ? `${base}/following` : '/following', label: 'Following', icon: Star, end: true },
+    { to: current ? `${base}/shop` : '/shop', label: 'Event shop', icon: ShoppingBag, end: true },
+    { to: current ? `${base}/rulebooks` : '/events', label: 'Rulebooks', icon: BookOpen, end: true },
   ];
   // Account and club links (teams, dec forms, signups, shop, sign out) live on the profile page now.
   const accountLinks = [
-    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: !!user },
     { to: '/me#site-admin', label: 'Site admin', icon: Settings, show: hasRole('Admin') },
   ].filter((item) => item.show);
   const selectedSection = location.pathname === `${base}/scoring` ? new URLSearchParams(location.search).get('section') : null;
@@ -128,7 +123,6 @@ export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = fa
               <NavLink key={item.label} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => itemClass(isActive && current !== null)}>
                 {({ isActive }) => <>
                   <item.icon className={iconClass(isActive && current !== null)} />{item.label}
-                  {item.badge && <span className="mg-badge mg-badge-live ml-auto !h-5">Live</span>}
                 </>}
               </NavLink>
             ))}

@@ -1,4 +1,4 @@
-/* Season, round and team-history screens. Built on the shared refinement blocks in ../refine/refine.css. */
+/* Season, round and team-history screens. Unified with the mg-* scoreboard and timetable design tokens. */
 .sv-fieldset { border: 0; margin: 0; min-width: 0; }
 .sv-body { display: flex; flex-direction: column; gap: 12px; padding: 4px 16px 16px; background: rgb(var(--mg-surface)); }
 .sv-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -13,22 +13,22 @@
 
 /* Standings and history tables */
 .sv-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 0; }
-.sv-table .sv-pos { width: 44px; }
+.sv-table .sv-pos { width: 44px; font: 700 18px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 .sv-table .sv-mid { text-align: center; }
 .sv-table td.sv-mid { color: rgb(var(--mg-muted)); font-variant-numeric: tabular-nums; }
 .sv-table td.sv-end { text-align: right; }
-.sv-table .rf-num { font-size: 20px; }
-.sv-club { display: block; font-size: 12px; font-weight: 400; color: rgb(var(--mg-muted)); margin-top: -8px; padding-bottom: 6px; }
+.sv-table .rf-num { font: 700 20px/1 var(--mg-font-display); }
+.sv-club { display: block; font: 400 12px/1.2 var(--mg-font); color: rgb(var(--mg-muted)); margin-top: -8px; padding-bottom: 6px; }
 .sv-struck { text-decoration: line-through; color: rgb(var(--mg-muted)); font-weight: 600; font-variant-numeric: tabular-nums; }
 .sv-dim { color: rgb(var(--mg-muted)); }
 .rf-table.sv-hist td { padding-block: 6px; height: auto; min-height: 48px; }
 .sv-hist .rf-t1 { font-weight: 600; }
 
 /* Round rows */
-.sv-rn { min-width: 34px; }
+.sv-rn { min-width: 34px; font: 700 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 .sv-rn-dim { color: rgb(var(--mg-muted)); }
 .sv-round-detail { display: flex; flex-direction: column; gap: 12px; padding: 4px 16px 16px; background: rgb(var(--mg-surface)); }
-.sv-round-detail .rf-table-wrap { margin-inline: -16px; }
+.sv-round-detail .rf-table-wrap { margin-inline: -16px; border-inline: 0; border-radius: 0; box-shadow: none; }
 .sv-round-detail a.sv-link { color: rgb(var(--mg-heading)); font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; }
 .sv-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sv-versions > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; color: rgb(var(--mg-heading)); }
@@ -37,14 +37,14 @@
 .sv-versions-pick .rf-fld { width: 96px; }
 .sv-add { display: flex; flex-direction: column; gap: 12px; padding: 12px 0; }
 .sv-empty { padding: 24px 0; color: rgb(var(--mg-muted)); }
-.sv-empty h2 { margin: 0 0 4px; font: 700 20px/1.1 'Barlow Condensed', sans-serif; color: rgb(var(--mg-heading)); }
+.sv-empty h2 { margin: 0 0 4px; font: 700 20px/1.1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 .sv-empty p { margin: 0; }
 .sv-msg { margin: 12px 0 0; }
 .sv-star[aria-pressed="true"] svg { fill: currentColor; }
 .sv-stack { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
-.rf-table th.sv-rowhead { text-align: left; font-size: 15px; font-weight: 600; text-transform: none; letter-spacing: 0; color: inherit; border-bottom: 1px solid rgb(var(--mg-rule-soft)); padding: 0 6px; }
+.rf-table th.sv-rowhead { text-align: left; font: 600 15px/1.25 var(--mg-font); text-transform: none; letter-spacing: 0; color: inherit; border-bottom: 1px solid rgb(var(--mg-rule-soft)); padding: 0 6px; }
 .sv-gap { margin-top: 12px; }
 .sv-place { width: 56px; }
 .sv-prev > .rf-row { border-top: 1px solid rgb(var(--mg-rule-soft)); }
-.sv-hist td.rf-num { font-size: 20px; }
+.sv-hist td.rf-num { font: 700 20px/1 var(--mg-font-display); }
 .sv-hist .sv-dim { font-variant-numeric: tabular-nums; }

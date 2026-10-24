@@ -9,7 +9,6 @@ import { competition, team } from '../test/factories';
 import type { DeclarationForm, ShopPost } from '../types';
 import { CompetitionContext } from './competition/context';
 import { TeamsTab } from './competition/TeamsTab';
-import { DashboardPage } from './DashboardPage';
 import { DeclarationsIndexPage } from './DeclarationsIndexPage';
 import { FormatPage } from './admin/FormatPage';
 import { ShopPage } from './ShopPage';
@@ -52,30 +51,6 @@ beforeEach(() => {
   hoisted.user = null;
   hoisted.roles = [];
   serve(() => []);
-});
-
-describe('DashboardPage', () => {
-  it('names the focused competition once it has loaded', async () => {
-    setCurrent({ id: 7, name: 'Summer Show' });
-    serve((url) => (url === '/competitions/7' ? competition({ id: 7, name: 'Summer Show' }) : []));
-    render(<MemoryRouter><DashboardPage /></MemoryRouter>);
-    expect(await screen.findByRole('link', { name: 'Open Summer Show' })).toBeInTheDocument();
-  });
-
-  it('shows no event band when there is no competition to focus on', async () => {
-    render(<MemoryRouter><DashboardPage /></MemoryRouter>);
-    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/competitions/picker', expect.anything()));
-    expect(screen.queryByRole('link', { name: /^Open / })).not.toBeInTheDocument();
-    expect(api.get).not.toHaveBeenCalledWith(expect.stringMatching(/^\/competitions\/\d+$/));
-  });
-
-  it('forgets the detail when the focused competition cannot be loaded', async () => {
-    setCurrent({ id: 9, name: 'Winter Show' });
-    serve((url) => { if (url === '/competitions/9') throw new Error('gone'); return []; });
-    render(<MemoryRouter><DashboardPage /></MemoryRouter>);
-    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/competitions/9'));
-    expect(screen.queryByRole('link', { name: 'Open Winter Show' })).not.toBeInTheDocument();
-  });
 });
 
 describe('DeclarationsIndexPage', () => {

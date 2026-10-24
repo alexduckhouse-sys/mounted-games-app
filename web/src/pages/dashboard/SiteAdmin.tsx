@@ -105,7 +105,12 @@ export function SiteAdmin() {
 
   function menuFor(c: CompetitionSummary): MenuItem[] {
     return [
+      { label: 'Open competition', onSelect: () => navigate(`/competitions/${c.id}`) },
       { label: 'Edit details', onSelect: () => navigate(`/admin/competitions/${c.id}`) },
+      { label: 'On the day & format', onSelect: () => navigate(`/admin/competitions/${c.id}/format`) },
+      { label: 'Operations & tools', onSelect: () => navigate(`/competitions/${c.id}/operations`) },
+      { label: 'Dec forms', onSelect: () => navigate(`/competitions/${c.id}/declarations`) },
+      { label: 'Manage event shop', onSelect: () => navigate(`/competitions/${c.id}/shop/manage`) },
       { label: 'Lock signups', onSelect: () => void setLocked(c, true) },
       { label: 'Open signups again', onSelect: () => void setLocked(c, false) },
       ...(canEdit() ? [{ label: 'Delete competition', onSelect: () => void deleteComp(c), danger: true }] : []),
@@ -133,7 +138,7 @@ export function SiteAdmin() {
               return (
                 <li key={c.id} className={`${ROW_GRID} min-h-[68px] grid-cols-[minmax(0,1fr)_auto] gap-y-2 py-2 pl-4 pr-3 ${i ? 'border-t border-[rgb(var(--mg-rule-soft))]' : ''}`}>
                   <span className="flex min-w-0 flex-col gap-[3px] max-sm:col-span-2">
-                    <strong className="truncate text-base font-semibold">{c.name}</strong>
+                    <Link to={`/competitions/${c.id}`} className="truncate text-base font-semibold !text-[rgb(var(--mg-ink))] hover:underline">{c.name}</Link>
                     <span className="truncate text-[13px] text-[rgb(var(--mg-muted))]">{[competitionDateText(c.startDate, c.endDate), c.location].filter(Boolean).join(' · ')}</span>
                   </span>
                   <span className={`justify-self-start whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold ${STAGE_CLASS[stage]}`}>{STAGE_LABEL[stage]}</span>

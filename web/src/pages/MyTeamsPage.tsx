@@ -12,6 +12,7 @@ import { displaySectionName } from '../lib/section';
 import type { DeclarationForm, Team } from '../types';
 import { TrainerRequestsSection } from './admin/TrainerRequestsSection';
 import { CodeRow, JoinTeamCard, ManageTeamBlock, SupportersBlock } from './MyTeamParts';
+import { FollowingTeamsSection } from './FollowingPage';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -137,6 +138,11 @@ export function MyTeamsPage() {
       )}
 
       {hasRole('Manager') && <TrainerRequestsSection />}
+
+      <div className="mt-2 flex flex-col gap-2.5 lg:col-span-2">
+        <h2 className="mg-display text-lg font-bold text-[rgb(var(--mg-heading))]">Following</h2>
+        <FollowingTeamsSection />
+      </div>
     </div>
   );
 }

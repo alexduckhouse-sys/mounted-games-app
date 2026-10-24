@@ -1,5 +1,11 @@
 import { CompetitionPicker } from '../competition/CompetitionPicker';
+import { ResultsStatsNav } from '../components/ResultsStatsNav';
 
 export function CompetitionsPage({ past = false }: { past?: boolean }) {
-  return <CompetitionPicker past={past} />;
+  return (
+    <>
+      {past && <ResultsStatsNav />}
+      <CompetitionPicker past={past} />
+    </>
+  );
 }

@@ -4,6 +4,8 @@
 
 :root {
   color-scheme: light dark;
+  --mg-font: 'Barlow', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mg-font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, -apple-system, sans-serif;
 }
 
 /* Brand palette as RGB channels (see tailwind.config.js). EGUK navy is the default. */
@@ -39,63 +41,60 @@ html, body, #root {
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: var(--mg-font);
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  background: linear-gradient(180deg, #eef2fa 0%, #dfe6f3 100%);
-  color: #0b1220;
+  background: rgb(var(--mg-ground, 247 247 247));
+  color: rgb(var(--mg-ink, 33 33 33));
   min-height: 100vh;
-}
-
-[data-theme="light"] body {
-  background: linear-gradient(180deg, #f1f7f4 0%, #e9eef5 100%);
-}
-
-[data-theme="dark"] body {
-  background: linear-gradient(180deg, #0b1d18 0%, #0f172a 100%);
-  color: #f1f5f9;
-}
-
-[data-theme="ocean"] body {
-  background: linear-gradient(180deg, #e0f2fe 0%, #bae6fd 100%);
-  color: #0c4a6e;
-}
-
-[data-theme="sunset"] body {
-  background: linear-gradient(180deg, #fff7ed 0%, #fed7aa 100%);
-  color: #7c2d12;
 }
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-3 font-semibold rounded-xl shadow-soft
-      transition-all duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2
+    @apply inline-flex items-center justify-center gap-2 px-4 py-3 font-semibold rounded-[10px]
+      transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2
       focus-visible:ring-offset-2 focus-visible:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed;
+    font-family: var(--mg-font);
   }
-  .btn-primary { @apply btn bg-brand-600 text-white hover:bg-brand-700; }
-  .btn-ghost   { @apply btn bg-white/70 text-brand-700 hover:bg-white border border-brand-100; }
-  .btn-danger  { @apply btn bg-rose-600 text-white hover:bg-rose-700; }
-  .btn-lg      { @apply px-6 py-4 text-lg rounded-2xl; }
+  .btn-primary {
+    @apply btn text-white;
+    background: rgb(var(--mg-button, 23 56 95));
+    border: 1.5px solid rgb(var(--mg-button, 23 56 95));
+  }
+  .btn-ghost {
+    @apply btn;
+    background: rgb(var(--mg-surface, 255 255 255));
+    color: rgb(var(--mg-heading, 23 56 95));
+    border: 1.5px solid rgb(var(--mg-control, 196 201 209));
+  }
+  .btn-danger {
+    @apply btn text-white;
+    background: rgb(var(--mg-elim, 200 32 47));
+    border: 1.5px solid rgb(var(--mg-elim, 200 32 47));
+  }
+  .btn-lg { @apply px-6 py-4 text-lg rounded-xl; }
 
   .card {
-    @apply bg-white/85 backdrop-blur rounded-2xl shadow-card border border-slate-100;
-  }
-  [data-theme="dark"] .card {
-    @apply bg-slate-900/70 border-slate-800;
+    background: rgb(var(--mg-surface, 255 255 255));
+    border: 1px solid rgb(var(--mg-rule, 218 218 218));
+    border-radius: var(--mg-radius-card, 12px);
+    box-shadow: var(--mg-shadow-sm, 0 1px 2px rgb(15 42 74 / 0.06));
   }
 
   .pill {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold;
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold;
+    font-family: var(--mg-font);
   }
 
   .input {
-    @apply w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent;
-  }
-  [data-theme="dark"] .input {
-    @apply bg-slate-800 border-slate-600 text-slate-50 placeholder:text-slate-400;
+    @apply w-full px-3 py-2 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-brand-400;
+    border: 1.5px solid rgb(var(--mg-control, 196 201 209));
+    background: rgb(var(--mg-surface, 255 255 255));
+    color: rgb(var(--mg-ink, 33 33 33));
+    font-family: var(--mg-font);
   }
 }
 

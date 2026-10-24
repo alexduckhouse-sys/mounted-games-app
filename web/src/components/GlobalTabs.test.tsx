@@ -13,7 +13,7 @@ describe('GlobalTabs', () => {
     render(<MemoryRouter initialEntries={['/']}><GlobalTabs /></MemoryRouter>);
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
     expect(screen.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
-      ['Events', '/events'], ['Following', '/following'], ['Me', '/dashboard'],
+      ['Events', '/events'], ['Following', '/following'], ['Me', '/me'],
     ]);
   });
 

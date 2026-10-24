@@ -371,6 +371,7 @@ export function SessionPage() {
               notes={summaryNotes}
               nextLanes={nextLanes}
               laneHatbands={competition.laneHatbands}
+              onRefresh={reload}
               correctionReason={activeRace ? correctionReasons[activeRace.id] ?? '' : ''}
               onCorrectionReason={(reason) => { if (activeRace) setCorrectionReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
             />
