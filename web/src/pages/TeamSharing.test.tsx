@@ -21,6 +21,7 @@ describe('JoinQr', () => {
   it('draws a code for the join link, and nothing when the team has no key', () => {
     const { container, rerender } = render(<JoinQr team={{ displayName: 'Cheshire A', supporterJoinKey: 'ABCD2345' }} />);
     expect(screen.getByRole('img', { name: 'QR code to join Cheshire A' })).toBeInTheDocument();
+    expect(screen.getByText(/Supporters and parents can scan this to join Cheshire A/i)).toBeInTheDocument();
     expect(screen.getByText(/You still approve them|you still approve them/i)).toBeInTheDocument();
     rerender(<JoinQr team={{ displayName: 'Cheshire A', supporterJoinKey: null }} />);
     expect(container).toBeEmptyDOMElement();

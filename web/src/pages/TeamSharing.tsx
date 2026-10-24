@@ -17,7 +17,7 @@ export function JoinQr({ team }: { team: Pick<Team, 'displayName' | 'supporterJo
         className="w-28 shrink-0 rounded-md border border-slate-200"
       />
       <p className="text-[11px] text-slate-500 dark:text-slate-300">
-        Supporters can scan this to join {team.displayName}. They’ll need to sign in first, and you still approve them.
+        Supporters and parents can scan this to join {team.displayName}. They’ll need to sign in first, and you still approve them.
       </p>
     </div>
   );
