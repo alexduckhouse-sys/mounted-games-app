@@ -198,8 +198,10 @@ describe('SeasonsPage', () => {
     expect(years[1]).toMatch(/^2025/);
     expect(screen.queryByRole('link', { name: /Create season/ })).not.toBeInTheDocument();
   });
-  it('opens the create form from the header action and cancels back to the list', async () => {
-    mountList(true);
+  it('opens the create form from the header action even when admin edit mode is off, and cancels back to the list', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [other, season] });
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u' }, canOrganise: () => true, hasRole: (r: string) => r === 'Admin', canEdit: () => false } as unknown as ReturnType<typeof useAuth>);
+    render(<MemoryRouter initialEntries={['/seasons']}><Routes><Route path="/seasons" element={<SeasonsPage />} /><Route path="/seasons/:seasonId" element={<p>Season page</p>} /></Routes></MemoryRouter>);
     await userEvent.click(await screen.findByRole('link', { name: 'Create season' }));
     expect(screen.getByRole('heading', { name: 'Create a season' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));

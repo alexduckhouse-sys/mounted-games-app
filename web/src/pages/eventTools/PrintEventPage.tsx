@@ -84,7 +84,20 @@ function PrintView({ competitionId, view }: { competitionId: string; view: View 
 
 function Draw({ data }: { data: PrintableDraw }) {
   if (data.sessions.length === 0) return <p className="event-print-empty">No draw has been set up yet.</p>;
-  return <>{data.sessions.map((session) => <section key={session.sessionId} className="event-print-section"><h2>{session.sectionName || 'Open section'} · {session.sessionName}</h2>{session.arenaName && <p className="event-print-note">Arena: {session.arenaName}</p>}{session.heats.map((heat) => <div key={heat.heatId} className="event-print-block"><h3>{heat.label} <span>{time(heat.scheduledStart)}</span></h3><div className="event-print-table-wrap"><table><thead><tr><th>Lane</th><th>Team</th><th>Club</th><th>Races</th></tr></thead><tbody>{heat.teams.map((team, index) => <tr key={team.teamId}><td>{team.lane}</td><td>{team.teamName}</td><td>{team.clubName}</td>{index === 0 && <td rowSpan={Math.max(heat.teams.length, 1)}>{heat.races.map((race) => race.name).join(', ') || 'No races added'}</td>}</tr>)}</tbody></table></div></div>)}</section>)}</>;
+  return <>{data.sessions.map((session) => <section key={session.sessionId} className="event-print-section">
+    <h2>{session.sectionName || 'Open section'} · {session.sessionName}</h2>
+    {session.arenaName && <p className="event-print-note">Arena: {session.arenaName}</p>}
+    {session.heats.map((heat) => {
+      const teams = heat.teams.slice().sort((a, b) => (a.lane ?? 0) - (b.lane ?? 0));
+      return <div key={heat.heatId} className="event-print-block">
+        <h3>{heat.label} <span>{time(heat.scheduledStart)}</span></h3>
+        <div className="event-print-table-wrap"><table>
+          <thead><tr><th>Lane</th><th>Team</th><th>Club</th>{heat.races.map((race, index) => <th key={race.raceId} className="event-print-cell">{index + 1}. {race.name}</th>)}<th className="event-print-cell">Total</th></tr></thead>
+          <tbody>{teams.map((team) => <tr key={team.teamId}><td>{team.lane}</td><td>{team.teamName}</td><td>{team.clubName}</td>{heat.races.map((race) => <td key={race.raceId} className="event-print-cell" />)}<td className="event-print-cell" /></tr>)}</tbody>
+        </table></div>
+      </div>;
+    })}
+  </section>)}</>;
 }
 
 /** A recorded result as it is written on the sheet: points, E, DNS, DNF or R for a team that did not finish, "S" for a sit-out, nothing if the race isn't scored. */

@@ -39,7 +39,7 @@ export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = fa
     setShowWeather(next);
     try { if (next) localStorage.setItem(WEATHER_KEY, '1'); else localStorage.removeItem(WEATHER_KEY); } catch { /* storage blocked */ }
   }
-  // The Seasons link only shows for a competition that counts towards a season.
+  // The Seasons link goes straight to the season when the followed competition is in one, or the season list otherwise.
   const [seasonLinks, setSeasonLinks] = useState<{ competitionId: number; seasons: { id: string }[] } | null>(null);
   const currentId = current?.id ?? null;
   useEffect(() => {
@@ -50,8 +50,8 @@ export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = fa
       .catch(() => { if (!cancelled) setSeasonLinks({ competitionId: currentId, seasons: [] }); });
     return () => { cancelled = true; };
   }, [currentId]);
-  const seasons = currentId == null ? null : seasonLinks?.competitionId === currentId ? seasonLinks.seasons : [];
-  const seasonsTo = seasons && seasons.length === 1 ? `/seasons/${seasons[0].id}` : '/seasons';
+  const seasons = currentId != null && seasonLinks?.competitionId === currentId ? seasonLinks.seasons : [];
+  const seasonsTo = seasons.length === 1 ? `/seasons/${seasons[0].id}` : '/seasons';
   useEffect(() => {
     const dialog = ref.current;
     const overflow = document.body.style.overflow;
@@ -138,7 +138,7 @@ export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = fa
 
           <div className="flex flex-col">
             <NavLink to="/events" end onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ArrowLeftRight className={iconClass(isActive)} />Change competition</>}</NavLink>
-            {(seasons === null || seasons.length > 0) && <NavLink to={seasonsTo} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>}
+            <NavLink to={seasonsTo} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>
             <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
             <NavLink to="/stats" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><BarChart3 className={iconClass(isActive)} />Rider and team stats</>}</NavLink>
             <button onClick={() => setSettingsOpen((v) => !v)} className={itemClass(settingsOpen)} aria-expanded={settingsOpen}><SlidersHorizontal className={iconClass(settingsOpen)} />Settings</button>

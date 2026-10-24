@@ -392,26 +392,26 @@ describe('NavigationDrawer: the Seasons link', () => {
   it('shows for a competition in one season and goes straight to it', async () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/seasons/for-competition/4' ? [{ id: 'abc' }] : {} }));
     mount({ competition: true });
-    expect(await screen.findByRole('link', { name: 'Seasons' })).toHaveAttribute('href', '/seasons/abc');
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Seasons' })).toHaveAttribute('href', '/seasons/abc'));
   });
 
   it('goes to the season list when the competition is in several', async () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/seasons/for-competition/4' ? [{ id: 'abc' }, { id: 'def' }] : {} }));
     mount({ competition: true });
-    expect(await screen.findByRole('link', { name: 'Seasons' })).toHaveAttribute('href', '/seasons');
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Seasons' })).toHaveAttribute('href', '/seasons'));
   });
 
-  it('is hidden when the competition is not in a season, or the lookup fails', async () => {
+  it('stays visible and links to the season list when the competition is not in a season, or the lookup fails', async () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/seasons/for-competition/4' ? [] : {} }));
     const first = mount({ competition: true });
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/seasons/for-competition/4'));
-    expect(seasonLink()).toBeNull();
+    expect(seasonLink()).toHaveAttribute('href', '/seasons');
     first.unmount();
     vi.mocked(api.get).mockImplementation(async (url: string) => { if (url.startsWith('/seasons/')) throw new Error('offline'); return { data: {} }; });
     mount({ competition: true });
     await waitFor(() => expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === '/seasons/for-competition/4')).toHaveLength(2));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(seasonLink()).toBeNull();
+    expect(seasonLink()).toHaveAttribute('href', '/seasons');
   });
 
   it('stays available before a competition is chosen', () => {

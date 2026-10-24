@@ -4,8 +4,9 @@ import { motion } from 'framer-motion';
 import { CheckCircle2, ArrowRight, Coffee, X, Users, Phone } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import type { CompetitionDetail, DeclarationForm, Session } from '../../types';
+import type { CompetitionDetail, DeclarationForm, Heat, Session } from '../../types';
 import { displaySectionName } from '../../lib/section';
+import { ordinal } from '../../lib/toplist';
 
 interface Props {
   competition: CompetitionDetail;
@@ -29,10 +30,67 @@ function bibSwatch(name?: string | null): string {
   }
 }
 
+function isFinalHeat(session: Session, heat: Heat): boolean {
+  const s = session as Session & { isFinal?: boolean };
+  const h = heat as Heat & { isFinal?: boolean };
+  return (
+    s.isFinal === true ||
+    h.isFinal === true ||
+    heat.raceRoundStage === 2 ||
+    /\bfinals?\b/i.test(heat.label ?? '') ||
+    /\bfinals?\b/i.test(session.name)
+  );
+}
+
+function isCompletedFinalHeat(session: Session, heat: Heat): boolean {
+  if (!isFinalHeat(session, heat)) return false;
+  return (
+    !!heat.finishedAt ||
+    heat.races.some((r) => r.results.length > 0) ||
+    (heat.races.length > 0 && heat.races.every((r) => r.isComplete))
+  );
+}
+
+function buildPrizeGivingOrder(heat: Heat) {
+  const teamMap = new Map<number, { teamId: number; teamName: string; points: number; laneIndex: number }>();
+  for (const entry of heat.entries) {
+    teamMap.set(entry.teamId, {
+      teamId: entry.teamId,
+      teamName: entry.teamName,
+      points: 0,
+      laneIndex: entry.laneIndex,
+    });
+  }
+  for (const race of heat.races) {
+    for (const res of race.results) {
+      const existing = teamMap.get(res.teamId);
+      if (existing) {
+        existing.points += res.points;
+        if (!existing.teamName && res.teamName) existing.teamName = res.teamName;
+      } else {
+        teamMap.set(res.teamId, {
+          teamId: res.teamId,
+          teamName: res.teamName,
+          points: res.points,
+          laneIndex: Number.MAX_SAFE_INTEGER,
+        });
+      }
+    }
+  }
+  const firstToLast = [...teamMap.values()].sort(
+    (a, b) => b.points - a.points || a.laneIndex - b.laneIndex || a.teamName.localeCompare(b.teamName),
+  );
+  const withPlaces = firstToLast.map((item) => ({
+    ...item,
+    place: firstToLast.findIndex((other) => other.points === item.points) + 1,
+  }));
+  return [...withPlaces].reverse();
+}
+
 export function SessionEndTransition({ competition, finishedSession, onClose, onAdvanced }: Props) {
   const nav = useNavigate();
   const { canManage } = useAuth();
-  const [forms, setForms] = useState<DeclarationForm[]>([]);
+  const [allForms, setAllForms] = useState<DeclarationForm[]>([]);
   const [busy, setBusy] = useState(false);
 
   // Arenas run side by side, so finishing a session moves on within its own arena only.
@@ -44,17 +102,24 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
   const next = laterInArena[0] ?? null;
   const nextRealSession = laterInArena.find((s) => !s.isBreak) ?? null;
 
+  const completedFinalHeats = [...finishedSession.heats]
+    .filter((h) => isCompletedFinalHeat(finishedSession, h))
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+  const hasFinalHeats = completedFinalHeats.length > 0;
+
   const nextRealSessionId = nextRealSession?.id;
   const nextRealSectionId = nextRealSession?.competitionSectionId;
   useEffect(() => {
-    if (nextRealSessionId == null) return;
-    const teamIds = competition.teams
-      .filter((t) => nextRealSectionId == null || t.competitionSectionId === nextRealSectionId)
-      .map((t) => t.id);
+    if (nextRealSessionId == null && !hasFinalHeats) return;
     api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id } })
-      .then((r) => setForms(r.data.filter((f) => teamIds.includes(f.teamId))))
-      .catch(() => setForms([]));
-  }, [competition.id, competition.teams, nextRealSessionId, nextRealSectionId]);
+      .then((r) => setAllForms(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setAllForms([]));
+  }, [competition.id, nextRealSessionId, hasFinalHeats]);
+
+  const nextSessionTeamIds = competition.teams
+    .filter((t) => nextRealSectionId == null || t.competitionSectionId === nextRealSectionId)
+    .map((t) => t.id);
+  const forms = allForms.filter((f) => nextSessionTeamIds.includes(f.teamId));
 
   async function markFinished(session: Session) {
     await api.put(`/competitions/${competition.id}/sessions/${session.id}/status`, { status: 2 });
@@ -109,6 +174,82 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
         </div>
 
         <div className="p-4 space-y-4">
+          {completedFinalHeats.length > 0 && (
+            <div className="space-y-3" aria-label="Prize giving">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                <Trophy className="w-4 h-4" /> Prize Giving (Last to First)
+              </h3>
+              {completedFinalHeats.map((heat) => {
+                const finalLabel = /\bfinals?\b/i.test(heat.label?.trim() ?? '')
+                  ? heat.label!.trim()
+                  : [finishedSession.name, heat.label?.trim()].filter(Boolean).join(' · ');
+                const rows = buildPrizeGivingOrder(heat);
+                return (
+                  <section
+                    key={heat.id}
+                    aria-label={finalLabel}
+                    className="rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-950/20 p-3 space-y-2"
+                  >
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">{finalLabel}</h4>
+                    <ol className="space-y-2">
+                      {rows.map((row) => {
+                        const team = competition.teams.find((t) => t.id === row.teamId);
+                        const form = allForms.find((f) => f.teamId === row.teamId);
+                        const teamName = team?.displayName || row.teamName;
+                        const clubName = team?.clubName?.trim() || null;
+                        const trainerName =
+                          form?.trainerName?.trim() ||
+                          team?.trainerName?.trim() ||
+                          form?.submittedByName?.trim() ||
+                          null;
+                        return (
+                          <li
+                            key={row.teamId}
+                            className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-1"
+                          >
+                            <div className="flex items-baseline justify-between gap-2">
+                              <div className="flex items-baseline gap-2 min-w-0">
+                                <span className="font-bold text-sm text-amber-600 dark:text-amber-400 shrink-0">
+                                  {ordinal(row.place)}
+                                </span>
+                                <span className="font-semibold text-sm text-slate-900 dark:text-slate-50 truncate">
+                                  {teamName}
+                                </span>
+                                {clubName && (
+                                  <span className="text-xs text-slate-500 dark:text-slate-300 truncate">
+                                    {clubName}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-bold text-xs text-slate-700 dark:text-slate-200 shrink-0">
+                                {row.points} pts
+                              </span>
+                            </div>
+                            {trainerName && (
+                              <p className="text-xs text-slate-600 dark:text-slate-300">
+                                Trained by {trainerName}
+                              </p>
+                            )}
+                            {form && form.riders.length > 0 && (
+                              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1 pt-0.5">
+                                {form.riders.map((r) => (
+                                  <li key={r.id} className="text-xs text-slate-700 dark:text-slate-200">
+                                    {r.fullName}
+                                    {r.horseName?.trim() ? ` — ${r.horseName.trim()}` : ''}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+
           {!next ? (
             <div className="text-center py-6">
               <Trophy className="w-10 h-10 mx-auto text-amber-500 mb-2" />
