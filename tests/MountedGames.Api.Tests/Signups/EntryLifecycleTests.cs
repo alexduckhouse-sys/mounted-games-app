@@ -199,7 +199,7 @@ public class EntryLifecycleTests : IClassFixture<ApiFactory>
         var teamId = await _f.InDbAsync(async db =>
         {
             var team = new Team { CompetitionId = section.CompetitionId, CompetitionSectionId = section.Id,
-                Club = new Club { Name = "Synthetic Unrelated Club" }, DisplayName = "Synthetic Unrelated Team", SupporterJoinKey = "synthetic-public-code" };
+                Club = new Club { Name = $"Synthetic Unrelated Club {hasDeclaration}" }, DisplayName = "Synthetic Unrelated Team", SupporterJoinKey = "synthetic-public-code" };
             db.Add(team); await db.SaveChangesAsync();
             if (hasDeclaration) { db.Add(new DeclarationForm { TeamId = team.Id }); await db.SaveChangesAsync(); }
             return team.Id;
