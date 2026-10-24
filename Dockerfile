@@ -4,7 +4,7 @@
 # and falls back to index.html so the React Router handles client routes.
 
 # ---- Frontend build ---------------------------------------------------------
-FROM node:20-alpine AS web-build
+FROM node:24.22.1-alpine AS web-build
 WORKDIR /src
 COPY web/package*.json ./
 RUN npm ci --no-audit --no-fund
