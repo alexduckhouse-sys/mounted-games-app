@@ -43,6 +43,14 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<SpecialAward> SpecialAwards => Set<SpecialAward>();
     public DbSet<FinalsTieOrder> FinalsTieOrders => Set<FinalsTieOrder>();
 
+    private static string? StoredUtcTime(DateTime? value) => value is null ? null
+        : (value.Value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+            : value.Value.ToUniversalTime()).ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static DateTime? ReadUtcTime(string? value) => value is null ? null
+        : DateTime.Parse(value, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal);
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
@@ -99,6 +107,59 @@ public class AppDbContext : IdentityDbContext<AppUser>
             b.Entity<RiderEntry>().Property(r => r.DateOfBirth)
                 .HasColumnType("timestamp without time zone").HasConversion(new CalendarDateTimeConverter());
         }
+
+        // These tables may already contain rows written by the original feature branches.
+        // Keep their integer flags and ISO text timestamps so adoption does not rewrite data.
+        b.Entity<SignupMatchmaking>(e =>
+        {
+            e.ToTable("SignupMatchmaking");
+            e.HasKey(x => x.SignupId);
+            e.Property(x => x.SignupId).ValueGeneratedNever();
+            e.Property(x => x.LookingForPair).HasConversion<int>().HasDefaultValue(false);
+            e.Property(x => x.LookingForGuestRiders).HasConversion<int>().HasDefaultValue(false);
+            e.Property(x => x.WaitingForGuestSpot).HasConversion<int>().HasDefaultValue(false);
+            e.HasOne<SectionSignup>().WithOne().HasForeignKey<SignupMatchmaking>(x => x.SignupId)
+                .HasConstraintName("FK_SignupMatchmaking_Signup").OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<SectionSignup>().WithMany().HasForeignKey(x => x.PairRequestFromSignupId)
+                .HasConstraintName("FK_SignupMatchmaking_PairFrom").OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<SectionSignup>().WithMany().HasForeignKey(x => x.PairRequestToSignupId)
+                .HasConstraintName("FK_SignupMatchmaking_PairTo").OnDelete(DeleteBehavior.SetNull);
+        });
+        b.Entity<SignupExtras>(e =>
+        {
+            e.ToTable("SignupExtras");
+            e.HasKey(x => x.SignupId);
+            e.Property(x => x.SignupId).ValueGeneratedNever();
+            e.Property(x => x.StablesCount).HasDefaultValue(0);
+            e.Property(x => x.TeamsCount).HasDefaultValue(1);
+            e.Property(x => x.IsWaitlist).HasConversion<int>().HasDefaultValue(false);
+            e.Property(x => x.IsWithdrawn).HasConversion<int>().HasDefaultValue(false);
+            e.Property(x => x.RefundPending).HasConversion<int>().HasDefaultValue(false);
+            e.HasOne<SectionSignup>().WithOne().HasForeignKey<SignupExtras>(x => x.SignupId)
+                .HasConstraintName("FK_SignupExtras_Signup").OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<CompetitionEntrySettings>(e =>
+        {
+            e.ToTable("CompetitionEntrySettings");
+            e.HasKey(x => x.CompetitionId);
+            e.Property(x => x.CompetitionId).ValueGeneratedNever();
+            e.Property(x => x.EntriesCloseAt).HasColumnType("text").HasConversion(
+                value => StoredUtcTime(value), value => ReadUtcTime(value));
+            e.HasOne<Competition>().WithOne().HasForeignKey<CompetitionEntrySettings>(x => x.CompetitionId)
+                .HasConstraintName("FK_CompetitionEntrySettings_Competition").OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<CompetitionDeclarationLock>(e =>
+        {
+            e.ToTable("CompetitionDeclarationLocks");
+            e.HasKey(x => x.CompetitionId);
+            e.Property(x => x.CompetitionId).ValueGeneratedNever();
+            e.Property(x => x.DeclarationsCloseAt).HasColumnType("text").HasConversion(
+                value => StoredUtcTime(value), value => ReadUtcTime(value));
+            e.HasOne<Competition>().WithOne().HasForeignKey<CompetitionDeclarationLock>(x => x.CompetitionId)
+                .HasConstraintName("FK_CompetitionDeclarationLocks_Competition").OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<MountedGames.Api.Entities.Seasons.SeasonRound>()
+            .Property(x => x.PointsMultiplier).HasDefaultValue(1.0);
 
         b.Entity<AppUser>(e =>
         {
