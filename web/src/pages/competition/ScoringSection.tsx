@@ -10,6 +10,7 @@ import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import { EliminationSheet, HcConfirm, HeatGrid, LaneView, NextLanesCard, RaceRules, ScoreRow, SummaryCard } from './ScoringParts';
 import { HeatPrintSheet } from './HeatPrintSheet';
+import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
 import './scoring.css';
 
 export type { PendingPlace } from '../../lib/raceScoring';
@@ -48,6 +49,8 @@ interface ScoringProps {
   nextLanes?: NextLanes | null;
   /** Hatband colour per lane (lane 1 first), when the competition sets them. */
   laneHatbands?: string[] | null;
+  /** Reload the competition after a score correction is saved in the audit panel. */
+  onRefresh?: () => void;
 }
 
 const NO_TEAMS: ReadonlySet<number> = new Set();
@@ -55,11 +58,12 @@ const NO_TEAMS: ReadonlySet<number> = new Set();
 export function ScoringSection({
   heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued,
   onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason,
-  onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null,
+  onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
 }: ScoringProps) {
   const [sheet, setSheet] = useState(false);
   const [hcFor, setHcFor] = useState<{ teamId: number; name: string; isHc: boolean } | null>(null);
   const [hcBusy, setHcBusy] = useState(false);
+  const [auditRaceId, setAuditRaceId] = useState<number | null>(null);
   const pendingByTeam = new Map(pending.map((p) => [p.teamId, p]));
   const queuedByRace = new Map(queued.map((q) => [q.raceId, q]));
   const activeQueued = activeRace ? queuedByRace.get(activeRace.id) : undefined;
@@ -168,9 +172,27 @@ export function ScoringSection({
                 </div>
               </section>
             );
+            const auditOpen = auditRaceId === race.id;
             return (
               <div key={race.id} className="contents">
                 {card}
+                {canScore && race.isComplete && (
+                  <div className="sc-card sc-pad">
+                    <button
+                      type="button"
+                      className="mg-btn mg-btn-secondary text-xs"
+                      aria-expanded={auditOpen}
+                      onClick={() => setAuditRaceId(auditOpen ? null : race.id)}
+                    >
+                      Score history &amp; correction
+                    </button>
+                    {auditOpen && (
+                      <div className="mt-3">
+                        <ScoreAuditPanel raceId={race.id} onChanged={onRefresh} />
+                      </div>
+                    )}
+                  </div>
+                )}
                 {summary && i === summaryIdx && <SummaryCard summary={summary} raceNumber={i + 1} />}
               </div>
             );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PageGrid } from '../../components/PageGrid';
+import { ResultsStatsNav } from '../../components/ResultsStatsNav';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { Search } from 'lucide-react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
@@ -77,6 +78,7 @@ function StatsBrowseView() {
   );
 
   return <RefinePage wide>
+    <ResultsStatsNav />
     <RefineHeader context="Across every competition" title="Rider and team stats" subtitle="Browse riders, ponies, teams and clubs, or search by name."
       tabs={desktop ? undefined : STATS_TABS.map((entry) => ({ label: entry.label, active: entry.kind === kind, onSelect: () => remember(entry.kind, text) }))}
       tabsKind="tablist" tabsLabel="Browse by" />

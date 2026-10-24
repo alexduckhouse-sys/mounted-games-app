@@ -3,6 +3,7 @@ import { ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
+import { RaceRulesLibrary } from '../admin/RulesPage';
 import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineStatus } from '../refine/Refine';
 import type { Rulebook, RulebookSummary } from './types';
 import { apiMessage } from './types';
@@ -18,6 +19,7 @@ interface RulebookDraft {
 }
 
 const emptyDraft: RulebookDraft = { id: null, title: '', edition: '', sourceUrl: '', text: '' };
+const readCompetitionContext = useCompetition;
 
 export function RulebooksPage() {
   const { user } = useAuth();
@@ -26,7 +28,62 @@ export function RulebooksPage() {
 
 /** Rulebooks are shared by every competition. The list holds titles only; a rulebook's text is fetched when it is opened. */
 function GlobalRulebooks() {
-  const { competition } = useCompetition();
+  let competition: { id: number; name: string } | null = null;
+  try {
+    competition = readCompetitionContext().competition;
+  } catch {
+    competition = null;
+  }
+  const [tab, setTab] = useState<'rulebooks' | 'races'>('rulebooks');
+  const { canEdit } = useAuth();
+  const canWrite = canEdit();
+
+  const headerFor = (draft: RulebookDraft | null, busy: boolean, onAdd: () => void, onClose: () => void) => {
+    const editing = draft !== null;
+    const actions = tab === 'rulebooks'
+      ? (editing
+        ? <button type="button" className="rf-ib" aria-label="Close editor" onClick={onClose} disabled={busy}><X className="h-5 w-5" aria-hidden="true" /></button>
+        : canWrite ? <button type="button" className="rf-btn" onClick={onAdd} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />Add rulebook</button> : null)
+      : null;
+
+    return (
+      <RefineHeader
+        back={competition ? `/competitions/${competition.id}` : '/events'}
+        backLabel={competition ? 'Back to event' : 'Back to events'}
+        context={competition?.name ?? 'Rules & rulebooks'}
+        actions={actions}
+        title={tab === 'races' ? 'Game rules' : draft ? (draft.id == null ? 'New rulebook' : 'Edit rulebook') : 'Rulebooks'}
+        tabsKind="tablist"
+        tabsLabel="Rules and rulebooks"
+        tabs={[
+          { label: 'Rulebooks', active: tab === 'rulebooks', onSelect: () => setTab('rulebooks') },
+          { label: 'Game rules', active: tab === 'races', onSelect: () => setTab('races') },
+        ]}
+      />
+    );
+  };
+
+  return (
+    <RefinePage>
+      {tab === 'rulebooks' ? (
+        <RulebooksPanel renderHeader={({ draft, busy, onAdd, onClose }) => headerFor(draft, busy, onAdd, onClose)} />
+      ) : (
+        <>
+          {headerFor(null, false, () => {}, () => {})}
+          <div className="mt-3">
+            <RaceRulesLibrary />
+          </div>
+        </>
+      )}
+    </RefinePage>
+  );
+}
+
+export function RulebooksPanel({
+  renderHeader,
+}: {
+  renderHeader?: (controls: { draft: RulebookDraft | null; busy: boolean; onAdd: () => void; onClose: () => void }) => ReactNode;
+} = {}) {
   const { canEdit } = useAuth();
   const canWrite = canEdit();
   const [rulebooks, setRulebooks] = useState<RulebookSummary[]>([]);
@@ -141,20 +198,15 @@ function GlobalRulebooks() {
     }
   }
 
-  const editing = draft !== null;
-  const actions = editing
-    ? <button type="button" className="rf-ib" aria-label="Close editor" onClick={() => setDraft(null)} disabled={busy}><X className="h-5 w-5" aria-hidden="true" /></button>
-    : canWrite ? <button type="button" className="rf-btn" onClick={() => edit()} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />Add rulebook</button> : null;
-
   return (
-    <RefinePage>
-      <RefineHeader
-        back={`/competitions/${competition.id}`}
-        backLabel="Back to event"
-        context={competition.name}
-        actions={actions}
-        title={draft ? (draft.id == null ? 'New rulebook' : 'Edit rulebook') : 'Rulebooks'}
-      />
+    <div>
+      {renderHeader
+        ? renderHeader({ draft, busy, onAdd: () => edit(), onClose: () => setDraft(null) })
+        : canWrite && !draft && (
+          <div className="mb-3 flex justify-end">
+            <button type="button" className="rf-btn" onClick={() => edit()} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />Add rulebook</button>
+          </div>
+        )}
 
       {error && <p role="alert" className="mg-notice ops-alert">{error} {!draft && <button type="button" className="rf-btn rf-btn-text" onClick={() => (selectedId != null && !selected ? void open(selectedId) : void load())}>Try again</button>}</p>}
       {saved && <p role="status" className="rf-note">Rulebook saved.</p>}
@@ -187,7 +239,7 @@ function GlobalRulebooks() {
           </article>}
         </div>
       )}
-    </RefinePage>
+    </div>
   );
 }
 

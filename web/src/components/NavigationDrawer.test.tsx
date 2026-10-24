@@ -88,10 +88,10 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(document.body.style.overflow).toBe('auto');
   });
 
-  it('sends the competition links to the events list, and leaves out live stream', () => {
+  it('sends the extra competition links to the events list when no competition is followed', () => {
     mount();
     expect(links('Main navigation')).toEqual([
-      ['Following', '/following'], ['Timetable', '/events'], ['Toplists', '/events'], ['Event shop', '/shop'], ['Rulebooks', '/events'], ['Details & entries', '/events'],
+      ['Following', '/following'], ['Event shop', '/shop'], ['Rulebooks', '/events'],
     ]);
   });
 
@@ -162,35 +162,24 @@ describe('NavigationDrawer: following a competition', () => {
     expect(screen.queryByText(/Oct/)).not.toBeInTheDocument();
   });
 
-  it('links to the competition’s own pages', () => {
+  it('links to the competition’s extra pages (omitting duplicate bottom-tab links)', () => {
     mount({ competition: true });
     expect(links('Main navigation')).toEqual([
-      ['Following', '/competitions/4/following'], ['Timetable', '/competitions/4'], ['Toplists', '/competitions/4/toplists'],
-      ['Live feed & stream', '/competitions/4/chat'], ['Event shop', '/competitions/4/shop'], ['Rulebooks', '/competitions/4/rulebooks'], ['Details & entries', '/competitions/4/details'],
+      ['Following', '/competitions/4/following'], ['Event shop', '/competitions/4/shop'], ['Rulebooks', '/competitions/4/rulebooks'],
     ]);
   });
 
-  it('flags the live feed while a session is in the arena', () => {
-    mount({ competition: true, meta: { live: true } });
-    expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).getByText('Live')).toBeInTheDocument();
-  });
-
-  it('has no live flag otherwise', () => {
-    mount({ competition: true, meta: { live: false } });
-    expect(within(screen.getByRole('navigation', { name: 'Main navigation' })).queryByText('Live')).not.toBeInTheDocument();
-  });
-
   it('highlights the page being viewed', () => {
-    mount({ competition: true, path: '/competitions/4/toplists' });
+    mount({ competition: true, path: '/competitions/4/shop' });
     const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
-    expect(nav.getByRole('link', { name: 'Toplists' })).toHaveAttribute('aria-current', 'page');
-    expect(nav.getByRole('link', { name: 'Timetable' })).not.toHaveAttribute('aria-current');
+    expect(nav.getByRole('link', { name: 'Event shop' })).toHaveAttribute('aria-current', 'page');
+    expect(nav.getByRole('link', { name: 'Following' })).not.toHaveAttribute('aria-current');
   });
 
   it('does not highlight anything when no competition is followed', () => {
-    mount({ path: '/competitions' });
+    mount({ path: '/events' });
     const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
-    expect(nav.getByRole('link', { name: 'Timetable' }).className).not.toMatch(/font-semibold/);
+    expect(nav.getByRole('link', { name: 'Rulebooks' }).className).not.toMatch(/font-semibold/);
   });
 });
 
@@ -254,8 +243,8 @@ describe('NavigationDrawer: signed in', () => {
 
   it('leaves account and club links to the profile page', () => {
     mount({ roles: ['Trainer'] });
-    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard']]);
-    for (const name of ['My account', 'My teams', 'Dec forms', 'My signups', 'My items for sale', 'Orders & sales', /Notifications/]) {
+    expect(screen.queryByRole('navigation', { name: 'Account and management' })).not.toBeInTheDocument();
+    for (const name of ['Dashboard', 'My account', 'My teams', 'Dec forms', 'My signups', 'My items for sale', 'Orders & sales', /Notifications/]) {
       expect(screen.queryByRole('link', { name })).not.toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
@@ -263,9 +252,9 @@ describe('NavigationDrawer: signed in', () => {
     expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 
-  it('shows an admin the site admin section of the dashboard too', () => {
+  it('shows an admin the site admin section of the dashboard', () => {
     mount({ roles: ['Admin', 'Trainer'] });
-    expect(links('Account and management')).toEqual([['Dashboard', '/dashboard'], ['Site admin', '/me#site-admin']]);
+    expect(links('Account and management')).toEqual([['Site admin', '/me#site-admin']]);
   });
 
   it('shows extra links published by the current page', () => {

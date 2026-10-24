@@ -161,4 +161,18 @@ describe('RulebooksPage', () => {
     expect(screen.queryByRole('button', { name: 'Edit Event handbook' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete Event handbook' })).not.toBeInTheDocument();
   });
+
+  it('switches to the Game rules tab to browse individual race rules and diagrams', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({
+      data: url === '/rulebooks' ? [handbook] : url === '/race-templates' ? [
+        { id: 1, name: 'Speed Weave', category: 'Bending', summary: 'Weave the poles.', rules: 'Weave out and back.', diagramJson: '[]', isBuiltIn: true },
+      ] : texts[url],
+    }));
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole('button', { name: /^Event handbook/ });
+    await user.click(screen.getByRole('tab', { name: 'Game rules' }));
+    expect(await screen.findByText('Speed Weave')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Game rules' })).toBeInTheDocument();
+  });
 });

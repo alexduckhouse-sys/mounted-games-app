@@ -1,53 +1,104 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import type { Role } from '../../types';
+import { OperationsPage } from '../operations/OperationsPage';
 import EventToolsPage from './EventToolsPage';
 
-vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
+vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: vi.fn() }));
+
+const compState = vi.hoisted(() => ({
+  competition: {
+    id: 12,
+    name: 'Spring event',
+    startDate: '2031-05-04T09:00:00Z',
+    endDate: null as string | null,
+    createdByUserId: 'owner',
+    sections: [{ id: 8, displayName: 'Under 12' }],
+  },
+  reload: vi.fn(),
+}));
+vi.mock('../competition/context', () => ({
+  useCompetition: () => compState,
+}));
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
 
-function renderPage() {
+const readiness = {
+  competitionId: 12,
+  isReady: true,
+  equipmentFingerprint: 'equipment-v1',
+  missingDeclarations: [],
+  unpaidSignups: [],
+  incompleteTeams: [],
+  sessionOverlaps: [],
+  equipmentChecklist: [],
+  equipmentIssues: [],
+};
+
+function renderPage(initialEntry = '/event-tools/12') {
   const router = createMemoryRouter([
     { path: '/event-tools/:competitionId', element: <EventToolsPage /> },
-  ], { initialEntries: ['/event-tools/12'] });
+    { path: '/competitions/:id/operations', element: <OperationsPage /> },
+  ], { initialEntries: [initialEntry] });
   return { ...render(<RouterProvider router={router} />), router };
 }
 
 beforeEach(() => {
+  compState.competition = {
+    id: 12,
+    name: 'Spring event',
+    startDate: '2031-05-04T09:00:00Z',
+    endDate: null,
+    createdByUserId: 'owner',
+    sections: [{ id: 8, displayName: 'Under 12' }],
+  };
+  compState.reload.mockReset();
   vi.mocked(useAuth).mockReturnValue({
     user: { id: 'owner' },
     canOrganise: () => true,
     hasRole: (role: Role) => role === 'Trainer',
     canEdit: () => false,
   } as unknown as ReturnType<typeof useAuth>);
-  get.mockResolvedValue({ data: { id: 12, name: 'Spring event', startDate: '2031-05-04T09:00:00Z', endDate: null, createdByUserId: 'owner' } });
+  get.mockResolvedValue({ data: readiness });
   post.mockReset();
 });
 
-describe('EventToolsPage', () => {
+describe('EventToolsPage merged into OperationsPage', () => {
+  it('redirects /event-tools/:id straight to /competitions/:id/operations', async () => {
+    const { router } = renderPage('/event-tools/12');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/competitions/12/operations'));
+    expect(await screen.findByRole('tab', { name: 'Import teams' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Tack check' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Passport check' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Print sheets' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Results book' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Duplicate event' })).toBeInTheDocument();
+  });
+
   it('turns away someone who does not run this competition', async () => {
     vi.mocked(useAuth).mockReturnValue({
       user: { id: 'visitor' }, canOrganise: () => false, hasRole: (role: Role) => role === 'Member', canEdit: () => false,
     } as unknown as ReturnType<typeof useAuth>);
     renderPage();
-    expect(await screen.findByText('These tools are available to this competition’s organiser.')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('You don’t have access to competition operations.');
   });
 
   it('gives a competition admin with a Member account import and print, but not duplicating', async () => {
     vi.mocked(useAuth).mockReturnValue({
       user: { id: 'helper' }, canOrganise: () => true, hasRole: (role: Role) => role === 'Member', canEdit: () => false,
     } as unknown as ReturnType<typeof useAuth>);
+    const user = userEvent.setup();
     renderPage();
+    await user.click(await screen.findByRole('tab', { name: 'Import teams' }));
     expect(await screen.findByLabelText('CSV text')).toBeInTheDocument();
-    expect(screen.getByText('Print sheets')).toBeInTheDocument();
-    expect(screen.queryByText('Duplicate event')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Print sheets' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Duplicate event' })).not.toBeInTheDocument();
   });
 
   it('previews CSV rows before applying the same fingerprint', async () => {
@@ -58,6 +109,7 @@ describe('EventToolsPage', () => {
     const user = userEvent.setup();
     renderPage();
 
+    await user.click(await screen.findByRole('tab', { name: 'Import teams' }));
     const input = await screen.findByLabelText('CSV text');
     await user.clear(input);
     await user.type(input, 'club,suffix,section\nNorth Club,A,Under 12');
@@ -69,6 +121,7 @@ describe('EventToolsPage', () => {
       csv: 'club,suffix,section\nNorth Club,A,Under 12', fingerprint: 'ABC', previewVersion: 1,
     }));
     expect(await screen.findByText('1 team added.')).toBeInTheDocument();
+    expect(compState.reload).toHaveBeenCalled();
   });
 
   it('keeps duplicate-event form values when the API rejects them', async () => {
@@ -85,63 +138,12 @@ describe('EventToolsPage', () => {
     expect(name).toHaveValue('Autumn championship');
   });
 
-  it('keeps the tools hidden from someone who cannot organise this competition', async () => {
-    vi.mocked(useAuth).mockReturnValue({
-      user: { id: 'admin' }, canOrganise: () => false, hasRole: (role: Role) => role === 'Admin', canEdit: () => true,
-    } as unknown as ReturnType<typeof useAuth>);
-    renderPage();
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('available to this competition’s organiser');
-    expect(screen.queryByText('Import teams from CSV')).not.toBeInTheDocument();
-  });
-
-  it('clears an import preview when the competition changes', async () => {
-    get.mockImplementation(async (url) => ({
-      data: {
-        id: String(url).endsWith('/13') ? 13 : 12,
-        name: String(url).endsWith('/13') ? 'Autumn event' : 'Spring event',
-        startDate: '2031-05-04T09:00:00Z', endDate: null, createdByUserId: 'owner',
-      },
-    }));
-    post.mockResolvedValue({ data: {
-      previewVersion: 1, fingerprint: 'ABC', totalRows: 1, validRows: 1,
-      rows: [{ rowNumber: 2, clubId: 4, club: 'North Club', suffix: 'A', competitionSectionId: 8, section: 'Under 12', teamName: 'North Club A', errors: [] }],
-    } });
-    const user = userEvent.setup();
-    const { router } = renderPage();
-    const input = await screen.findByLabelText('CSV text');
-    await user.clear(input);
-    await user.type(input, 'club,suffix,section\nNorth Club,A,Under 12');
-    await user.click(screen.getByRole('button', { name: 'Preview teams' }));
-    expect(await screen.findByRole('button', { name: 'Add 1 team' })).toBeInTheDocument();
-
-    await act(async () => { await router.navigate('/event-tools/13'); });
-
-    expect(await screen.findByText('Autumn event')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add 1 team' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('CSV text')).toHaveValue('club,suffix,section\n');
-  });
-
-  it('retries a failed initial competition load', async () => {
-    get.mockRejectedValueOnce(new Error('offline'));
+  it('lists the print sheets as links from the Print sheets tab', async () => {
     const user = userEvent.setup();
     renderPage();
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load this competition.');
-    await user.click(screen.getByRole('button', { name: 'Try again' }));
-
-    expect(await screen.findByText('Spring event')).toBeInTheDocument();
-    expect(get).toHaveBeenCalledTimes(2);
-  });
-  it('uses tabs for the three tools and lists the print sheets as links', async () => {
-    const user = userEvent.setup();
-    renderPage();
-    const import_ = await screen.findByRole('tab', { name: 'Import teams' });
-    expect(import_).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('link', { name: 'Back to event' })).toHaveAttribute('href', '/competitions/12');
-
-    await user.click(screen.getByRole('tab', { name: 'Print sheets' }));
+    await user.click(await screen.findByRole('tab', { name: 'Print sheets' }));
     expect(screen.getByRole('tab', { name: 'Print sheets' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('link', { name: 'Back to event' })).toHaveAttribute('href', '/competitions/12');
     expect(screen.getByRole('link', { name: /Draw and lanes/ })).toHaveAttribute('href', '/event-tools/12/print/draw');
     expect(screen.getByRole('link', { name: /Score sheets/ })).toHaveAttribute('href', '/event-tools/12/print/score-sheets');
     expect(screen.getByRole('link', { name: /Results/ })).toHaveAttribute('href', '/event-tools/12/print/results');
@@ -158,6 +160,7 @@ describe('EventToolsPage', () => {
     } });
     const user = userEvent.setup();
     renderPage();
+    await user.click(await screen.findByRole('tab', { name: 'Import teams' }));
     await user.click(await screen.findByRole('button', { name: 'Preview teams' }));
 
     expect(await screen.findByText('Ready')).toBeInTheDocument();

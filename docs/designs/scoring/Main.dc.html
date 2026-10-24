@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Race scoring</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&amp;family=Barlow+Condensed:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#17385F}a:hover{color:#0F2A4A}
+button{font-family:inherit;cursor:pointer}
+button:disabled{cursor:default}
+button:focus-visible{outline:3px solid #5577BB;outline-offset:2px}
+.mg-row{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+.mg-hold{width:0;animation:mgHold 450ms ease-in 200ms forwards}
+@keyframes mgHold{from{width:0}to{width:100%}}
+.mg-grip{touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none}
+.mg-grip:active{cursor:grabbing}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #F4F6F9; font-family: 'Barlow', system-ui, sans-serif; color: #1B2230; overflow: hidden">
+
+  <!-- Shell bar -->
+  <div style="display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 8px 0 4px; background: #17385F; color: #FFFFFF; flex-shrink: 0">
+    <button aria-label="Back to timetable" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; color: #FFFFFF; border-radius: 10px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+    </button>
+    <div style="display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.15">
+      <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 18px; letter-spacing: 0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">[COMPETITION NAME]</span>
+      <span style="font-size: 13px; color: #C9D4E3">Arena 1 · Section A</span>
+    </div>
+    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #FFFFFF; color: #17385F; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #E12A39"></span>Live
+    </span>
+  </div>
+
+  <!-- Heat + race switcher -->
+  <div style="background: #FFFFFF; border-bottom: 1px solid #E3E7EC; padding: 12px 16px 12px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px">
+    <h1 style="margin: 0; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 26px; color: #17385F; letter-spacing: 0.2px">Heat 3</h1>
+    <div style="display: flex; align-items: center; gap: 8px; height: 60px; padding: 0 6px; background: #F4F6F9; border: 1px solid #E3E7EC; border-radius: 14px; box-sizing: border-box">
+      <button onClick="{{prevRace}}" disabled="{{atFirst}}" aria-label="Previous race" style="width: 48px; height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 10px; background: {{prevBg}}; color: {{prevColour}}">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+      </button>
+      <div role="status" style="flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; line-height: 1.1; text-align: center">
+        <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: {{statusColour}}">Race {{raceNo}} of 5 · {{statusText}}</span>
+        <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 22px; color: #1B2230; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%">{{raceName}}</span>
+      </div>
+      <button onClick="{{nextRace}}" disabled="{{atLast}}" aria-label="Next race" style="width: 48px; height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 10px; background: {{nextBg}}; color: {{nextColour}}">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+      </button>
+    </div>
+  </div>
+  <div style="height: 12px; flex-shrink: 0"></div>
+
+  <!-- Team rows -->
+  
+
+  <!-- Bottom action bar -->
+  <div style="display: flex; flex-direction: column; gap: 8px; padding: 0 12px; flex: 1; min-height: 0; overflow-y: auto">
+    <sc-for list="{{rows}}" as="t" hint-placeholder-count="6">
+      <div style="position: relative; display: flex; align-items: stretch; height: 64px; flex-shrink: 0; border-radius: 14px; background: {{t.bg}}; border: 2px solid {{t.border}}; box-sizing: border-box; overflow: hidden; transform: translateY({{t.shift}}px); transition: {{t.trans}}; z-index: {{t.z}}; box-shadow: {{t.shadow}}">
+        <sc-if value="{{t.holding}}" hint-placeholder-val="{{false}}">
+          <span class="mg-hold" aria-hidden="true" style="position: absolute; left: 0; top: 0; bottom: 0; background: #F6D3D7; pointer-events: none"></span>
+        </sc-if>
+        <button class="mg-row" onClick="{{t.tap}}" onPointerDown="{{t.down}}" onPointerUp="{{t.up}}" onPointerLeave="{{t.up}}" onPointerCancel="{{t.up}}" onContextMenu="{{t.noMenu}}" onKeyDown="{{t.key}}" disabled="{{locked}}" aria-label="{{t.label}}" style="position: relative; flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 0 12px 0 0; background: transparent; border: 0; text-align: left; color: inherit">
+          <span style="width: 8px; align-self: stretch; background: {{t.colour}}; flex-shrink: 0"></span>
+          <span style="width: 22px; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 15px; color: #4A505A; flex-shrink: 0">L{{t.lane}}</span>
+          <span style="display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.2">
+            <span style="display: flex; align-items: center; gap: 6px; min-width: 0">
+              <span style="font-weight: 700; font-size: 17px; color: {{t.nameColour}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.name}}</span>
+              <sc-if value="{{t.hasOv}}" hint-placeholder-val="{{false}}">
+                <span style="flex-shrink: 0; padding: 1px 7px; border-radius: 6px; background: {{t.chipBg}}; color: {{t.chipColour}}; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase">{{t.chipText}}</span>
+              </sc-if>
+            </span>
+            <span style="font-size: 13px; color: #4A505A">Heat total {{t.total}}</span>
+          </span>
+          <sc-if value="{{t.hasOv}}" hint-placeholder-val="{{false}}">
+            <span style="display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; flex-shrink: 0">
+              <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 26px; color: #17385F">{{t.ovBig}}</span>
+              <span style="font-size: 12px; font-weight: 600; color: #3B5577">{{t.ovSmall}}</span>
+            </span>
+          </sc-if>
+          <sc-if value="{{t.placedPlain}}" hint-placeholder-val="{{false}}">
+            <span style="display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; flex-shrink: 0">
+              <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 26px; color: #17385F">{{t.placeLabel}}</span>
+              <span style="font-size: 12px; font-weight: 600; color: #3B5577">+{{t.pts}} pts</span>
+            </span>
+          </sc-if>
+          <sc-if value="{{t.elimPlain}}" hint-placeholder-val="{{false}}">
+            <span style="display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; flex-shrink: 0">
+              <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 20px; color: #B01C2B; letter-spacing: 0.6px">ELIM</span>
+              <span style="font-size: 12px; font-weight: 600; color: #B01C2B">0 pts</span>
+            </span>
+          </sc-if>
+        </button>
+        <sc-if value="{{t.canDrag}}" hint-placeholder-val="{{false}}">
+          <button class="mg-grip" onPointerDown="{{t.gripDown}}" onPointerMove="{{t.gripMove}}" onPointerUp="{{t.gripUp}}" onPointerCancel="{{t.gripUp}}" onKeyDown="{{t.gripKey}}" aria-label="{{t.gripLabel}}" style="width: 44px; flex-shrink: 0; margin-left: -8px; border: 0; background: transparent; color: #3B5577; display: flex; align-items: center; justify-content: center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>
+          </button>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div><div style="flex-shrink: 0; background: #FFFFFF; border-top: 1px solid #E3E7EC; padding: 12px 16px 24px; display: flex; flex-direction: column; gap: 10px">
+    <sc-if value="{{submitted}}" hint-placeholder-val="{{false}}">
+      <div role="status" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #E8F3EC; color: #1E5B36; font-size: 14px; font-weight: 600">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+        <span>Race {{raceNo}} saved on this phone and sent to the scoreboard.</span>
+      </div>
+    </sc-if>
+    <sc-if value="{{showToast}}" hint-placeholder-val="{{false}}">
+      <div role="status" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #E8F3EC; color: #1E5B36; font-size: 14px; font-weight: 600">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+        <span>{{toast}} saved and sent. Now scoring {{raceName}}.</span>
+      </div>
+    </sc-if>
+    <sc-if value="{{editing}}" hint-placeholder-val="{{true}}">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+          <span style="font-family: 'Barlow Condensed', sans-serif; font-size: 18px; font-weight: 700; color: #1B2230; line-height: 1">{{doneCount}} <span style="font-weight: 500; color: #5A6270">of 6</span></span>
+          <div aria-hidden="true" style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px">
+            <sc-for list="{{segs}}" as="s" hint-placeholder-count="6">
+              <span style="height: 6px; border-radius: 3px; background: {{s.colour}}; transition: background 160ms ease"></span>
+            </sc-for>
+          </div>
+        </div>
+        <button onClick="{{openSheet}}" aria-label="Score override" style="width: 44px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: #F4F6F9; color: #17385F">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9"></path><path d="M17 6h3"></path><circle cx="15" cy="6" r="2"></circle><path d="M4 12h3"></path><path d="M11 12h9"></path><circle cx="9" cy="12" r="2"></circle><path d="M4 18h11"></path><path d="M19 18h1"></path><circle cx="17" cy="18" r="2"></circle></svg>
+        </button>
+        <button onClick="{{undo}}" disabled="{{nothing}}" aria-label="Undo last" style="width: 44px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: #F4F6F9; color: {{toolColour}}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>
+        </button>
+        <button onClick="{{reset}}" disabled="{{nothing}}" aria-label="Clear all" style="width: 44px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: #F4F6F9; color: {{toolColour}}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M6 6l1 14h10l1-14"></path></svg>
+        </button>
+      </div>
+      <sc-if value="{{ready}}" hint-placeholder-val="{{false}}">
+        <button onClick="{{submit}}" style="height: 56px; border: 0; border-radius: 14px; background: #17385F; color: #FFFFFF; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 21px; letter-spacing: 0.4px">Submit race {{raceNo}}</button>
+      </sc-if>
+      <sc-if value="{{notReady}}" hint-placeholder-val="{{true}}">
+        <button disabled="{{true}}" style="height: 56px; border: 0; border-radius: 14px; background: #E3E7EC; color: #5A6270; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 21px; letter-spacing: 0.4px">Place every team to submit</button>
+      </sc-if>
+    </sc-if>
+    <sc-if value="{{submitted}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; gap: 8px">
+        <button onClick="{{edit}}" style="flex: 1; height: 56px; padding: 0 18px; border-radius: 14px; border: 1px solid #C4C9D1; background: #FFFFFF; color: #17385F; font-weight: 600; font-size: 16px">Correct</button>
+        <sc-if value="{{heatDone}}" hint-placeholder-val="{{false}}">
+          <button onClick="{{restart}}" style="flex: 1; height: 56px; border: 0; border-radius: 14px; background: #E12A39; color: #FFFFFF; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 20px; letter-spacing: 0.3px">Heat complete · Next heat</button>
+        </sc-if>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- Score override sheet -->
+  <sc-if value="{{sheetOpen}}" hint-placeholder-val="{{false}}">
+    <div style="position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; justify-content: flex-end; background: rgba(15, 27, 45, 0.45)">
+      <button onClick="{{closeSheet}}" aria-label="Close score override" style="flex: 1; border: 0; background: transparent"></button>
+      <div role="dialog" aria-label="Score override" style="background: #FFFFFF; border-radius: 20px 20px 0 0; padding: 8px 16px 24px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 -8px 30px rgba(15, 42, 74, 0.18)">
+        <span aria-hidden="true" style="align-self: center; width: 40px; height: 4px; border-radius: 2px; background: #C4C9D1"></span>
+
+        <sc-if value="{{sheetList}}" hint-placeholder-val="{{true}}">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15">
+              <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px; color: #17385F">Score override</span>
+              <span style="font-size: 14px; color: #4A505A">{{raceName}} · pick a team</span>
+            </div>
+            <button onClick="{{closeSheet}}" aria-label="Close" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: #F4F6F9; color: #17385F">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
+            </button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <sc-for list="{{sheetTeams}}" as="s" hint-placeholder-count="6">
+              <button onClick="{{s.pick}}" style="display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 12px; border: 1px solid #E3E7EC; border-radius: 12px; background: #FFFFFF; text-align: left; color: #1B2230">
+                <span style="width: 12px; height: 12px; border-radius: 50%; background: {{s.colour}}; flex-shrink: 0"></span>
+                <span style="flex: 1; min-width: 0; font-weight: 700; font-size: 16px">{{s.name}}</span>
+                <span style="font-size: 14px; font-weight: 600; color: {{s.statusColour}}">{{s.status}}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A6270" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{sheetTeam}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <button onClick="{{backToList}}" aria-label="Back to teams" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: #F4F6F9; color: #17385F; flex-shrink: 0">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+            </button>
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15">
+              <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px; color: #17385F">{{dName}}</span>
+              <span style="font-size: 14px; color: #4A505A">{{dSub}}</span>
+            </div>
+          </div>
+          <div role="radiogroup" aria-label="How this team scores" style="display: flex; flex-direction: column; gap: 8px">
+            <sc-for list="{{opts}}" as="o" hint-placeholder-count="3">
+              <button role="radio" aria-checked="{{o.selected}}" onClick="{{o.pick}}" style="display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 14px; border-radius: 12px; border: 2px solid {{o.border}}; background: {{o.bg}}; box-sizing: border-box; text-align: left; color: #1B2230">
+                <span style="width: 22px; height: 22px; border-radius: 50%; border: 2px solid {{o.ring}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+                  <sc-if value="{{o.selected}}" hint-placeholder-val="{{false}}">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background: #17385F"></span>
+                  </sc-if>
+                </span>
+                <span style="display: flex; flex-direction: column; line-height: 1.2">
+                  <span style="font-weight: 700; font-size: 16px">{{o.title}}</span>
+                  <span style="font-size: 13px; color: #4A505A">{{o.sub}}</span>
+                </span>
+              </button>
+            </sc-for>
+          </div>
+          <sc-if value="{{modeSet}}" hint-placeholder-val="{{false}}">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 8px 8px 14px; border-radius: 12px; background: #F4F6F9">
+              <span style="font-weight: 600; font-size: 15px; color: #1B2230">Points this race</span>
+              <span style="display: flex; align-items: center; gap: 6px">
+                <button onClick="{{dec}}" aria-label="One point fewer" style="width: 44px; height: 44px; border: 1px solid #C4C9D1; border-radius: 10px; background: #FFFFFF; color: #17385F; font-size: 22px; font-weight: 700">−</button>
+                <span aria-live="polite" style="min-width: 40px; text-align: center; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 28px; color: #17385F">{{dPts}}</span>
+                <button onClick="{{inc}}" aria-label="One point more" style="width: 44px; height: 44px; border: 1px solid #C4C9D1; border-radius: 10px; background: #FFFFFF; color: #17385F; font-size: 22px; font-weight: 700">+</button>
+              </span>
+            </div>
+          </sc-if>
+          <sc-if value="{{needsReason}}" hint-placeholder-val="{{false}}">
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #1B2230">
+              Reason
+              <input type="text" value="{{dReason}}" onChange="{{setReason}}" placeholder="e.g. Judge’s decision" style="height: 48px; padding: 0 12px; border-radius: 10px; border: 1px solid #C4C9D1; font-family: inherit; font-size: 16px; color: #1B2230; box-sizing: border-box">
+            </label>
+          </sc-if>
+          <button onClick="{{saveDraft}}" disabled="{{cantSave}}" style="height: 56px; border: 0; border-radius: 14px; background: {{saveBg}}; color: {{saveColour}}; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 20px; letter-spacing: 0.3px">{{saveText}}</button>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+var MG_TEAMS = [
+  { id: 1, lane: 1, name: 'Team 1', colour: '#D93A3A', prev: 11 },
+  { id: 2, lane: 2, name: 'Team 2', colour: '#2F6FD0', prev: 9 },
+  { id: 3, lane: 3, name: 'Team 3', colour: '#F2B705', prev: 7 },
+  { id: 4, lane: 4, name: 'Team 4', colour: '#2E9A5B', prev: 8 },
+  { id: 5, lane: 5, name: 'Team 5', colour: '#7A4CC2', prev: 4 },
+  { id: 6, lane: 6, name: 'Team 6', colour: '#1B2230', prev: 3 }
+];
+var MG_RACES = ['Bending Race', 'Flag Race', 'Sack Race', 'Ball and Cone Race', 'Mug Race'];
+// Races 1 and 2 already scored (sample data).
+var MG_SEED = {
+  1: { order: [1, 2, 4, 3, 5, 6], elim: [], log: [], submitted: true },
+  2: { order: [1, 3, 2, 4, 6], elim: [5], log: [], submitted: true }
+};
+
+function mgOrdinal(n) {
+  var s = ['th', 'st', 'nd', 'rd'];
+  var v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+class Component extends DCLogic {
+  renderVals() {
+    var self = this;
+    var st = this.state || {};
+    var order = st.order || [];
+    var elim = st.elim || [];
+    var race = st.race || 3;
+    var submitted = !!st.submitted;
+    var saved = st.saved || MG_SEED;
+    var ov = st.ov || {};
+    var heatSize = MG_TEAMS.length;
+
+    function pts(place) { return heatSize - place + 1; }
+    // Points for one team in one race: an override wins (HC scores nothing), else the finishing place.
+    function ptsFor(r, id) {
+      var o = r.ov && r.ov[id];
+      if (o) return o.mode === 'set' ? o.pts : 0;
+      var i = r.order.indexOf(id);
+      return i >= 0 ? pts(i + 1) : 0;
+    }
+
+    // Heat totals from every other scored race; the race on screen is added per row below.
+    var totals = MG_TEAMS.reduce(function (m, t) { m[t.id] = 0; return m; }, {});
+    Object.keys(saved).forEach(function (k) {
+      var r = saved[k];
+      if (Number(k) === race || !r.submitted) return;
+      MG_TEAMS.forEach(function (t) { totals[t.id] += ptsFor(r, t.id); });
+    });
+
+    function goTo(n, justSubmitted) {
+      if (n < 1 || n > MG_RACES.length) return;
+      var s = self.state || {};
+      var store = Object.assign({}, s.saved || MG_SEED);
+      store[race] = { order: s.order || [], elim: s.elim || [], ov: s.ov || {}, log: s.log || [], submitted: justSubmitted || !!s.submitted };
+      var target = store[n] || { order: [], elim: [], ov: {}, log: [], submitted: false };
+      clearTimeout(self.toastTimer);
+      self.setState({ saved: store, race: n, order: target.order, elim: target.elim, ov: target.ov || {}, sheet: null, log: target.log, submitted: target.submitted, correcting: false, holdId: null, drag: null, toast: justSubmitted ? MG_RACES[race - 1] : null });
+      if (justSubmitted) self.toastTimer = setTimeout(function () { self.setState({ toast: null }); }, 3000);
+    }
+    function without(list, id) { return list.filter(function (x) { return x !== id; }); }
+    function eliminate(id) {
+      var o = (self.state && self.state.order) || [];
+      var e = (self.state && self.state.elim) || [];
+      if (e.indexOf(id) >= 0) return;
+      self.setState({ holdId: null, elim: e.concat([id]), order: without(o, id), log: ((self.state && self.state.log) || []).concat([{ type: 'elim', id: id }]) });
+    }
+
+    // First-time scoring keeps lane order so rows never jump while you tap.
+    // A scored race, or one being corrected, sorts into finishing order (placed, unplaced, eliminated).
+    var sorted = submitted || !!st.correcting;
+    var byId = MG_TEAMS.reduce(function (m, t) { m[t.id] = t; return m; }, {});
+    var display = !sorted ? MG_TEAMS : order.map(function (id) { return byId[id]; })
+      .concat(MG_TEAMS.filter(function (t) { return order.indexOf(t.id) < 0 && elim.indexOf(t.id) < 0; }))
+      .concat(elim.map(function (id) { return byId[id]; }));
+
+    var PITCH = 72; // row height 64 + gap 8
+    var drag = st.drag || null;
+    function dragTarget(d) {
+      return Math.max(0, Math.min(order.length - 1, d.from + Math.round(d.dy / PITCH)));
+    }
+    var dragTo = drag ? dragTarget(drag) : -1;
+    function moveTo(id, to) {
+      var o = ((self.state && self.state.order) || []).slice();
+      var from = o.indexOf(id);
+      if (from < 0 || to < 0 || to >= o.length || from === to) return;
+      o.splice(from, 1);
+      o.splice(to, 0, id);
+      self.setState({ order: o, drag: null });
+    }
+
+    var rows = display.map(function (t) {
+      var idx = order.indexOf(t.id);
+      var shift = 0;
+      var dragging = drag && drag.id === t.id;
+      if (drag && idx >= 0) {
+        if (dragging) shift = drag.dy;
+        else if (drag.from < dragTo && idx > drag.from && idx <= dragTo) shift = -PITCH;
+        else if (dragTo < drag.from && idx >= dragTo && idx < drag.from) shift = PITCH;
+      }
+      var isElim = elim.indexOf(t.id) >= 0;
+      var placed = idx >= 0;
+      var o = ov[t.id];
+      var p = o ? (o.mode === 'set' ? o.pts : 0) : placed ? pts(idx + 1) : 0;
+      return {
+        hasOv: !!o,
+        placedPlain: placed && !o,
+        elimPlain: isElim && !o,
+        chipText: o ? (o.mode === 'hc' ? 'HC' : 'Manual') : '',
+        chipBg: o && o.mode === 'hc' ? '#E3E7EC' : '#FFF1D6',
+        chipColour: o && o.mode === 'hc' ? '#4A505A' : '#7A4B00',
+        ovBig: o ? (placed ? mgOrdinal(idx + 1) : o.mode === 'hc' ? 'HC' : String(o.pts)) : '',
+        ovSmall: o ? (o.mode === 'hc' ? 'No points' : o.pts + ' pts · manual') : '',
+        lane: t.lane,
+        name: t.name,
+        colour: t.colour,
+        total: totals[t.id] + p,
+        placed: placed,
+        elim: isElim,
+        open: !placed && !isElim,
+        placeLabel: placed ? mgOrdinal(idx + 1) : '',
+        pts: p,
+        label: t.name + ', lane ' + t.lane + (placed ? ', placed ' + mgOrdinal(idx + 1) + '. Tap to remove.' : isElim ? ', eliminated. Tap to restore.' : '. Tap to give next place. Hold, or press Delete, to eliminate.'),
+        holding: st.holdId === t.id,
+        shift: shift,
+        trans: dragging ? 'none' : 'transform 180ms ease',
+        z: dragging ? 5 : 1,
+        shadow: dragging ? '0 10px 24px rgba(15, 42, 74, 0.22)' : 'none',
+        canDrag: placed && sorted && !submitted && order.length > 1,
+        gripLabel: 'Move ' + t.name + ', currently ' + (placed ? mgOrdinal(idx + 1) : '') + '. Use arrow keys to move up or down.',
+        gripDown: function (e) {
+          if (submitted) return;
+          e.preventDefault();
+          if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
+          self.dragStartY = e.clientY;
+          self.setState({ drag: { id: t.id, from: idx, dy: 0 } });
+        },
+        gripMove: function (e) {
+          var d = self.state && self.state.drag;
+          if (!d || d.id !== t.id) return;
+          var n = ((self.state && self.state.order) || []).length;
+          var dy = Math.max(-d.from * PITCH, Math.min((n - 1 - d.from) * PITCH, e.clientY - self.dragStartY));
+          self.setState({ drag: { id: d.id, from: d.from, dy: dy } });
+        },
+        gripUp: function () {
+          var d = self.state && self.state.drag;
+          if (!d || d.id !== t.id) return;
+          var to = dragTarget(d);
+          if (to === d.from) self.setState({ drag: null });
+          else moveTo(t.id, to);
+        },
+        gripKey: function (e) {
+          if (e.key === 'ArrowUp') { e.preventDefault(); moveTo(t.id, idx - 1); }
+          if (e.key === 'ArrowDown') { e.preventDefault(); moveTo(t.id, idx + 1); }
+        },
+        bg: placed ? '#EEF2FA' : isElim ? '#FBF3F4' : '#FFFFFF',
+        border: isElim ? '#E8B4BA' : t.colour,
+        nameColour: isElim ? '#5A6270' : '#1B2230',
+        down: function () {
+          if (submitted || isElim) return;
+          clearTimeout(self.holdTimer);
+          self.setState({ holdId: t.id });
+          self.holdTimer = setTimeout(function () {
+            self.skipClick = true;
+            eliminate(t.id);
+            if (navigator.vibrate) navigator.vibrate(30);
+          }, 650);
+        },
+        up: function () {
+          clearTimeout(self.holdTimer);
+          if (self.state && self.state.holdId) self.setState({ holdId: null });
+        },
+        noMenu: function (e) { e.preventDefault(); },
+        key: function (e) {
+          if (submitted || isElim) return;
+          if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); eliminate(t.id); }
+        },
+        tap: function () {
+          if (self.skipClick) { self.skipClick = false; return; }
+          if (submitted) return;
+          var o = self.state && self.state.order || [];
+          var e = self.state && self.state.elim || [];
+          if (e.indexOf(t.id) >= 0) { self.setState({ elim: without(e, t.id), log: (self.state.log || []).concat([{ type: 'unelim', id: t.id }]) }); return; }
+          if (o.indexOf(t.id) >= 0) { self.setState({ order: without(o, t.id) }); return; }
+          self.setState({ order: o.concat([t.id]), log: ((self.state && self.state.log) || []).concat([{ type: 'place', id: t.id }]) });
+        },
+      };
+    });
+
+    // A team is done once it is placed, eliminated or overridden.
+    var redCount = 0;
+    var doneCount = MG_TEAMS.filter(function (t) {
+      var isDone = order.indexOf(t.id) >= 0 || elim.indexOf(t.id) >= 0 || !!ov[t.id];
+      if (isDone && elim.indexOf(t.id) >= 0 && !ov[t.id]) redCount++;
+      return isDone;
+    }).length;
+    var left = heatSize - doneCount;
+
+    // Score override sheet
+    var sheet = st.sheet || null;
+    var draft = st.draft || { mode: 'auto', pts: 0, reason: '' };
+    function autoText(t) {
+      var i = order.indexOf(t.id);
+      if (i >= 0) return mgOrdinal(i + 1) + ' · ' + pts(i + 1) + ' pts';
+      if (elim.indexOf(t.id) >= 0) return 'Eliminated · 0 pts';
+      return 'Not placed yet';
+    }
+    var sheetTeams = MG_TEAMS.map(function (t) {
+      var o = ov[t.id];
+      return {
+        name: t.name,
+        colour: t.colour,
+        status: o ? (o.mode === 'hc' ? 'HC' : o.pts + ' pts · manual') : autoText(t),
+        statusColour: o ? '#7A4B00' : '#4A505A',
+        pick: function () {
+          var cur = ov[t.id];
+          var i = order.indexOf(t.id);
+          self.setState({ sheet: t.id, draft: cur ? { mode: cur.mode, pts: cur.pts || 0, reason: cur.reason || '' } : { mode: 'auto', pts: i >= 0 ? pts(i + 1) : 0, reason: '' } });
+        }
+      };
+    });
+    var dTeam = typeof sheet === 'number' ? byId[sheet] : null;
+    function opt(mode, title, sub) {
+      var sel = draft.mode === mode;
+      return {
+        title: title, sub: sub, selected: sel,
+        border: sel ? '#17385F' : '#E3E7EC', bg: sel ? '#EEF2FA' : '#FFFFFF', ring: sel ? '#17385F' : '#A3A9B3',
+        pick: function () { self.setState({ draft: Object.assign({}, draft, { mode: mode }) }); }
+      };
+    }
+    var needsReason = draft.mode !== 'auto';
+    var cantSave = needsReason && !draft.reason.trim();
+
+    var atFirst = race <= 1;
+    var atLast = race >= MG_RACES.length;
+
+    return {
+      sheetOpen: !!sheet,
+      sheetList: sheet === 'list',
+      sheetTeam: !!dTeam,
+      sheetTeams: sheetTeams,
+      dName: dTeam ? dTeam.name : '',
+      dSub: dTeam ? 'Lane ' + dTeam.lane + ' · ' + autoText(dTeam) : '',
+      opts: dTeam ? [
+        opt('auto', 'Automatic', 'Points from finishing place (' + autoText(dTeam) + ')'),
+        opt('set', 'Set points', 'Enter this race’s points by hand'),
+        opt('hc', 'Hors concours (HC)', 'Rides, but scores no points')
+      ] : [],
+      modeSet: draft.mode === 'set',
+      dPts: draft.pts,
+      dReason: draft.reason,
+      needsReason: needsReason,
+      cantSave: cantSave,
+      saveBg: cantSave ? '#E3E7EC' : '#17385F',
+      saveColour: cantSave ? '#5A6270' : '#FFFFFF',
+      saveText: draft.mode === 'auto' ? (dTeam && ov[dTeam.id] ? 'Remove override' : 'Done') : cantSave ? 'Add a reason to save' : 'Save override',
+      openSheet: function () { self.setState({ sheet: 'list' }); },
+      closeSheet: function () { self.setState({ sheet: null }); },
+      backToList: function () { self.setState({ sheet: 'list' }); },
+      inc: function () { self.setState({ draft: Object.assign({}, draft, { pts: Math.min(30, draft.pts + 1) }) }); },
+      dec: function () { self.setState({ draft: Object.assign({}, draft, { pts: Math.max(0, draft.pts - 1) }) }); },
+      setReason: function (e) { self.setState({ draft: Object.assign({}, draft, { reason: e.target.value }) }); },
+      saveDraft: function () {
+        if (!dTeam || cantSave) return;
+        var next = Object.assign({}, ov);
+        if (draft.mode === 'auto') delete next[dTeam.id];
+        else next[dTeam.id] = { mode: draft.mode, pts: draft.mode === 'set' ? draft.pts : 0, reason: draft.reason.trim() };
+        self.setState({ ov: next, sheet: 'list' });
+      },
+      rows: rows,
+      raceNo: race,
+      raceName: MG_RACES[race - 1],
+      statusText: submitted ? 'Scored' : doneCount > 0 ? 'Scoring' : 'Not scored',
+      statusColour: submitted ? '#1E5B36' : '#4A505A',
+      atFirst: atFirst,
+      atLast: atLast,
+      prevBg: atFirst ? 'transparent' : '#FFFFFF',
+      prevColour: atFirst ? '#A3A9B3' : '#17385F',
+      nextBg: atLast ? 'transparent' : '#FFFFFF',
+      nextColour: atLast ? '#A3A9B3' : '#17385F',
+      prevRace: function () { goTo(race - 1); },
+      nextRace: function () { goTo(race + 1); },
+      locked: submitted,
+      submitted: submitted,
+      editing: !submitted,
+      doneCount: doneCount,
+      leftText: left === 0 ? 'ready to submit' : left + (left === 1 ? ' team' : ' teams') + ' to place',
+      nothing: doneCount === 0,
+      toolColour: doneCount === 0 ? '#A3A9B3' : '#17385F',
+      segs: [0, 1, 2, 3, 4, 5].map(function (i) {
+        return { colour: i < doneCount - redCount ? '#17385F' : i < doneCount ? '#B01C2B' : '#DADFE6' };
+      }),
+      ready: left === 0,
+      notReady: left > 0,
+      hasNext: race < MG_RACES.length,
+      heatDone: race >= MG_RACES.length,
+      nextName: race < MG_RACES.length ? MG_RACES[race] : '',
+      undo: function () {
+        var o = (self.state && self.state.order) || [];
+        var e = (self.state && self.state.elim) || [];
+        var log = ((self.state && self.state.log) || []).slice();
+        while (log.length) {
+          var last = log.pop();
+          if (last.type === 'place' && o.indexOf(last.id) >= 0) { self.setState({ order: without(o, last.id), log: log }); return; }
+          if (last.type === 'elim' && e.indexOf(last.id) >= 0) { self.setState({ elim: without(e, last.id), log: log }); return; }
+        }
+        if (o.length) self.setState({ order: o.slice(0, -1), log: [] });
+        else if (e.length) self.setState({ elim: e.slice(0, -1), log: [] });
+      },
+      reset: function () { self.setState({ order: [], elim: [], ov: {}, log: [] }); },
+      showToast: !!st.toast && !submitted,
+      toast: st.toast || '',
+      submit: function () {
+        // Find the next race that still needs scoring; stay put on the last one.
+        var store = (self.state && self.state.saved) || MG_SEED;
+        var target = 0;
+        for (var n = race + 1; n <= MG_RACES.length; n++) { if (!(store[n] && store[n].submitted)) { target = n; break; } }
+        if (target) goTo(target, true);
+        else self.setState({ submitted: true, toast: null });
+      },
+      edit: function () { self.setState({ submitted: false, correcting: true }); },
+      next: function () { goTo(race + 1); },
+      restart: function () {
+        self.setState({ saved: {}, race: 1, order: [], elim: [], ov: {}, sheet: null, log: [], submitted: false, correcting: false, holdId: null });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -13,6 +13,10 @@ import { ReadinessDesk } from './ReadinessDesk';
 import { buildIssueGroups, clock, drawSubtitle, plural, type IssueGroup } from './readiness';
 import type { CompetitionReadiness, DrawPreview } from './types';
 import { apiMessage } from './types';
+import { DuplicateEventPanel, PrintSheetsPanel, TeamImportPanel } from '../eventTools/EventToolsPage';
+import { TackCheckTab } from '../eventTools/TackCheckTab';
+import { PassportCheckTab } from '../eventTools/PassportCheckTab';
+import { ResultsBookTab } from '../eventTools/ResultsBookTab';
 import './operations.css';
 
 const DESK_QUERY = '(min-width: 1024px)';
@@ -40,12 +44,14 @@ export function OperationsPage() {
   return <OperationsPageContent key={`${competition.id}:${user.id}`} />;
 }
 
-type View = 'checks' | 'equipment' | 'draw' | 'entries';
+type View = 'checks' | 'equipment' | 'draw' | 'entries' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
 type Sheet = 'more' | 'draw' | null;
 
 function OperationsPageContent() {
   const canWrite = true; // anyone who can organise this competition may change it; the API decides
   const { competition, reload: reloadCompetition } = useCompetition();
+  const { hasRole } = useAuth();
+  const mayDuplicate = Boolean(hasRole?.('Admin') || hasRole?.('Trainer'));
   const wide = useWideScreen();
   usePageWidth(wide ? 'wide' : 'default');
   const [view, setView] = useState<View>('checks');
@@ -215,6 +221,24 @@ function OperationsPageContent() {
     title = 'Entries';
     context = `Organiser · ${competition.name}`;
     actions = null;
+  } else if (shownView === 'tack') {
+    title = 'Tack check';
+    actions = null;
+  } else if (shownView === 'passport') {
+    title = 'Passport check';
+    actions = null;
+  } else if (shownView === 'import') {
+    title = 'Import teams';
+    actions = null;
+  } else if (shownView === 'print') {
+    title = 'Print sheets';
+    actions = null;
+  } else if (shownView === 'results') {
+    title = 'Results book';
+    actions = null;
+  } else if (shownView === 'duplicate') {
+    title = 'Duplicate event';
+    actions = null;
   } else if (shownView === 'equipment') {
     title = 'Equipment';
     if (readiness) subtitle = `${checkedEquipment.size} of ${equipmentTotal} items checked`;
@@ -232,6 +256,12 @@ function OperationsPageContent() {
     ...(wide ? [] : [{ label: 'Equipment', active: shownView === 'equipment', onSelect: () => setView('equipment') }]),
     { label: 'Draw', active: shownView === 'draw', onSelect: () => setView('draw') },
     { label: 'Entries', active: shownView === 'entries', onSelect: () => setView('entries') },
+    { label: 'Tack check', active: shownView === 'tack', onSelect: () => setView('tack') },
+    { label: 'Passport check', active: shownView === 'passport', onSelect: () => setView('passport') },
+    { label: 'Import teams', active: shownView === 'import', onSelect: () => setView('import') },
+    { label: 'Print sheets', active: shownView === 'print', onSelect: () => setView('print') },
+    { label: 'Results book', active: shownView === 'results', onSelect: () => setView('results') },
+    ...(mayDuplicate ? [{ label: 'Duplicate event', active: shownView === 'duplicate', onSelect: () => setView('duplicate') }] : []),
   ];
 
   const clashes = groups.find((group) => group.id === 'clashes')?.items.length ?? 0;
@@ -258,6 +288,13 @@ function OperationsPageContent() {
       )}
 
       {shownView === 'entries' && <EntriesPanel canWrite={canWrite} onTimetableChanged={reloadCompetition} />}
+
+      {shownView === 'tack' && <TackCheckTab competitionId={String(competition.id)} />}
+      {shownView === 'passport' && <PassportCheckTab competitionId={String(competition.id)} />}
+      {shownView === 'import' && <TeamImportPanel competitionId={String(competition.id)} onImported={reloadCompetition} />}
+      {shownView === 'print' && <PrintSheetsPanel competitionId={String(competition.id)} />}
+      {shownView === 'results' && <ResultsBookTab competitionId={String(competition.id)} />}
+      {shownView === 'duplicate' && mayDuplicate && <DuplicateEventPanel competition={competition} />}
 
       {shownView === 'draw' && (
         <section aria-label="Section draw">

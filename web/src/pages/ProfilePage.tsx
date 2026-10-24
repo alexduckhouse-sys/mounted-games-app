@@ -18,6 +18,13 @@ import { useTodaysEvents } from './dashboard/useTodaysEvents';
 
 const NO_TEAMS: Team[] = [];
 
+interface SavedRiderRow {
+  id: number;
+  fullName: string;
+  ponyName?: string | null;
+  horseName?: string | null;
+}
+
 /**
  * Who I am, what needs me, my club and my account, in one place (the Me tab). For an admin this is the whole dashboard:
  * what needs them, quick actions, today's events and the site admin sections, in a grid on a laptop.
@@ -29,7 +36,8 @@ export function ProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const notify = useTeamNotifications(NO_TEAMS);
-  const [savedRiders, setSavedRiders] = useState<number | null>(null);
+  const [savedRiders, setSavedRiders] = useState<SavedRiderRow[] | null>(null);
+  const [ridersOpen, setRidersOpen] = useState(false);
   const [forms, setForms] = useState<DeclarationForm[] | null>(null);
 
   const userId = user?.id;
@@ -39,7 +47,7 @@ export function ProfilePage() {
   useEffect(() => {
     if (!userId || clubId == null) return;
     let cancelled = false;
-    api.get<unknown[]>(`/clubs/${clubId}/saved-riders`).then((r) => { if (!cancelled && Array.isArray(r.data)) setSavedRiders(r.data.length); }).catch(() => {});
+    api.get<SavedRiderRow[]>(`/clubs/${clubId}/saved-riders`).then((r) => { if (!cancelled && Array.isArray(r.data)) setSavedRiders(r.data); }).catch(() => {});
     return () => { cancelled = true; };
   }, [userId, clubId]);
 
@@ -74,7 +82,39 @@ export function ProfilePage() {
 <Section title="My club" aside={user.clubName ?? undefined}>
           <div className="mg-card mg-list">
             {showTeams && <ListRow to="/teams" icon={Users} label="Teams" count={teams ? String(teams.length) : undefined} />}
-            {clubId != null && <ListRow icon={Contact} label="Saved riders" count={savedRiders != null ? String(savedRiders) : undefined} />}
+            {clubId != null && (
+              <>
+                <ListRow
+                  icon={Contact}
+                  label="Saved riders"
+                  count={savedRiders != null ? String(savedRiders.length) : undefined}
+                  expanded={ridersOpen}
+                  onClick={() => setRidersOpen((open) => !open)}
+                />
+                {ridersOpen && (
+                  <div className="flex flex-col gap-2 bg-[rgb(var(--mg-subtle))] px-4 py-3 text-sm">
+                    {savedRiders && savedRiders.length > 0 ? (
+                      <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Saved riders list">
+                        {savedRiders.map((rider) => {
+                          const pony = rider.ponyName ?? rider.horseName;
+                          return (
+                            <li key={rider.id} className="flex items-baseline justify-between gap-2">
+                              <span className="font-semibold text-[rgb(var(--mg-ink))]">{rider.fullName}</span>
+                              {pony && <span className="text-[rgb(var(--mg-muted))]">{pony}</span>}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="m-0 text-[rgb(var(--mg-muted))]">No saved riders yet.</p>
+                    )}
+                    <Link to="/declarations" className="mg-text-link !min-h-0 self-start !text-sm font-semibold">
+                      Manage on dec forms →
+                    </Link>
+                  </div>
+                )}
+              </>
+            )}
             <ListRow to="/declarations" icon={ClipboardList} label="Dec forms" count={decFormCount} />
             {runsClub && <ListRow to="/me/members" icon={UserCog} label="Members" />}
             {runsClub && <ListRow to="/me/payouts" icon={Landmark} label="Payouts" />}
@@ -159,17 +199,17 @@ function Section({ title, aside, children }: { title: string; aside?: string; ch
   );
 }
 
-/** A tappable row with an icon, a label, an optional count and a chevron. Without `to` it just reports. */
-function ListRow({ to, icon: IconComponent, label, count }: { to?: string; icon: LucideIcon; label: string; count?: string }) {
+/** A tappable row with an icon, a label, an optional count and a chevron. */
+function ListRow({ to, onClick, expanded, icon: IconComponent, label, count }: { to?: string; onClick?: () => void; expanded?: boolean; icon: LucideIcon; label: string; count?: string }) {
   const body = (
     <>
       <IconComponent aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-heading))]" />
       <span className="flex-1 text-base font-semibold">{label}</span>
       {count && <span className="text-[15px] text-[rgb(var(--mg-muted))]">{count}</span>}
-      {to && <ChevronRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))]" />}
+      <ChevronRight aria-hidden="true" className={`h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))] transition-transform ${expanded ? 'rotate-90' : ''}`} />
     </>
   );
   return to
     ? <Link to={to} className="mg-row !min-h-14">{body}</Link>
-    : <div className="mg-row !min-h-14">{body}</div>;
+    : <button type="button" aria-expanded={expanded} onClick={onClick} className="mg-row !min-h-14">{body}</button>;
 }

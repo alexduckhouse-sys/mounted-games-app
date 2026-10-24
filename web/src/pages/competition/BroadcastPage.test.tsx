@@ -1,21 +1,45 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { BroadcastPage } from './BroadcastPage';
+import { ProducePage } from './ProducePage';
 import type { PublisherSnapshot } from '../../live/streamPublisher';
+import type { StreamOverlay } from '../../types';
+import { DEFAULT_OVERLAY } from '../../lib/overlays';
 import { setBroadcasting } from '../../pwa';
 import { competition, session } from '../../test/factories';
 import { asMedia, deferred, FakeMediaStream, fakePeerConstructor, FakeTrack, flush } from '../../test/streamFakes';
 import { chooseOption, optionLabels } from '../../test/select';
 
-const state = vi.hoisted(() => ({ organiser: true, enabled: true, snapshot: {} as PublisherSnapshot, listener: () => {}, streams: [] as unknown[] }));
+const state = vi.hoisted(() => ({
+  organiser: true,
+  enabled: true,
+  snapshot: {} as PublisherSnapshot,
+  listener: () => {},
+  streams: [] as unknown[],
+  overlay: undefined as StreamOverlay | undefined,
+  saveOverlay: vi.fn(async (change: (o: StreamOverlay) => StreamOverlay) => {
+    if (state.overlay) state.overlay = change(state.overlay);
+    return 'saved' as const;
+  }),
+}));
 const publisher = vi.hoisted(() => ({
   getSnapshot: () => state.snapshot,
   subscribe: (listener: () => void) => { state.listener = listener; return () => {}; },
   capture: vi.fn(), devices: vi.fn(), switchCamera: vi.fn(), start: vi.fn(), stop: vi.fn(), dispose: vi.fn(), mute: vi.fn(), pause: vi.fn(), caption: vi.fn(), viewers: vi.fn(),
 }));
 vi.mock('../../live/streamPublisher', () => ({ browserPublisherDependencies: () => ({}), createStreamPublisher: () => publisher }));
-vi.mock('./context', async (importOriginal) => ({ ...(await importOriginal<typeof import('./context')>()), useCompetition: () => ({ competition: competition({ sessions: [session(1, { arenaName: 'Main Arena' }), session(2, { arenaName: 'Second Arena' })] }), streamingEnabled: state.enabled, streams: state.streams, streamMessages: [] }) }));
+vi.mock('./context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./context')>()),
+  useCompetition: () => ({
+    competition: competition({ sessions: [session(1, { arenaName: 'Main Arena' }), session(2, { arenaName: 'Second Arena' })] }),
+    streamingEnabled: state.enabled,
+    streams: state.streams,
+    streamMessages: [],
+    overlay: state.overlay,
+    saveOverlay: state.saveOverlay,
+  }),
+}));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => state.organiser }) }));
 vi.mock('../../pwa', () => ({ setBroadcasting: vi.fn() }));
 const update = (patch: Partial<PublisherSnapshot>) => { state.snapshot = { ...state.snapshot, ...patch }; state.listener(); };
@@ -23,6 +47,8 @@ const show = () => render(<MemoryRouter initialEntries={['/competitions/1/broadc
 const settle = () => act(flush);
 beforeEach(() => {
   state.organiser = true; state.enabled = true; state.streams = [];
+  state.overlay = { ...DEFAULT_OVERLAY };
+  state.saveOverlay.mockClear();
   state.snapshot = { state: 'idle', media: null, streamId: null, viewerCount: 0, signal: 'good', audioMuted: false, hasAudio: false, error: null };
   vi.stubGlobal('RTCPeerConnection', fakePeerConstructor);
   Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {} });
@@ -85,4 +111,31 @@ it('offers to take over when the same arena and camera position is already live'
   fireEvent.click(screen.getByRole('button', { name: 'Main camera' }));
   fireEvent.click(screen.getByRole('button', { name: 'Take over and go live' })); await settle();
   expect(publisher.start).toHaveBeenCalledWith('Main Arena', 'Main camera', true);
+});
+it('toggles the live score strip and sends or clears banner messages inline', async () => {
+  const { rerender } = show();
+  const stripToggle = screen.getByRole('button', { name: 'Show live score strip' });
+  expect(stripToggle).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(stripToggle); await settle();
+  expect(state.overlay).toMatchObject({ stripMode: 2, scoreCardMode: 2 });
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'Banner message' }), { target: { value: '  Lunch break until 1pm  ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Put on air' })); await settle();
+  expect(state.overlay).toMatchObject({ bannerText: 'Lunch break until 1pm', bannerStyle: 1 });
+
+  rerender(<MemoryRouter initialEntries={['/competitions/1/broadcast']}><BroadcastPage /></MemoryRouter>);
+  expect(screen.getByText('On air: Lunch break until 1pm')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Clear banner' })); await settle();
+  expect(state.overlay?.bannerText).toBeNull();
+});
+it('redirects ProducePage to BroadcastPage', () => {
+  render(
+    <MemoryRouter initialEntries={['/competitions/1/produce']}>
+      <Routes>
+        <Route path="/competitions/:id/produce" element={<ProducePage />} />
+        <Route path="/competitions/:id/broadcast" element={<BroadcastPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole('heading', { name: 'Go live' })).toBeVisible();
 });

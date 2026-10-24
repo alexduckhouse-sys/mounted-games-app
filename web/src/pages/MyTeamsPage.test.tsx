@@ -6,6 +6,7 @@ import { api } from '../api';
 import { competition, heat, race, session, team } from '../test/factories';
 import type { CompetitionDetail, Team } from '../types';
 import { formatTime, roundTo5Min } from '../lib/time';
+import { FAVOURITES_KEY } from '../lib/favourites';
 import { MyTeamsPage } from './MyTeamsPage';
 import { chooseOption, optionLabels } from '../test/select';
 
@@ -291,5 +292,20 @@ describe('MyTeamsPage for a club manager', () => {
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Save team details' }));
     expect(await screen.findByText(/Could not save/)).toBeInTheDocument();
+  });
+});
+
+describe('MyTeamsPage followed teams', () => {
+  it('shows starred teams alongside managed teams in one place', async () => {
+    localStorage.setItem(FAVOURITES_KEY, JSON.stringify([{ competitionId: 1, teamId: 2 }]));
+    detail = competition({
+      id: 1,
+      name: 'Hartpury Area Festival',
+      teams: [team(1, { displayName: 'Example Blue' }), team(2, { displayName: 'Wirral Pairs', sectionName: 'Pairs' })],
+    });
+    mount();
+    expect(await screen.findByRole('article', { name: 'Example Blue' })).toBeInTheDocument();
+    const followedRegion = await screen.findByRole('region', { name: 'Hartpury Area Festival' });
+    expect(within(followedRegion).getByRole('link', { name: /Wirral Pairs/ })).toHaveAttribute('href', '/competitions/1/following');
   });
 });

@@ -264,8 +264,13 @@ describe('admin competitions', () => {
   it('shows the whole menu to an admin with no edit mode to switch on', async () => {
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'More for Christmas Cracker Teams' }));
-    expect(screen.getByRole('menuitem', { name: 'Delete competition' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Open competition' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Edit details' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'On the day & format' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Operations & tools' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Dec forms' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Manage event shop' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Delete competition' })).toBeInTheDocument();
   });
 
   it('blocks an address, shows your own address and lifts a block', async () => {

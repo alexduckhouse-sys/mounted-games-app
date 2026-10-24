@@ -135,4 +135,18 @@ describe('RulesPage', () => {
     await user.click(within(form).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
+
+  it('switches to the Rulebooks tab to view and manage rulebooks in the same place', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({
+      data: url === '/rulebooks'
+        ? [{ id: 2, title: 'Event handbook', edition: '2030', sourceUrl: null, updatedAt: '2030-01-01T00:00:00Z' }]
+        : races,
+    }));
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText('Speed Weave');
+    await user.click(screen.getByRole('tab', { name: 'Rulebooks' }));
+    expect(await screen.findByRole('button', { name: /^Event handbook/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add rulebook' })).toBeInTheDocument();
+  });
 });

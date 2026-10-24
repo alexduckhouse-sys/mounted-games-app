@@ -1,20 +1,20 @@
-/* Organiser tools page: built on the shared refine.css primitives. */
+/* Organiser tools page: unified with the mg-* scoreboard and timetable design tokens. */
 .tools-pad { padding: 20px 0; }
 .tools-msg { margin-top: 12px; }
 .tools-success { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-weight: 600; color: rgb(var(--mg-ok)); }
 .tools-form { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 .tools-fields { display: flex; flex-direction: column; gap: 12px; border: 0; margin: 0; padding: 0; min-width: 0; }
-.rf-fld .tools-csv { min-height: 12rem; height: auto; padding: 10px; font: 400 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
+.rf-fld .tools-csv { min-height: 12rem; height: auto; padding: 10px; font: 400 14px/1.5 var(--mg-font); font-variant-numeric: tabular-nums; resize: vertical; }
 .tools-error { color: rgb(var(--mg-elim)); font-weight: 600; }
 
 /* Tack check and passport check. */
-.tools-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 15px; font-weight: 600; color: rgb(var(--mg-ink)); }
+.tools-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font: 600 15px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
 .tools-check input { width: 22px; height: 22px; flex-shrink: 0; accent-color: rgb(var(--mg-heading)); }
-.tools-check-sub { display: block; font-size: 13px; font-weight: 500; color: rgb(var(--mg-muted)); }
+.tools-check-sub { display: block; font: 500 13px/1.2 var(--mg-font); color: rgb(var(--mg-muted)); }
 .tools-row { display: flex; align-items: flex-end; gap: 8px; }
 .tools-row > .rf-fld { flex: 1; }
 .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 8px; }
-.tools-team { border-top: 1px solid rgb(var(--mg-rule)); padding-top: 12px; }
+.tools-team { border-top: 1px solid rgb(var(--mg-line)); padding-top: 12px; }
 .tools-team-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.tools-team-name { font-size: 16px; font-weight: 700; color: rgb(var(--mg-ink)); }
-.tools-muted { font-size: 13px; color: rgb(var(--mg-muted)); }
+.tools-team-name { font: 700 16px/1.15 var(--mg-font-display); letter-spacing: .02em; color: rgb(var(--mg-heading)); }
+.tools-muted { font: 400 13px/1.25 var(--mg-font); color: rgb(var(--mg-muted)); }

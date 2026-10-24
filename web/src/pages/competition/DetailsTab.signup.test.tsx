@@ -117,8 +117,8 @@ describe('sign-up form email', () => {
   });
 });
 
-describe('organiser list', () => {
-  it('shows the address and what happened to the confirmation', async () => {
+describe('organiser entry link', () => {
+  it('points organisers to Operations instead of duplicating inline signup management on DetailsTab', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/auth/me') return { data: { roles: ['Admin'] } };
       if (String(url).endsWith('/signups')) return { data: [signup({ contactEmail: 'parent@example.org', confirmationEmailStatus: 2 }), signup({ id: 10, fullName: 'Bob' })] };
@@ -126,7 +126,8 @@ describe('organiser list', () => {
     });
     mount(['Admin'], 'admin1');
 
-    expect(await screen.findByText(/parent@example.org · Confirmation email failed/)).toBeTruthy();
-    expect(screen.getByText('No email address')).toBeTruthy();
+    const link = await screen.findByRole('link', { name: 'Manage entries & equipment in Operations' });
+    expect(link).toHaveAttribute('href', '/competitions/1/operations');
+    expect(screen.queryByText(/Manage \(/)).not.toBeInTheDocument();
   });
 });

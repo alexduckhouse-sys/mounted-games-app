@@ -58,7 +58,11 @@ beforeEach(() => {
     '/auth/me': {},
     '/competitions/access': [],
     '/trainer/my-teams': [team(1, { competitionId: 4 }), team(2, { competitionId: 4 }), team(3, { competitionId: 9 })],
-    '/clubs/7/saved-riders': [{ id: 1 }, { id: 2 }, { id: 3 }],
+    '/clubs/7/saved-riders': [
+      { id: 1, fullName: 'Mia Clarke', ponyName: 'Bramble' },
+      { id: 2, fullName: 'Leo Patel', horseName: 'Starlight' },
+      { id: 3, fullName: 'Zoe Evans' },
+    ],
     '/declaration-forms': [{ id: 1, teamId: 1 }],
     '/admin/trainer-requests': requests,
   };
@@ -154,6 +158,23 @@ describe('ProfilePage: my club', () => {
     mount({ roles: ['Trainer'], clubName: null });
     await section('My club').findByRole('link', { name: /Teams/ });
     expect(section('My club').queryByText('Saved riders')).not.toBeInTheDocument();
+  });
+
+  it('expands saved riders inline with their ponies and a link to dec forms', async () => {
+    mount({ competition: true });
+    const club = section('My club');
+    await club.findAllByText('3');
+    const toggle = club.getByRole('button', { name: /Saved riders/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const list = club.getByRole('list', { name: 'Saved riders list' });
+    expect(within(list).getByText('Mia Clarke')).toBeInTheDocument();
+    expect(within(list).getByText('Bramble')).toBeInTheDocument();
+    expect(within(list).getByText('Leo Patel')).toBeInTheDocument();
+    expect(within(list).getByText('Starlight')).toBeInTheDocument();
+    expect(within(list).getByText('Zoe Evans')).toBeInTheDocument();
+    expect(club.getByRole('link', { name: /Manage on dec forms/ })).toHaveAttribute('href', '/declarations');
   });
 
   it('is hidden for a member with no club and no teams', async () => {

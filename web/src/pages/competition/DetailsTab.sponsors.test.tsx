@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
@@ -33,24 +33,27 @@ beforeEach(() => {
 });
 
 describe('sponsors on the details page', () => {
-  it('shows the sponsors set for Details, and links to the sponsor page when it has any', () => {
-    show([sponsor(1, { name: 'Details Co', showOn: 4 }), sponsor(2, { name: 'Page Co', showOn: 32 })]);
-    expect(screen.getByRole('region', { name: 'Our sponsors' })).toHaveTextContent('Details Co');
-    expect(screen.getByRole('region', { name: 'Our sponsors' })).not.toHaveTextContent('Page Co');
-    expect(screen.getByRole('link', { name: 'Sponsors' })).toHaveAttribute('href', '/competitions/5/sponsors');
+  it('shows all sponsors for Details and the sponsor page grouped by tier directly on Details', () => {
+    show([
+      sponsor(1, { name: 'Details Co', tier: 2, showOn: 4 }),
+      sponsor(2, { name: 'Page Co', tier: 0, showOn: 32 }),
+    ]);
+    const section = screen.getByRole('region', { name: 'Our sponsors' });
+    expect(within(within(section).getByRole('group', { name: 'Headline' })).getByText('Page Co')).toBeInTheDocument();
+    expect(within(within(section).getByRole('group', { name: 'Supporter' })).getByText('Details Co')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Sponsors' })).toBeNull();
   });
 
-  it('leaves out the link and the strip when there is nothing to show', () => {
+  it('leaves out the sponsors section when there is nothing to show', () => {
     show([sponsor(1, { showOn: 1 })]);
     expect(screen.queryByRole('link', { name: 'Sponsors' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Our sponsors' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Sponsors' })).toBeNull();
   });
 
-  it('gives organisers the link anyway, and the Sponsors card', async () => {
+  it('gives organisers the Sponsors management card on Details', async () => {
     auth.organiser = true;
     show([]);
-    expect(screen.getByRole('link', { name: 'Sponsors' })).toBeInTheDocument();
     expect(await screen.findByRole('region', { name: 'Sponsors' })).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/competitions/5/sponsors/manage');
   });

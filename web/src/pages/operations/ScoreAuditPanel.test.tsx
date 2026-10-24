@@ -2,7 +2,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
-import { autoConfirm } from '../../test/confirm';
 import { ScoreAuditPanel } from './ScoreAuditPanel';
 
 const auth = vi.hoisted(() => ({ manage: true, asked: [] as unknown[] }));
@@ -21,13 +20,12 @@ describe('ScoreAuditPanel', () => {
     auth.asked = [];
     vi.mocked(api.get).mockImplementation((url: string) => Promise.resolve({ data: url.endsWith('/history') ? [] : score }));
     vi.mocked(api.put).mockResolvedValue({ data: score });
-    vi.mocked(api.post).mockResolvedValue({ data: { ...score, revision: 2, isSignedOff: true } });
   });
 
   it('shows the record but no sign-off or corrections to someone who cannot manage this competition', async () => {
     auth.manage = false;
     render(<ScoreAuditPanel raceId={9} />);
-    await screen.findByText('Open for scoring');
+    await screen.findByRole('button', { name: 'Refresh score record' });
     expect(screen.queryByRole('button', { name: 'Sign off results' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save correction' })).not.toBeInTheDocument();
     expect(auth.asked).toContainEqual({ id: 5, createdByUserId: 'owner-1' });
@@ -36,7 +34,7 @@ describe('ScoreAuditPanel', () => {
   it('requires a reason before saving a correction', async () => {
     const user = userEvent.setup();
     render(<ScoreAuditPanel raceId={9} />);
-    await screen.findByText('Open for scoring');
+    await screen.findByRole('button', { name: 'Save correction' });
     await user.click(screen.getByRole('button', { name: 'Save correction' }));
     expect(screen.getByRole('textbox', { name: 'Correction reason' })).toBeInvalid();
     expect(api.put).not.toHaveBeenCalled();
@@ -44,25 +42,21 @@ describe('ScoreAuditPanel', () => {
 
   it('removes the previous race actions while the next record loads', async () => {
     const { rerender } = render(<ScoreAuditPanel raceId={9} />);
-    await screen.findByRole('button', { name: 'Sign off results' });
+    await screen.findByRole('button', { name: 'Save correction' });
     vi.mocked(api.get).mockImplementation(() => new Promise(() => {}));
     rerender(<ScoreAuditPanel raceId={10} />);
-    expect(screen.queryByRole('button', { name: 'Sign off results' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save correction' })).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Loading score history');
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  it('signs off the current revision', async () => {
-    const user = userEvent.setup();
-    render(<ScoreAuditPanel raceId={9} />);
-    await user.click(await screen.findByRole('button', { name: 'Sign off results' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/races/9/score/sign-off', expect.objectContaining({ expectedRevision: 1 })));
-  });
   it('keeps corrections behind a collapsed row and saves with a reason', async () => {
     const user = userEvent.setup();
     render(<ScoreAuditPanel raceId={9} />);
-    await screen.findByText('Open for scoring');
+    await screen.findByRole('button', { name: 'Save correction' });
     expect(screen.getByText('Correct placings').closest('details')).not.toHaveAttribute('open');
+    expect(screen.queryByRole('button', { name: 'Sign off results' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reopen results' })).not.toBeInTheDocument();
 
     await user.type(screen.getByRole('textbox', { name: 'Correction reason' }), 'Judge recount');
     await user.click(screen.getByRole('button', { name: 'Save correction' }));
@@ -72,34 +66,15 @@ describe('ScoreAuditPanel', () => {
     expect(await screen.findByText('Correction saved.')).toBeInTheDocument();
   });
 
-  it('lists history as rows and asks for a reason before reopening', async () => {
-    const signedOff = { ...score, isSignedOff: true, signedOffAt: '2030-01-01T10:00:00Z', signedOffByUserId: 'u1' };
+  it('lists score history as rows with no sign-off or reopen controls', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => Promise.resolve({ data: url.endsWith('/history')
-      ? [{ revision: 2, kind: 3, before: score.results, after: score.results, actorUserId: 'u1', reason: 'All checked', createdAt: '2030-01-01T10:00:00Z' }]
-      : signedOff }));
-    const user = userEvent.setup();
+      ? [{ revision: 2, kind: 2, before: score.results, after: score.results, actorUserId: 'u1', reason: 'Referee protest upheld', createdAt: '2030-01-01T10:00:00Z' }]
+      : score }));
     render(<ScoreAuditPanel raceId={9} />);
 
-    expect(await screen.findAllByText('Signed off')).toHaveLength(2);
-    expect(screen.getByRole('list', { name: 'Score history' })).toHaveTextContent('All checked');
-    expect(screen.queryByText('Correct placings')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Reopen results' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Add a reason for reopening these results.');
-    expect(api.post).not.toHaveBeenCalled();
-  });
-
-  it('asks in a red dialog before reopening signed-off results, and does nothing if cancelled', async () => {
-    const signedOff = { ...score, isSignedOff: true, signedOffAt: '2030-01-01T10:00:00Z', signedOffByUserId: 'u1' };
-    vi.mocked(api.get).mockImplementation((url: string) => Promise.resolve({ data: url.endsWith('/history') ? [] : signedOff }));
-    vi.mocked(api.post).mockResolvedValue({ data: {} });
-    const asked = autoConfirm([false, true]);
-    const user = userEvent.setup();
-    render(<ScoreAuditPanel raceId={9} />);
-    await user.type(await screen.findByLabelText('Reason for reopening'), 'Wrong placing');
-    await user.click(screen.getByRole('button', { name: 'Reopen results' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('Reopen these results for correction? The sign-off is removed until they are signed off again.'));
-    expect(api.post).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Reopen results' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/races/9/score/reopen', expect.objectContaining({ reason: 'Wrong placing' })));
+    expect(await screen.findByRole('list', { name: 'Score history' })).toHaveTextContent('Referee protest upheld');
+    expect(screen.getByRole('list', { name: 'Score history' })).toHaveTextContent('Results corrected');
+    expect(screen.queryByRole('button', { name: 'Sign off results' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reopen results' })).not.toBeInTheDocument();
   });
 });

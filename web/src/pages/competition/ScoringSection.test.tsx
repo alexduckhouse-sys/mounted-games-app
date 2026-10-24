@@ -11,6 +11,8 @@ import { ScoringSection, type PendingPlace } from './ScoringSection';
 vi.mock('../../api', () => ({ api: { get: vi.fn().mockResolvedValue({ data: [] }), post: vi.fn() } }));
 vi.mock('@microsoft/signalr', () => ({ HubConnectionBuilder: vi.fn() }));
 vi.mock('../../components/RaceRulesButton', () => ({ RaceRulesButton: ({ raceName }: { raceName: string }) => <button type="button">Rules for {raceName}</button> }));
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1' }, canManage: () => true }) }));
+vi.mock('./context', () => ({ useCompetition: () => ({ competition: { id: 1, createdByUserId: 'u1' } }) }));
 
 const entries: Heat['entries'] = [
   { id: 1, teamId: 1, teamName: 'Alpha', laneIndex: 3, bibColour: 'Red' },
@@ -282,5 +284,14 @@ describe('team colours and hatbands', () => {
     unmount();
     render(<Harness hatbands={null} />);
     expect(screen.queryByText(/hatband/)).toBeNull();
+  });
+
+  it('toggles the score history and correction panel for completed races', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const toggle = screen.getByRole('button', { name: 'Score history & correction' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 });

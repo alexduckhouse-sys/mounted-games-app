@@ -5,7 +5,7 @@ import { Camera, Eye, Handshake, Megaphone, Mic, MicOff, Pause, Play, RefreshCw,
 import { api } from '../../api';
 import { sponsorsFor } from '../../lib/sponsors';
 import { SponsorOverlay } from '../../components/stream/SponsorOverlay';
-import { readMessages } from '../../lib/overlayMessages';
+import { readMessages, writeMessages } from '../../lib/overlayMessages';
 import { DEFAULT_OVERLAY } from '../../lib/overlays';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -143,9 +143,108 @@ function BroadcastStudio() {
         </div>
       </div>
     </>}
+    <StreamOverlayControls competitionId={competition.id} />
   </div>;
 }
 function VideoIcon() { return <span aria-hidden="true" className="h-2 w-2 rounded-full bg-white" />; }
+
+function StreamOverlayControls({ competitionId }: { competitionId: number }) {
+  const { overlay, saveOverlay } = useCompetition();
+  const current = overlay ?? DEFAULT_OVERLAY;
+  const [bannerText, setBannerText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const stripShown = current.stripMode !== 2;
+
+  async function toggleStrip() {
+    if (!saveOverlay || busy) return;
+    setBusy(true);
+    try {
+      const nextMode = stripShown ? 2 : 0;
+      await saveOverlay((o) => ({ ...o, stripMode: nextMode, scoreCardMode: nextMode }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendBanner() {
+    const text = bannerText.trim();
+    if (!saveOverlay || busy || !text) return;
+    setBusy(true);
+    try {
+      await saveOverlay((o) => ({ ...o, bannerText: text, bannerStyle: 1 }));
+      const existing = readMessages(competitionId);
+      if (!existing.some((m) => m.text === text)) {
+        writeMessages(competitionId, [...existing, { text, style: 1 }]);
+      }
+      setBannerText('');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearBanner() {
+    if (!saveOverlay || busy) return;
+    setBusy(true);
+    try {
+      await saveOverlay((o) => ({ ...o, bannerText: null }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mg-card flex flex-col gap-3 p-4" aria-label="Stream overlays">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-semibold">Live score strip</span>
+        <button
+          type="button"
+          className="mg-stream-chip"
+          aria-pressed={stripShown}
+          disabled={busy || !saveOverlay}
+          onClick={() => void toggleStrip()}
+        >
+          Show live score strip
+        </button>
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-semibold">Banner message</span>
+          <span className="text-xs text-[rgb(var(--mg-muted))]">
+            {current.bannerText ? `On air: ${current.bannerText}` : 'No banner up'}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input
+            aria-label="Banner message"
+            className="input min-w-0 flex-1"
+            maxLength={140}
+            value={bannerText}
+            placeholder="e.g. Lunch break until 1pm"
+            onChange={(event) => setBannerText(event.target.value)}
+          />
+          <button
+            type="button"
+            className="mg-btn mg-btn-primary"
+            disabled={busy || !saveOverlay || !bannerText.trim()}
+            onClick={() => void sendBanner()}
+          >
+            {current.bannerText ? 'Update banner' : 'Put on air'}
+          </button>
+          {current.bannerText && (
+            <button
+              type="button"
+              className="mg-btn mg-btn-secondary"
+              disabled={busy || !saveOverlay}
+              onClick={() => void clearBanner()}
+            >
+              Clear banner
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 /**
  * A quick banner switch for the person filming: clears the banner that's up, or puts back the latest

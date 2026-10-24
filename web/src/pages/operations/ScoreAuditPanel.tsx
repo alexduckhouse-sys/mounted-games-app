@@ -10,7 +10,6 @@ import { STATUS_CHOICES, effectiveStatus, statusLetter } from '../../lib/resultS
 import './operations.css';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
-import { confirmDialog } from '../../components/ConfirmDialog';
 import { formatPoints } from '../../lib/formatPoints';
 
 export function ScoreAuditPanel(props: { raceId: number; onChanged?: () => void }) {
@@ -25,7 +24,6 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
   const [history, setHistory] = useState<RaceScoreHistory[]>([]);
   const [draft, setDraft] = useState<ScorePlace[]>([]);
   const [correctionReason, setCorrectionReason] = useState('');
-  const [actionReason, setActionReason] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,33 +84,6 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
     }
   }
 
-  async function changeSignOff(signOff: boolean) {
-    if (!score || busy || loading) return;
-    if (!signOff && !actionReason.trim()) {
-      setError('Add a reason for reopening these results.');
-      return;
-    }
-    if (!signOff && !(await confirmDialog({ title: 'Reopen these results?', message: 'Reopen these results for correction? The sign-off is removed until they are signed off again.', confirmLabel: 'Reopen results', destructive: true }))) return;
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      await api.post(`/races/${raceId}/score/${signOff ? 'sign-off' : 'reopen'}`, {
-        expectedRevision: score.revision,
-        requestId: requestId(signOff ? 'sign-off' : 'reopen'),
-        reason: actionReason.trim() || null,
-      });
-      setActionReason('');
-      setMessage(signOff ? 'Results signed off.' : 'Results reopened for correction.');
-      await load();
-      onChanged?.();
-    } catch (actionError) {
-      setError(apiMessage(actionError, 'Couldn’t update the sign-off. Refresh the score and try again.'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (loading) return <div><p role="status" className="rf-note">Loading score history…</p></div>;
 
   const heading = `score-audit-${raceId}`;
@@ -127,24 +98,13 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
         <RefineList as="div">
           <div className="rf-row">
             <span className="rf-grow">
-              <span className="rf-t1">{score.isSignedOff ? 'Signed off' : 'Open for scoring'}</span>
-              {score.signedOffAt && <span className="rf-t2">{new Date(score.signedOffAt).toLocaleString('en-GB')}{score.signedOffByUserId ? <> · Signed off by <code className="break-all">{score.signedOffByUserId}</code></> : null}</span>}
+              <span className="rf-t1">Revision {score.revision}</span>
             </span>
             <button type="button" className="rf-btn rf-btn-text" aria-label="Refresh score record" onClick={() => void load()} disabled={loading || busy}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />Refresh</button>
           </div>
         </RefineList>
 
-        {canManage(competition) && <>
-          <RefineSection title={score.isSignedOff ? 'Reopen' : 'Sign off'} />
-          <div className="ops-form ops-panel">
-            <label className="rf-fld" htmlFor={`score-action-reason-${raceId}`}>{score.isSignedOff ? 'Reason for reopening' : 'Sign-off note (optional)'}
-              <textarea id={`score-action-reason-${raceId}`} className="ops-note-input" value={actionReason} onChange={(event) => setActionReason(event.target.value)} maxLength={1000} />
-            </label>
-            <button type="button" className="rf-btn rf-btn-primary" disabled={busy || loading} onClick={() => void changeSignOff(!score.isSignedOff)}>{score.isSignedOff ? 'Reopen results' : 'Sign off results'}</button>
-          </div>
-        </>}
-
-        {canManage(competition) && !score.isSignedOff && draft.length > 0 && <>
+        {canManage(competition) && draft.length > 0 && <>
           <RefineSection title="Corrections" />
           <RefineList as="div">
             <RefineDisclosure title="Correct placings" sub="Every correction needs a reason">

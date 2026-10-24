@@ -18,7 +18,7 @@
 .mg-compact-title {
   overflow: hidden;
   color: #fff;
-  font: 700 18px/1.05 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  font: 700 18px/1.05 var(--mg-font-display);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -26,7 +26,7 @@
 .mg-compact-subtitle {
   overflow: hidden;
   color: rgb(var(--mg-header-sub));
-  font: 500 13px/1.1 'Barlow', sans-serif;
+  font: 500 13px/1.1 var(--mg-font);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, Pencil, Trash2 } from 'lucide-react';
 import { api } from '../../api';
 import { useCompetition } from './context';
@@ -9,10 +9,47 @@ import { apiMessage } from '../operations/types';
 import { LogoError, prepareLogo } from './sponsorLogo';
 import type { SponsorAdmin, SponsorTier } from '../../types';
 import {
-  SPONSOR_PLACEMENTS, SPONSOR_TIERS, dateToEnd, dateToStart, datesText, endToDate, hasPlacement, isHttpsLink,
+  SPONSOR_PLACEMENTS, SPONSOR_TIERS, dateToEnd, dateToStart, datesText, endToDate, groupByTier, hasPlacement, isHttpsLink,
   parseSponsorAdmin, parseSponsorAdmins, shownText, startToDate, withPlacement,
 } from '../../lib/sponsors';
 import { SelectField } from '../../components/SelectField';
+import { SponsorBadge } from '../../components/SponsorBadge';
+import { useRecordSponsorViews, useSponsorsFor } from '../../hooks/useSponsors';
+
+/** Public sponsors shown directly on the Details tab, grouped by tier (headline first). */
+export function EventSponsorsSection() {
+  const detailsSponsors = useSponsorsFor('Details');
+  const pageSponsors = useSponsorsFor('SponsorPage');
+  useRecordSponsorViews('Details', detailsSponsors);
+  const groups = useMemo(() => {
+    const seen = new Set<number>();
+    const combined = [...detailsSponsors, ...pageSponsors].filter((sponsor) => {
+      if (seen.has(sponsor.id)) return false;
+      seen.add(sponsor.id);
+      return true;
+    });
+    return groupByTier(combined);
+  }, [detailsSponsors, pageSponsors]);
+
+  if (groups.length === 0) return null;
+  return (
+    <section className="mg-sponsors" aria-label="Our sponsors">
+      <h2 className="mg-sponsors-title">Our sponsors</h2>
+      <div className="flex flex-col gap-3">
+        {groups.map((group) => (
+          <div key={group.tier} role="group" aria-label={group.label}>
+            <h3 className="mb-1.5 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">{group.label}</h3>
+            <ul className="mg-sponsor-card-list mg-cards-grid">
+              {group.sponsors.map((sponsor) => (
+                <li key={sponsor.id} className="mg-card"><SponsorBadge sponsor={sponsor} large={group.tier === 0} /></li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 /** What the form edits. Dates are `yyyy-mm-dd` boxes; `logo` is a chosen file waiting to be sent. */
 interface Draft {

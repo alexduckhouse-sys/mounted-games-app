@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Trophy,
-  Hammer, Check, ChevronDown, ChevronLeft, ChevronUp, Lock, Unlock, Sparkles, Download,
-  X, RotateCcw, Ban, CalendarPlus, ClipboardList,
+  Hammer, Check, ChevronDown, ChevronLeft, ChevronUp, Sparkles,
+  CalendarPlus, ClipboardList,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { competitionDateText } from '../../lib/competitionDates';
@@ -14,42 +14,30 @@ import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
 import { EmbedCard } from './EmbedCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
-import { SponsorsCard } from './SponsorsCard';
+import { EventSponsorsSection, SponsorsCard } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
-import { SponsorStrip } from '../../components/SponsorStrip';
-import { hasPlacement } from '../../lib/sponsors';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
 import { TermsTickBox } from '../../components/TermsTickBox';
 import { CONSENT_VERSION } from '../../lib/termsTick';
 import { EntryEmailFields, type EntryEmail } from '../../components/EntryEmailFields';
-import { EMAIL_OPT_IN_VERSION, confirmationEmailLabel, looksLikeEmail, newRequestId } from '../../lib/emailOptIn';
-import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignup, SignupPaymentStatus } from '../../types';
-import { downloadCsv, safeFilename, signupsToCsv } from '../../lib/csv';
-import { Chevron, RefineList, RefineSection, RefineStatus, type StatusTone } from '../refine/Refine';
+import { EMAIL_OPT_IN_VERSION, looksLikeEmail, newRequestId } from '../../lib/emailOptIn';
+import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignup } from '../../types';
+import { Chevron, RefineList, RefineSection } from '../refine/Refine';
 import { usePageHeader } from '../../components/CompactPageBarContext';
-import { confirmDialog } from '../../components/ConfirmDialog';
 
 function priceLabel(minor?: number | null): string {
   if (!minor) return 'Free';
   return `£${(minor / 100).toFixed(2)}`;
 }
 
-const SIGNUP_STATUS: Record<SignupPaymentStatus, { label: string; tone: StatusTone; struck: boolean }> = {
-  0: { label: 'Pending', tone: 'warn', struck: false },
-  1: { label: 'Paid', tone: 'ok', struck: false },
-  2: { label: 'Refunded', tone: 'mut', struck: true },
-  3: { label: 'Cancelled', tone: 'bad', struck: true },
-};
-
 export function DetailsTab() {
   usePageWidth('wide');
-  const { competition, reload, sponsors } = useCompetition();
+  const { competition, reload } = useCompetition();
   const { canManage, canOrganise, hasRole, user } = useAuth();
   const [signupResult, setSignupResult] = useState<{ key: string; items: SectionSignup[] } | null>(null);
   const signupKey = `${competition.id}:${user?.id ?? ''}`;
   const mayOrganise = canOrganise(competition);
   const allSignups = mayOrganise && signupResult?.key === signupKey ? signupResult.items : [];
-  const [lockBusy, setLockBusy] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
 
   usePageHeader({ title: 'Details', subtitle: `${competition.name}${competitionDateText(competition.startDate, competition.endDate) ? ` · ${competitionDateText(competition.startDate, competition.endDate)}` : ''}` });
@@ -72,25 +60,6 @@ export function DetailsTab() {
     return () => { cancelled = true; };
   }, [competition.id, mayOrganise, signupKey]);
 
-  async function toggleLock() {
-    if (lockBusy) return;
-    setLockBusy(true);
-    try {
-      await api.post(`/competitions/${competition.id}/signups-locked`, { locked: !competition.signupsLocked });
-      reload();
-    } catch {
-      alert('Could not update signup lock. Try again.');
-    } finally {
-      setLockBusy(false);
-    }
-  }
-
-  function exportAllSignupsCsv() {
-    if (allSignups.length === 0) return;
-    const csv = signupsToCsv(allSignups, { test: !!competition.isDemo });
-    downloadCsv(`${safeFilename(competition.name)}_signups.csv`, csv);
-  }
-
   const infoRow = (icon: ReactNode, label: string, value: ReactNode) => (
     <div className="flex items-start gap-2">
       <span className="mt-0.5 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true">{icon}</span>
@@ -101,7 +70,6 @@ export function DetailsTab() {
     <li key={label}><Link className="rf-row" to={to}><span className="rf-grow rf-t1">{label}</span><Chevron /></Link></li>
   );
 
-  const hasSponsorPage = (sponsors ?? []).some((sponsor) => hasPlacement(sponsor.showOn, 'SponsorPage'));
   const longDescription = (competition.description?.length ?? 0) > 140;
 
   return (
@@ -150,7 +118,7 @@ export function DetailsTab() {
 
         <EnterCompetition competition={competition} allSignups={allSignups} mayOrganise={mayOrganise} onChanged={() => { refreshSignups(); reload(); }} />
 
-        <SponsorStrip placement="Details" />
+        <EventSponsorsSection />
 
         {user && <EquipmentBlock competitionId={competition.id} />}
       </div>
@@ -158,41 +126,29 @@ export function DetailsTab() {
       <div className="flex min-w-0 flex-col gap-2.5">
         <RefineSection title="Event links" />
         <RefineList label="Event links">
+          {linkRow('../teams', 'Teams')}
+          {linkRow('../declarations', 'Dec forms')}
           {linkRow('../shop', 'Event shop')}
-          {linkRow('../rulebooks', 'Rulebooks')}
+          {linkRow('../rulebooks', 'Rulebooks & game rules')}
           <li>
             <a className="rf-row" href={competitionCalendarUrl(competition.id, window.location.origin)}>
               <span className="rf-grow rf-t1">Add to calendar</span>
               <CalendarPlus className="h-5 w-5 rf-chev" aria-hidden="true" />
             </a>
           </li>
-          {(hasSponsorPage || mayOrganise) && linkRow('../sponsors', 'Sponsors')}
           {linkRow(`/event-tools/${competition.id}/print/draw`, 'Print draw')}
           {linkRow(`/event-tools/${competition.id}/print/results`, 'Print results')}
           {mayOrganise && linkRow(`/event-tools/${competition.id}/print/poster`, 'Print venue poster')}
-          {mayOrganise && linkRow(`/event-tools/${competition.id}`, hasRole('Admin') || hasRole('Trainer') ? 'Import, duplicate & print' : 'Import & print')}
           {mayOrganise && linkRow('../shop/manage', 'Manage event shop')}
-          {mayOrganise && linkRow('../operations', 'Readiness & draw')}
+          {mayOrganise && linkRow('../operations', 'Operations, draw & tools')}
         </RefineList>
 
-        {/* Entry controls (co-organisers and admins): lock signups, jump to the format wizard, CSV export. */}
+        {/* Entry controls (co-organisers and admins): jump to the format wizard and dec form setup. */}
         {mayOrganise && competition.sections.length > 0 && (
           <>
             <RefineSection title="Organiser tools" />
             <div className="rf-list flex flex-col gap-2 p-3">
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={toggleLock}
-                  disabled={lockBusy}
-                  className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
-                  title={competition.signupsLocked
-                    ? 'Signups are closed. Re-open to accept more entries.'
-                    : 'Signups are open. Close once your entry window ends.'}
-                >
-                  {competition.signupsLocked ? <Lock className="h-4 w-4" aria-hidden="true" /> : <Unlock className="h-4 w-4" aria-hidden="true" />}
-                  {competition.signupsLocked ? 'Re-open signups' : 'Close signups'}
-                </button>
                 <Link
                   to={`/admin/competitions/${competition.id}/format`}
                   className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
@@ -207,20 +163,7 @@ export function DetailsTab() {
                 >
                   <ClipboardList className="h-4 w-4" aria-hidden="true" /> Dec form setup
                 </Link>
-                <button
-                  type="button"
-                  onClick={exportAllSignupsCsv}
-                  disabled={allSignups.length === 0}
-                  className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
-                >
-                  <Download className="h-4 w-4" aria-hidden="true" /> Signups CSV
-                </button>
               </div>
-              {competition.signupsLocked && (
-                <p className="mg-notice">
-                  Signups are <span className="font-semibold">closed</span> to new entries. Refunds and cancellations still work below.
-                </p>
-              )}
             </div>
           </>
         )}
@@ -245,17 +188,26 @@ export function DetailsTab() {
  * The per-section entry cards: Join, Sign in to enter, Full or Entries closed. Shown on the Details tab and as the
  * main content of the entry page. Anyone can see it; signing in is asked for only when they press the button.
  */
-export function EnterCompetition({ competition, allSignups, mayOrganise, onChanged }: {
+export function EnterCompetition({ competition, allSignups = [], mayOrganise }: {
   competition: CompetitionDetail;
-  allSignups: SectionSignup[];
+  allSignups?: SectionSignup[];
   mayOrganise: boolean;
-  onChanged: () => void;
+  onChanged?: () => void;
 }) {
-  const { canEdit } = useAuth();
   if (competition.sections.length === 0) return null;
   return (
     <>
       <RefineSection title="Enter the competition" meta={competition.paymentDestination ? <>Pay to <span className="font-mono">{competition.paymentDestination}</span></> : undefined} />
+      {mayOrganise && (
+        <RefineList label="Organiser entry tools">
+          <li>
+            <Link className="rf-row" to={`/competitions/${competition.id}/operations`}>
+              <span className="rf-grow rf-t1">Manage entries &amp; equipment in Operations</span>
+              <Chevron />
+            </Link>
+          </li>
+        </RefineList>
+      )}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {competition.sections.map((sec) => (
           <SectionSignupCard
@@ -264,10 +216,6 @@ export function EnterCompetition({ competition, allSignups, mayOrganise, onChang
             section={sec}
             allSignups={allSignups}
             signupsLocked={!!competition.signupsLocked}
-            isDemo={!!competition.isDemo}
-            competitionName={competition.name}
-            onChanged={onChanged}
-            canManage={canEdit() || mayOrganise}
             countsKnown={mayOrganise}
           />
         ))}
@@ -277,18 +225,12 @@ export function EnterCompetition({ competition, allSignups, mayOrganise, onChang
 }
 
 function SectionSignupCard({
-  competitionId, section, allSignups, signupsLocked,
-  competitionName, isDemo,
-  onChanged, canManage, countsKnown,
+  competitionId, section, allSignups, signupsLocked, countsKnown,
 }: {
   competitionId: number;
   section: CompetitionSection;
   allSignups: SectionSignup[];
   signupsLocked: boolean;
-  isDemo: boolean;
-  competitionName: string;
-  onChanged: () => void;
-  canManage: boolean;
   /** Only organisers receive the signup list, so places taken is only known to them. */
   countsKnown: boolean;
 }) {
@@ -307,19 +249,10 @@ function SectionSignupCard({
   const seatsLeft = max ? Math.max(0, max - takenSeats) : null;
   const full = seatsLeft != null && seatsLeft === 0;
 
-  function exportCsv() {
-    if (signups.length === 0) return;
-    downloadCsv(
-      `${safeFilename(competitionName)}_${safeFilename(section.displayName)}_signups.csv`,
-      signupsToCsv(signups, { test: isDemo }),
-    );
-  }
-
   const places = max ? Math.round((takenSeats / max) * 100) : 30;
   const scarce = seatsLeft != null && seatsLeft > 0 && seatsLeft <= 4;
-  const wide = canManage && signups.length > 0;
   return (
-    <div className={`mg-card flex flex-col gap-1.5 p-3 ${wide ? 'sm:col-span-2 border-[rgb(var(--mg-heading))]' : ''}`}>
+    <div className="mg-card flex flex-col gap-1.5 p-3">
       <div className="flex items-baseline gap-1.5">
         <span className="mg-display flex-1 text-base font-bold uppercase leading-none tracking-[0.03em] text-[rgb(var(--mg-heading))]">{section.displayName}</span>
         <span className="mg-display text-base font-bold leading-none">{priceLabel(section.priceMinor)}</span>
@@ -348,27 +281,6 @@ function SectionSignupCard({
         >
           <Trophy className="h-4 w-4" aria-hidden="true" /> Join {section.priceMinor ? `(${priceLabel(section.priceMinor)})` : ''}
         </button>
-      )}
-      {canManage && signups.length > 0 && (
-        <details className="text-sm">
-          <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-[rgb(var(--mg-muted))]">
-            <span className="flex-1 font-semibold">Manage ({signups.length})</span>
-            <button
-              type="button"
-              onClick={(e) => { e.preventDefault(); exportCsv(); }}
-              className="mg-icon-btn"
-              title="Download these signups as CSV"
-              aria-label="Download these signups as CSV"
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </summary>
-          <ul className="m-0 flex list-none flex-col p-0">
-            {signups.map((s) => (
-              <SignupRow key={s.id} signup={s} isDemo={isDemo} onChanged={onChanged} />
-            ))}
-          </ul>
-        </details>
       )}
     </div>
   );
@@ -575,58 +487,6 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
         </div>
       )}
     </div>
-  );
-}
-
-function SignupRow({ signup, isDemo, onChanged }: { signup: SectionSignup; isDemo: boolean; onChanged: () => void }) {
-  const status = SIGNUP_STATUS[signup.status];
-  async function setStatus(next: SignupPaymentStatus) {
-    try {
-      await api.put(`/signups/${signup.id}/status`, { status: next });
-      onChanged();
-    } catch {
-      alert('Could not update signup status. Try again.');
-    }
-  }
-  async function remove() {
-    if (!(await confirmDialog({ title: 'Delete this signup?', message: `Delete signup for ${signup.fullName}? This can't be undone.`, confirmLabel: 'Delete signup', destructive: true }))) return;
-    try {
-      await api.delete(`/signups/${signup.id}`);
-      onChanged();
-    } catch {
-      alert('Could not delete signup. Try again.');
-    }
-  }
-  return (
-    <li className="flex flex-wrap items-center gap-1 border-t border-[rgb(var(--mg-rule-soft))] py-1">
-      <span className="min-w-0 flex-1">
-        <span className={`block truncate font-semibold ${status.struck ? 'line-through' : ''}`}>{signup.fullName}</span>
-        {signup.ponyClubName && <span className="rf-t2 truncate">{signup.ponyClubName}</span>}
-        <span className="rf-t2 truncate">
-          {signup.contactEmail ? `${signup.contactEmail} · ` : ''}{confirmationEmailLabel(signup.confirmationEmailStatus, !!signup.contactEmail)}
-        </span>
-      </span>
-      <RefineStatus tone={status.tone}>{isDemo && signup.amountMinor > 0 && signup.status !== 0 ? `${status.label} (test)` : status.label}</RefineStatus>
-      {/* Demo entries are paid through the test payment page only; the server refuses manual changes. */}
-      {!isDemo && signup.status !== 1 && signup.status !== 3 && (
-        <button type="button" onClick={() => setStatus(1)} className="mg-icon-btn" title="Mark paid" aria-label={`Mark ${signup.fullName} paid`}>
-          <Check className="h-4 w-4" aria-hidden="true" />
-        </button>
-      )}
-      {!isDemo && signup.status === 1 && (
-        <button type="button" onClick={() => setStatus(2)} className="mg-icon-btn" title="Mark refunded" aria-label={`Mark ${signup.fullName} refunded`}>
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
-        </button>
-      )}
-      {!isDemo && signup.status !== 3 && (
-        <button type="button" onClick={() => setStatus(3)} className="mg-icon-btn" title="Cancel signup (keeps the record)" aria-label={`Cancel signup for ${signup.fullName}`}>
-          <Ban className="h-4 w-4" aria-hidden="true" />
-        </button>
-      )}
-      <button type="button" onClick={remove} className="mg-icon-btn" title="Delete signup permanently" aria-label={`Delete signup for ${signup.fullName}`}>
-        <X className="h-4 w-4" aria-hidden="true" />
-      </button>
-    </li>
   );
 }
 

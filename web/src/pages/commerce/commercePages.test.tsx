@@ -15,7 +15,6 @@ import { autoConfirm } from '../../test/confirm';
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../competition/context', () => ({ useCompetition: vi.fn() }));
-vi.mock('../ShopPage', () => ({ ShopClassifieds: () => <p>Classified listings</p> }));
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
@@ -94,7 +93,7 @@ describe('EventShopPage', () => {
     expect(await screen.findByText('Weekend camping')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Your orders' })).toHaveAttribute('href', '/me/orders');
     expect(screen.getByText('One pitch beside the main arena. · 4 left')).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Camping', 'Merchandise', 'Tack and equipment for sale']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Camping', 'Merchandise']);
     expect(screen.getByRole('list', { name: 'Camping for sale' })).toHaveTextContent('Weekend camping');
     expect(screen.getByRole('list', { name: 'Merchandise for sale' })).toHaveTextContent('Event hoodie');
     await userEvent.click(screen.getByRole('button', { name: 'Add one Weekend camping' }));
