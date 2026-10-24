@@ -162,11 +162,16 @@ describe('NavigationDrawer: following a competition', () => {
     expect(screen.queryByText(/Oct/)).not.toBeInTheDocument();
   });
 
-  it('links to the competition’s extra pages (omitting duplicate bottom-tab links)', () => {
+  it('links to the competition’s extra pages (omitting duplicate bottom-tab links)', async () => {
     mount({ competition: true });
     expect(links('Main navigation')).toEqual([
       ['Following', '/competitions/4/following'], ['Event shop', '/competitions/4/shop'], ['Rulebooks', '/competitions/4/rulebooks'],
     ]);
+    const communityShop = screen.getByRole('link', { name: 'Tack & kit shop' });
+    expect(communityShop).toHaveAttribute('href', '/shop');
+    await userEvent.click(communityShop);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('probe')).toHaveTextContent('/shop');
   });
 
   it('highlights the page being viewed', () => {

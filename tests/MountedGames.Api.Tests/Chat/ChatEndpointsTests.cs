@@ -482,4 +482,20 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PostAsJsonAsync(Url(a, "/announcement"), body)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(a, "/announcement"), body)).StatusCode);
     }
+
+    [Fact]
+    public async Task Post_AndAnnounce_UseAdminKeyTitle_WhenProvided()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var login = await (await _f.CreateClient().PostAsJsonAsync("/api/auth/admin-key",
+            new MountedGames.Api.Auth.AdminKeyRequest(ApiFactory.AdminKey, "Chief Steward", "steward@example.com")))
+            .ReadAsync<MountedGames.Api.Auth.AuthResponse>();
+        var steward = _f.WithToken(login.Token);
+
+        var chat = await (await steward.PostAsJsonAsync(Url(a), new PostChatMessageRequest("All riders to the collecting ring"))).ReadAsync<ChatMessageDto>();
+        var ann = await (await steward.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("Arena 1 open", "info"))).ReadAsync<ChatMessageDto>();
+
+        Assert.Equal("Chief Steward", chat.AuthorName);
+        Assert.Equal("Chief Steward", ann.AuthorName);
+    }
 }

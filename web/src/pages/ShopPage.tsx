@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { LazyImage } from '../components/LazyImage';
+import { NumberField } from '../components/NumberField';
 import { priceLabel } from '../lib/money';
 import type { CompetitionSummary, ShopComment, ShopPost } from '../types';
 import { confirmDialog } from '../components/ConfirmDialog';
@@ -229,7 +230,7 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
         </label>
         <label className="block">
           <span className="text-xs font-semibold">Price (£, optional)</span>
-          <input className="input mt-1 text-sm" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="25.00" />
+          <NumberField decimal min={0} step="0.01" className="input mt-1 text-sm" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="25.00" />
         </label>
       </div>
       <label className="block">

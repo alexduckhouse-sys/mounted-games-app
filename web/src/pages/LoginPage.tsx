@@ -15,22 +15,27 @@ export function LoginPage() {
   const [useKey, setUseKey] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [organiserTitle, setOrganiserTitle] = useState('');
+  const [organiserEmail, setOrganiserEmail] = useState('');
   const [organiserKey, setOrganiserKey] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const ready = useKey ? organiserKey.trim().length > 0 : email.trim().length > 0 && password.length > 0;
+  const ready = useKey
+    ? organiserTitle.trim().length > 0 && organiserEmail.trim().includes('@') && organiserKey.trim().length > 0
+    : email.trim().length > 0 && password.length > 0;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!ready || loading) return;
     setError(null);
     try {
-      if (useKey) await loginWithAdminKey(organiserKey.trim());
+      if (useKey) await loginWithAdminKey(organiserKey.trim(), organiserTitle.trim(), organiserEmail.trim());
       else await login(email.trim(), password);
       nav((loc.state as NavState | null)?.from ?? '/', { replace: true });
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      if (useKey) setError('That key did not work.');
+      const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
+      const status = res?.status;
+      if (useKey) setError(status === 400 ? (res?.data?.message || 'Check your email address and key.') : 'That key did not work.');
       else setError(status === 401 || status === 400 ? 'Email or password is wrong.' : 'Could not sign in. Try again.');
     }
   }
@@ -46,14 +51,32 @@ export function LoginPage() {
         <h1 className="mg-h1 !text-[34px] !leading-none">{useKey ? 'Organiser sign in' : 'Sign in'}</h1>
 
         {useKey ? (
-          <Field label="Organiser key" error={error}>
-            {({ id, invalid, describedBy }) => (
-              <div className="mg-field" data-invalid={invalid}>
-                <input id={id} type="password" value={organiserKey} autoComplete="off" autoFocus aria-invalid={invalid} aria-describedby={describedBy}
-                  onChange={(e) => { setOrganiserKey(e.target.value); setError(null); }} />
-              </div>
-            )}
-          </Field>
+          <>
+            <Field label="Title or role">
+              {({ id }) => (
+                <div className="mg-field">
+                  <input id={id} type="text" value={organiserTitle} placeholder="e.g. Chief Steward, Show Secretary" autoFocus
+                    onChange={(e) => { setOrganiserTitle(e.target.value); setError(null); }} />
+                </div>
+              )}
+            </Field>
+            <Field label="Email">
+              {({ id }) => (
+                <div className="mg-field">
+                  <input id={id} type="email" value={organiserEmail} autoComplete="email"
+                    onChange={(e) => { setOrganiserEmail(e.target.value); setError(null); }} />
+                </div>
+              )}
+            </Field>
+            <Field label="Organiser key" error={error}>
+              {({ id, invalid, describedBy }) => (
+                <div className="mg-field" data-invalid={invalid}>
+                  <input id={id} type="password" value={organiserKey} autoComplete="off" aria-invalid={invalid} aria-describedby={describedBy}
+                    onChange={(e) => { setOrganiserKey(e.target.value); setError(null); }} />
+                </div>
+              )}
+            </Field>
+          </>
         ) : (
           <>
             <Field label="Email">

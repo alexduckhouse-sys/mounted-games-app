@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePageWidth } from '../../components/pageWidthState';
 import { MoreHorizontal } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
+import { CompetitionTeamCard } from '../competition/CompetitionTeamCard';
+import { ScorerLinksCard } from '../competition/ScorerLinksCard';
 import { Chevron, RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet } from '../refine/Refine';
 import { DrawResult, DrawSettingsForm } from './DrawPreviewView';
 import { EntriesPanel } from './EntriesPanel';
@@ -44,8 +46,10 @@ export function OperationsPage() {
   return <OperationsPageContent key={`${competition.id}:${user.id}`} />;
 }
 
-type View = 'checks' | 'equipment' | 'draw' | 'entries' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
+type View = 'checks' | 'equipment' | 'draw' | 'entries' | 'scorers' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
 type Sheet = 'more' | 'draw' | null;
+
+const VALID_VIEWS = new Set<View>(['checks', 'equipment', 'draw', 'entries', 'scorers', 'tack', 'passport', 'import', 'print', 'results', 'duplicate']);
 
 function OperationsPageContent() {
   const canWrite = true; // anyone who can organise this competition may change it; the API decides
@@ -54,7 +58,11 @@ function OperationsPageContent() {
   const mayDuplicate = Boolean(hasRole?.('Admin') || hasRole?.('Trainer'));
   const wide = useWideScreen();
   usePageWidth(wide ? 'wide' : 'default');
-  const [view, setView] = useState<View>('checks');
+  const [searchParams] = useSearchParams();
+  const [view, setView] = useState<View>(() => {
+    const param = searchParams.get('tab') as View | null;
+    return param && VALID_VIEWS.has(param) ? param : 'checks';
+  });
   const [sheet, setSheet] = useState<Sheet>(null);
   const [readiness, setReadiness] = useState<CompetitionReadiness | null>(null);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
@@ -221,6 +229,9 @@ function OperationsPageContent() {
     title = 'Entries';
     context = `Organiser · ${competition.name}`;
     actions = null;
+  } else if (shownView === 'scorers') {
+    title = 'Scorers & team';
+    actions = null;
   } else if (shownView === 'tack') {
     title = 'Tack check';
     actions = null;
@@ -256,6 +267,7 @@ function OperationsPageContent() {
     ...(wide ? [] : [{ label: 'Equipment', active: shownView === 'equipment', onSelect: () => setView('equipment') }]),
     { label: 'Draw', active: shownView === 'draw', onSelect: () => setView('draw') },
     { label: 'Entries', active: shownView === 'entries', onSelect: () => setView('entries') },
+    { label: 'Scorers & team', active: shownView === 'scorers', onSelect: () => setView('scorers') },
     { label: 'Tack check', active: shownView === 'tack', onSelect: () => setView('tack') },
     { label: 'Passport check', active: shownView === 'passport', onSelect: () => setView('passport') },
     { label: 'Import teams', active: shownView === 'import', onSelect: () => setView('import') },
@@ -288,6 +300,13 @@ function OperationsPageContent() {
       )}
 
       {shownView === 'entries' && <EntriesPanel canWrite={canWrite} onTimetableChanged={reloadCompetition} />}
+
+      {shownView === 'scorers' && (
+        <div className="space-y-6">
+          <ScorerLinksCard competitionId={competition.id} canWrite={canWrite} />
+          <CompetitionTeamCard competitionId={competition.id} canWrite={canWrite} />
+        </div>
+      )}
 
       {shownView === 'tack' && <TackCheckTab competitionId={String(competition.id)} />}
       {shownView === 'passport' && <PassportCheckTab competitionId={String(competition.id)} />}

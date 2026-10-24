@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -257,6 +258,7 @@ public class TeamsController : ControllerBase
         return Ok(rows.Select(s => s.ToDto()));
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("/api/teams/join")]
     [Authorize]
     public async Task<ActionResult<TeamSupporterDto>> Join(JoinTeamRequest req)

@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
@@ -55,5 +56,36 @@ describe('Details tab sharing links', () => {
     auth.organise = true;
     renderTab();
     expect(screen.getByRole('link', { name: 'Print venue poster' })).toHaveAttribute('href', '/event-tools/12/print/poster');
+  });
+
+  it('uses navigator.share when available, or copies the event link to the clipboard', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { value: share, configurable: true });
+    renderTab();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Share event link' }));
+    expect(share).toHaveBeenCalledWith({
+      title: 'Spring Games',
+      url: `${window.location.origin}/competitions/12`,
+    });
+
+    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Share event link' }));
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/competitions/12`);
+    expect(await screen.findByRole('button', { name: 'Link copied' })).toBeInTheDocument();
+  });
+
+  it('toggles an inline QR code for the competition link', async () => {
+    renderTab();
+    const toggle = screen.getByRole('button', { name: 'Show event QR code' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('img', { name: 'QR code for Spring Games' })).not.toBeInTheDocument();
+
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('img', { name: 'QR code for Spring Games' })).toBeInTheDocument();
   });
 });

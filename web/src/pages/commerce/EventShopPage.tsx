@@ -230,6 +230,10 @@ function EventShopContent() {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-none">
       <ShopHeader />
+      <div className="mg-seg self-start" role="navigation" aria-label="Shop switcher">
+        <Link to={`/competitions/${competition.id}/shop`} aria-current="page" className="mg-chip !min-h-10 !px-3.5 !text-sm !no-underline hover:!no-underline">Event shop</Link>
+        <Link to="/shop" className="mg-chip !min-h-10 !px-3.5 !text-sm !no-underline hover:!no-underline">Tack &amp; kit classifieds</Link>
+      </div>
       <p className="m-0 flex items-start gap-2 rounded-lg bg-[rgb(var(--mg-tint))] px-3 py-2.5 text-[13px] leading-snug text-[rgb(var(--mg-heading))]">
         <MapPin className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
         <span className="flex-1">Listings approved by the organiser. {COLLECT_NOTE}</span>

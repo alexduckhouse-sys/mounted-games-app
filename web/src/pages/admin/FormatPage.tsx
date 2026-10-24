@@ -19,6 +19,7 @@ import { RaceListDialog } from './RaceListDialog';
 import { NumberField } from '../../components/NumberField';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { DecFormConfigEditor } from './DecFormConfig';
+import { ScorerLinksCard } from '../competition/ScorerLinksCard';
 
 const DEFAULT_MINUTES = 10;
 const MAIN_ARENA = 'Main arena';
@@ -387,6 +388,7 @@ export function FormatPage() {
             <Link to={`/competitions/${competition.id}/declarations`} className="mg-small-btn">Dec forms</Link>
             <Link to={`/competitions/${competition.id}/details`} className="mg-small-btn">Equipment list</Link>
           </div>
+          <ScorerLinksCard competitionId={competition.id} canWrite={canOrganise(competition)} />
         </div>
       </div>
 

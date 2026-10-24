@@ -1,4 +1,5 @@
 import { usePageWidth } from '../../components/pageWidthState';
+import { NumberField } from '../../components/NumberField';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -27,6 +28,7 @@ import { LANE_ROTATION_LABELS, LaneRotationMode, type LaneRotationModeValue } fr
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
 import { useRaceNotes } from './useRaceNotes';
 import { formatPoints } from '../../lib/formatPoints';
+import { ScorerLinksCard } from './ScorerLinksCard';
 
 function formatTime(d: Date | null): string {
   if (!d) return '—';
@@ -400,6 +402,9 @@ export function SessionPage() {
                 onError={setSaveError}
               />
             )}
+            <div className="mt-4 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
+              <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
+            </div>
           </details>
         </>
       ) : (
@@ -1166,8 +1171,8 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-xs font-semibold">Max teams per heat</span>
-              <input
-                type="number" min={1} max={20}
+              <NumberField
+                min={1} max={20}
                 className="input mt-1 text-sm"
                 value={lanes}
                 onChange={(e) => setLanes(Math.max(1, parseInt(e.target.value, 10) || 1))}

@@ -26,10 +26,11 @@ describe('ToplistView positions', () => {
     expect(screen.queryByText(/joint/i)).not.toBeInTheDocument();
   });
 
-  it('shows real positions, with ties marked, once there are points', () => {
+  it('shows real positions, with ties marked and points gap behind the leader, once there are points', () => {
     render(<ToplistView list={list([6, 6, 2])} section={null} />);
     expect(positions()).toEqual(['1', '1', '3']);
     expect(screen.getAllByText('(joint)', { exact: false })).toHaveLength(2);
+    expect(screen.getByText('−4')).toHaveAttribute('title', '4 behind leader');
   });
 
   it('uses the dash in the by-session table too', async () => {

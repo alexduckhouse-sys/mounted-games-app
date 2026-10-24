@@ -1,4 +1,4 @@
-# Next steps (22 October 2026)
+# Next steps (24 October 2026)
 
 The cross-chat to-do list, confirmed product specifications, code-verified bugs, and roadmap. Update or delete items as they land.
 
@@ -7,6 +7,14 @@ The cross-chat to-do list, confirmed product specifications, code-verified bugs,
 ## Start here: after the 23 October walkthrough
 
 On 23 October the user walked through creating a competition on production and reported findings live. Chat c5406079 turned them into PRs #105–#124, all merged with CI green; every migration ran on Neon first, each after a backup branch. Streaming is switched on (new Cloudflare SFU app; TURN not set up).
+
+**24 October consolidation & polish pass:**
+- Consolidated `/event-tools/:id` into `/competitions/:id/operations` tabs (Readiness, Equipment, Draw, Entries, Scorers & team, Tack check, Passport check, Import teams, Print sheets, Results book, Duplicate event) while keeping `/event-tools/:id/print/*` printable routes.
+- Consolidated `/competitions/:id/produce` into `/competitions/:id/broadcast` (Camera & stream + Overlays & banners tabs).
+- Consolidated `/stats` and `/competitions/past` with a shared `ResultsStatsNav` switcher; added `Arena setup & race diagrams` to `DetailsTab` and `SessionsTab`.
+- Surfaced **Scorer QR codes & links** (`ScorerLinksCard`) across `OperationsPage` (`Scorers & team` tab), `FormatPage` (`On the day`), `SessionPage` (`Organiser tools`), `DetailsTab` (`#scorer-links` shortcut), and `SiteAdmin`, with support for `"Main arena"` (when sessions are unnamed) and `"All arenas"` links.
+- Kept both the **Event shop** (`/competitions/:id/shop`) and the **Tack & kit classifieds** (`/shop`) reachable via a switcher on `EventShopPage` and a `Tack & kit shop` link in `NavigationDrawer`.
+- Hid `"Pay to …"` bank details from signed-out visitors on `DetailsTab` and `SectionEntryPage`, and updated `/privacy` to disclose stored sort code and account holder name on club payouts.
 
 **Decisions taken in the walkthrough** (don't relitigate):
 - Admin **edit mode is removed** entirely; destructive actions use the red full-screen `ConfirmDialog`, never `window.confirm`.
@@ -39,9 +47,9 @@ On 23 October the user walked through creating a competition on production and r
 **4. Laptop layouts not done in #124:** Teams side drawer, Seasons filters, team profile in two columns, the scoring heat table beside the race stack, and `shop/manage`, `/me/catalogue`, `/me/orders`, rulebooks and members (still a centred column). `DataTable` exists but nothing uses it yet.
 
 **5. Security follow-ups** from the review of #113, #114 and #116 (all low):
-- [ ] Payouts: allow clearing the responsible person's date of birth; the privacy page should also mention the stored sort code and account holder name.
+- [ ] Payouts: allow clearing the responsible person's date of birth. (Privacy page updated on 24 Oct to mention the stored sort code and account holder name.)
 - [ ] Payouts: pin the paying club on the competition before real money moves (it follows the creator's current club today).
-- [ ] Show "Pay to …" on the entry page only to signed-in users.
+- [x] Show "Pay to …" on the entry page only to signed-in users.
 - [ ] `IsClubManagerAsync` trusts the Manager role in the token; re-check it against the database, as `ClubPayoutsController.ScopeAsync` does.
 
 **6. Optional:** a TURN key for streaming on weak 4G (`Streaming__Cloudflare__TurnKeyId` is set, its `TurnKeyApiToken` isn't), a tutorial mode for scoring, and `window.prompt`/`alert` left in ShopPage, ChatTab, TimetableManagement and `useTeamNotifications`.

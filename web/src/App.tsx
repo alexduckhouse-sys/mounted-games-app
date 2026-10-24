@@ -68,6 +68,7 @@ const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then((module) => ({
 const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({ default: module.AccountPage })));
 const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymentPage').then((module) => ({ default: module.TestEntryPaymentPage })));
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
 
 export default function App() {
   return (
@@ -166,8 +167,8 @@ export default function App() {
               <Route path="me/signups/:signupId/test-payment" element={
                 <ProtectedRoute><TestEntryPaymentPage /></ProtectedRoute>
               } />
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>
           </PageLoadBoundary>

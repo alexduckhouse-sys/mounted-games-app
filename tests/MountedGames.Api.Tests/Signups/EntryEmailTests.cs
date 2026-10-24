@@ -524,6 +524,60 @@ public class EntryEmailTests : IClassFixture<EmailApiFactory>
         Assert.Contains("'=cmd|calc@example.org,", csv);
         Assert.Contains("\"v,1\"", csv);
     }
+
+    // ---- admin status & test email ----
+
+    [Fact]
+    public async Task EmailStatus_AndTestSend_AreAdminOnly()
+    {
+        foreach (var client in new[] { _f.CreateClient(), await _f.TrainerAsync(), (await _f.SignupAsync("Member")).Client })
+        {
+            var expected = client.DefaultRequestHeaders.Authorization is null ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden;
+            Assert.Equal(expected, (await client.GetAsync("/api/admin/email-status")).StatusCode);
+            Assert.Equal(expected, (await client.PostAsync("/api/admin/email-test", null)).StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task EmailStatus_ReportsActiveConfiguration_WithMaskedSender_AndNeverTheApiKey()
+    {
+        var resp = await (await _f.AdminAsync()).GetAsync("/api/admin/email-status");
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.DoesNotContain(EmailApiFactory.ApiKey, body);
+        Assert.DoesNotContain("entries@example.org", body);
+        Assert.Contains("\"enabled\":true", body);
+        Assert.Contains("\"configured\":true", body);
+        Assert.Contains("\"fromMasked\":\"e***@e***.org\"", body);
+    }
+
+    [Fact]
+    public async Task EmailTest_SendsToSignedInAdmin_OrExplicitAddress_AndRejectsBadAddress()
+    {
+        var admin = await _f.AdminAsync();
+
+        var self = await admin.PostAsync("/api/admin/email-test", null);
+        Assert.Equal(HttpStatusCode.OK, self.StatusCode);
+        var selfBody = await self.Content.ReadAsStringAsync();
+        Assert.Contains("\"status\":\"Sent\"", selfBody);
+        Assert.Contains("\"recipientMasked\":\"a***@m***.local\"", selfBody);
+        var selfMsg = _f.Sent.Last(m => m.To == TestClients.AdminEmail);
+        Assert.Equal("Mounted Games test email", selfMsg.Subject);
+        Assert.NotNull(selfMsg.Html);
+        Assert.Contains(EmailHtml.HeaderStyle, selfMsg.Html);
+
+        var target = NewEmail();
+        var explicitTo = await admin.PostAsJsonAsync("/api/admin/email-test", new { to = target });
+        Assert.Equal(HttpStatusCode.OK, explicitTo.StatusCode);
+        var explicitBody = await explicitTo.Content.ReadAsStringAsync();
+        Assert.Contains("\"status\":\"Sent\"", explicitBody);
+        Assert.Contains("\"recipientMasked\":\"p***@e***.org\"", explicitBody);
+        Assert.Contains(_f.Sent, m => m.To == target.ToLowerInvariant());
+
+        var bad = await admin.PostAsJsonAsync("/api/admin/email-test", new { to = "not-an-email" });
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+    }
 }
 
 /// <summary>Sending is off unless it is set up on purpose; a missing setting must never break a sign-up.</summary>
@@ -531,6 +585,23 @@ public class EntryEmailOffTests : IClassFixture<EmailOffApiFactory>
 {
     private readonly EmailOffApiFactory _f;
     public EntryEmailOffTests(EmailOffApiFactory f) => _f = f;
+
+    [Fact]
+    public async Task WithNoEmailSettings_AdminStatusAndTestSend_ReportOffAndNotSent()
+    {
+        var admin = await _f.AdminAsync();
+
+        var status = await admin.GetAsync("/api/admin/email-status");
+        Assert.Equal(HttpStatusCode.OK, status.StatusCode);
+        var statusBody = await status.Content.ReadAsStringAsync();
+        Assert.Contains("\"configured\":false", statusBody);
+
+        var test = await admin.PostAsync("/api/admin/email-test", null);
+        Assert.Equal(HttpStatusCode.OK, test.StatusCode);
+        var testBody = await test.Content.ReadAsStringAsync();
+        Assert.Contains("\"status\":\"NotSent\"", testBody);
+        Assert.Empty(_f.Sent);
+    }
 
     [Fact]
     public async Task WithNoEmailSettings_SignupWorks_NothingIsSent_AndTheStatusSaysSo()

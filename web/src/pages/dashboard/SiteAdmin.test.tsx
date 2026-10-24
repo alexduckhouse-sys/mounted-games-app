@@ -268,6 +268,8 @@ describe('admin competitions', () => {
     expect(screen.getByRole('menuitem', { name: 'Edit details' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'On the day & format' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Operations & tools' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Scorer QR codes' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Go live & stream' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Dec forms' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Manage event shop' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Delete competition' })).toBeInTheDocument();

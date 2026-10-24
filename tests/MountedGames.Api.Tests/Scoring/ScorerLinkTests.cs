@@ -130,7 +130,7 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
 
         var list = await w.Owner.GetFromJsonAsync<ScorerLinkListDto>(LinksUrl(w.Arena.CompetitionId), TestClients.Json);
 
-        Assert.Equal(["Main", "Side"], list!.Arenas);
+        Assert.Equal(["Main", "Side", "All arenas"], list!.Arenas);
         var shown = Assert.Single(list.Links);
         Assert.Equal(link.Id, shown.Id);
         Assert.Equal("Pat", shown.Label);
@@ -139,6 +139,35 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         // End of the day after the competition's last day (it starts today and has no end date).
         Assert.Equal(DateTime.UtcNow.Date.AddDays(2), list.DefaultExpiresAt);
         Assert.Equal(list.DefaultExpiresAt, shown.ExpiresAt);
+    }
+
+    [Fact]
+    public async Task DefaultMainArena_AndAllArenasLinks_ScoreMatchingSessions()
+    {
+        var w = await WorldAsync();
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Sessions.FindAsync(w.Arena.SessionId))!.ArenaName = null;
+            await db.SaveChangesAsync();
+        });
+
+        var list = await w.Owner.GetFromJsonAsync<ScorerLinkListDto>(LinksUrl(w.Arena.CompetitionId), TestClients.Json);
+        Assert.Equal(["Main arena", "Side", "All arenas"], list!.Arenas);
+
+        var (mainToken, _) = await CreateLinkAsync(w, "Main arena", "MainScorer");
+        var mainScorer = Scorer(mainToken);
+        var mainSession = await mainScorer.GetFromJsonAsync<ScorerSessionDto>("/api/scorer/session", TestClients.Json);
+        Assert.Single(mainSession!.Sessions);
+        Assert.Equal(w.Arena.SessionId, mainSession.Sessions[0].Id);
+        Assert.Equal(HttpStatusCode.OK, (await mainScorer.PutAsJsonAsync(Score(w.MainRaces[0]), Put(w, 0, "main-1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await mainScorer.GetAsync(Score(w.SideRaces[0]))).StatusCode);
+
+        var (allToken, _) = await CreateLinkAsync(w, "All arenas", "AllScorer");
+        var allScorer = Scorer(allToken);
+        var allSession = await allScorer.GetFromJsonAsync<ScorerSessionDto>("/api/scorer/session", TestClients.Json);
+        Assert.Equal(2, allSession!.Sessions.Count);
+        Assert.Equal(HttpStatusCode.OK, (await allScorer.GetAsync(Score(w.MainRaces[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await allScorer.PutAsJsonAsync(Score(w.SideRaces[0]), Put(w, 0, "all-1"))).StatusCode);
     }
 
     [Fact]

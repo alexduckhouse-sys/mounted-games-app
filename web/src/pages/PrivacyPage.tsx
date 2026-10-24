@@ -32,7 +32,7 @@ export function PrivacyPage() {
         <ul className="list-disc space-y-1.5 pl-5 marker:text-[rgb(var(--mg-muted))]">
           <li className="mg-lede"><strong>Account details.</strong> Your name, sign-in (an email address or username), club if you gave one, phone number if you added one to a declaration, and your role. Your password is stored as a hash, never as text.</li>
           <li className="mg-lede"><strong>Entries and declarations.</strong> Declaration forms list riders (name, horse, bib colour) and who submitted them. They also hold the trainer's phone number and, depending on what the organiser asks for, a rider's date of birth, birth year or age group, weight, membership number, an emergency contact's name and phone number, medical notes, the pony's passport or ID number, height and age, and the organiser's own extra questions. Only the organisers of that competition, the trainer or person who submitted the form and administrators can see those details; they never appear on public pages, in statistics or in public downloads. The saved rider list you build is visible only to you and to administrators. Signing up for a competition records your name, club, any contact details you gave and the payment status.</li>
-          <li className="mg-lede"><strong>Club payout details.</strong> If you set up payouts for your club, we keep the club's business details, the name and date of birth of the person responsible, and the last four digits of the bank account. Full account numbers are checked and then discarded, never stored. Only that club's managers and administrators can see them.</li>
+          <li className="mg-lede"><strong>Club payout details.</strong> If you set up payouts for your club, we keep the club's business details, the name and date of birth of the person responsible, the account holder name, the sort code and the last four digits of the bank account. Full account numbers are checked and then discarded, never stored. Only that club's managers and administrators can see them.</li>
           <li className="mg-lede"><strong>Notes and teams.</strong> Private trainer notes, and the teams you coach or support.</li>
           <li className="mg-lede"><strong>Chat and the marketplace.</strong> What you post, the name you posted under, and any contact details you put in a listing. Private marketplace messages are visible to the two people involved and to administrators.</li>
           <li className="mg-lede"><strong>Push notifications.</strong> If you turn them on, we keep the address your browser gave us for sending them, until you switch them off or delete your account.</li>
@@ -98,6 +98,15 @@ export function PrivacyPage() {
           surname as an initial only (Oliver S.), and can ask not to be filmed or photographed close up: tick either box
           on the declaration or entry form. If you want a young rider's details removed, ask us at the address below.
         </p>
+      </section>
+
+      <section className="mg-card space-y-2 p-4">
+        <h2 className="mg-h2">Terms of use &amp; event conduct</h2>
+        <ul className="list-disc space-y-1.5 pl-5 marker:text-[rgb(var(--mg-muted))]">
+          <li className="mg-lede"><strong>Entries and declarations.</strong> When you enter a competition or submit a rider declaration form, you confirm the rider, pony and emergency contact details are accurate and that a parent or guardian has given consent for any rider under 18.</li>
+          <li className="mg-lede"><strong>Tack &amp; kit shop.</strong> Marketplace listings and event-stall reservations are arranged directly between buyers, sellers and organisers. Describe items honestly and agree payment and collection with the seller or organiser.</li>
+          <li className="mg-lede"><strong>Live chat and comments.</strong> Keep event announcements, messages to organisers and shop comments respectful. Organisers and administrators can remove posts or block network addresses that abuse the service.</li>
+        </ul>
       </section>
 
       <section className="mg-card space-y-2 p-4">

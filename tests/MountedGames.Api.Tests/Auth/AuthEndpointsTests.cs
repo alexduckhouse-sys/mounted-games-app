@@ -73,6 +73,43 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal((HttpStatusCode.OK, true), (r.StatusCode, auth.User.Roles.Contains(Roles.Admin)));
     }
 
+    [Fact]
+    public async Task AdminKey_WithTitleAndEmail_SetsProfileAndPreservesOnMe_AndRejectsInvalidInputs()
+    {
+        var r = await Anon.PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, "  Chief Steward  ", "  Steward@Example.com  "));
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var auth = await r.ReadAsync<AuthResponse>();
+        Assert.Equal("Chief Steward", auth.User.FullName);
+        Assert.Equal("steward@example.com", auth.User.Email);
+
+        var meClient = _f.WithToken(auth.Token);
+        var me = await (await meClient.GetAsync("/api/auth/me")).ReadAsync<UserProfile>();
+        Assert.Equal("Chief Steward", me.FullName);
+        Assert.Equal("steward@example.com", me.Email);
+
+        var badEmail = await Anon.PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, "Chief Steward", "not-an-email"));
+        Assert.Equal(HttpStatusCode.BadRequest, badEmail.StatusCode);
+
+        var longTitle = await Anon.PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, new string('T', 101), "steward@example.com"));
+        Assert.Equal(HttpStatusCode.BadRequest, longTitle.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_AndSignupTrainer_RejectPasswordsOver128Characters()
+    {
+        var overlong = new string('A', 120) + "a1!bcdefgh";
+        var loginResp = await Anon.PostAsJsonAsync("/api/auth/login", new LoginRequest("someone@example.com", overlong));
+        var signupResp = await Anon.PostAsJsonAsync("/api/auth/signup-trainer",
+            new SignupTrainerRequest(Unique(), overlong, null, "Auth Test Club"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, loginResp.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, signupResp.StatusCode);
+    }
+
     [Theory]
     [InlineData("wrong")]
     [InlineData("")]
