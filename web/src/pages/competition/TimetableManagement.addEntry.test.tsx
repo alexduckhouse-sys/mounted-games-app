@@ -59,3 +59,31 @@ it('also asks for an arena when adding a briefing or a custom item', () => {
   fireEvent.click(screen.getByRole('button', { name: /Custom/ }));
   expect(screen.getByRole('combobox', { name: 'Arena' })).toBeInTheDocument();
 });
+
+it('puts the competition on hold with a custom resume time and displays the hold banner', async () => {
+  show(['Arena 1', 'Arena 1']);
+  fireEvent.click(screen.getByRole('button', { name: /Hold \/ Set Resume Time/ }));
+  const resumeInput = screen.getByLabelText('Resume time');
+  fireEvent.change(resumeInput, { target: { value: '15:15' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply hold' }));
+  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sessions/hold', {
+    resumeTime: '15:15',
+    delayMinutes: null,
+    postAnnouncement: true,
+  }));
+  expect(await screen.findByTestId('competition-hold-banner')).toHaveTextContent(
+    'Competition on hold — we will continue at 15:15',
+  );
+});
+
+it('combines two small sections into one heat with BySection or Combined scoring mode', async () => {
+  show(['Arena 1', 'Arena 1']);
+  fireEvent.click(screen.getByRole('button', { name: /Combine sections/ }));
+  fireEvent.change(screen.getByLabelText('Combined scoring mode'), { target: { value: 'BySection' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Combine into one heat' }));
+  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sessions/1/combine-heat', {
+    sourceSessionId: 2,
+    scoringMode: 'BySection',
+    removeSourceSession: true,
+  }));
+});

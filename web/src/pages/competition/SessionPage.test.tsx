@@ -666,5 +666,44 @@ describe('SessionPage', () => {
       expect(await screen.findByText('Adjust by whole or half points, such as 1 or -0.5.')).toBeInTheDocument();
       expect(api.post).not.toHaveBeenCalled();
     });
+
+    it('supports 1-tap short-handed HC, Under Review flag, Clear / Re-run race, and mid-session Change / Cancel race with announcement', async () => {
+      vi.mocked(api.put).mockResolvedValue({ data: {} });
+      vi.mocked(api.post).mockResolvedValue({ data: {} });
+      vi.mocked(api.delete).mockResolvedValue({ data: {} });
+
+      mount(scoringData(2));
+      await screen.findByText('Organiser tools');
+
+      await userEvent.selectOptions(screen.getByLabelText('Short-handed team'), '2');
+      await userEvent.click(screen.getByRole('button', { name: 'Mark team HC (Hors Concours)' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/2', { isHorsConcours: true }));
+
+      await userEvent.selectOptions(screen.getByLabelText('Under review team'), '2');
+      await userEvent.type(screen.getByLabelText('Under review note'), 'Lane interference');
+      await userEvent.click(screen.getByRole('button', { name: 'Flag Under Review' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/sessions/races/1/results/2/under-review', {
+        underReview: true,
+        note: 'Lane interference',
+      }));
+      expect(await screen.findByTestId('under-review-badge-2')).toHaveTextContent('UNDER REVIEW: Rider 2');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Re-run stopped race' }));
+      await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sessions/races/1/results'));
+
+      await userEvent.type(screen.getByLabelText('New race name'), 'Sword');
+      await userEvent.click(screen.getByRole('button', { name: 'Change race' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races/1', {
+        newName: 'Sword',
+        applyToAllHeats: true,
+      }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/chat', {
+        body: 'Update: Race 1 in Session 1 is now Sword',
+        type: 1,
+      }));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel race' }));
+      await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/1/sessions/1/races/1'));
+    });
   });
 });
