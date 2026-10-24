@@ -301,7 +301,7 @@ describe('On the day: generating the exact timetable', () => {
         session(19, { competitionSectionId: 1, name: 'Junior pairs · A Final', arenaName: 'Main arena', orderIndex: 5, heats: [] }),
       ],
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    autoConfirm(true);
     mount();
     await region('Open pairs');
     await userEvent.click(screen.getByRole('button', { name: 'Generate timetable' }));
