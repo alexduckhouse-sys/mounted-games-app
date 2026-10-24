@@ -2,6 +2,7 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
@@ -79,6 +80,43 @@ public class ScoringService
             actorUserId, null,
             expected?.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status)).ToList(),
             $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, actorLabel);
+
+    public Task<RaceScoreDto> OverrideRacePointsAsync(
+        int raceId, int teamId, double points, string reason,
+        string? actorUserId = null, CancellationToken cancellationToken = default)
+        => ApplyPointChangeAsync(raceId, teamId, points, isDelta: false, reason, actorUserId, cancellationToken);
+
+    public Task<RaceScoreDto> AdjustTeamPointsAsync(
+        int raceId, int teamId, double pointsDelta, string reason,
+        string? actorUserId = null, CancellationToken cancellationToken = default)
+        => ApplyPointChangeAsync(raceId, teamId, pointsDelta, isDelta: true, reason, actorUserId, cancellationToken);
+
+    private async Task<RaceScoreDto> ApplyPointChangeAsync(
+        int raceId, int teamId, double value, bool isDelta, string reason,
+        string? actorUserId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ScoreValidationException("A reason is required when adjusting or overriding points.");
+        var race = await _db.Races.AsNoTracking()
+            .Include(r => r.Results)
+            .Include(r => r.Heat).ThenInclude(h => h!.Entries)
+            .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken)
+            ?? throw new KeyNotFoundException("Race not found.");
+        var entries = race.Heat?.Entries.OrderBy(e => e.LaneIndex).ThenBy(e => e.Id).ToList() ?? [];
+        var existingByTeam = race.Results.ToDictionary(r => r.TeamId);
+        PointValues.Validate(Math.Abs(value));
+        var directive = isDelta ? $"[adj:{(value < 0 ? "-" : "+")}{PointValues.Format(Math.Abs(value))}]" : $"[pts:{PointValues.Format(value)}]";
+        var note = $"{directive} {reason.Trim()}";
+        // Only this team's note changes: the directive in it decides its points, so a later re-save of the heat keeps them.
+        // Everyone else keeps the points they have (a dead heat's half points included).
+        var places = entries.Select((e, idx) => existingByTeam.TryGetValue(e.TeamId, out var r)
+            ? e.TeamId == teamId
+                ? new FinishingPlace(e.TeamId, r.Placing ?? 0, r.Eliminated, ResultStatuses.Of(r), note)
+                : new FinishingPlace(e.TeamId, r.Placing ?? 0, r.Eliminated, ResultStatuses.Of(r), r.RefereeNote, r.Points)
+            : new FinishingPlace(e.TeamId, idx + 1, false, ResultStatus.Finished, e.TeamId == teamId ? note : null)).ToList();
+        return await ApplyCoreAsync(raceId, places, actorUserId, null, null,
+            $"adj-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken);
+    }
 
     public async Task<RaceScoreDto> GetAsync(int raceId, CancellationToken cancellationToken = default)
     {
@@ -173,7 +211,7 @@ public class ScoringService
         return await ExecuteTransactionAsync(async () =>
         {
         var race = await _db.Races
-            .Include(r => r.Heat).ThenInclude(h => h!.Entries)
+            .Include(r => r.Heat).ThenInclude(h => h!.Entries).ThenInclude(e => e.Team)
             .Include(r => r.Heat).ThenInclude(h => h!.Races)
             .Include(r => r.Heat).ThenInclude(h => h!.Session)
             .Include(r => r.Results)
@@ -210,9 +248,33 @@ public class ScoringService
         var accepted = strictValidation
             ? finishingPlaces.ToList()
             : finishingPlaces.Where(p => entryTeamIds.Contains(p.TeamId)).ToList();
+        var hcTeamIds = heat.Entries
+            .Where(e => e.Team?.IsHorsConcours == true)
+            .Select(e => e.TeamId)
+            .ToHashSet();
         var isQualifier = heat.RaceRoundStage == RaceRoundStage.Qualifier;
-        double PointsFor(FinishingPlace fp) => sitOut.Contains(fp.TeamId) || fp.Eliminated ? 0
-            : fp.Points ?? (isQualifier ? 1 : PointsForPlace(fp.Place, sessionBase, fp.Eliminated));
+        int EffectivePlace(FinishingPlace fp)
+        {
+            if (fp.Eliminated || fp.Place < 1 || hcTeamIds.Count == 0) return fp.Place;
+            var hcAhead = accepted.Count(other =>
+                !other.Eliminated && !sitOut.Contains(other.TeamId) && hcTeamIds.Contains(other.TeamId)
+                && other.Place > 0 && other.Place < fp.Place);
+            return Math.Max(1, fp.Place - hcAhead);
+        }
+        // The referee note's points directive wins ([pts:N] sets, [adj:±N] moves the placing points; never stored points,
+        // so re-saving can't apply an adjustment twice), then any points sent with the place (a dead heat), then the
+        // placing. Sit-outs always score 0.
+        double PointsFor(FinishingPlace fp)
+        {
+            if (sitOut.Contains(fp.TeamId)) return 0;
+            double placing = fp.Eliminated || hcTeamIds.Contains(fp.TeamId) ? 0
+                : isQualifier ? 1 : PointsForPlace(EffectivePlace(fp), sessionBase, fp.Eliminated);
+            if (!TryParsePointsDirective(fp.Note, out var overridePts, out var deltaPts))
+                return fp.Eliminated || hcTeamIds.Contains(fp.TeamId) ? 0 : fp.Points ?? placing;
+            var points = overridePts ?? placing + deltaPts!.Value;
+            PointValues.Validate(points);
+            return points;
+        }
         var incomingCore = accepted.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
                 p.Status ?? ResultStatus.Finished, CleanNoteOrNull(p.Note), PointsFor(p)))
             .OrderBy(p => p.TeamId).ToList();
@@ -269,6 +331,18 @@ public class ScoringService
         race.IsComplete = true;
         race.StartedAt ??= now;
         race.FinishedAt ??= now;
+        if (fresh.Count > 0)
+        {
+            heat.StartedAt ??= now;
+            if (heat.Races.Count > 0 && heat.Races.All(r => r.Id == raceId || r.IsComplete))
+                heat.FinishedAt ??= now;
+            if (heat.Session is { } session)
+            {
+                session.StartedAt ??= now;
+                if (session.Status == SessionStatus.Upcoming)
+                    session.Status = SessionStatus.InArena;
+            }
+        }
         state.Revision++;
         state.UpdatedAt = now;
         _db.Add(new RaceScoreEvent
@@ -286,6 +360,24 @@ public class ScoringService
             CreatedAt = now,
         });
         await _db.SaveChangesAsync(cancellationToken);
+        if (fresh.Count > 0)
+        {
+            if (isQualifier && heat.RaceRoundId is not null)
+                await new RaceFinalService(_db).TryAutoPopulateAsync(raceId, cancellationToken);
+            if (heat.Session is { } session)
+            {
+                var sessionHeats = await _db.Heats.AsNoTracking()
+                    .Include(h => h.Races)
+                    .Where(h => h.SessionId == session.Id)
+                    .ToListAsync(cancellationToken);
+                if (sessionHeats.Count > 0 && sessionHeats.All(h => h.Races.Count > 0 && h.Races.All(r => r.IsComplete)))
+                {
+                    session.Status = SessionStatus.Finished;
+                    session.FinishedAt ??= now;
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+            }
+        }
         return ToDto(raceId, state.Revision, false, null, null, after);
         }, cancellationToken);
     }
@@ -446,6 +538,29 @@ public class ScoringService
         => new(raceId, revision, signedOff, signedOffAt, signedOffBy, results, replay);
 
     private sealed record CorePlace(int TeamId, int? Place, bool Eliminated, ResultStatus Status, string? Note, double Points);
+
+    /// <summary>Reads a <c>[pts:N]</c> or <c>[adj:±N]</c> directive from a referee note; N must be whole or half.</summary>
+    private static bool TryParsePointsDirective(string? note, out double? overridePts, out double? deltaPts)
+    {
+        overridePts = null;
+        deltaPts = null;
+        if (string.IsNullOrWhiteSpace(note)) return false;
+        var ptsMatch = Regex.Match(note, @"\[pts:(\d+(?:\.\d+)?)\]", RegexOptions.IgnoreCase);
+        if (ptsMatch.Success && double.TryParse(ptsMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture, out var pts))
+        {
+            PointValues.Validate(pts);
+            overridePts = pts;
+            return true;
+        }
+        var adjMatch = Regex.Match(note, @"\[adj:([+-]?\d+(?:\.\d+)?)\]", RegexOptions.IgnoreCase);
+        if (adjMatch.Success && double.TryParse(adjMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture, out var adj))
+        {
+            PointValues.Validate(Math.Abs(adj));
+            deltaPts = adj;
+            return true;
+        }
+        return false;
+    }
 
     private static string? CleanNoteOrNull(string? note) => ResultStatuses.CleanNote(note);
 

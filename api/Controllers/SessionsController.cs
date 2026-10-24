@@ -8,6 +8,7 @@ using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Operations;
 
 namespace MountedGames.Api.Controllers;
 
@@ -233,6 +234,9 @@ public class SessionsController : ControllerBase
         if (lanes <= 0) lanes = teamIds.Count;
         s.LanesPerHeat = lanes;
 
+        var existingHeatCount = req.ReplaceExisting ? 0 : s.Heats.Count;
+        var nextRoundSeed = req.ReplaceExisting ? 1 : (s.Heats.Select(h => h.RaceRoundId ?? 0).DefaultIfEmpty(0).Max() + 1);
+
         if (req.ReplaceExisting)
         {
             _db.Heats.RemoveRange(s.Heats);
@@ -240,18 +244,20 @@ public class SessionsController : ControllerBase
         }
 
         // For each race in the list: create 3 heats (Q1, Q2, Final). Q1 + Q2
-        // split the teams randomly; the Final stays empty until admin populates.
-        var rng = new Random();
-        var heatOrder = req.ReplaceExisting ? 1 : s.Heats.Count + 1;
-        var roundSeed = req.ReplaceExisting ? 1 : (s.Heats.Select(h => h.RaceRoundId ?? 0).DefaultIfEmpty(0).Max() + 1);
+        // split the teams using the fair seeded draw; the Final stays empty until qualifiers complete.
+        var (teamsWithClub, opponentCounts, laneCounts, smallHeatCounts) =
+            await LoadDrawStateAsync(competitionId, s.CompetitionSectionId, s.Id, teamIds);
+        var heatOrder = existingHeatCount + 1;
+        var roundSeed = nextRoundSeed;
 
         foreach (var raceName in raceNames)
         {
-            var shuffled = teamIds.OrderBy(_ => rng.Next()).ToList();
-            var midpoint = (shuffled.Count + 1) / 2;
-            var q1Teams = shuffled.Take(midpoint).ToList();
-            var q2Teams = shuffled.Skip(midpoint).ToList();
             var roundId = roundSeed++;
+            var groups = CompetitionDrawService.DrawGroups(
+                teamsWithClub, 2, competitionId * 397 ^ s.Id, s.Id * 100 + roundId,
+                opponentCounts, laneCounts, smallHeatCounts);
+            var q1Teams = groups[0];
+            var q2Teams = groups.Count > 1 ? groups[1] : new List<int>();
 
             await CreateRoundHeatAsync(s.Id, raceName, $"{raceName} · Q1", heatOrder++, RaceRoundStage.Qualifier, roundId, q1Teams);
             await CreateRoundHeatAsync(s.Id, raceName, $"{raceName} · Q2", heatOrder++, RaceRoundStage.Qualifier, roundId, q2Teams);
@@ -478,7 +484,7 @@ public class SessionsController : ControllerBase
 
         var maxHeatSize = req.LanesPerHeat ?? s.LanesPerHeat ?? teamIds.Count;
         if (maxHeatSize <= 0) maxHeatSize = teamIds.Count;
-        var groups = SplitIntoBalancedGroups(teamIds, maxHeatSize);
+        var existingCount = req.ReplaceExisting ? 0 : s.Heats.Count;
 
         if (req.ReplaceExisting)
         {
@@ -486,9 +492,15 @@ public class SessionsController : ControllerBase
             await _db.SaveChangesAsync();
         }
 
+        var (teamsWithClub, opponentCounts, laneCounts, smallHeatCounts) =
+            await LoadDrawStateAsync(competitionId, s.CompetitionSectionId, s.Id, teamIds);
+        var groupCount = Math.Max(1, (int)Math.Ceiling(teamIds.Count / (double)maxHeatSize));
+        var groups = CompetitionDrawService.DrawGroups(
+            teamsWithClub, groupCount, competitionId * 397 ^ s.Id, s.Id,
+            opponentCounts, laneCounts, smallHeatCounts);
+
         s.LanesPerHeat = maxHeatSize;
 
-        var existingCount = req.ReplaceExisting ? 0 : s.Heats.Count;
         var heatOrder = existingCount + 1;
         for (var gi = 0; gi < groups.Count; gi++)
         {
@@ -526,16 +538,30 @@ public class SessionsController : ControllerBase
         return dto;
     }
 
-    private static List<List<int>> SplitIntoBalancedGroups(IReadOnlyList<int> teamIds, int maxPerGroup)
+    private async Task<(
+        List<(int TeamId, int ClubId)> Teams,
+        Dictionary<(int Low, int High), int> OpponentCounts,
+        Dictionary<int, Dictionary<int, int>> LaneCounts,
+        Dictionary<int, int> SmallHeatCounts)> LoadDrawStateAsync(
+        int competitionId, int? sectionId, int currentSessionId, IReadOnlyList<int> teamIds)
     {
-        var rng = new Random();
-        var shuffled = teamIds.OrderBy(_ => rng.Next()).ToList();
-        var groupCount = (int)Math.Ceiling(shuffled.Count / (double)maxPerGroup);
-        if (groupCount < 1) groupCount = 1;
-        var groups = Enumerable.Range(0, groupCount).Select(_ => new List<int>()).ToList();
-        for (var i = 0; i < shuffled.Count; i++)
-            groups[i % groupCount].Add(shuffled[i]);
-        return groups;
+        var clubMap = await _db.Teams.AsNoTracking()
+            .Where(t => t.CompetitionId == competitionId && teamIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.ClubId);
+        var teams = teamIds.Select(tid => (tid, clubMap.GetValueOrDefault(tid))).ToList();
+        var opponentCounts = new Dictionary<(int Low, int High), int>();
+        var laneCounts = new Dictionary<int, Dictionary<int, int>>();
+        var smallHeatCounts = new Dictionary<int, int>();
+
+        var existingHeats = await _db.Heats.AsNoTracking()
+            .Include(h => h.Entries)
+            .Include(h => h.Session)
+            .Where(h => h.Session!.CompetitionId == competitionId
+                && (sectionId.HasValue ? h.Session.CompetitionSectionId == sectionId.Value : h.SessionId == currentSessionId))
+            .OrderBy(h => h.Session!.OrderIndex).ThenBy(h => h.OrderIndex)
+            .ToListAsync();
+        CompetitionDrawService.RecordExistingHeats(existingHeats, opponentCounts, laneCounts, smallHeatCounts);
+        return (teams, opponentCounts, laneCounts, smallHeatCounts);
     }
 
     private async Task<List<int>> OutTeamIdsAsync(int competitionId, IEnumerable<int> teamIds)
