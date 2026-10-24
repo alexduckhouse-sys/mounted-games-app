@@ -71,7 +71,8 @@ describe('RiderPanel on a set-up dec form', () => {
     render(<Harness config={c} reserve />);
     expect(screen.queryByLabelText(/Pony passport/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Pony’s age/)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Pony')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Pony (optional)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Height (hh) (optional)')).toBeInTheDocument();
   });
 
   it('shows the limit, and an amber warning that goes away when the number is back in range', async () => {

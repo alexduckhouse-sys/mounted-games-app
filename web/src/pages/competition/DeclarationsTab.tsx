@@ -4,7 +4,7 @@ import { Check, Download, Flag, LogIn, Shield, Trash2 } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import type { DeclarationForm, RiderEntry, Team } from '../../types';
+import type { DeclarationForm, RiderEntry, SectionSignup, Team } from '../../types';
 import { toCsv, downloadCsv, safeFilename } from '../../lib/csv';
 import { decDraftKey, dobText, heightText, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
 import { DecFormEditor } from './decform/DecFormEditor';
@@ -26,18 +26,36 @@ export function DeclarationsTab() {
   const [params] = useSearchParams();
   // null until the forms have come back, so the editor starts from the team's real declaration.
   const [forms, setForms] = useState<DeclarationForm[] | null>(null);
+  const [signupResult, setSignupResult] = useState<{ userId: string; items: (SectionSignup & { competitionId?: number; declarationAccessGranted?: boolean })[] } | null>(null);
+  const signupUserId = user?.id;
   const [chosen, setChosen] = useState<number | null>(null);
   // What this competition's dec form asks. Null until it has come back; the standard form if it can't be fetched.
   const [config, setConfig] = useState<DecFormConfig | null>(null);
 
-  // Trainers submit for the teams they coach, and a club's Team Manager for any team of their club.
+  useEffect(() => {
+    if (!signupUserId) return;
+    let cancelled = false;
+    Promise.resolve(api.get<(SectionSignup & { competitionId?: number; declarationAccessGranted?: boolean })[]>('/me/signups'))
+      .then((r) => { if (!cancelled && Array.isArray(r?.data)) setSignupResult({ userId: signupUserId, items: r.data }); })
+      .catch(() => { if (!cancelled) setSignupResult({ userId: signupUserId, items: [] }); });
+    return () => { cancelled = true; };
+  }, [signupUserId]);
+
+  // Trainers submit for the teams they coach, a club's Team Manager for any team of their club,
+  // and self-entered riders for their own team/pair/individual entry.
   // Admins and people who organise this competition can submit for any team. The API enforces the same rule.
   const myTeams = useMemo(() => {
     if (hasRole('Admin') || canOrganise(competition)) return competition.teams;
     if (!user) return [];
     const manager = hasRole('Manager') && user.clubId != null;
-    return competition.teams.filter((t) => t.trainerUserId === user.id || (manager && t.clubId === user.clubId));
-  }, [competition, hasRole, canOrganise, user]);
+    const mySignups = signupResult?.userId === user.id ? signupResult.items : [];
+    const compSignups = mySignups.filter((s) => s.competitionId === competition.id && s.declarationAccessGranted === true && (s.status === 0 || s.status === 1));
+    return competition.teams.filter((t) =>
+      t.trainerUserId === user.id
+      || (manager && t.clubId === user.clubId)
+      || compSignups.some((s) => s.teamId === t.id && s.competitionSectionId === t.competitionSectionId)
+    );
+  }, [competition, hasRole, canOrganise, user, signupResult]);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +161,7 @@ export function DeclarationsTab() {
       {forms?.length === 0 && (
         <div className="card p-3 text-xs text-[rgb(var(--mg-muted))]">No declaration forms submitted yet.</div>
       )}
-      {forms?.map((f) => <DecFormCard key={f.id} f={f} config={config ?? STANDARD_CONFIG} onDelete={() => remove(f.id)} canDelete={user != null} />)}
+      {forms?.map((f) => <DecFormCard key={f.id} f={f} config={config ?? STANDARD_CONFIG} onDelete={() => remove(f.id)} canDelete={user != null && (hasRole('Admin') || canOrganise(competition) || f.submittedByUserId === user.id || myTeams.some((t) => t.id === f.teamId))} />)}
     </div>
   );
   const rail = (
@@ -256,7 +274,7 @@ function DecFormCard({ f, config, onDelete, canDelete }: CardProps) {
             Submitted {new Date(f.submittedAt).toLocaleString()}
           </p>
         </div>
-        {canDelete && (
+        {canDelete && onDelete && (
           <button onClick={onDelete} className="text-rose-500 hover:text-rose-700" title="Delete" aria-label={`Delete the dec form for ${f.teamName}`}>
             <Trash2 className="h-4 w-4" />
           </button>

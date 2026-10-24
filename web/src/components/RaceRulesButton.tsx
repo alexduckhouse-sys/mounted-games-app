@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Info, X } from 'lucide-react';
 import { equipmentFromDiagram } from '../lib/raceEquipment';
@@ -9,8 +9,17 @@ import './race-rules.css';
 
 type Result = { key: string; template: RaceTemplate | null } | { key: string; failed: true };
 
+/** Quote the stored race guidance; generic advice can contradict a game's rules. */
+function ruleHighlights(template: RaceTemplate): string[] {
+  const sentences = (template.rules ?? '').split(/(?<=[.!?])\s+|\n+/).map((text) => text.trim()).filter(Boolean);
+  const winning = sentences.find((text) => /\bwinning\b|\bwins?\b/i.test(text));
+  const corrections = sentences.filter((text) => /eliminat|knock|drop|miss|must|return|correct|penalt/i.test(text) && text !== winning);
+  const candidates = [template.summary?.trim(), winning, ...corrections, ...sentences];
+  return [...new Set(candidates.filter((text): text is string => !!text))].slice(0, 3);
+}
+
 /** An info button that opens a sheet with a race's rules and equipment. */
-export function RaceRulesButton({ raceName, className = '' }: { raceName: string; className?: string }) {
+export function RaceRulesButton({ raceName, className = '', label }: { raceName: string; className?: string; label?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -57,11 +66,12 @@ export function RaceRulesButton({ raceName, className = '' }: { raceName: string
 
   const current = result?.key === key ? result : null;
   const template = current && 'template' in current ? current.template : null;
+  const highlights = template ? ruleHighlights(template) : [];
   const equipment = template ? equipmentFromDiagram(template.diagramJson) : [];
 
   return <>
     <button ref={buttonRef} type="button" className={`race-rules-btn ${className}`} aria-label={`Rules for ${raceName}`} aria-haspopup="dialog" aria-expanded={open} onClick={(event) => { event.stopPropagation(); setOpen(true); }}>
-      <Info aria-hidden="true" className="h-4 w-4" />
+      {label ?? <Info aria-hidden="true" className="h-4 w-4" />}
     </button>
     {open && createPortal(
       <div className="race-rules-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}>
@@ -81,6 +91,14 @@ export function RaceRulesButton({ raceName, className = '' }: { raceName: string
             {equipment.length > 0 && <section aria-label="Equipment"><h3>Equipment</h3>
               <ul>{equipment.map((item) => <li key={item.label}>{item.count > 1 ? `${item.count} × ` : ''}{item.label}</li>)}</ul>
             </section>}
+            {highlights.length > 0 && (
+              <section aria-label="How to win & common eliminations">
+                <h3>How to win &amp; common eliminations</h3>
+                <ul>
+                  {highlights.map((text) => <li key={text}>{text}</li>)}
+                </ul>
+              </section>
+            )}
             {!template.summary && !template.rules && equipment.length === 0 && <p>No rules have been added for this race yet.</p>}
           </div>}
         </div>

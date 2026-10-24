@@ -5,7 +5,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { apiErrorMessage } from '../../../lib/apiError';
 import { competitionDateText } from '../../../lib/competitionDates';
 import {
-  blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, panelTitle, riderFromSaved,
+  blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, normaliseSlotsForFormat, panelTitle, riderFromSaved,
   phoneProblem, riderReady, ridersRequired, savedChoices, slotFlagged, slotLabel, slotMeta, slotsFromForm, statusText, subtitleOf, teamIsFull,
   type DecFormDraft, type DecRider, type Slot,
 } from '../../../lib/decForm';
@@ -40,7 +40,9 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const section = competition.sections.find((s) => s.id === team.competitionSectionId);
   const required = ridersRequired(section?.format);
 
-  const [slots, setSlots] = useState<Slot[]>(() => draft?.slots ?? (existing ? slotsFromForm(existing, required, config) : emptySlots(required)));
+  const [slots, setSlots] = useState<Slot[]>(() => draft?.slots
+    ? (required < 4 ? normaliseSlotsForFormat(draft.slots, section?.format) : draft.slots)
+    : (existing ? slotsFromForm(existing, required, config) : emptySlots(required)));
   const [teamName, setTeamName] = useState(draft?.teamName ?? team.displayName);
   const [bibs, setBibs] = useState(draft?.bibs ?? existing?.bibDescription ?? team.bibDescription ?? '');
   const [trainerName, setTrainerName] = useState(draft?.trainerName ?? existing?.trainerName ?? existing?.submittedByName ?? user?.fullName ?? '');

@@ -119,7 +119,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.Property(x => x.LookingForPair).HasConversion<int>().HasDefaultValue(false);
             e.Property(x => x.LookingForGuestRiders).HasConversion<int>().HasDefaultValue(false);
             e.Property(x => x.WaitingForGuestSpot).HasConversion<int>().HasDefaultValue(false);
-            e.HasOne<SectionSignup>().WithOne().HasForeignKey<SignupMatchmaking>(x => x.SignupId)
+            e.HasOne(x => x.Signup).WithOne().HasForeignKey<SignupMatchmaking>(x => x.SignupId)
                 .HasConstraintName("FK_SignupMatchmaking_Signup").OnDelete(DeleteBehavior.Cascade);
             e.HasOne<SectionSignup>().WithMany().HasForeignKey(x => x.PairRequestFromSignupId)
                 .HasConstraintName("FK_SignupMatchmaking_PairFrom").OnDelete(DeleteBehavior.SetNull);

@@ -10,8 +10,14 @@ namespace MountedGames.Api.Services.Operations;
 
 public sealed class DeclarationLockedException(string message) : InvalidOperationException(message);
 
+public record EmergencyReplacementInput(
+    string? ReplacementRiderName = null,
+    string? ReplacementHorseName = null
+);
+
 /// <summary>
-/// An organiser brings a reserve in for a rider on a team's current declaration. The two riders trade places
+/// An organiser brings a reserve in for a rider on a team's current declaration, or records an emergency
+/// rider/pony replacement (e.g. Referee-approved when no declared reserve exists). The two riders trade places
 /// (the one coming out becomes a reserve, so it can be reversed) and the captain badge follows the seat.
 /// Every swap is written to <see cref="RiderSwapEvent"/> with the before and after, who did it and why.
 /// </summary>
@@ -20,9 +26,31 @@ public class RiderSwapService(AppDbContext db)
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public const int MaxReasonLength = 500;
 
+    private static (string? RiderName, string? HorseName) ParseEmergencyHeader(string reason, EmergencyReplacementInput? explicitInput)
+    {
+        if (explicitInput is not null && (!string.IsNullOrWhiteSpace(explicitInput.ReplacementRiderName) || !string.IsNullOrWhiteSpace(explicitInput.ReplacementHorseName)))
+        {
+            return (explicitInput.ReplacementRiderName?.Trim(), explicitInput.ReplacementHorseName?.Trim());
+        }
+        // Supports "[Emergency: Rider Name | Pony Name] Reason" or "[Emergency: Rider Name] Reason"
+        if (reason.StartsWith("[Emergency:", StringComparison.OrdinalIgnoreCase))
+        {
+            var close = reason.IndexOf(']');
+            if (close > 11)
+            {
+                var inner = reason[11..close].Trim();
+                var parts = inner.Split('|', 2, StringSplitOptions.TrimEntries);
+                var rName = parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]) ? parts[0] : null;
+                var hName = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]) ? parts[1] : null;
+                return (rName, hName);
+            }
+        }
+        return (null, null);
+    }
+
     public async Task<RiderSwapDto> SwapAsync(
         int competitionId, int formId, SwapRiderRequest request, string? actorUserId,
-        CancellationToken ct = default)
+        CancellationToken ct = default, EmergencyReplacementInput? emergency = null)
     {
         var requestId = (request.RequestId ?? string.Empty).Trim();
         if (requestId.Length is 0 or > 100) throw new EntryValidationException("A request id of up to 100 characters is required.");
@@ -53,10 +81,7 @@ public class RiderSwapService(AppDbContext db)
 
             var outRider = form.Riders.FirstOrDefault(r => r.Id == request.OutRiderEntryId)
                 ?? throw new EntryValidationException("The rider to take out isn't on this declaration.");
-            var inRider = form.Riders.FirstOrDefault(r => r.Id == request.InRiderEntryId)
-                ?? throw new EntryValidationException("The reserve to bring in isn't on this declaration.");
             if (outRider.IsReserve) throw new EntryValidationException("The rider to take out is already a reserve.");
-            if (!inRider.IsReserve) throw new EntryValidationException("The rider to bring in isn't a reserve.");
 
             if (form.IsLocked)
             {
@@ -68,13 +93,55 @@ public class RiderSwapService(AppDbContext db)
             }
 
             var before = Snapshot(form);
-            (outRider.IsReserve, inRider.IsReserve) = (true, false);
-            if (outRider.IsCaptain)
+            RiderEntry inRider;
+
+            if (request.InRiderEntryId <= 0)
             {
+                // Emergency replacement (Referee-approved replacement rider and/or pony when no reserve is used).
+                if (reason.Length == 0)
+                    throw new EntryValidationException("Give a reason (e.g. Referee approval) for an emergency replacement.");
+                var (repRider, repHorse) = ParseEmergencyHeader(reason, emergency);
+                if (string.IsNullOrWhiteSpace(repRider) && string.IsNullOrWhiteSpace(repHorse))
+                    throw new EntryValidationException("Provide a replacement rider name or replacement pony name for an emergency replacement.");
+
+                var seatOrder = outRider.OrderIndex;
+                var wasCaptain = outRider.IsCaptain;
+                outRider.IsReserve = true;
                 outRider.IsCaptain = false;
-                inRider.IsCaptain = true;
+                outRider.OrderIndex = form.Riders.Count > 0 ? form.Riders.Max(r => r.OrderIndex) + 1 : 5;
+
+                inRider = new RiderEntry
+                {
+                    DeclarationFormId = form.Id,
+                    FullName = !string.IsNullOrWhiteSpace(repRider) ? repRider : outRider.FullName,
+                    DateOfBirth = string.IsNullOrWhiteSpace(repRider) ? outRider.DateOfBirth : null,
+                    HorseName = !string.IsNullOrWhiteSpace(repHorse) ? repHorse : outRider.HorseName,
+                    PonyHeightHands = string.IsNullOrWhiteSpace(repHorse) ? outRider.PonyHeightHands : null,
+                    BibColour = outRider.BibColour,
+                    IsCaptain = wasCaptain,
+                    IsReserve = false,
+                    IsGuestRider = !string.IsNullOrWhiteSpace(repRider),
+                    OrderIndex = seatOrder,
+                    UseInitialOnly = outRider.UseInitialOnly,
+                    NoFilming = outRider.NoFilming,
+                };
+                form.Riders.Add(inRider);
+                await db.SaveChangesAsync(ct);
             }
-            (outRider.OrderIndex, inRider.OrderIndex) = (inRider.OrderIndex, outRider.OrderIndex);
+            else
+            {
+                inRider = form.Riders.FirstOrDefault(r => r.Id == request.InRiderEntryId)
+                    ?? throw new EntryValidationException("The reserve to bring in isn't on this declaration.");
+                if (!inRider.IsReserve) throw new EntryValidationException("The rider to bring in isn't a reserve.");
+
+                (outRider.IsReserve, inRider.IsReserve) = (true, false);
+                if (outRider.IsCaptain)
+                {
+                    outRider.IsCaptain = false;
+                    inRider.IsCaptain = true;
+                }
+                (outRider.OrderIndex, inRider.OrderIndex) = (inRider.OrderIndex, outRider.OrderIndex);
+            }
             var after = Snapshot(form);
 
             var swap = new RiderSwapEvent

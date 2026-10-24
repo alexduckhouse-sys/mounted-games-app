@@ -178,4 +178,43 @@ public class RiderSwapTests : IClassFixture<ApiFactory>
         Assert.DoesNotContain("Secret medical reason", body);
         Assert.DoesNotContain("private note", body);
     }
+
+    [Fact]
+    public async Task Swap_EmergencyReplacementWithoutDeclaredReserve_AddsReplacementRiderAndLogsAudit()
+    {
+        var arena = await _f.CreateArenaAsync(1);
+        var (formId, captainId) = await _f.WithDbAsync(async db =>
+        {
+            var form = new DeclarationForm { TeamId = arena.TeamIds[0], IsLocked = true };
+            form.Riders.Add(new RiderEntry { FullName = "Pair Rider 1", HorseName = "Star", DateOfBirth = new DateTime(2000, 1, 1), PonyHeightHands = 13.2m, IsCaptain = true, OrderIndex = 0 });
+            form.Riders.Add(new RiderEntry { FullName = "Pair Rider 2", HorseName = "Moon", OrderIndex = 1 });
+            db.DeclarationForms.Add(form);
+            await db.SaveChangesAsync();
+            return (form.Id, form.Riders.OrderBy(r => r.OrderIndex).First().Id);
+        });
+
+        var admin = await _f.AdminAsync();
+        var response = await admin.PostAsJsonAsync(
+            $"/api/competitions/{arena.CompetitionId}/declaration-forms/{formId}/swap",
+            new SwapRiderRequest(
+                captainId,
+                0,
+                "[Emergency: Emergency Sam | Comet] Referee approved replacement",
+                true,
+                "emerg-1"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var swap = await response.ReadAsync<RiderSwapDto>();
+        Assert.True(swap.OverrodeLock);
+        Assert.Contains(swap.After, r => r.FullName == "Emergency Sam" && !r.IsReserve && r.IsCaptain);
+
+        var riders = await RidersAsync(formId);
+        var replacement = Assert.Single(riders, r => r.FullName == "Emergency Sam");
+        Assert.Equal("Comet", replacement.HorseName);
+        Assert.Null(replacement.DateOfBirth);
+        Assert.Null(replacement.PonyHeightHands);
+        Assert.True(replacement.IsCaptain);
+        Assert.False(replacement.IsReserve);
+        Assert.True(riders.Single(r => r.Id == captainId).IsReserve);
+    }
 }

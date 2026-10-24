@@ -151,14 +151,21 @@ describe('TopBarTicker: rotating', () => {
     expect(() => show([live, next])).not.toThrow();
   });
 
-  it('jumps to a new announcement when it arrives, otherwise keeps its place', async () => {
-    const { rerender } = show([live, next]);
+  it('jumps to a new announcement when it arrives, flashes and holds it for 10 seconds, otherwise keeps its place', async () => {
+    const { rerender, container } = show([live, next]);
     await tick(4500);
     expect(strip()).toContain('Heat 2');
     rerender(<Page items={[live, next, { ...info }]} />);
     expect(strip()).toContain('Heat 2');
+    expect(container.querySelector('.mg-strip-flash')).toBeNull();
     rerender(<Page items={[notice, live, next]} />);
     expect(strip()).toBe('NoticeLunch moved to 1pm');
+    expect(container.querySelector('.mg-strip-flash')).not.toBeNull();
+    await tick(4500);
+    expect(strip()).toBe('NoticeLunch moved to 1pm');
+    await tick(5500);
+    expect(strip()).toBe('LiveSeniors Session 1 · Heat 1');
+    expect(container.querySelector('.mg-strip-flash')).toBeNull();
   });
 
   it('goes back to the first line when the one being shown disappears', async () => {

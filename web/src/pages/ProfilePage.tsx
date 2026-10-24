@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Bell, ChevronRight, ClipboardList, Contact, CreditCard, Landmark, LogOut, Package, Pencil, ShoppingBag, UserCog, UserRound, Users, type LucideIcon } from 'lucide-react';
 import { api } from '../api';
@@ -6,6 +6,10 @@ import { signOutDestination } from '../auth/signOutDestination';
 import { useAuth } from '../auth/AuthContext';
 import { EmailConfirmBanner } from '../components/EmailConfirmBanner';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
+import { useMyTeams } from '../hooks/useMyTeams';
+import { heatRowsForTeam, heatTime } from '../lib/myTeams';
+import { dayKey } from '../lib/timetableDay';
+import { displaySectionName } from '../lib/section';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
 import { initialsOf, roleLabel } from '../lib/profile';
 import type { DeclarationForm, Team } from '../types';
@@ -33,6 +37,8 @@ export function ProfilePage() {
   const { user, hasRole, logout } = useAuth();
   const { current } = useCurrentCompetition();
   const { teams } = useNeedsYou();
+  const mine = useMyTeams();
+  const now = useMemo(() => new Date(), []);
   const location = useLocation();
   const navigate = useNavigate();
   const notify = useTeamNotifications(NO_TEAMS);
@@ -70,6 +76,24 @@ export function ProfilePage() {
   }, [wantsSiteAdmin]);
 
   if (!user) return null;
+
+  const todayKey = dayKey(now);
+  const todays = mine.teams.flatMap((team) => {
+    const comp = mine.comps.get(team.competitionId);
+    return comp ? heatRowsForTeam(team, comp).filter((row) => row.status !== 'over' && row.effective && dayKey(row.effective) === todayKey).map((row) => ({ team, row })) : [];
+  }).sort((a, b) => a.row.effective!.getTime() - b.row.effective!.getTime()).slice(0, 6);
+
+  const teamsToday = todays.length > 0 && <Section title="Your teams today">
+    <div className="mg-card mg-list">
+      {todays.map(({ team, row }) => <Link key={`${team.id}-${row.heatId}`} to={`/competitions/${team.competitionId}/teams/${team.id}`} className="mg-row !min-h-14">
+        <span className={`shrink-0 font-semibold ${row.delayMinutes > 0 ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{heatTime(row)}</span>
+        <span className="flex min-w-0 flex-col gap-1">
+          <strong>{team.displayName}</strong>
+          <span className="text-xs text-[rgb(var(--mg-muted))]">{[displaySectionName(team.sectionName), row.sessionName, row.label, row.lane != null ? `Lane ${row.lane}` : '', row.delayMinutes > 0 ? `+${row.delayMinutes} min` : ''].filter(Boolean).join(' · ')}</span>
+        </span>
+      </Link>)}
+    </div>
+  </Section>;
 
   const runsClub = isAdmin || hasRole('Manager');
   const showClub = isAdmin || clubId != null || hasRole('Trainer') || hasRole('Manager') || (teams?.length ?? 0) > 0;
@@ -168,6 +192,7 @@ export function ProfilePage() {
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="flex flex-col gap-6 lg:col-span-2">
             <NeedsYouPanel events={events.week} />
+            {teamsToday}
             <TodaysEvents events={events.week} loaded={events.loaded} />
           </div>
           <div className="flex flex-col gap-6">
@@ -179,6 +204,7 @@ export function ProfilePage() {
       ) : (
         <>
           <NeedsYouPanel events={events.week} />
+            {teamsToday}
           <QuickActions focus={events.focus} today={events.today.length > 0} />
           {clubSection}
           {accountSection}

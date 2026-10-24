@@ -17,7 +17,7 @@ public record PickerLiveHeat(string? SectionName, string HeatLabel, string? Aren
 public record CompetitionPickerItem(
     int Id, string Name, DateTime StartDate, DateTime? EndDate, string Icon,
     string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false, bool EntriesOpen = false);
-public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore);
+public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore, IReadOnlyList<int>? Years = null, IReadOnlyList<string>? Locations = null);
 
 public static class CompetitionTerms
 {

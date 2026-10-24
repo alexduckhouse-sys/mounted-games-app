@@ -13,11 +13,13 @@ function when(iso: string): string {
 
 function swapLine(swap: RiderSwap): string {
   const out = swap.before.find((rider) => rider.riderEntryId === swap.outRiderEntryId)?.fullName ?? 'A rider';
-  const incoming = swap.before.find((rider) => rider.riderEntryId === swap.inRiderEntryId)?.fullName ?? 'a reserve';
+  const incoming = swap.before.find((rider) => rider.riderEntryId === swap.inRiderEntryId)?.fullName
+    ?? swap.after.find((rider) => rider.riderEntryId === swap.inRiderEntryId)?.fullName
+    ?? 'a reserve';
   return `${incoming} in for ${out}`;
 }
 
-/** Bring a reserve in for a rider on the team's current declaration. A locked declaration needs an explicit override and a reason. */
+/** Bring a reserve in for a rider on the team's current declaration, or record a Referee-approved emergency replacement. */
 export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapped }: {
   competitionId: number;
   team: TeamEntry;
@@ -30,6 +32,8 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
   const [loadError, setLoadError] = useState<string | null>(null);
   const [outId, setOutId] = useState<number | null>(null);
   const [inId, setInId] = useState<number | null>(null);
+  const [replacementRider, setReplacementRider] = useState('');
+  const [replacementPony, setReplacementPony] = useState('');
   const [reason, setReason] = useState('');
   const [override, setOverride] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -44,6 +48,8 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
       const current = Array.isArray(data) && data.length > 0 ? data[0] : null;
       setForm(current);
       if (current) {
+        const hasReserve = current.riders.some((r) => r.isReserve);
+        if (!hasReserve) setInId(0);
         const swaps = await api.get<RiderSwap[]>(`/competitions/${competitionId}/declaration-forms/${current.id}/swaps`);
         setHistory(Array.isArray(swaps.data) ? swaps.data : []);
       }
@@ -63,17 +69,31 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
   const riders = form ? [...form.riders].sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const riding = riders.filter((rider) => !rider.isReserve);
   const reserves = riders.filter((rider) => rider.isReserve);
+  const isEmergency = inId === 0 || reserves.length === 0;
+  const effectiveInId = reserves.length === 0 ? 0 : inId;
+  const emergencyReady = !isEmergency || (Boolean(replacementRider.trim() || replacementPony.trim()) && Boolean(reason.trim()));
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!form || busy || outId == null || inId == null) return;
+    if (!form || busy || outId == null || effectiveInId == null) return;
     if (form.isLocked && !override) { setError('This declaration is locked. Tick the override box to change it.'); return; }
-    if (form.isLocked && !reason.trim()) { setError('Give a reason to change a locked declaration.'); return; }
+    if ((form.isLocked || isEmergency) && !reason.trim()) { setError('Give a reason (e.g. Referee approval) to record this change.'); return; }
+    if (isEmergency && !replacementRider.trim() && !replacementPony.trim()) {
+      setError('Enter the replacement rider name or replacement pony name.');
+      return;
+    }
+    const formattedReason = isEmergency
+      ? `[Emergency: ${replacementRider.trim()}${replacementPony.trim() ? ` | ${replacementPony.trim()}` : ''}] ${reason.trim()}`
+      : (reason.trim() || null);
     setBusy(true);
     setError(null);
     try {
       const { data } = await api.post<RiderSwap>(`/competitions/${competitionId}/declaration-forms/${form.id}/swap`, {
-        outRiderEntryId: outId, inRiderEntryId: inId, reason: reason.trim() || null, overrideLock: form.isLocked && override, requestId,
+        outRiderEntryId: outId,
+        inRiderEntryId: effectiveInId,
+        reason: formattedReason,
+        overrideLock: form.isLocked && override,
+        requestId,
       });
       onSwapped(`${team.teamName}: ${swapLine(data)}.`);
       onClose();
@@ -93,8 +113,10 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
       {form === undefined && !loadError && <p role="status" className="rf-note">Loading the declaration…</p>}
       {loadError && <p role="alert" className="mg-notice ops-alert">{loadError} <button type="button" className="rf-btn rf-btn-text" onClick={() => void load()}>Try again</button></p>}
       {form === null && <RefineNote>This team hasn’t submitted a declaration yet, so there is nobody to swap.</RefineNote>}
-      {form && reserves.length === 0 && <RefineNote>The declaration lists no reserve to bring in.</RefineNote>}
-      {form && reserves.length > 0 && (
+      {form && reserves.length === 0 && (
+        <RefineNote>The declaration lists no reserve to bring in. You can record a Referee-approved emergency rider or pony replacement below.</RefineNote>
+      )}
+      {form && (
         <form className="ops-form" onSubmit={(event) => void submit(event)}>
           <fieldset className="ops-pick">
             <legend>Rider coming out</legend>
@@ -102,14 +124,30 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
               <label key={rider.id} className="rf-row ops-check"><input type="radio" name="swap-out" checked={outId === rider.id} onChange={() => setOutId(rider.id)} /> <span className="rf-grow">{rider.fullName}{rider.isCaptain ? ' (captain)' : ''}</span></label>
             ))}
           </fieldset>
-          <fieldset className="ops-pick">
-            <legend>Reserve coming in</legend>
-            {reserves.map((rider) => (
-              <label key={rider.id} className="rf-row ops-check"><input type="radio" name="swap-in" checked={inId === rider.id} onChange={() => setInId(rider.id)} /> <span className="rf-grow">{rider.fullName}</span></label>
-            ))}
-          </fieldset>
-          <label className="rf-fld">Reason{form.isLocked ? '' : ' (optional)'}
-            <textarea className="ops-note-input" value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
+          {reserves.length > 0 && (
+            <fieldset className="ops-pick">
+              <legend>Reserve coming in</legend>
+              {reserves.map((rider) => (
+                <label key={rider.id} className="rf-row ops-check"><input type="radio" name="swap-in" checked={inId === rider.id} onChange={() => setInId(rider.id)} /> <span className="rf-grow">{rider.fullName}</span></label>
+              ))}
+              <label className="rf-row ops-check">
+                <input type="radio" name="swap-in" checked={inId === 0} onChange={() => setInId(0)} />
+                <span className="rf-grow">Emergency replacement (Referee approved)</span>
+              </label>
+            </fieldset>
+          )}
+          {isEmergency && (
+            <div className="flex flex-col gap-2">
+              <label className="rf-fld">Replacement rider name
+                <input placeholder="Leave blank if same rider on a replacement pony" value={replacementRider} onChange={(event) => setReplacementRider(event.target.value)} />
+              </label>
+              <label className="rf-fld">Replacement pony name
+                <input placeholder="Replacement pony (optional)" value={replacementPony} onChange={(event) => setReplacementPony(event.target.value)} />
+              </label>
+            </div>
+          )}
+          <label className="rf-fld">Reason{form.isLocked || isEmergency ? '' : ' (optional)'}
+            <textarea className="ops-note-input" placeholder={isEmergency ? 'e.g. Approved by Referee — pony lame in warm-up' : undefined} value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
           </label>
           {form.isLocked && (
             <label className="rf-row ops-check">
@@ -120,7 +158,7 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
           {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
           <div className="rf-actions">
             <button type="button" className="rf-btn" onClick={onClose}>Cancel</button>
-            <button type="submit" className="rf-btn rf-btn-primary rf-grow" disabled={busy || !canWrite || outId == null || inId == null}>{busy ? 'Swapping…' : 'Swap rider'}</button>
+            <button type="submit" className="rf-btn rf-btn-primary rf-grow" disabled={busy || !canWrite || outId == null || effectiveInId == null || !emergencyReady}>{busy ? 'Swapping…' : 'Swap rider'}</button>
           </div>
         </form>
       )}

@@ -23,9 +23,10 @@ describe('StatsSummaryView', () => {
     expect(screen.getByText(/count individual and pairs competitions/)).toBeInTheDocument();
   });
 
-  it('leaves the note out when race figures cover every format', () => {
-    render(<StatsSummaryView summary={summary} raceFiguresAllFormats />);
+  it('leaves the note out when race figures cover every format, and shows A/B/C finals breakdown when present', () => {
+    render(<StatsSummaryView summary={{ ...summary, bFinals: 2, cFinals: 1 }} raceFiguresAllFormats />);
     expect(screen.queryByText(/count individual and pairs competitions/)).not.toBeInTheDocument();
+    expect(screen.getByText('Finals reached: A Final 1 · B Final 2 · C Final 1')).toBeInTheDocument();
   });
 });
 

@@ -81,6 +81,7 @@ describe('ChatTab auth sessions', () => {
     mount();
 
     expect(screen.queryByText('Messaging the organisers isn’t available for this event yet.')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
     await userEvent.type(screen.getByPlaceholderText('Message the organisers…'), 'Please call collecting ring');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -94,6 +95,7 @@ describe('ChatTab auth sessions', () => {
     state.post.mockResolvedValue({ data: chat(9, { body: 'Where is the ring?', type: 0, adminOnly: true, userId: 'fake-user' }) });
     mount({ staffChatEnabled: true });
 
+    await userEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
     await userEvent.type(screen.getByPlaceholderText('Message the organisers…'), 'Where is the ring?');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -111,6 +113,7 @@ describe('ChatTab auth sessions', () => {
     ] });
     mount({ staffChatEnabled: true });
 
+    await userEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
     expect(await screen.findByText('Your answer')).toBeInTheDocument();
     expect(screen.getByText('My question')).toBeInTheDocument();
     expect(screen.queryByText('Someone else')).not.toBeInTheDocument();
@@ -121,6 +124,7 @@ describe('ChatTab auth sessions', () => {
     state.post.mockResolvedValue({ data: chat(2, { body: 'By the lorries', type: 0, adminOnly: true, userId: 'fake-user', recipientUserId: 'asker-1' }) });
     mount({ staffChatEnabled: true });
 
+    await userEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
     await userEvent.click(await screen.findByRole('button', { name: /Reply privately/ }));
     expect(screen.getByText(/Private reply to Sam Rider/)).toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText('Write a private reply…'), 'By the lorries');
@@ -135,6 +139,7 @@ describe('ChatTab auth sessions', () => {
     const privateMessage = chat(1, { body: 'Private trainer message', type: 0, adminOnly: true });
     state.get.mockResolvedValueOnce({ data: [privateMessage] });
     const view = mount();
+    await userEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
     expect(await screen.findByText('Private trainer message')).toBeInTheDocument();
 
     const stale = deferred<{ data: typeof privateMessage[] }>();
@@ -167,5 +172,28 @@ describe('ChatTab auth sessions', () => {
     publicResponse.resolve({ data: [publicMessage] });
     await act(async () => { await publicResponse.promise; });
     expect(await screen.findByText('Public announcement')).toBeInTheDocument();
+  });
+
+  it('splits Announcements and Message Organisers into two switchable sub-tabs', async () => {
+    state.token = 'fake-rider-token';
+    state.roles = ['Rider'];
+    state.get.mockResolvedValue({
+      data: [
+        chat(1, { body: 'Official heat 1 update', type: 2, adminOnly: false }),
+        chat(2, { body: 'Private question from rider', type: 0, adminOnly: true, userId: 'fake-user' }),
+      ],
+    });
+    mount({ staffChatEnabled: true });
+
+    expect(await screen.findByText('Official heat 1 update')).toBeInTheDocument();
+    const announcementsTab = screen.getByRole('tab', { name: /Announcements/ });
+    const messagesTab = screen.getByRole('tab', { name: /Message Organisers/ });
+    expect(announcementsTab).toHaveAttribute('aria-selected', 'true');
+    expect(messagesTab).toHaveAttribute('aria-selected', 'false');
+
+    await userEvent.click(messagesTab);
+    expect(messagesTab).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(screen.queryByText('Official heat 1 update')).not.toBeInTheDocument());
+    expect(screen.getByText('Private question from rider')).toBeInTheDocument();
   });
 });

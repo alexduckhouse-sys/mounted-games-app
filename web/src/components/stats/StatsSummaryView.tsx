@@ -3,6 +3,8 @@ import { summaryTiles } from '../../lib/stats';
 
 /** The headline numbers every visitor sees. `raceFiguresAllFormats` false adds the note about team events. */
 export function StatsSummaryView({ summary, raceFiguresAllFormats }: { summary: StatsSummary; raceFiguresAllFormats: boolean }) {
+  const bFinals = summary.bFinals ?? 0;
+  const cFinals = summary.cFinals ?? 0;
   return (
     <section aria-label="Summary" className="pt-3">
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -14,6 +16,9 @@ export function StatsSummaryView({ summary, raceFiguresAllFormats }: { summary: 
           </div>
         ))}
       </dl>
+      {(bFinals > 0 || cFinals > 0) && (
+        <p className="rf-note" aria-label="Finals breakdown">Finals reached: A Final {summary.aFinals} · B Final {bFinals} · C Final {cFinals}</p>
+      )}
       {!raceFiguresAllFormats && (
         <p className="rf-note">Point quota and races won count individual and pairs competitions. Team competitions show the team’s result instead.</p>
       )}

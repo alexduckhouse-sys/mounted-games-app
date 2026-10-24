@@ -12,12 +12,33 @@ public static class CompetitionPickerQuery
     private sealed record LiveSessionRow(int CompetitionId, int OrderIndex, string? SectionName, string? ArenaName, List<LiveHeatRow> Heats);
 
     public static async Task<CompetitionPickerPage> LoadAsync(
-        AppDbContext db, bool past, int page, int pageSize, DateTime todayUtc, CancellationToken ct = default)
+        AppDbContext db, bool past, int page, int pageSize, DateTime todayUtc, CancellationToken ct = default,
+        int? year = null, string? location = null, string? search = null, string? userId = null)
     {
         var query = db.Competitions.AsNoTracking();
         query = past
             ? query.Where(c => c.IsArchived || (c.EndDate ?? c.StartDate) < todayUtc)
             : query.Where(c => !c.IsArchived && (c.EndDate ?? c.StartDate) >= todayUtc);
+        if (userId is not null)
+        {
+            var clubId = await db.Users.Where(u => u.Id == userId).Select(u => u.ClubId).SingleOrDefaultAsync(ct);
+            query = query.Where(c => db.Teams.Any(t => t.CompetitionId == c.Id &&
+                (t.TrainerUserId == userId || (clubId != null && t.ClubId == clubId)
+                    || t.Supporters.Any(s => s.UserId == userId && s.Status == TeamSupporterStatus.Accepted)))
+                || db.SectionSignups.Any(s => s.Section!.CompetitionId == c.Id && s.UserId == userId
+                    && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)));
+        }
+        // Facets describe the whole matching archive, before pagination or individual filters.
+        var years = past ? await query.Select(c => c.StartDate.Year).Distinct().OrderByDescending(y => y).ToListAsync(ct) : null;
+        var locations = past ? await query.Where(c => c.Location != null && c.Location.Trim() != "")
+            .Select(c => c.Location!.Trim()).Distinct().OrderBy(value => value).ToListAsync(ct) : null;
+        if (year.HasValue) query = query.Where(c => c.StartDate.Year == year.Value);
+        if (!string.IsNullOrWhiteSpace(location)) query = query.Where(c => c.Location != null && c.Location.Trim() == location.Trim());
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLowerInvariant();
+            query = query.Where(c => c.Name.ToLower().Contains(term) || (c.Location != null && c.Location.ToLower().Contains(term)));
+        }
         var ordered = past ? query.OrderByDescending(c => c.StartDate) : query.OrderBy(c => c.StartDate);
         // Project in SQL: no sections, teams, sessions or results are fetched, only a section count.
         var items = await ordered.ThenBy(c => c.Id).Skip((page - 1) * pageSize).Take(pageSize + 1)
@@ -27,7 +48,7 @@ public static class CompetitionPickerQuery
             .ToListAsync(ct);
         var pageItems = items.Take(pageSize).ToList();
         if (!past) await AttachLiveAsync(db, pageItems, todayUtc, ct);
-        return new CompetitionPickerPage(pageItems, items.Count > pageSize);
+        return new CompetitionPickerPage(pageItems, items.Count > pageSize, years, locations);
     }
 
     /// <summary>One extra query for the competitions running today; mirrors the active-heat rule in web/src/lib/timetableRows.ts.</summary>

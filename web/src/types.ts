@@ -153,6 +153,8 @@ export interface CompetitionPickerItem {
 }
 
 export interface CompetitionPickerPage {
+  years?: number[] | null;
+  locations?: string[] | null;
   items: CompetitionPickerItem[];
   hasMore: boolean;
 }
@@ -902,6 +904,8 @@ export interface StatsSummary {
   entriesWithFinals: number;
   finalsReached: number;
   aFinals: number;
+  bFinals?: number;
+  cFinals?: number;
   aFinalPercent: number | null;
   races: number;
   wins: number;
@@ -964,6 +968,25 @@ export interface StatsPartnership {
   competitions: number;
 }
 
+export interface StatsClub {
+  clubName: string;
+  entries: number;
+  competitions: number;
+  firstDate?: string | null;
+  lastDate?: string | null;
+}
+
+export interface StatsSeasonStanding {
+  seasonId: string;
+  teamProfileId: string;
+  teamName: string;
+  seasonName: string;
+  year: number;
+  rank?: number | null;
+  points: number;
+  eventsEntered: number;
+}
+
 /** Everyone gets `summary`; the lists are null unless the viewer is signed in (`detailed`). */
 export interface StatsProfile {
   kind: StatsSubjectKind;
@@ -978,4 +1001,6 @@ export interface StatsProfile {
   worstGames: string[] | null;
   entries: StatsEntry[] | null;
   partnerships: StatsPartnership[] | null;
+  clubs?: StatsClub[] | null;
+  seasons?: StatsSeasonStanding[] | null;
 }

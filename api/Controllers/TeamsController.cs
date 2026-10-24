@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -10,6 +11,29 @@ using MountedGames.Api.Entities;
 using MountedGames.Api.Services;
 
 namespace MountedGames.Api.Controllers;
+
+public record CreateTeamInput(
+    int CompetitionSectionId,
+    int ClubId = 0,
+    string? Suffix = null,
+    string? BibColour = null,
+    string? TrainerUserId = null,
+    bool IsHorsConcours = false,
+    string? BibDescription = null,
+    [StringLength(150)] string? ClubName = null,
+    [StringLength(150)] string? Club = null,
+    string? Name = null,
+    string? DisplayName = null
+);
+
+public record UpdateTeamInput(
+    string? Suffix = null,
+    string? TrainerUserId = null,
+    bool? IsHorsConcours = null,
+    string? BibDescription = null,
+    string? Name = null,
+    string? DisplayName = null
+);
 
 [ApiController]
 [Route("api/competitions/{competitionId:int}/teams")]
@@ -30,18 +54,45 @@ public class TeamsController : ControllerBase
     [HttpPost]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
-    public async Task<ActionResult<TeamDto>> Create(int competitionId, CreateTeamRequest req)
+    public async Task<ActionResult<TeamDto>> Create(int competitionId, CreateTeamInput req)
     {
         var section = await _db.CompetitionSections.FindAsync(req.CompetitionSectionId);
         if (section is null || section.CompetitionId != competitionId)
             return BadRequest(new { message = "Section is not part of this competition." });
 
-        var club = await _db.Clubs.FindAsync(req.ClubId);
+        Club? club = null;
+        if (req.ClubId > 0)
+        {
+            club = await _db.Clubs.FindAsync(req.ClubId);
+        }
+        var typedClub = (req.ClubName ?? req.Club)?.Trim();
+        if (club is null && !string.IsNullOrEmpty(typedClub))
+        {
+            club = await _db.Clubs.FirstOrDefaultAsync(c => c.Name.ToLower() == typedClub.ToLower());
+            if (club is null)
+            {
+                club = new Club { Name = typedClub };
+                _db.Clubs.Add(club);
+                await _db.SaveChangesAsync();
+            }
+        }
+        var customName = (req.Name ?? req.DisplayName)?.Trim();
+        if (club is null && req.ClubId <= 0 && !string.IsNullOrEmpty(customName))
+        {
+            club = await _db.Clubs.FirstOrDefaultAsync(c => c.Name.ToLower() == "unaffiliated");
+            if (club is null)
+            {
+                club = new Club { Name = "Unaffiliated" };
+                _db.Clubs.Add(club);
+                await _db.SaveChangesAsync();
+            }
+        }
         if (club is null) return BadRequest(new { message = "Club not found." });
 
-        var display = string.IsNullOrWhiteSpace(req.Suffix)
-            ? club.Name
-            : $"{club.Name} {req.Suffix.Trim().ToUpperInvariant()}";
+        var suffix = (req.Suffix ?? string.Empty).Trim().ToUpperInvariant();
+        var display = !string.IsNullOrEmpty(customName)
+            ? customName
+            : (string.IsNullOrWhiteSpace(suffix) ? club.Name : $"{club.Name} {suffix}");
 
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var trainerUserId = req.TrainerUserId;
@@ -52,8 +103,8 @@ public class TeamsController : ControllerBase
         {
             CompetitionId = competitionId,
             CompetitionSectionId = req.CompetitionSectionId,
-            ClubId = req.ClubId,
-            Suffix = req.Suffix.Trim().ToUpperInvariant(),
+            ClubId = club.Id,
+            Suffix = suffix,
             DisplayName = display,
             BibColour = req.BibColour ?? club.BibColour,
             TrainerUserId = trainerUserId,
@@ -72,13 +123,19 @@ public class TeamsController : ControllerBase
     [HttpPut("{id:int}")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
-    public async Task<ActionResult<TeamDto>> Update(int competitionId, int id, UpdateTeamRequest req)
+    public async Task<ActionResult<TeamDto>> Update(int competitionId, int id, UpdateTeamInput req)
     {
         var t = await _db.Teams
             .Include(x => x.Club).Include(x => x.Section).Include(x => x.Trainer)
             .FirstOrDefaultAsync(x => x.Id == id && x.CompetitionId == competitionId);
         if (t is null) return NotFound();
-        if (!string.IsNullOrWhiteSpace(req.Suffix))
+        var customName = (req.Name ?? req.DisplayName)?.Trim();
+        if (!string.IsNullOrEmpty(customName))
+        {
+            t.DisplayName = customName;
+            if (req.Suffix is not null) t.Suffix = req.Suffix.Trim().ToUpperInvariant();
+        }
+        else if (!string.IsNullOrWhiteSpace(req.Suffix))
         {
             t.Suffix = req.Suffix.Trim().ToUpperInvariant();
             t.DisplayName = $"{t.Club?.Name ?? string.Empty} {t.Suffix}".Trim();

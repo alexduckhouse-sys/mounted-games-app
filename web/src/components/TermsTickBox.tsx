@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { TERMS_PLACEHOLDER, TERMS_PLACEHOLDER_LABEL, TERMS_TICK, TERMS_TICK_HELP } from '../lib/termsTick';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 
 /** The one required tick on the sign-up form: parental consent plus the event terms, readable beside it. */
 export function TermsTickBox({ termsText, checked, onChange }: Props) {
+  const consentId = useId();
   const terms = termsText?.trim() ?? '';
   return (
     <div className="flex flex-col gap-2">
@@ -16,6 +18,7 @@ export function TermsTickBox({ termsText, checked, onChange }: Props) {
         <input
           type="checkbox"
           className="mt-0.5 h-5 w-5 shrink-0"
+          aria-describedby={consentId}
           checked={checked}
           onChange={(event) => onChange(event.target.checked)}
         />
@@ -33,7 +36,7 @@ export function TermsTickBox({ termsText, checked, onChange }: Props) {
           </p>
         )}
       </details>
-      <p className="rf-note !p-0">{TERMS_TICK_HELP}</p>
+      <p id={consentId} className="rf-note !p-0">{TERMS_TICK_HELP}</p>
     </div>
   );
 }

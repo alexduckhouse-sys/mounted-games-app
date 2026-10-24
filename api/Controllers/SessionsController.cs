@@ -20,13 +20,15 @@ public class SessionsController : ControllerBase
     private readonly ILiveBroadcaster _live;
     private readonly RaceFinalService _raceFinals;
     private readonly ScoringService _scoring;
+    private readonly PushNotifier? _push;
 
-    public SessionsController(AppDbContext db, ILiveBroadcaster live, RaceFinalService raceFinals, ScoringService? scoring = null)
+    public SessionsController(AppDbContext db, ILiveBroadcaster live, RaceFinalService raceFinals, ScoringService? scoring = null, PushNotifier? push = null)
     {
         _db = db;
         _live = live;
         _raceFinals = raceFinals;
         _scoring = scoring ?? new ScoringService(db);
+        _push = push;
     }
 
     private IQueryable<Session> SessionsWithDetail() => _db.Sessions
@@ -94,6 +96,7 @@ public class SessionsController : ControllerBase
         var s = await SessionsWithDetail()
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        var prevScheduled = s.ScheduledStart;
         if (req.Name is not null)
         {
             if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { message = "A session needs a name." });
@@ -117,6 +120,12 @@ public class SessionsController : ControllerBase
 
         var dto = s.ToDto();
         await _live.SessionUpdated(competitionId, dto);
+        if (prevScheduled.HasValue && s.ScheduledStart.HasValue)
+        {
+            var delayMin = (int)Math.Round((s.ScheduledStart.Value - prevScheduled.Value).TotalMinutes);
+            if (delayMin >= 5)
+                await NotifySessionDelayAsync(competitionId, s, delayMin);
+        }
         return dto;
     }
 
@@ -136,6 +145,12 @@ public class SessionsController : ControllerBase
 
         var dto = s.ToDto();
         await _live.SessionUpdated(competitionId, dto);
+        if (req.Status == SessionStatus.InArena && s.ScheduledStart.HasValue && s.StartedAt.HasValue)
+        {
+            var delayMin = (int)Math.Round((s.StartedAt.Value - s.ScheduledStart.Value).TotalMinutes);
+            if (delayMin >= 5)
+                await NotifySessionDelayAsync(competitionId, s, delayMin);
+        }
 
         var statusLabel = req.Status switch
         {
@@ -421,6 +436,8 @@ public class SessionsController : ControllerBase
         var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == s.Id);
         var dto = reloaded.ToDto();
         await _live.SessionUpdated(competitionId, dto);
+        if (changed.Count > 0)
+            await NotifyRedrawAsync(competitionId, reloaded, changed.Select(c => c.Heat.Id).ToHashSet());
         return dto;
     }
 
@@ -537,7 +554,64 @@ public class SessionsController : ControllerBase
         var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == s.Id);
         var dto = reloaded.ToDto();
         await _live.SessionUpdated(competitionId, dto);
+        if (req.ReplaceExisting)
+            await NotifyRedrawAsync(competitionId, reloaded, null);
         return dto;
+    }
+
+    private async Task NotifySessionDelayAsync(int competitionId, Session s, int delayMinutes)
+    {
+        if (_push is null) return;
+        try
+        {
+            var teamIds = s.Heats.SelectMany(h => h.Entries).Select(e => e.TeamId).Distinct().ToList();
+            if (teamIds.Count == 0 && s.CompetitionSectionId.HasValue)
+            {
+                teamIds = await _db.Teams.AsNoTracking()
+                    .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == s.CompetitionSectionId.Value)
+                    .Select(t => t.Id)
+                    .ToListAsync(HttpContext.RequestAborted);
+            }
+            if (teamIds.Count == 0) return;
+            await _push.NotifyTeamsAsync(teamIds, new PushPayload(
+                Title: "Timetable delay / Redraw alert",
+                Body: $"{s.Name} is now +{delayMinutes} min.",
+                Tag: $"session-delay:{s.Id}",
+                Url: $"/competitions/{competitionId}"), HttpContext.RequestAborted);
+        }
+        catch
+        {
+            // Never fail session update if push notification delivery fails.
+        }
+    }
+
+    private async Task NotifyRedrawAsync(int competitionId, Session s, HashSet<int>? changedHeatIds)
+    {
+        if (_push is null) return;
+        try
+        {
+            var messages = new List<(int TeamId, PushPayload Payload)>();
+            foreach (var heat in s.Heats.OrderBy(h => h.OrderIndex))
+            {
+                if (changedHeatIds is not null && !changedHeatIds.Contains(heat.Id)) continue;
+                var heatLabel = !string.IsNullOrWhiteSpace(heat.Label) ? heat.Label! : $"Heat {heat.OrderIndex}";
+                foreach (var entry in heat.Entries.OrderBy(e => e.LaneIndex))
+                {
+                    var teamName = entry.Team?.DisplayName ?? $"Team {entry.TeamId}";
+                    messages.Add((entry.TeamId, new PushPayload(
+                        Title: "Timetable delay / Redraw alert",
+                        Body: $"Heats redrawn for {s.Name} — {teamName} is in {heatLabel}, Lane {entry.LaneIndex}.",
+                        Tag: $"session-redraw:{s.Id}:{heat.Id}:{entry.TeamId}",
+                        Url: $"/competitions/{competitionId}")));
+                }
+            }
+            if (messages.Count > 0)
+                await _push.NotifyPerTeamAsync(messages, HttpContext.RequestAborted);
+        }
+        catch
+        {
+            // Never fail heat assignment update if push notification delivery fails.
+        }
     }
 
     private async Task<(

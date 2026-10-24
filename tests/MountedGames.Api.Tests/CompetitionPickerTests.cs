@@ -63,6 +63,50 @@ public class CompetitionPickerTests
         Assert.Equal(new[] { "ageGroupCount", "endDate", "entriesOpen", "icon", "id", "isDemo", "live", "location", "name", "startDate" }, json.EnumerateObject().Select(p => p.Name).Order());
     }
 
+    [Fact]
+    public async Task ArchiveFiltersAndFacetsCoverEventsBeyondTheFirstPage()
+    {
+        await using var db = await Database();
+        db.Competitions.AddRange(Enumerable.Range(1, 30).Select(i => new Competition { Name = $"Recent {i}", StartDate = Today.AddDays(-i), Location = "Example North" }));
+        db.Competitions.Add(new Competition { Name = "Older target", StartDate = Today.AddYears(-2), Location = "  Example South  " });
+        await db.SaveChangesAsync();
+        var first = await CompetitionPickerQuery.LoadAsync(db, true, 1, 24, Today);
+        Assert.DoesNotContain(first.Items, c => c.Name == "Older target");
+        Assert.Contains(2028, first.Years!);
+        Assert.Contains("Example South", first.Locations!);
+        var filtered = await CompetitionPickerQuery.LoadAsync(db, true, 1, 24, Today, year: 2028, location: "Example South", search: "TARGET");
+        Assert.Equal("Older target", Assert.Single(filtered.Items).Name);
+        Assert.False(filtered.HasMore);
+        Assert.Empty((await CompetitionPickerQuery.LoadAsync(db, true, 1, 24, Today, year: 2029)).Items);
+    }
+
+    [Fact]
+    public async Task MineIncludesClubMembersAndOwnEntriesButNotCancelledEntriesOrNameMatches()
+    {
+        await using var db = await Database();
+        var club = new Club { Name = "Example club" };
+        var user = new AppUser { Id = "example-member", UserName = "example-member", Club = club, FullName = "Example Rider" };
+        var other = new AppUser { Id = "example-other", UserName = "example-other", FullName = user.FullName };
+        db.Users.AddRange(user, other);
+        var clubEvent = new Competition { Name = "Club event", StartDate = Today.AddDays(-1) };
+        var clubSection = new CompetitionSection { Competition = clubEvent, DisplayName = "Seniors", AgeGroup = "Senior" };
+        db.Teams.Add(new Team { Competition = clubEvent, Section = clubSection, Club = club, DisplayName = "Example team" });
+        foreach (var (name, owner, status) in new[] {
+            ("Rode here", user, SignupPaymentStatus.Paid), ("Pending entry", user, SignupPaymentStatus.Pending),
+            ("Cancelled", user, SignupPaymentStatus.Cancelled), ("Refunded", user, SignupPaymentStatus.Refunded),
+            ("Same name only", other, SignupPaymentStatus.Paid) })
+        {
+            var comp = new Competition { Name = name, StartDate = Today.AddDays(-2) };
+            db.SectionSignups.Add(new SectionSignup { User = owner, FullName = "Example Rider", Status = status,
+                Section = new CompetitionSection { Competition = comp, DisplayName = "Seniors", AgeGroup = "Senior" } });
+        }
+        await db.SaveChangesAsync();
+        var mine = await CompetitionPickerQuery.LoadAsync(db, true, 1, 24, Today, userId: user.Id);
+        Assert.Equal(new[] { "Club event", "Pending entry", "Rode here" }, mine.Items.Select(c => c.Name).Order());
+        Assert.Equal("Same name only", Assert.Single((await CompetitionPickerQuery.LoadAsync(db, true, 1, 24, Today, userId: other.Id)).Items).Name);
+        Assert.Empty((await CompetitionPickerQuery.LoadAsync(db, true, 1, 24, Today, userId: "missing")).Items);
+    }
+
     private static Session RaceSession(SessionStatus status, int order, string? arena, CompetitionSection? section, params Heat[] heats) => new()
     {
         Name = $"Session {order}", Status = status, OrderIndex = order, ArenaName = arena, Section = section, Heats = heats,

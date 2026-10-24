@@ -32,11 +32,13 @@ public class CompetitionsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly ILiveBroadcaster _live;
     private readonly GeocodingService _geocode;
-    public CompetitionsController(AppDbContext db, ILiveBroadcaster live, GeocodingService geocode)
+    private readonly PushNotifier? _push;
+    public CompetitionsController(AppDbContext db, ILiveBroadcaster live, GeocodingService geocode, PushNotifier? push = null)
     {
         _db = db;
         _live = live;
         _geocode = geocode;
+        _push = push;
     }
 
     [HttpGet("/api/geocode")]
@@ -95,11 +97,32 @@ public class CompetitionsController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<CompetitionPickerPage>> Picker(
         [FromQuery] bool past = false, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
-        CancellationToken ct = default)
+        CancellationToken ct = default, [FromQuery] int? year = null,
+        [FromQuery] string? location = null, [FromQuery] string? search = null)
+        => await PickerPage(past, page, pageSize, year, location, search, null, ct);
+
+    // Separate path deliberately excluded from both server and service-worker public-cache allowlists.
+    [HttpGet("picker/mine")]
+    [Authorize]
+    public async Task<ActionResult<CompetitionPickerPage>> MyPicker(
+        [FromQuery] bool past = true, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
+        CancellationToken ct = default, [FromQuery] int? year = null,
+        [FromQuery] string? location = null, [FromQuery] string? search = null)
+    {
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+        Response.Headers.CacheControl = "private, no-store";
+        return await PickerPage(past, page, pageSize, year, location, search, userId, ct);
+    }
+
+    private async Task<ActionResult<CompetitionPickerPage>> PickerPage(bool past, int page, int pageSize,
+        int? year, string? location, string? search, string? userId, CancellationToken ct)
     {
         if (page is < 1 or > 10000 || pageSize is < 1 or > 50)
             return Problem(statusCode: 400, title: "Invalid page", detail: "Use a page from 1 to 10000 and a page size from 1 to 50.");
-        return await CompetitionPickerQuery.LoadAsync(_db, past, page, pageSize, DateTime.UtcNow.Date, ct);
+        if (year is < 1 or > 9999 || location?.Length > 200 || search?.Length > 200)
+            return Problem(statusCode: 400, title: "Invalid filter", detail: "Use a valid year and at most 200 characters for a location or search.");
+        return await CompetitionPickerQuery.LoadAsync(_db, past, page, pageSize, DateTime.UtcNow.Date, ct, year, location, search, userId);
     }
 
     [HttpGet]
@@ -396,7 +419,9 @@ public class CompetitionsController : ControllerBase
     private async Task<Dictionary<int, int>> ActiveSignupCountsAsync(int competitionId)
         => await _db.SectionSignups.AsNoTracking()
             .Where(s => s.Section!.CompetitionId == competitionId
-                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending))
+                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
+                && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
+                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && x.IsWithdrawn))
             .GroupBy(s => s.CompetitionSectionId)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count);
@@ -686,7 +711,36 @@ public class CompetitionsController : ControllerBase
         var reloaded = await SessionsWithDetail().FirstAsync(s => s.Id == session.Id);
         var dto = reloaded.ToDto();
         await _live.SessionUpdated(id, dto);
+        await NotifyFinalsDrawAsync(id, reloaded);
         return dto;
+    }
+
+    private async Task NotifyFinalsDrawAsync(int competitionId, Session session)
+    {
+        if (_push is null) return;
+        try
+        {
+            var messages = new List<(int TeamId, PushPayload Payload)>();
+            foreach (var heat in session.Heats.OrderBy(h => h.OrderIndex))
+            {
+                var heatLabel = !string.IsNullOrWhiteSpace(heat.Label) ? heat.Label! : $"Heat {heat.OrderIndex}";
+                foreach (var entry in heat.Entries.OrderBy(e => e.LaneIndex))
+                {
+                    var teamName = entry.Team?.DisplayName ?? $"Team {entry.TeamId}";
+                    messages.Add((entry.TeamId, new PushPayload(
+                        Title: "Finals draw published",
+                        Body: $"You are in the {heatLabel}, Lane {entry.LaneIndex} ({teamName})",
+                        Tag: $"finals-draw:{heat.Id}:{entry.TeamId}",
+                        Url: $"/competitions/{competitionId}")));
+                }
+            }
+            if (messages.Count > 0)
+                await _push.NotifyPerTeamAsync(messages, HttpContext.RequestAborted);
+        }
+        catch
+        {
+            // Never fail finals creation if push notification delivery fails.
+        }
     }
 
     private Task<bool> SectionInCompetitionAsync(int competitionId, int sectionId)
@@ -820,6 +874,7 @@ public class CompetitionsController : ControllerBase
         var reloaded = await SessionsWithDetail().FirstAsync(s => s.Id == session.Id);
         var dto = reloaded.ToDto();
         await _live.SessionUpdated(id, dto);
+        await NotifyFinalsDrawAsync(id, reloaded);
         return dto;
     }
 
