@@ -36,3 +36,10 @@ public class CompetitionDeclarationLock
     public int CompetitionId { get; set; }
     public DateTime? DeclarationsCloseAt { get; set; }
 }
+
+/// <summary>All teams formed from one entry, including whole-team purchases with multiple teams.</summary>
+public class SignupTeamLink
+{
+    public int SignupId { get; set; }
+    public int TeamId { get; set; }
+}
