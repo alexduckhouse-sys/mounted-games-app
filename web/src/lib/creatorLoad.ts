@@ -23,7 +23,10 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
   const race = c.sessions.filter((s) => kindOf(s) === 0).sort((a, b) => a.orderIndex - b.orderIndex);
   const sections: SectionDraft[] = c.sections.map((s) => {
     const mine = race.filter((x) => x.competitionSectionId === s.id);
-    const first = mine[0];
+    const usesRaceFinals = s.usesRaceFinals ?? false;
+    const finalsSession = !usesRaceFinals ? mine.find((x) => /^finals\s*·/i.test(x.name.trim())) : undefined;
+    const qualifying = finalsSession ? mine.filter((x) => x.id !== finalsSession.id) : mine;
+    const first = qualifying[0] ?? mine[0];
     const format: Format = s.format === 1 || s.format === 3 ? s.format : 2;
     return {
       existingId: s.id,
@@ -31,19 +34,25 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
       ageGroup: s.ageGroup,
       priceGbp: s.priceMinor ? (s.priceMinor / 100).toFixed(2) : '',
       maxParticipants: s.maxParticipants != null ? String(s.maxParticipants) : '',
-      usesRaceFinals: s.usesRaceFinals ?? false,
+      usesRaceFinals,
       finalistCount: s.finalistCount ? String(s.finalistCount) : '',
       runoffRaceName: s.runoffRaceName ?? '',
       minutesPerRace: String(first?.minutesPerHeat ?? DEFAULT_MINUTES),
       maxTeamsPerHeat: String(first?.lanesPerHeat ?? lanesFor(format)),
       arena: first?.arenaName?.trim() || MAIN_ARENA,
-      sessions: mine.length === 0 ? [{ races: null }] : mine.map((x) => ({
+      sessions: qualifying.length === 0 ? [{ races: null }] : qualifying.map((x) => ({
         existingId: x.id,
         name: x.name,
         races: x.plannedRaces && x.plannedRaces.length > 0 ? x.plannedRaces : null,
         ...(x.heats.length > 0 ? { hasHeats: true } : {}),
         ...(hasScores(x) ? { scored: true } : {}),
       })),
+      finalRaces: finalsSession?.plannedRaces && finalsSession.plannedRaces.length > 0 ? finalsSession.plannedRaces : null,
+      ...(finalsSession ? {
+        finalSessionId: finalsSession.id,
+        ...(finalsSession.heats.length > 0 ? { finalHasHeats: true } : {}),
+        ...(hasScores(finalsSession) ? { finalScored: true } : {}),
+      } : {}),
       ...((s.activeSignupsCount ?? 0) > 0 || c.teams.some((t) => t.competitionSectionId === s.id) ? { hasEntries: true } : {}),
     };
   });

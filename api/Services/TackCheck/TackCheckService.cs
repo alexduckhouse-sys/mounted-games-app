@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
@@ -23,6 +24,7 @@ public sealed class TackCheckService(AppDbContext db)
             .Where(s => s.CompetitionId == competitionId).ToListAsync(ct);
         var setups = await SetupsAsync(competitionId, withMarks: true, ct);
         var teams = await db.Teams.AsNoTracking().Include(t => t.Club)
+            .Include(t => t.DeclarationForms).ThenInclude(f => f.Riders)
             .Where(t => t.CompetitionId == competitionId).ToListAsync(ct);
         return new TackCheckBoardDto(competitionId, sections
             .OrderBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(s => s.Id)
@@ -100,7 +102,11 @@ public sealed class TackCheckService(AppDbContext db)
             throw new EventToolsException("A mark names a sector that is not in this tack check. Reload the page and try again.", StatusCodes.Status400BadRequest);
         if (request.Marks.GroupBy(m => m.SectorId).Any(g => g.Count() > 1))
             throw new EventToolsException("Each sector can be marked once.", StatusCodes.Status400BadRequest);
-        if (request.Marks.Any(m => m.Points is { } p && (p < 0 || p > setup.MaxPoints)))
+        if (request.Marks.Any(m => m.RiderPoints is { Count: > 10 }))
+            throw new EventToolsException("A sector can have at most 10 rider scores.", StatusCodes.Status400BadRequest);
+        if (request.Marks.Any(m =>
+            (m.RiderPoints is { Count: > 0 } && m.RiderPoints.Any(p => p is { } rp && (rp < 0 || rp > setup.MaxPoints)))
+            || (m.RiderPoints is not { Count: > 0 } && m.Points is { } tp && (tp < 0 || tp > setup.MaxPoints))))
             throw new EventToolsException($"Points go from 0 to {setup.MaxPoints}.", StatusCodes.Status400BadRequest);
 
         var now = DateTime.UtcNow;
@@ -108,7 +114,10 @@ public sealed class TackCheckService(AppDbContext db)
         {
             var existing = sector.Marks.SingleOrDefault();
             var sent = request.Marks.SingleOrDefault(m => m.SectorId == sector.Id);
-            if (sent is null || (sent.Passed is null && sent.Points is null))
+            var hasRiderPoints = sent?.RiderPoints is { Count: > 0 } && sent.RiderPoints.Any(p => p is not null);
+            var riderJson = hasRiderPoints ? JsonSerializer.Serialize(sent!.RiderPoints) : null;
+            var effectivePoints = hasRiderPoints ? sent!.RiderPoints!.Sum(p => p ?? 0) : sent?.Points;
+            if (sent is null || (sent.Passed is null && effectivePoints is null))
             {
                 if (existing is not null) db.Remove(existing);
                 continue;
@@ -118,12 +127,13 @@ public sealed class TackCheckService(AppDbContext db)
                 existing = new TackCheckMark { TackCheckSectorId = sector.Id, TeamId = teamId };
                 db.Add(existing);
             }
-            else if (existing.Passed == sent.Passed && existing.Points == sent.Points)
+            else if (existing.Passed == sent.Passed && existing.Points == effectivePoints && existing.RiderScoresJson == riderJson)
             {
                 continue;
             }
             existing.Passed = sent.Passed;
-            existing.Points = sent.Points;
+            existing.Points = effectivePoints;
+            existing.RiderScoresJson = riderJson;
             existing.RecordedByUserId = userId;
             existing.RecordedAt = now;
         }
@@ -215,11 +225,35 @@ public sealed class TackCheckService(AppDbContext db)
 
     internal static string? PonyName(string? name) => string.IsNullOrWhiteSpace(name) ? null : name.Trim();
 
+    internal static IReadOnlyList<string> TeamRiderLabels(CompetitionSection section, Team team)
+    {
+        var declared = DeclaredRiders(team)
+            .Select(r => r.FullName.Trim())
+            .Where(name => name.Length > 0)
+            .ToList();
+        if (declared.Count > 0) return declared;
+        var count = section.Format switch
+        {
+            SectionFormat.Individual => 1,
+            SectionFormat.Pairs => 2,
+            _ => 4,
+        };
+        return Enumerable.Range(1, count).Select(i => $"Rider {i}").ToList();
+    }
+
+    internal static IReadOnlyList<int?>? ParseRiderPoints(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonSerializer.Deserialize<List<int?>>(json); }
+        catch { return null; }
+    }
+
     private async Task<TackCheckSectionDto> SectionAsync(int competitionId, CompetitionSection section, CancellationToken ct)
     {
         db.ChangeTracker.Clear();
         var setups = await SetupsAsync(competitionId, withMarks: true, ct);
         var teams = await db.Teams.AsNoTracking().Include(t => t.Club)
+            .Include(t => t.DeclarationForms).ThenInclude(f => f.Riders)
             .Where(t => t.CompetitionSectionId == section.Id && t.CompetitionId == competitionId).ToListAsync(ct);
         return SectionDto(section, setups.GetValueOrDefault(section.Id), teams);
     }
@@ -228,7 +262,8 @@ public sealed class TackCheckService(AppDbContext db)
     {
         var query = db.Set<TackCheckSection>().AsNoTracking().Include(x => x.Sectors).AsQueryable();
         if (withMarks) query = query.Include(x => x.Sectors).ThenInclude(x => x.Marks);
-        return await query.AsSplitQuery().Where(x => x.CompetitionId == competitionId).ToDictionaryAsync(x => x.CompetitionSectionId, ct);
+        var setups = await query.AsSplitQuery().Where(x => x.CompetitionId == competitionId).ToDictionaryAsync(x => x.CompetitionSectionId, ct);
+        return setups;
     }
 
     private static TackCheckSectionDto SectionDto(CompetitionSection section, TackCheckSection? setup, IEnumerable<Team> teams)
@@ -239,10 +274,11 @@ public sealed class TackCheckService(AppDbContext db)
         var teamRows = teams.OrderBy(t => t.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Id).Select(team =>
         {
             var marks = sectors.SelectMany(s => s.Marks.Where(m => m.TeamId == team.Id)
-                .Select(m => new TackCheckMarkDto(s.Id, m.Passed, m.Points))).ToList();
+                .Select(m => new TackCheckMarkDto(s.Id, m.Passed, m.Points, ParseRiderPoints(m.RiderScoresJson)))).ToList();
             return new TackCheckTeamDto(team.Id, team.DisplayName, team.Club?.Name ?? string.Empty, team.IsHorsConcours,
                 team.EntryStatus != TeamEntryStatus.Active, marks,
-                marks.Sum(m => m.Points ?? 0), marks.Count(m => m.Passed == true), marks.Count(m => m.Passed == false));
+                marks.Sum(m => m.Points ?? 0), marks.Count(m => m.Passed == true), marks.Count(m => m.Passed == false),
+                TeamRiderLabels(section, team));
         }).ToList();
         return new TackCheckSectionDto(section.Id, section.DisplayName, setup is not null, setup?.IsEnabled ?? false,
             setup?.Mode ?? TackCheckMode.PassFail, setup?.MaxPoints ?? DefaultMaxPoints,

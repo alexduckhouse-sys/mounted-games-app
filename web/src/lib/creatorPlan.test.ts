@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultDraft, defaultSection, resizeSessions, setRaceFinals, type CreatorDraft, type SectionDraft } from './creatorDraft';
 import {
-  breakWindow, durationText, estimateText, expectedTeams, plannedSessions, plannedWrites, provisionalTimetable, raceCountFor, sectionEstimate, sectionNames,
+  breakWindow, durationText, estimateText, expectedTeams, finalRaceCountFor, plannedSessions, plannedWrites, provisionalTimetable, raceCountFor, sectionEstimate, sectionNames,
 } from './creatorPlan';
 
 const at = (h: number, m = 0) => new Date(2026, 9, 31, h, m);
@@ -47,6 +47,8 @@ describe('plannedSessions', () => {
   it('plans for the standard list when the races are left for later', () => {
     expect(raceCountFor(section(), { races: null })).toBe(10);
     expect(raceCountFor(section(), { races: ['Bending'] })).toBe(1);
+    expect(finalRaceCountFor(section())).toBe(10);
+    expect(finalRaceCountFor(section({ finalRaces: ['Bending', 'Flag'] }))).toBe(2);
   });
 });
 
