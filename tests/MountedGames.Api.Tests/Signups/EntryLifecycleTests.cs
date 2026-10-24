@@ -191,6 +191,45 @@ public class EntryLifecycleTests : IClassFixture<ApiFactory>
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublicSupporterCode_DoesNotGrantTeamWithdrawalControl(bool hasDeclaration)
+    {
+        var section = await _f.NewSectionAsync();
+        var teamId = await _f.InDbAsync(async db =>
+        {
+            var team = new Team { CompetitionId = section.CompetitionId, CompetitionSectionId = section.Id,
+                Club = new Club { Name = "Synthetic Unrelated Club" }, DisplayName = "Synthetic Unrelated Team", SupporterJoinKey = "synthetic-public-code" };
+            db.Add(team); await db.SaveChangesAsync();
+            if (hasDeclaration) { db.Add(new DeclarationForm { TeamId = team.Id }); await db.SaveChangesAsync(); }
+            return team.Id;
+        });
+        var (entrant, _) = await _f.SignupAsync();
+        var signup = await (await entrant.PostAsJsonAsync(EntryUrl(section), Entry() with { TeamCode = "synthetic-public-code" })).ReadAsync<SectionSignupExtendedDto>();
+        Assert.Equal(teamId, signup.TeamId);
+        (await entrant.PostAsJsonAsync($"/api/my/signups/{signup.Id}/withdraw", new { })).EnsureSuccessStatusCode();
+        await _f.InDbAsync(async db =>
+        {
+            var team = await db.Teams.SingleAsync(t => t.Id == teamId);
+            Assert.Equal(TeamEntryStatus.Active, team.EntryStatus);
+            Assert.False(await db.Set<TeamStatusEvent>().AnyAsync(x => x.TeamId == teamId));
+            Assert.Null((await db.SectionSignups.FindAsync(signup.Id))!.TeamId);
+        });
+    }
+
+    [Fact]
+    public async Task WaitlistedPairSeeker_IsNotAdvertisedUntilPromoted()
+    {
+        var section = await _f.NewSectionAsync(SectionFormat.Pairs, priceMinor: 1000);
+        var (entrant, _) = await _f.SignupAsync();
+        var signup = await (await entrant.PostAsJsonAsync(EntryUrl(section), Entry(waitlist: true, pair: true))).ReadAsync<SectionSignupExtendedDto>();
+        var url = $"/api/competitions/{section.CompetitionId}/matchmaking";
+        Assert.DoesNotContain(await (await entrant.GetAsync(url)).ReadAsync<List<MatchmakingEntryDto>>(), x => x.SignupId == signup.Id);
+        (await (await _f.AdminAsync()).PostAsJsonAsync(PaidUrl(section, signup.Id), new { })).EnsureSuccessStatusCode();
+        Assert.Contains(await (await entrant.GetAsync(url)).ReadAsync<List<MatchmakingEntryDto>>(), x => x.SignupId == signup.Id);
+    }
+
+    [Theory]
     [InlineData(0, 1)]
     [InlineData(21, 1)]
     [InlineData(2, int.MaxValue)]

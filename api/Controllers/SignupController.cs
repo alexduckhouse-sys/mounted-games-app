@@ -306,8 +306,12 @@ public class SignupController : ControllerBase
     [HttpPost("api/competitions/{competitionId:int}/sections/{sectionId:int}/signups")]
     [Authorize]
     public Task<ActionResult<SectionSignupExtendedDto>> Create(int competitionId, int sectionId, CreateSectionSignupInput req,
-        [FromServices] SignupConfirmationService confirmation, [FromServices] EmailOptInService optIns, [FromServices] TimeProvider clock) =>
-        _db.Database.CreateExecutionStrategy().ExecuteAsync(() => CreateOnceAsync(competitionId, sectionId, req, confirmation, optIns, clock));
+        [FromServices] SignupConfirmationService confirmation, [FromServices] EmailOptInService optIns, [FromServices] TimeProvider clock)
+    {
+        // Keep retries within this HTTP request idempotent even when the client did not supply a key.
+        if (string.IsNullOrWhiteSpace(req.RequestId)) req = req with { RequestId = Guid.NewGuid().ToString("N") };
+        return _db.Database.CreateExecutionStrategy().ExecuteAsync(() => CreateOnceAsync(competitionId, sectionId, req, confirmation, optIns, clock));
+    }
 
     private async Task<ActionResult<SectionSignupExtendedDto>> CreateOnceAsync(int competitionId, int sectionId, CreateSectionSignupInput req,
         SignupConfirmationService confirmation, EmailOptInService optIns, TimeProvider clock)
@@ -609,7 +613,7 @@ public class SignupController : ControllerBase
             .Include(s => s.Section)
             .Where(s => s.Section!.CompetitionId == competitionId
                 && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
-                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && x.IsWithdrawn))
+                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || x.IsWaitlist)))
             .OrderBy(s => s.CreatedAt)
             .ToListAsync();
         var meta = await LoadMatchmakingMapAsync(rows.Select(r => r.Id));
@@ -817,8 +821,11 @@ public class SignupController : ControllerBase
         if (mySignup.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded)
             return Conflict(new { message = "This entry is no longer active." });
         var links = await _db.Set<SignupTeamLink>().Where(x => x.SignupId == mySignup.Id).ToListAsync();
-        var teamIds = links.Select(x => x.TeamId)
-            .Concat(mySignup.TeamId is int primary ? new[] { primary } : Array.Empty<int>()).Distinct().ToArray();
+        var meta = await _db.Set<SignupMatchmaking>().FindAsync(mySignup.Id);
+        // A public supporter code only associates an entry; it does not confer control of that team.
+        var teamIds = meta?.DeclarationAccessGranted == true
+            ? links.Select(x => x.TeamId).Concat(mySignup.TeamId is int primary ? new[] { primary } : Array.Empty<int>()).Distinct().ToArray()
+            : Array.Empty<int>();
         var teams = await _db.Teams.Include(t => t.HeatEntries).Include(t => t.DeclarationForms)
             .Where(t => teamIds.Contains(t.Id) && t.CompetitionSectionId == mySignup.CompetitionSectionId).ToListAsync();
         if (teams.Any(t => t.HeatEntries.Count > 0))
@@ -844,7 +851,6 @@ public class SignupController : ControllerBase
             }
         }
         await ReleasePendingPairAsync(mySignup.Id);
-        var meta = await _db.Set<SignupMatchmaking>().FindAsync(mySignup.Id);
         if (meta is not null)
         {
             meta.LookingForPair = meta.LookingForGuestRiders = meta.WaitingForGuestSpot = false;
