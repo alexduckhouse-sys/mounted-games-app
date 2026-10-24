@@ -424,6 +424,7 @@ public static class DbInitializer
         await ResultsSqliteSchema.EnsureAsync(db);
 
         await TackCheck.TackCheckSqliteSchema.EnsureAsync(db);
+        await EntryExtensionsSqliteSchema.EnsureAsync(db);
 
     }
 

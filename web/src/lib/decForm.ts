@@ -34,11 +34,25 @@ export function ridersRequired(format: SectionFormat | undefined): number {
   return format === 1 ? 2 : format === 3 ? 1 : 5;
 }
 
-export function emptySlots(riders: number): Slot[] {
-  return Array.from({ length: riders + 1 }, () => null);
+/** Only a team (4-5 riders) has a 6th reserve slot; pairs (2) and individuals (1) have no reserve slot. */
+export function hasReserveSlotForRiders(riders: number): boolean {
+  return riders >= 4;
 }
 
-export const isReserveSlot = (slots: readonly Slot[], index: number): boolean => index === slots.length - 1;
+export function emptySlots(riders: number): Slot[] {
+  return Array.from({ length: hasReserveSlotForRiders(riders) ? riders + 1 : riders }, () => null);
+}
+
+export const isReserveSlot = (slots: readonly Slot[], index: number): boolean =>
+  slots.length >= 6 && index === slots.length - 1;
+
+export const ridingSlotsCount = (slots: readonly Slot[]): number =>
+  slots.length >= 6 ? slots.length - 1 : slots.length;
+
+export const minRidersForSlots = (slots: readonly Slot[]): number => {
+  const riding = ridingSlotsCount(slots);
+  return riding >= 5 ? 4 : riding;
+};
 
 export function blankRider(): DecRider {
   return { savedRiderId: null, fullName: '', dob: '', pony: '', height: '', isCaptain: false, useInitialOnly: false, noFilming: false, isGuestRider: false, extra: blankExtras() };
@@ -95,6 +109,9 @@ export function riderIssues(rider: DecRider, reserve: boolean, config: DecFormCo
       else if (parseHeight(rider.height) === null) invalid.height = 'Use hands, like 13.2 (inches run 0 to 3).';
     }
   }
+  if (reserve && asked(config.ponyHeight) && rider.height.trim() !== '' && parseHeight(rider.height) === null) {
+    invalid.height = 'Use hands, like 13.2 (inches run 0 to 3).';
+  }
   return { missing, invalid };
 }
 
@@ -109,7 +126,7 @@ export function riderFromSaved(saved: SavedRider, reserve: boolean): DecRider {
     savedRiderId: saved.id,
     fullName: saved.fullName,
     dob: dobText(saved.dateOfBirth),
-    // The reserve doesn't ride, so a saved pony isn't copied across.
+    // The reserve doesn't have to ride, so a saved pony isn't copied across by default.
     pony: reserve ? '' : saved.horseName ?? '',
     height: reserve ? '' : heightText(saved.ponyHeightHands),
     useInitialOnly: saved.useInitialOnly ?? false,
@@ -138,12 +155,25 @@ function riderFromEntry(entry: RiderEntry, config: DecFormConfig): DecRider {
  */
 export function slotsFromForm(form: DeclarationForm, required: number, config: DecFormConfig = STANDARD_CONFIG): Slot[] {
   const ordered = form.riders.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-  const reserve = ordered.find((r) => r.isReserve);
-  const riding = ordered.filter((r) => r !== reserve);
+  const reserve = hasReserveSlotForRiders(required) ? ordered.find((r) => r.isReserve) : undefined;
+  const riding = ordered.filter((r) => r !== reserve && !r.isReserve);
   const slots = emptySlots(Math.max(required, riding.length));
   riding.forEach((entry, i) => { slots[i] = riderFromEntry(entry, config); });
   if (reserve) slots[slots.length - 1] = riderFromEntry(reserve, config);
   return slots;
+}
+
+export function normaliseSlotsForFormat(slots: readonly Slot[], format: SectionFormat | undefined): Slot[] {
+  const required = ridersRequired(format);
+  const target = emptySlots(required);
+  const riding = slots.filter((_s, i) => !isReserveSlot(slots, i));
+  for (let i = 0; i < Math.min(required, riding.length); i++) {
+    target[i] = riding[i];
+  }
+  if (hasReserveSlotForRiders(required) && slots.length >= 6) {
+    target[target.length - 1] = slots[slots.length - 1];
+  }
+  return target;
 }
 
 export function firstEmpty(slots: readonly Slot[]): number | null {
@@ -151,8 +181,11 @@ export function firstEmpty(slots: readonly Slot[]): number | null {
   return index < 0 ? null : index;
 }
 
-export const ridersAdded = (slots: readonly Slot[]): number => slots.slice(0, -1).filter(Boolean).length;
-export const teamIsFull = (slots: readonly Slot[]): boolean => ridersAdded(slots) === slots.length - 1;
+export const ridersAdded = (slots: readonly Slot[]): number =>
+  slots.filter((s, i) => !isReserveSlot(slots, i) && Boolean(s)).length;
+
+export const teamIsFull = (slots: readonly Slot[]): boolean =>
+  ridersAdded(slots) >= minRidersForSlots(slots);
 
 const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
 
@@ -168,7 +201,7 @@ export function slotMeta(rider: DecRider, reserve: boolean, config: DecFormConfi
     : config.dobFormat === 1 ? (rider.extra.birthYear ? `born ${rider.extra.birthYear}` : null)
       : config.dobFormat === 2 ? (rider.extra.ageGroup ? rider.extra.ageGroup : null)
         : rider.dob ? `born ${rider.dob}` : null;
-  const parts = reserve ? ['Non-riding', born] : [rider.pony, asked(config.ponyHeight) && rider.height ? `${rider.height} hh` : null, born];
+  const parts = reserve && (!rider.pony.trim() || !rider.height.trim()) ? ['Non-riding', born] : [rider.pony, asked(config.ponyHeight) && rider.height ? `${rider.height} hh` : null, born];
   return parts.filter(Boolean).join(' · ');
 }
 
@@ -189,7 +222,7 @@ export function panelTitle(slots: readonly Slot[], index: number): string {
 export function statusText(slots: readonly Slot[], agreed: boolean, submitted: boolean): string {
   if (submitted) return 'Submitted';
   if (teamIsFull(slots)) return agreed ? 'Ready to submit' : 'Tick to agree, then submit';
-  return `${ridersAdded(slots)} of ${slots.length - 1} riders added`;
+  return `${ridersAdded(slots)} of ${ridingSlotsCount(slots)} riders added`;
 }
 
 export function canSubmit(slots: readonly Slot[], agreed: boolean, teamName: string, phoneOk = true): boolean {
@@ -222,8 +255,8 @@ export function buildSubmitBody(fields: DecFormFields, slots: readonly Slot[], c
       savedRiderId: rider.savedRiderId,
       fullName: rider.fullName.trim(),
       dateOfBirth: asked(config.dob) && config.dobFormat === 0 ? parseDob(rider.dob) : null,
-      horseName: reserve ? null : rider.pony.trim() || null,
-      ponyHeightHands: reserve || !asked(config.ponyHeight) ? null : parseHeight(rider.height),
+      horseName: rider.pony.trim() || null,
+      ponyHeightHands: !asked(config.ponyHeight) ? null : parseHeight(rider.height),
       bibColour: null,
       isCaptain: rider.isCaptain,
       isReserve: reserve,
@@ -262,7 +295,7 @@ export function parseDraft(raw: string | null, required: number): DecFormDraft |
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Partial<DecFormDraft> | null;
-    if (!value || typeof value.teamId !== 'number' || !Array.isArray(value.slots) || value.slots.length < required + 1) return null;
+    if (!value || typeof value.teamId !== 'number' || !Array.isArray(value.slots) || value.slots.length < emptySlots(required).length) return null;
     const text = (v: unknown) => (typeof v === 'string' ? v : '');
     const slots = value.slots.map((s): Slot => (s && typeof s === 'object' ? { ...blankRider(), ...s, extra: { ...blankExtras(), ...(s.extra ?? {}) } } : null));
     return {

@@ -42,6 +42,20 @@ public class ShopTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Create_AcceptsDescriptionWhenBodyIsOmitted()
+    {
+        var (me, _) = await _f.SignupAsync();
+
+        var response = await me.PostAsJsonAsync("/api/shop/posts", new
+        {
+            title = "Test saddle", description = "Test description", authorName = "Test seller",
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Test description", (await response.ReadAsync<ShopPostDto>()).Body);
+    }
+
+    [Fact]
     public async Task Create_RejectsOverlongTitleOrBody_AndTruncatesAuthorName()
     {
         var (me, _) = await _f.SignupAsync();
@@ -118,6 +132,44 @@ public class ShopTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.OK, updatedResp.StatusCode);
         var updated = await updatedResp.ReadAsync<ShopPostDto>();
         Assert.Equal(("Updated Title", "Updated Body", 3000), (updated.Title, updated.Body, updated.PriceMinor));
+    }
+
+    [Fact]
+    public async Task Update_RequiresTheAuthorOrAdmin_AndRejectsDeletedOrMissingPosts()
+    {
+        var (owner, _) = await _f.SignupAsync();
+        var (other, _) = await _f.SignupAsync();
+        var post = await CreateAsync(owner, Post("Original title"));
+        var url = $"/api/shop/posts/{post.Id}";
+        var request = new UpdateShopPostRequest(Title: "Changed title");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PutAsJsonAsync(url, request)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await other.PutAsJsonAsync(url, request)).StatusCode);
+        Assert.Equal("Original title", (await _f.InDbAsync(db => db.ShopPosts.SingleAsync(p => p.Id == post.Id))).Title);
+
+        var admin = await _f.AdminAsync();
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync(url, request)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.PutAsJsonAsync("/api/shop/posts/999999", request)).StatusCode);
+        await owner.DeleteAsync(url);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.PutAsJsonAsync(url, request)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_DoesNotLetABlockedSenderRewriteAnExistingPost()
+    {
+        var (owner, _) = await _f.SignupAsync();
+        var post = await CreateAsync(owner, Post("Original title"));
+        await _f.InDbAsync(async db =>
+        {
+            db.IpBlocks.Add(new IpBlock { IpAddress = "198.51.100.91" });
+            await db.SaveChangesAsync();
+        });
+        owner.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "198.51.100.91");
+
+        var response = await owner.PutAsJsonAsync($"/api/shop/posts/{post.Id}", new UpdateShopPostRequest(Title: "Changed title"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("Original title", (await _f.InDbAsync(db => db.ShopPosts.SingleAsync(p => p.Id == post.Id))).Title);
     }
 
     [Fact]

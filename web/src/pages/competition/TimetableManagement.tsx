@@ -20,6 +20,7 @@ import { WeatherNow, WeatherAt } from '../../components/WeatherChips';
 import { exportTimetableCsv } from '../../lib/timetableCsv';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
+import { defaultRaceList } from '../../lib/defaultRaces';
 import { confirmDialog } from '../../components/ConfirmDialog';
 
 type AddKind = 'break' | 'briefing' | 'custom';
@@ -112,6 +113,15 @@ export function TimetableManagement() {
   const [autoLanes, setAutoLanes] = useState(6);
   const [autoMinutes, setAutoMinutes] = useState(15);
   const [finalsOpen, setFinalsOpen] = useState(false);
+  const [holdOpen, setHoldOpen] = useState(false);
+  const [holdResumeTime, setHoldResumeTime] = useState('14:30');
+  const [holdDelayMinutes, setHoldDelayMinutes] = useState('30');
+  const [holdAnnounce, setHoldAnnounce] = useState(true);
+  const [holdBannerText, setHoldBannerText] = useState<string | null>(null);
+  const [combineOpen, setCombineOpen] = useState(false);
+  const [combineTargetId, setCombineTargetId] = useState<number>(0);
+  const [combineSourceId, setCombineSourceId] = useState<number>(0);
+  const [combineScoringMode, setCombineScoringMode] = useState<'BySection' | 'Combined'>('BySection');
 
   const orderedSessions = useMemo(
     () => competition.sessions.slice().sort((a, b) => a.orderIndex - b.orderIndex),
@@ -166,8 +176,54 @@ export function TimetableManagement() {
     }
   }
 
+  async function applyHold() {
+    const trimmedResume = holdResumeTime.trim();
+    const delayVal = Number(holdDelayMinutes) || 0;
+    await api.post(`/competitions/${competition.id}/sessions/hold`, {
+      resumeTime: trimmedResume || null,
+      delayMinutes: trimmedResume ? null : delayVal,
+      postAnnouncement: holdAnnounce,
+    });
+    setHoldBannerText(
+      trimmedResume
+        ? `Competition on hold — we will continue at ${trimmedResume}`
+        : `Competition on hold — delayed by ${delayVal} minutes`,
+    );
+    setHoldOpen(false);
+    reload();
+  }
+
+  async function combineSectionsIntoHeat() {
+    const targetId = combineTargetId || raceSessions[0]?.id;
+    const sourceId = combineSourceId || raceSessions.find((s) => s.id !== targetId)?.id;
+    if (!targetId || !sourceId || targetId === sourceId) return;
+    await api.post(`/competitions/${competition.id}/sessions/${targetId}/combine-heat`, {
+      sourceSessionId: sourceId,
+      scoringMode: combineScoringMode,
+      removeSourceSession: true,
+    });
+    setCombineOpen(false);
+    reload();
+  }
+
   return (
     <div className="space-y-3">
+      {holdBannerText && (
+        <div
+          data-testid="competition-hold-banner"
+          role="status"
+          className="flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-100 p-2.5 text-xs font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-100"
+        >
+          <span>{holdBannerText}</span>
+          <button
+            type="button"
+            className="btn-ghost !py-0.5 !px-2 text-[11px]"
+            onClick={() => setHoldBannerText(null)}
+          >
+            Resume / Dismiss
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">{selectedDay === today ? 'Today’s timetable' : 'Timetable'}</h1>
         <label className="flex min-h-12 items-center gap-2 text-sm font-medium">
@@ -222,9 +278,115 @@ export function TimetableManagement() {
           >
             <CalendarDays className="w-3.5 h-3.5" /> Next day
           </button>
+          <button
+            type="button"
+            className="btn-ghost !py-1.5 !px-2.5 text-xs"
+            onClick={() => setHoldOpen((v) => !v)}
+          >
+            <Clock className="w-3.5 h-3.5" /> Hold / Set Resume Time
+          </button>
+          {raceSessions.length >= 2 && (
+            <button
+              type="button"
+              className="btn-ghost !py-1.5 !px-2.5 text-xs"
+              onClick={() => {
+                setCombineTargetId((cur) => cur || (raceSessions[0]?.id ?? 0));
+                setCombineSourceId((cur) => cur || (raceSessions[1]?.id ?? 0));
+                setCombineOpen((v) => !v);
+              }}
+            >
+              <Sparkles className="w-3.5 h-3.5" /> Combine sections
+            </button>
+          )}
           </>
         )}
       </div>
+
+      {holdOpen && canManage(competition) && (
+        <div className="card p-3 space-y-2 text-xs">
+          <div className="font-semibold">Competition on hold / custom resume time</div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-slate-500 dark:text-slate-300">Resume time</span>
+              <input
+                aria-label="Resume time"
+                type="text"
+                placeholder="e.g. 14:30"
+                className="input !py-1 !px-2 text-xs w-28"
+                value={holdResumeTime}
+                onChange={(e) => setHoldResumeTime(e.target.value)}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-slate-500 dark:text-slate-300">Delay minutes</span>
+              <input
+                aria-label="Delay minutes"
+                type="number"
+                className="input !py-1 !px-2 text-xs w-24"
+                value={holdDelayMinutes}
+                onChange={(e) => setHoldDelayMinutes(e.target.value)}
+              />
+            </label>
+            <label className="flex items-center gap-1.5 py-1.5">
+              <input
+                type="checkbox"
+                aria-label="Post hold announcement"
+                checked={holdAnnounce}
+                onChange={(e) => setHoldAnnounce(e.target.checked)}
+              />
+              <span>Post announcement</span>
+            </label>
+            <button type="button" onClick={() => void applyHold()} className="btn-primary !py-1.5 !px-3 text-xs">
+              Apply hold
+            </button>
+          </div>
+        </div>
+      )}
+
+      {combineOpen && canManage(competition) && raceSessions.length >= 2 && (
+        <div className="card p-3 space-y-2 text-xs">
+          <div className="font-semibold">Combine small age groups into one heat</div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-slate-500 dark:text-slate-300">Target session</span>
+              <select
+                aria-label="Target session"
+                className="input !py-1 !px-2 text-xs"
+                value={combineTargetId || raceSessions[0]?.id}
+                onChange={(e) => setCombineTargetId(Number(e.target.value))}
+              >
+                {raceSessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-slate-500 dark:text-slate-300">Combine with session</span>
+              <select
+                aria-label="Combine with session"
+                className="input !py-1 !px-2 text-xs"
+                value={combineSourceId || raceSessions[1]?.id}
+                onChange={(e) => setCombineSourceId(Number(e.target.value))}
+              >
+                {raceSessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-slate-500 dark:text-slate-300">Combined scoring mode</span>
+              <select
+                aria-label="Combined scoring mode"
+                className="input !py-1 !px-2 text-xs"
+                value={combineScoringMode}
+                onChange={(e) => setCombineScoringMode(e.target.value as 'BySection' | 'Combined')}
+              >
+                <option value="BySection">Score by section (separate section points)</option>
+                <option value="Combined">Score as one combined heat</option>
+              </select>
+            </label>
+            <button type="button" onClick={() => void combineSectionsIntoHeat()} className="btn-primary !py-1.5 !px-3 text-xs">
+              Combine into one heat
+            </button>
+          </div>
+        </div>
+      )}
 
       {autoOpen && canManage(competition) && (
         <div className="card p-3 space-y-2">
@@ -293,6 +455,7 @@ export function TimetableManagement() {
         <CreateFinalsModal
           competitionId={competition.id}
           sections={competition.sections}
+          sessions={competition.sessions}
           onClose={() => setFinalsOpen(false)}
           onCreated={() => { setFinalsOpen(false); reload(); }}
         />
@@ -1130,11 +1293,13 @@ function HeatAssignmentEditor({
 function CreateFinalsModal({
   competitionId,
   sections,
+  sessions,
   onClose,
   onCreated,
 }: {
   competitionId: number;
   sections: CompetitionSection[];
+  sessions: Session[];
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -1142,7 +1307,7 @@ function CreateFinalsModal({
   const [topN, setTopN] = useState(6);
   const [lanes, setLanes] = useState(6);
   const [name, setName] = useState('');
-  const [raceNames, setRaceNames] = useState('Litter Lifter\nFlag\nBottle\nMug\nBall and Cone');
+  const [raceNames, setRaceNames] = useState('');
   const [lowestFinalFirst, setLowestFinalFirst] = useState(true);
   const [scaffoldOnly, setScaffoldOnly] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1151,6 +1316,19 @@ function CreateFinalsModal({
   const [boundaryVersion, setBoundaryVersion] = useState(0);
   const [rules, setRules] = useState<Record<number, TieBreakRule>>({});
   const section = sectionId === '' ? null : sections.find((s) => s.id === sectionId) ?? null;
+
+  const plannedFinal = sectionId === '' ? undefined : sessions.find((s) =>
+    s.competitionSectionId === sectionId && /^finals\s*·/i.test(s.name.trim()) && s.heats.length === 0 && s.status === 0);
+
+  function selectSection(value: string) {
+    const id = value === '' ? '' : Number(value);
+    setSectionId(id);
+    const selected = sections.find((s) => s.id === id);
+    const planned = sessions.find((s) => s.competitionSectionId === id && /^finals\s*·/i.test(s.name.trim()) && s.heats.length === 0 && s.status === 0);
+    setRaceNames((planned?.plannedRaces?.length ? planned.plannedRaces : selected ? defaultRaceList('Zone', selected.format, selected.ageGroup) : []).join('\n'));
+    if (selected?.finalistCount) setTopN(selected.finalistCount);
+    if (planned?.lanesPerHeat) setLanes(planned.lanesPerHeat);
+  }
 
   // Re-check every finals cut whenever the size of the finals, the section or a tie's settlement changes.
   useEffect(() => {
@@ -1174,6 +1352,7 @@ function CreateFinalsModal({
         const numHeats = Math.max(1, Math.ceil(topN / Math.max(1, lanes)));
         await api.post(`/competitions/${competitionId}/finals/scaffold`, {
           competitionSectionId: sectionId === '' ? null : sectionId,
+          existingSessionId: plannedFinal?.id ?? null,
           raceNames: races,
           lanesPerHeat: lanes,
           numHeats,
@@ -1183,6 +1362,7 @@ function CreateFinalsModal({
       } else {
         await api.post(`/competitions/${competitionId}/finals`, {
           competitionSectionId: sectionId === '' ? null : sectionId,
+          existingSessionId: plannedFinal?.id ?? null,
           topN,
           raceNames: races,
           lanesPerHeat: lanes,
@@ -1223,7 +1403,7 @@ function CreateFinalsModal({
             <SelectField
               className="input mt-1 text-sm"
               value={sectionId}
-              onChange={(e) => setSectionId(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+              onChange={(e) => selectSection(e.target.value)}
             >
               <option value="">All age groups (overall)</option>
               {sections.map((s) => (

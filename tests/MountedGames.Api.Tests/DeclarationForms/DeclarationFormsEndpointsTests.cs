@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.DeclarationForms;
@@ -226,6 +227,139 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Submit_RiderWithLinkedSignupCanSubmitAndDeleteOwnForm()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var admin = await _f.AdminAsync();
+        var email = $"rider{Guid.NewGuid():N}"[..14] + "@mg.local";
+        var reg = await admin.PostAsJsonAsync("/api/auth/register", new RegisterRequest(email, "Passw0rd!x", "Solo Rider", Roles.Rider, null));
+        reg.EnsureSuccessStatusCode();
+        var auth = await reg.ReadAsync<AuthResponse>();
+        var rider = _f.WithToken(auth.Token);
+
+        await _f.WithDbAsync(async db =>
+        {
+            var team = await db.Teams.SingleAsync(t => t.Id == a.TeamIds[0]);
+            db.SectionSignups.Add(new SectionSignup
+            {
+                CompetitionSectionId = team.CompetitionSectionId,
+                UserId = auth.User.Id,
+                FullName = "Solo Rider",
+                TeamId = team.Id,
+                Status = SignupPaymentStatus.Paid,
+                AmountMinor = 2500
+            });
+            await db.SaveChangesAsync();
+            var signupId = await db.SectionSignups.Where(s => s.UserId == auth.User.Id && s.TeamId == team.Id).Select(s => s.Id).SingleAsync();
+            db.Add(new SignupMatchmaking { SignupId = signupId, DeclarationAccessGranted = true });
+            await db.SaveChangesAsync();
+        });
+
+        var ok = await rider.PostAsJsonAsync(Url, Form(a.TeamIds[0]));
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        var dto = await ok.ReadAsync<DeclarationFormDto>();
+
+        var forbidden = await rider.PostAsJsonAsync(Url, Form(a.TeamIds[1]));
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        var del = await rider.DeleteAsync($"{Url}/{dto.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, del.StatusCode);
+    }
+
+    [Fact]
+    public async Task PublicSupporterCode_DoesNotGrantDeclarationReadOrWriteAccess()
+    {
+        var arena = await _f.CreateArenaAsync(1);
+        var (entrant, _) = await _f.SignupAsync("Member");
+        var formId = await SeedFormAsync(arena.TeamIds[0], true);
+        var code = "synthetic-public-code-" + Guid.NewGuid().ToString("N");
+        var sectionId = await _f.WithDbAsync(async db =>
+        {
+            var team = await db.Teams.SingleAsync(t => t.Id == arena.TeamIds[0]);
+            team.SupporterJoinKey = code;
+            var form = await db.DeclarationForms.SingleAsync(f => f.Id == formId);
+            form.TrainerName = "Private Synthetic Trainer";
+            await db.SaveChangesAsync();
+            return team.CompetitionSectionId;
+        });
+        var signup = await entrant.PostAsJsonAsync($"/api/competitions/{arena.CompetitionId}/sections/{sectionId}/signups", new
+        {
+            fullName = "Synthetic Supporter", teamCode = code,
+            acceptTerms = true, consentVersion = SignupTerms.WordingVersion,
+        });
+        signup.EnsureSuccessStatusCode();
+        Assert.Equal(arena.TeamIds[0], (await signup.ReadAsync<SectionSignupDto>()).TeamId);
+        var get = await (await entrant.GetAsync($"{Url}/{formId}")).ReadAsync<DeclarationFormDto>();
+        Assert.Null(get.TrainerName);
+        var list = await (await entrant.GetAsync($"{Url}?teamId={arena.TeamIds[0]}")).ReadAsync<List<DeclarationFormDto>>();
+        Assert.Null(Assert.Single(list).TrainerName);
+        Assert.Equal(HttpStatusCode.Forbidden, (await entrant.PostAsJsonAsync(Url, Form(arena.TeamIds[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await entrant.DeleteAsync($"{Url}/{formId}")).StatusCode);
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.DeclarationForms.SingleAsync(f => f.Id == formId)).IsLocked = false;
+            await db.SaveChangesAsync();
+        });
+        Assert.Equal(HttpStatusCode.NotFound, (await entrant.GetAsync($"{Url}/{formId}")).StatusCode);
+        Assert.Empty(await (await entrant.GetAsync($"{Url}?teamId={arena.TeamIds[0]}")).ReadAsync<List<DeclarationFormDto>>());
+    }
+
+    [Fact]
+    public async Task OrganiserFormedEntry_GrantsAccessToDraftsAndSubmission()
+    {
+        var section = await _f.NewSectionAsync(SectionFormat.Individual, priceMinor: 0);
+        var (entrant, _) = await _f.SignupAsync("Member");
+        (await entrant.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/sections/{section.Id}/signups", new
+        {
+            fullName = "Synthetic Entrant", acceptTerms = true, consentVersion = SignupTerms.WordingVersion,
+        })).EnsureSuccessStatusCode();
+        var admin = await _f.AdminAsync();
+        var formed = await (await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/sections/{section.Id}/form-teams", new FormTeamsFromSignupsRequest(null, false, false))).ReadAsync<FormTeamsResult>();
+        var team = Assert.Single(formed.Created);
+        var formId = await SeedFormAsync(team.Id, false);
+        Assert.Equal(HttpStatusCode.OK, (await entrant.GetAsync($"{Url}/{formId}")).StatusCode);
+        Assert.Single(await (await entrant.GetAsync($"{Url}?teamId={team.Id}")).ReadAsync<List<DeclarationFormDto>>());
+        Assert.Equal(HttpStatusCode.OK, (await entrant.PostAsJsonAsync(Url, Form(team.Id))).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(false, SignupPaymentStatus.Paid, false)]
+    [InlineData(true, SignupPaymentStatus.Cancelled, false)]
+    [InlineData(true, SignupPaymentStatus.Refunded, false)]
+    [InlineData(true, SignupPaymentStatus.Paid, true)]
+    public async Task DeclarationAccess_RequiresAnActiveExplicitTeamLink(bool linked, SignupPaymentStatus status, bool withdrawn)
+    {
+        var arena = await _f.CreateArenaAsync(1);
+        var (client, auth) = await _f.SignupAsync("Member");
+        var formId = await SeedFormAsync(arena.TeamIds[0], true);
+        await _f.WithDbAsync(async db =>
+        {
+            var team = await db.Teams.SingleAsync(t => t.Id == arena.TeamIds[0]);
+            var form = await db.DeclarationForms.SingleAsync(f => f.Id == formId);
+            form.TrainerName = "Private Test Trainer";
+            var signup = new SectionSignup
+            {
+                CompetitionSectionId = team.CompetitionSectionId, UserId = auth.User.Id,
+                FullName = team.DisplayName, TeamName = team.DisplayName,
+                TeamId = linked ? team.Id : null, Status = status,
+            };
+            db.Add(signup);
+            await db.SaveChangesAsync();
+            db.Add(new SignupMatchmaking { SignupId = signup.Id, DeclarationAccessGranted = true });
+            await db.SaveChangesAsync();
+            if (withdrawn)
+            {
+                db.Add(new SignupExtras { SignupId = signup.Id, IsWithdrawn = true });
+                await db.SaveChangesAsync();
+            }
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(Url, Form(arena.TeamIds[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync($"{Url}/{formId}")).StatusCode);
+        var visible = await (await client.GetAsync($"{Url}/{formId}")).ReadAsync<DeclarationFormDto>();
+        Assert.Null(visible.TrainerName);
+    }
+
+    [Fact]
     public async Task Submit_SavesTrainerPhone_WhenChanged()
     {
         var a = await _f.CreateArenaAsync(1);
@@ -297,7 +431,7 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Submit_SaveToRoster_FillsMissingDetailsOfExistingRider_ButKeepsExistingOnes()
+    public async Task Submit_SaveToRoster_FillsMissingDetailsOfExistingRider_AndSavesSeparateHorseCombos()
     {
         var a = await _f.CreateArenaAsync(1);
         var clubId = await _f.WithDbAsync(db => db.Teams.Where(t => t.Id == a.TeamIds[0]).Select(t => t.ClubId).SingleAsync());
@@ -312,19 +446,240 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
         var dob = new DateTime(2012, 4, 5, 0, 0, 0, DateTimeKind.Utc);
         var riders = new[]
         {
-            Rider("Needs DOB", dob: dob, horse: "Overwrite?"),
+            Rider("Needs DOB", dob: dob, horse: "Second Pony"),
             Rider("Needs Horse", dob: dob, horse: "Comet"),
         };
 
         await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0], riders, save: true));
 
-        var saved = (await _f.WithDbAsync(db => db.SavedRiders.Where(s => s.ClubId == clubId).ToListAsync())).ToDictionary(s => s.FullName);
-        Assert.Equal(2, saved.Count);
-        Assert.Equal(dob, saved["Needs DOB"].DateOfBirth);
-        Assert.Equal("Keep Me", saved["Needs DOB"].HorseName);
-        Assert.NotNull(saved["Needs DOB"].UpdatedAt);
-        Assert.Equal(new DateTime(2010, 1, 1, 0, 0, 0, DateTimeKind.Utc), saved["Needs Horse"].DateOfBirth);
-        Assert.Equal("Comet", saved["Needs Horse"].HorseName);
+        var saved = await _f.WithDbAsync(db => db.SavedRiders.Where(s => s.ClubId == clubId).ToListAsync());
+        Assert.Equal(3, saved.Count);
+        var keepMe = saved.Single(s => s.FullName == "Needs DOB" && s.HorseName == "Keep Me");
+        var secondPony = saved.Single(s => s.FullName == "Needs DOB" && s.HorseName == "Second Pony");
+        var needsHorse = saved.Single(s => s.FullName == "Needs Horse");
+        Assert.Null(keepMe.DateOfBirth);
+        Assert.Null(keepMe.UpdatedAt);
+        Assert.Equal(dob, secondPony.DateOfBirth);
+        Assert.Equal(new DateTime(2010, 1, 1, 0, 0, 0, DateTimeKind.Utc), needsHorse.DateOfBirth);
+        Assert.Equal("Comet", needsHorse.HorseName);
+    }
+
+    [Fact]
+    public async Task Submit_SaveToRoster_SavesMultipleHorseCombosForSameRider_IncludingWhenSavedRiderHorseChanged()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var clubId = await _f.WithDbAsync(db => db.Teams.Where(t => t.Id == a.TeamIds[0]).Select(t => t.ClubId).SingleAsync());
+        var trainer = await CoachAsync(a);
+        var dob = new DateTime(2014, 6, 15, 0, 0, 0, DateTimeKind.Utc);
+
+        // Declare Ella Hughes with "Star" on Team 1
+        await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0], new[] { Rider("Ella Hughes", dob: dob, horse: "Star") }, save: true));
+        var afterFirst = await (await trainer.GetAsync($"/api/clubs/{clubId}/saved-riders")).ReadAsync<List<SavedRiderDto>>();
+        var starCombo = Assert.Single(afterFirst, s => s.FullName == "Ella Hughes");
+        Assert.Equal("Star", starCombo.HorseName);
+
+        // Pick the saved "Ella Hughes — Star" combo (savedId: starCombo.Id), but change the horse to "Flash" on Team 2
+        var changedForm = await (await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[1], new[] { Rider("Ella Hughes", dob: dob, horse: "Flash", savedId: starCombo.Id) }, save: true))).ReadAsync<DeclarationFormDto>();
+        Assert.Equal(starCombo.Id, Assert.Single(changedForm.Riders).SavedRiderId);
+
+        // Submitting "Star" again (case-insensitive) does not create a third row
+        await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0], new[] { Rider("  ella hughes ", dob: dob, horse: "  star ") }, save: true));
+
+        var combos = (await (await trainer.GetAsync($"/api/clubs/{clubId}/saved-riders")).ReadAsync<List<SavedRiderDto>>())
+            .Where(s => s.FullName.Equals("Ella Hughes", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(s => s.HorseName)
+            .ToList();
+        Assert.Equal(2, combos.Count);
+        Assert.Equal(new[] { "Flash", "Star" }, combos.Select(c => c.HorseName));
+    }
+
+    [Fact]
+    public async Task SelfEnteredRider_CanLoadOwnSavedRiders_ViaClubAndMySavedRidersEndpoints()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var clubId = await _f.WithDbAsync(db => db.Teams.Where(t => t.Id == a.TeamIds[0]).Select(t => t.ClubId).SingleAsync());
+        var admin = await _f.AdminAsync();
+        var email = $"rider{Guid.NewGuid():N}"[..14] + "@mg.local";
+        var reg = await admin.PostAsJsonAsync("/api/auth/register", new RegisterRequest(email, "Passw0rd!x", "Solo Rider", Roles.Rider, null));
+        reg.EnsureSuccessStatusCode();
+        var auth = await reg.ReadAsync<AuthResponse>();
+        var rider = _f.WithToken(auth.Token);
+
+        await _f.WithDbAsync(async db =>
+        {
+            var team = await db.Teams.SingleAsync(t => t.Id == a.TeamIds[0]);
+            var signup = new SectionSignup
+            {
+                CompetitionSectionId = team.CompetitionSectionId,
+                UserId = auth.User.Id,
+                FullName = "Solo Rider",
+                TeamId = team.Id,
+                Status = SignupPaymentStatus.Paid,
+                AmountMinor = 2500
+            };
+            db.SectionSignups.Add(signup);
+            db.Set<SignupMatchmaking>().Add(new SignupMatchmaking { Signup = signup, DeclarationAccessGranted = true });
+            await db.SaveChangesAsync();
+        });
+
+        (await rider.PostAsJsonAsync(Url, Form(a.TeamIds[0], new[]
+        {
+            Rider("Solo Rider", horse: "Blaze"),
+            Rider("Solo Rider", horse: "Storm")
+        }, save: true))).EnsureSuccessStatusCode();
+
+        var clubSaved = await (await rider.GetAsync($"/api/clubs/{clubId}/saved-riders")).ReadAsync<List<SavedRiderDto>>();
+        Assert.Equal(new[] { "Blaze", "Storm" }, clubSaved.Select(r => r.HorseName));
+
+        var mySaved = await (await rider.GetAsync("/api/clubs/my-saved-riders")).ReadAsync<List<SavedRiderDto>>();
+        Assert.Equal(new[] { "Blaze", "Storm" }, mySaved.Select(r => r.HorseName));
+    }
+
+    [Fact]
+    public async Task DeclarationLockTime_BlocksNonOrganiserEditsAfterDeadline_WhileAllowingOrganisers()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var trainer = await CoachAsync(a);
+        var admin = await _f.AdminAsync();
+
+        // Initially no lock time is set
+        var initial = await (await trainer.GetAsync($"{Url}/competition/{a.CompetitionId}/lock-time")).ReadAsync< MountedGames.Api.Controllers.DeclarationLockTimeDto>();
+        Assert.Null(initial.DeclarationsCloseAt);
+        Assert.False(initial.IsClosed);
+
+        // Non-organiser cannot set lock time
+        var forbid = await trainer.PutAsJsonAsync($"{Url}/competition/{a.CompetitionId}/lock-time",
+            new MountedGames.Api.Controllers.SetDeclarationLockTimeRequest(DateTime.UtcNow.AddMinutes(-5)));
+        Assert.Equal(HttpStatusCode.NotFound, forbid.StatusCode);
+
+        var original = await (await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]))).ReadAsync<DeclarationFormDto>();
+
+        // Admin sets lock time in the past
+        var past = DateTime.UtcNow.AddMinutes(-5);
+        var locked = await (await admin.PutAsJsonAsync($"{Url}/competition/{a.CompetitionId}/lock-time",
+            new MountedGames.Api.Controllers.SetDeclarationLockTimeRequest(past))).ReadAsync<MountedGames.Api.Controllers.DeclarationLockTimeDto>();
+        Assert.True(locked.IsClosed);
+
+        // Trainer is now blocked from submitting
+        var blocked = await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]));
+        Assert.Equal(HttpStatusCode.BadRequest, blocked.StatusCode);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await trainer.DeleteAsync($"{Url}/{original.Id}")).StatusCode);
+        Assert.True(await _f.WithDbAsync(db => db.DeclarationForms.AnyAsync(d => d.Id == original.Id)));
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"{Url}/{original.Id}")).StatusCode);
+
+        // Admin can still submit after lock time
+        var adminSubmit = await admin.PostAsJsonAsync(Url, Form(a.TeamIds[0]));
+        Assert.Equal(HttpStatusCode.OK, adminSubmit.StatusCode);
+
+        // Admin clears lock time -> trainer can submit again
+        var cleared = await (await admin.PutAsJsonAsync($"{Url}/competition/{a.CompetitionId}/lock-time",
+            new MountedGames.Api.Controllers.SetDeclarationLockTimeRequest(null))).ReadAsync<MountedGames.Api.Controllers.DeclarationLockTimeDto>();
+        Assert.Null(cleared.DeclarationsCloseAt);
+        Assert.False(cleared.IsClosed);
+
+        var allowedAgain = await trainer.PostAsJsonAsync(Url, Form(a.TeamIds[0]));
+        Assert.Equal(HttpStatusCode.OK, allowedAgain.StatusCode);
+    }
+
+    [Fact]
+    public async Task SavedRiders_RequireAuthentication_AndNeverExposeAnotherAccountsRoster()
+    {
+        var arena = await _f.CreateArenaAsync(1);
+        var clubId = await _f.WithDbAsync(db => db.Teams.Where(t => t.Id == arena.TeamIds[0]).Select(t => t.ClubId).SingleAsync());
+        var (member, auth) = await _f.SignupAsync("Member");
+        await _f.WithDbAsync(async db =>
+        {
+            db.SavedRiders.AddRange(
+                new SavedRider { ClubId = clubId, CreatedByUserId = auth.User.Id, FullName = "Synthetic Own Rider", HorseName = "Synthetic Pony" },
+                new SavedRider { ClubId = clubId, CreatedByUserId = await _f.TrainerIdAsync(), FullName = "Synthetic Private Rider", HorseName = "Private Pony" });
+            await db.SaveChangesAsync();
+        });
+        foreach (var route in new[] { $"/api/clubs/{clubId}/saved-riders", "/api/clubs/my-saved-riders" })
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().GetAsync(route)).StatusCode);
+            var riders = await (await member.GetAsync(route)).ReadAsync<List<SavedRiderDto>>();
+            Assert.Equal("Synthetic Own Rider", Assert.Single(riders).FullName);
+        }
+    }
+
+    [Fact]
+    public async Task SaveChangedPony_DoesNotRestoreFieldsDisabledByAdaptiveConfig()
+    {
+        var arena = await _f.CreateArenaAsync(1);
+        var trainer = await CoachAsync(arena);
+        var trainerId = await _f.TrainerIdAsync();
+        var savedId = await _f.WithDbAsync(async db =>
+        {
+            var team = await db.Teams.Include(t => t.Competition).SingleAsync(t => t.Id == arena.TeamIds[0]);
+            team.Competition!.DecFormConfigJson = System.Text.Json.JsonSerializer.Serialize(
+                MountedGames.Api.Services.DecForms.DecFormConfig.Basic with { TrainerPhone = MountedGames.Api.Services.DecForms.FieldRequirement.Off });
+            var rider = new SavedRider { ClubId = team.ClubId, CreatedByUserId = trainerId, FullName = "Synthetic Combo Rider", HorseName = "Original Pony", DateOfBirth = new DateTime(2012, 1, 1), PonyHeightHands = 13m };
+            db.SavedRiders.Add(rider);
+            await db.SaveChangesAsync();
+            return rider.Id;
+        });
+        var request = Form(arena.TeamIds[0], [Rider("Synthetic Combo Rider", dob: new DateTime(2012, 1, 1), horse: "Different Pony", savedId: savedId) with { PonyHeightHands = 14m }], save: true);
+        (await trainer.PostAsJsonAsync(Url, request)).EnsureSuccessStatusCode();
+        var combo = await _f.WithDbAsync(db => db.SavedRiders.SingleAsync(r => r.CreatedByUserId == trainerId && r.FullName == "Synthetic Combo Rider" && r.HorseName == "Different Pony"));
+        Assert.Null(combo.DateOfBirth);
+        Assert.Null(combo.PonyHeightHands);
+    }
+
+    [Fact]
+    public async Task LockTime_HidesUnknownCompetition_AndRequiresOrganiser()
+    {
+        var arena = await _f.CreateArenaAsync(1);
+        var route = $"{Url}/competition/{arena.CompetitionId}/lock-time";
+        var body = new MountedGames.Api.Controllers.SetDeclarationLockTimeRequest(null);
+        Assert.Equal(HttpStatusCode.NotFound, (await _f.CreateClient().GetAsync($"{Url}/competition/2147483647/lock-time")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PutAsJsonAsync(route, body)).StatusCode);
+        var (member, _) = await _f.SignupAsync("Member");
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.PutAsJsonAsync(route, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await (await _f.AdminAsync()).PutAsJsonAsync($"{Url}/competition/2147483647/lock-time", body)).StatusCode);
+    }
+
+    [Fact]
+    public async Task LockTime_ClosesAtTheExactDeadline()
+    {
+        var arena = await _f.CreateArenaAsync(1);
+        var clock = new ManualTimeProvider();
+        await _f.WithDbAsync(async db =>
+        {
+            db.Set<CompetitionDeclarationLock>().Add(new CompetitionDeclarationLock { CompetitionId = arena.CompetitionId, DeclarationsCloseAt = clock.GetUtcNow().UtcDateTime.AddSeconds(1) });
+            await db.SaveChangesAsync();
+            var controller = new MountedGames.Api.Controllers.DeclarationFormsController(db, null!, clock);
+            Assert.False((await controller.GetLockTime(arena.CompetitionId)).Value!.IsClosed);
+            clock.Advance(TimeSpan.FromSeconds(1));
+            Assert.True((await controller.GetLockTime(arena.CompetitionId)).Value!.IsClosed);
+        });
+    }
+
+    [Fact]
+    public async Task SaveToRoster_LinksFirstEntry_AndDoesNotCopyDobToSameNamedOtherCombos()
+    {
+        var arena = await _f.CreateArenaAsync(1);
+        var trainer = await CoachAsync(arena);
+        var trainerId = await _f.TrainerIdAsync();
+        var unrelatedId = await _f.WithDbAsync(async db =>
+        {
+            var clubId = await db.Teams.Where(t => t.Id == arena.TeamIds[0]).Select(t => t.ClubId).SingleAsync();
+            var unrelated = new SavedRider { ClubId = clubId, CreatedByUserId = trainerId, FullName = "Synthetic Shared Name", HorseName = "Unrelated Pony" };
+            db.SavedRiders.Add(unrelated);
+            await db.SaveChangesAsync();
+            return unrelated.Id;
+        });
+        var response = await trainer.PostAsJsonAsync(Url, Form(arena.TeamIds[0], [Rider("Synthetic Shared Name", dob: new DateTime(2013, 1, 1), horse: "Selected Pony")], save: true));
+        response.EnsureSuccessStatusCode();
+        var form = await response.ReadAsync<DeclarationFormDto>();
+        var savedId = Assert.Single(form.Riders).SavedRiderId;
+        Assert.NotNull(savedId);
+        Assert.NotEqual(unrelatedId, savedId);
+        await _f.WithDbAsync(async db =>
+        {
+            Assert.Null((await db.SavedRiders.FindAsync(unrelatedId))!.DateOfBirth);
+            Assert.Equal("Selected Pony", (await db.SavedRiders.FindAsync(savedId))!.HorseName);
+        });
     }
 
     // ---- List ----
@@ -627,5 +982,55 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
         var mine = await (await supporter.GetAsync("/api/trainer/my-teams")).ReadAsync<List<TeamDto>>();
 
         Assert.False(mine.Single(t => t.Id == a.TeamIds[0]).NeedsDeclaration);
+    }
+
+    [Fact]
+    public async Task CreateTeam_AutoFillsClubDefaultBibColour_AndAllowsPerTeamOverride()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var admin = await _f.AdminAsync();
+        var (clubId, sectionId) = await _f.WithDbAsync(async db =>
+        {
+            var t = await db.Teams.Where(x => x.Id == a.TeamIds[0]).Select(x => new { x.ClubId, x.CompetitionSectionId }).SingleAsync();
+            var club = await db.Clubs.SingleAsync(c => c.Id == t.ClubId);
+            club.BibColour = "Royal Blue";
+            await db.SaveChangesAsync();
+            return (t.ClubId, t.CompetitionSectionId);
+        });
+
+        var createAutoResp = await admin.PostAsJsonAsync($"/api/competitions/{a.CompetitionId}/teams", new CreateTeamRequest(sectionId, clubId, "B", null, null));
+        Assert.Equal(HttpStatusCode.OK, createAutoResp.StatusCode);
+        var autoTeam = await createAutoResp.ReadAsync<TeamDto>();
+        Assert.Equal("Royal Blue", autoTeam.BibColour);
+
+        var createOverrideResp = await admin.PostAsJsonAsync($"/api/competitions/{a.CompetitionId}/teams", new CreateTeamRequest(sectionId, clubId, "C", "Crimson", null));
+        Assert.Equal(HttpStatusCode.OK, createOverrideResp.StatusCode);
+        var overrideTeam = await createOverrideResp.ReadAsync<TeamDto>();
+        Assert.Equal("Crimson", overrideTeam.BibColour);
+
+        var updateResp = await admin.PutAsJsonAsync($"/api/competitions/{a.CompetitionId}/teams/{autoTeam.Id}", new { suffix = "B", bibColour = "Gold" });
+        Assert.Equal(HttpStatusCode.OK, updateResp.StatusCode);
+        var updatedTeam = await updateResp.ReadAsync<TeamDto>();
+        Assert.Equal("Gold", updatedTeam.BibColour);
+    }
+
+    [Fact]
+    public async Task JoinTeam_MatchesSupporterJoinKeyCaseInsensitively_ForAnySignedInAccount()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var key = await _f.WithDbAsync(async db =>
+        {
+            var team = await db.Teams.SingleAsync(t => t.Id == a.TeamIds[0]);
+            team.SupporterJoinKey = $"JOIN{Guid.NewGuid():N}"[..10].ToUpperInvariant();
+            await db.SaveChangesAsync();
+            return team.SupporterJoinKey;
+        });
+
+        var (parentClient, parentAuth) = await _f.SignupAsync("Parent Supporter");
+        var joinResp = await parentClient.PostAsJsonAsync("/api/teams/join", new { key = $"  {key.ToLowerInvariant()}  " });
+        Assert.Equal(HttpStatusCode.OK, joinResp.StatusCode);
+
+        var joined = await _f.WithDbAsync(db => db.TeamSupporters.AnyAsync(s => s.TeamId == a.TeamIds[0] && s.UserId == parentAuth.User.Id));
+        Assert.True(joined);
     }
 }

@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, CloudOff, Printer, SlidersHorizontal, Trash2
 import { bibName, hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import { describePlacings, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
 import type { NextLanes } from '../../lib/nextRoundLanes';
-import type { PendingPlace } from '../../lib/raceScoring';
+import { manualPoints, type PendingPlace } from '../../lib/raceScoring';
 import { pointsForPlace } from '../../lib/queuedView';
 import { summariseRace } from '../../lib/raceSummary';
 import { TieBreakRule, type Heat, type Race } from '../../types';
@@ -39,7 +39,7 @@ interface ScoringProps {
   /** Take back the last action. Off (undefined) when there is nothing to undo. */
   onUndo?: () => void;
   undoLabel?: string;
-  /** Ask why each eliminated team is out when the race is marked complete. Off for scorer links, which can't write referee notes. */
+  /** Ask why each eliminated team is out when the race is marked complete, including when using a scorer link. */
   allowReasons?: boolean;
   /** Teams marked hors concours, and how organisers change that. Without the handler there is no HC button. */
   hcTeamIds?: ReadonlySet<number>;
@@ -59,7 +59,6 @@ interface ScoringProps {
 }
 
 const NO_TEAMS: ReadonlySet<number> = new Set();
-const NO_OVERRIDES: Readonly<Record<number, ScoreOverrideValue>> = {};
 
 export function ScoringSection({
   heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued,
@@ -69,7 +68,6 @@ export function ScoringSection({
 }: ScoringProps) {
   const [sheet, setSheet] = useState(false);
   const [overrideSheet, setOverrideSheet] = useState(false);
-  const [overridesByRace, setOverridesByRace] = useState<Record<number, Record<number, ScoreOverrideValue>>>({});
   const [hcFor, setHcFor] = useState<{ teamId: number; name: string; isHc: boolean } | null>(null);
   const [hcBusy, setHcBusy] = useState(false);
   const [auditRaceId, setAuditRaceId] = useState<number | null>(null);
@@ -81,7 +79,11 @@ export function ScoringSection({
   const names = useMemo(() => Object.fromEntries(heat.entries.map((e) => [e.teamId, e.teamName])), [heat.entries]);
   const isQualifier = heat.raceRoundStage === 1;
   const pointsFor = (place: number, eliminated: boolean) => pointsForPlace(heat, sessionBase, place, eliminated);
-  const activeOverrides = activeRace ? (overridesByRace[activeRace.id] ?? NO_OVERRIDES) : NO_OVERRIDES;
+  const activeOverrides: Record<number, ScoreOverrideValue> = {};
+  for (const place of pending) {
+    const points = manualPoints(place.refereeNote);
+    if (points !== undefined) activeOverrides[place.teamId] = { points, reason: place.refereeNote?.replace(/\[pts:[^\]]*\]/gi, '').trim() };
+  }
 
   // The announcer card sits after the latest finished race that isn't the one open for scoring.
   const summaryIdx = races.reduce((last, r, i) => (r.isComplete && i !== activeIdx ? i : last), -1);
@@ -94,27 +96,10 @@ export function ScoringSection({
     else onSubmit();
   }
 
-  function handleReset() {
-    if (activeRace) {
-      setOverridesByRace((prev) => {
-        if (!prev[activeRace.id]) return prev;
-        const next = { ...prev };
-        delete next[activeRace.id];
-        return next;
-      });
-    }
-    onReset();
-  }
+  function handleReset() { onReset(); }
 
   function saveOverride(teamId: number, value: ScoreOverrideValue | null) {
-    if (!activeRace) return;
-    setOverridesByRace((prev) => {
-      const current = { ...(prev[activeRace.id] ?? {}) };
-      if (value == null) delete current[teamId];
-      else current[teamId] = value;
-      return { ...prev, [activeRace.id]: current };
-    });
-    onOverridePoints?.(teamId, value?.points, value?.reason);
+    if (activeRace) onOverridePoints?.(teamId, value?.points, value?.reason);
   }
 
   async function confirmHc() {
@@ -197,11 +182,20 @@ export function ScoringSection({
                       (sum, r) => (r.id === race.id ? sum : sum + (r.results.find((x) => x.teamId === e.teamId)?.points ?? 0)),
                       0,
                     );
+                    const savedResult = activeRace.results.find((result) => result.teamId === e.teamId);
+                    // Scorer links cannot read private directives. Keep the actual saved score visible
+                    // while its placing is unchanged, including half-point awards.
+                    const unchangedScore = state?.refereeNote === undefined && savedResult
+                      && savedResult.eliminated === state?.eliminated
+                      && (savedResult.placing ?? 0) === (state?.place ?? 0)
+                      ? savedResult.points : undefined;
                     const racePoints = sitting || isHc
                       ? 0
                       : ov != null
                         ? ov.points
-                        : state?.eliminated
+                        : unchangedScore !== undefined
+                          ? unchangedScore
+                          : state?.eliminated
                           ? 0
                           : state?.place
                             ? pointsFor(state.place, false)

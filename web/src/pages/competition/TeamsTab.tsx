@@ -31,7 +31,10 @@ export function TeamsTab() {
   const [draft, setDraft] = useState({
     competitionSectionId: 0,
     clubId: 0,
+    clubName: '',
+    teamName: '',
     suffix: 'A',
+    suffixTouched: false,
   });
   const [busy, setBusy] = useState(false);
 
@@ -41,21 +44,26 @@ export function TeamsTab() {
   }, [user]);
 
   useEffect(() => {
-    if (!hasRole('Admin') && !hasRole('Trainer')) return;
+    if (!hasRole('Admin') && !hasRole('Trainer') && !hasRole('Manager') && !canOrganise(competition)) return;
     api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id } })
       .then((r) => {
         setDecFormTeamIds(new Set(r.data.map((f) => f.teamId)));
         setFlagged(new Map(r.data.filter((f) => (f.flagCount ?? 0) > 0).map((f) => [f.teamId, f.flagCount ?? 0])));
       })
       .catch(() => { setDecFormTeamIds(new Set()); setFlagged(new Map()); });
-  }, [competition.id, hasRole]);
+  }, [competition, hasRole, canOrganise]);
 
-  // A new team starts on the competition's first section and the trainer's own club. These
-  // defaults fill the zero placeholders on the way out rather than being copied into state.
+  // A new team starts on the competition's first section and the trainer's own club.
+  const effectiveSuffix = draft.suffixTouched
+    ? draft.suffix
+    : draft.teamName.trim()
+      ? ''
+      : draft.suffix;
   const form = {
     ...draft,
-    competitionSectionId: draft.competitionSectionId || competition.sections[0]?.id || 0,
-    clubId: draft.clubId || user?.clubId || 0,
+    competitionSectionId: draft.competitionSectionId || competition.sections[0]?.id || competition.teams[0]?.competitionSectionId || 0,
+    clubId: draft.clubId || user?.clubId || clubs[0]?.id || 0,
+    suffix: effectiveSuffix,
   };
 
   const grouped = useMemo(() => {
@@ -73,25 +81,32 @@ export function TeamsTab() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!form.clubId || !form.competitionSectionId) return;
+    const clubText = form.clubName.trim();
+    const customName = form.teamName.trim();
+    if ((!form.clubId && !clubText && !customName) || !form.competitionSectionId) return;
+    const matchedClub = clubText
+      ? clubs.find((c) => c.name.trim().toLowerCase() === clubText.toLowerCase())
+      : undefined;
     setBusy(true);
     try {
       await api.post(`/competitions/${competition.id}/teams`, {
         competitionSectionId: form.competitionSectionId,
-        clubId: form.clubId,
-        suffix: form.suffix.trim() || 'A',
+        clubId: clubText ? (matchedClub?.id ?? 0) : form.clubId,
+        clubName: clubText || null,
+        name: customName || null,
+        suffix: form.suffix.trim(),
         bibColour: null,
         trainerUserId: null,
       });
       setShowForm(false);
-      setDraft({ competitionSectionId: 0, clubId: user?.clubId ?? 0, suffix: 'A' });
+      setDraft({ competitionSectionId: 0, clubId: 0, clubName: '', teamName: '', suffix: 'A', suffixTouched: false });
       reload();
     } finally {
       setBusy(false);
     }
   }
 
-  const canCreate = hasRole('Trainer') || hasRole('Admin');
+  const canCreate = hasRole('Trainer') || hasRole('Admin') || hasRole('Manager') || canOrganise(competition);
 
   const addButton = canCreate && (
     <button onClick={() => setShowForm((s) => !s)} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 !py-2 text-sm">
@@ -121,7 +136,7 @@ export function TeamsTab() {
     <>
       {showForm && canCreate && (
         <form onSubmit={submit} className="mg-card grid gap-3 p-4 sm:grid-cols-12">
-          <label className="sm:col-span-5">
+          <label className="sm:col-span-3">
             <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">Section</span>
             <SelectField
               className="input mt-1"
@@ -134,13 +149,12 @@ export function TeamsTab() {
               ))}
             </SelectField>
           </label>
-          <label className="sm:col-span-5">
+          <label className="sm:col-span-3">
             <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">Club</span>
             <SelectField
               className="input mt-1"
               value={form.clubId}
-              onChange={(e) => setDraft({ ...form, clubId: parseInt(e.target.value, 10) })}
-              required
+              onChange={(e) => setDraft({ ...form, clubId: parseInt(e.target.value, 10), clubName: '' })}
             >
               <option value={0}>Choose a club</option>
               {clubs.map((c) => (
@@ -149,17 +163,41 @@ export function TeamsTab() {
             </SelectField>
           </label>
           <label className="sm:col-span-2">
-            <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">Suffix</span>
+            <span className="text-xs text-slate-500">New club / branch (optional)</span>
+            <input
+              className="input mt-1"
+              list="mg-clubs-datalist"
+              placeholder="e.g. Stockport PC"
+              value={form.clubName}
+              onChange={(e) => setDraft({ ...form, clubName: e.target.value })}
+            />
+            <datalist id="mg-clubs-datalist">
+              {clubs.map((c) => (
+                <option key={c.id} value={c.name} />
+              ))}
+            </datalist>
+          </label>
+          <label className="sm:col-span-2">
+            <span className="text-xs text-slate-500">Team name</span>
+            <input
+              className="input mt-1"
+              placeholder="e.g. Welsh Dragons (optional)"
+              value={form.teamName}
+              onChange={(e) => setDraft({ ...form, teamName: e.target.value })}
+            />
+          </label>
+          <label className="sm:col-span-2">
+            <span className="text-xs text-slate-500">Suffix (optional)</span>
             <input
               className="input mt-1 uppercase" maxLength={4}
+              placeholder="e.g. A"
               value={form.suffix}
-              onChange={(e) => setDraft({ ...form, suffix: e.target.value })}
-              required
+              onChange={(e) => setDraft({ ...form, suffix: e.target.value, suffixTouched: true })}
             />
           </label>
           <div className="flex justify-end gap-2 sm:col-span-12">
             <button type="button" className="mg-btn mg-btn-secondary !min-h-10 !px-3.5 text-sm" onClick={() => setShowForm(false)}>Cancel</button>
-            <button type="submit" disabled={busy || !form.clubId} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 text-sm">
+            <button type="submit" disabled={busy || (!form.clubId && !form.clubName.trim() && !form.teamName.trim())} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 text-sm">
               <Save className="h-4 w-4" /> {busy ? 'Creating…' : 'Create team'}
             </button>
           </div>

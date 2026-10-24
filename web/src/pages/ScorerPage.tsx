@@ -11,7 +11,7 @@ import { enqueue, placingsOf, type QueuedScore } from '../offline/scoreOutbox';
 import { nextRoundLanes } from '../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo';
-import { nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
+import { overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import type { Heat, ScorerSession, Session } from '../types';
@@ -107,7 +107,11 @@ export function ScorerPage() {
   }, [token, load]);
 
   const raceSessions = useMemo(
-    () => (session?.sessions ?? []).filter((s) => (s.kind ?? 0) === 0).slice().sort((a, b) => a.orderIndex - b.orderIndex),
+    () => (session?.sessions ?? []).filter((s) => (s.kind ?? 0) === 0).slice().sort((a, b) => {
+      const ta = a.scheduledStart ? Date.parse(a.scheduledStart) : Number.MAX_SAFE_INTEGER;
+      const tb = b.scheduledStart ? Date.parse(b.scheduledStart) : Number.MAX_SAFE_INTEGER;
+      return (ta - tb) || (a.orderIndex - b.orderIndex);
+    }),
     [session],
   );
 
@@ -298,8 +302,10 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
           onToggleElim={toggleElim}
           onReset={() => change([])}
           onSubmit={submit}
+              onOverridePoints={(teamId, points, reason) => change(overridePoints(shown, teamId, points, reason))}
           onUndo={canUndo ? undo : undefined}
           undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
+          allowReasons
           nextLanes={nextLanes}
           correctionReason={activeRace ? reasons[activeRace.id] ?? '' : ''}
           onCorrectionReason={(reason) => { if (activeRace) setReasons((current) => ({ ...current, [activeRace.id]: reason })); }}

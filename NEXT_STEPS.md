@@ -52,7 +52,7 @@ On 23 October the user walked through creating a competition on production and r
 - [x] Show "Pay to …" on the entry page only to signed-in users.
 - [ ] `IsClubManagerAsync` trusts the Manager role in the token; re-check it against the database, as `ClubPayoutsController.ScopeAsync` does.
 
-**6. Optional:** a TURN key for streaming on weak 4G (`Streaming__Cloudflare__TurnKeyId` is set, its `TurnKeyApiToken` isn't), a tutorial mode for scoring, and `window.prompt`/`alert` left in ShopPage, ChatTab, TimetableManagement and `useTeamNotifications`.
+**6. Optional:** a TURN key for streaming on weak 4G (`Streaming__Cloudflare__TurnKeyId` is set, its `TurnKeyApiToken` isn't), a tutorial mode for scoring, and the remaining browser alert in `useTeamNotifications`.
 
 **7. Housekeeping:** Neon has 9 of 10 branches (backups from 23 October); delete older ones once tonight's changes have settled. Remove the merged agent branches and worktrees (`.claude/worktrees/agent-*`). A stash entry `creator-wip-1` is safe to drop.
 
@@ -412,6 +412,7 @@ All items below have been reviewed and confirmed for upcoming implementation:
   - Ticker: should a fresh announcement keep replacing the live heat for up to 15 minutes, or should "Now" stay on top?
 
 ### Bugs and tidy-ups
+- Move note tags (`[pts]`, `[adj]`, `[under-review]`, `[scoring:*]`) to real columns.
 - Flaky under load: `StreamingHubTests.RewatchReplacesAndClosesPreviousSession_EvenAtTheCap_DisconnectClosesCurrent` (seen in CI on #52 and locally) and, once, `CommerceEndpointsTests.DemoDeclineReleasesStock_AndRetryCanSucceed`. Both pass on rerun; make them deterministic.
 - Heat page draft restore looks dead on main (the seed effect overwrites the hydrated draft); found by the lint work in #41.
 - Stream controls still to come: instant replays (needs recording), and the producer screen's per-angle preview tiles from the design board.

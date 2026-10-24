@@ -32,11 +32,13 @@ public class CompetitionsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly ILiveBroadcaster _live;
     private readonly GeocodingService _geocode;
-    public CompetitionsController(AppDbContext db, ILiveBroadcaster live, GeocodingService geocode)
+    private readonly PushNotifier? _push;
+    public CompetitionsController(AppDbContext db, ILiveBroadcaster live, GeocodingService geocode, PushNotifier? push = null)
     {
         _db = db;
         _live = live;
         _geocode = geocode;
+        _push = push;
     }
 
     [HttpGet("/api/geocode")]
@@ -93,18 +95,37 @@ public class CompetitionsController : ControllerBase
 
     [HttpGet("picker")]
     [AllowAnonymous]
-    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionPickerPage>> Picker(
         [FromQuery] bool past = false, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
-        CancellationToken ct = default)
+        CancellationToken ct = default, [FromQuery] int? year = null,
+        [FromQuery] string? location = null, [FromQuery] string? search = null)
+        => await PickerPage(past, page, pageSize, year, location, search, null, ct);
+
+    // Separate path deliberately excluded from both server and service-worker public-cache allowlists.
+    [HttpGet("picker/mine")]
+    [Authorize]
+    public async Task<ActionResult<CompetitionPickerPage>> MyPicker(
+        [FromQuery] bool past = true, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
+        CancellationToken ct = default, [FromQuery] int? year = null,
+        [FromQuery] string? location = null, [FromQuery] string? search = null)
+    {
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+        Response.Headers.CacheControl = "private, no-store";
+        return await PickerPage(past, page, pageSize, year, location, search, userId, ct);
+    }
+
+    private async Task<ActionResult<CompetitionPickerPage>> PickerPage(bool past, int page, int pageSize,
+        int? year, string? location, string? search, string? userId, CancellationToken ct)
     {
         if (page is < 1 or > 10000 || pageSize is < 1 or > 50)
             return Problem(statusCode: 400, title: "Invalid page", detail: "Use a page from 1 to 10000 and a page size from 1 to 50.");
-        return await CompetitionPickerQuery.LoadAsync(_db, past, page, pageSize, DateTime.UtcNow.Date, ct);
+        if (year is < 1 or > 9999 || location?.Length > 200 || search?.Length > 200)
+            return Problem(statusCode: 400, title: "Invalid filter", detail: "Use a valid year and at most 200 characters for a location or search.");
+        return await CompetitionPickerQuery.LoadAsync(_db, past, page, pageSize, DateTime.UtcNow.Date, ct, year, location, search, userId);
     }
 
     [HttpGet]
-    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<CompetitionSummary>> List([FromQuery] bool includeArchived = false)
     {
         var q = _db.Competitions
@@ -121,7 +142,6 @@ public class CompetitionsController : ControllerBase
         _db.Set<EventCommerceSettings>().AsNoTracking().AnyAsync(x => x.CompetitionId == competitionId && x.IsDemo);
 
     [HttpGet("{id:int}")]
-    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionDetail>> Get(int id)
     {
         var c = await _db.Competitions
@@ -159,7 +179,6 @@ public class CompetitionsController : ControllerBase
     /// racing in them. The web shows it straight away and swaps in the full timetable when that arrives.
     /// </summary>
     [HttpGet("{id:int}/first-view")]
-    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionDetail>> FirstView(int id)
     {
         var c = await _db.Competitions.AsNoTracking().Include(x => x.Sections).FirstOrDefaultAsync(x => x.Id == id);
@@ -398,12 +417,17 @@ public class CompetitionsController : ControllerBase
 
     /// <summary>Entries that count towards a section's cap (paid and pending), by section id.</summary>
     private async Task<Dictionary<int, int>> ActiveSignupCountsAsync(int competitionId)
-        => await _db.SectionSignups.AsNoTracking()
+    {
+        var rows = await _db.SectionSignups.AsNoTracking()
             .Where(s => s.Section!.CompetitionId == competitionId
-                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending))
-            .GroupBy(s => s.CompetitionSectionId)
-            .Select(g => new { g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.Key, x => x.Count);
+                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
+                && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
+                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || x.IsWaitlist)))
+            .Select(s => new { s.CompetitionSectionId,
+                Count = _db.Set<SignupExtras>().Where(x => x.SignupId == s.Id).Select(x => (int?)x.TeamsCount).FirstOrDefault() ?? 1 })
+            .ToListAsync();
+        return rows.GroupBy(s => s.CompetitionSectionId).ToDictionary(g => g.Key, g => g.Sum(s => s.Count));
+    }
 
     [HttpPut("{id:int}/sections/{sectionId:int}")]
     [Authorize(Policy = CompetitionStaff.Policy)]
@@ -464,7 +488,6 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpGet("{id:int}/standings")]
-    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<StandingRow>>> Standings(int id,
         [FromServices] StandingsService standings, [FromQuery] int? sectionId = null)
         => await standings.RowsAsync(id, sectionId, HttpContext.RequestAborted);
@@ -639,16 +662,25 @@ public class CompetitionsController : ControllerBase
         var maxHeatSize = req.LanesPerHeat ?? top.Count;
         if (maxHeatSize <= 0) maxHeatSize = top.Count;
 
-        var session = new Session
+        Session? session = null;
+        if (req.ExistingSessionId is { } existingId)
         {
-            CompetitionId = id,
-            CompetitionSectionId = req.CompetitionSectionId,
-            Name = name,
-            OrderIndex = maxOrder + 1,
-            Status = SessionStatus.Upcoming,
-            LanesPerHeat = maxHeatSize
-        };
-        _db.Sessions.Add(session);
+            session = await _db.Sessions.Include(s => s.Heats).SingleOrDefaultAsync(s =>
+                s.Id == existingId && s.CompetitionId == id && s.CompetitionSectionId == req.CompetitionSectionId);
+            if (session is null) return BadRequest("The planned finals session was not found in this age group.");
+            if (session.Heats.Count > 0 || session.Status != SessionStatus.Upcoming || session.Kind != SessionKind.Race)
+                return Conflict("The planned finals session already has heats or has started. Reload the timetable.");
+        }
+        if (session is null)
+        {
+            session = new Session
+            {
+                CompetitionId = id, CompetitionSectionId = req.CompetitionSectionId,
+                Name = name, OrderIndex = maxOrder + 1, Status = SessionStatus.Upcoming,
+            };
+            _db.Sessions.Add(session);
+        }
+        session.LanesPerHeat = maxHeatSize;
         await _db.SaveChangesAsync();
 
         var groups = SplitIntoRankedGroups(top, maxHeatSize);
@@ -682,7 +714,36 @@ public class CompetitionsController : ControllerBase
         var reloaded = await SessionsWithDetail().FirstAsync(s => s.Id == session.Id);
         var dto = reloaded.ToDto();
         await _live.SessionUpdated(id, dto);
+        await NotifyFinalsDrawAsync(id, reloaded);
         return dto;
+    }
+
+    private async Task NotifyFinalsDrawAsync(int competitionId, Session session)
+    {
+        if (_push is null) return;
+        try
+        {
+            var messages = new List<(int TeamId, PushPayload Payload)>();
+            foreach (var heat in session.Heats.OrderBy(h => h.OrderIndex))
+            {
+                var heatLabel = !string.IsNullOrWhiteSpace(heat.Label) ? heat.Label! : $"Heat {heat.OrderIndex}";
+                foreach (var entry in heat.Entries.OrderBy(e => e.LaneIndex))
+                {
+                    var teamName = entry.Team?.DisplayName ?? $"Team {entry.TeamId}";
+                    messages.Add((entry.TeamId, new PushPayload(
+                        Title: "Finals draw published",
+                        Body: $"You are in the {heatLabel}, Lane {entry.LaneIndex} ({teamName})",
+                        Tag: $"finals-draw:{heat.Id}:{entry.TeamId}",
+                        Url: $"/competitions/{competitionId}")));
+                }
+            }
+            if (messages.Count > 0)
+                await _push.NotifyPerTeamAsync(messages, HttpContext.RequestAborted);
+        }
+        catch
+        {
+            // Never fail finals creation if push notification delivery fails.
+        }
     }
 
     private Task<bool> SectionInCompetitionAsync(int competitionId, int sectionId)
@@ -731,18 +792,27 @@ public class CompetitionsController : ControllerBase
             : "Finals";
         var name = string.IsNullOrWhiteSpace(req.Name) ? $"Finals · {sectionLabel}" : req.Name!.Trim();
 
-        var session = new Session
+        Session? session = null;
+        if (req.ExistingSessionId is { } existingId)
         {
-            CompetitionId = id,
-            CompetitionSectionId = req.CompetitionSectionId,
-            Name = name,
-            OrderIndex = maxOrder + 1,
-            Status = SessionStatus.Upcoming,
-            LanesPerHeat = req.LanesPerHeat,
-            MinutesPerHeat = req.MinutesPerHeat,
-            ScheduledStart = req.ScheduledStart,
-        };
-        _db.Sessions.Add(session);
+            session = await _db.Sessions.Include(s => s.Heats).SingleOrDefaultAsync(s =>
+                s.Id == existingId && s.CompetitionId == id && s.CompetitionSectionId == req.CompetitionSectionId);
+            if (session is null) return BadRequest("The planned finals session was not found in this age group.");
+            if (session.Heats.Count > 0 || session.Status != SessionStatus.Upcoming || session.Kind != SessionKind.Race)
+                return Conflict("The planned finals session already has heats or has started. Reload the timetable.");
+        }
+        if (session is null)
+        {
+            session = new Session
+            {
+                CompetitionId = id, CompetitionSectionId = req.CompetitionSectionId,
+                Name = name, OrderIndex = maxOrder + 1, Status = SessionStatus.Upcoming,
+            };
+            _db.Sessions.Add(session);
+        }
+        session.LanesPerHeat = req.LanesPerHeat;
+        session.MinutesPerHeat = req.MinutesPerHeat ?? session.MinutesPerHeat;
+        session.ScheduledStart = req.ScheduledStart ?? session.ScheduledStart;
         await _db.SaveChangesAsync();
 
         var lowestFirst = req.LowestFinalFirst != false;
@@ -807,6 +877,7 @@ public class CompetitionsController : ControllerBase
         var reloaded = await SessionsWithDetail().FirstAsync(s => s.Id == session.Id);
         var dto = reloaded.ToDto();
         await _live.SessionUpdated(id, dto);
+        await NotifyFinalsDrawAsync(id, reloaded);
         return dto;
     }
 
@@ -859,7 +930,7 @@ public class CompetitionsController : ControllerBase
             {
                 // Independent random heat split per session — guarantees each team rides only once.
                 var groups = SplitIntoBalancedGroups(sectionTeams, maxHeatSize);
-                var sessionMinutes = groups.Count * racesPerHeat * minutes;
+                var sessionMinutes = groups.Count * minutes;
                 var sessionName = sessionsPerSection > 1
                     ? $"{section.DisplayName} · Session {sIdx}"
                     : section.DisplayName;
@@ -888,7 +959,7 @@ public class CompetitionsController : ControllerBase
                         SessionId = session.Id,
                         Label = $"Heat {gi + 1}",
                         OrderIndex = gi + 1,
-                        DurationMinutes = racesPerHeat * minutes
+                        DurationMinutes = minutes
                     };
                     _db.Heats.Add(heat);
                     await _db.SaveChangesAsync();

@@ -7,6 +7,7 @@ import { useTicker } from './TickerContext';
 import { PAGE_WIDTH_CLASS, usePageWidthValue } from './pageWidthState';
 
 const ROTATE_MS = 4500;
+const ANNOUNCEMENT_HOLD_MS = 10_000;
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 
 /** The badge in front of each line; the dark strip keeps every badge readable in every theme. */
@@ -45,11 +46,14 @@ export function TopBarTicker() {
   const reduceMotion = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
 
   // Follow the list as it changes: keep the current line, or jump to an announcement that has just arrived.
-  const [view, setView] = useState<{ items: TickerItem[]; activeKey: string | null }>(() => ({ items, activeKey: items[0]?.key ?? null }));
+  const [view, setView] = useState<{ items: TickerItem[]; activeKey: string | null; flashed: boolean }>(() => ({ items, activeKey: items[0]?.key ?? null, flashed: false }));
   let activeKey = view.activeKey;
+  let flashed = view.flashed;
   if (view.items !== items) {
     activeKey = tickerFocusAfterChange(view.items, items, view.activeKey);
-    setView({ items, activeKey });
+    const seen = new Set(view.items.map((item) => item.key));
+    flashed = view.items.length > 0 && items.some((item) => item.key === activeKey && item.kind === 'announcement' && !seen.has(item.key));
+    setView({ items, activeKey, flashed });
   }
   // With reduced motion nothing rotates by itself; the full list is one tap away.
   const index = Math.max(0, items.findIndex((item) => item.key === activeKey));
@@ -68,15 +72,16 @@ export function TopBarTicker() {
     return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('pointerdown', onPointer); };
   }, [open]);
 
+  const active = items[index] ?? (watchCompetitionId ? { key: 'stream', kind: 'info' as const, text: 'Live video' } : undefined);
+  const holdMs = active?.kind === 'announcement' ? ANNOUNCEMENT_HOLD_MS : ROTATE_MS;
   useEffect(() => {
     if (reduceMotion || open || items.length < 2) return;
     const timer = setTimeout(() => {
-      setView((cur) => (cur.items === items ? { items, activeKey: items[(index + 1) % items.length].key } : cur));
-    }, ROTATE_MS);
+      setView((cur) => (cur.items === items ? { items, activeKey: items[(index + 1) % items.length].key, flashed: false } : cur));
+    }, holdMs);
     return () => clearTimeout(timer);
-  }, [items, index, reduceMotion, open]);
+  }, [items, index, holdMs, reduceMotion, open]);
 
-  const active = items[index] ?? (watchCompetitionId ? { key: 'stream', kind: 'info' as const, text: 'Live video' } : undefined);
   if (!current || !active) return null;
   const { badge, text } = badgeFor(active);
   const feed = `/competitions/${current.id}/chat`;
@@ -94,7 +99,7 @@ export function TopBarTicker() {
           return <li key={item.key}>{label ? `${label}: ${item.text}` : item.text}</li>;
         })}
       </ul>
-      <div className="mg-strip-bar">
+      <div className={`mg-strip-bar${flashed ? ' mg-strip-flash' : ''}`}>
         <div className={`mx-auto flex w-full ${cap} items-stretch`}>
           <Link to={linkFor(active)} aria-label={labelFor(active)} title={labelFor(active)} className="mg-strip min-w-0 flex-1">
             <span key={active.key} aria-hidden="true" className="ticker-line flex w-full min-w-0 items-center gap-2.5 pl-4 pr-1">

@@ -67,6 +67,8 @@ describe('formatting', () => {
     const empty = summaryTiles(summary({ entries: 1, placedEntries: 0, averagePlace: null, entriesWithFinals: 0, aFinalPercent: null, races: 1, wins: 0, winPercent: 0 }));
     expect(empty.map((tile) => tile.detail)).toEqual(['1 age-group entry', '1st 1 · 2nd 1 · 3rd 0', 'No placed entries', 'No finals run', '7 of 12 points', '0 of 1 race']);
     expect(empty[2].value).toBe('—');
+    const abc = summaryTiles(summary({ entriesWithFinals: 3, aFinals: 1, bFinals: 1, cFinals: 1 }));
+    expect(abc[3].detail).toBe('A 1 · B 1 · C 1 (of 3)');
   });
 });
 

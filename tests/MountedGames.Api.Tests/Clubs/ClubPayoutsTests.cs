@@ -111,8 +111,31 @@ public class ClubPayoutsTests : IClassFixture<ApiFactory>
         Assert.Equal("GB123456789", dto.VatNumber);
         Assert.Equal(new DateOnly(1985, 3, 14), dto.PersonDateOfBirth);
 
-        var cleared = await (await manager.PutAsJsonAsync(Url(clubId), new SavePayoutDetailsRequest(PersonFullName: "Ann Smith", PersonDateOfBirth: null))).ReadAsync<ClubPayoutsDto>();
+        var renamed = await (await manager.PutAsJsonAsync(Url(clubId), new SavePayoutDetailsRequest(PersonFullName: "Fake Responsible Person"))).ReadAsync<ClubPayoutsDto>();
+        Assert.Equal(dto.PersonDateOfBirth, renamed.PersonDateOfBirth);
+    }
+
+    [Fact]
+    public async Task Save_ExplicitlyClearsDateOfBirth_AndRequiresSetupToBeCompletedAgain()
+    {
+        var (manager, clubId, _) = await ManagerWithClubAsync();
+        var fakeDob = new DateOnly(2000, 1, 1);
+        await manager.PutAsJsonAsync(Url(clubId), Complete() with { PersonFullName = "Fake Responsible Person", PersonDateOfBirth = fakeDob });
+        await manager.PutAsJsonAsync(Url(clubId, "/bank"), UkBank());
+        var ready = await manager.PostAsync(Url(clubId, "/finish"), null);
+        Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+        Assert.Equal(PayoutStatus.Ready, (await ready.ReadAsync<ClubPayoutsDto>()).Status);
+
+        var response = await manager.PutAsJsonAsync(Url(clubId), new SavePayoutDetailsRequest(ClearPersonDateOfBirth: true));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var cleared = await response.ReadAsync<ClubPayoutsDto>();
         Assert.Null(cleared.PersonDateOfBirth);
+        Assert.Equal("Fake Responsible Person", cleared.PersonFullName);
+        Assert.Equal(PayoutStatus.InProgress, cleared.Status);
+        Assert.Contains("personDateOfBirth", cleared.Missing);
+        var stored = await (await manager.GetAsync(Url(clubId))).ReadAsync<ClubPayoutsDto>();
+        Assert.Null(stored.PersonDateOfBirth);
+        Assert.Equal(HttpStatusCode.BadRequest, (await manager.PostAsync(Url(clubId, "/finish"), null)).StatusCode);
     }
 
     [Theory]

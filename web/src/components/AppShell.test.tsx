@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, Link, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../auth/AuthContext';
 import { CurrentCompetitionProvider } from '../competition/CurrentCompetitionContext';
@@ -26,7 +26,7 @@ const remembered = () => { document.cookie = `mg.competition=${encodeURIComponen
 
 function Probe() {
   const { pathname, hash } = useLocation();
-  return <span data-testid="probe">{pathname}{hash}</span>;
+  return <><span data-testid="probe">{pathname}{hash}</span><Link to="/competitions/4/broadcast">Film test</Link><Link to="/events">Leave filming test</Link></>;
 }
 function mount(path: string) {
   return render(
@@ -112,4 +112,22 @@ describe('AppShell: pages outside a competition', () => {
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
+});
+
+
+it('resumes observing the header after leaving filming mode', async () => {
+  const observe = vi.fn();
+  const disconnect = vi.fn();
+  class Observer { observe = observe; disconnect = disconnect; }
+  vi.stubGlobal('ResizeObserver', Observer);
+  try {
+    mount('/events');
+    const initial = observe.mock.calls.length;
+    expect(initial).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole('link', { name: 'Film test' }));
+    expect(document.documentElement.style.getPropertyValue('--mg-shell-h')).toBe('0px');
+    expect(disconnect).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('link', { name: 'Leave filming test' }));
+    expect(observe.mock.calls.length).toBeGreaterThan(initial);
+  } finally { vi.unstubAllGlobals(); }
 });

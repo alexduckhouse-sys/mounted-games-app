@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
+import { AuthProvider } from '../auth/AuthContext';
 import { CurrentCompetitionProvider } from '../competition/CurrentCompetitionContext';
 import { CompetitionsPage } from './CompetitionsPage';
 import { StartPage } from './StartPage';
@@ -22,14 +23,14 @@ function Probe() {
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <CurrentCompetitionProvider>
+      <AuthProvider><CurrentCompetitionProvider>
         <Routes>
           <Route path="/" element={<StartPage />} />
           <Route path="/events" element={<CompetitionsPage />} />
           <Route path="/competitions/:id" element={<span>Competition page</span>} />
         </Routes>
         <Probe />
-      </CurrentCompetitionProvider>
+      </CurrentCompetitionProvider></AuthProvider>
     </MemoryRouter>,
   );
 }

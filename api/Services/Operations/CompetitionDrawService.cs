@@ -1,6 +1,7 @@
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
@@ -14,6 +15,10 @@ public sealed class DrawChangedException(string message) : InvalidOperationExcep
 
 public class CompetitionDrawService(AppDbContext db)
 {
+    public static bool IsFinalSession(Session s)
+        => Regex.IsMatch(s.Name ?? string.Empty, @"\b([A-Z]\s+)?Finals?\b", RegexOptions.IgnoreCase)
+            || (s.Heats.Count > 0 && s.Heats.All(h => FinalsTiers.ParseLabel(h.Label) is not null));
+
     public async Task<DrawPreviewDto> PreviewAsync(
         int competitionId, int sectionId, int seed, CancellationToken cancellationToken = default)
     {
@@ -25,17 +30,19 @@ public class CompetitionDrawService(AppDbContext db)
             .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == sectionId
                 && t.EntryStatus == TeamEntryStatus.Active)
             .OrderBy(t => t.Id)
-            .Select(t => new TeamInput(t.Id, t.DisplayName))
+            .Select(t => new TeamInput(t.Id, t.DisplayName, t.ClubId))
             .ToListAsync(cancellationToken);
         if (teams.Count == 0) throw new DrawValidationException("The section has no teams to draw.");
 
-        var sessions = await db.Sessions.AsNoTracking()
+        var sessions = (await db.Sessions.AsNoTracking()
             .Where(s => s.CompetitionId == competitionId && s.CompetitionSectionId == sectionId
                 && s.Kind == SessionKind.Race && !s.IsBreak)
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
             .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .OrderBy(s => s.OrderIndex).ThenBy(s => s.Id)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken))
+            .Where(s => !IsFinalSession(s))
+            .ToList();
         if (sessions.Count == 0) throw new DrawValidationException("The section has no race sessions to draw.");
         if (sessions.Any(s => s.Heats.Count == 0))
             throw new DrawValidationException("Every race session must have at least one heat before drawing.");
@@ -60,18 +67,21 @@ public class CompetitionDrawService(AppDbContext db)
 
         var opponentCounts = new Dictionary<(int Low, int High), int>();
         var laneCounts = teams.ToDictionary(t => t.Id, _ => new Dictionary<int, int>());
+        var smallHeatCounts = teams.ToDictionary(t => t.Id, _ => 0);
         var output = new List<DrawSessionDto>();
 
         foreach (var session in sessions)
         {
             var heats = session.Heats.OrderBy(h => h.OrderIndex).ThenBy(h => h.Id).ToList();
             var sizes = BalancedSizes(teams.Count, heats.Count);
+            var maxHeatSize = sizes.DefaultIfEmpty(0).Max();
             var available = teams.ToDictionary(t => t.Id);
             var drawnHeats = new List<DrawHeatDto>();
 
             for (var heatIndex = 0; heatIndex < heats.Count; heatIndex++)
             {
                 var selected = new List<TeamInput>();
+                var isSmallerHeat = sizes[heatIndex] < maxHeatSize;
                 for (var lane = 1; lane <= sizes[heatIndex]; lane++)
                 {
                     var candidate = available.Values
@@ -79,10 +89,14 @@ public class CompetitionDrawService(AppDbContext db)
                         {
                             Team = team,
                             OpponentCost = selected.Sum(other => OpponentCount(opponentCounts, team.Id, other.Id)),
+                            ClubCost = selected.Count(other => other.ClubId == team.ClubId),
+                            SmallHeatCost = isSmallerHeat ? smallHeatCounts[team.Id] : 0,
                             LaneCost = laneCounts[team.Id].GetValueOrDefault(lane),
                             Tie = StableTie(seed, session.Id, heats[heatIndex].Id, lane, team.Id),
                         })
                         .OrderBy(x => x.OpponentCost)
+                        .ThenBy(x => x.ClubCost)
+                        .ThenBy(x => x.SmallHeatCost)
                         .ThenBy(x => x.LaneCost)
                         .ThenBy(x => x.Tie)
                         .ThenBy(x => x.Team.Id)
@@ -90,6 +104,7 @@ public class CompetitionDrawService(AppDbContext db)
                     selected.Add(candidate);
                     available.Remove(candidate.Id);
                     laneCounts[candidate.Id][lane] = laneCounts[candidate.Id].GetValueOrDefault(lane) + 1;
+                    if (isSmallerHeat) smallHeatCounts[candidate.Id]++;
                 }
 
                 foreach (var pair in Pairs(selected.Select(t => t.Id)))
@@ -218,5 +233,89 @@ public class CompetitionDrawService(AppDbContext db)
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source.ToString()))).ToLowerInvariant();
     }
 
-    private sealed record TeamInput(int Id, string Name);
+    public static List<List<int>> DrawGroups(
+        IReadOnlyList<(int TeamId, int ClubId)> teams,
+        int groupCount,
+        int seed,
+        int contextId,
+        Dictionary<(int Low, int High), int>? opponentCounts = null,
+        Dictionary<int, Dictionary<int, int>>? laneCounts = null,
+        Dictionary<int, int>? smallHeatCounts = null)
+    {
+        if (groupCount < 1) groupCount = 1;
+        opponentCounts ??= new Dictionary<(int Low, int High), int>();
+        laneCounts ??= new Dictionary<int, Dictionary<int, int>>();
+        smallHeatCounts ??= new Dictionary<int, int>();
+        foreach (var t in teams)
+        {
+            if (!laneCounts.ContainsKey(t.TeamId)) laneCounts[t.TeamId] = new Dictionary<int, int>();
+            if (!smallHeatCounts.ContainsKey(t.TeamId)) smallHeatCounts[t.TeamId] = 0;
+        }
+
+        var sizes = BalancedSizes(teams.Count, groupCount);
+        var maxHeatSize = sizes.DefaultIfEmpty(0).Max();
+        var available = teams.OrderBy(t => t.TeamId).ToDictionary(t => t.TeamId);
+        var groups = new List<List<int>>(groupCount);
+
+        for (var heatIndex = 0; heatIndex < groupCount; heatIndex++)
+        {
+            var selected = new List<(int TeamId, int ClubId)>();
+            var isSmallerHeat = sizes[heatIndex] < maxHeatSize;
+            for (var lane = 1; lane <= sizes[heatIndex]; lane++)
+            {
+                var candidate = available.Values
+                    .Select(team => new
+                    {
+                        Team = team,
+                        OpponentCost = selected.Sum(other => OpponentCount(opponentCounts, team.TeamId, other.TeamId)),
+                        ClubCost = selected.Count(other => other.ClubId == team.ClubId),
+                        SmallHeatCost = isSmallerHeat ? smallHeatCounts.GetValueOrDefault(team.TeamId) : 0,
+                        LaneCost = laneCounts[team.TeamId].GetValueOrDefault(lane),
+                        Tie = StableTie(seed, contextId, heatIndex + 1, lane, team.TeamId),
+                    })
+                    .OrderBy(x => x.OpponentCost)
+                    .ThenBy(x => x.ClubCost)
+                    .ThenBy(x => x.SmallHeatCost)
+                    .ThenBy(x => x.LaneCost)
+                    .ThenBy(x => x.Tie)
+                    .ThenBy(x => x.Team.TeamId)
+                    .First().Team;
+                selected.Add(candidate);
+                available.Remove(candidate.TeamId);
+                laneCounts[candidate.TeamId][lane] = laneCounts[candidate.TeamId].GetValueOrDefault(lane) + 1;
+                if (isSmallerHeat) smallHeatCounts[candidate.TeamId] = smallHeatCounts.GetValueOrDefault(candidate.TeamId) + 1;
+            }
+            foreach (var pair in Pairs(selected.Select(t => t.TeamId)))
+                opponentCounts[pair] = opponentCounts.GetValueOrDefault(pair) + 1;
+            groups.Add(selected.Select(t => t.TeamId).ToList());
+        }
+        return groups;
+    }
+
+    public static void RecordExistingHeats(
+        IEnumerable<Heat> heats,
+        Dictionary<(int Low, int High), int> opponentCounts,
+        Dictionary<int, Dictionary<int, int>> laneCounts,
+        Dictionary<int, int> smallHeatCounts)
+    {
+        var list = heats.Where(h => h.Entries.Count > 0 && h.RaceRoundStage != RaceRoundStage.Final).ToList();
+        if (list.Count == 0) return;
+        var maxSize = list.Max(h => h.Entries.Count);
+        foreach (var h in list)
+        {
+            var entries = h.Entries.OrderBy(e => e.LaneIndex).ThenBy(e => e.Id).ToList();
+            var isSmaller = entries.Count < maxSize;
+            foreach (var e in entries)
+            {
+                if (!laneCounts.TryGetValue(e.TeamId, out var lanes))
+                    laneCounts[e.TeamId] = lanes = new Dictionary<int, int>();
+                lanes[e.LaneIndex] = lanes.GetValueOrDefault(e.LaneIndex) + 1;
+                if (isSmaller) smallHeatCounts[e.TeamId] = smallHeatCounts.GetValueOrDefault(e.TeamId) + 1;
+            }
+            foreach (var pair in Pairs(entries.Select(e => e.TeamId)))
+                opponentCounts[pair] = opponentCounts.GetValueOrDefault(pair) + 1;
+        }
+    }
+
+    private sealed record TeamInput(int Id, string Name, int ClubId);
 }

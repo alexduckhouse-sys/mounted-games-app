@@ -361,6 +361,13 @@ public static class ReviewCompetitionSeeder
     await db.Set<EventTeamProfileLink>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
     await db.FinalsTieOrders.Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
     await db.SpecialAwards.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    var signupIds = db.SectionSignups.Where(x => sectionIds.Contains(x.CompetitionSectionId)).Select(x => x.Id);
+    await db.Set<SignupMatchmaking>().Where(x => x.PairRequestFromSignupId != null && signupIds.Contains(x.PairRequestFromSignupId.Value))
+        .ExecuteUpdateAsync(set => set.SetProperty(x => x.PairRequestFromSignupId, (int?)null));
+    await db.Set<SignupMatchmaking>().Where(x => x.PairRequestToSignupId != null && signupIds.Contains(x.PairRequestToSignupId.Value))
+        .ExecuteUpdateAsync(set => set.SetProperty(x => x.PairRequestToSignupId, (int?)null));
+    await db.Set<SignupMatchmaking>().Where(x => signupIds.Contains(x.SignupId)).ExecuteDeleteAsync();
+    await db.Set<SignupExtras>().Where(x => signupIds.Contains(x.SignupId)).ExecuteDeleteAsync();
     await db.SectionSignups.Where(x => sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
     await db.Teams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<DrawChange>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
@@ -376,6 +383,8 @@ public static class ReviewCompetitionSeeder
     await db.CompetitionCollaborators.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.ScorerLinks.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<EquipmentAcknowledgement>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<CompetitionEntrySettings>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<CompetitionDeclarationLock>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Competitions.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync();
     }
 }

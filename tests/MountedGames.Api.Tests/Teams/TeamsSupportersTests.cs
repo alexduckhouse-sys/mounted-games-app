@@ -42,6 +42,17 @@ public class TeamsSupportersTests : IClassFixture<ApiFactory>
     private async Task<HttpClient> CoachAsync()
         => _f.WithToken((await _f.LoginAsync("coach@mg.local", "Trainer!234")).Token);
 
+    [Fact]
+    public async Task Join_AcceptsCaseInsensitiveCode_ForAuthenticatedMember()
+    {
+        var key = "SYNTHETIC" + Guid.NewGuid().ToString("N")[..10].ToUpperInvariant();
+        var (_, teamId) = await TeamOfTrainerAsync(joinKey: key);
+        var (member, _) = await _f.SignupAsync("Member");
+        var joined = await (await member.PostAsJsonAsync("/api/teams/join", new JoinTeamRequest(key.ToLowerInvariant()))).ReadAsync<TeamSupporterDto>();
+        Assert.Equal(teamId, joined.TeamId);
+        Assert.Equal(TeamSupporterStatus.Pending, joined.Status);
+    }
+
     // ---- my teams ----
 
     [Fact]

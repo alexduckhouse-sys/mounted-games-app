@@ -42,6 +42,73 @@ public class PushNotifier
         await SendAsync(subs, payload);
     }
 
+    /// <summary>Sends a tailored push to the trainer and accepted supporters of each team in <paramref name="messages"/>.</summary>
+    public async Task NotifyPerTeamAsync(IEnumerable<(int TeamId, PushPayload Payload)> messages, CancellationToken ct = default)
+    {
+        var list = messages.ToList();
+        if (list.Count == 0) return;
+        var teamIds = list.Select(m => m.TeamId).Distinct().ToList();
+        var teams = await _db.Teams.AsNoTracking()
+            .Where(t => teamIds.Contains(t.Id))
+            .Select(t => new { t.Id, t.TrainerUserId })
+            .ToListAsync(ct);
+        var supporters = await _db.TeamSupporters.AsNoTracking()
+            .Where(s => teamIds.Contains(s.TeamId) && s.Status == TeamSupporterStatus.Accepted)
+            .Select(s => new { s.TeamId, s.UserId })
+            .ToListAsync(ct);
+
+        var usersByTeam = new Dictionary<int, HashSet<string>>();
+        foreach (var t in teams)
+        {
+            var set = new HashSet<string>();
+            if (!string.IsNullOrEmpty(t.TrainerUserId)) set.Add(t.TrainerUserId);
+            usersByTeam[t.Id] = set;
+        }
+        foreach (var s in supporters)
+        {
+            if (!usersByTeam.TryGetValue(s.TeamId, out var set))
+                usersByTeam[s.TeamId] = set = new HashSet<string>();
+            set.Add(s.UserId);
+        }
+
+        foreach (var (teamId, payload) in list)
+        {
+            if (usersByTeam.TryGetValue(teamId, out var users) && users.Count > 0)
+                await SendToUsersAsync(users, payload);
+        }
+    }
+
+    /// <summary>Sends the same push payload to the trainer and accepted supporters of all <paramref name="teamIds"/>.</summary>
+    public async Task NotifyTeamsAsync(IReadOnlyCollection<int> teamIds, PushPayload payload, CancellationToken ct = default)
+    {
+        if (teamIds.Count == 0) return;
+        var trainers = await _db.Teams.AsNoTracking()
+            .Where(t => teamIds.Contains(t.Id) && t.TrainerUserId != null && t.TrainerUserId != "")
+            .Select(t => t.TrainerUserId!)
+            .ToListAsync(ct);
+        var supporters = await _db.TeamSupporters.AsNoTracking()
+            .Where(s => teamIds.Contains(s.TeamId) && s.Status == TeamSupporterStatus.Accepted)
+            .Select(s => s.UserId)
+            .ToListAsync(ct);
+        var users = trainers.Concat(supporters).Distinct().ToList();
+        if (users.Count > 0)
+            await SendToUsersAsync(users, payload);
+    }
+
+    public static string Ordinal(int n)
+    {
+        if (n <= 0) return n.ToString();
+        var rem100 = n % 100;
+        if (rem100 is 11 or 12 or 13) return $"{n}th";
+        return (n % 10) switch
+        {
+            1 => $"{n}st",
+            2 => $"{n}nd",
+            3 => $"{n}rd",
+            _ => $"{n}th",
+        };
+    }
+
     private async Task SendAsync(IReadOnlyList<Entities.PushSubscription> subs, PushPayload payload)
     {
         if (subs.Count == 0) return;

@@ -33,6 +33,11 @@ export function raceCountFor(section: SectionDraft, session: SessionDraft): numb
   return session.races ? session.races.length : defaultRaceList('Zone', section.format, section.ageGroup).length;
 }
 
+/** Races in the section's final: the chosen list, or the standard one when left for later. */
+export function finalRaceCountFor(section: SectionDraft): number {
+  return section.finalRaces ? section.finalRaces.length : defaultRaceList('Zone', section.format, section.ageGroup).length;
+}
+
 export interface PlannedSession {
   /** Position in the plan (also its id for planTimetable). */
   key: number;
@@ -159,8 +164,8 @@ export const sectionNames = (draft: CreatorDraft) => draft.sections.map(sectionN
 export function sectionEstimate(section: SectionDraft, actualTeams = 0): { teams: TeamEstimate; sizes: number[]; minutesPerSession: number } {
   const teams = expectedTeams(section, actualTeams);
   const sizes = heatSizes(teams.count, heatSizeOf(section));
-  const races = section.sessions[0] ? raceCountFor(section, section.sessions[0]) : 0;
-  const minutesPerSession = section.usesRaceFinals ? 3 * races * minutesOf(section) : sizes.length * races * minutesOf(section);
+  const heatCount = section.sessions.length === 0 ? 0 : section.usesRaceFinals ? 3 : sizes.length;
+  const minutesPerSession = heatCount * minutesOf(section);
   return { teams, sizes, minutesPerSession };
 }
 

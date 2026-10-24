@@ -63,7 +63,7 @@ public static class TimetableTimes
     private static int HeatMinutes(Heat heat, Session session)
     {
         if (heat.DurationMinutes is > 0) return heat.DurationMinutes.Value;
-        if (session.MinutesPerHeat is > 0) return session.MinutesPerHeat.Value * Math.Max(1, heat.Races.Count);
+        if (session.MinutesPerHeat is > 0) return session.MinutesPerHeat.Value;
         return DefaultHeatMinutes;
     }
 

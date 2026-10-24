@@ -62,7 +62,7 @@ describe('EmailOptInExportSection', () => {
     });
     render(<EmailOptInExportSection />);
 
-    expect(await screen.findByText(/Off \(logging only — set Email__Enabled, Email__ApiKey and Email__From\)/)).toBeInTheDocument();
+    expect(await screen.findByText('Email sending is off')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /Send test email/ }));
     expect(await screen.findByText('Email sending is currently off in settings.')).toBeInTheDocument();
@@ -76,5 +76,12 @@ describe('EmailOptInExportSection', () => {
     vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
     await userEvent.click(screen.getByRole('button', { name: /Send test email/ }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/Could not send the test email/);
+  });
+
+  it('reports when delivery settings could not be checked', async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error('offline'));
+    render(<EmailOptInExportSection />);
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Could not check email settings');
   });
 });

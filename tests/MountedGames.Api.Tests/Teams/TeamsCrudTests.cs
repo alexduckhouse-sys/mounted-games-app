@@ -26,6 +26,22 @@ public class TeamsCrudTests : IClassFixture<ApiFactory>
         competitionSectionId = section, clubId = club, suffix, bibColour = bib, trainerUserId = trainer, isHorsConcours = horsConcours,
     };
 
+    [Fact]
+    public async Task BibColour_WhitespaceUsesClubDefault_UpdateOverrideAndResetWork()
+    {
+        var (comp, section, club) = await ArrangeAsync(clubBib: "Green");
+        var admin = await _f.AdminAsync();
+        var team = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/teams", NewTeam(section, club, bib: "  "))).ReadAsync<TeamDto>();
+        Assert.Equal("Green", team.BibColour);
+        var route = $"/api/competitions/{comp}/teams/{team.Id}";
+        var changed = await (await admin.PutAsJsonAsync(route, new { bibColour = "  Blue  " })).ReadAsync<TeamDto>();
+        Assert.Equal("Blue", changed.BibColour);
+        var untouched = await (await admin.PutAsJsonAsync(route, new { name = "Synthetic Bib Team" })).ReadAsync<TeamDto>();
+        Assert.Equal("Blue", untouched.BibColour);
+        var reset = await (await admin.PutAsJsonAsync(route, new { bibColour = " " })).ReadAsync<TeamDto>();
+        Assert.Equal("Green", reset.BibColour);
+    }
+
     // ---- list ----
 
     [Fact]
@@ -134,6 +150,29 @@ public class TeamsCrudTests : IClassFixture<ApiFactory>
             .ReadAsync<TeamDto>();
 
         Assert.Equal(dto.ClubName, dto.DisplayName);
+        Assert.Equal("", dto.Suffix);
+    }
+
+    [Fact]
+    public async Task Create_AllowsFreeTextClubNameAndCustomTeamNameWithoutSuffix()
+    {
+        var (comp, section, _) = await ArrangeAsync();
+        var admin = await _f.AdminAsync();
+        var uniqueClub = $"FreeClub {Guid.NewGuid():N}"[..18];
+
+        var r = await admin.PostAsJsonAsync($"/api/competitions/{comp}/teams", new
+        {
+            competitionSectionId = section,
+            clubId = 0,
+            clubName = uniqueClub,
+            name = "Welsh Dragons",
+            suffix = "",
+        });
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var dto = await r.ReadAsync<TeamDto>();
+        Assert.Equal("Welsh Dragons", dto.DisplayName);
+        Assert.Equal(uniqueClub, dto.ClubName);
         Assert.Equal("", dto.Suffix);
     }
 
@@ -251,6 +290,26 @@ public class TeamsCrudTests : IClassFixture<ApiFactory>
 
         Assert.Equal("Keep me", dto.DisplayName);
         Assert.Equal("A", dto.Suffix);
+    }
+
+    [Theory]
+    [InlineData("clubName")]
+    [InlineData("club")]
+    public async Task Create_RejectsClubNamesAboveTheDatabaseLimit(string field)
+    {
+        var (comp, section, _) = await ArrangeAsync();
+        var trainer = await _f.TrainerAsync();
+        var input = new Dictionary<string, object>
+        {
+            ["competitionSectionId"] = section,
+            [field] = new string('x', 151),
+            ["name"] = "Synthetic Team",
+        };
+        var response = await trainer.PostAsJsonAsync($"/api/competitions/{comp}/teams", input);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False(await _f.WithDbAsync(db => db.Clubs.AnyAsync(c => c.Name == new string('x', 151))));
+        input[field] = new string('x', 150);
+        Assert.Equal(HttpStatusCode.OK, (await trainer.PostAsJsonAsync($"/api/competitions/{comp}/teams", input)).StatusCode);
     }
 
     // ---- delete ----

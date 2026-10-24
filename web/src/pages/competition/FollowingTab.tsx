@@ -67,6 +67,13 @@ export function FollowingTab() {
     const arena = arenaToShow(row.session, arenas);
     return [displaySectionName(row.session.sectionName || row.session.name), row.group === 'Finals' || !ordinal ? heatName(row) : `Session ${ordinal}, ${heatName(row)}`, arena].filter(Boolean).join(' · ');
   };
+  const onNowText = (row: FollowedHeat) => {
+    const orderedRaces = row.heat ? row.heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex) : [];
+    if (orderedRaces.length === 0) return 'ON NOW';
+    const runningIdx = orderedRaces.findIndex((r) => !r.isComplete);
+    const currentRaceNum = runningIdx >= 0 ? runningIdx + 1 : orderedRaces.length;
+    return `ON NOW · Race ${currentRaceNum} of ${orderedRaces.length}`;
+  };
   const choosing = showTeams || teams.length === 0;
 
   return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 lg:max-w-3xl">
@@ -84,7 +91,7 @@ export function FollowingTab() {
           const when = state?.kind === 'heat' ? `next ${formatTime(state.row.effective)}` : state?.kind === 'done' ? 'heats done' : 'not drawn yet';
           return <div key={team.id} className="grid min-h-[52px] grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-x-2.5 border-t border-[rgb(var(--mg-rule-soft))] py-1 pl-3 pr-1.5 first:border-t-0">
             <Star className="h-4 w-4 fill-[#C08308] text-[#C08308]" aria-hidden="true" />
-            <span className="flex min-w-0 flex-col gap-0.5"><strong className="truncate text-[15px] font-semibold">{team.displayName}</strong><span className="truncate text-xs text-[rgb(var(--mg-muted))]">{displaySectionName(team.sectionName)} · {when}</span></span>
+            <span className="flex min-w-0 flex-col gap-0.5"><Link to={`/competitions/${competition.id}/teams/${team.id}`} className="truncate text-[15px] font-semibold hover:underline" onClick={() => setListOpen(false)}>{team.displayName}</Link><span className="truncate text-xs text-[rgb(var(--mg-muted))]">{displaySectionName(team.sectionName)} · {when}</span></span>
             <button className="min-h-11 rounded-lg px-3 text-[13px] font-semibold text-[rgb(var(--mg-elim))]" aria-label={`Unfollow ${team.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}>Unfollow</button>
           </div>;
         })}
@@ -113,7 +120,7 @@ export function FollowingTab() {
       </ul>}
       <ul className="max-h-80 divide-y divide-[rgb(var(--mg-rule-soft))] overflow-y-auto">
         {filtered.map((team) => <li key={team.id} className="flex items-center gap-3 py-1">
-          <div className="min-w-0 flex-1"><p className="font-semibold break-words">{team.displayName}</p><p className="mg-meta">{displaySectionName(team.sectionName)}</p></div>
+          <div className="min-w-0 flex-1"><Link to={`/competitions/${competition.id}/teams/${team.id}`} className="font-semibold break-words hover:underline">{team.displayName}</Link><p className="mg-meta">{displaySectionName(team.sectionName)}</p></div>
           <button className="mg-btn mg-btn-secondary !px-3" aria-pressed={ids.has(team.id)} aria-label={`${ids.has(team.id) ? 'Unfollow' : 'Follow'} ${team.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}><Star aria-hidden="true" className={`h-5 w-5 ${ids.has(team.id) ? 'fill-current' : ''}`} /></button>
         </li>)}
       </ul>
@@ -141,7 +148,7 @@ export function FollowingTab() {
                 <span className="flex items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
                   <strong className="truncate text-[15px] font-semibold">{score.team.displayName}</strong>
                   <span className="text-xs text-[rgb(var(--mg-muted))]">Lane {score.lane}</span>
-                  {live && <span className="text-[10px] font-bold tracking-[0.06em] text-[rgb(var(--mg-red))]">{isStale ? 'WAS IN ARENA' : 'ON NOW'}</span>}
+                  {live && <span className="text-[10px] font-bold tracking-[0.06em] text-[rgb(var(--mg-red))]">{isStale ? 'WAS IN ARENA' : onNowText(row)}</span>}
                   {late && <span className="text-xs text-[rgb(var(--mg-late-time))]">+{row.delayMinutes} · <s>{formatTime(row.scheduled)}</s></span>}
                 </span>
                 <span className="mg-line-sub">{where(row)}</span>

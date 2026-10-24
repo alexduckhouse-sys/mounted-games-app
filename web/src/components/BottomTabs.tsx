@@ -9,6 +9,7 @@ export interface MeTab { initials: string; count: number }
  * Signed-in people get a fifth tab, Me, which opens their profile.
  * While entries are the only thing to do (`entryOnly`), the public gets just Enter and Details: the others have nothing to show yet.
  */
+// Keeps the four competition tabs (plus Me when signed in); Following stays in the top/drawer navigation.
 export function BottomTabs({ competitionId, me, entryOnly = false }: { competitionId: number; me?: MeTab; entryOnly?: boolean }) {
   const { pathname } = useLocation();
   const base = `/competitions/${competitionId}`;

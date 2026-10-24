@@ -28,6 +28,16 @@ describe('tickerItems: what is on now', () => {
     expect(items[0]).toEqual({ key: 'live-heat-1', kind: 'live', text: 'Now: Seniors Session 1 · Heat 1', sessionId: 1 });
   });
 
+  it('includes the active race progress when a live heat has races', () => {
+    const races = [
+      baseRace(1, { orderIndex: 1, isComplete: true }),
+      baseRace(2, { orderIndex: 2, isComplete: false }),
+      baseRace(3, { orderIndex: 3, isComplete: false }),
+    ];
+    const items = tickerItems([session([heat(1, { label: 'Heat 2', races })], { status: 1 })], [], now);
+    expect(items[0].text).toBe('Now: Seniors Session 1 · Heat 2 · Race 2/3');
+  });
+
   it('numbers an unlabelled heat from its position', () => {
     const items = tickerItems([session([heat(1), heat(2)], { status: 1 })], [], now);
     expect(items[0].text).toBe('Now: Seniors Session 1 · Heat 1');

@@ -23,11 +23,12 @@ describe('FollowingTab', () => {
     expect(screen.queryByRole('button', { name: 'Follow Example Red' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Follow Example Blue' }));
     expect(screen.getByRole('heading', { name: 'Next heats' })).toBeInTheDocument();
-    expect(screen.getByText('ON NOW')).toBeInTheDocument();
+    expect(screen.getByText('ON NOW · Race 2 of 2')).toBeInTheDocument();
     expect(screen.getByText('4 pts')).toBeInTheDocument();
     expect(screen.getByText('1 race')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Lane 2/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=1');
     await userEvent.click(screen.getByRole('button', { name: /Following 1 team/ }));
+    expect(screen.getByRole('link', { name: 'Example Blue' })).toHaveAttribute('href', '/competitions/1/teams/1');
     await userEvent.click(screen.getByRole('button', { name: 'Unfollow Example Blue' }));
     expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();
   });

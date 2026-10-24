@@ -20,13 +20,14 @@ import { nextRoundLanes } from '../../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../../lib/scoreUndo';
 import {
-  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
+  overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
   writeScoringDraft, type PendingPlace,
 } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 import { LANE_ROTATION_LABELS, LaneRotationMode, type LaneRotationModeValue } from '../../lib/lanes';
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
 import { useRaceNotes } from './useRaceNotes';
+import { formatPoints } from '../../lib/formatPoints';
 import { ScorerLinksCard } from './ScorerLinksCard';
 
 function formatTime(d: Date | null): string {
@@ -364,6 +365,7 @@ export function SessionPage() {
               onToggleElim={toggleElim}
               onReset={resetPending}
               onSubmit={submit}
+              onOverridePoints={(teamId, points, reason) => changePending((current) => overridePoints(current, teamId, points, reason))}
               onUndo={canUndo ? undo : undefined}
               undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
               allowReasons
@@ -390,6 +392,17 @@ export function SessionPage() {
                 <Wand2 className="w-3.5 h-3.5" /> Set up heats
               </button>
             </div>
+            {viewHeat && (
+              <ScoreAdjustmentsPanel
+                session={session}
+                heat={viewHeat}
+                activeRaceId={activeRaceId}
+                hcTeamIds={hcTeamIds}
+                raceNotes={{ ...savedNotes, ...summaryNotes }}
+                onChanged={reload}
+                onError={setSaveError}
+              />
+            )}
             <div className="mt-4 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
               <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
             </div>
@@ -490,6 +503,449 @@ function QualifiersControl({ session, onChanged }: { session: Session; onChanged
       </select>
       {error && <span role="alert" className="text-rose-600">Not saved</span>}
     </label>
+  );
+}
+
+/** Run-off +0.01 tie-breaker, per-race manual score override, team point adjustment, 1-tap HC, Under Review flag, and mid-session race controls for organisers. */
+function ScoreAdjustmentsPanel({
+  session, heat, activeRaceId, hcTeamIds, raceNotes, onChanged, onError,
+}: {
+  session: Session;
+  heat: Heat;
+  activeRaceId: number | null;
+  hcTeamIds: Set<number>;
+  raceNotes: Record<number, string>;
+  onChanged: () => void;
+  onError: (msg: string | null) => void;
+}) {
+  const entries = heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
+  const races = heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+  const defaultTeamId = entries[0]?.teamId ?? 0;
+  const targetRace = races.find((r) => r.id === activeRaceId) ?? races[races.length - 1] ?? null;
+
+  const [runoffWinnerId, setRunoffWinnerId] = useState<number>(defaultTeamId);
+  const [appliedRunoffWinnerId, setAppliedRunoffWinnerId] = useState<number | null>(null);
+
+  const [overrideTeamId, setOverrideTeamId] = useState<number>(defaultTeamId);
+  const [overridePoints, setOverridePoints] = useState<string>('0');
+  const [overrideReason, setOverrideReason] = useState<string>('');
+
+  const [adjustTeamId, setAdjustTeamId] = useState<number>(defaultTeamId);
+  const [adjustDelta, setAdjustDelta] = useState<string>('-1');
+  const [adjustReason, setAdjustReason] = useState<string>('');
+
+  const [hcTargetTeamId, setHcTargetTeamId] = useState<number>(defaultTeamId);
+
+  const [reviewTeamId, setReviewTeamId] = useState<number>(defaultTeamId);
+  const [reviewNote, setReviewNote] = useState<string>('');
+  const [localReviewOverrides, setLocalReviewOverrides] = useState<Record<string, boolean>>({});
+
+  const [raceNameDraft, setRaceNameDraft] = useState<string>('');
+  const [announceRaceUpdate, setAnnounceRaceUpdate] = useState<boolean>(true);
+
+  const underReviewTeamIds = useMemo(() => {
+    const flagged = new Set<number>();
+    if (!targetRace) return flagged;
+    for (const e of entries) {
+      const key = `${targetRace.id}:${e.teamId}`;
+      if (key in localReviewOverrides) {
+        if (localReviewOverrides[key]) flagged.add(e.teamId);
+      } else {
+        const note = raceNotes[e.teamId] ?? '';
+        if (/\[under-review\]/i.test(note)) flagged.add(e.teamId);
+      }
+    }
+    return flagged;
+  }, [entries, localReviewOverrides, raceNotes, targetRace]);
+
+  const standings = useMemo(() => {
+    return entries
+      .map((e) => {
+        const rawTotal = races.reduce((sum, r) => sum + (r.results.find((res) => res.teamId === e.teamId)?.points ?? 0), 0);
+        const total = rawTotal + (appliedRunoffWinnerId === e.teamId ? 0.01 : 0);
+        return { teamId: e.teamId, teamName: e.teamName, rawTotal, total };
+      })
+      .sort((a, b) => b.total - a.total || a.teamId - b.teamId);
+  }, [entries, races, appliedRunoffWinnerId]);
+
+  async function recordRunoffWinner() {
+    setAppliedRunoffWinnerId(runoffWinnerId);
+    onError(null);
+    const winnerTotal = standings.find((s) => s.teamId === runoffWinnerId)?.rawTotal;
+    const tiedIds = standings.filter((s) => s.rawTotal === winnerTotal).map((s) => s.teamId);
+    if (tiedIds.length >= 2) {
+      const orderedIds = [runoffWinnerId, ...tiedIds.filter((id) => id !== runoffWinnerId)];
+      try {
+        await api.put(`/competitions/${session.competitionId}/finals/tie-order`, { teamIds: orderedIds });
+        onChanged();
+      } catch {
+        // The order on screen is only local until the server has it, and finals seeding reads the server's.
+        onError('Couldn’t save the run-off result. Try again.');
+      }
+    }
+  }
+
+  async function submitPointDirective(teamId: number, directive: string, reason: string) {
+    if (!targetRace) return;
+    const existingByTeam = new Map(targetRace.results.map((r) => [r.teamId, r]));
+    const places = entries.map((e, i) => {
+      const existing = existingByTeam.get(e.teamId);
+      const isTarget = e.teamId === teamId;
+      return {
+        teamId: e.teamId,
+        place: existing ? (existing.eliminated ? 0 : existing.placing ?? i + 1) : i + 1,
+        eliminated: existing?.eliminated ?? false,
+        ...(existing?.status ? { status: existing.status } : {}),
+        ...(isTarget ? { refereeNote: `${directive} ${reason}`.trim() } : {}),
+      };
+    });
+    try {
+      await api.post(`/races/${targetRace.id}/results`, { places, reason });
+      onError(null);
+      onChanged();
+    } catch {
+      onError('Couldn’t save score adjustment. Try again.');
+    }
+  }
+
+  async function saveOverride() {
+    const pts = Number(overridePoints);
+    if (overridePoints.trim() === '' || Number.isNaN(pts) || pts < 0 || !Number.isInteger(pts * 2)) {
+      onError('Enter whole or half points, such as 3 or 2.5.');
+      return;
+    }
+    const formatted = formatPoints(pts);
+    const reason = overrideReason.trim() || `Manual score override to ${formatted} pts`;
+    await submitPointDirective(overrideTeamId, `[pts:${formatted}]`, reason);
+    setOverrideReason('');
+  }
+
+  async function applyAdjustment() {
+    const delta = Number(adjustDelta);
+    if (adjustDelta.trim() === '' || Number.isNaN(delta) || delta === 0) {
+      onError('Enter a non-zero point adjustment.');
+      return;
+    }
+    if (!Number.isInteger(delta * 2)) {
+      onError('Adjust by whole or half points, such as 1 or -0.5.');
+      return;
+    }
+    const reason = adjustReason.trim();
+    if (!reason) {
+      onError('Add a reason for this point adjustment.');
+      return;
+    }
+    const formatted = formatPoints(Math.abs(delta));
+    const signed = delta > 0 ? `+${formatted}` : `-${formatted}`;
+    await submitPointDirective(adjustTeamId, `[adj:${signed}]`, reason);
+    setAdjustReason('');
+  }
+
+  async function toggleOneTapHc() {
+    if (!hcTargetTeamId) return;
+    const nextHc = !hcTeamIds.has(hcTargetTeamId);
+    try {
+      await api.put(`/competitions/${session.competitionId}/teams/${hcTargetTeamId}`, { isHorsConcours: nextHc });
+      onError(null);
+      onChanged();
+    } catch {
+      onError('Couldn’t change hors concours. Try again.');
+    }
+  }
+
+  async function toggleUnderReview() {
+    if (!targetRace || !reviewTeamId) return;
+    const nextReview = !underReviewTeamIds.has(reviewTeamId);
+    const key = `${targetRace.id}:${reviewTeamId}`;
+    try {
+      await api.put(`/sessions/races/${targetRace.id}/results/${reviewTeamId}/under-review`, {
+        underReview: nextReview,
+        note: reviewNote.trim() || undefined,
+      });
+      setLocalReviewOverrides((cur) => ({ ...cur, [key]: nextReview }));
+      setReviewNote('');
+      onError(null);
+      onChanged();
+    } catch {
+      onError('Couldn’t update Under Review status. Try again.');
+    }
+  }
+
+  async function clearRaceForRerun() {
+    if (!targetRace) return;
+    try {
+      await api.delete(`/sessions/races/${targetRace.id}/results`);
+      writeScoringDraft(draftKeyFor(heat.id, targetRace.id), []);
+      updateOutbox((list) => list.filter((q) => q.raceId !== targetRace.id));
+      onError(null);
+      onChanged();
+    } catch {
+      onError('Couldn’t clear race for re-run. Try again.');
+    }
+  }
+
+  async function changeRaceMidSession() {
+    if (!targetRace) return;
+    const nextName = raceNameDraft.trim();
+    if (!nextName) {
+      onError('Enter the replacement race name.');
+      return;
+    }
+    const raceIndex = races.findIndex((r) => r.id === targetRace.id);
+    const displayNum = raceIndex >= 0 ? raceIndex + 1 : targetRace.orderIndex;
+    try {
+      await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/races/${targetRace.id}`, {
+        newName: nextName,
+        applyToAllHeats: true,
+      });
+      if (announceRaceUpdate) {
+        try {
+          await api.post(`/competitions/${session.competitionId}/chat`, {
+            body: `Update: Race ${displayNum} in ${session.name} is now ${nextName}`,
+            type: 1,
+          });
+        } catch {
+          // Non-fatal if chat announcement fails
+        }
+      }
+      setRaceNameDraft('');
+      onError(null);
+      onChanged();
+    } catch {
+      onError('Couldn’t change race. Try again.');
+    }
+  }
+
+  async function cancelRaceMidSession() {
+    if (!targetRace) return;
+    const cancelledName = targetRace.name;
+    try {
+      await api.delete(`/competitions/${session.competitionId}/sessions/${session.id}/races/${targetRace.id}`);
+      if (announceRaceUpdate) {
+        try {
+          await api.post(`/competitions/${session.competitionId}/chat`, {
+            body: `Update: ${cancelledName} in ${session.name} has been cancelled`,
+            type: 1,
+          });
+        } catch {
+          // Non-fatal if chat announcement fails
+        }
+      }
+      onError(null);
+      onChanged();
+    } catch {
+      onError('Couldn’t cancel race. Try again.');
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-3 border-t border-slate-200 dark:border-slate-700 pt-3 text-xs">
+      {entries.length > 0 && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Short-handed team</span>
+            <select
+              aria-label="Short-handed team"
+              className="input !min-h-0 !py-1 text-xs"
+              value={hcTargetTeamId}
+              onChange={(e) => setHcTargetTeamId(Number(e.target.value))}
+            >
+              {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
+            </select>
+          </label>
+          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void toggleOneTapHc()}>
+            {hcTeamIds.has(hcTargetTeamId) ? 'Remove team HC' : 'Mark team HC (Hors Concours)'}
+          </button>
+        </div>
+      )}
+
+      {entries.length > 0 && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Run-off winner</span>
+            <select
+              aria-label="Run-off winner"
+              className="input !min-h-0 !py-1 text-xs"
+              value={runoffWinnerId}
+              onChange={(e) => setRunoffWinnerId(Number(e.target.value))}
+            >
+              {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
+            </select>
+          </label>
+          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void recordRunoffWinner()}>
+            Record run-off winner
+          </button>
+          {appliedRunoffWinnerId != null && (
+            <ul aria-label="Run-off standings" className="flex flex-wrap gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+              {standings.map((s, idx) => (
+                <li key={s.teamId} data-testid={`runoff-standing-${idx + 1}`}>
+                  {idx + 1}. {s.teamName}: {formatPoints(s.total)} pts
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {targetRace && entries.length > 0 && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Under review team</span>
+            <select
+              aria-label="Under review team"
+              className="input !min-h-0 !py-1 text-xs"
+              value={reviewTeamId}
+              onChange={(e) => setReviewTeamId(Number(e.target.value))}
+            >
+              {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Under review note</span>
+            <input
+              aria-label="Under review note"
+              type="text"
+              placeholder="e.g. Steward enquiry"
+              className="input !min-h-0 !py-1 text-xs"
+              value={reviewNote}
+              onChange={(e) => setReviewNote(e.target.value)}
+            />
+          </label>
+          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void toggleUnderReview()}>
+            {underReviewTeamIds.has(reviewTeamId) ? 'Remove Under Review' : 'Flag Under Review'}
+          </button>
+          {underReviewTeamIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5" aria-label="Under review results">
+              {entries.filter((e) => underReviewTeamIds.has(e.teamId)).map((e) => (
+                <span
+                  key={e.teamId}
+                  data-testid={`under-review-badge-${e.teamId}`}
+                  className="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900 dark:bg-amber-900/50 dark:text-amber-200"
+                >
+                  UNDER REVIEW: {e.teamName}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {targetRace && entries.length > 0 && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Override team</span>
+            <select
+              aria-label="Override team"
+              className="input !min-h-0 !py-1 text-xs"
+              value={overrideTeamId}
+              onChange={(e) => setOverrideTeamId(Number(e.target.value))}
+            >
+              {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Custom points</span>
+            <input
+              aria-label="Custom points"
+              type="number"
+              step="0.5"
+              className="input !min-h-0 !py-1 text-xs w-20"
+              value={overridePoints}
+              onChange={(e) => setOverridePoints(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Override reason</span>
+            <input
+              aria-label="Override reason"
+              type="text"
+              placeholder="e.g. Combined heat"
+              className="input !min-h-0 !py-1 text-xs"
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+            />
+          </label>
+          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void saveOverride()}>
+            Save override
+          </button>
+        </div>
+      )}
+
+      {targetRace && entries.length > 0 && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Adjustment team</span>
+            <select
+              aria-label="Adjustment team"
+              className="input !min-h-0 !py-1 text-xs"
+              value={adjustTeamId}
+              onChange={(e) => setAdjustTeamId(Number(e.target.value))}
+            >
+              {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Point adjustment</span>
+            <input
+              aria-label="Point adjustment"
+              type="number"
+              step="0.5"
+              className="input !min-h-0 !py-1 text-xs w-20"
+              value={adjustDelta}
+              onChange={(e) => setAdjustDelta(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Adjustment reason</span>
+            <input
+              aria-label="Adjustment reason"
+              type="text"
+              placeholder="Required reason"
+              className="input !min-h-0 !py-1 text-xs"
+              value={adjustReason}
+              onChange={(e) => setAdjustReason(e.target.value)}
+            />
+          </label>
+          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void applyAdjustment()}>
+            Apply adjustment
+          </button>
+        </div>
+      )}
+
+      {targetRace && (
+        <div className="flex flex-wrap items-end gap-2 border-t border-slate-200 dark:border-slate-700 pt-2">
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">New race name ({targetRace.name})</span>
+            <input
+              aria-label="New race name"
+              type="text"
+              placeholder={targetRace.name}
+              className="input !min-h-0 !py-1 text-xs"
+              value={raceNameDraft}
+              onChange={(e) => setRaceNameDraft(e.target.value)}
+            />
+          </label>
+          <label className="flex items-center gap-1.5 py-1.5">
+            <input
+              type="checkbox"
+              aria-label="Post announcement to competition"
+              checked={announceRaceUpdate}
+              onChange={(e) => setAnnounceRaceUpdate(e.target.checked)}
+            />
+            <span>Post announcement to competition</span>
+          </label>
+          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void changeRaceMidSession()}>
+            Change race
+          </button>
+          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs text-rose-700 dark:text-rose-300" onClick={() => void cancelRaceMidSession()}>
+            Cancel race
+          </button>
+          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void clearRaceForRerun()}>
+            Re-run stopped race
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

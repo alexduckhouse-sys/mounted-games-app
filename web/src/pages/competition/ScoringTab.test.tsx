@@ -244,7 +244,7 @@ describe('navigating to a team page from the toplist', () => {
     const user = userEvent.setup();
     renderTab();
     const list = await screen.findByRole('list', { name: 'A Final' });
-    await user.click(within(list).getByRole('button', { name: /Team 1/ }));
+    await user.click(within(list).getByRole('link', { name: /Team 1/ }));
     expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/1');
   });
 
@@ -254,10 +254,10 @@ describe('navigating to a team page from the toplist', () => {
     const user = userEvent.setup();
     renderTab();
     await screen.findByRole('region', { name: 'Totals' });
-    await user.click(within(screen.getByRole('region', { name: 'Totals' })).getByRole('button', { name: /Team 1/ }));
+    await user.click(within(screen.getByRole('region', { name: 'Totals' })).getByRole('link', { name: /Team 1/ }));
     expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/1');
     await user.click(screen.getByRole('button', { name: 'By session' }));
-    await user.click(within(screen.getByRole('region', { name: 'Points by session' })).getByRole('button', { name: 'Team 2' }));
+    await user.click(within(screen.getByRole('region', { name: 'Points by session' })).getByRole('link', { name: 'Team 2' }));
     expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/2');
   });
 });
@@ -265,14 +265,14 @@ describe('navigating to a team page from the toplist', () => {
 describe('the totals list', () => {
   it('keeps the cut-off, run-off, per-row notes and hors concours teams', async () => {
     state.get.mockResolvedValue({ data: [standing(1, 10), standing(2, 6), standing(3, 6), standing(4, 2)], headers: {} });
-    setCompetition([session(1, { competitionSectionId: 9, heats: [heat(1, { entries: entries([4]), races: [race(1), race(2)] })] })], {
-      teams: [team(1), team(2), team(3), team(4), team(5, { competitionSectionId: 9, isHorsConcours: true, displayName: 'Guest' })],
+    setCompetition([session(1, { competitionSectionId: 9, heats: [heat(1, { entries: entries([4, 5, 6]), races: [race(1), race(2)] })] })], {
+      teams: [team(1), team(2), team(3), team(4), team(5, { competitionSectionId: 9, isHorsConcours: true, displayName: 'Guest' }), team(6, { competitionSectionId: 9, isHorsConcours: true })],
       sections: [{ id: 9, displayName: 'Under 12', finalistCount: 2, runoffRaceName: 'Sword' }] as never,
     });
     renderTab();
     const totals = await screen.findByRole('region', { name: 'Totals' });
     expect(within(totals).getAllByText('Joint 2nd · run-off')).toHaveLength(2);
-    expect(within(totals).getByText('5 needed to make the final')).toBeVisible();
+    expect(within(totals).getByText('5 needed to make the final (normal finishes)')).toBeVisible();
     expect(within(totals).getByRole('separator', { name: 'Final cut-off' })).toBeVisible();
     expect(within(totals).getByText('Hors concours')).toBeVisible();
     expect(within(totals).getByText('Guest')).toBeVisible();
@@ -302,13 +302,19 @@ describe('loading and failure states', () => {
 });
 
 describe('embedded in the timetable', () => {
-  it('keeps the age group menu and the collapsible toplist, with the create finals button for organisers', async () => {
+  it('keeps the age group menu, 3-way sub-tabs (Draw / Heats, Heat Scores, Toplist) and the collapsible toplist, with the create finals button for organisers', async () => {
     state.manage = true;
     const user = userEvent.setup();
     renderTab('/?section=9', { toplistOnly: false });
     expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Age group' })).toBeVisible();
     expect(screen.getByRole('button', { name: /Create finals/ })).toBeVisible();
+    const sectionTabs = screen.getByRole('group', { name: 'Section view' });
+    expect(within(sectionTabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Draw / Heats', 'Heat Scores', 'Toplist']);
+    expect(screen.getByRole('region', { name: 'Draw and starting lanes' })).toBeVisible();
+    await user.click(within(sectionTabs).getByRole('button', { name: 'Heat Scores' }));
+    expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeVisible();
+    await user.click(within(screen.getByRole('group', { name: 'Section view' })).getByRole('button', { name: 'Draw / Heats' }));
     await user.click(screen.getByRole('button', { name: /Show Under 12 toplist/ }));
     await screen.findByRole('region', { name: 'Finals' });
     await user.click(screen.getByRole('combobox', { name: 'Age group' }));
@@ -320,15 +326,15 @@ describe('embedded in the timetable', () => {
     const user = userEvent.setup();
     renderTab('/?section=9', { toplistOnly: false });
     expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
-    const toggle = screen.getByRole('button', { name: 'Heat scores' });
+    const toggle = screen.getByRole('button', { name: 'Heat Scores' });
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
 
     await user.click(toggle);
     expect(screen.queryByRole('heading', { level: 1, name: 'Under 12' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Show timetable' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('heading', { level: 1, name: /Heat 1 scores/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Heat Scores' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Show timetable' }));
+    await user.click(screen.getByRole('button', { name: 'Draw / Heats' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
     expect(screen.queryByRole('heading', { level: 1, name: /Heat 1 scores/ })).toBeNull();
   });

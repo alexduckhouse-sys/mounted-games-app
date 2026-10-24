@@ -20,6 +20,7 @@ import { usePageWidth } from '../../components/pageWidthState';
 
 const DEFAULT_STREAM_LIMIT_SECONDS = 30 * 60;
 const EXTEND_STREAM_SECONDS = 15 * 60;
+const MAX_STREAM_LIMIT_SECONDS = 45 * 60;
 const LOW_TIME_THRESHOLD_SECONDS = 5 * 60;
 
 const DATA_CARD_OPTIONS: { mode: LiveOverlayCardMode; label: string }[] = [
@@ -199,7 +200,9 @@ function BroadcastStudio() {
             <button
               type="button"
               className="pointer-events-auto rounded bg-white/15 px-1.5 py-0.5 text-xs font-bold text-white hover:bg-white/25"
-              onClick={() => setLimitSeconds((s) => s + EXTEND_STREAM_SECONDS)}
+              disabled={limitSeconds >= MAX_STREAM_LIMIT_SECONDS}
+              title={limitSeconds >= MAX_STREAM_LIMIT_SECONDS ? 'Maximum stream length is 45 minutes' : 'Extend to 45 minutes'}
+              onClick={() => setLimitSeconds((s) => Math.min(s + EXTEND_STREAM_SECONDS, MAX_STREAM_LIMIT_SECONDS))}
             >
               +15m
             </button>

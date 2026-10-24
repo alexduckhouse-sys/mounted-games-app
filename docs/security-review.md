@@ -1,5 +1,33 @@
 # Security review, 15 October 2026
 
+## Dependency update, 24 October 2026
+
+The web app uses Vite 8.3.5, covering the
+[October development-server file access advisory](https://github.com/vitejs/vite/security/advisories/GHSA-rq7h-c2jc-7f22).
+The combined Dockerfile uses Node 24.22.1 and a root `.nvmrc` selects the same
+[patched LTS release](https://nodejs.org/en/blog/release/v24.22.1).
+The API-only Vercel Dockerfile has no Node runtime. Existing CI selects Node 22.
+
+The test project's SignalR client moves to 10.0.13, removing its vulnerable
+transitive SignalR.Common package. The API already uses SignalR Redis 10.0.13.
+See [Microsoft's advisory](https://github.com/advisories/GHSA-334f-vvp4-7g6p).
+Compatible npm lockfile updates also remove five of the twelve dependency
+audit findings present after installing the original Vite update.
+
+The fresh npm audit still reports seven findings: four high through Vercel's
+CLI configuration dependency on Zod, and three moderate through Tailwind 3's
+PostCSS selector parser. npm proposes a Vercel functions downgrade and a
+breaking Tailwind 4 migration; neither is applied or suppressed here.
+Verification: 1,927 API tests passed (four Redis tests skipped locally), as did
+121 Node tests, 2,923 Vitest tests, lint and the production build. Web coverage
+passed all gates (99.95% lines, 97.25% branches). Fresh NuGet audits for the API
+and test project report no vulnerable packages. Browser automation was
+unavailable; Docker was not run. No hosting settings, database data or
+credentials changed.
+
+The review below records the earlier 15 October work. Its historical audit
+and deployment statements do not describe the current deployment.
+
 This review uses WhiteLabelApp's `app/src/lib/security-headers.ts`, `app/next.config.mjs` and `app/docs/08-security.md` as the reference. It is a source review with local regression tests, not a penetration test or a certification of the deployed service.
 
 ## Changes

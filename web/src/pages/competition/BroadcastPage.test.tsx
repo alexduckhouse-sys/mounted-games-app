@@ -166,12 +166,15 @@ it('shows remaining free-plan stream time, allows +15m extension, and auto-stops
 
   fireEvent.click(screen.getByRole('button', { name: '+15m' }));
   expect(screen.getByText('44:45 left')).toBeVisible();
+  expect(screen.getByRole('button', { name: '+15m' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: '+15m' }));
+  expect(screen.getByText('44:45 left')).toBeVisible();
 
   await act(async () => {
     vi.advanceTimersByTime(44 * 60 * 1000 + 45 * 1000);
     await flush();
   });
-  expect(publisher.stop).toHaveBeenCalled();
+  expect(publisher.stop).toHaveBeenCalledTimes(1);
 });
 it('redirects ProducePage to BroadcastPage', () => {
   render(

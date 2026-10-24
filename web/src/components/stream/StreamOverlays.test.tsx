@@ -1,12 +1,21 @@
-import { act, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CompetitionDetail, StreamOverlay } from '../../types';
 import { CompetitionContext, type CompetitionCtx } from '../../pages/competition/context';
 import { DEFAULT_OVERLAY } from '../../lib/overlays';
-import { competition, heat, race, result, session, team } from '../../test/factories';
+import { competition, heat, race, result, session, standing, team } from '../../test/factories';
+import { api } from '../../api';
+import { deferred } from '../../test/streamFakes';
 import { liveStream } from '../../test/streamFakes';
 import { LiveDataCardOverlay, ProducerBanner, ScoreCardOverlay } from './OverlayExtras';
 import { StreamOverlays } from './StreamOverlays';
+
+vi.mock('../../api', () => ({ api: { get: vi.fn() } }));
+beforeEach(() => {
+  vi.mocked(api.get).mockImplementation(async (_path, config) => ({ data: (config?.params as { sectionId?: number } | undefined)?.sectionId === 6
+    ? [{ ...standing(6, 0), teamName: 'Birch U17' }, { ...standing(5, 0), teamName: 'Cedar U17' }]
+    : [{ ...standing(1, 5), teamName: 'Oak Seniors' }, { ...standing(2, 0), teamName: 'Ash Seniors' }] }));
+});
 
 function sampleCompetition(overrides: Partial<CompetitionDetail> = {}): CompetitionDetail {
   return competition({
@@ -102,11 +111,14 @@ function renderWithComp(overlay: Partial<StreamOverlay>, comp = sampleCompetitio
     streamMessages: [],
     overlay: { ...DEFAULT_OVERLAY, ...overlay },
   };
-  return render(
+  const content = () => (
     <CompetitionContext.Provider value={value}>
       <StreamOverlays stream={liveStream({ arenaName })} label={null} reconnecting={false} muted={false} onSound={vi.fn()} />
-    </CompetitionContext.Provider>,
+    </CompetitionContext.Provider>
   );
+  const view = render(content());
+  return { ...view, refresh: (changes: Partial<CompetitionCtx>) => { Object.assign(value, changes); view.rerender(content()); } };
+
 }
 
 describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
@@ -121,11 +133,11 @@ describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
     expect(screen.queryByRole('region')).toBeNull();
   });
 
-  it('renders the live toplist card with scored standings and before race 1 state', () => {
+  it('renders the live toplist card with scored standings and before race 1 state', async () => {
     const { unmount } = renderWithComp({ look: { liveCard: 'toplist' } });
     const card = screen.getByRole('region', { name: 'Live toplist: Seniors' });
     expect(card).toHaveTextContent('Seniors · Toplist');
-    expect(card).toHaveTextContent('Current standings');
+    await waitFor(() => expect(card).toHaveTextContent('Current standings'));
     const items = within(card).getAllByRole('listitem');
     expect(items.map((el) => el.textContent)).toEqual(['1Oak Seniors5', '2Ash Seniors0']);
     unmount();
@@ -133,7 +145,7 @@ describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
     // Explicit liveSectionId for an unscored section shows "Before Race 1"
     const unscored = renderWithComp({ look: { liveCard: 'toplist', liveSectionId: 6 } });
     const u17Card = screen.getByRole('region', { name: 'Live toplist: Under 17 Pairs' });
-    expect(u17Card).toHaveTextContent('Before Race 1');
+    await waitFor(() => expect(u17Card).toHaveTextContent('Before Race 1'));
     expect(within(u17Card).getAllByRole('listitem')[0]).toHaveTextContent('—Birch U170');
     unmount();
     unscored.unmount();
@@ -176,62 +188,99 @@ describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
     nextView.unmount();
   });
 
-  it('handles arena fallback when no session matches the arena name or when all heats are finished', () => {
-    const comp = sampleCompetition({
-      sessions: [
-        session(1, {
-          competitionSectionId: 5,
-          sectionName: 'Teams Seniors',
-          arenaName: 'Main Arena',
-          status: 2,
-          heats: [
-            heat(10, {
-              label: 'Heat 1',
-              orderIndex: 1,
-              entries: [{ id: 101, teamId: 1, teamName: 'Oak Seniors', laneIndex: 1 }],
-              races: [race(100, { results: [result(1, 1, { points: 5 })] })],
-            }),
-            heat(11, {
-              label: 'Heat 2',
-              orderIndex: 2,
-              entries: [{ id: 102, teamId: 2, teamName: 'Ash Seniors', laneIndex: 1 }],
-              races: [race(101, { results: [] })],
-            }),
-          ],
-        }),
-      ],
-    });
-    const { unmount } = renderWithComp({ look: { liveCard: 'current' in ({} as Record<string, unknown>) ? 'none' : 'lanes' } }, comp, 'Other Arena');
-    // Unscored heat index > 0 selects the previous scored heat for 'current'
-    expect(screen.getByRole('region', { name: 'Starting lanes: Seniors · Heat 1' })).toBeInTheDocument();
+  it('uses the live heat after a completed heat, and shows the next unfinished heat', () => {
+    const comp = sampleCompetition();
+    const current = comp.sessions[0];
+    current.heats[0].races.forEach((race) => { race.isComplete = true; });
+    current.heats.push(heat(13, { label: 'Heat 3', orderIndex: 3, races: [race(104)] }));
+    const { unmount } = renderWithComp({ look: { liveCard: 'heat' } }, comp, ' arena 1 ');
+    expect(screen.getByRole('region', { name: 'Heat table: Seniors · Heat 2' })).toBeVisible();
     unmount();
+    renderWithComp({ look: { liveCard: 'next' } }, comp);
+    expect(screen.getByRole('region', { name: 'Up next: Seniors · Heat 3' })).toBeVisible();
+  });
 
-    const nextView = renderWithComp({ look: { liveCard: 'next' } }, comp, 'Other Arena');
-    expect(screen.getByRole('region', { name: 'Up next: Seniors · Heat 2' })).toBeInTheDocument();
-    nextView.unmount();
+  it.each(['lanes', 'heat', 'next', 'toplist'])('does not borrow another arena for the %s card', (liveCard) => {
+    renderWithComp({ look: { liveCard } }, sampleCompetition(), 'Unknown Arena');
+    expect(screen.queryByRole('region')).toBeNull();
+    expect(api.get).not.toHaveBeenCalled();
+  });
 
-    // All heats scored in 'next' mode returns the last heat
-    const allDone = sampleCompetition({
-      sessions: [
-        session(1, {
-          status: 2,
-          heats: [
-            heat(10, {
-              label: 'Heat 1',
-              entries: [{ id: 101, teamId: 1, teamName: 'Oak Seniors', laneIndex: 1 }],
-              races: [race(100, { results: [result(1, 1, { points: 5 })] })],
-            }),
-          ],
-        }),
-      ],
-    });
-    const doneNext = renderWithComp({ look: { liveCard: 'next' } }, allDone);
-    expect(screen.getByRole('region', { name: 'Up next: Seniors · Heat 1' })).toBeInTheDocument();
-    doneNext.unmount();
+  it('keeps unassigned sessions separate from named arenas', () => {
+    const comp = sampleCompetition();
+    comp.sessions[0].arenaName = null;
+    const { unmount } = renderWithComp({ look: { liveCard: 'lanes' } }, comp);
+    expect(screen.queryByRole('region')).toBeNull();
+    unmount();
+    renderWithComp({ look: { liveCard: 'lanes' } }, comp, '');
+    expect(screen.getByRole('region', { name: 'Starting lanes: Seniors · Heat 1' })).toBeVisible();
+  });
 
-    // No heats at all returns null
+  it('does not offer a completed heat as up next, and retains its final heat table', () => {
+    const comp = sampleCompetition();
+    comp.sessions[0].status = 2;
+    const { unmount } = renderWithComp({ look: { liveCard: 'next' } }, comp);
+    expect(screen.queryByRole('region')).toBeNull();
+    unmount();
+    renderWithComp({ look: { liveCard: 'heat' } }, comp);
+    expect(screen.getByRole('region', { name: 'Heat table: Seniors · Heat 2' })).toBeVisible();
+  });
+
+  it('shows the first upcoming heat when the arena has not started', () => {
+    renderWithComp({ look: { liveCard: 'next' } }, sampleCompetition(), 'Arena 2');
+    expect(screen.getByRole('region', { name: 'Up next: Under 17 Session · Heat A' })).toBeVisible();
+  });
+
+  it('renders no heat card for an arena without heats', () => {
     renderWithComp({ look: { liveCard: 'lanes' } }, competition({ sessions: [] }));
     expect(screen.queryByRole('region')).toBeNull();
+  });
+
+  it('uses official final tiers, point corrections, ties and withdrawal rows, excluding HC', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [
+      { ...standing(2, 5.5), teamName: 'Ash Seniors', finalTier: 0 },
+      { ...standing(1, 5.5), teamName: 'Oak Seniors', finalTier: 0 },
+      { ...standing(4, 99), teamName: 'Pine Withdrawn', finalTier: 1, withdrawn: true },
+      { ...standing(3, 100), teamName: 'Elm HC' },
+    ] });
+    renderWithComp({ look: { liveCard: 'toplist' } });
+    const card = screen.getByRole('region', { name: 'Live toplist: Seniors' });
+    await waitFor(() => expect(within(card).getAllByRole('listitem')).toHaveLength(3));
+    expect(within(card).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      '1Ash Seniors5.5', '1Oak Seniors5.5', '3Pine Withdrawn99',
+    ]);
+    expect(api.get).toHaveBeenCalledWith('/competitions/1/standings', expect.objectContaining({ params: { sectionId: 5 } }));
+  });
+
+  it('refreshes standings after a score change and a hub rejoin, labelling the last answer on failure', async () => {
+    const comp = sampleCompetition();
+    const view = renderWithComp({ look: { liveCard: 'toplist' } }, comp);
+    await screen.findByText('Current standings');
+    vi.mocked(api.get).mockResolvedValueOnce({ data: [{ ...standing(2, 8), teamName: 'Ash Seniors' }] });
+    view.refresh({ competition: { ...comp, sessions: [...comp.sessions] } });
+    await waitFor(() => expect(screen.getByRole('listitem')).toHaveTextContent('1Ash Seniors8'));
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));
+    view.refresh({ ready: 2 });
+    await screen.findByText('Last received standings');
+    expect(screen.getByRole('listitem')).toHaveTextContent('1Ash Seniors8');
+  });
+
+  it('discards a late response after changing the selected age group', async () => {
+    const slow = deferred<{ data: ReturnType<typeof standing>[] }>();
+    vi.mocked(api.get).mockReturnValueOnce(slow.promise);
+    const view = renderWithComp({ look: { liveCard: 'toplist' } });
+    view.refresh({ overlay: { ...DEFAULT_OVERLAY, look: { liveCard: 'toplist', liveSectionId: 6 } } });
+    await screen.findByText('Before Race 1');
+    await act(async () => { slow.resolve({ data: [{ ...standing(1, 99), teamName: 'Stale Seniors' }] }); });
+    expect(screen.queryByText('Stale Seniors')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Live toplist: Under 17 Pairs' })).toHaveTextContent('Birch U17');
+  });
+
+  it.each([{}, [null], [{ teamId: 1, teamName: 'Invalid Team', totalPoints: 'bad' }]])('handles malformed standings without inventing a ranking', async (data) => {
+    vi.mocked(api.get).mockResolvedValue({ data });
+    renderWithComp({ look: { liveCard: 'toplist' } });
+    await screen.findByText('Standings unavailable');
+    expect(screen.queryByRole('listitem')).toBeNull();
   });
 
   it('supports ProducerBanner without a stream prop and shows sit-out S in ScoreCardOverlay', () => {

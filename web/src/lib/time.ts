@@ -30,7 +30,7 @@ export interface SessionTiming {
 
 function heatDurationMinutes(h: Heat, s: Session): number {
   if (h.durationMinutes) return h.durationMinutes;
-  if (s.minutesPerHeat) return s.minutesPerHeat * Math.max(1, h.races.length);
+  if (s.minutesPerHeat) return s.minutesPerHeat;
   return 30;
 }
 

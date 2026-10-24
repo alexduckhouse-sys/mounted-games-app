@@ -1,21 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Ban, ChevronRight, ClipboardList, Shield, Star } from 'lucide-react';
+import { ArrowLeft, Ban, Calendar, ChevronRight, ClipboardList, Shield, Star } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { usePageHeader } from '../../components/CompactPageBarContext';
+import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { useFavourites } from '../../hooks/useFavourites';
 import { bibAccent, bibLabel, parseBibAndFlag } from '../../lib/bib';
 import { heightText } from '../../lib/decForm';
 import { formatPoints } from '../../lib/formatPoints';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { displaySectionName } from '../../lib/section';
-import { computeTimings } from '../../lib/time';
-import { timetableRows } from '../../lib/timetableRows';
+import { computeTimings, formatTime } from '../../lib/time';
+import { timetableRows, sessionOrdinals } from '../../lib/timetableRows';
 import { buildToplist, ordinal, toplistNote, type TeamBlock } from '../../lib/toplist';
 import type { DeclarationForm, Heat, Session, StandingRow } from '../../types';
 import { useCompetition } from './context';
 import { HeatScores } from './HeatScores';
+import { arenaNames, arenaToShow, heatName, nextHeats } from '../../lib/following';
+import { publicRiderName } from '../../lib/riderNames';
+import { statsProfileHref } from '../../lib/stats';
+import { StatsSubjectKind } from '../../types';
+import type { TeamProfile, TeamProfileHistory } from '../seasons/teamProfileTypes';
 import { byDrawnLane } from './laneRules';
 
 const eyebrow = 'text-[10px] font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]';
@@ -28,7 +33,7 @@ export function CompetitionTeamPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { competition } = useCompetition();
-  const { user, hasRole, canOrganise } = useAuth();
+  const { user, token, hasRole, canOrganise } = useAuth();
   const { favourites, toggle } = useFavourites();
 
   const team = competition.teams.find((t) => t.id === id) ?? null;
@@ -38,12 +43,6 @@ export function CompetitionTeamPage() {
     ? `/competitions/${competition.id}/toplists?section=${team.competitionSectionId}`
     : `/competitions/${competition.id}/teams`;
 
-  usePageHeader({
-    title: team?.displayName ?? 'Team',
-    subtitle: [competition.name, sectionLabel].filter(Boolean).join(' · ') || undefined,
-    backTo: fallbackBackPath,
-    backLabel: 'Back',
-  });
 
   function goBack() {
     if (location.key !== 'default') {
@@ -54,8 +53,13 @@ export function CompetitionTeamPage() {
   }
 
   const [standings, setStandings] = useState<StandingRow[]>([]);
-  const [decForm, setDecForm] = useState<DeclarationForm | null>(null);
-  const [decLoaded, setDecLoaded] = useState(false);
+  // A response is visible only for the exact resource and authentication that fetched it.
+  const declarationKey = JSON.stringify([competition.id, id, user?.id ?? null, token ?? null, user?.roles ?? [], canOrganise(competition)]);
+  const [declarationState, setDeclarationState] = useState<{ key: string; form: DeclarationForm | null } | null>(null);
+  const decLoaded = declarationState?.key === declarationKey;
+  const decForm = decLoaded ? declarationState.form : null;
+  const [matchedProfile, setMatchedProfile] = useState<TeamProfile | null>(null);
+  const [profileHistory, setProfileHistory] = useState<TeamProfileHistory | null>(null);
 
   useEffect(() => {
     if (!team) return;
@@ -73,17 +77,35 @@ export function CompetitionTeamPage() {
       .then((r) => {
         if (cancelled) return;
         const list = Array.isArray(r.data) ? r.data : [];
-        setDecForm(list.find((f) => f.teamId === team.id) ?? null);
-        setDecLoaded(true);
+        setDeclarationState({ key: declarationKey, form: list.find((f) => f.teamId === team.id) ?? null });
       })
       .catch(() => {
         if (!cancelled) {
-          setDecForm(null);
-          setDecLoaded(true);
+          setDeclarationState({ key: declarationKey, form: null });
         }
       });
     return () => { cancelled = true; };
-  }, [competition.id, team]);
+  }, [competition.id, team, declarationKey]);
+
+  useEffect(() => {
+    if (!team) return;
+    let cancelled = false;
+    api.get<TeamProfile[]>('/team-profiles')
+      .then((r) => {
+        if (cancelled || !Array.isArray(r.data)) return;
+        const found = r.data.find(
+          (p) => p.clubId === team.clubId && (p.displayName.toLowerCase() === team.displayName.toLowerCase() || (p.suffix && p.suffix.toLowerCase() === team.suffix.toLowerCase())),
+        ) ?? r.data.find((p) => p.clubId === team.clubId) ?? null;
+        setMatchedProfile(found);
+        if (found) {
+          api.get<TeamProfileHistory>(`/team-profiles/${found.id}/history`)
+            .then((hr) => { if (!cancelled && hr.data) setProfileHistory(hr.data); })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [team]);
 
   const list = useMemo(
     () => (team ? buildToplist(standings, competition.sessions, competition.teams, team.competitionSectionId, section?.finalistCount) : null),
@@ -144,6 +166,45 @@ export function CompetitionTeamPage() {
     return items;
   }, [competition.sessions, team]);
 
+  const nextMap = useMemo(
+    () => (team ? nextHeats(competition, new Set([team.id])) : new Map()),
+    [competition, team],
+  );
+  const nextState = team ? nextMap.get(team.id) : undefined;
+  const ordinals = useMemo(() => sessionOrdinals(competition.sessions), [competition.sessions]);
+  const arenas = useMemo(() => arenaNames(competition.sessions), [competition.sessions]);
+
+  const teamHeats = useMemo(() => {
+    if (!team) return [];
+    const items: { key: string; session: Session; heats: Heat[]; activeHeatId: number }[] = [];
+    const orderedSessions = competition.sessions
+      .filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    for (const s of orderedSessions) {
+      const orderedHeats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+      const matching = orderedHeats.filter(
+        (h) => h.entries.some((e) => e.teamId === team.id) || h.races.some((r) => r.results.some((res) => res.teamId === team.id)),
+      );
+      if (matching.length === 0) continue;
+      const isRaceFinals = orderedHeats.some((h) => Boolean(h.raceRoundStage) && h.raceRoundId != null);
+      if (isRaceFinals) {
+        items.push({ key: `session-${s.id}`, session: s, heats: orderedHeats, activeHeatId: matching[0].id });
+      } else {
+        for (const h of matching) {
+          items.push({ key: `heat-${h.id}`, session: s, heats: orderedHeats, activeHeatId: h.id });
+        }
+      }
+    }
+    return items;
+  }, [competition.sessions, team]);
+
+  useCompactPageBar({
+    backTo: fallbackBackPath,
+    title: team?.displayName ?? 'Team',
+    subtitle: [sectionLabel, competition.name].filter(Boolean).join(' · '),
+    badge: nextState?.kind === 'heat' && nextState.row.status === 'live' ? 'live' : nextState?.kind === 'done' ? 'finished' : 'next',
+  });
+
   if (!team) {
     return (
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-3">
@@ -169,10 +230,11 @@ export function CompetitionTeamPage() {
   const parsedBib = parseBibAndFlag(rawBib);
   const detail = list?.detail.get(team.id) ?? null;
   const toplistRow = list?.rows.find((r) => r.teamId === team.id) ?? null;
-  const leaderPoints = list?.rows[0]?.points ?? 0;
-  const teamPoints = toplistRow?.points ?? detail?.qualifyingPoints ?? 0;
+  const qualifying = [...(list?.detail.values() ?? [])];
+  const leaderPoints = Math.max(0, ...qualifying.map((item) => item.qualifyingPoints));
+  const teamPoints = detail?.qualifyingPoints ?? 0;
+  const qualifyingJoint = detail != null && qualifying.filter((item) => item.qualifyingPoints === detail.qualifyingPoints).length > 1;
   const gap = list?.started && toplistRow && leaderPoints > teamPoints ? leaderPoints - teamPoints : 0;
-  const nextHeat = drawnHeats.find((item) => !item.done) ?? null;
   const orderedRiders = decForm ? [...decForm.riders].sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const trainerDisplay = decForm?.trainerName ?? decForm?.submittedByName ?? team.trainerName ?? null;
 
@@ -244,12 +306,16 @@ export function CompetitionTeamPage() {
           )}
         </div>
 
+        {toplistRow && list?.started && <p className="text-sm text-[rgb(var(--mg-muted))]">
+          Current standing: <span className="font-semibold text-[rgb(var(--mg-heading))]">{toplistRow.joint ? '=' : ''}{ordinal(toplistRow.position)} · {formatPoints(toplistRow.points)} pts</span>
+        </p>}
+
         {/* At-a-glance strip */}
         <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-3">
           <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-tint))] px-3 py-2.5">
             <span className={eyebrow}>Qualifying</span>
             <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
-              {list?.started && detail?.qualifyingPosition != null ? ordinal(detail.qualifyingPosition) : '—'}
+              {team.isHorsConcours ? 'HC' : list?.started && detail?.qualifyingPosition != null ? `${qualifyingJoint ? '=' : ''}${ordinal(detail.qualifyingPosition)}` : '—'}
               {' · '}
               {formatPoints(teamPoints)} pts
             </span>
@@ -267,16 +333,16 @@ export function CompetitionTeamPage() {
 
           <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
             <span className={eyebrow}>Next on track</span>
-            {nextHeat ? (
+            {nextState?.kind === 'heat' ? (
               <Link
-                to={`/competitions/${competition.id}/session/${nextHeat.session.id}?heat=${nextHeat.heat.id}`}
+                to={`/competitions/${competition.id}/session/${nextState.row.session.id}?heat=${nextState.row.heat!.id}`}
                 className="group flex flex-col gap-0.5 text-[rgb(var(--mg-heading))] hover:underline"
               >
                 <span className="mg-display text-lg font-bold leading-tight">
-                  {nextHeat.heatLabel} · Lane {nextHeat.lane}
+                  {heatName(nextState.row)} · Lane {nextState.lane}
                 </span>
                 <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">
-                  {[nextHeat.session.name, nextHeat.session.arenaName?.trim(), nextHeat.timeText].filter(Boolean).join(' · ')}
+                  {[nextState.row.session.name, nextState.row.session.arenaName?.trim(), formatTime(nextState.row.effective)].filter(Boolean).join(' · ')}
                 </span>
               </Link>
             ) : (
@@ -286,6 +352,47 @@ export function CompetitionTeamPage() {
             )}
           </div>
         </div>
+      </section>
+
+      <section aria-label="Next heat" className="mg-card overflow-hidden">
+        {nextState?.kind === 'heat' ? (
+          <Link
+            to={`/competitions/${competition.id}/session/${nextState.row.session.id}?heat=${nextState.row.heat!.id}`}
+            className="flex items-center justify-between gap-3 p-3.5 hover:bg-[rgb(var(--mg-subtle))]"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-muted))]">
+                  {nextState.row.status === 'live' ? 'In arena now' : 'Next heat'}
+                </span>
+                {nextState.row.status === 'live' && (
+                  <span className="text-[10px] font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-red))]">
+                    ON NOW
+                  </span>
+                )}
+              </div>
+              <div className="mt-0.5 text-base font-semibold text-[rgb(var(--mg-ink))]">
+                {[
+                  ordinals.get(nextState.row.session.id) ? `Session ${ordinals.get(nextState.row.session.id)}` : nextState.row.session.name,
+                  heatName(nextState.row),
+                  `Lane ${nextState.lane}`,
+                  arenaToShow(nextState.row.session, arenas),
+                ].filter(Boolean).join(' · ')}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="mg-display text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
+                {formatTime(nextState.row.effective)}
+              </span>
+              <ChevronRight aria-hidden="true" className="h-4 w-4 text-[rgb(var(--mg-faint))]" />
+            </div>
+          </Link>
+        ) : (
+          <div className="flex items-center gap-2.5 p-3.5 text-sm text-[rgb(var(--mg-muted))]">
+            <Calendar aria-hidden="true" className="h-4 w-4 shrink-0" />
+            <span>{nextState?.kind === 'done' ? 'All heats completed for this team.' : 'Not drawn into any heats yet.'}</span>
+          </div>
+        )}
       </section>
 
       {/* Declared Riders & Ponies */}
@@ -315,7 +422,7 @@ export function CompetitionTeamPage() {
                   <span className="mg-display w-5 shrink-0 text-sm font-bold text-[rgb(var(--mg-muted))]">
                     {rider.isReserve ? 'R' : index + 1}
                   </span>
-                  <span className="truncate text-[15px] font-semibold text-[rgb(var(--mg-ink))]">{rider.fullName}</span>
+                  <span className="truncate text-[15px] font-semibold text-[rgb(var(--mg-ink))]"><Link to={statsProfileHref(StatsSubjectKind.Rider, publicRiderName(rider))}>{publicRiderName(rider)}</Link></span>
                   {rider.isCaptain && <span className="mg-badge mg-badge-outline !h-5">Captain</span>}
                   {rider.isReserve && (
                     <span className="mg-badge mg-badge-outline !h-5 inline-flex items-center gap-1">
@@ -327,7 +434,7 @@ export function CompetitionTeamPage() {
                 <div className="text-sm font-medium text-[rgb(var(--mg-body))]">
                   {rider.isReserve && !rider.horseName
                     ? <span className="text-xs text-[rgb(var(--mg-muted))]">Non-riding reserve</span>
-                    : [rider.horseName || '—', rider.ponyHeightHands != null ? `${heightText(rider.ponyHeightHands)} hh` : null].filter(Boolean).join(' · ')}
+                    : <>{rider.horseName ? <Link to={statsProfileHref(StatsSubjectKind.Pony, rider.horseName)}>{rider.horseName}</Link> : '—'}{rider.ponyHeightHands != null ? ` · ${heightText(rider.ponyHeightHands)} hh` : ''}</>}
                 </div>
               </li>
             ))}
@@ -376,8 +483,8 @@ export function CompetitionTeamPage() {
           <h2 className="mg-display px-1 text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
             Heat tables
           </h2>
-          {drawnHeats.map(({ session, orderedHeats, heat }) => (
-            <HeatScores key={heat.id} session={session} heats={orderedHeats} activeHeatId={heat.id} />
+          {teamHeats.map((item) => (
+            <HeatScores key={item.key} session={item.session} heats={item.heats} activeHeatId={item.activeHeatId} embedded />
           ))}
         </section>
       )}
@@ -389,6 +496,32 @@ export function CompetitionTeamPage() {
             Race-by-race breakdown
           </h2>
           {detail.blocks.map((block) => <BreakdownBlock key={block.key} block={block} />)}
+        </section>
+      )}
+      {matchedProfile && (
+        <section aria-labelledby="team-season-heading" className="mg-card flex flex-col gap-2.5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 id="team-season-heading" className="mg-h2">Season &amp; past competitions</h2>
+            <Link to={`/team-profiles/${matchedProfile.id}`} className="text-xs font-semibold text-[rgb(var(--mg-heading))] hover:underline">
+              Full history
+            </Link>
+          </div>
+          {profileHistory && profileHistory.publishedResults.length > 0 ? (
+            <ul className="divide-y divide-[rgb(var(--mg-rule-soft))] text-sm">
+              {profileHistory.publishedResults.slice(0, 4).map((res) => (
+                <li key={`${res.seasonId}-${res.roundId}`} className="flex items-center justify-between gap-2 py-1.5">
+                  <span className="truncate font-medium text-[rgb(var(--mg-ink))]">{res.competitionName}</span>
+                  <span className="shrink-0 font-semibold text-[rgb(var(--mg-heading))]">
+                    {ordinal(res.eventRank)} · {res.seasonPoints} pts
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-[rgb(var(--mg-muted))]">
+              View {matchedProfile.displayName}’s season profile and past competition results.
+            </p>
+          )}
         </section>
       )}
     </div>
@@ -432,3 +565,5 @@ function BreakdownBlock({ block }: { block: TeamBlock }) {
     </div>
   );
 }
+
+export default CompetitionTeamPage;

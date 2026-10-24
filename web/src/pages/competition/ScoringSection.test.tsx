@@ -6,6 +6,7 @@ import { heat, race, result } from '../../test/factories';
 import type { Heat } from '../../types';
 import { LaneRotationMode } from '../../lib/lanes';
 import type { QueuedScore } from '../../offline/scoreOutbox';
+import { overridePoints } from '../../lib/raceScoring';
 import { ScoringSection, type PendingPlace } from './ScoringSection';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn().mockResolvedValue({ data: [] }), post: vi.fn() } }));
@@ -46,6 +47,7 @@ function Harness({ activeIdx = 1, heatOverride = h, queued = [], onSelectRace = 
       laneRules={rules} qualifiers={3} pending={pending} canScore queued={queued}
       onClickTeam={(teamId) => setPending((p) => [...p, { teamId, place: p.length + 1, eliminated: false }])}
       onToggleElim={(teamId) => setPending((p) => [...p.filter((x) => x.teamId !== teamId), { teamId, place: 0, eliminated: true }])}
+      onOverridePoints={(id, points, reason) => setPending((current) => overridePoints(current, id, points, reason))}
       onReset={() => setPending([])} onSubmit={onSubmit} onUndo={onUndo} allowReasons={allowReasons} onSetHc={onSetHc} hcTeamIds={hcTeamIds} laneHatbands={hatbands}
       correctionReason="" onCorrectionReason={() => {}}
     />
@@ -340,16 +342,15 @@ describe('race switcher bar, press-and-hold, and score override sheet', () => {
 
     await user.click(within(sheet).getByRole('button', { name: /Bravo/ }));
     await user.click(within(sheet).getByRole('radio', { name: /Set points/ }));
-    await user.click(within(sheet).getByRole('button', { name: 'One point more' }));
-    await user.click(within(sheet).getByRole('button', { name: 'One point more' }));
+    for (let i = 0; i < 5; i++) await user.click(within(sheet).getByRole('button', { name: 'Half a point more' }));
     await user.click(within(sheet).getByRole('button', { name: 'Save override' }));
 
     await user.click(within(sheet).getByRole('button', { name: 'Close' }));
     const bravoRow = screen.getByRole('button', { name: /^Bravo, lane/ }).closest('li') as HTMLElement;
     expect(bravoRow).toHaveTextContent('Manual');
-    expect(bravoRow).toHaveTextContent('2 pts · manual');
-    // Bravo had 3 points from Race 1 + 2 manual points in Race 2 = Heat total 5.
-    expect(bravoRow).toHaveTextContent('Heat total 5');
+    expect(bravoRow).toHaveTextContent('2.5 pts · manual');
+    // Bravo had 3 points from Race 1 + 2.5 manual points in Race 2 = Heat total 5.5.
+    expect(bravoRow).toHaveTextContent('Heat total 5.5');
 
     await user.click(screen.getByRole('button', { name: 'Score override' }));
     const sheetAgain = screen.getByRole('dialog', { name: 'Score override' });
@@ -361,3 +362,11 @@ describe('race switcher bar, press-and-hold, and score override sheet', () => {
   });
 });
 
+
+
+it('shows an existing half-point score when a scorer link cannot read its private directive', () => {
+  const scored = heat(1, { entries, races: [race(1, { isComplete: true, results: [result(2, 1, { points: 2.5 })] })] });
+  render(<Harness heatOverride={scored} activeIdx={0} initial={[{ teamId: 2, place: 1, eliminated: false }]} />);
+  const row = screen.getByRole('button', { name: /^Bravo, lane/ }).closest('li')!;
+  expect(row).toHaveTextContent('+2.5 pts');
+});

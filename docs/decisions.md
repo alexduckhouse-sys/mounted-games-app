@@ -1,5 +1,13 @@
 # Project decisions
 
+## 2026-10-24: Entrant declaration access needs trusted team formation
+- Why: riders need to complete declarations for their own pairs and individual entries, but public supporter codes and matching names do not prove that someone is a team entrant.
+- Rule: the existing coach, club manager and organiser permissions remain. An entrant also needs an active Pending or Paid signup, an explicit link to the same section's team, no withdrawal, and `SignupMatchmaking.DeclarationAccessGranted`. Only organiser team formation and mutually accepted pair requests set that grant. Typing a team name or a public supporter code never grants declaration access.
+- Old runtime matchmaking rows default to no grant when adopted. Their names or existing team links are not used to infer permission. Authorised organisers can form their teams; existing staff permissions still work.
+- Private reads, draft visibility, submission and deletion use the same trusted-entry check. The web filters its team choices using the grant returned by the API; server checks remain authoritative.
+- Supersedes: the coach-only restriction in the 2026-10-22 declaration decision, solely for these trusted entrants.
+- Files: `api/Controllers/{Signup,DeclarationForms}Controller.cs`, `api/Entities/EntryExtensions.cs`, `api/Data/AppDbContext.cs`, `web/src/pages/competition/DeclarationsTab.tsx`.
+
 ## 2026-10-23: Sign-up passwords and emails are checked, and new accounts confirm their email
 - Why: a walkthrough found the password rules weren't shown while typing, the error said "non-alphanumeric", and nothing checked an email was real, which we'll need once emails are used properly.
 - Passwords: the rules are unchanged (8 or more characters, a digit, a lowercase letter, a special character, no capital). The sign-up page shows a live checklist (`PasswordChecklist`) driven by `web/src/lib/passwordRules.ts`; a test there reads `api/Program.cs` and a test in `EmailAccountTests` reads the Identity options, so neither side can drift. Error codes map to the same words on the API (`PasswordRules.Friendly`) and the web; "non-alphanumeric" is never shown. Sign-up is the only place a password is set today.

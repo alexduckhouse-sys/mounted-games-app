@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultDraft, defaultSection, resizeSessions, setRaceFinals, type CreatorDraft, type SectionDraft } from './creatorDraft';
 import {
-  breakWindow, durationText, estimateText, expectedTeams, plannedSessions, plannedWrites, provisionalTimetable, raceCountFor, sectionEstimate, sectionNames,
+  breakWindow, durationText, estimateText, expectedTeams, finalRaceCountFor, plannedSessions, plannedWrites, provisionalTimetable, raceCountFor, sectionEstimate, sectionNames,
 } from './creatorPlan';
 
 const at = (h: number, m = 0) => new Date(2026, 9, 31, h, m);
@@ -47,26 +47,28 @@ describe('plannedSessions', () => {
   it('plans for the standard list when the races are left for later', () => {
     expect(raceCountFor(section(), { races: null })).toBe(10);
     expect(raceCountFor(section(), { races: ['Bending'] })).toBe(1);
+    expect(finalRaceCountFor(section())).toBe(10);
+    expect(finalRaceCountFor(section({ finalRaces: ['Bending', 'Flag'] }))).toBe(2);
   });
 });
 
 describe('provisionalTimetable', () => {
   it('works out heats, minutes and start times from the structure', () => {
-    // 6 teams guessed, heat size 6: one heat. 10 races x 10 min = 100 min.
+    // 6 teams guessed, heat size 6: one whole heat takes 10 minutes.
     const d = draft([section({ sessions: [{ races: tenRaces() }] })]);
     const { rows, finishes, overrun } = provisionalTimetable(d);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ kind: 'session', name: 'Seniors', minutes: 100, start: at(9), end: at(10, 40) });
+    expect(rows[0]).toMatchObject({ kind: 'session', name: 'Seniors', minutes: 10, start: at(9), end: at(9, 10) });
     expect(rows[0].detail).toBe('1 heat of 6, 10 races');
-    expect(finishes).toEqual(at(10, 40));
+    expect(finishes).toEqual(at(9, 10));
     expect(overrun).toBe(false);
   });
 
   it('splits a large section into heats and uses the entry limit', () => {
     const d = draft([section({ maxParticipants: '40', maxTeamsPerHeat: '4', minutesPerRace: '5', sessions: [{ races: tenRaces(4) }] })]);
-    // 40 riders / 4 = 10 teams, heats of 4: 4,3,3. 3 heats x 4 races x 5 = 60.
+    // 40 riders / 4 = 10 teams, heats of 4: 4,3,3. 3 whole heats x 5 minutes = 15.
     const { rows } = provisionalTimetable(d);
-    expect(rows[0].minutes).toBe(60);
+    expect(rows[0].minutes).toBe(15);
     expect(rows[0].detail).toBe('3 heats (4, 3, 3), 4 races');
   });
 
@@ -78,7 +80,7 @@ describe('provisionalTimetable', () => {
     ]);
     const starts = provisionalTimetable(d).rows.filter((r) => r.kind === 'session').map((r) => [r.name, r.start] as const);
     expect(starts).toContainEqual(['Open', at(9)]);
-    expect(starts).toContainEqual(['Juniors', at(9, 30)]);
+    expect(starts).toContainEqual(['Juniors', at(9, 20)]);
     expect(starts).toContainEqual(['Novices', at(9)]);
   });
 
@@ -92,15 +94,15 @@ describe('provisionalTimetable', () => {
     ]);
   });
 
-  it('counts heat, heat, final as three heats of one race each', () => {
+  it('uses three whole-heat durations for heat, heat, final', () => {
     const d = draft([setRaceFinals(section({ sessions: [{ races: tenRaces(5) }], minutesPerRace: '4' }), true)]);
     const { rows } = provisionalTimetable(d);
-    expect(rows[0].minutes).toBe(60);
+    expect(rows[0].minutes).toBe(12);
     expect(rows[0].detail).toBe('5 races, each a heat, heat, final');
   });
 
   it('warns when the day runs past the end time, using the end date when there is one', () => {
-    const long = draft([section({ sessions: [{ races: tenRaces(10) }], minutesPerRace: '60' })]);
+    const long = draft([section({ sessions: [{ races: tenRaces(10) }], minutesPerRace: '60' })], { endTime: '09:30' });
     expect(provisionalTimetable(long).overrun).toBe(true);
     expect(provisionalTimetable({ ...long, endDate: '2026-11-02' }).overrun).toBe(false);
   });
@@ -126,16 +128,16 @@ describe('provisionalTimetable', () => {
     ]);
     const writes = plannedWrites(d);
     expect([...writes.keys()]).toEqual([0]);
-    expect(writes.get(0)).toEqual({ start: at(9), minutes: 20 });
+    expect(writes.get(0)).toEqual({ start: at(9), minutes: 10 });
   });
 });
 
 describe('sectionEstimate and durationText', () => {
   it('works out teams, heats and the length of a session for one age group', () => {
     expect(sectionEstimate(section({ maxParticipants: '40', maxTeamsPerHeat: '4', minutesPerRace: '5', sessions: [{ races: tenRaces(4) }] }))).toEqual({
-      teams: { count: 10, basis: 'cap' }, sizes: [4, 3, 3], minutesPerSession: 60,
+      teams: { count: 10, basis: 'cap' }, sizes: [4, 3, 3], minutesPerSession: 15,
     });
-    expect(sectionEstimate(setRaceFinals(section({ sessions: [{ races: tenRaces(5) }], minutesPerRace: '4' }), true), 8).minutesPerSession).toBe(60);
+    expect(sectionEstimate(setRaceFinals(section({ sessions: [{ races: tenRaces(5) }], minutesPerRace: '4' }), true), 8).minutesPerSession).toBe(12);
     expect(sectionEstimate(section({ sessions: [] })).minutesPerSession).toBe(0);
   });
 

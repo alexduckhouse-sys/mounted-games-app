@@ -88,7 +88,7 @@ describe('DetailsTab entries (seats and whole-team entry)', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Enter a whole team' }));
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
     await userEvent.type(screen.getByPlaceholderText('e.g. Welsh Dragons'), 'Welsh Dragons');
-    await userEvent.click(screen.getByRole('checkbox', { name: /parental consent/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({
       fullName: 'Pat Manager', teamName: 'Welsh Dragons', wholeTeam: true,
@@ -106,5 +106,81 @@ describe('DetailsTab entries (seats and whole-team entry)', () => {
     mount([section({ format: 1 })]);
     await userEvent.click(screen.getByRole('button', { name: /Join/ }));
     expect(screen.queryByRole('checkbox', { name: 'Enter a whole team' })).not.toBeInTheDocument();
+  });
+
+  it('offers Looking for a Pair (50% price) in a pairs section and hides team fields in an individual section', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { id: 12, status: 0, amountMinor: 500 } });
+    const { unmount } = mount([section({ format: 1, displayName: 'Pairs U14', priceMinor: 1000 })]);
+    await userEvent.click(screen.getByRole('button', { name: /Join/ }));
+    const pairBox = screen.getByRole('checkbox', { name: /Looking for a Pair/i });
+    await userEvent.click(pairBox);
+    await userEvent.type(screen.getByPlaceholderText('Your full name'), 'Solo Pair Rider');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
+    await userEvent.click(screen.getByRole('button', { name: /Confirm/ }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({
+      fullName: 'Solo Pair Rider', lookingForPair: true,
+    })));
+    unmount();
+
+    mount([section({ format: 3, displayName: 'Individuals Open', priceMinor: 1000 })]);
+    await userEvent.click(screen.getByRole('button', { name: /Join/ }));
+    expect(screen.queryByPlaceholderText(/Team code/)).not.toBeInTheDocument();
+  });
+  it('lets a rider join the free guest waiting list when the section is full', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { id: 13, status: 1, amountMinor: 0 } });
+    mount([section({ maxParticipants: 1, activeSignupsCount: 1 })]);
+    await userEvent.click(screen.getByRole('link', { name: 'Wait for a Guest Ride Spot (Free)' }));
+    expect(screen.getByRole('checkbox', { name: 'Wait for a Guest Ride Spot (Free)' })).toBeChecked();
+    expect(screen.queryByLabelText('Team code')).not.toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText('Your full name'), 'Synthetic Guest');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({ waitingForGuestSpot: true, wholeTeam: false, teamCode: null })));
+  });
+
+  it('offers pair requests only from the signed-in rider’s own seeking entry', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url.endsWith('/matchmaking') ? [
+      { signupId: 20, competitionSectionId: 5, fullName: 'Synthetic Partner', lookingForPair: true },
+    ] : url === '/me/signups' ? [{ id: 10, competitionSectionId: 5, lookingForPair: true, status: 0 }] : [] }));
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    mount([section({ format: 1 })]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Request pair-up with Synthetic Partner' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/10/pair-request', { targetSignupId: 20 }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Pair-up request sent.');
+  });
+
+});
+
+describe('w7 entry options', () => {
+  beforeEach(() => {
+    state.roles = ['Member']; state.organise = false;
+    vi.mocked(api.get).mockResolvedValue({ data: [] });
+    vi.mocked(api.post).mockResolvedValue({ data: { id: 90, status: 0, amountMinor: 0 } });
+  });
+  it('lets a rider join a full section waiting list without charging or booking stables', async () => {
+    mount([section({ maxParticipants: 1, activeSignupsCount: 1 })]);
+    await userEvent.click(screen.getByRole('link', { name: 'Join waiting list (Free)' }));
+    await userEvent.type(screen.getByPlaceholderText('Your full name'), 'Synthetic Entrant');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({ isWaitlist: true, stablesCount: 0, paymentMethod: null })));
+    expect(await screen.findByText(/You are on the waiting list/)).toBeInTheDocument();
+  });
+  it('submits a multi-team BACS entry with stabling and the multiplied price', async () => {
+    state.roles = ['Manager'];
+    mount([section()]);
+    await userEvent.click(screen.getByRole('button', { name: /Join/ }));
+    await userEvent.type(screen.getByPlaceholderText('Your full name'), 'Synthetic Manager');
+    await userEvent.type(screen.getByPlaceholderText('Pony Club (optional)'), 'Synthetic Club');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Enter a whole team' }));
+    await userEvent.clear(screen.getByLabelText('Number of teams'));
+    await userEvent.type(screen.getByLabelText('Number of teams'), '2');
+    await userEvent.clear(screen.getByLabelText('Number of stables'));
+    await userEvent.type(screen.getByLabelText('Number of stables'), '3');
+    expect(screen.getByText('£20.00')).toBeInTheDocument();
+    expect(screen.queryByText('Pay by Card')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({ wholeTeam: true, teamsCount: 2, stablesCount: 3, paymentMethod: 'bacs' })));
   });
 });

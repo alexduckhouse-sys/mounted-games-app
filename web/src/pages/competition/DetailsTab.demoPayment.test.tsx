@@ -43,7 +43,7 @@ async function openForm() {
 
 async function confirmAs(name: string) {
   await userEvent.type(screen.getByLabelText('Your full name'), name);
-  await userEvent.click(screen.getByRole('checkbox', { name: /parental consent/ }));
+  await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
   await userEvent.click(screen.getByRole('button', { name: /Confirm/ }));
 }
 

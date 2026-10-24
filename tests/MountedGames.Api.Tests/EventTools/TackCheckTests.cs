@@ -163,6 +163,51 @@ public class TackCheckTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, (await MarkAsync(owner, arena, otherTeam, new TackCheckMarkDto(sector, null, 1))).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await owner.PutAsJsonAsync($"{Base(arena.CompetitionId)}/tack-check/sections/999999/teams/{arena.TeamIds[0]}",
             new SaveTackCheckMarksRequest([]))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await MarkAsync(owner, arena, arena.TeamIds[0], new TackCheckMarkDto(sector, null, null, [11]))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await MarkAsync(owner, arena, arena.TeamIds[0], new TackCheckMarkDto(sector, null, null, Enumerable.Repeat((int?)5, 11).ToList()))).StatusCode);
+    }
+
+    [Fact]
+    public async Task PerRiderMarks_SumIntoSectorAndTeamTotals_AndExposeDeclaredOrDefaultRiders()
+    {
+        var (arena, owner) = await WorldAsync(scored: false);
+        await _f.WithDbAsync(async db =>
+        {
+            db.DeclarationForms.Add(new DeclarationForm
+            {
+                TeamId = arena.TeamIds[0], SubmittedAt = DateTime.UtcNow,
+                Riders =
+                {
+                    new RiderEntry { FullName = "Amy Archer", OrderIndex = 1 },
+                    new RiderEntry { FullName = "Ben Brook", OrderIndex = 2 },
+                },
+            });
+            await db.SaveChangesAsync();
+        });
+        var section = await SetUpAsync(owner, arena, TackCheckMode.Leaderboard);
+        var (saddle, turnout) = (section.Sectors[0].Id, section.Sectors[1].Id);
+
+        Assert.Equal(["Amy Archer", "Ben Brook"], section.Teams.Single(t => t.TeamId == arena.TeamIds[0]).Riders);
+        Assert.Equal(["Rider 1", "Rider 2", "Rider 3", "Rider 4"], section.Teams.Single(t => t.TeamId == arena.TeamIds[1]).Riders);
+
+        var saved = await (await MarkAsync(owner, arena, arena.TeamIds[0],
+            new TackCheckMarkDto(saddle, null, null, [8, 9]),
+            new TackCheckMarkDto(turnout, null, null, [7, 10]))).ReadAsync<TackCheckSectionDto>();
+        var team = saved.Teams.Single(t => t.TeamId == arena.TeamIds[0]);
+        Assert.Equal(34, team.Total);
+        Assert.Equal([8, 9], team.Marks.Single(m => m.SectorId == saddle).RiderPoints);
+        Assert.Equal(17, team.Marks.Single(m => m.SectorId == saddle).Points);
+        Assert.Equal([7, 10], team.Marks.Single(m => m.SectorId == turnout).RiderPoints);
+        Assert.Equal(17, team.Marks.Single(m => m.SectorId == turnout).Points);
+
+        // Sending the same rider scores again keeps the row unchanged; sending all nulls clears it.
+        var unchanged = await (await MarkAsync(owner, arena, arena.TeamIds[0],
+            new TackCheckMarkDto(saddle, null, null, [8, 9]))).ReadAsync<TackCheckSectionDto>();
+        Assert.Equal(17, unchanged.Teams.Single(t => t.TeamId == arena.TeamIds[0]).Total);
+
+        var cleared = await (await MarkAsync(owner, arena, arena.TeamIds[0],
+            new TackCheckMarkDto(saddle, null, null, [null, null]))).ReadAsync<TackCheckSectionDto>();
+        Assert.Empty(cleared.Teams.Single(t => t.TeamId == arena.TeamIds[0]).Marks);
     }
 
     [Fact]

@@ -56,13 +56,16 @@ function Shell({ width }: { width: PageWidth }) {
   const barRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const bar = barRef.current;
-    if (!bar) return;
+    if (!bar) {
+      document.documentElement.style.setProperty('--mg-shell-h', '0px');
+      return;
+    }
     const publish = () => document.documentElement.style.setProperty('--mg-shell-h', `${bar.offsetHeight}px`);
     publish();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish);
     observer?.observe(bar);
     return () => observer?.disconnect();
-  }, []);
+  }, [filmingMode]);
 
   return (
     <div className="min-h-screen flex flex-col">

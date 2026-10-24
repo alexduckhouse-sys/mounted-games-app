@@ -2,13 +2,13 @@ import { Dropdown } from '../../components/Dropdown';
 import { displaySectionName } from '../../lib/section';
 import { TimetableBoard } from './TimetableBoard';
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, Trophy, Sparkles, X, AlertTriangle } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import type { StandingRow } from '../../types';
+import type { Session, StandingRow } from '../../types';
 import { buildToplist } from '../../lib/toplist';
 import { ToplistView, type ToplistViewTab } from './ToplistView';
 import { TackLeaderboard } from './TackLeaderboard';
@@ -22,6 +22,8 @@ import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { formatPoints } from '../../lib/formatPoints';
+
+type SectionSubTab = 'draw' | 'scores' | 'toplist';
 
 const NO_ROWS: StandingRow[] = [];
 
@@ -86,8 +88,8 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSection = Number(searchParams.get('section'));
   const sectionId = competition.sections.find((s) => s.id === requestedSection)?.id ?? competition.sections[0]?.id ?? null;
+  const [subTab, setSubTab] = useState<SectionSubTab>('draw');
   const [showToplist, setShowToplist] = useState(toplistOnly);
-  const [showHeatScores, setShowHeatScores] = useState(false);
   const [showFinals, setShowFinals] = useState(false);
   const [chosenView, setChosenView] = useState<ToplistViewTab | null>(null);
 
@@ -200,6 +202,12 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   );
 
   const ageGroups = !rail && competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} onChange={chooseSection} />;
+  const sectionSessions = useMemo(
+    () => competition.sessions
+      .filter((s) => s.competitionSectionId === sectionId && (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
+      .sort((a, b) => a.orderIndex - b.orderIndex),
+    [competition.sessions, sectionId],
+  );
 
   if (toplistOnly || sectionId == null) {
     const page = (
@@ -218,55 +226,130 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     return rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className="pt-3">{page}</PageGrid> : page;
   }
 
-  const leadControls = (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className="mg-tint-link flex-1" aria-expanded={showToplist} onClick={() => setShowToplist((v) => !v)}>
-          <Trophy aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
-          <span className="flex-1">{showToplist ? 'Hide toplist' : `Show ${sectionName ? `${sectionName} ` : ''}toplist`}</span>
-          <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none ${showToplist ? 'rotate-90' : ''}`} />
-        </button>
-        <button type="button" className="mg-tint-link" aria-pressed={showHeatScores} onClick={() => setShowHeatScores((v) => !v)}>
-          <span>{showHeatScores ? 'Show timetable' : 'Heat scores'}</span>
-        </button>
-      </div>
-      <AnimatePresence initial={false}>
-        {showToplist && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-            {toplist}
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {finalsButton}
-    </div>
-  );
+  const subTabs: [SectionSubTab, string][] = [
+    ['draw', 'Draw / Heats'],
+    ['scores', 'Heat Scores'],
+    ['toplist', 'Toplist'],
+  ];
 
-  const board = showHeatScores ? (
-    <div className={`mx-auto flex w-full flex-col gap-3 ${rail ? '' : 'max-w-[560px]'}`}>
-      {ageGroups}
-      {leadControls}
-      {sectionHeats.length === 0 ? (
-        <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No heat scores yet.</p>
-      ) : (
-        sectionHeats.map(({ session: s, orderedHeats, heat: h }) => (
-          <HeatScores key={h.id} session={s} heats={orderedHeats} activeHeatId={h.id} />
-        ))
-      )}
-    </div>
+  const leadControls = (
+          <div className="flex flex-col gap-3">
+            <div className="mg-seg" role="group" aria-label="Section view">
+              {subTabs.map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={subTab === id}
+                  onClick={() => {
+                    setSubTab(id);
+                    if (id === 'toplist') setShowToplist(true);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {subTab === 'draw' && (
+              <>
+                <SectionDrawView competitionId={competition.id} sessions={sectionSessions} />
+                <button type="button" className="mg-tint-link" aria-expanded={showToplist} onClick={() => setShowToplist((v) => !v)}>
+                  <Trophy aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
+                  <span className="flex-1">{showToplist ? 'Hide toplist' : `Show ${sectionName ? `${sectionName} ` : ''}toplist`}</span>
+                  <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none ${showToplist ? 'rotate-90' : ''}`} />
+                </button>
+                <AnimatePresence initial={false}>
+                  {showToplist && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                      {toplist}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </>
+            )}
+
+            {subTab === 'scores' && (
+              <div className="flex flex-col gap-4" role="region" aria-label="Section heat scores">
+                {sectionSessions.flatMap((s) => {
+                  const heats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+                  if (heats.length === 0) return [];
+                  const isRaceFinals = heats.some((h) => Boolean(h.raceRoundStage) && h.raceRoundId != null);
+                  if (isRaceFinals) {
+                    return [<HeatScores key={`session-${s.id}`} session={s} heats={heats} activeHeatId={heats[0].id} embedded />];
+                  }
+                  return heats.map((h) => (
+                    <HeatScores key={`heat-${h.id}`} session={s} heats={heats} activeHeatId={h.id} embedded />
+                  ));
+                })}
+                {sectionSessions.every((s) => s.heats.length === 0) && (
+                  <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No heats drawn for this section yet.</p>
+                )}
+              </div>
+            )}
+
+            {subTab === 'toplist' && toplist}
+
+            {finalsButton}
+          </div>
+  );
+  const board = subTab === 'draw' ? (
+    <TimetableBoard sectionId={sectionId} title={sectionName || 'Age group'} bandExtra={ageGroups} lead={leadControls} />
   ) : (
-      <TimetableBoard
-        sectionId={sectionId}
-        title={sectionName || 'Age group'}
-        bandExtra={ageGroups}
-        lead={leadControls}
-      />
+    <div className="mx-auto flex w-full flex-col gap-3">{ageGroups}{leadControls}</div>
   );
 
   return (
     <>
-      {rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className={showHeatScores ? 'pt-3' : ''}>{board}</PageGrid> : board}
+      {rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className="pt-3">{board}</PageGrid> : board}
       {finalsModal}
     </>
+  );
+}
+
+function SectionDrawView({ competitionId, sessions }: { competitionId: number; sessions: Session[] }) {
+  const sessionsWithHeats = sessions.filter((s) => s.heats.length > 0);
+  if (sessionsWithHeats.length === 0) return null;
+  return (
+    <section aria-label="Draw and starting lanes" className="flex flex-col gap-2.5">
+      {sessionsWithHeats.map((session, sIdx) => {
+        const orderedHeats = session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+        return (
+          <div key={session.id} className="mg-card overflow-hidden">
+            <div className="border-b border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-3 py-2 text-xs font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-heading))]">
+              {session.name || `Session ${sIdx + 1}`}
+            </div>
+            <div className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+              {orderedHeats.map((heat, hIdx) => {
+                const entries = heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
+                if (entries.length === 0) return null;
+                return (
+                  <div key={heat.id} className="px-3 py-2">
+                    <div className="mb-1 text-xs font-semibold text-[rgb(var(--mg-muted))]">
+                      {heat.label || `Heat ${hIdx + 1}`}
+                    </div>
+                    <ol className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                      {entries.map((entry) => (
+                        <li key={entry.id} className="flex items-baseline gap-2 text-sm">
+                          <span className="mg-display w-14 shrink-0 text-xs font-bold uppercase text-[rgb(var(--mg-muted))]">
+                            Lane {entry.laneIndex}
+                          </span>
+                          <Link
+                            to={`/competitions/${competitionId}/teams/${entry.teamId}`}
+                            className="truncate font-semibold text-[rgb(var(--mg-ink))] hover:underline"
+                          >
+                            {entry.teamName}
+                          </Link>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </section>
   );
 }
 

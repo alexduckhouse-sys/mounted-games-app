@@ -128,11 +128,17 @@ export function PayoutsPage() {
     }
     if (step === 6) { await finish(); return; }
     const detailStep = step as 1 | 2 | 3 | 5;
+    const clearingDateOfBirth = detailStep === 3 && current?.personDateOfBirth != null && form.personDateOfBirth === '';
     const bad = stepProblems(detailStep, form, new Date());
+    // Removing a saved date is allowed; finishing payout setup will require it again.
+    if (clearingDateOfBirth) delete bad.personDateOfBirth;
     if (Object.keys(bad).length > 0) { setProblems(bad); return; }
     setBusy(true);
     try {
-      const body = Object.fromEntries(fieldsFor[detailStep].map((k) => [k, form[k] === '' && k === 'personDateOfBirth' ? null : form[k]]));
+      const body = {
+        ...Object.fromEntries(fieldsFor[detailStep].map((k) => [k, form[k] === '' && k === 'personDateOfBirth' ? null : form[k]])),
+        ...(clearingDateOfBirth ? { clearPersonDateOfBirth: true } : {}),
+      };
       const { data: d } = await api.put<ClubPayouts>(`/clubs/${clubId}/payouts`, body);
       adopt(d);
       go(step + 1);

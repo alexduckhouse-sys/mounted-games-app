@@ -19,7 +19,7 @@ export function LoginPage() {
   const [organiserTitle, setOrganiserTitle] = useState('');
   const [organiserEmail, setOrganiserEmail] = useState('');
   const [organiserKey, setOrganiserKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
+  const [showOrganiserKey, setShowOrganiserKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const ready = useKey
@@ -44,6 +44,7 @@ export function LoginPage() {
 
   function swap() {
     setUseKey((v) => !v);
+    setShowOrganiserKey(false);
     setError(null);
   }
 
@@ -73,16 +74,14 @@ export function LoginPage() {
             <Field label="Organiser key" error={error}>
               {({ id, invalid, describedBy }) => (
                 <div className="mg-field" data-invalid={invalid}>
-                  <input id={id} type={showKey ? 'text' : 'password'} value={organiserKey} autoComplete="off" aria-invalid={invalid} aria-describedby={describedBy}
+                  <input id={id} type={showOrganiserKey ? 'text' : 'password'} value={organiserKey}
+                    autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+                    aria-invalid={invalid} aria-describedby={describedBy}
                     onChange={(e) => { setOrganiserKey(e.target.value); setError(null); }} />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey((v) => !v)}
-                    aria-label={showKey ? 'Hide organiser key' : 'Show organiser key'}
-                    aria-pressed={showKey}
-                    className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]"
-                  >
-                    {showKey ? <EyeOff aria-hidden="true" className="h-[18px] w-[18px]" /> : <Eye aria-hidden="true" className="h-[18px] w-[18px]" />}
+                  <button type="button" className="flex min-h-11 min-w-11 items-center justify-center text-[rgb(var(--mg-muted))]"
+                    onClick={() => setShowOrganiserKey((shown) => !shown)} aria-pressed={showOrganiserKey}
+                    aria-label={showOrganiserKey ? 'Hide key' : 'Show key'}>
+                    {showOrganiserKey ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
                   </button>
                 </div>
               )}

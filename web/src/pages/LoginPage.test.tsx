@@ -118,9 +118,9 @@ describe('LoginPage', () => {
       expect(screen.getByLabelText('Email')).toHaveAttribute('type', 'email');
       const keyInput = screen.getByLabelText('Organiser key');
       expect(keyInput).toHaveAttribute('type', 'password');
-      await userEvent.click(screen.getByRole('button', { name: 'Show organiser key' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Show key' }));
       expect(keyInput).toHaveAttribute('type', 'text');
-      await userEvent.click(screen.getByRole('button', { name: 'Hide organiser key' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Hide key' }));
       expect(keyInput).toHaveAttribute('type', 'password');
       expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
       expect(screen.queryByText(/New here/)).not.toBeInTheDocument();
@@ -149,6 +149,25 @@ describe('LoginPage', () => {
         title: 'Chief Steward',
         email: 'steward@example.com',
       });
+    });
+
+    it('lets organisers reveal and hide their key without submitting, and hides it when they return', async () => {
+      mount();
+      await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
+      const key = screen.getByLabelText('Organiser key');
+      await userEvent.type(key, 'fake-organiser-key');
+      expect(key).toHaveAttribute('type', 'password');
+      await userEvent.click(screen.getByRole('button', { name: 'Show key' }));
+      expect(key).toHaveAttribute('type', 'text');
+      expect(key).toHaveValue('fake-organiser-key');
+      expect(screen.getByRole('button', { name: 'Hide key' })).toHaveAttribute('aria-pressed', 'true');
+      await userEvent.click(screen.getByRole('button', { name: 'Hide key' }));
+      expect(key).toHaveAttribute('type', 'password');
+      await userEvent.click(screen.getByRole('button', { name: 'Show key' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
+      expect(screen.getByLabelText('Organiser key')).toHaveAttribute('type', 'password');
+      expect(api.post).not.toHaveBeenCalled();
     });
 
     it('explains under the field when the key is refused or the request is invalid', async () => {

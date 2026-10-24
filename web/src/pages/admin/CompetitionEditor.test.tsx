@@ -141,12 +141,12 @@ describe('CompetitionEditor: validation one step at a time', () => {
     seed('structure');
     mount();
     const group = screen.getByRole('group', { name: 'Structure for Seniors' });
-    await userEvent.clear(within(group).getByLabelText(/Minutes per race/));
-    await userEvent.type(within(group).getByLabelText(/Minutes per race/), '0');
+    await userEvent.clear(within(group).getByLabelText(/Minutes per heat/));
+    await userEvent.type(within(group).getByLabelText(/Minutes per heat/), '0');
     await userEvent.clear(within(group).getByLabelText('Teams through to the final'));
     await userEvent.type(within(group).getByLabelText('Teams through to the final'), '99');
     await next();
-    expect(within(group).getByLabelText(/Minutes per race/)).toHaveAccessibleDescription('Minutes per race must be from 1 to 180.');
+    expect(within(group).getByLabelText(/Minutes per heat/)).toHaveAccessibleDescription('Minutes per heat must be from 1 to 180.');
     expect(within(group).getByLabelText('Teams through to the final')).toHaveAccessibleDescription('Teams in the final must be from 1 to 50.');
     expect(screen.getByRole('heading', { level: 2, name: 'Structure and timing' })).toBeInTheDocument();
   });
@@ -217,7 +217,7 @@ describe('CompetitionEditor: structure and timing', () => {
     seed('structure', { sections: [{ ...defaultSection(), maxParticipants: '40', maxTeamsPerHeat: '4', minutesPerRace: '5' }] });
     mount();
     const group = screen.getByRole('group', { name: 'Structure for Seniors' });
-    expect(group).toHaveTextContent('Estimate: about 10 teams, from the entry limit, 3 heats (4, 3, 3), about 2 h 30 min a session.');
+    expect(group).toHaveTextContent('Estimate: about 10 teams, from the entry limit, 3 heats (4, 3, 3), about 15 min a session.');
     await userEvent.selectOptions(within(group).getByLabelText('Sessions'), '2');
     expect(stored().sections[0].sessions).toHaveLength(2);
     await userEvent.click(within(group).getByRole('radio', { name: 'Heat, heat, final (HHF)' }));
@@ -302,6 +302,12 @@ describe('CompetitionEditor: races', () => {
     expect(group).toHaveTextContent('Left for later');
     await userEvent.click(within(group).getByText('Pony Club Zone list for all', { selector: 'button' }));
     expect(group).toHaveTextContent('10 races: Bending, Hollywood Bowl Boule & Bucket…');
+    expect(stored().sections[0].finalRaces).toHaveLength(10);
+    await userEvent.click(screen.getByRole('button', { name: 'Choose races for Finals · Seniors' }));
+    const finalsDialog = await screen.findByRole('dialog', { name: 'Races for Finals · Seniors' });
+    await userEvent.click(within(finalsDialog).getByRole('button', { name: 'Use Pony Club Area list' }));
+    await userEvent.click(within(finalsDialog).getByRole('button', { name: 'Save race list' }));
+    expect(stored().sections[0].finalRaces).toHaveLength(8);
   });
 
   it('names every session when an age group has several', () => {
@@ -325,13 +331,13 @@ describe('CompetitionEditor: review and the provisional timetable', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveTextContent('Seniors');
     expect(rows[0]).toHaveTextContent('1 heat of 6, 10 races');
-    expect(rows[0]).toHaveTextContent('1 h 40 min');
+    expect(rows[0]).toHaveTextContent('10 min');
     expect(screen.getByText(/Races aren’t chosen for 1 session/)).toBeInTheDocument();
     expect(screen.getByText(/It becomes exact once teams are formed/)).toBeInTheDocument();
   });
 
   it('warns when the day runs past its end time', () => {
-    seed('review', { sections: [{ ...defaultSection(), minutesPerRace: '60' }] });
+    seed('review', { startTime: '09:00', endTime: '09:30', sections: [{ ...defaultSection(), minutesPerRace: '60' }] });
     mount();
     expect(screen.getByRole('alert')).toHaveTextContent('This runs until');
   });
@@ -396,13 +402,14 @@ describe('CompetitionEditor: creating', () => {
     });
     expect(api.post).toHaveBeenCalledWith('/competitions/41/sections', expect.objectContaining({ ageGroup: 'Open', displayName: 'Open', usesRaceFinals: true }));
     const sessions = vi.mocked(api.post).mock.calls.filter(([url]) => url === '/competitions/41/sessions').map(([, body]) => body as Record<string, unknown>);
-    expect(sessions.map((s) => s.name)).toEqual(['Junior Individuals · Session 1', 'Junior Individuals · Session 2', 'Open', 'Lunch']);
+    expect(sessions.map((s) => s.name)).toEqual(['Junior Individuals · Session 1', 'Junior Individuals · Session 2', 'Open', 'Finals · Junior Individuals', 'Lunch']);
     expect(sessions[0]).toMatchObject({
       competitionSectionId: 51, arenaName: 'Main arena', kind: 0, lanesPerHeat: 4, minutesPerHeat: 5, plannedRaces: ['Bending', 'Bottle'], scheduledStart: expect.any(String), durationMinutes: expect.any(Number),
     });
     expect(sessions[1].plannedRaces).toEqual([]);
     expect(sessions[2]).toMatchObject({ arenaName: 'Arena 2', minutesPerHeat: 10, lanesPerHeat: 6 });
-    expect(sessions[3]).toMatchObject({ competitionSectionId: null, kind: 1, isBreak: true, durationMinutes: 30, arenaName: null });
+    expect(sessions[3]).toMatchObject({ competitionSectionId: 51, name: 'Finals · Junior Individuals', arenaName: 'Main arena', kind: 0, lanesPerHeat: 4, minutesPerHeat: 5, plannedRaces: [] });
+    expect(sessions[4]).toMatchObject({ competitionSectionId: null, kind: 1, isBreak: true, durationMinutes: 30, arenaName: null });
     // Every session is ordered by when it starts; the first session of a busy arena starts at the event start.
     expect(new Date(sessions[0].scheduledStart as string).getTime()).toBe(new Date('2026-10-24T09:00').getTime());
     expect(stored()).toBeNull();
@@ -650,8 +657,8 @@ describe('CompetitionEditor: editing', () => {
     expect(group).toHaveTextContent('structure is fixed');
     expect(within(group).getByLabelText('Sessions')).toBeDisabled();
     expect(within(group).getByLabelText('Max teams per heat')).toBeDisabled();
-    expect(within(group).getByLabelText(/Minutes per race/)).toHaveValue('8');
-    expect(within(group).getByLabelText(/Minutes per race/)).toBeEnabled();
+    expect(within(group).getByLabelText(/Minutes per heat/)).toHaveValue('8');
+    expect(within(group).getByLabelText(/Minutes per heat/)).toBeEnabled();
     expect(group).toHaveTextContent('1 teams entered');
     await userEvent.click(step('Races'));
     expect(screen.getByRole('group', { name: 'Races for Under 12' })).toHaveTextContent('Heats are made. Change the races on the On the day page.');

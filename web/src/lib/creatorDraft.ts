@@ -7,7 +7,7 @@ export const FORMAT_LABEL: Record<Format, string> = { 1: 'Pairs', 2: 'Teams', 3:
 export const AGE_GROUP_PRESETS = ['Under 10', 'Under 12', 'Under 14', 'Under 15', 'Under 17', 'Open', 'Juniors', 'Seniors', 'Novices'];
 
 export const MAIN_ARENA = 'Main arena';
-/** Minutes a race takes in each heat. A heat runs every race in the list, one after another. */
+/** Minutes a whole heat takes in the arena, including every race in its list. */
 export const DEFAULT_MINUTES = 10;
 export const lanesFor = (format: number) => (format === 1 ? 4 : 6);
 export const MAX_SESSIONS = 6;
@@ -46,6 +46,14 @@ export interface SectionDraft {
   maxTeamsPerHeat: string;
   arena: string;
   sessions: SessionDraft[];
+  /** The races chosen for the section's final; null means "decide later". */
+  finalRaces?: string[] | null;
+  /** The saved finals session id, when editing a competition that already has one. */
+  finalSessionId?: number;
+  /** Heats have been made for the finals session. */
+  finalHasHeats?: boolean;
+  /** The finals session has started or been scored. */
+  finalScored?: boolean;
   /** Entries or teams exist: format and age group are fixed and the section can't be removed. */
   hasEntries?: boolean;
 }
@@ -102,10 +110,11 @@ export function hatbandsFor(draft: Pick<CreatorDraft, 'sections' | 'laneHatbands
   return Array.from({ length: laneCount(draft.sections) }, (_, i) => draft.laneHatbands[i]?.trim() || HATBAND_COLOURS[i % HATBAND_COLOURS.length]);
 }
 
-export function defaultSection(): SectionDraft {
+export function defaultSection(format: Format = 2): SectionDraft {
   return {
-    format: 2, ageGroup: 'Seniors', priceGbp: '', maxParticipants: '', usesRaceFinals: false, finalistCount: '', runoffRaceName: '',
-    minutesPerRace: String(DEFAULT_MINUTES), maxTeamsPerHeat: String(lanesFor(2)), arena: MAIN_ARENA, sessions: [{ races: null }],
+    format, ageGroup: 'Seniors', priceGbp: '', maxParticipants: '', usesRaceFinals: false, finalistCount: '', runoffRaceName: '',
+    minutesPerRace: String(DEFAULT_MINUTES), maxTeamsPerHeat: String(lanesFor(format)), arena: MAIN_ARENA, sessions: [{ races: null }],
+    finalRaces: null,
   };
 }
 
@@ -119,6 +128,7 @@ export function defaultDraft(today: Date = new Date()): CreatorDraft {
 }
 
 export const sectionName = (s: Pick<SectionDraft, 'format' | 'ageGroup'>) => sectionDisplayName(s.format, s.ageGroup);
+export const finalSessionName = (s: Pick<SectionDraft, 'format' | 'ageGroup'>) => `Finals · ${sectionName(s)}`;
 
 /** A new session's name: the age group's name, with "· Session 2" and so on when there is more than one. */
 export function newSessionName(section: SectionDraft, index: number): string {
@@ -144,10 +154,13 @@ export function setRaceFinals(section: SectionDraft, on: boolean): SectionDraft 
   return on ? resizeSessions(next, 1) : next;
 }
 
-/** Changing the format re-bases the heat size when it is still the default for the old format. */
+/** Changing the format re-bases the heat size and finalist count when they are still the default for the old format. */
 export function setFormat(section: SectionDraft, format: Format): SectionDraft {
-  const heat = section.maxTeamsPerHeat === String(lanesFor(section.format)) ? String(lanesFor(format)) : section.maxTeamsPerHeat;
-  return { ...section, format, maxTeamsPerHeat: heat };
+  const oldDefault = String(lanesFor(section.format));
+  const nextDefault = String(lanesFor(format));
+  const heat = section.maxTeamsPerHeat === oldDefault ? nextDefault : section.maxTeamsPerHeat;
+  const finalists = section.finalistCount === oldDefault ? nextDefault : section.finalistCount;
+  return { ...section, format, maxTeamsPerHeat: heat, finalistCount: finalists };
 }
 
 // ---- Reading what was typed ----
@@ -174,6 +187,7 @@ export function parseFinalistCount(input: string): number | null {
 export const wholeNumber = (input: string): number | null => (/^\d+$/.test(input.trim()) ? parseInt(input, 10) : null);
 export const minutesOf = (s: SectionDraft) => wholeNumber(s.minutesPerRace) ?? DEFAULT_MINUTES;
 export const heatSizeOf = (s: SectionDraft) => wholeNumber(s.maxTeamsPerHeat) ?? lanesFor(s.format);
+export const finalistCountOf = (s: SectionDraft) => parseFinalistCount(s.finalistCount) ?? heatSizeOf(s);
 
 // ---- Validation, one step at a time ----
 
@@ -201,7 +215,7 @@ export function validateStep(draft: CreatorDraft, step: StepId): Problems {
   } else if (step === 'structure') {
     draft.sections.forEach((s, i) => {
       const minutes = wholeNumber(s.minutesPerRace);
-      if (minutes === null || minutes < 1 || minutes > 180) found[`section.${i}.minutes`] = 'Minutes per race must be from 1 to 180.';
+      if (minutes === null || minutes < 1 || minutes > 180) found[`section.${i}.minutes`] = 'Minutes per heat must be from 1 to 180.';
       const heat = wholeNumber(s.maxTeamsPerHeat);
       if (heat === null || heat < 1 || heat > 20) found[`section.${i}.heat`] = 'Teams per heat must be from 1 to 20.';
       if (s.finalistCount.trim() && parseFinalistCount(s.finalistCount) === null) found[`section.${i}.finalists`] = 'Teams in the final must be from 1 to 50.';
@@ -246,6 +260,7 @@ function readSection(raw: unknown): SectionDraft {
   const format: Format = r.format === 1 || r.format === 3 ? r.format : 2;
   // Older drafts held a list of sessions with a race text each: keep how many there were, not what they held.
   const sessions = Array.isArray(r.sessions) && r.sessions.length > 0 ? r.sessions.slice(0, MAX_SESSIONS).map(readSession) : base.sessions;
+  const finalRaces = Array.isArray(r.finalRaces) && r.finalRaces.every((x) => typeof x === 'string') ? (r.finalRaces as string[]) : null;
   const newShape = typeof r.minutesPerRace === 'string';
   return {
     ...(typeof r.existingId === 'number' ? { existingId: r.existingId } : {}),
@@ -260,6 +275,10 @@ function readSection(raw: unknown): SectionDraft {
     maxTeamsPerHeat: newShape ? text(r.maxTeamsPerHeat, String(lanesFor(format))) : String(lanesFor(format)),
     arena: text(r.arena, MAIN_ARENA) || MAIN_ARENA,
     sessions,
+    finalRaces: finalRaces && finalRaces.length > 0 ? finalRaces : null,
+    ...(typeof r.finalSessionId === 'number' ? { finalSessionId: r.finalSessionId } : {}),
+    ...(r.finalHasHeats ? { finalHasHeats: true } : {}),
+    ...(r.finalScored ? { finalScored: true } : {}),
     ...(r.hasEntries ? { hasEntries: true } : {}),
   };
 }

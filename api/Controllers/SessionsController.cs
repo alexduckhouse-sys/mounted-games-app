@@ -8,6 +8,7 @@ using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Operations;
 
 namespace MountedGames.Api.Controllers;
 
@@ -18,12 +19,16 @@ public class SessionsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly ILiveBroadcaster _live;
     private readonly RaceFinalService _raceFinals;
+    private readonly ScoringService _scoring;
+    private readonly PushNotifier? _push;
 
-    public SessionsController(AppDbContext db, ILiveBroadcaster live, RaceFinalService raceFinals)
+    public SessionsController(AppDbContext db, ILiveBroadcaster live, RaceFinalService raceFinals, ScoringService? scoring = null, PushNotifier? push = null)
     {
         _db = db;
         _live = live;
         _raceFinals = raceFinals;
+        _scoring = scoring ?? new ScoringService(db);
+        _push = push;
     }
 
     private IQueryable<Session> SessionsWithDetail() => _db.Sessions
@@ -91,6 +96,7 @@ public class SessionsController : ControllerBase
         var s = await SessionsWithDetail()
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        var prevScheduled = s.ScheduledStart;
         if (req.Name is not null)
         {
             if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { message = "A session needs a name." });
@@ -114,6 +120,12 @@ public class SessionsController : ControllerBase
 
         var dto = s.ToDto();
         await _live.SessionUpdated(competitionId, dto);
+        if (prevScheduled.HasValue && s.ScheduledStart.HasValue)
+        {
+            var delayMin = (int)Math.Round((s.ScheduledStart.Value - prevScheduled.Value).TotalMinutes);
+            if (delayMin >= 5)
+                await NotifySessionDelayAsync(competitionId, s, delayMin);
+        }
         return dto;
     }
 
@@ -133,6 +145,12 @@ public class SessionsController : ControllerBase
 
         var dto = s.ToDto();
         await _live.SessionUpdated(competitionId, dto);
+        if (req.Status == SessionStatus.InArena && s.ScheduledStart.HasValue && s.StartedAt.HasValue)
+        {
+            var delayMin = (int)Math.Round((s.StartedAt.Value - s.ScheduledStart.Value).TotalMinutes);
+            if (delayMin >= 5)
+                await NotifySessionDelayAsync(competitionId, s, delayMin);
+        }
 
         var statusLabel = req.Status switch
         {
@@ -233,6 +251,9 @@ public class SessionsController : ControllerBase
         if (lanes <= 0) lanes = teamIds.Count;
         s.LanesPerHeat = lanes;
 
+        var existingHeatCount = req.ReplaceExisting ? 0 : s.Heats.Count;
+        var nextRoundSeed = req.ReplaceExisting ? 1 : (s.Heats.Select(h => h.RaceRoundId ?? 0).DefaultIfEmpty(0).Max() + 1);
+
         if (req.ReplaceExisting)
         {
             _db.Heats.RemoveRange(s.Heats);
@@ -240,18 +261,20 @@ public class SessionsController : ControllerBase
         }
 
         // For each race in the list: create 3 heats (Q1, Q2, Final). Q1 + Q2
-        // split the teams randomly; the Final stays empty until admin populates.
-        var rng = new Random();
-        var heatOrder = req.ReplaceExisting ? 1 : s.Heats.Count + 1;
-        var roundSeed = req.ReplaceExisting ? 1 : (s.Heats.Select(h => h.RaceRoundId ?? 0).DefaultIfEmpty(0).Max() + 1);
+        // split the teams using the fair seeded draw; the Final stays empty until qualifiers complete.
+        var (teamsWithClub, opponentCounts, laneCounts, smallHeatCounts) =
+            await LoadDrawStateAsync(competitionId, s.CompetitionSectionId, s.Id, teamIds);
+        var heatOrder = existingHeatCount + 1;
+        var roundSeed = nextRoundSeed;
 
         foreach (var raceName in raceNames)
         {
-            var shuffled = teamIds.OrderBy(_ => rng.Next()).ToList();
-            var midpoint = (shuffled.Count + 1) / 2;
-            var q1Teams = shuffled.Take(midpoint).ToList();
-            var q2Teams = shuffled.Skip(midpoint).ToList();
             var roundId = roundSeed++;
+            var groups = CompetitionDrawService.DrawGroups(
+                teamsWithClub, 2, competitionId * 397 ^ s.Id, s.Id * 100 + roundId,
+                opponentCounts, laneCounts, smallHeatCounts);
+            var q1Teams = groups[0];
+            var q2Teams = groups.Count > 1 ? groups[1] : new List<int>();
 
             await CreateRoundHeatAsync(s.Id, raceName, $"{raceName} · Q1", heatOrder++, RaceRoundStage.Qualifier, roundId, q1Teams);
             await CreateRoundHeatAsync(s.Id, raceName, $"{raceName} · Q2", heatOrder++, RaceRoundStage.Qualifier, roundId, q2Teams);
@@ -413,6 +436,8 @@ public class SessionsController : ControllerBase
         var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == s.Id);
         var dto = reloaded.ToDto();
         await _live.SessionUpdated(competitionId, dto);
+        if (changed.Count > 0)
+            await NotifyRedrawAsync(competitionId, reloaded, changed.Select(c => c.Heat.Id).ToHashSet());
         return dto;
     }
 
@@ -478,7 +503,7 @@ public class SessionsController : ControllerBase
 
         var maxHeatSize = req.LanesPerHeat ?? s.LanesPerHeat ?? teamIds.Count;
         if (maxHeatSize <= 0) maxHeatSize = teamIds.Count;
-        var groups = SplitIntoBalancedGroups(teamIds, maxHeatSize);
+        var existingCount = req.ReplaceExisting ? 0 : s.Heats.Count;
 
         if (req.ReplaceExisting)
         {
@@ -486,9 +511,15 @@ public class SessionsController : ControllerBase
             await _db.SaveChangesAsync();
         }
 
+        var (teamsWithClub, opponentCounts, laneCounts, smallHeatCounts) =
+            await LoadDrawStateAsync(competitionId, s.CompetitionSectionId, s.Id, teamIds);
+        var groupCount = Math.Max(1, (int)Math.Ceiling(teamIds.Count / (double)maxHeatSize));
+        var groups = CompetitionDrawService.DrawGroups(
+            teamsWithClub, groupCount, competitionId * 397 ^ s.Id, s.Id,
+            opponentCounts, laneCounts, smallHeatCounts);
+
         s.LanesPerHeat = maxHeatSize;
 
-        var existingCount = req.ReplaceExisting ? 0 : s.Heats.Count;
         var heatOrder = existingCount + 1;
         for (var gi = 0; gi < groups.Count; gi++)
         {
@@ -523,19 +554,90 @@ public class SessionsController : ControllerBase
         var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == s.Id);
         var dto = reloaded.ToDto();
         await _live.SessionUpdated(competitionId, dto);
+        if (req.ReplaceExisting)
+            await NotifyRedrawAsync(competitionId, reloaded, null);
         return dto;
     }
 
-    private static List<List<int>> SplitIntoBalancedGroups(IReadOnlyList<int> teamIds, int maxPerGroup)
+    private async Task NotifySessionDelayAsync(int competitionId, Session s, int delayMinutes)
     {
-        var rng = new Random();
-        var shuffled = teamIds.OrderBy(_ => rng.Next()).ToList();
-        var groupCount = (int)Math.Ceiling(shuffled.Count / (double)maxPerGroup);
-        if (groupCount < 1) groupCount = 1;
-        var groups = Enumerable.Range(0, groupCount).Select(_ => new List<int>()).ToList();
-        for (var i = 0; i < shuffled.Count; i++)
-            groups[i % groupCount].Add(shuffled[i]);
-        return groups;
+        if (_push is null) return;
+        try
+        {
+            var teamIds = s.Heats.SelectMany(h => h.Entries).Select(e => e.TeamId).Distinct().ToList();
+            if (teamIds.Count == 0 && s.CompetitionSectionId.HasValue)
+            {
+                teamIds = await _db.Teams.AsNoTracking()
+                    .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == s.CompetitionSectionId.Value)
+                    .Select(t => t.Id)
+                    .ToListAsync(HttpContext.RequestAborted);
+            }
+            if (teamIds.Count == 0) return;
+            await _push.NotifyTeamsAsync(teamIds, new PushPayload(
+                Title: "Timetable delay / Redraw alert",
+                Body: $"{s.Name} is now +{delayMinutes} min.",
+                Tag: $"session-delay:{s.Id}",
+                Url: $"/competitions/{competitionId}"), HttpContext.RequestAborted);
+        }
+        catch
+        {
+            // Never fail session update if push notification delivery fails.
+        }
+    }
+
+    private async Task NotifyRedrawAsync(int competitionId, Session s, HashSet<int>? changedHeatIds)
+    {
+        if (_push is null) return;
+        try
+        {
+            var messages = new List<(int TeamId, PushPayload Payload)>();
+            foreach (var heat in s.Heats.OrderBy(h => h.OrderIndex))
+            {
+                if (changedHeatIds is not null && !changedHeatIds.Contains(heat.Id)) continue;
+                var heatLabel = !string.IsNullOrWhiteSpace(heat.Label) ? heat.Label! : $"Heat {heat.OrderIndex}";
+                foreach (var entry in heat.Entries.OrderBy(e => e.LaneIndex))
+                {
+                    var teamName = entry.Team?.DisplayName ?? $"Team {entry.TeamId}";
+                    messages.Add((entry.TeamId, new PushPayload(
+                        Title: "Timetable delay / Redraw alert",
+                        Body: $"Heats redrawn for {s.Name} — {teamName} is in {heatLabel}, Lane {entry.LaneIndex}.",
+                        Tag: $"session-redraw:{s.Id}:{heat.Id}:{entry.TeamId}",
+                        Url: $"/competitions/{competitionId}")));
+                }
+            }
+            if (messages.Count > 0)
+                await _push.NotifyPerTeamAsync(messages, HttpContext.RequestAborted);
+        }
+        catch
+        {
+            // Never fail heat assignment update if push notification delivery fails.
+        }
+    }
+
+    private async Task<(
+        List<(int TeamId, int ClubId)> Teams,
+        Dictionary<(int Low, int High), int> OpponentCounts,
+        Dictionary<int, Dictionary<int, int>> LaneCounts,
+        Dictionary<int, int> SmallHeatCounts)> LoadDrawStateAsync(
+        int competitionId, int? sectionId, int currentSessionId, IReadOnlyList<int> teamIds)
+    {
+        var clubMap = await _db.Teams.AsNoTracking()
+            .Where(t => t.CompetitionId == competitionId && teamIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.ClubId);
+        var teams = teamIds.Select(tid => (tid, clubMap.GetValueOrDefault(tid))).ToList();
+        var opponentCounts = new Dictionary<(int Low, int High), int>();
+        var laneCounts = new Dictionary<int, Dictionary<int, int>>();
+        var smallHeatCounts = new Dictionary<int, int>();
+
+        var existingHeats = await _db.Heats.AsNoTracking()
+            .Include(h => h.Entries)
+            .Include(h => h.Session)
+            .Where(h => h.Session!.CompetitionId == competitionId
+                && (sectionId.HasValue ? h.Session.CompetitionSectionId == sectionId.Value : h.SessionId == currentSessionId))
+            .OrderBy(h => h.Session!.OrderIndex).ThenBy(h => h.OrderIndex)
+            .ToListAsync();
+        CompetitionDrawService.RecordExistingHeats(existingHeats, opponentCounts, laneCounts, smallHeatCounts);
+        return (teams, opponentCounts, laneCounts, smallHeatCounts);
     }
 
     private async Task<List<int>> OutTeamIdsAsync(int competitionId, IEnumerable<int> teamIds)
@@ -569,4 +671,338 @@ public class SessionsController : ControllerBase
         var ids = teamIds.Distinct().ToList();
         return ids.Count == 0 || await _db.Teams.CountAsync(t => t.CompetitionId == competitionId && ids.Contains(t.Id)) == ids.Count;
     }
+
+    /// <summary>Mid-session rename or replacement of a race across all heats of the session.</summary>
+    [HttpPut("{id:int}/races/{raceId:int}")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> ChangeRace(
+        int competitionId, int id, int raceId, ChangeSessionRaceRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.NewName))
+            return BadRequest(new { message = "A race name is required." });
+        var s = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+        var targetHeat = s.Heats.FirstOrDefault(h => h.Races.Any(r => r.Id == raceId));
+        var targetRace = targetHeat?.Races.FirstOrDefault(r => r.Id == raceId);
+        if (targetRace is null || targetHeat is null) return NotFound();
+
+        var newName = req.NewName.Trim();
+        var oldName = targetRace.Name;
+        var targetOrder = targetRace.OrderIndex;
+
+        if (req.ApplyToAllHeats)
+        {
+            foreach (var heat in s.Heats)
+            {
+                if (targetHeat.RaceRoundId.HasValue && heat.RaceRoundId == targetHeat.RaceRoundId)
+                {
+                    foreach (var r in heat.Races) r.Name = newName;
+                    if (!string.IsNullOrWhiteSpace(heat.Label) && heat.Label.StartsWith(oldName + " ·", StringComparison.OrdinalIgnoreCase))
+                        heat.Label = newName + heat.Label[oldName.Length..];
+                }
+                else if (!targetHeat.RaceRoundId.HasValue)
+                {
+                    foreach (var r in heat.Races.Where(r => r.OrderIndex == targetOrder))
+                        r.Name = newName;
+                }
+            }
+            var planned = PlannedRaceList.Read(s.PlannedRaces)?.ToList();
+            if (planned is not null && targetOrder >= 1 && targetOrder <= planned.Count)
+            {
+                planned[targetOrder - 1] = newName;
+                s.PlannedRaces = PlannedRaceList.Write(planned);
+            }
+        }
+        else
+        {
+            targetRace.Name = newName;
+        }
+
+        await _db.SaveChangesAsync();
+        var dto = s.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    /// <summary>Mid-session cancellation/removal of a race across all heats of the session.</summary>
+    [HttpDelete("{id:int}/races/{raceId:int}")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> CancelRace(int competitionId, int id, int raceId)
+    {
+        var s = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+        var targetHeat = s.Heats.FirstOrDefault(h => h.Races.Any(r => r.Id == raceId));
+        var targetRace = targetHeat?.Races.FirstOrDefault(r => r.Id == raceId);
+        if (targetRace is null || targetHeat is null) return NotFound();
+
+        var targetOrder = targetRace.OrderIndex;
+        foreach (var heat in s.Heats.ToList())
+        {
+            var toRemove = targetHeat.RaceRoundId.HasValue && heat.RaceRoundId == targetHeat.RaceRoundId
+                ? heat.Races.ToList()
+                : heat.Races.Where(r => r.OrderIndex == targetOrder).ToList();
+            foreach (var r in toRemove)
+            {
+                _db.Results.RemoveRange(r.Results);
+                _db.Races.Remove(r);
+                heat.Races.Remove(r);
+            }
+            var order = 1;
+            foreach (var remaining in heat.Races.OrderBy(r => r.OrderIndex))
+                remaining.OrderIndex = order++;
+        }
+
+        await _db.SaveChangesAsync();
+        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+        var dto = reloaded.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    /// <summary>Clears recorded results and clock for a stopped race so it can be re-run cleanly.</summary>
+    [HttpDelete("{id:int}/races/{raceId:int}/results")]
+    [HttpDelete("/api/sessions/races/{raceId:int}/results")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
+    public async Task<ActionResult<RaceScoreDto>> ClearRaceResults(int raceId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var actor = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var score = await _scoring.ClearRaceForRerunAsync(raceId, actor, "Cleared for re-run.", cancellationToken);
+            var race = await _db.Races.AsNoTracking()
+                .Include(r => r.Heat).ThenInclude(h => h!.Session)
+                .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken);
+            if (race?.Heat?.Session is { } session)
+            {
+                var sessionDto = await SessionsWithDetail().FirstAsync(s => s.Id == session.Id, cancellationToken);
+                await _live.SessionUpdated(session.CompetitionId, sessionDto.ToDto());
+            }
+            return score;
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+    }
+
+    /// <summary>Flags or unflags a team's result in a race as Under Review ([under-review] in RefereeNote).</summary>
+    [HttpPut("{id:int}/races/{raceId:int}/results/{teamId:int}/under-review")]
+    [HttpPut("/api/sessions/races/{raceId:int}/results/{teamId:int}/under-review")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
+    public async Task<ActionResult<RaceScoreDto>> SetUnderReview(
+        int raceId, int teamId, SetUnderReviewRequest req, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var actor = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            return await _scoring.SetUnderReviewAsync(raceId, teamId, req.UnderReview, req.Note, actor, cancellationToken);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+        catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    /// <summary>Combines another small section or session's teams into this session's arena heat with a scoring mode (BySection or Combined).</summary>
+    [HttpPost("{id:int}/combine-heat")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> CombineHeat(
+        int competitionId, int id, CombineHeatRequest req)
+    {
+        var s = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+
+        Session? sourceSession = null;
+        if (req.SourceSessionId.HasValue && req.SourceSessionId.Value != id)
+        {
+            sourceSession = await SessionsWithDetail()
+                .FirstOrDefaultAsync(x => x.Id == req.SourceSessionId.Value && x.CompetitionId == competitionId);
+            if (sourceSession is null) return NotFound();
+        }
+
+        var teamIdsToMerge = new List<int>();
+        if (req.TeamIds is { Count: > 0 })
+        {
+            if (!await TeamsBelongAsync(competitionId, req.TeamIds))
+                return BadRequest(new { message = "Some of those teams aren't in this competition." });
+            teamIdsToMerge.AddRange(req.TeamIds);
+        }
+        if (sourceSession is not null)
+        {
+            var fromHeats = sourceSession.Heats.SelectMany(h => h.Entries).OrderBy(e => e.LaneIndex).Select(e => e.TeamId).ToList();
+            if (fromHeats.Count > 0)
+            {
+                teamIdsToMerge.AddRange(fromHeats);
+            }
+            else if (sourceSession.CompetitionSectionId.HasValue)
+            {
+                var secTeams = await _db.Teams
+                    .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == sourceSession.CompetitionSectionId.Value && t.EntryStatus == TeamEntryStatus.Active)
+                    .Select(t => t.Id)
+                    .ToListAsync();
+                teamIdsToMerge.AddRange(secTeams);
+            }
+        }
+        teamIdsToMerge = await WithoutOutTeamsAsync(competitionId, teamIdsToMerge.Distinct().ToList());
+
+        var targetHeat = s.Heats.OrderBy(h => h.OrderIndex)
+            .FirstOrDefault(h => !req.TargetHeatId.HasValue || h.Id == req.TargetHeatId.Value);
+        if (targetHeat is null)
+        {
+            targetHeat = new Heat
+            {
+                SessionId = s.Id,
+                Label = "Combined Heat 1",
+                OrderIndex = 1,
+            };
+            _db.Heats.Add(targetHeat);
+            await _db.SaveChangesAsync();
+            var planned = PlannedRaceList.Read(s.PlannedRaces) ?? ["Bending", "Flag", "Mug"];
+            var rOrder = 1;
+            foreach (var rName in planned)
+                _db.Races.Add(new Race { HeatId = targetHeat.Id, Name = rName, OrderIndex = rOrder++ });
+            await _db.SaveChangesAsync();
+        }
+
+        var existingTeamIds = targetHeat.Entries.Select(e => e.TeamId).ToHashSet();
+        var nextLane = targetHeat.Entries.Count == 0 ? 1 : targetHeat.Entries.Max(e => e.LaneIndex) + 1;
+        foreach (var tid in teamIdsToMerge.Where(t => !existingTeamIds.Contains(t)))
+        {
+            _db.HeatEntries.Add(new HeatEntry { HeatId = targetHeat.Id, TeamId = tid, LaneIndex = nextLane++ });
+            existingTeamIds.Add(tid);
+        }
+
+        var mode = ParseScoringMode(req.ScoringMode);
+        s.Notes = ScoringService.ApplyScoringModeTag(s.Notes, mode);
+        s.LanesPerHeat = Math.Max(s.LanesPerHeat ?? 0, existingTeamIds.Count);
+        if (sourceSession is not null && !s.Name.Contains('+'))
+            s.Name = $"{s.Name} + {sourceSession.Name}";
+        if (sourceSession is not null && req.RemoveSourceSession && !HasScores(sourceSession))
+            _db.Sessions.Remove(sourceSession);
+
+        await _db.SaveChangesAsync();
+        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == s.Id);
+        var dto = reloaded.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    [HttpPut("{id:int}/combined-scoring")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> SetCombinedScoring(
+        int competitionId, int id, SetCombinedScoringRequest req)
+    {
+        var s = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+        var mode = ParseScoringMode(req.ScoringMode);
+        s.Notes = ScoringService.ApplyScoringModeTag(s.Notes, mode);
+        await _db.SaveChangesAsync();
+        var dto = s.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    /// <summary>Places the competition (or arena) on hold, shifting remaining unstarted sessions to a custom resume time or by delay minutes.</summary>
+    [HttpPost("hold")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<IEnumerable<SessionDto>>> HoldCompetition(
+        int competitionId, HoldCompetitionRequest req)
+    {
+        var comp = await _db.Competitions.FirstOrDefaultAsync(c => c.Id == competitionId);
+        if (comp is null) return NotFound();
+
+        var sessions = await SessionsWithDetail()
+            .Where(s => s.CompetitionId == competitionId)
+            .OrderBy(s => s.ScheduledStart ?? DateTime.MaxValue)
+            .ThenBy(s => s.OrderIndex)
+            .ToListAsync();
+
+        var unstarted = sessions
+            .Where(s => s.Status == SessionStatus.Upcoming && s.StartedAt is null
+                && (string.IsNullOrWhiteSpace(req.ArenaName) || string.Equals(s.ArenaName?.Trim(), req.ArenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        TimeSpan shift = TimeSpan.Zero;
+        string? resumeDisplay = req.ResumeTime?.Trim();
+        if (!string.IsNullOrWhiteSpace(resumeDisplay))
+        {
+            var baseDate = unstarted.FirstOrDefault(s => s.ScheduledStart.HasValue)?.ScheduledStart?.Date ?? comp.StartDate.Date;
+            if (TimeSpan.TryParse(resumeDisplay, out var timeOfDay))
+            {
+                var targetStart = DateTime.SpecifyKind(baseDate.Add(timeOfDay), DateTimeKind.Utc);
+                var firstScheduled = unstarted.FirstOrDefault(s => s.ScheduledStart.HasValue)?.ScheduledStart;
+                if (firstScheduled.HasValue)
+                    shift = targetStart - firstScheduled.Value;
+                else if (unstarted.Count > 0)
+                    unstarted[0].ScheduledStart = targetStart;
+            }
+            else if (DateTime.TryParse(resumeDisplay, out var parsedDt))
+            {
+                var firstScheduled = unstarted.FirstOrDefault(s => s.ScheduledStart.HasValue)?.ScheduledStart;
+                if (firstScheduled.HasValue)
+                    shift = parsedDt.ToUniversalTime() - firstScheduled.Value;
+                resumeDisplay = parsedDt.ToString("HH:mm");
+            }
+        }
+        else if (req.DelayMinutes.HasValue)
+        {
+            shift = TimeSpan.FromMinutes(req.DelayMinutes.Value);
+        }
+
+        if (shift != TimeSpan.Zero)
+        {
+            foreach (var us in unstarted)
+            {
+                if (us.ScheduledStart.HasValue)
+                    us.ScheduledStart = us.ScheduledStart.Value.Add(shift);
+                foreach (var h in us.Heats.Where(h => h.ScheduledStart.HasValue))
+                    h.ScheduledStart = h.ScheduledStart!.Value.Add(shift);
+            }
+        }
+
+        if (req.PostAnnouncement)
+        {
+            var body = !string.IsNullOrWhiteSpace(resumeDisplay)
+                ? $"Competition on hold — we will continue at {resumeDisplay}"
+                : $"Competition on hold — delayed by {req.DelayMinutes ?? 0} minutes";
+            var msg = new ChatMessage
+            {
+                CompetitionId = competitionId,
+                AuthorName = "Organiser",
+                Body = body,
+                Type = ChatMessageType.Announcement,
+                Tag = "hold",
+            };
+            _db.ChatMessages.Add(msg);
+            await _db.SaveChangesAsync();
+            var msgDto = msg.ToDto();
+            await _live.Announcement(competitionId, msgDto);
+            await _live.ChatMessage(competitionId, msgDto);
+        }
+        else
+        {
+            await _db.SaveChangesAsync();
+        }
+
+        return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+    }
+
+    private static CombinedHeatScoringMode ParseScoringMode(string? raw)
+        => string.Equals(raw?.Trim(), "Combined", StringComparison.OrdinalIgnoreCase) || raw?.Trim() == "1"
+            ? CombinedHeatScoringMode.Combined
+            : CombinedHeatScoringMode.BySection;
 }
+
+public record ChangeSessionRaceRequest(string NewName, bool ApplyToAllHeats = true);
+public record SetUnderReviewRequest(bool UnderReview, string? Note = null);
+public record CombineHeatRequest(int? SourceSessionId = null, IReadOnlyList<int>? TeamIds = null, string? ScoringMode = "BySection", int? TargetHeatId = null, bool RemoveSourceSession = false);
+public record SetCombinedScoringRequest(string ScoringMode);
+public record HoldCompetitionRequest(string? ResumeTime = null, int? DelayMinutes = null, string? ArenaName = null, bool PostAnnouncement = true);

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   user: { id: 'u1', fullName: 'Alex Morgan', email: 'alex@example.com', clubId: 1, clubName: 'Stockport PC', roles: ['Trainer'] } as { id: string; fullName: string; email: string; clubId: number | null; clubName: string; roles: Role[] } | null,
   get: vi.fn(),
   post: vi.fn(),
+  put: vi.fn(),
   del: vi.fn(),
   download: vi.fn(),
 }));
@@ -24,7 +25,7 @@ vi.mock('../../auth/AuthContext', () => ({
     canOrganise: () => false,
   }),
 }));
-vi.mock('../../api', () => ({ api: { get: state.get, post: state.post, delete: state.del } }));
+vi.mock('../../api', () => ({ api: { get: state.get, post: state.post, put: state.put, delete: state.del } }));
 vi.mock('../../lib/csv', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/csv')>()), downloadCsv: state.download }));
 
 const saved: SavedRider[] = [
@@ -136,14 +137,14 @@ describe('DeclarationsTab: the dec form', () => {
     mount();
     await opened();
     await user.click(within(slotButtons()[0]).getByRole('button'));
-    await user.click(screen.getByRole('button', { name: 'Ella Hughes' }));
+    await user.click(screen.getByRole('button', { name: 'Ella Hughes — Pickle' }));
     expect(screen.getByLabelText('Rider')).toHaveValue('Ella Hughes');
     expect(screen.getByLabelText('Date of birth')).toHaveValue('05/04/2015');
     expect(screen.getByLabelText('Pony')).toHaveValue('Pickle');
     expect(screen.getByLabelText('Height (hh)')).toHaveValue('13.2');
     await user.click(screen.getByRole('button', { name: 'Add rider' }));
-    expect(screen.queryByRole('button', { name: 'Ella Hughes' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Oliver Smith' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ella Hughes — Pickle' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Oliver Smith — Bramble' })).toBeInTheDocument();
   });
 
   it('asks the reserve only for a name and date of birth, and copies no pony across', async () => {
@@ -154,7 +155,7 @@ describe('DeclarationsTab: the dec form', () => {
     const panel = screen.getByRole('region', { name: 'Add a non-riding reserve' });
     expect(within(panel).queryByLabelText('Pony')).not.toBeInTheDocument();
     expect(within(panel).queryByLabelText('Height (hh)')).not.toBeInTheDocument();
-    await user.click(within(panel).getByRole('button', { name: 'Ella Hughes' }));
+    await user.click(within(panel).getByRole('button', { name: 'Ella Hughes — Pickle' }));
     expect(within(panel).getByRole('button', { name: 'Add reserve' })).toBeEnabled();
     await user.click(within(panel).getByRole('button', { name: 'Add reserve' }));
     expect(within(slotButtons()[5]).getByText('Reserve')).toBeInTheDocument();
@@ -167,7 +168,7 @@ describe('DeclarationsTab: the dec form', () => {
     mount();
     await opened();
     await user.click(within(slotButtons()[0]).getByRole('button'));
-    await user.click(screen.getByRole('button', { name: 'Ella Hughes' }));
+    await user.click(screen.getByRole('button', { name: 'Ella Hughes — Pickle' }));
     await user.click(screen.getByRole('button', { name: 'Add rider' }));
     await user.click(within(slotButtons()[0]).getAllByRole('button')[0]);
     const panel = screen.getByRole('region', { name: 'Edit rider' });
@@ -193,7 +194,7 @@ describe('DeclarationsTab: the dec form', () => {
 
   async function fillTeam(user: ReturnType<typeof userEvent.setup>) {
     await user.click(within(slotButtons()[0]).getByRole('button'));
-    for (const name of ['Ella Hughes', 'Oliver Smith', 'Maisie Clarke', 'Harry Wood']) {
+    for (const name of ['Ella Hughes — Pickle', 'Oliver Smith — Bramble', 'Maisie Clarke — Toffee', 'Harry Wood — Jasper']) {
       await user.click(screen.getByRole('button', { name }));
       await user.click(screen.getByRole('button', { name: 'Add rider' }));
     }
@@ -336,10 +337,89 @@ describe('DeclarationsTab: the dec form', () => {
     expect(riders[2].useInitialOnly).toBe(true);
   });
 
-  it('needs only two riders for a pair and one for an individual', async () => {
+  it('needs only two riders for a pair and one for an individual, with no reserve slot', async () => {
     mount({ teams: [team(8, { competitionId: 4, competitionSectionId: 6, clubId: 1, displayName: 'Pair A', trainerUserId: 'u1' })] });
     expect(await screen.findByText('0 of 2 riders added')).toBeInTheDocument();
-    expect(slotButtons()).toHaveLength(3);
+    expect(slotButtons()).toHaveLength(2);
+  });
+
+  it('allows a four-rider team to submit without a fifth rider', async () => {
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    await user.click(within(slotButtons()[0]).getByRole('button'));
+    for (const name of ['Ella Hughes — Pickle', 'Oliver Smith — Bramble', 'Maisie Clarke — Toffee', 'Harry Wood — Jasper']) {
+      await user.click(screen.getByRole('button', { name }));
+      await user.click(screen.getByRole('button', { name: 'Add rider' }));
+    }
+    await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
+    const submit = screen.getByRole('button', { name: 'Submit dec form' });
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    await waitFor(() => expect(state.post).toHaveBeenCalledTimes(1));
+    expect(state.post.mock.calls[0][1].riders).toHaveLength(4);
+  });
+
+  it('displays multiple saved (Rider — Horse) combinations for the same rider and selects the chosen horse', async () => {
+    const user = userEvent.setup();
+    savedRiders = [
+      { id: 1, clubId: 1, fullName: 'Ella Hughes', dateOfBirth: '2015-04-05T00:00:00', horseName: 'Pickle', ponyHeightHands: 13.2 },
+      { id: 7, clubId: 1, fullName: 'Ella Hughes', dateOfBirth: '2015-04-05T00:00:00', horseName: 'Flash', ponyHeightHands: 14.0 },
+    ];
+    mount();
+    await opened();
+    await user.click(within(slotButtons()[0]).getByRole('button'));
+    expect(screen.getByRole('button', { name: 'Ella Hughes — Pickle' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ella Hughes — Flash' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ella Hughes — Flash' }));
+    expect(screen.getByLabelText('Rider')).toHaveValue('Ella Hughes');
+    expect(screen.getByLabelText('Pony')).toHaveValue('Flash');
+    expect(screen.getByLabelText('Height (hh)')).toHaveValue('14.0');
+  });
+
+  it('lets organisers set and clear the deadline, and reports failed saves', async () => {
+    state.user!.roles = ['Admin'];
+    const user = userEvent.setup();
+    const lockUrl = '/declaration-forms/competition/4/lock-time';
+    state.put.mockResolvedValueOnce({ data: { competitionId: 4, declarationsCloseAt: '2040-01-02T12:00:00Z', isClosed: false } });
+    mount();
+    await opened();
+    fireEvent.change(screen.getByLabelText('Declaration deadline'), { target: { value: '2040-01-02T12:00' } });
+    await user.click(screen.getByRole('button', { name: 'Set lock time' }));
+    expect(state.put).toHaveBeenCalledWith(lockUrl, { declarationsCloseAt: new Date('2040-01-02T12:00').toISOString() });
+    state.put.mockRejectedValueOnce(new Error('offline'));
+    await user.click(await screen.findByRole('button', { name: 'Clear lock time' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The deadline could not be saved');
+    state.put.mockResolvedValueOnce({ data: { competitionId: 4, declarationsCloseAt: null, isClosed: false } });
+    await user.click(screen.getByRole('button', { name: 'Clear lock time' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Clear lock time' })).not.toBeInTheDocument());
+    expect(state.put).toHaveBeenLastCalledWith(lockUrl, { declarationsCloseAt: null });
+  });
+
+  it('shows the declaration deadline banner and blocks non-organiser edits after the lock time passes', async () => {
+    state.get.mockImplementation(async (url: string) => {
+      if (url === '/declaration-forms') return { data: forms };
+      if (url === '/clubs/1/saved-riders') return { data: savedRiders };
+      if (url === '/declaration-forms/competition/4/lock-time') {
+        return { data: { competitionId: 4, declarationsCloseAt: '2020-01-01T10:00:00Z', isClosed: true } };
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+    mount();
+    expect(await screen.findByText(/Declarations are locked for this competition/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Team name')).not.toBeInTheDocument();
+  });
+
+  it('lets a self-entered Rider open and submit a dec form for their linked team', async () => {
+    state.user = { id: 'u-rider', fullName: 'Sam Rider', email: 'sam@example.com', clubId: null, clubName: '', roles: ['Rider'] };
+    state.get.mockImplementation(async (url: string) => {
+      if (url === '/declaration-forms') return { data: forms };
+      if (url === '/me/signups') return { data: [{ id: 101, competitionId: 4, competitionSectionId: 6, teamId: 8, fullName: 'Sam Rider', status: 1, declarationAccessGranted: true }] };
+      if (url === '/clubs/1/saved-riders') return { data: [] };
+      throw new Error(`unexpected ${url}`);
+    });
+    mount({ teams: [team(8, { competitionId: 4, competitionSectionId: 6, clubId: 1, displayName: 'Sam Rider & Pat Lee', trainerUserId: null })] });
+    expect(await screen.findByRole('heading', { name: 'Sam Rider & Pat Lee' })).toBeInTheDocument();
   });
 
   it('lets the trainer pick between teams, and takes ?team= from the profile link', async () => {
@@ -404,7 +484,7 @@ describe('DeclarationsTab: drafts', () => {
     const first = mount();
     await user.type(await screen.findByLabelText('Bibs'), 'Green stripes');
     await user.click(within(slotButtons()[0]).getByRole('button'));
-    await user.click(screen.getByRole('button', { name: 'Ella Hughes' }));
+    await user.click(screen.getByRole('button', { name: 'Ella Hughes — Pickle' }));
     await user.click(screen.getByRole('button', { name: 'Add rider' }));
     expect(JSON.parse(localStorage.getItem(decDraftKey(4, 7))!)).toMatchObject({ teamId: 7, bibs: 'Green stripes' });
     first.unmount();
@@ -421,7 +501,7 @@ describe('DeclarationsTab: drafts', () => {
     await user.type(await screen.findByLabelText('Bibs'), 'Green');
     expect(localStorage.getItem(decDraftKey(4, 7))).not.toBeNull();
     await user.click(within(slotButtons()[0]).getByRole('button'));
-    for (const name of ['Ella Hughes', 'Oliver Smith', 'Maisie Clarke', 'Harry Wood', 'Ruby Ash']) {
+    for (const name of ['Ella Hughes — Pickle', 'Oliver Smith — Bramble', 'Maisie Clarke — Toffee', 'Harry Wood — Jasper', 'Ruby Ash — Domino']) {
       await user.click(screen.getByRole('button', { name }));
       await user.click(screen.getByRole('button', { name: 'Add rider' }));
     }
@@ -483,17 +563,22 @@ describe('DeclarationsTab: around the form', () => {
     expect(await screen.findByText('No declaration forms submitted yet.')).toBeInTheDocument();
   });
 
-  it('removes a form from the list when it is deleted', async () => {
+  it('removes a form from the list when it is deleted by an authorised user, and hides delete for other clubs', async () => {
     const user = userEvent.setup();
-    forms = [{ id: 9, teamId: 70, teamName: 'Other Club A', competitionId: 4, competitionName: 'x', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] }];
+    forms = [
+      { id: 9, teamId: 7, teamName: 'Stockport C', competitionId: 4, competitionName: 'x', submittedByUserId: 'u1', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] },
+      { id: 10, teamId: 70, teamName: 'Other Club A', competitionId: 4, competitionName: 'x', submittedByUserId: 'u-other', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] },
+    ];
     mount();
+    expect(await screen.findByRole('heading', { name: 'Other Club A' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete the dec form for Other Club A' })).not.toBeInTheDocument();
     const asked = autoConfirm([false, true]);
-    await user.click(await screen.findByRole('button', { name: 'Delete the dec form for Other Club A' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('Delete the dec form for Other Club A? This can’t be undone.'));
+    await user.click(await screen.findByRole('button', { name: 'Delete the dec form for Stockport C' }));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Delete the dec form for Stockport C? This can’t be undone.'));
     expect(state.del).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Delete the dec form for Other Club A' }));
+    await user.click(screen.getByRole('button', { name: 'Delete the dec form for Stockport C' }));
     await waitFor(() => expect(state.del).toHaveBeenCalledWith('/declaration-forms/9'));
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Other Club A' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete the dec form for Stockport C' })).not.toBeInTheDocument());
   });
 
   it('exports the forms as a CSV with height and trainer columns', async () => {
@@ -542,4 +627,13 @@ describe('DeclarationsTab: around the form', () => {
     expect(screen.queryByText('Pick a saved rider')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Rider')).toBeInTheDocument();
   });
+});
+
+it.each([true, false])('only opens a secondary signup team when the trusted grant is %s', async (granted) => {
+  state.user = { ...state.user!, id: 'synthetic-member', clubId: null, roles: ['Member'] };
+  state.get.mockImplementation(async (url: string) => ({ data: url === '/me/signups' ? [{ id: 101, competitionId: 4, competitionSectionId: 5, teamId: 7, linkedTeams: [{ id: 7, name: 'Synthetic A' }, { id: 8, name: 'Synthetic B' }], status: 1, declarationAccessGranted: granted }] : [] }));
+  mount({ teams: [team(7, { competitionId: 4, competitionSectionId: 5, trainerUserId: null }), team(8, { competitionId: 4, competitionSectionId: 5, displayName: 'Synthetic B', trainerUserId: null })] }, '/competitions/4/declarations?team=8');
+  await waitFor(() => expect(state.get).toHaveBeenCalledWith('/me/signups'));
+  if (granted) expect(await screen.findByRole('heading', { name: 'Synthetic B' })).toBeInTheDocument();
+  else expect(screen.queryByLabelText('Team name')).not.toBeInTheDocument();
 });

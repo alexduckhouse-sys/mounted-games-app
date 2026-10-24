@@ -34,7 +34,9 @@ public record StatsProfileDto(
     IReadOnlyList<StatsGameDto>? Games,
     IReadOnlyList<string>? BestGames, IReadOnlyList<string>? WorstGames,
     IReadOnlyList<StatsEntryDto>? Entries,
-    IReadOnlyList<StatsPartnershipDto>? Partnerships);
+    IReadOnlyList<StatsPartnershipDto>? Partnerships,
+    IReadOnlyList<StatsClubDto>? Clubs = null,
+    IReadOnlyList<StatsSeasonStandingDto>? Seasons = null);
 
 /// <param name="Entries">Age-group entries (one team in one section) in finished competitions.</param>
 /// <param name="PlacedEntries">Entries with a final place: hors concours teams are left out, as in the standings.</param>
@@ -46,7 +48,11 @@ public record StatsSummaryDto(
     int Firsts, int Seconds, int Thirds, double? AveragePlace,
     int EntriesWithFinals, int FinalsReached, int AFinals, double? AFinalPercent,
     int Races, int Wins, double? WinPercent,
-    double Points, double MaxPoints, double? PointQuotaPercent);
+    double Points, double MaxPoints, double? PointQuotaPercent,
+    int BFinals = 0, int CFinals = 0);
+
+public record StatsClubDto(string ClubName, int Entries, int Competitions, string? FirstDate, string? LastDate);
+public record StatsSeasonStandingDto(Guid SeasonId, string SeasonName, int Year, int? Rank, long Points, int EventsEntered, Guid TeamProfileId, string TeamName);
 
 /// <summary>One game (race name) across every counted race. <c>NonFinishes</c> covers E, DNS, DNF and R.</summary>
 public record StatsGameDto(

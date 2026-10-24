@@ -17,7 +17,7 @@ public record PickerLiveHeat(string? SectionName, string HeatLabel, string? Aren
 public record CompetitionPickerItem(
     int Id, string Name, DateTime StartDate, DateTime? EndDate, string Icon,
     string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false, bool EntriesOpen = false);
-public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore);
+public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore, IReadOnlyList<int>? Years = null, IReadOnlyList<string>? Locations = null);
 
 public static class CompetitionTerms
 {
@@ -159,7 +159,9 @@ public record CreateSectionSignupRequest(
     bool EmailOptIn = false, string? EmailOptInVersion = null,
     [MaxLength(64)] string? RequestId = null,
     string? TeamName = null, bool WholeTeam = false,
-    IReadOnlyList<string>? TeamMembers = null);
+    IReadOnlyList<string>? TeamMembers = null,
+    [Range(0, 100)] int StablesCount = 0, [StringLength(200)] string? StablingClubOrTeam = null,
+    [StringLength(20)] string? PaymentMethod = null, bool IsWaitlist = false, [Range(1, 20)] int TeamsCount = 1);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 
@@ -172,7 +174,7 @@ public record ShopPostDto(
     int CommentCount, int ReportCount);
 
 public record CreateShopPostRequest(
-    string Title, string Body, int? PriceMinor,
+    string Title, string? Body, int? PriceMinor,
     string? ContactInfo, string AuthorName, string? PonyClubName,
     string? ImageBase64, string? Description = null);
 
@@ -273,7 +275,8 @@ public record CreateFinalsRequest(
     IReadOnlyList<string> RaceNames,
     int? LanesPerHeat,
     string? Name,
-    bool? LowestFinalFirst = true);
+    bool? LowestFinalFirst = true,
+    int? ExistingSessionId = null);
 
 public record ScaffoldFinalsRequest(
     int? CompetitionSectionId,
@@ -283,7 +286,8 @@ public record ScaffoldFinalsRequest(
     string? Name,
     int? MinutesPerHeat,
     DateTime? ScheduledStart,
-    bool? LowestFinalFirst = true);
+    bool? LowestFinalFirst = true,
+    int? ExistingSessionId = null);
 
 public record AutoTimetableRequest(
     int? RacesPerHeat,

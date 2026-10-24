@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
+using MountedGames.Api.Security;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
@@ -84,6 +85,9 @@ public class ShopController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ShopPostDto>> Update(int id, UpdateShopPostRequest req)
     {
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        if (!string.IsNullOrEmpty(ip) && await _db.IpBlocks.AnyAsync(b => b.IpAddress == ip))
+            return StatusCode(403, new { message = "Posting from this network is blocked." });
         if (req.ImageBase64 is { Length: > MaxImageBase64Bytes })
             return BadRequest(new { message = "Image is too large (max ~500 KB after compression)." });
         if (req.PriceMinor is < 0 or > 100_000_000)
@@ -99,7 +103,7 @@ public class ShopController : ControllerBase
             .FirstOrDefaultAsync(p => p.Id == id);
         if (post is null || post.IsDeleted) return NotFound();
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        var canEdit = User.IsInRole(Roles.Admin) || post.AuthorUserId == userId;
+        var canEdit = User.IsInRole(Roles.Admin) || (!string.IsNullOrEmpty(userId) && post.AuthorUserId == userId);
         if (!canEdit) return Forbid();
 
         if (!string.IsNullOrEmpty(title)) post.Title = title;
@@ -191,7 +195,7 @@ public class ShopController : ControllerBase
         return NoContent();
     }
 
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting(RequestLimits.ShopReportPolicy)]
     [HttpPost("posts/{id:int}/report")]
     [AllowAnonymous]
     public async Task<IActionResult> Report(int id, CreateShopReportRequest req)

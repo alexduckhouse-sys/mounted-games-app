@@ -3,6 +3,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
@@ -16,7 +19,7 @@ namespace MountedGames.Api.Services.Operations;
 /// It never touches a scored, signed-off or started heat, or a final. The result is a pure function of the
 /// current timetable, so the same state always gives the same preview.
 /// </summary>
-public class WithdrawalRedrawService(AppDbContext db)
+public class WithdrawalRedrawService(AppDbContext db, PushNotifier? push = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -76,17 +79,34 @@ public class WithdrawalRedrawService(AppDbContext db)
             }
 
             if (outIds.Count == 0) continue;
-            // A finals session or a race-finals round isn't redrawn: who is in it was decided by results.
-            if (heats.Any(h => h.RaceRoundStage != RaceRoundStage.None || FinalsTiers.ParseLabel(h.Label) is not null))
+            // A finals session isn't redrawn: who is in it was decided by results.
+            if (heats.Any(h => FinalsTiers.ParseLabel(h.Label) is not null) || CompetitionDrawService.IsFinalSession(session))
                 continue;
-            var unscored = heats.Where(h => !HeatProtection.IsProtected(h, session, signedOff)).ToList();
+            var redrawable = heats
+                .Where(h => h.RaceRoundStage is RaceRoundStage.None or RaceRoundStage.Qualifier)
+                .ToList();
+            var unscored = redrawable.Where(h => !HeatProtection.IsProtected(h, session, signedOff)).ToList();
             if (unscored.Count == 0) continue;
 
-            var plan = Plan(session, heats, unscored, outIds, arrangement, names, notes);
-            if (plan is null) continue;
-            output.Add(plan);
-            foreach (var heat in plan.After) arrangement[heat.HeatId] = heat.Teams.Select(t => t.TeamId).ToList();
-            foreach (var removedId in plan.RemovedHeatIds) arrangement[removedId] = [];
+            var sessionBefore = new List<DrawHeatDto>();
+            var sessionAfter = new List<DrawHeatDto>();
+            var sessionRemoved = new List<int>();
+            var sessionMoves = new List<RedrawHeatMoveDto>();
+            foreach (var group in unscored.GroupBy(h => h.RaceRoundId))
+            {
+                var groupPlan = Plan(session, heats, group.ToList(), outIds, arrangement, names, notes);
+                if (groupPlan is null) continue;
+                sessionBefore.AddRange(groupPlan.Before);
+                sessionAfter.AddRange(groupPlan.After);
+                sessionRemoved.AddRange(groupPlan.RemovedHeatIds);
+                sessionMoves.AddRange(groupPlan.Moves);
+                foreach (var heat in groupPlan.After) arrangement[heat.HeatId] = heat.Teams.Select(t => t.TeamId).ToList();
+                foreach (var removedId in groupPlan.RemovedHeatIds) arrangement[removedId] = [];
+            }
+            if (sessionBefore.Count == 0) continue;
+            output.Add(new RedrawSessionDto(
+                session.Id, session.Name, heats.Count - unscored.Count,
+                sessionBefore, sessionAfter, sessionRemoved, sessionMoves));
         }
 
         if (outTeams.Count == 0)
@@ -270,8 +290,80 @@ public class WithdrawalRedrawService(AppDbContext db)
             });
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
+            await NotifyMovedTeamsAsync(competitionId, preview);
             return (preview, preview.Sessions.Select(s => s.SessionId).ToList());
         });
+    }
+
+    private async Task NotifyMovedTeamsAsync(int competitionId, RedrawPreviewDto preview)
+    {
+        var allMoves = preview.Sessions
+            .SelectMany(s => s.Moves.Select(m => (Session: s, Move: m)))
+            .ToList();
+        if (allMoves.Count == 0) return;
+
+        var notifier = push ?? ResolvePushNotifier();
+        if (notifier is null) return;
+
+        try
+        {
+            var movedTeamIds = allMoves.Select(x => x.Move.TeamId).Distinct().ToList();
+            var teams = await db.Teams.AsNoTracking()
+                .Include(t => t.Supporters)
+                .Where(t => t.CompetitionId == competitionId && movedTeamIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id);
+            var signups = await db.SectionSignups.AsNoTracking()
+                .Where(s => s.TeamId != null && movedTeamIds.Contains(s.TeamId.Value) && s.UserId != null)
+                .ToListAsync();
+
+            foreach (var (session, move) in allMoves)
+            {
+                if (!teams.TryGetValue(move.TeamId, out var team)) continue;
+                var recipients = new HashSet<string>();
+                if (!string.IsNullOrEmpty(team.TrainerUserId)) recipients.Add(team.TrainerUserId);
+                foreach (var sup in team.Supporters.Where(x => x.Status == TeamSupporterStatus.Accepted))
+                    if (!string.IsNullOrEmpty(sup.UserId)) recipients.Add(sup.UserId);
+                foreach (var signup in signups.Where(s => s.TeamId == move.TeamId))
+                    if (!string.IsNullOrEmpty(signup.UserId)) recipients.Add(signup.UserId);
+                if (recipients.Count == 0) continue;
+
+                var newHeat = session.After.FirstOrDefault(h => h.HeatId == move.ToHeatId);
+                var lane = newHeat?.Teams.FirstOrDefault(t => t.TeamId == move.TeamId)?.LaneIndex;
+                var body = newHeat is not null && lane.HasValue
+                    ? $"Now in {newHeat.Label}, lane {lane.Value} ({session.Name})."
+                    : $"Heat draw updated in {session.Name}.";
+
+                await notifier.SendToUsersAsync(recipients.ToList(), new PushPayload(
+                    Title: $"{move.TeamName} heat updated",
+                    Body: body,
+                    Tag: $"redraw:{competitionId}:{session.SessionId}:{move.TeamId}:{move.ToHeatId}",
+                    Url: $"/competitions/{competitionId}"));
+            }
+        }
+        catch
+        {
+            // Push delivery is best-effort after the redraw transaction has committed.
+        }
+    }
+
+    private PushNotifier? ResolvePushNotifier()
+    {
+        try
+        {
+            var appSp = db.GetService<IDbContextOptions>()
+                .FindExtension<CoreOptionsExtension>()
+                ?.ApplicationServiceProvider;
+            if (appSp is null) return null;
+            var vapid = appSp.GetService<VapidKeyService>();
+            var log = appSp.GetService<ILogger<PushNotifier>>();
+            var http = appSp.GetService<IHttpClientFactory>();
+            if (vapid is null || log is null || http is null) return null;
+            return new PushNotifier(db, vapid, log, http);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static int[] BalancedSizes(int teams, int heats)

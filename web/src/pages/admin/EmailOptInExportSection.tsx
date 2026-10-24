@@ -14,17 +14,23 @@ export function EmailOptInExportSection() {
   const [busy, setBusy] = useState(false);
   const [testBusy, setTestBusy] = useState(false);
   const [status, setStatus] = useState<EmailStatus | null>(null);
+  const [statusUnavailable, setStatusUnavailable] = useState(false);
   const [testNotice, setTestNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     api.get<EmailStatus>('/admin/email-status')
       .then((r) => {
-        if (r?.data && typeof r.data === 'object' && 'configured' in r.data) {
+        if (cancelled) return;
+        if (r?.data && typeof r.data.enabled === 'boolean' && typeof r.data.configured === 'boolean') {
           setStatus(r.data);
+        } else {
+          setStatusUnavailable(true);
         }
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setStatusUnavailable(true); });
+    return () => { cancelled = true; };
   }, []);
 
   async function download() {
@@ -76,11 +82,12 @@ export function EmailOptInExportSection() {
                 {status.fromMasked && <span className="font-normal opacity-80">· {status.fromMasked}</span>}
               </>
             ) : (
-              'Off (logging only — set Email__Enabled, Email__ApiKey and Email__From)'
+              'Email sending is off'
             )}
           </span>
         )}
       </div>
+      {statusUnavailable && <p role="status" className="m-0 text-sm">Could not check email settings. Reload the page to try again.</p>}
       <p className="m-0 text-sm text-[rgb(var(--mg-body))]">
         People who ticked the box to hear when new competitions open. The list only holds those who have not unsubscribed.
         It contains personal data: keep it in your mailing tool and delete the file afterwards.

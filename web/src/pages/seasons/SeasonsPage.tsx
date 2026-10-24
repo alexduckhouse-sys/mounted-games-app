@@ -11,8 +11,8 @@ import { seasonError, type SeasonView } from './seasonViewTypes';
 import './seasonViews.css';
 
 export function SeasonsPage() {
-  const { user, canOrganise } = useAuth();
-  const canCreate = canOrganise();
+  const { user, canOrganise, hasRole } = useAuth();
+  const canCreate = canOrganise() || (typeof hasRole === 'function' && hasRole('Manager'));
   const [seasons, setSeasons] = useState<SeasonView[] | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);

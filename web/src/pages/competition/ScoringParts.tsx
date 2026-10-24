@@ -101,7 +101,7 @@ export function ScoreRow({
       <span className="sc-badge sc-badge-out" aria-label={statusLabel(true, state?.status) ?? 'Eliminated'}>
         {statusLetter(true, state?.status) === 'E' ? 'OUT' : statusLetter(true, state?.status)}
       </span>
-      <span className="sc-pts sc-pts-out">0 pts</span>
+      <span className="sc-pts sc-pts-out">{formatPoints(points)} pts</span>
     </span>
   ) : state?.place ? (
     <span className="sc-score-right">
@@ -330,9 +330,9 @@ export function ScoreOverrideSheet({
             <div className="sc-ov-stepper">
               <span className="font-semibold">Points this race</span>
               <span className="flex items-center gap-2">
-                <button type="button" className="sc-ov-step-btn" aria-label="One point fewer" onClick={() => setPts((p) => Math.max(0, p - 1))}>−</button>
+                <button type="button" className="sc-ov-step-btn" aria-label="Half a point fewer" onClick={() => setPts((p) => Math.max(0, p - 0.5))}>−</button>
                 <span aria-live="polite" className="min-w-10 text-center font-[var(--mg-font-display)] text-2xl font-bold text-[rgb(var(--mg-heading))]">{formatPoints(pts)}</span>
-                <button type="button" className="sc-ov-step-btn" aria-label="One point more" onClick={() => setPts((p) => Math.min(30, p + 1))}>+</button>
+                <button type="button" className="sc-ov-step-btn" aria-label="Half a point more" onClick={() => setPts((p) => Math.min(30, p + 0.5))}>+</button>
               </span>
             </div>
           )}

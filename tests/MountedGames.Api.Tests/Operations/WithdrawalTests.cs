@@ -175,6 +175,7 @@ public class WithdrawalTests : IClassFixture<ApiFactory>
 
         // Out again, then a draw is applied: the withdrawal is now locked in.
         await WithdrawAsync(admin, s.Arena, team);
+        await WithdrawAsync(admin, s.Arena, s.Heats[0][2]);
         var preview = await (await admin.GetAsync(PreviewUrl(s.Arena))).ReadAsync<RedrawPreviewDto>();
         Assert.True(preview.HasChanges);
         Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync(ApplyUrl(s.Arena), new ApplyRedrawRequest(preview.Fingerprint, "req-lock"))).StatusCode);
@@ -303,11 +304,12 @@ public class WithdrawalTests : IClassFixture<ApiFactory>
         var admin = await _f.AdminAsync();
         await WithdrawAsync(admin, s.Arena, s.Heats[2][0]);
 
-        var session = Assert.Single((await (await admin.GetAsync(PreviewUrl(s.Arena))).ReadAsync<RedrawPreviewDto>()).Sessions);
+        var preview = await (await admin.GetAsync(PreviewUrl(s.Arena))).ReadAsync<RedrawPreviewDto>();
 
-        // A merge into 3 + 2 would break the limit of 2, so all three heats stay: 2, 2, 1.
-        Assert.Empty(session.RemovedHeatIds);
-        Assert.All(session.After, h => Assert.InRange(h.Teams.Count, 1, 2));
+        // A merge into 3 + 2 would break the limit of 2, and lanes are already closed up to 1..N, so all three heats stay: 2, 2, 1.
+        Assert.False(preview.HasChanges);
+        var entries = await EntriesAsync(s.Arena.CompetitionId);
+        Assert.Equal(new[] { 2, 2, 1 }, s.HeatIds.Select(id => entries.Count(e => e.HeatId == id)));
     }
 
     [Fact]
@@ -337,7 +339,7 @@ public class WithdrawalTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Preview_LeavesScoredAndSignedOffHeatsAlone_AndIsDeterministic()
     {
-        var s = await BuildAsync(3, 3, 3);
+        var s = await BuildAsync(3, 3, 3, 3);
         await ScoreAsync(s.RaceIds[0][0], s.Heats[0][0]);
         await _f.WithDbAsync(async db =>
         {
@@ -345,8 +347,8 @@ public class WithdrawalTests : IClassFixture<ApiFactory>
             await db.SaveChangesAsync();
         });
         var admin = await _f.AdminAsync();
-        await WithdrawAsync(admin, s.Arena, s.Heats[2][0]);
-        await WithdrawAsync(admin, s.Arena, s.Heats[2][1]);
+        await WithdrawAsync(admin, s.Arena, s.Heats[3][0]);
+        await WithdrawAsync(admin, s.Arena, s.Heats[3][1]);
 
         var first = await (await admin.GetAsync(PreviewUrl(s.Arena))).ReadAsync<RedrawPreviewDto>();
         var second = await (await admin.GetAsync(PreviewUrl(s.Arena))).ReadAsync<RedrawPreviewDto>();
@@ -355,7 +357,7 @@ public class WithdrawalTests : IClassFixture<ApiFactory>
         Assert.Equal(JsonSerializer.Serialize(first.Sessions), JsonSerializer.Serialize(second.Sessions));
         var session = Assert.Single(first.Sessions);
         Assert.Equal(2, session.ProtectedHeats);
-        // Only the one unscored heat is left, so there is nothing to merge it with and nothing moves.
+        // The scored and signed-off heats are left untouched while the two unscored heats rebalance from 3+1 to 2+2.
         Assert.DoesNotContain(session.Before.Concat(session.After), h => h.HeatId == s.HeatIds[0] || h.HeatId == s.HeatIds[1]);
     }
 
@@ -662,6 +664,76 @@ public class WithdrawalTests : IClassFixture<ApiFactory>
         Assert.True(withdrawn.CanReinstate);
         Assert.True(withdrawn.RedrawAvailable);
         Assert.All(entries.Where(e => e.Status == TeamEntryStatus.Active), e => Assert.Null(e.Reason));
+    }
+
+    [Fact]
+    public async Task Withdrawing_ClosesUpRemainingLanesImmediately()
+    {
+        var s = await BuildAsync(5);
+        var admin = await _f.AdminAsync();
+
+        // Withdraw the team in lane 2 of a 5-team heat.
+        await WithdrawAsync(admin, s.Arena, s.Heats[0][1]);
+
+        var entries = await EntriesAsync(s.Arena.CompetitionId);
+        Assert.Equal(new[] { 1, 2, 3, 4 }, entries.Select(e => e.Lane));
+        Assert.Equal(new[] { s.Heats[0][0], s.Heats[0][2], s.Heats[0][3], s.Heats[0][4] }, entries.Select(e => e.TeamId));
+    }
+
+    [Fact]
+    public async Task Preview_RebalancesRaceFinalsQualifiers_AndLeavesFinalsUntouched()
+    {
+        var arena = await _f.CreateArenaAsync(8, raceFinals: true);
+        var admin = await _f.AdminAsync();
+        var gen = await admin.PostAsJsonAsync($"{Base(arena)}/sessions/{arena.SessionId}/generate-race-finals",
+            new GenerateHeatsRequest(arena.TeamIds, ["Bending"], 4, true));
+        Assert.Equal(HttpStatusCode.OK, gen.StatusCode);
+        var sessionDto = await gen.ReadAsync<SessionDto>();
+        var q1 = sessionDto.Heats.Single(h => h.Label!.EndsWith("Q1"));
+        var q2 = sessionDto.Heats.Single(h => h.Label!.EndsWith("Q2"));
+        var fin = sessionDto.Heats.Single(h => h.Label!.EndsWith("Final"));
+
+        // Withdraw two teams from Q2 so Q1 has 4 teams and Q2 has 2 teams.
+        await WithdrawAsync(admin, arena, q2.Entries[0].TeamId);
+        await WithdrawAsync(admin, arena, q2.Entries[1].TeamId);
+
+        var preview = await (await admin.GetAsync(PreviewUrl(arena))).ReadAsync<RedrawPreviewDto>();
+        Assert.True(preview.HasChanges);
+        var plannedSession = Assert.Single(preview.Sessions);
+        Assert.Equal(new[] { 3, 3 }, plannedSession.After.Select(h => h.Teams.Count));
+        Assert.DoesNotContain(plannedSession.Before.Concat(plannedSession.After), h => h.HeatId == fin.Id);
+    }
+
+    [Fact]
+    public async Task Apply_SendsPushNotificationToMovedTeamFollowers()
+    {
+        using var push = new MountedGames.Api.Tests.Push.FakePushService(_f.Http, HttpStatusCode.Created);
+        var s = await BuildAsync(3, 3);
+        var (supporterClient, supporterAuth) = await _f.SignupAsync();
+        await supporterClient.PostAsJsonAsync("/api/push/subscribe",
+            MountedGames.Api.Tests.Push.FakePushService.Subscription(push.Endpoint));
+
+        var admin = await _f.AdminAsync();
+        await WithdrawAsync(admin, s.Arena, s.Heats[1][0]);
+        await WithdrawAsync(admin, s.Arena, s.Heats[1][1]);
+        var preview = await (await admin.GetAsync(PreviewUrl(s.Arena))).ReadAsync<RedrawPreviewDto>();
+        var movedTeamId = Assert.Single(preview.Sessions.Single().Moves).TeamId;
+
+        await _f.WithDbAsync(async db =>
+        {
+            db.TeamSupporters.Add(new TeamSupporter
+            {
+                TeamId = movedTeamId,
+                UserId = supporterAuth.User.Id,
+                Status = TeamSupporterStatus.Accepted,
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var applied = await admin.PostAsJsonAsync(ApplyUrl(s.Arena), new ApplyRedrawRequest(preview.Fingerprint, "req-push"));
+        Assert.Equal(HttpStatusCode.OK, applied.StatusCode);
+        await push.WaitForAsync(1);
+        Assert.Equal(1, push.Received);
     }
 
     private async Task<HubConnection> ConnectAsync()

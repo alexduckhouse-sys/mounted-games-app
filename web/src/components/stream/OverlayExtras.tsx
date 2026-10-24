@@ -1,12 +1,16 @@
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { AlertTriangle, ArrowDown, ArrowUp, Clock, Eye, MapPin, Megaphone } from 'lucide-react';
-import type { CompetitionDetail, Heat, LiveStream, Session, StreamOverlay } from '../../types';
+import type { CompetitionDetail, Heat, LiveStream, Session, StandingRow, StreamOverlay } from '../../types';
 import { bannerShowsIn, parseLook, type OverlayLook, type OverlayPlace } from '../../lib/overlays';
 import type { QueuedScoreCard } from '../../lib/scoreCard';
 import { statusLetter } from '../../lib/resultStatus';
 import { formatPoints } from '../../lib/formatPoints';
 import { useCompetition } from '../../pages/competition/context';
 import { displaySectionName } from '../../lib/section';
+import { api } from '../../api';
+import { buildToplist } from '../../lib/toplist';
+import { computeTimings } from '../../lib/time';
+import { timetableRows } from '../../lib/timetableRows';
 
 export type LiveOverlayCardMode = 'none' | 'toplist' | 'heat' | 'lanes' | 'next';
 
@@ -136,19 +140,59 @@ function useOptionalCompetition(): CompetitionDetail | null {
 
 function activeArenaHeat(competition: CompetitionDetail, arenaName: string, mode: 'current' | 'next'): { session: Session; heat: Heat } | null {
   const arena = arenaName.trim().toLowerCase();
-  const nonBreak = competition.sessions.filter((s) => !s.isBreak && s.heats.length > 0);
-  const matching = nonBreak.filter((s) => !arena || !s.arenaName?.trim() || s.arenaName.trim().toLowerCase() === arena);
-  const all = [...(matching.length > 0 ? matching : nonBreak)].sort((a, b) => a.orderIndex - b.orderIndex);
-  const pairs = all.flatMap((session) => [...session.heats].sort((a, b) => a.orderIndex - b.orderIndex).map((heat) => ({ session, heat })));
-  if (pairs.length === 0) return null;
-  const inProgressIdx = pairs.findIndex(({ session }) => session.status === 1);
-  const unscoredIdx = pairs.findIndex(({ heat }) => heat.races.every((r) => r.results.length === 0));
-  if (mode === 'next') {
-    if (inProgressIdx >= 0 && pairs[inProgressIdx + 1]) return pairs[inProgressIdx + 1];
-    return unscoredIdx >= 0 ? pairs[unscoredIdx] : pairs.at(-1)!;
-  }
-  if (inProgressIdx >= 0) return pairs[inProgressIdx];
-  return unscoredIdx > 0 ? pairs[unscoredIdx - 1] : pairs[0];
+  const sessions = competition.sessions.filter((session) =>
+    (session.kind ?? (session.isBreak ? 1 : 0)) === 0 && (session.arenaName ?? '').trim().toLowerCase() === arena);
+  const rows = timetableRows(sessions, computeTimings(sessions), true).filter((row) => row.heat !== null);
+  const liveIndex = rows.findIndex((row) => row.status === 'live');
+  const row = mode === 'next'
+    ? rows.slice(liveIndex + 1).find((item) => item.status !== 'finished')
+    : rows[liveIndex] ?? rows.find((item) => item.status !== 'finished') ?? rows.at(-1);
+  return row?.heat ? { session: row.session, heat: row.heat } : null;
+}
+
+function LiveToplistCard({ competition, sectionId }: { competition: CompetitionDetail; sectionId: number }) {
+  const { ready } = useCompetition();
+  const [result, setResult] = useState<{ rows: StandingRow[]; failed: boolean } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const abort = new AbortController();
+    api.get<StandingRow[]>(`/competitions/${competition.id}/standings`, { params: { sectionId }, signal: abort.signal })
+      .then(({ data }) => {
+        if (!Array.isArray(data) || data.some((row) => !row || !Number.isFinite(row.teamId) || typeof row.teamName !== 'string' || !Number.isFinite(row.totalPoints))) {
+          throw new Error('Invalid standings');
+        }
+        if (!cancelled) setResult({ rows: data, failed: false });
+      })
+      .catch(() => {
+        if (!cancelled) setResult((previous) => ({ rows: previous?.rows ?? [], failed: true }));
+      });
+    return () => { cancelled = true; abort.abort(); };
+  }, [competition.id, competition.sessions, competition.teams, sectionId, ready]);
+  const section = competition.sections.find((item) => item.id === sectionId)!;
+  const hc = new Set(competition.teams.filter((team) => team.isHorsConcours).map((team) => team.id));
+  const list = buildToplist((result?.rows ?? []).filter((row) => !hc.has(row.teamId)), competition.sessions, competition.teams, sectionId, null);
+  const subtitle = result === null ? 'Loading standings…'
+    : result.failed ? (list.rows.length > 0 ? 'Last received standings' : 'Standings unavailable')
+      : list.started ? 'Current standings' : 'Before Race 1';
+  return (
+    <section className="mg-ov-card mg-stream-fade mg-ov-card-right" aria-label={`Live toplist: ${displaySectionName(section.displayName)}`}>
+      <header>
+        <strong>{displaySectionName(section.displayName)} · Toplist</strong>
+        <span>{subtitle}</span>
+      </header>
+      <ol>
+        {list.rows.slice(0, 8).map((row) => (
+          <li key={row.teamId}>
+            <span className="mg-ov-card-place">{list.started ? row.position : '—'}</span>
+            <span className="mg-ov-card-team">{row.teamName}</span>
+            <span />
+            <span />
+            <span className="mg-ov-card-total">{formatPoints(row.points)}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
 }
 
 /**
@@ -163,48 +207,10 @@ export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string;
 
   if (mode === 'toplist') {
     const active = activeArenaHeat(competition, arenaName, 'current');
-    const secId = sectionId ?? active?.session.competitionSectionId ?? competition.sections[0]?.id ?? null;
-    const section = competition.sections.find((s) => s.id === secId) ?? competition.sections[0];
+    const secId = sectionId ?? active?.session.competitionSectionId;
+    const section = competition.sections.find((s) => s.id === secId);
     if (!section) return null;
-    const points = new Map<number, number>();
-    for (const session of competition.sessions) {
-      if (session.competitionSectionId !== section.id) continue;
-      for (const heat of session.heats) {
-        for (const race of heat.races) {
-          for (const res of race.results) {
-            points.set(res.teamId, (points.get(res.teamId) ?? 0) + res.points);
-          }
-        }
-      }
-    }
-    const teams = competition.teams
-      .filter((t) => t.competitionSectionId === section.id && !t.isHorsConcours && !t.isWithdrawn)
-      .map((t) => ({ id: t.id, name: t.displayName, pts: points.get(t.id) ?? 0 }))
-      .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name))
-      .slice(0, 8);
-    const anyScored = teams.some((t) => t.pts > 0);
-    return (
-      <section className="mg-ov-card mg-stream-fade mg-ov-card-right" aria-label={`Live toplist: ${displaySectionName(section.displayName)}`}>
-        <header>
-          <strong>{displaySectionName(section.displayName)} · Toplist</strong>
-          <span>{anyScored ? 'Current standings' : 'Before Race 1'}</span>
-        </header>
-        <ol>
-          {teams.map((t) => {
-            const place = anyScored ? teams.filter((o) => o.pts > t.pts).length + 1 : '—';
-            return (
-              <li key={t.id}>
-                <span className="mg-ov-card-place">{place}</span>
-                <span className="mg-ov-card-team">{t.name}</span>
-                <span />
-                <span />
-                <span className="mg-ov-card-total">{formatPoints(t.pts)}</span>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-    );
+    return <LiveToplistCard key={`${competition.id}-${section.id}`} competition={competition} sectionId={section.id} />;
   }
 
   const pair = activeArenaHeat(competition, arenaName, mode === 'next' ? 'next' : 'current');

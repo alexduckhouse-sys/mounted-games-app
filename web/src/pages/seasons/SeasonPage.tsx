@@ -5,7 +5,7 @@ import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { SectionFormatLabel, type CompetitionDetail, type CompetitionSummary } from '../../types';
 import { Chevron, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus, type RefineTab } from '../refine/Refine';
-import { lastPublishedRound, positionLabels, roundStatus, shortDate } from './seasonModel';
+import { filterStandingsByDivision, lastPublishedRound, positionLabels, roundDivision, roundStatus, seasonDivisions, shortDate } from './seasonModel';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
 import { EmbedCard } from '../competition/EmbedCard';
 import { seasonError, type PublicationView, type SeasonRoundView, type SeasonView, type StandingsView } from './seasonViewTypes';
@@ -78,10 +78,21 @@ function SeasonDetail({ id }: { id: string }) {
 }
 
 function Standings({ season, table }: { season: SeasonView; table: StandingsView }) {
-  const included = season.rounds.filter((round) => round.isIncluded);
+  const formats = [...new Set(season.rounds.filter((round) => round.isIncluded).map((round) => round.format ?? season.format))];
+  const [selectedFormat, setSelectedFormat] = useState(season.format);
+  const activeFormat = formats.includes(selectedFormat) ? selectedFormat : formats[0] ?? season.format;
+  const formatRounds = season.rounds.filter((round) => (round.format ?? season.format) === activeFormat);
+  const divisions = seasonDivisions(formatRounds, season.ageGroup);
+  const hasMultipleDivisions = divisions.length > 1;
+  const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  const activeDivision = hasMultipleDivisions && divisions.includes(selectedDivision) ? selectedDivision : 'all';
+  const divisionRounds = formatRounds.filter((round) => activeDivision === 'all' || roundDivision(round, season.ageGroup) === activeDivision);
+  const included = divisionRounds.filter((round) => round.isIncluded);
+  const publishedRounds = [...included].filter((round) => round.publishedVersion != null).sort((a, b) => a.orderIndex - b.orderIndex);
+  const visibleStandings = filterStandingsByDivision(season, table.standings, activeDivision, activeFormat);
   const stale = season.rounds.some((round) => round.publishedVersion && !round.publicationIsCurrent);
-  const labels = positionLabels(table.standings);
-  const latest = lastPublishedRound(season.rounds);
+  const labels = positionLabels(visibleStandings);
+  const latest = lastPublishedRound(divisionRounds);
   const best = season.bestResultsToCount;
   const notes = [
     best ? `Best ${best} of ${included.length} ${included.length === 1 ? 'round' : 'rounds'}` : `All ${included.length} included ${included.length === 1 ? 'round counts' : 'rounds count'}`,
@@ -89,18 +100,77 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
     latest ? `after R${latest.orderIndex}, ${shortDate(latest.competitionDate, false)}` : null,
   ].filter(Boolean).join(' · ');
   return <>
+    {hasMultipleDivisions && (
+      <div role="tablist" aria-label="Age groups" className="flex flex-wrap gap-2 pt-3">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeDivision === 'all'}
+          className={`rf-btn ${activeDivision === 'all' ? 'rf-btn-primary' : ''}`.trim()}
+          onClick={() => setSelectedDivision('all')}
+        >
+          All
+        </button>
+        {divisions.map((div) => (
+          <button
+            key={div}
+            type="button"
+            role="tab"
+            aria-selected={activeDivision === div}
+            className={`rf-btn ${activeDivision === div ? 'rf-btn-primary' : ''}`.trim()}
+            onClick={() => setSelectedDivision(div)}
+          >
+            {div}
+          </button>
+        ))}
+      </div>
+    )}
     <div className="sv-filters">
-      <label className="rf-fld"><span className="sr-only">Age section</span><SelectField disabled aria-label="Age section" title="Each season covers one age section" value={season.ageGroup}><option>{season.ageGroup}</option></SelectField></label>
-      <label className="rf-fld"><span className="sr-only">Format</span><SelectField disabled aria-label="Format" title="Each season covers one format" value={season.format}><option value={season.format}>{SectionFormatLabel[season.format]}</option></SelectField></label>
+      <label className="rf-fld">
+        <span className="sr-only">Age section</span>
+        {hasMultipleDivisions ? (
+          <SelectField
+            aria-label="Age section"
+            value={activeDivision}
+            onChange={(e) => setSelectedDivision(e.target.value)}
+          >
+            <option value="all">All age groups</option>
+            {divisions.map((div) => <option key={div} value={div}>{div}</option>)}
+          </SelectField>
+        ) : (
+          <SelectField disabled aria-label="Age section" title="Season age section" value={season.ageGroup}>
+            <option>{season.ageGroup}</option>
+          </SelectField>
+        )}
+      </label>
+      <label className="rf-fld"><span className="sr-only">Format</span><SelectField disabled={formats.length < 2} aria-label="Format" title="Season format" value={activeFormat} onChange={(event) => { setSelectedFormat(Number(event.target.value) as typeof activeFormat); setSelectedDivision('all'); }}>{(formats.length ? formats : [activeFormat]).map((format) => <option key={format} value={format}>{SectionFormatLabel[format]}</option>)}</SelectField></label>
     </div>
     {stale && <p className="mg-notice sv-msg">A result or points rule has changed since publication. The table stays on the published version until the organiser publishes again.</p>}
-    {!table.standings.length ? <div className="sv-empty"><h2>No standings yet</h2><p>Results will appear after the first round is published.</p></div> : <>
+    {!visibleStandings.length ? <div className="sv-empty"><h2>No standings yet</h2><p>Results will appear after the first round is published.</p></div> : <>
       <div className="rf-table-wrap"><table className="rf-table sv-table">
         <caption className="sr-only">Season standings</caption>
-        <thead><tr><th scope="col" className="sv-pos">Pos</th><th scope="col">Team</th><th scope="col" className="sv-mid">Rds</th><th scope="col">Pts</th></tr></thead>
-        <tbody>{table.standings.map((row) => <tr key={row.teamProfileId}>
+        <thead>
+          <tr>
+            <th scope="col" className="sv-pos">Pos</th>
+            <th scope="col">{activeFormat === 1 ? 'Rider' : 'Team'}</th>
+            {publishedRounds.map((round) => (
+              <th key={round.id} scope="col" className="sv-mid" title={round.competitionName}>R{round.orderIndex}</th>
+            ))}
+            <th scope="col" className="sv-mid">Rds</th>
+            <th scope="col">Pts</th>
+          </tr>
+        </thead>
+        <tbody>{visibleStandings.map((row) => <tr key={row.teamProfileId}>
           <td className="rf-num">{labels.get(row.teamProfileId)}</td>
           <td><Link to={`/team-profiles/${row.teamProfileId}`}>{row.teamName}</Link>{row.clubName && !row.teamName.toLowerCase().includes(row.clubName.toLowerCase()) && <span className="sv-club">{row.clubName}</span>}</td>
+          {publishedRounds.map((round) => {
+            const cell = row.rounds.find((r) => r.roundId === round.id);
+            if (!cell) return <td key={round.id} className="sv-mid sv-dim">–</td>;
+            if (!cell.counted) {
+              return <td key={round.id} className="sv-mid"><span className="sv-struck line-through opacity-55" title="Dropped (outside best results)">{cell.seasonPoints}</span></td>;
+            }
+            return <td key={round.id} className="sv-mid">{cell.seasonPoints}</td>;
+          })}
           <td className="sv-mid">{row.rounds.length}</td>
           <td className="rf-num sv-end">{row.totalPoints}</td>
         </tr>)}</tbody>
@@ -129,6 +199,7 @@ function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => 
   const [competitionId, setCompetitionId] = useState('');
   const [detail, setDetail] = useState<CompetitionDetail | null>(null);
   const [sectionId, setSectionId] = useState('');
+  const [multiplier, setMultiplier] = useState('1');
   const [listError, setListError] = useState('');
   const [detailError, setDetailError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -155,14 +226,21 @@ function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => 
     return () => controller.abort();
   }, [competitionId, detailAttempt]);
 
-  const sections = detail && canOrganise(detail) ? detail.sections.filter((section) => section.format === season.format && section.ageGroup.trim().toLowerCase() === season.ageGroup.trim().toLowerCase() && !season.rounds.some((round) => round.competitionSectionId === section.id)) : [];
+  const sections = detail && canOrganise(detail) ? detail.sections.filter((section) => !season.rounds.some((round) => round.competitionSectionId === section.id)) : [];
   function chooseCompetition(next: string) {
     setCompetitionId(next); setDetail(null); setSectionId(''); setDetailError(''); setActionError(''); setDetailLoading(!!next);
   }
   async function submit(event: FormEvent) {
     event.preventDefault(); if (!sectionId) return;
     setBusy(true); setActionError('');
-    try { await api.post(`/seasons/${season.id}/rounds`, { competitionSectionId: Number(sectionId) }); setSectionId(''); onChanged(); }
+    const mult = Number(multiplier);
+    try {
+      await api.post(`/seasons/${season.id}/rounds`, {
+        competitionSectionId: Number(sectionId),
+        ...(mult !== 1 ? { pointsMultiplier: mult } : {}),
+      });
+      setSectionId(''); setMultiplier('1'); onChanged();
+    }
     catch (reason) { setActionError(seasonError(reason, 'This round couldn’t be added. Try again.')); }
     finally { setBusy(false); }
   }
@@ -175,7 +253,10 @@ function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => 
       <label className="rf-fld">Competition<SelectField required value={competitionId} onChange={(event) => chooseCompetition(event.target.value)}><option value="">{competitions ? 'Choose a competition' : 'Loading competitions…'}</option>{competitions?.map((competition) => <option key={competition.id} value={competition.id}>{competition.name} · {new Date(competition.startDate).getFullYear()}</option>)}</SelectField></label>
       {competitionId && detailLoading && <p role="status" className="rf-note sv-flush">Loading sections…</p>}
       {detailError && <p role="alert" className="mg-notice">{detailError} <button type="button" className="mg-text-link min-h-11" onClick={() => { setDetailLoading(true); setDetailError(''); setDetailAttempt((value) => value + 1); }}>Try again</button></p>}
-      {detail && (sections.length ? <label className="rf-fld">Section<SelectField required value={sectionId} onChange={(event) => setSectionId(event.target.value)}><option value="">Choose a section</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.displayName}</option>)}</SelectField></label> : <p className="rf-note sv-flush">There isn’t a matching unlinked section in this competition.</p>)}
+      {detail && (sections.length ? <>
+        <label className="rf-fld">Section<SelectField required value={sectionId} onChange={(event) => setSectionId(event.target.value)}><option value="">Choose a section</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.displayName}</option>)}</SelectField></label>
+        <label className="rf-fld">Points multiplier<SelectField value={multiplier} onChange={(event) => setMultiplier(event.target.value)}><option value="1">1× (standard)</option><option value="1.5">1.5× (major)</option><option value="2">2× (championship)</option></SelectField></label>
+      </> : <p className="rf-note sv-flush">There isn’t an unlinked section in this competition.</p>)}
     </fieldset>
     <button className="rf-btn rf-btn-primary" disabled={busy || !sectionId}>{busy ? 'Adding round…' : 'Add round'}</button>
   </form>;
@@ -187,6 +268,7 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const base = `/seasons/${seasonId}/rounds/${round.id}`;
+  const mult = round.pointsMultiplier && round.pointsMultiplier > 0 ? round.pointsMultiplier : 1;
 
   async function act(action: () => Promise<void>) {
     setBusy(true); setError(''); setNotice('');
@@ -202,14 +284,27 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
   return <li>
     <button type="button" className="rf-row" aria-expanded={expanded} onClick={onToggle}>
       <span className={`rf-num sv-rn ${round.isIncluded ? '' : 'sv-rn-dim'}`.trim()}><span className="sr-only">Round {round.orderIndex}</span><span aria-hidden="true">R{round.orderIndex}</span></span>
-      <span className="rf-grow"><span className="rf-t1">{round.competitionName}</span><span className="rf-t2">{shortDate(round.competitionDate)} · {round.sectionName}</span></span>
+      <span className="rf-grow"><span className="rf-t1">{round.competitionName}</span><span className="rf-t2">{shortDate(round.competitionDate)} · {round.sectionName}{mult !== 1 ? ` · ${mult}× pts` : ''}</span></span>
       <RefineStatus tone={status.tone}>{status.label}</RefineStatus>
       <Chevron down />
     </button>
     {expanded && <div className="sv-round-detail">
       {error && <p role="alert" className="mg-notice">{error}</p>}{notice && <p role="status" className="mg-notice">{notice}</p>}
-      <p className="rf-note sv-flush"><strong>{publicationStatus}</strong> · {round.isIncluded ? 'Counts in standings' : 'Excluded from standings'}. <Link className="sv-link" to={`/competitions/${round.competitionId}`}>Open {round.competitionName}</Link></p>
+      <p className="rf-note sv-flush"><strong>{publicationStatus}</strong> · {round.isIncluded ? 'Counts in standings' : 'Excluded from standings'}{mult !== 1 ? ` · ${mult}× points` : ''}. <Link className="sv-link" to={`/competitions/${round.competitionId}`}>Open {round.competitionName}</Link></p>
       {canManage && <div className="sv-actions">
+        <label className="rf-fld">
+          <span className="sr-only">Points multiplier</span>
+          <SelectField
+            aria-label="Points multiplier"
+            disabled={busy}
+            value={String(mult)}
+            onChange={(event) => void act(async () => { await api.put(`${base}/multiplier`, { pointsMultiplier: Number(event.target.value) }); onChanged(); })}
+          >
+            <option value="1">1× (standard)</option>
+            <option value="1.5">1.5× (major)</option>
+            <option value="2">2× (championship)</option>
+          </SelectField>
+        </label>
         <button type="button" className="rf-btn" disabled={busy} onClick={() => void act(async () => { await api.put(`${base}/included`, { isIncluded: !round.isIncluded }); onChanged(); })}>{round.isIncluded ? 'Exclude round' : 'Include round'}</button>
         <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void act(async () => { const { data } = await api.get<PublicationView>(`${base}/publication-preview`); setPreview(data); })}>{busy ? 'Checking results…' : 'Preview publication'}</button>
       </div>}
@@ -224,7 +319,7 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
 }
 
 function PublicationResults({ publication }: { publication: Pick<PublicationView, 'results'> }) {
-  return <div className="rf-table-wrap"><table className="rf-table sv-table"><thead><tr><th className="sv-pos" scope="col">Pos</th><th scope="col">Team</th><th scope="col" className="sv-mid">Event pts</th><th scope="col">Season pts</th></tr></thead><tbody>{publication.results.map((row) => <tr key={row.teamProfileId}><td className="rf-num">{row.eventRank}</td><th scope="row" className="sv-rowhead">{row.teamName}</th><td className="sv-mid">{row.eventPoints}</td><td className="rf-num sv-end">{row.seasonPoints}</td></tr>)}</tbody></table>{!publication.results.length && <p className="rf-note" style={{ paddingInline: 16 }}>No eligible teams in this publication.</p>}</div>;
+  return <div className="rf-table-wrap"><table className="rf-table sv-table"><thead><tr><th className="sv-pos" scope="col">Pos</th><th scope="col">Team or rider</th><th scope="col" className="sv-mid">Event pts</th><th scope="col">Season pts</th></tr></thead><tbody>{publication.results.map((row) => <tr key={row.teamProfileId}><td className="rf-num">{row.eventRank}</td><th scope="row" className="sv-rowhead">{row.teamName}</th><td className="sv-mid">{row.eventPoints}</td><td className="rf-num sv-end">{row.seasonPoints}</td></tr>)}</tbody></table>{!publication.results.length && <p className="rf-note" style={{ paddingInline: 16 }}>No eligible teams in this publication.</p>}</div>;
 }
 
 function PublicationHistory({ base, latest }: { base: string; latest: number }) {

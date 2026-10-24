@@ -7,7 +7,7 @@ import { apiErrorMessage } from '../../../lib/apiError';
 import { parseBibAndFlag } from '../../../lib/bib';
 import { competitionDateText } from '../../../lib/competitionDates';
 import {
-  blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, panelTitle, riderFromSaved,
+  blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, normaliseSlotsForFormat, panelTitle, riderFromSaved,
   phoneProblem, riderReady, ridersRequired, savedChoices, slotFlagged, slotLabel, slotMeta, slotsFromForm, statusText, subtitleOf, teamIsFull,
   type DecFormDraft, type DecRider, type Slot,
 } from '../../../lib/decForm';
@@ -43,7 +43,9 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const required = ridersRequired(section?.format);
 
   const initialBib = parseBibAndFlag(existing?.bibDescription ?? team.bibDescription ?? '');
-  const [slots, setSlots] = useState<Slot[]>(() => draft?.slots ?? (existing ? slotsFromForm(existing, required, config) : emptySlots(required)));
+  const [slots, setSlots] = useState<Slot[]>(() => draft?.slots
+    ? (required < 4 ? normaliseSlotsForFormat(draft.slots, section?.format) : draft.slots)
+    : (existing ? slotsFromForm(existing, required, config) : emptySlots(required)));
   const [teamName, setTeamName] = useState(draft?.teamName ?? team.displayName);
   const [bibs, setBibs] = useState(draft?.bibs ?? initialBib.bib);
   const [flag, setFlag] = useState(draft?.flag ?? initialBib.flag ?? '');
@@ -63,8 +65,20 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
 
   useEffect(() => {
     let cancelled = false;
-    api.get<SavedRider[]>(`/clubs/${team.clubId}/saved-riders`)
-      .then((r) => { if (!cancelled && Array.isArray(r.data)) setSaved(r.data); })
+    Promise.resolve(api.get<SavedRider[]>(`/clubs/${team.clubId}/saved-riders`))
+      .then(async (r) => {
+        const clubRiders = Array.isArray(r?.data) ? r.data : [];
+        if (clubRiders.length > 0 || cancelled) {
+          if (!cancelled) setSaved(clubRiders);
+          return;
+        }
+        try {
+          const own = await api.get<SavedRider[]>('/clubs/my-saved-riders');
+          if (!cancelled && Array.isArray(own?.data)) setSaved(own.data);
+        } catch {
+          if (!cancelled) setSaved([]);
+        }
+      })
       .catch(() => { if (!cancelled) setSaved([]); });
     return () => { cancelled = true; };
   }, [team.clubId]);
@@ -76,7 +90,13 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
     try { localStorage.setItem(decDraftKey(competition.id, team.id), JSON.stringify(draftToKeep)); } catch { /* storage full or blocked */ }
   }, [submitted, touched, competition.id, team.id, teamName, bibs, flag, trainerName, phone, notes, slots]);
 
-  const choices = useMemo(() => savedChoices(saved, slots), [saved, slots]);
+  const choices = useMemo(
+    () => savedChoices(saved, slots).map((r) => ({
+      ...r,
+      fullName: r.horseName ? `${r.fullName} — ${r.horseName}` : r.fullName,
+    })),
+    [saved, slots],
+  );
   const reserve = active != null && isReserveSlot(slots, active);
   const editing = active != null && !!slots[active];
   const full = teamIsFull(slots);
@@ -237,7 +257,17 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             ready={riderReady(form, reserve, undefined, config)}
             config={config}
             onChange={(patch) => setForm((cur) => ({ ...cur, ...patch }))}
-            onPick={(pick) => setForm(riderFromSaved(pick, reserve))}
+            onPick={(pick) => {
+              const original = saved.find((s) => s.id === pick.id) ?? {
+                ...pick,
+                fullName: pick.horseName && pick.fullName.endsWith(` — ${pick.horseName}`)
+                  ? pick.fullName.slice(0, -(` — ${pick.horseName}`).length)
+                  : pick.fullName,
+              };
+              const next = riderFromSaved(original, reserve);
+              if (original.clubId && original.clubId !== team.clubId) next.savedRiderId = null;
+              setForm(next);
+            }}
             onCommit={commit}
             onClose={close}
           />

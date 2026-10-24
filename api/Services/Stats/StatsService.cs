@@ -1,4 +1,5 @@
 using System.Globalization;
+using MountedGames.Api.Services.Seasons;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
@@ -155,13 +156,13 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         var key = StatsNames.Normalise(name);
         if (!StatsNames.IsValidQuery(key)) return null;
         var rows = await RiderRows(PoniesNamed(StatsNames.Tokens(key)), MaxProfileRows).ToListAsync(ct);
-        var mine = rows.Where(r => StatsNames.Normalise(PonyName(r.HorseName, r.PonyHeightHands)) == key).ToList();
-        if (mine.Count == 0)
-            mine = rows.Where(r => StatsNames.Normalise(r.HorseName) == key).ToList();
+        var legacyName = rows.Any(r => StatsNames.Normalise(r.HorseName) == key);
+        var mine = rows.Where(r => StatsNames.Normalise(legacyName ? r.HorseName : PonyName(r.HorseName, r.PonyHeightHands)) == key).ToList();
         if (mine.Count == 0) return null;
         var memberships = mine.Select(r => new Membership(r.TeamId,
             StatsNames.Tidy(RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames)), PonyName(r.HorseName, r.PonyHeightHands), r.IsReserve)).ToList();
-        return await BuildAsync(StatsSubjectKind.Pony, memberships[0].PonyName!, StatsNames.Normalise(memberships[0].PonyName), memberships, viewer, ct);
+        var displayName = legacyName ? StatsNames.Tidy(mine[0].HorseName) : memberships[0].PonyName!;
+        return await BuildAsync(StatsSubjectKind.Pony, displayName, key, memberships, viewer, ct);
     }
 
     public async Task<StatsProfileDto?> TeamAsync(string? name, StatsViewer viewer, CancellationToken ct = default)
@@ -184,7 +185,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         return await TeamsProfileAsync(StatsSubjectKind.Club, key, rows, viewer, ct);
     }
 
-    /// <summary>A season team profile: the event teams an organiser linked to it, so no name matching is needed.</summary>
+    /// <summary>A season profile uses explicit links and its latest published event memberships, never names.</summary>
     public async Task<StatsProfileDto?> TeamProfileAsync(Guid id, StatsViewer viewer, CancellationToken ct = default)
     {
         var profile = await db.Set<TeamProfile>().AsNoTracking()
@@ -192,8 +193,17 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             .Select(p => new { p.DisplayName, Teams = p.EventTeams.Select(e => e.TeamId).ToList() })
             .SingleOrDefaultAsync(ct);
         if (profile is null) return null;
-        var memberships = profile.Teams.Select(teamId => new Membership(teamId, null, null, false)).ToList();
-        return await BuildAsync(StatsSubjectKind.Team, StatsNames.Tidy(profile.DisplayName), id.ToString(), memberships, viewer, ct);
+        var publishedTeams = await db.Set<SeasonRoundResult>().AsNoTracking()
+            .Where(result => result.TeamProfileId == id
+                && !db.Set<SeasonRoundPublication>().Any(newer =>
+                    newer.SeasonRoundId == result.SeasonRoundPublication!.SeasonRoundId
+                    && newer.Version > result.SeasonRoundPublication.Version))
+            .Select(result => result.EventTeamId).Distinct().ToListAsync(ct);
+        var memberships = profile.Teams.Concat(publishedTeams).Distinct()
+            .Select(teamId => new Membership(teamId, null, null, false)).ToList();
+        var initialOnly = await SeasonRiderPrivacy.InitialOnlyProfilesAsync(db, [id], ct);
+        var name = SeasonRiderPrivacy.Display(id, profile.DisplayName, initialOnly);
+        return await BuildAsync(StatsSubjectKind.Team, StatsNames.Tidy(name), id.ToString(), memberships, viewer, ct);
     }
 
     private async Task<StatsProfileDto?> TeamsProfileAsync(StatsSubjectKind kind, string key, List<NameRow> rows, StatsViewer viewer, CancellationToken ct)
@@ -242,6 +252,8 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         var placed = entryTeams.Where(t => places.ContainsKey(t.TeamId)).Select(t => places[t.TeamId]).ToList();
         var finalsEntries = placed.Count(p => p.SectionHasFinals);
         var aFinals = placed.Count(p => p.FinalTier == 0);
+        var bFinals = placed.Count(p => p.FinalTier == 1);
+        var cFinals = placed.Count(p => p.FinalTier == 2);
         var wins = raceScope.Count(IsWin);
         var points = raceScope.Sum(r => r.Points);
         var maxPoints = raceScope.Sum(MaxFor);
@@ -251,7 +263,8 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             placed.Count == 0 ? null : Math.Round(placed.Average(p => p.Place), 1, MidpointRounding.AwayFromZero),
             finalsEntries, placed.Count(p => p.FinalTier is not null), aFinals, StatsNames.Percent(aFinals, finalsEntries),
             raceScope.Count, wins, StatsNames.Percent(wins, raceScope.Count),
-            points, maxPoints, StatsNames.Percent(points, maxPoints));
+            points, maxPoints, StatsNames.Percent(points, maxPoints),
+            bFinals, cFinals);
 
         if (!viewer.SignedIn)
             return new StatsProfileDto(kind, name, key, false, allFormats, summary, null, null, null, null, null);
@@ -312,7 +325,41 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             : Partnerships(kept.Where(m => m.RiderName is not null && m.PonyName is not null)
                 .Select(m => (m.RiderName!, m.PonyName!, teamById[m.TeamId].CompetitionId, m.TeamId)));
 
-        return new StatsProfileDto(kind, name, key, true, allFormats, summary, games, best, worst, entries, partnerships);
+        var clubs = kind == StatsSubjectKind.Club ? [] : entries
+            .Where(e => !string.IsNullOrWhiteSpace(e.ClubName))
+            .GroupBy(e => StatsNames.Normalise(e.ClubName))
+            .Select(g => new StatsClubDto(
+                StatsNames.Tidy(g.First().ClubName),
+                g.Count(),
+                g.Select(e => e.CompetitionId).Distinct().Count(),
+                g.Min(e => e.StartDate).ToString("yyyy-MM-dd"),
+                g.Max(e => e.StartDate).ToString("yyyy-MM-dd")))
+            .OrderByDescending(c => c.Competitions).ThenByDescending(c => c.Entries)
+            .ThenBy(c => c.ClubName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var eventTeamIds = entries.Select(e => e.TeamId).ToArray();
+        var seasonMemberships = await db.Set<SeasonRoundResult>().AsNoTracking()
+            .Where(r => eventTeamIds.Contains(r.EventTeamId)
+                && r.SeasonRoundPublication!.SeasonRound!.IsIncluded
+                && !db.Set<SeasonRoundPublication>().Any(newer =>
+                    newer.SeasonRoundId == r.SeasonRoundPublication.SeasonRoundId
+                    && newer.Version > r.SeasonRoundPublication.Version))
+            .Select(r => new { r.SeasonRoundPublication!.SeasonRound!.SeasonId, r.TeamProfileId })
+            .Distinct().ToListAsync(ct);
+        var seasons = new List<StatsSeasonStandingDto>();
+        foreach (var group in seasonMemberships.GroupBy(m => m.SeasonId))
+        {
+            var table = await Services.Seasons.SeasonStandingsCalculator.CalculateAsync(db, group.Key, ct);
+            if (table is null) continue;
+            var profileIds = group.Select(m => m.TeamProfileId).ToHashSet();
+            seasons.AddRange(table.Standings.Where(row => profileIds.Contains(row.TeamProfileId))
+                .Select(row => new StatsSeasonStandingDto(table.SeasonId, table.Title, table.Year,
+                    row.Rank, row.TotalPoints, row.Rounds.Count, row.TeamProfileId, row.TeamName)));
+        }
+        seasons = seasons.OrderByDescending(s => s.Year).ThenBy(s => s.SeasonName).ThenBy(s => s.Rank).ToList();
+
+        return new StatsProfileDto(kind, name, key, true, allFormats, summary, games, best, worst, entries, partnerships, clubs, seasons);
     }
 
     private static bool IsWin(ResultRow r) => r.Placing == 1 && !r.Eliminated;
@@ -361,7 +408,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         if (ids.Count == 0) return [];
         var riders = await PublicRiders()
             .Where(r => ids.Contains(r.DeclarationForm!.TeamId) && r.HorseName != null)
-            .Select(r => new { r.FullName, r.UseInitialOnly, r.HorseName, r.PonyHeightHands, r.DeclarationForm!.TeamId })
+            .Select(r => new { r.FullName, UseInitialOnly = r.UseInitialOnly || (r.SavedRider != null && r.SavedRider.UseInitialOnly), r.HorseName, r.PonyHeightHands, r.DeclarationForm!.TeamId })
             .ToListAsync(ct);
         return Partnerships(riders
             .Where(r => PonyName(r.HorseName, r.PonyHeightHands) is not null)
@@ -429,7 +476,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
     private static IQueryable<RiderRow> RiderRows(IQueryable<RiderEntry> q, int max) => q
         .OrderByDescending(r => r.DeclarationForm!.Team!.Competition!.StartDate).ThenByDescending(r => r.Id)
         .Take(max)
-        .Select(r => new RiderRow(r.FullName, r.UseInitialOnly, r.HorseName, r.PonyHeightHands, r.IsReserve,
+        .Select(r => new RiderRow(r.FullName, r.UseInitialOnly || (r.SavedRider != null && r.SavedRider.UseInitialOnly), r.HorseName, r.PonyHeightHands, r.IsReserve,
             r.DeclarationForm!.TeamId, r.DeclarationForm.Team!.CompetitionId, r.DeclarationForm.Team.Section!.Format));
 
     /// <summary>

@@ -8,6 +8,7 @@ import type { HeatEntry } from '../../types';
 import type { CompetitionDetail, DeclarationForm } from '../../types';
 import { CompetitionContext } from './context';
 import { SessionPage } from './SessionPage';
+import { formatPoints } from '../../lib/formatPoints';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('./HeatScores', () => ({ HeatScores: () => <p>Public results</p> }));
@@ -579,6 +580,136 @@ describe('SessionPage', () => {
       await userEvent.click(screen.getByRole('button', { name: /Set up heats/ }));
       expect(await screen.findByText('0 dec forms in')).toBeInTheDocument();
       expect(screen.getByText(/Teams \(3 selected\)/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Run-off tie-breaker, manual score override, and team point adjustments', () => {
+    it('hides .01 run-off tie-breaker fractions while keeping .5 half-points visible', () => {
+      expect(formatPoints(24)).toBe('24');
+      expect(formatPoints(24.01)).toBe('24');
+      expect(formatPoints(24.5)).toBe('24.5');
+      expect(formatPoints(24.51)).toBe('24.5');
+    });
+
+    it('awards +0.01 to the run-off winner and supports manual score override and team point adjustments', async () => {
+      const tiedComp = competition({
+        teams,
+        sessions: [session(1, {
+          status: 1,
+          heats: [heat(1, {
+            entries: entries(2),
+            races: [race(1, {
+              name: 'Bending',
+              isComplete: true,
+              results: [result(1, 1, { points: 5 }), result(2, 1, { points: 5 })],
+            })],
+          })],
+        })],
+      });
+      mount(tiedComp);
+      await screen.findByText('Organiser tools');
+
+      await userEvent.selectOptions(screen.getByLabelText('Run-off winner'), '2');
+      await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
+      expect(await screen.findByTestId('runoff-standing-1')).toHaveTextContent('1. Rider 2: 5 pts');
+      expect(screen.getByTestId('runoff-standing-2')).toHaveTextContent('2. Rider 1: 5 pts');
+
+      const customPts = screen.getByLabelText('Custom points');
+      await userEvent.clear(customPts);
+      await userEvent.type(customPts, '4.5');
+      await userEvent.type(screen.getByLabelText('Override reason'), 'Dead heat');
+      await userEvent.click(screen.getByRole('button', { name: 'Save override' }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/races/1/results', expect.objectContaining({
+        reason: 'Dead heat',
+        places: expect.arrayContaining([
+          expect.objectContaining({ teamId: 1, refereeNote: '[pts:4.5] Dead heat' }),
+        ]),
+      })));
+
+      await userEvent.type(screen.getByLabelText('Adjustment reason'), 'False start penalty');
+      await userEvent.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/races/1/results', expect.objectContaining({
+        reason: 'False start penalty',
+        places: expect.arrayContaining([
+          expect.objectContaining({ teamId: 1, refereeNote: '[adj:-1] False start penalty' }),
+        ]),
+      })));
+    });
+
+    it('accepts only whole or half points, and says when a run-off result could not be saved', async () => {
+      const tiedComp = competition({
+        teams,
+        sessions: [session(1, {
+          status: 1,
+          heats: [heat(1, {
+            entries: entries(2),
+            races: [race(1, {
+              name: 'Bending',
+              isComplete: true,
+              results: [result(1, 1, { points: 5 }), result(2, 1, { points: 5 })],
+            })],
+          })],
+        })],
+      });
+      vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
+      mount(tiedComp);
+      await screen.findByText('Organiser tools');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
+      expect(await screen.findByText('Couldn’t save the run-off result. Try again.')).toBeInTheDocument();
+
+      const customPts = screen.getByLabelText('Custom points');
+      await userEvent.clear(customPts);
+      await userEvent.type(customPts, '2.25');
+      await userEvent.click(screen.getByRole('button', { name: 'Save override' }));
+      expect(await screen.findByText('Enter whole or half points, such as 3 or 2.5.')).toBeInTheDocument();
+
+      const delta = screen.getByLabelText('Point adjustment');
+      await userEvent.clear(delta);
+      await userEvent.type(delta, '0.3');
+      await userEvent.type(screen.getByLabelText('Adjustment reason'), 'Typo');
+      await userEvent.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+      expect(await screen.findByText('Adjust by whole or half points, such as 1 or -0.5.')).toBeInTheDocument();
+      expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it('supports 1-tap short-handed HC, Under Review flag, Clear / Re-run race, and mid-session Change / Cancel race with announcement', async () => {
+      vi.mocked(api.put).mockResolvedValue({ data: {} });
+      vi.mocked(api.post).mockResolvedValue({ data: {} });
+      vi.mocked(api.delete).mockResolvedValue({ data: {} });
+
+      mount(scoringData(2));
+      await screen.findByText('Organiser tools');
+
+      await userEvent.selectOptions(screen.getByLabelText('Short-handed team'), '2');
+      await userEvent.click(screen.getByRole('button', { name: 'Mark team HC (Hors Concours)' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/2', { isHorsConcours: true }));
+
+      await userEvent.selectOptions(screen.getByLabelText('Under review team'), '2');
+      await userEvent.type(screen.getByLabelText('Under review note'), 'Lane interference');
+      await userEvent.click(screen.getByRole('button', { name: 'Flag Under Review' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/sessions/races/1/results/2/under-review', {
+        underReview: true,
+        note: 'Lane interference',
+      }));
+      expect(await screen.findByTestId('under-review-badge-2')).toHaveTextContent('UNDER REVIEW: Rider 2');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Re-run stopped race' }));
+      await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sessions/races/1/results'));
+
+      await userEvent.type(screen.getByLabelText('New race name'), 'Sword');
+      await userEvent.click(screen.getByRole('button', { name: 'Change race' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races/1', {
+        newName: 'Sword',
+        applyToAllHeats: true,
+      }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/chat', {
+        body: 'Update: Race 1 in Session 1 is now Sword',
+        type: 1,
+      }));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel race' }));
+      await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/1/sessions/1/races/1'));
     });
   });
 });

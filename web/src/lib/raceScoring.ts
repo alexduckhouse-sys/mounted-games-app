@@ -12,6 +12,26 @@ export interface PendingPlace {
   refereeNote?: string;
 }
 
+/** Store manual points in the same private directive the scoring API and offline outbox accept. */
+export function overridePoints(list: PendingPlace[], teamId: number, points: number | undefined, reason?: string): PendingPlace[] {
+  const existing = list.find((p) => p.teamId === teamId);
+  if (points === undefined && !existing) return list;
+  const note = (existing?.refereeNote ?? '').replace(/\[(?:pts|adj):[^\]]*\]/gi, '').trim();
+  const refereeNote = points === undefined ? note : `[pts:${points}] ${reason?.trim() || note || 'Manual score override'}`;
+  const place = existing?.place || Math.max(0, ...list.map((p) => p.place)) + 1;
+  const replacement: PendingPlace = points === undefined
+    ? { ...existing!, refereeNote }
+    : { teamId, place, eliminated: false, refereeNote };
+  if (points !== undefined && existing?.eliminated) return [...list.filter((p) => p.teamId !== teamId), replacement];
+  return existing ? list.map((p) => p.teamId === teamId ? replacement : p) : [...list, replacement];
+}
+
+export function manualPoints(note?: string): number | undefined {
+  const value = /\[pts:(\d+(?:\.\d+)?)\]/i.exec(note ?? '')?.[1];
+  const points = value === undefined ? undefined : Number(value);
+  return points !== undefined && Number.isFinite(points) && Number.isInteger(points * 2) ? points : undefined;
+}
+
 /** Non-eliminated teams take places 1..n in order, with no gaps. Eliminated teams have no place (0). */
 function renumber(list: PendingPlace[]): PendingPlace[] {
   let next = 0;
@@ -39,6 +59,11 @@ export function tapTeam(list: PendingPlace[], teamId: number, qualifierCap: numb
   return [...list, { teamId, place: finishers(list) + 1, eliminated: false }];
 }
 
+/** Eliminating a team resets manual points while retaining its plain-language note. */
+function withoutManualPoints(p: PendingPlace): PendingPlace {
+  return p.refereeNote === undefined ? p : { ...p, refereeNote: p.refereeNote.replace(/\[(?:pts|adj):[^\]]*\]/gi, '').trim() };
+}
+
 /** Swipe a team out, or bring it back. A team brought back goes to the end of the order. */
 export function toggleEliminated(list: PendingPlace[], teamId: number): PendingPlace[] {
   const existing = list.find((p) => p.teamId === teamId);
@@ -47,7 +72,7 @@ export function toggleEliminated(list: PendingPlace[], teamId: number): PendingP
     const rest = list.filter((p) => p.teamId !== teamId);
     return [...rest, finisher(existing, finishers(rest) + 1)];
   }
-  return renumber(list.map((p) => (p.teamId === teamId ? { ...p, eliminated: true } : p)));
+  return renumber(list.map((p) => (p.teamId === teamId ? { ...withoutManualPoints(p), eliminated: true } : p)));
 }
 
 /**
@@ -58,7 +83,7 @@ export function setStatus(list: PendingPlace[], teamId: number, status: number):
   const existing = list.find((p) => p.teamId === teamId);
   if (status === RESULT_STATUS.Finished) return existing?.eliminated ? toggleEliminated(list, teamId) : list;
   if (!existing) return [...list, { teamId, place: 0, eliminated: true, status }];
-  return renumber(list.map((p) => (p.teamId === teamId ? { ...p, eliminated: true, status } : p)));
+  return renumber(list.map((p) => (p.teamId === teamId ? { ...withoutManualPoints(p), eliminated: true, status } : p)));
 }
 
 /** Set a team's private note. A team with no place or reason yet has nothing to attach it to, so it is left alone. */

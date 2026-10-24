@@ -274,9 +274,9 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
         var session = Assert.Single(draw.Sessions);
         Assert.Equal("Racing", session.SessionName);
         var nine = new DateTime(2037, 6, 6, 9, 0, 0, DateTimeKind.Utc);
-        // Heats are timed from the session start: 10 minutes per race, two races each.
-        Assert.Equal(new DateTime?[] { nine, nine.AddMinutes(20) }, session.Heats.Select(h => h.ScheduledStart));
-        Assert.Equal(new DateTime?[] { nine, nine.AddMinutes(20) }, score.Heats.Select(h => h.ScheduledStart));
+        // Heats are timed from the session start: 10 minutes per whole heat, with two races each.
+        Assert.Equal(new DateTime?[] { nine, nine.AddMinutes(10) }, session.Heats.Select(h => h.ScheduledStart));
+        Assert.Equal(new DateTime?[] { nine, nine.AddMinutes(10) }, score.Heats.Select(h => h.ScheduledStart));
         var firstCell = score.Heats[0].Races[0].Teams.Single();
         Assert.Equal((3, "Green bibs", 4), (firstCell.Lane, firstCell.Bib, firstCell.Points));
         Assert.Null(score.Heats[1].Races[0].Teams.Single().Points);

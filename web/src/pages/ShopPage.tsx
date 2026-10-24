@@ -293,6 +293,8 @@ function PostRow({
   const [reporting, setReporting] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reported, setReported] = useState(false);
+  const [sendingReport, setSendingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
   const ownPost = currentUserId != null && post.authorUserId === currentUserId;
 
   async function remove() {
@@ -301,10 +303,19 @@ function PostRow({
     onChanged();
   }
   async function submitReport() {
-    await api.post(`/shop/posts/${post.id}/report`, { reason: reportReason.trim() || null }).catch(() => {});
-    setReporting(false);
-    setReportReason('');
-    setReported(true);
+    if (sendingReport) return;
+    setSendingReport(true);
+    setReportError(null);
+    try {
+      await api.post(`/shop/posts/${post.id}/report`, { reason: reportReason.trim() || null });
+      setReporting(false);
+      setReportReason('');
+      setReported(true);
+    } catch {
+      setReportError('Could not send the report. Try again.');
+    } finally {
+      setSendingReport(false);
+    }
   }
 
   const where = [post.authorName, post.ponyClubName].filter(Boolean).join(' · ');
@@ -333,7 +344,7 @@ function PostRow({
             </button>
             <div className="ml-auto" />
             {!post.isDeleted && !ownPost && !reported && (
-              <button type="button" onClick={() => setReporting((v) => !v)} className="mg-small-btn gap-1.5"><Flag className="h-4 w-4" aria-hidden="true" /> Report</button>
+              <button type="button" onClick={() => { setReporting((v) => !v); setReportError(null); }} disabled={sendingReport} className="mg-small-btn gap-1.5"><Flag className="h-4 w-4" aria-hidden="true" /> Report</button>
             )}
             {(isAdmin || ownPost) && !post.isDeleted && (
               <button onClick={remove} className="mg-small-btn gap-1.5 !text-[rgb(var(--mg-elim))]" aria-label="Remove post"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
@@ -345,12 +356,15 @@ function PostRow({
                 type="text"
                 aria-label="Why are you reporting this post? (optional)"
                 placeholder="Reason (optional)"
+                maxLength={1000}
+                disabled={sendingReport}
                 value={reportReason}
                 onChange={(e) => setReportReason(e.target.value)}
                 className="input min-w-[180px] flex-1 text-sm"
               />
-              <button type="button" onClick={() => { void submitReport(); }} className="mg-small-btn">Send report</button>
-              <button type="button" onClick={() => { setReporting(false); setReportReason(''); }} className="mg-small-btn">Cancel</button>
+              <button type="button" disabled={sendingReport} onClick={() => { void submitReport(); }} className="mg-small-btn">{sendingReport ? 'Sending…' : 'Send report'}</button>
+              <button type="button" disabled={sendingReport} onClick={() => { setReporting(false); setReportReason(''); setReportError(null); }} className="mg-small-btn">Cancel</button>
+              {reportError && <p role="alert" className="mg-notice w-full">{reportError}</p>}
             </div>
           )}
           {reported && <p role="status" className="mg-meta">Reported. An admin will review.</p>}

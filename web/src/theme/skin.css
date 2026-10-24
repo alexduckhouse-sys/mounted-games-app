@@ -138,6 +138,11 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-nav-btn[aria-pressed="true"] { background: #fff; color: rgb(var(--mg-header)); }
 .mg-header :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .mg-strip-bar { background: rgb(var(--mg-header-deep)); color: #fff; }
+.mg-strip-flash { animation: mg-strip-flash 1.4s ease-out; }
+@keyframes mg-strip-flash {
+  0%, 25% { background: rgb(var(--mg-warn, 217 119 6)); }
+  100% { background: rgb(var(--mg-header-deep)); }
+}
 .mg-strip {
   display: flex; align-items: center; gap: 10px; min-height: 44px;
   color: #fff !important; font: 500 14px/1.2 var(--mg-font); text-decoration: none !important;

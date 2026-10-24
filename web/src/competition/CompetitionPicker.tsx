@@ -12,10 +12,12 @@ import { displaySectionName } from '../lib/section';
 import { lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
 import { CompetitionListSkeleton } from '../components/Skeletons';
 import { usePageHeader } from '../components/CompactPageBarContext';
+import { useAuth } from '../auth/AuthContext';
 
 /** The events page: upcoming competitions, with the past ones a link away at the bottom. */
 export function CompetitionPicker({ past = false }: { past?: boolean }) {
   usePageWidth('wide');
+  const { user } = useAuth();
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const refresh = () => setAttempt((n) => n + 1);
@@ -24,7 +26,7 @@ export function CompetitionPicker({ past = false }: { past?: boolean }) {
       window.removeEventListener('online', refresh);
     };
   }, []);
-  return <CompetitionList key={`${past}-${attempt}`} past={past} onRetry={() => setAttempt((n) => n + 1)} />;
+  return <CompetitionList key={`${past}-${user?.id ?? 'public'}`} past={past} refresh={attempt} onRetry={() => setAttempt((n) => n + 1)} />;
 }
 
 function PlainHeader({ past }: { past: boolean }) {
@@ -32,44 +34,61 @@ function PlainHeader({ past }: { past: boolean }) {
   return null;
 }
 
-function CompetitionList({ onRetry, past }: { onRetry: () => void; past: boolean }) {
+function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past: boolean; refresh: number }) {
   const headingId = useId();
   const { current, setCurrent, forget } = useCurrentCompetition();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  // The first page this phone saw last time shows while the list refreshes.
+  const [yearFilter, setYearFilter] = useState('all');
+  const [locationFilter, setLocationFilter] = useState('all');
+  const [mineOnly, setMineOnly] = useState(false);
+  const serverSearch = past ? search.trim() : '';
+  const filterKey = past ? JSON.stringify([yearFilter, locationFilter, serverSearch, mineOnly]) : 'upcoming';
+  const unfiltered = !mineOnly && yearFilter === 'all' && locationFilter === 'all' && !serverSearch;
+  // Only the unfiltered public page is kept on this device; personal results stay in memory.
   const [saved] = useState(() => readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(past)));
-  const [state, setState] = useState({ items: saved?.data.items ?? [] as CompetitionPickerItem[], page: 0, hasMore: false, error: false, savedCopy: !!saved, savedAt: saved?.savedAt ?? null as string | null });
-  const loading = state.page !== page;
+  const [state, setState] = useState({ key: filterKey, items: saved?.data.items ?? [] as CompetitionPickerItem[], page: 0, hasMore: false, error: false, savedCopy: !!saved, savedAt: saved?.savedAt ?? null as string | null,
+    years: saved?.data.years ?? [] as number[], locations: saved?.data.locations ?? [] as string[] });
+  const loading = state.page !== page || state.key !== filterKey;
   useEffect(() => {
     const controller = new AbortController();
-    api.get<CompetitionPickerPage>('/competitions/picker', { params: { past, page }, signal: controller.signal })
+    const filters = past ? {
+      ...(yearFilter !== 'all' ? { year: Number(yearFilter) } : {}),
+      ...(locationFilter !== 'all' ? { location: locationFilter } : {}),
+      ...(serverSearch ? { search: serverSearch } : {}),
+    } : {};
+    api.get<CompetitionPickerPage>(mineOnly ? '/competitions/picker/mine' : '/competitions/picker', { params: { past, page, ...filters }, signal: controller.signal })
       .then(({ data, headers }) => {
         if (controller.signal.aborted) return;
-        const fallback = serviceWorkerSavedAt(headers);
-        if (page === 1 && fallback === null) writeSavedCopy(savedCopyKeys.picker(past), data);
-        const keepSaved = page === 1 && fallback !== null && saved != null && (fallback === 'unknown' || Date.parse(saved.savedAt) >= fallback.getTime());
+        const fallback = mineOnly ? null : serviceWorkerSavedAt(headers);
+        if (unfiltered && page === 1 && fallback === null) writeSavedCopy(savedCopyKeys.picker(past), data);
+        const keepSaved = unfiltered && page === 1 && fallback !== null && saved != null && (fallback === 'unknown' || Date.parse(saved.savedAt) >= fallback.getTime());
         const fresh = keepSaved ? saved.data : data;
         setState((previous) => {
-          // Page 1 replaces the saved list, which may still hold competitions that have since gone.
-          const kept = page === 1 ? [] : previous.items;
+          const kept = page === 1 || previous.key !== filterKey ? [] : previous.items;
           return {
-            items: [...kept, ...fresh.items.filter((item) => !kept.some((existing) => existing.id === item.id))],
+            key: filterKey, items: [...kept, ...fresh.items.filter((item) => !kept.some((existing) => existing.id === item.id))],
+            years: fresh.years ?? [], locations: fresh.locations ?? [],
             page, hasMore: fresh.hasMore, error: false,
-            savedCopy: (page > 1 && previous.savedCopy) || fallback !== null,
+            savedCopy: (page > 1 && previous.key === filterKey && previous.savedCopy) || fallback !== null,
             savedAt: fallback === null ? (page > 1 ? previous.savedAt : null) : keepSaved ? saved.savedAt : fallback === 'unknown' ? '' : fallback.toISOString(),
           };
         });
       })
       .catch(() => {
-        if (!controller.signal.aborted) setState((previous) => ({ ...previous, page, error: true }));
+        if (!controller.signal.aborted) setState((previous) => ({ ...previous,
+          ...(previous.key !== filterKey ? { items: [], savedCopy: false, savedAt: null, hasMore: false } : {}), key: filterKey, page, error: true }));
       });
     return () => controller.abort();
-  }, [past, page, saved]);
+  }, [past, page, saved, filterKey, yearFilter, locationFilter, serverSearch, mineOnly, unfiltered, refresh]);
 
   const query = search.trim().toLowerCase();
-  const matches = query ? state.items.filter((item) => `${item.name} ${item.location ?? ''}`.toLowerCase().includes(query)) : state.items;
+  const items = state.key === filterKey ? state.items : [];
+  const matches = !past && query ? items.filter((item) => `${item.name} ${item.location ?? ''}`.toLowerCase().includes(query)) : items;
+  const years = state.years;
+  const locations = state.locations;
   const now = new Date();
   const onToday = past ? [] : matches.filter((item) => isOnToday(item.startDate, item.endDate, now));
   const later = matches.filter((item) => !onToday.includes(item));
@@ -89,8 +108,29 @@ function CompetitionList({ onRetry, past }: { onRetry: () => void; past: boolean
         <label className="mg-navy-field">
           <Search className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
           <span className="sr-only">Search competitions</span>
-          <input type="search" placeholder="Name or venue" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <input type="search" placeholder="Name or venue" value={search} onChange={(event) => { setSearch(event.target.value); if (past) setPage(1); }} />
         </label>
+        {past && (
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Archive filters">
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-white">
+              <span>Year</span>
+              <select aria-label="Filter by year" value={yearFilter} onChange={(e) => { setYearFilter(e.target.value); setPage(1); }} className="rounded bg-white/15 px-2 py-1 text-xs text-white">
+                <option value="all">All years</option>
+                {years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+              </select>
+            </label>
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-white">
+              <span>Location</span>
+              <select aria-label="Filter by location" value={locationFilter} onChange={(e) => { setLocationFilter(e.target.value); setPage(1); }} className="rounded bg-white/15 px-2 py-1 text-xs text-white">
+                <option value="all">All locations</option>
+                {locations.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            <button type="button" disabled={!user} aria-pressed={mineOnly} onClick={() => { setMineOnly((v) => !v); setPage(1); }} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${mineOnly ? 'bg-white text-[rgb(var(--mg-heading))]' : 'bg-white/15 text-white'}`}>
+              My club / competitions I rode in
+            </button>
+          </div>
+        )}
         {past && <Link to="/events" className="inline-flex min-h-11 items-center gap-1 self-start text-[13px] font-semibold !text-white !no-underline"><ChevronLeft className="h-4 w-4" aria-hidden="true" />Back to upcoming competitions</Link>}
       </div>
       {current && (
@@ -98,7 +138,7 @@ function CompetitionList({ onRetry, past }: { onRetry: () => void; past: boolean
           <PinOff className="h-4 w-4" aria-hidden="true" />Forget this competition<span className="sr-only">: {current.name}</span>
         </button>
       )}
-      {state.savedCopy && !loading && shouldNoticeSavedCopy(state.savedAt, true, now) && <p role="status" className="mg-notice">{lastUpdatedText(state.savedAt, now)}. We’ll refresh when you’re back online.</p>}
+      {!mineOnly && state.savedCopy && !loading && shouldNoticeSavedCopy(state.savedAt, true, now) && <p role="status" className="mg-notice">{lastUpdatedText(state.savedAt, now)}. We’ll refresh when you’re back online.</p>}
       <div className="flex flex-col gap-3.5" aria-busy={loading}>
         {onToday.length > 0 && (
           <section className="mg-sec" aria-label="On today">
@@ -118,7 +158,7 @@ function CompetitionList({ onRetry, past }: { onRetry: () => void; past: boolean
         )}
         {loading && (state.items.length === 0 ? <CompetitionListSkeleton /> : <p role="status" className="mg-meta py-3 text-center">Checking for changes…</p>)}
         {!loading && state.error && <div className="mg-card flex flex-col items-start gap-3 p-4" role="alert"><p>Couldn’t load competitions. Check your connection and try again.</p><button className="mg-btn mg-btn-primary" onClick={onRetry}>Try again</button></div>}
-        {!loading && !state.error && state.items.length === 0 && <p className="mg-card p-4">{past ? 'No past competitions yet.' : 'No competitions available yet.'}</p>}
+        {!loading && !state.error && state.items.length === 0 && <p className="mg-card p-4">{!unfiltered ? 'No competitions match those filters.' : past ? 'No past competitions yet.' : 'No competitions available yet.'}</p>}
         {!loading && !state.error && state.items.length > 0 && matches.length === 0 && <p className="mg-card p-4">No competitions match that search.{state.hasMore ? ' Load more to search further back.' : ''}</p>}
         {!loading && !state.error && state.hasMore && <button className="mg-btn mg-btn-secondary w-full" onClick={() => setPage((value) => value + 1)}>Load more competitions</button>}
         {!past && <Link to="/competitions/past" className="mg-btn mg-btn-secondary w-full"><History className="h-4 w-4" aria-hidden="true" />See past competitions</Link>}

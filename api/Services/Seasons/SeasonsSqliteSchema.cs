@@ -1,11 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
+using MountedGames.Api.Entities.Seasons;
 
 namespace MountedGames.Api.Services.Seasons;
 
 public static class SeasonsSqliteSchema
 {
-    public static Task EnsureAsync(AppDbContext db) => db.Database.ExecuteSqlRawAsync("""
+    public static async Task EnsureAsync(AppDbContext db)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS "Season" (
         "Id" TEXT NOT NULL,
         "OwnerUserId" TEXT NOT NULL,
@@ -58,6 +61,7 @@ public static class SeasonsSqliteSchema
         "CompetitionSectionId" INTEGER NOT NULL,
         "OrderIndex" INTEGER NOT NULL,
         "IsIncluded" INTEGER NOT NULL,
+        "PointsMultiplier" REAL NOT NULL DEFAULT 1.0,
         "CreatedAt" TEXT NOT NULL,
         CONSTRAINT "PK_SeasonRound" PRIMARY KEY ("Id"),
         CONSTRAINT "FK_SeasonRound_CompetitionSections_CompetitionSectionId" FOREIGN KEY ("CompetitionSectionId") REFERENCES "CompetitionSections" ("Id") ON DELETE RESTRICT,
@@ -128,4 +132,6 @@ public static class SeasonsSqliteSchema
 
         CREATE INDEX IF NOT EXISTS "IX_SeasonRoundResult_TeamProfileId" ON "SeasonRoundResult" ("TeamProfileId");
         """);
+        await DbInitializer.EnsureColumnAsync(db, "SeasonRound", "PointsMultiplier", "REAL NOT NULL DEFAULT 1.0");
+    }
 }

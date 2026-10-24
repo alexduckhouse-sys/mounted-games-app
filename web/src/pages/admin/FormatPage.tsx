@@ -30,6 +30,9 @@ const message = (e: unknown, fallback: string) => {
 };
 
 const isRace = (s: Session) => (s.kind ?? (s.isBreak ? SessionKind.Break : SessionKind.Race)) === SessionKind.Race;
+const isFinalSession = (s: Session) =>
+  (s.heats.length > 0 && s.heats.every((h) => /^[A-Z](\s+Final)?$/i.test(h.label?.trim() ?? '')))
+  || /\b([A-Z]\s+)?Finals?\b/i.test(s.name ?? '');
 const hasScores = (s: Session) => s.status !== 0 || s.heats.some((h) => h.races.some((r) => r.isComplete));
 
 /**
@@ -132,7 +135,8 @@ export function FormatPage() {
   for (const s of signups) if (s.status === 1) paidBySection.set(s.competitionSectionId, (paidBySection.get(s.competitionSectionId) ?? 0) + 1);
   const totalPaid = signups.filter((s) => s.status === 1).length;
   const totalPending = signups.filter((s) => s.status === 0).length;
-  const generated = raceSessions.length > 0 && raceSessions.every((s) => s.heats.length > 0);
+  const drawSessions = raceSessions.filter((s) => !isFinalSession(s));
+  const generated = drawSessions.length > 0 && drawSessions.every((s) => s.heats.length > 0);
   const teamsFormed = competition.teams.length > 0;
   const racesSet = raceSessions.length > 0 && raceSessions.every((s) => (s.plannedRaces?.length ?? 0) > 0 || s.heats.length > 0);
   const steps = [
@@ -185,8 +189,8 @@ export function FormatPage() {
   };
 
   async function generate() {
-    const targets = raceSessions.filter((s) => !hasScores(s));
-    const skipped = raceSessions.filter(hasScores);
+    const targets = drawSessions.filter((s) => !hasScores(s));
+    const skipped = drawSessions.filter(hasScores);
     const withTeams = targets.filter((s) => { const section = sectionOf(s); return section && activeTeams(section).length > 0; });
     if (withTeams.length === 0) { setError('There are no teams to put in heats yet. Form teams first.'); return; }
     const replacing = withTeams.filter((s) => s.heats.length > 0).length;
