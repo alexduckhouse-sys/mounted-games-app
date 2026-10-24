@@ -379,4 +379,3 @@ it('toggles the lanes dropdown on a heat row to reveal lane numbers and team lin
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   expect(screen.queryByRole('list', { name: 'Lanes for Heat 1' })).toBeNull();
 });
-
