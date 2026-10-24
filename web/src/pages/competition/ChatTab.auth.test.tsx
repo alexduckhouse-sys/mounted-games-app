@@ -186,7 +186,7 @@ describe('ChatTab auth sessions', () => {
     mount({ staffChatEnabled: true });
 
     expect(await screen.findByText('Official heat 1 update')).toBeInTheDocument();
-    const announcementsTab = screen.getByRole('tab', { name: /Announcements/ });
+    const announcementsTab = screen.getByRole('tab', { name: /^Announcements$/ });
     const messagesTab = screen.getByRole('tab', { name: /Message Organisers/ });
     expect(announcementsTab).toHaveAttribute('aria-selected', 'true');
     expect(messagesTab).toHaveAttribute('aria-selected', 'false');
