@@ -161,7 +161,7 @@ describe('w7 entry options', () => {
     mount([section({ maxParticipants: 1, activeSignupsCount: 1 })]);
     await userEvent.click(screen.getByRole('link', { name: 'Join waiting list (Free)' }));
     await userEvent.type(screen.getByPlaceholderText('Your full name'), 'Synthetic Entrant');
-    await userEvent.click(screen.getByRole('checkbox', { name: /parental consent/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({ isWaitlist: true, stablesCount: 0, paymentMethod: null })));
     expect(await screen.findByText(/You are on the waiting list/)).toBeInTheDocument();
@@ -179,7 +179,7 @@ describe('w7 entry options', () => {
     await userEvent.type(screen.getByLabelText('Number of stables'), '3');
     expect(screen.getByText('£20.00')).toBeInTheDocument();
     expect(screen.queryByText('Pay by Card')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('checkbox', { name: /parental consent/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({ wholeTeam: true, teamsCount: 2, stablesCount: 3, paymentMethod: 'bacs' })));
   });
