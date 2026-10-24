@@ -7,11 +7,11 @@ import { STEP_IDS, STEP_LABEL } from '../../../lib/creatorDraft';
  */
 export function StepNav({ current, reached, onGo }: { current: number; reached: number; onGo: (step: number) => void }) {
   return (
-    <nav aria-label="Steps" className="flex flex-col gap-3 lg:sticky lg:top-6 lg:self-start">
+    <nav aria-label="Steps" className="flex flex-col gap-3 lg:sticky lg:top-[calc(var(--mg-shell-h,64px)+24px)] lg:self-start">
       <p className="text-sm font-semibold text-[rgb(var(--mg-muted))] lg:hidden">
         Step {current + 1} of {STEP_IDS.length}<span aria-hidden="true"> · </span><span className="text-[rgb(var(--mg-heading))]">{STEP_LABEL[STEP_IDS[current]]}</span>
       </p>
-      <ol className="m-0 flex list-none items-center gap-2 p-0 lg:flex-col lg:items-stretch lg:gap-1">
+      <ol className="m-0 flex list-none items-center justify-between gap-1 overflow-x-auto p-0 lg:flex-col lg:items-stretch lg:gap-1">
         {STEP_IDS.map((id, i) => {
           const done = i < current;
           const now = i === current;

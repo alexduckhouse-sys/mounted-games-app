@@ -227,7 +227,7 @@ export function ArenaPage() {
         ) : (
           <div className="rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700 p-6 text-center">
             <Flag className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-            <p className="text-sm text-slate-500">No setup diagram for "{activeRace?.name}" yet — add it under Admin → Race rules.</p>
+            <p className="text-sm text-slate-500">No setup diagram for "{activeRace?.name}" yet. Add it under Admin → Race rules.</p>
           </div>
         )}
       </div>

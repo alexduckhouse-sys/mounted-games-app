@@ -151,7 +151,7 @@ function Switch({ label, on, disabled, onChange }: { label: string; on: boolean;
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)}
       className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50 ${on ? 'bg-[rgb(var(--mg-button))]' : 'bg-[rgb(var(--mg-control))]'}`}>
-      <span aria-hidden="true" className={`absolute top-[3px] h-[22px] w-[22px] rounded-full bg-white transition-all ${on ? 'left-[23px]' : 'left-[3px]'}`} />
+      <span aria-hidden="true" className={`absolute left-[3px] top-[3px] h-[22px] w-[22px] rounded-full bg-white transition-transform duration-150 ${on ? 'translate-x-5' : 'translate-x-0'}`} />
       <span className="absolute -inset-y-2 inset-x-0" aria-hidden="true" />
     </button>
   );

@@ -71,7 +71,7 @@ export function DeclarationsIndexPage() {
   }
 
   return (
-    <div className="skin mx-auto w-full max-w-[560px] space-y-3 py-4">
+    <div className="skin mx-auto w-full max-w-4xl space-y-3 py-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="mg-h1 mg-h1-sm flex items-center gap-2">
           <ClipboardList className="h-6 w-6" aria-hidden="true" /> Declaration forms
@@ -99,7 +99,7 @@ export function DeclarationsIndexPage() {
           aria-pressed={view === 'current'}
           title={current ? `${current.name} only` : 'Open a competition to scope by it'}
         >
-          <Trophy className="w-3.5 h-3.5" /> {current ? `Current — ${current.name}` : 'Current comp'}
+          <Trophy className="w-3.5 h-3.5" /> {current ? `Current · ${current.name}` : 'Current competition'}
         </button>
         <button
           onClick={() => setView('all')}

@@ -43,6 +43,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const ordinals = useMemo(() => sessionOrdinals(competition.sessions), [competition.sessions]);
   const [pickedDay, setPickedDay] = useState<string | null>(null);
   const arenaKey = `mg.tt.arena.${competition.id}`;
+  const [showFinished, setShowFinished] = useState(false);
   const [openDone, setOpenDone] = useState<ReadonlySet<string>>(new Set());
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
   function chooseArena(name: string) {
@@ -139,13 +140,25 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       <div className="tt-body">
         {lead}
         {visibleRows.some(isProvisionalRow) && (
-          <p className="tt-provisional-note" role="note">Provisional timetable: times are estimates from the structure. They become exact once teams are formed and the races are set.</p>
+          <p className="tt-provisional-note" role="note">Provisional timetable: times are estimates until teams and races are confirmed.</p>
         )}
         {activeGroups.map(renderGroup)}
         {finishedGroups.length > 0 && (
-          <h2 className="tt-divider">{selectedDay === today ? 'Finished today' : 'Finished'} · {finishedGroups.length}<span aria-hidden="true" /></h2>
+          <button
+            type="button"
+            className="mg-text-link self-center"
+            aria-expanded={showFinished}
+            onClick={() => setShowFinished((open) => !open)}
+          >
+            {showFinished ? 'Hide finished sessions' : 'Show full timetable'}
+          </button>
         )}
-        {finishedGroups.map(renderGroup)}
+        {finishedGroups.length > 0 && showFinished && (
+          <>
+            <h2 className="tt-divider">{selectedDay === today ? 'Finished today' : 'Finished'} · {finishedGroups.length}<span aria-hidden="true" /></h2>
+            {finishedGroups.map(renderGroup)}
+          </>
+        )}
         {visibleRows.length > 0 && (
           <ul className="tt-key" aria-label="Status colours">
             {STATUS_KEY.map(([status, label]) => <li key={status}><span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />{label}</li>)}

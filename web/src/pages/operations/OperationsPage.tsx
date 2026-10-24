@@ -263,10 +263,7 @@ function OperationsPageContent() {
         <section aria-label="Section draw">
           {competition.sections.length === 0 && <RefineNote>Add a section before preparing a draw.</RefineNote>}
           {!preview && sheet !== 'draw' && (
-            <>
-              <RefineNote>Preview the lanes first. Applying a draw changes assignments across the section’s unscored sessions.</RefineNote>
-              <DrawSettingsForm sections={competition.sections} sectionId={sectionId} seed={seed} previewing={previewing} onSection={changeSection} onSeed={changeSeed} onPreview={() => void previewDraw()} />
-            </>
+            <DrawSettingsForm sections={competition.sections} sectionId={sectionId} seed={seed} previewing={previewing} onSection={changeSection} onSeed={changeSeed} onPreview={() => void previewDraw()} />
           )}
           {drawError && <p role="alert" className="mg-notice ops-alert">{drawError}</p>}
           {preview && <DrawResult preview={preview} round={round} onRound={setRound} onNewSeed={newSeed} busy={previewing} />}

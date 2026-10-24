@@ -28,8 +28,8 @@ export function WhenWhereStep({ draft, change, problems, clear }: StepProps<Crea
 
   return (
     <section aria-labelledby="cw-when" className="flex flex-col gap-[18px]">
-      <StepIntro title="When and where">The timetable starts from the start time.</StepIntro>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)]">
+      <StepIntro title="When and where" />
+      <div className="grid grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] gap-2.5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)] sm:gap-4">
         <Field label="Starts" error={problems.startDate}>
           {({ id, invalid, describedBy }) => (
             <div className={fieldClass} data-invalid={invalid}>

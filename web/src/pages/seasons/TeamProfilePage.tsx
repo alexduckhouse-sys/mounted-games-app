@@ -279,7 +279,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
           {clubId === NEW_CLUB && <label className="rf-fld">New club name<input value={newClubName} onChange={(event) => setNewClubName(event.target.value)} maxLength={150} required disabled={identityLocked} /></label>}
           <div className="sv-two"><label className="rf-fld">Suffix<input value={suffix} onChange={(event) => setSuffix(event.target.value)} maxLength={10} placeholder="Optional" disabled={identityLocked} /></label><label className="rf-fld">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={200} required /></label></div>
         </fieldset>
-        <RefineNote>Once this profile is linked, the club and suffix stay fixed. You can still correct the display name.</RefineNote>
+        <RefineNote>Once linked, the club and suffix stay fixed.</RefineNote>
         <button className="rf-btn rf-btn-primary" disabled={busy}><Save className="h-4 w-4" aria-hidden="true" />{busy ? 'Saving…' : 'Save profile'}</button>
       </form>
     </>}

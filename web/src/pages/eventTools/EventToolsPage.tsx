@@ -163,7 +163,6 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
       backLabel="Back to event"
       context={competition.name}
       title="Organiser tools"
-      subtitle="Choose the job you need. Each tool works separately."
       tabs={desktop ? undefined : tabs.map((item) => ({ label: item.label, active: tab === item.id, onSelect: () => selectTab(item.id) }))}
       tabsLabel="Organiser tools"
       tabsKind="tablist"
@@ -198,7 +197,6 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
             {row.errors.length > 0 ? <RefineStatus tone="bad">Fix</RefineStatus> : <RefineStatus tone="ok">Ready</RefineStatus>}
           </li>)}
         </RefineList>
-        <RefineNote>{preview.validRows} of {preview.totalRows} rows ready.</RefineNote>
         <RefineFoot label="Add teams">
           <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={hasErrors || busy !== null} onClick={applyImport}>{busy === 'apply' ? 'Adding teams…' : `Add ${preview.validRows} ${preview.validRows === 1 ? 'team' : 'teams'}`}</button>
         </RefineFoot>
@@ -229,7 +227,6 @@ function EventToolsPageContent({ competitionId }: { competitionId: string }) {
     {tab === 'print' && <section aria-labelledby="print-title">
       <RefineSection title="Print event sheets" />
       <h2 id="print-title" className="sr-only">Print event sheets</h2>
-      <RefineNote>Each link opens a clean A4 view ready for your browser’s print command.</RefineNote>
       <nav aria-label="Printable event sheets"><RefineList as="div">
         {printSheets.map((sheet) => <Link key={sheet.to} className="rf-row" to={`/event-tools/${competitionId}/print/${sheet.to}`}>
           <span className="rf-grow"><span className="rf-t1">{sheet.title}</span><span className="rf-t2">{sheet.detail}</span></span><Chevron />

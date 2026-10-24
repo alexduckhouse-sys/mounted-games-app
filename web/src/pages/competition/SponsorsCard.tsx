@@ -232,7 +232,7 @@ export function SponsorsCard({ competitionId }: { competitionId: number }) {
           )}
 
           {draft ? (
-            <form onSubmit={save} className="rf-list flex flex-col gap-3 p-3" aria-label={draft.id === null ? 'Add a sponsor' : `Edit ${draft.name}`}>
+            <form onSubmit={save} className={`rf-list ${items.length > 0 ? 'mt-2 ' : ''}flex flex-col gap-3 p-3`} aria-label={draft.id === null ? 'Add a sponsor' : `Edit ${draft.name}`}>
               <label className="rf-fld">Name
                 <input required maxLength={80} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
               </label>
@@ -257,7 +257,7 @@ export function SponsorsCard({ competitionId }: { competitionId: number }) {
                 <input type="checkbox" className="h-5 w-5 shrink-0" checked={draft.isEnabled} onChange={(event) => setDraft({ ...draft, isEnabled: event.target.checked })} />
                 <span className="font-semibold">Showing</span>
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <label className="rf-fld">First day (optional)
                   <input type="date" value={draft.startDate} onChange={(event) => setDraft({ ...draft, startDate: event.target.value })} />
                 </label>
@@ -280,7 +280,7 @@ export function SponsorsCard({ competitionId }: { competitionId: number }) {
               </div>
             </form>
           ) : (
-            <div className="rf-list p-3">
+            <div className={`rf-list ${items.length > 0 ? 'mt-2 ' : ''}p-3`}>
               <button type="button" className="mg-btn mg-btn-secondary !min-h-11" disabled={busy || items.length >= 30} onClick={() => { setNotice(null); setDraft(blank()); }}>Add a sponsor</button>
             </div>
           )}

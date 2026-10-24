@@ -27,7 +27,7 @@ export function SectionsStep({ draft, change, problems, clear }: StepProps<Creat
 
   return (
     <section aria-labelledby="cw-sections" className="flex flex-col gap-[18px]">
-      <StepIntro title="What people can enter">One block for each age group. Give each its format, price and the most entries you will take.</StepIntro>
+      <StepIntro title="What people can enter" />
       <div className="flex flex-col gap-4">
         {draft.sections.map((s, i) => {
           const fixed = s.existingId != null;

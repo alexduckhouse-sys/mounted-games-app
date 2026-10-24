@@ -114,11 +114,11 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
       {state === null && <p role="status" className="rf-note">Loading the team…</p>}
       {team && (
         <>
-          <RefineNote>
-            {mayEdit
-              ? 'Competition admins can run every part of this event, from scoring to entries and the shop. Add someone using the email address on their account.'
-              : 'These are the people who run this event.'}
-          </RefineNote>
+          {mayEdit && (
+            <RefineNote>
+              Competition admins can manage entries, scoring and the shop. Add someone using the email address on their account.
+            </RefineNote>
+          )}
           <RefineList label="People on this team">
             {team.owner && (
               <li className="flex flex-wrap items-center justify-between gap-2 p-3">
@@ -143,7 +143,7 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
           </RefineList>
 
           {mayEdit && (
-            <form onSubmit={add} className="rf-list flex flex-col gap-2 p-3">
+            <form onSubmit={add} className="rf-list mt-2 flex flex-col gap-2 p-3">
               <label className="rf-fld">Email address
                 <input type="email" required autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} />
               </label>
@@ -152,7 +152,7 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
           )}
 
           {me && (
-            <div className="rf-list flex flex-col items-start gap-2 p-3">
+            <div className="rf-list mt-2 flex flex-col items-start gap-2 p-3">
               <p>You’re a competition admin for this event.</p>
               <button type="button" className="mg-btn mg-btn-secondary" disabled={busy} onClick={() => void leave(me)}>Leave this team</button>
             </div>

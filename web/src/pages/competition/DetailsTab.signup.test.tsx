@@ -1,13 +1,13 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { AuthProvider } from '../../auth/AuthContext';
 import { competition } from '../../test/factories';
 import type { CompetitionSection, SectionSignup } from '../../types';
 import { CompetitionContext, type CompetitionCtx } from './context';
-import { DetailsTab } from './DetailsTab';
+import { DetailsTab, SectionEntryPage } from './DetailsTab';
 
 vi.mock('../../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api')>()),
@@ -31,7 +31,16 @@ function mount(roles: string[] = ['Member'], userId = 'u1') {
   }));
   const ctx = { competition: competition({ sections: [section], createdByUserId: 'owner' }), reload: vi.fn() } as unknown as CompetitionCtx;
   return render(
-    <AuthProvider><MemoryRouter><CompetitionContext.Provider value={ctx}><DetailsTab /></CompetitionContext.Provider></MemoryRouter></AuthProvider>,
+    <AuthProvider>
+      <MemoryRouter initialEntries={['/competitions/1/details']}>
+        <CompetitionContext.Provider value={ctx}>
+          <Routes>
+            <Route path="/competitions/:id/details" element={<DetailsTab />} />
+            <Route path="/competitions/:id/enter/:sectionId" element={<SectionEntryPage />} />
+          </Routes>
+        </CompetitionContext.Provider>
+      </MemoryRouter>
+    </AuthProvider>,
   );
 }
 

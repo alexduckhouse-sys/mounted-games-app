@@ -115,7 +115,7 @@ export function DashboardPage() {
   // Admins get the whole dashboard on the Me page.
   if (isAdmin) return <Navigate to="/me" replace />;
 
-  return <div className="mx-auto flex max-w-xl flex-col gap-4 pb-2">
+  return <div className="skin mx-auto flex w-full max-w-5xl flex-col gap-4 pb-2">
     {!user && (
       <div className="mg-card flex flex-col gap-2 p-3.5">
         <Link to="/login" className="mg-btn mg-btn-primary !min-h-12 !text-base">Sign in</Link>
@@ -134,7 +134,7 @@ export function DashboardPage() {
       </div>
     )}
 
-    {jumps.length > 0 && <nav aria-label="This event" className="grid grid-cols-2 gap-1.5">
+    {jumps.length > 0 && <nav aria-label="This event" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {jumps.map((jump) => (
         <Link key={jump.label} to={jump.to} className="flex min-h-[60px] flex-col justify-center gap-1 rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-3 py-2 !text-[rgb(var(--mg-ink))]">
           <span className="mg-display text-[13px] font-bold uppercase leading-none tracking-[0.06em] text-[rgb(var(--mg-heading))]">{jump.label}</span>
@@ -143,47 +143,55 @@ export function DashboardPage() {
       ))}
     </nav>}
 
-    {needs.length > 0 && <section className="mg-sec" aria-label="Needs you">
-      <div className="mg-sec-head"><h2>Needs you</h2><span className="!font-bold text-[rgb(var(--mg-red))]">{needs.length}</span></div>
-      <div className="mg-lines">
-        {needs.map((item) => (
-          <Link key={item.key} to={item.to} className={`mg-line grid-cols-[minmax(0,1fr)_14px] !gap-x-2.5 ${item.urgent ? 'bg-[rgb(var(--mg-live-row))] shadow-[inset_3px_0_0_rgb(var(--mg-red))]' : ''}`}>
-            <span className="flex min-w-0 flex-col gap-0.5"><strong className="text-[15px] font-semibold">{item.title}</strong>{item.sub && <span className={`text-xs ${item.urgent ? 'text-[rgb(var(--mg-elim))]' : 'text-[rgb(var(--mg-muted))]'}`}>{item.sub}</span>}</span>
-            <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
-          </Link>
-        ))}
-      </div>
-    </section>}
+    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
+      {(needs.length > 0 || todays.length > 0) && (
+        <div className="flex min-w-0 flex-col gap-4">
+          {needs.length > 0 && <section className="mg-sec" aria-label="Needs you">
+            <div className="mg-sec-head"><h2>Needs you</h2><span className="!font-bold text-[rgb(var(--mg-red))]">{needs.length}</span></div>
+            <div className="mg-lines">
+              {needs.map((item) => (
+                <Link key={item.key} to={item.to} className={`mg-line grid-cols-[minmax(0,1fr)_14px] !gap-x-2.5 ${item.urgent ? 'bg-[rgb(var(--mg-live-row))] shadow-[inset_3px_0_0_rgb(var(--mg-red))]' : ''}`}>
+                  <span className="flex min-w-0 flex-col gap-0.5"><strong className="text-[15px] font-semibold">{item.title}</strong>{item.sub && <span className={`text-xs ${item.urgent ? 'text-[rgb(var(--mg-elim))]' : 'text-[rgb(var(--mg-muted))]'}`}>{item.sub}</span>}</span>
+                  <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
+                </Link>
+              ))}
+            </div>
+          </section>}
 
-    {todays.length > 0 && <section className="mg-sec" aria-label="Your teams today">
-      <div className="mg-sec-head"><h2>Your teams today</h2></div>
-      <div className="mg-lines">
-        {todays.map(({ team, row }) => (
-          <div key={`${team.id}-${row.heatId}`} className="mg-line grid-cols-[44px_minmax(0,1fr)] !gap-x-2.5 !min-h-12">
-            <span className={`mg-line-time ${row.delayMinutes > 0 ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{heatTime(row)}</span>
-            <span className="flex min-w-0 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
-              <strong className="text-[15px] font-semibold">{team.displayName}</strong>
-              <span className="truncate text-xs text-[rgb(var(--mg-muted))]">{[displaySectionName(team.sectionName), row.label, row.delayMinutes > 0 ? `+${row.delayMinutes} min` : ''].filter(Boolean).join(' · ')}</span>
-            </span>
+          {todays.length > 0 && <section className="mg-sec" aria-label="Your teams today">
+            <div className="mg-sec-head"><h2>Your teams today</h2></div>
+            <div className="mg-lines">
+              {todays.map(({ team, row }) => (
+                <div key={`${team.id}-${row.heatId}`} className="mg-line grid-cols-[44px_minmax(0,1fr)] !gap-x-2.5 !min-h-12">
+                  <span className={`mg-line-time ${row.delayMinutes > 0 ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{heatTime(row)}</span>
+                  <span className="flex min-w-0 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
+                    <strong className="text-[15px] font-semibold">{team.displayName}</strong>
+                    <span className="truncate text-xs text-[rgb(var(--mg-muted))]">{[displaySectionName(team.sectionName), row.label, row.delayMinutes > 0 ? `+${row.delayMinutes} min` : ''].filter(Boolean).join(' · ')}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>}
+        </div>
+      )}
+
+      <div className="flex min-w-0 flex-col gap-4">
+        {user && hasRole('Trainer') && <QuickActions focus={picker?.items.find((item) => item.id === focusId) ?? null} today={onToday.length > 0} />}
+
+        <section className="mg-sec" aria-label="Shortcuts">
+          <div className="mg-sec-head"><h2>Shortcuts</h2></div>
+          <div className="mg-lines">
+            {shortcuts.map((link) => (
+              <Link key={link.to} to={link.to} className="mg-line grid-cols-[minmax(0,1fr)_auto_14px] !min-h-12 !gap-x-3 !py-0 !pl-3.5">
+                <span className="text-[15px] font-semibold">{link.label}</span>
+                <span className="text-xs text-[rgb(var(--mg-muted))]">{link.meta}</span>
+                <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
+              </Link>
+            ))}
           </div>
-        ))}
+        </section>
       </div>
-    </section>}
-
-    {user && hasRole('Trainer') && <QuickActions focus={picker?.items.find((item) => item.id === focusId) ?? null} today={onToday.length > 0} />}
-
-    <section className="mg-sec" aria-label="Shortcuts">
-      <div className="mg-sec-head"><h2>Shortcuts</h2></div>
-      <div className="mg-lines">
-        {shortcuts.map((link) => (
-          <Link key={link.to} to={link.to} className="mg-line grid-cols-[minmax(0,1fr)_auto_14px] !min-h-12 !gap-x-3 !py-0 !pl-3.5">
-            <span className="text-[15px] font-semibold">{link.label}</span>
-            <span className="text-xs text-[rgb(var(--mg-muted))]">{link.meta}</span>
-            <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
-          </Link>
-        ))}
-      </div>
-    </section>
+    </div>
 
     {!event && !picker && <p role="status" className="mg-meta px-1">Looking for what’s on today…</p>}
     {!event && picker && focusId == null && <p className="mg-meta px-1">Nothing is on today. {picker.items[0] ? `Next up: ${picker.items[0].name}, ${competitionDateText(picker.items[0].startDate, picker.items[0].endDate)}.` : ''}</p>}

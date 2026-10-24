@@ -1,5 +1,5 @@
 import { motion, type PanInfo } from 'framer-motion';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
 import { teamBoxStyle } from '../../lib/teamColours';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
@@ -34,8 +34,17 @@ export function ScoreRow({
 }) {
   const eliminated = state?.eliminated ?? false;
   const disabled = !canScore || sitting;
+  const dragged = useRef(false);
   function handlePanEnd(_e: unknown, info: PanInfo) {
+    if (Math.abs(info.offset.y) > 8) dragged.current = true;
     if (!disabled && info.offset.y > 50 && info.velocity.y > 0) onSwipeEliminate();
+  }
+  function handleClick() {
+    if (dragged.current) {
+      dragged.current = false;
+      return;
+    }
+    if (!disabled) onTap();
   }
   const badge = sitting ? <span className="sc-badge sc-badge-sit" aria-label="Sitting out">S</span>
     : eliminated ? <span className="sc-badge sc-badge-out" aria-label={statusLabel(true, state?.status) ?? 'Eliminated'}>{statusLetter(true, state?.status) === 'E' ? 'OUT' : statusLetter(true, state?.status)}</span>
@@ -53,8 +62,7 @@ export function ScoreRow({
         dragElastic={0.4}
         dragConstraints={{ top: 0, bottom: 80 }}
         onPanEnd={handlePanEnd}
-        onTap={!disabled ? onTap : undefined}
-        onKeyDown={(e) => { if (!disabled && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onTap(); } }}
+        onClick={handleClick}
       >
         <span className="sc-lane" title={`Lane ${lane}`}>{lane}</span>
         <span className="sc-who">
@@ -285,21 +293,36 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
   );
 }
 
-/** The race rules, one button per race, below the table. */
+/** The race rules, one button per race, below the table when opened. */
 export function RaceRules({ races }: { races: Race[] }) {
+  const [open, setOpen] = useState(false);
   if (races.length === 0) return null;
   return (
-    <section aria-label="Race rules" className="sc-card px-3">
-      <h3 className="sc-label pt-3">Race rules</h3>
-      <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-        {races.map((r) => (
-          <li key={r.id} className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate py-2">{r.name}</span>
-            <RaceRulesButton raceName={r.name} className="!h-11 !w-11" />
-          </li>
-        ))}
-      </ol>
-    </section>
+    <>
+      <div className="flex justify-center">
+        <button
+          type="button"
+          className="mg-text-link"
+          aria-expanded={open}
+          onClick={() => setOpen((show) => !show)}
+        >
+          {open ? 'Close race rules and setup' : 'Race rules and arena setup'}
+        </button>
+      </div>
+      {open && (
+        <section aria-label="Race rules" className="sc-card px-3">
+          <h3 className="sc-label pt-3">Race rules</h3>
+          <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+            {races.map((r) => (
+              <li key={r.id} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate py-2">{r.name}</span>
+                <RaceRulesButton raceName={r.name} className="!h-11 !w-11" />
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </>
   );
 }
 

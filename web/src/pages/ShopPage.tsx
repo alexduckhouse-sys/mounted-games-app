@@ -180,7 +180,7 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
   async function pickImage(file: File) {
     setImageErr(null);
     if (file.size > 2_000_000) {
-      setImageErr('Image too big — pick something under 2 MB.');
+      setImageErr('Image is too big. Pick one under 2 MB.');
       return;
     }
     // Resize client-side to keep base64 manageable.
@@ -228,7 +228,7 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
           <input className="input mt-1 text-sm" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What are you selling?" />
         </label>
         <label className="block">
-          <span className="text-xs font-semibold">Price (£) — optional</span>
+          <span className="text-xs font-semibold">Price (£, optional)</span>
           <input className="input mt-1 text-sm" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="25.00" />
         </label>
       </div>

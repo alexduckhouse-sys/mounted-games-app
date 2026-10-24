@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Trophy,
-  Hammer, Check, ChevronDown, ChevronUp, Lock, Unlock, Sparkles, Download,
+  Hammer, Check, ChevronDown, ChevronLeft, ChevronUp, Lock, Unlock, Sparkles, Download,
   X, RotateCcw, Ban, CalendarPlus, ClipboardList,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { competitionDateText } from '../../lib/competitionDates';
+import { entryPhaseOnly } from '../../lib/competitionPhase';
 import { competitionCalendarUrl } from '../../lib/sharing';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
@@ -77,6 +78,8 @@ export function DetailsTab() {
     try {
       await api.post(`/competitions/${competition.id}/signups-locked`, { locked: !competition.signupsLocked });
       reload();
+    } catch {
+      alert('Could not update signup lock. Try again.');
     } finally {
       setLockBusy(false);
     }
@@ -102,139 +105,138 @@ export function DetailsTab() {
   const longDescription = (competition.description?.length ?? 0) > 140;
 
   return (
-    <div className="rf-page mx-auto flex w-full max-w-3xl flex-col gap-2.5 pb-4 pt-3 lg:block lg:max-w-none lg:columns-2 lg:gap-x-6">
+    <div className="rf-page mx-auto flex w-full max-w-3xl flex-col gap-3 pb-4 pt-3 lg:grid lg:max-w-none lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start lg:gap-6">
       <h1 className="sr-only">Details &amp; entries</h1>
 
-      <div className="flex flex-col gap-2.5 lg:mb-5 lg:break-inside-avoid">
-      <div className="mg-card flex flex-col gap-4 p-4">
-        <div>
-          <h2 className="mg-display text-2xl font-bold leading-[1.1] text-[rgb(var(--mg-heading))]">{competition.name}</h2>
-          {competition.organiserName && (
-            <p className="mg-meta mt-1">Organised by <span className="font-semibold">{competition.organiserName}</span></p>
-          )}
-          {competition.description && (
-            <>
-              <p className={`mg-lede mt-2 whitespace-pre-wrap ${longDescription && !descOpen ? 'line-clamp-2' : ''}`}>{competition.description}</p>
-              {longDescription && (
-                <button type="button" className="mg-text-link !min-h-11 !justify-start" aria-expanded={descOpen} onClick={() => setDescOpen((open) => !open)}>
-                  {descOpen ? 'Less' : 'More'}
-                </button>
-              )}
-            </>
-          )}
-        </div>
-        <dl className="m-0 grid grid-cols-1 gap-3">
-          {infoRow(<CalendarDays className="h-4 w-4" />, 'Dates', competitionDateText(competition.startDate, competition.endDate, true))}
-          {competition.location && infoRow(<MapPin className="h-4 w-4" />, 'Location', competition.location)}
-          {competition.what3Words && infoRow(<Info className="h-4 w-4" />, 'what3words', (
-            <a
-              href={`https://what3words.com/${competition.what3Words.replace(/^\/\/\//, '')}`}
-              target="_blank" rel="noreferrer"
-              className="font-mono font-semibold text-[rgb(var(--mg-heading))] hover:underline"
-            >
-              {competition.what3Words.startsWith('///') ? competition.what3Words : `///${competition.what3Words}`}
-            </a>
-          ))}
-          {competition.appleMapsUrl && infoRow(<MapPinned className="h-4 w-4" />, 'Map pin', (
-            <a href={competition.appleMapsUrl} target="_blank" rel="noreferrer" className="font-semibold text-[rgb(var(--mg-heading))] hover:underline">
-              Open in Apple Maps
-            </a>
-          ))}
-          {infoRow(<Layers className="h-4 w-4" />, 'Age groups', competition.sections.length || '—')}
-          {infoRow(<Users className="h-4 w-4" />, 'Teams', competition.teams.length)}
-        </dl>
-      </div>
-      </div>
-
-      <div className="flex flex-col gap-2.5 lg:mb-5 lg:break-inside-avoid">
-      <RefineSection title="Event links" />
-      <RefineList label="Event links">
-        {linkRow('../shop', 'Event shop')}
-        {linkRow('../rulebooks', 'Rulebooks')}
-        <li>
-          <a className="rf-row" href={competitionCalendarUrl(competition.id, window.location.origin)}>
-            <span className="rf-grow rf-t1">Add to calendar</span>
-            <CalendarPlus className="h-5 w-5 rf-chev" aria-hidden="true" />
-          </a>
-        </li>
-        {(hasSponsorPage || mayOrganise) && linkRow('../sponsors', 'Sponsors')}
-        {linkRow(`/event-tools/${competition.id}/print/draw`, 'Print draw')}
-        {linkRow(`/event-tools/${competition.id}/print/results`, 'Print results')}
-        {mayOrganise && linkRow(`/event-tools/${competition.id}/print/poster`, 'Print venue poster')}
-        {mayOrganise && linkRow(`/event-tools/${competition.id}`, hasRole('Admin') || hasRole('Trainer') ? 'Import, duplicate & print' : 'Import & print')}
-        {mayOrganise && linkRow('../shop/manage', 'Manage event shop')}
-        {mayOrganise && linkRow('../operations', 'Readiness & draw')}
-      </RefineList>
-      </div>
-
-      {/* Entry controls (co-organisers and admins): lock signups, jump to the format wizard, CSV export. */}
-      {mayOrganise && competition.sections.length > 0 && (
-        <div className="flex flex-col gap-2.5 lg:mb-5 lg:break-inside-avoid">
-          <RefineSection title="Organiser tools" />
-          <div className="rf-list flex flex-col gap-2 p-3">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={toggleLock}
-                disabled={lockBusy}
-                className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
-                title={competition.signupsLocked
-                  ? 'Signups are closed. Re-open to accept more entries.'
-                  : 'Signups are open. Close once your entry window ends.'}
-              >
-                {competition.signupsLocked ? <Lock className="h-4 w-4" aria-hidden="true" /> : <Unlock className="h-4 w-4" aria-hidden="true" />}
-                {competition.signupsLocked ? 'Re-open signups' : 'Close signups'}
-              </button>
-              <Link
-                to={`/admin/competitions/${competition.id}/format`}
-                className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
-                title="Form teams + generate sessions/heats from paid signups"
-              >
-                <Sparkles className="h-4 w-4" aria-hidden="true" /> Format competition
-              </Link>
-              <Link
-                to={`/admin/competitions/${competition.id}/format#fm-dec`}
-                className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
-                title="Choose what the dec form asks for, such as weight or your own questions"
-              >
-                <ClipboardList className="h-4 w-4" aria-hidden="true" /> Dec form setup
-              </Link>
-              <button
-                type="button"
-                onClick={exportAllSignupsCsv}
-                disabled={allSignups.length === 0}
-                className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
-              >
-                <Download className="h-4 w-4" aria-hidden="true" /> Signups CSV
-              </button>
-            </div>
-            {competition.signupsLocked && (
-              <p className="mg-notice">
-                Signups are <span className="font-semibold">closed</span>. The public form is hidden and new
-                entries are rejected. Refund / cancel actions still work below.
-              </p>
+      <div className="flex min-w-0 flex-col gap-2.5">
+        <div className="mg-card flex flex-col gap-4 p-4">
+          <div>
+            <h2 className="mg-display text-2xl font-bold leading-[1.1] text-[rgb(var(--mg-heading))]">{competition.name}</h2>
+            {competition.organiserName && (
+              <p className="mg-meta mt-1">Organised by <span className="font-semibold">{competition.organiserName}</span></p>
+            )}
+            {competition.description && (
+              <>
+                <p className={`mg-lede mt-2 whitespace-pre-wrap ${longDescription && !descOpen ? 'line-clamp-2' : ''}`}>{competition.description}</p>
+                {longDescription && (
+                  <button type="button" className="mg-text-link !min-h-11 !justify-start" aria-expanded={descOpen} onClick={() => setDescOpen((open) => !open)}>
+                    {descOpen ? 'Less' : 'More'}
+                  </button>
+                )}
+              </>
             )}
           </div>
+          <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {infoRow(<CalendarDays className="h-4 w-4" />, 'Dates', competitionDateText(competition.startDate, competition.endDate, true))}
+            {competition.location && infoRow(<MapPin className="h-4 w-4" />, 'Location', competition.location)}
+            {competition.what3Words && infoRow(<Info className="h-4 w-4" />, 'what3words', (
+              <a
+                href={`https://what3words.com/${competition.what3Words.replace(/^\/\/\//, '')}`}
+                target="_blank" rel="noreferrer"
+                className="font-mono font-semibold text-[rgb(var(--mg-heading))] hover:underline"
+              >
+                {competition.what3Words.startsWith('///') ? competition.what3Words : `///${competition.what3Words}`}
+              </a>
+            ))}
+            {competition.appleMapsUrl && infoRow(<MapPinned className="h-4 w-4" />, 'Map pin', (
+              <a href={competition.appleMapsUrl} target="_blank" rel="noreferrer" className="font-semibold text-[rgb(var(--mg-heading))] hover:underline">
+                Open in Apple Maps
+              </a>
+            ))}
+            {infoRow(<Layers className="h-4 w-4" />, 'Age groups', competition.sections.length || '—')}
+            {infoRow(<Users className="h-4 w-4" />, 'Teams', competition.teams.length)}
+          </dl>
         </div>
-      )}
 
-      {/* The owner, competition admins and site admins see who runs the event and can change it. */}
-      {user && (mayOrganise || hasRole('Admin')) && (
-        <div className="lg:mb-5 lg:break-inside-avoid"><CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} /></div>
-      )}
-      {user && (mayOrganise || hasRole('Admin')) && (
-        <div className="lg:mb-5 lg:break-inside-avoid"><ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} /></div>
-      )}
+        <EnterCompetition competition={competition} allSignups={allSignups} mayOrganise={mayOrganise} onChanged={() => { refreshSignups(); reload(); }} />
 
-      {mayOrganise && <div className="lg:mb-5 lg:break-inside-avoid"><SponsorsCard competitionId={competition.id} /></div>}
-      {/* Owner, competition admins and site admins can put live results on their own website. */}
-      {mayOrganise && <div className="lg:mb-5 lg:break-inside-avoid"><EmbedCard kind="competition" competitionId={competition.id} name={competition.name} sections={competition.sections} /></div>}
+        <SponsorStrip placement="Details" />
 
-      <SponsorStrip placement="Details" />
+        {user && <EquipmentBlock competitionId={competition.id} />}
+      </div>
 
-      <div className="flex flex-col gap-2.5 lg:mb-5 lg:break-inside-avoid"><EnterCompetition competition={competition} allSignups={allSignups} mayOrganise={mayOrganise} onChanged={() => { refreshSignups(); reload(); }} /></div>
+      <div className="flex min-w-0 flex-col gap-2.5">
+        <RefineSection title="Event links" />
+        <RefineList label="Event links">
+          {linkRow('../shop', 'Event shop')}
+          {linkRow('../rulebooks', 'Rulebooks')}
+          <li>
+            <a className="rf-row" href={competitionCalendarUrl(competition.id, window.location.origin)}>
+              <span className="rf-grow rf-t1">Add to calendar</span>
+              <CalendarPlus className="h-5 w-5 rf-chev" aria-hidden="true" />
+            </a>
+          </li>
+          {(hasSponsorPage || mayOrganise) && linkRow('../sponsors', 'Sponsors')}
+          {linkRow(`/event-tools/${competition.id}/print/draw`, 'Print draw')}
+          {linkRow(`/event-tools/${competition.id}/print/results`, 'Print results')}
+          {mayOrganise && linkRow(`/event-tools/${competition.id}/print/poster`, 'Print venue poster')}
+          {mayOrganise && linkRow(`/event-tools/${competition.id}`, hasRole('Admin') || hasRole('Trainer') ? 'Import, duplicate & print' : 'Import & print')}
+          {mayOrganise && linkRow('../shop/manage', 'Manage event shop')}
+          {mayOrganise && linkRow('../operations', 'Readiness & draw')}
+        </RefineList>
 
-      {user && <EquipmentBlock competitionId={competition.id} />}
+        {/* Entry controls (co-organisers and admins): lock signups, jump to the format wizard, CSV export. */}
+        {mayOrganise && competition.sections.length > 0 && (
+          <>
+            <RefineSection title="Organiser tools" />
+            <div className="rf-list flex flex-col gap-2 p-3">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={toggleLock}
+                  disabled={lockBusy}
+                  className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
+                  title={competition.signupsLocked
+                    ? 'Signups are closed. Re-open to accept more entries.'
+                    : 'Signups are open. Close once your entry window ends.'}
+                >
+                  {competition.signupsLocked ? <Lock className="h-4 w-4" aria-hidden="true" /> : <Unlock className="h-4 w-4" aria-hidden="true" />}
+                  {competition.signupsLocked ? 'Re-open signups' : 'Close signups'}
+                </button>
+                <Link
+                  to={`/admin/competitions/${competition.id}/format`}
+                  className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
+                  title="Form teams and heats from paid entries"
+                >
+                  <Sparkles className="h-4 w-4" aria-hidden="true" /> Format competition
+                </Link>
+                <Link
+                  to={`/admin/competitions/${competition.id}/format#fm-dec`}
+                  className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
+                  title="Choose what the dec form asks for, such as weight or your own questions"
+                >
+                  <ClipboardList className="h-4 w-4" aria-hidden="true" /> Dec form setup
+                </Link>
+                <button
+                  type="button"
+                  onClick={exportAllSignupsCsv}
+                  disabled={allSignups.length === 0}
+                  className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]"
+                >
+                  <Download className="h-4 w-4" aria-hidden="true" /> Signups CSV
+                </button>
+              </div>
+              {competition.signupsLocked && (
+                <p className="mg-notice">
+                  Signups are <span className="font-semibold">closed</span> to new entries. Refunds and cancellations still work below.
+                </p>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* The owner, competition admins and site admins see who runs the event and can change it. */}
+        {user && (mayOrganise || hasRole('Admin')) && (
+          <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
+        )}
+        {user && (mayOrganise || hasRole('Admin')) && (
+          <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
+        )}
+
+        {mayOrganise && <SponsorsCard competitionId={competition.id} />}
+        {/* Owner, competition admins and site admins can put live results on their own website. */}
+        {mayOrganise && <EmbedCard kind="competition" competitionId={competition.id} name={competition.name} sections={competition.sections} />}
+      </div>
     </div>
   );
 }
@@ -254,7 +256,7 @@ export function EnterCompetition({ competition, allSignups, mayOrganise, onChang
   return (
     <>
       <RefineSection title="Enter the competition" meta={competition.paymentDestination ? <>Pay to <span className="font-mono">{competition.paymentDestination}</span></> : undefined} />
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {competition.sections.map((sec) => (
           <SectionSignupCard
             key={sec.id}
@@ -263,8 +265,6 @@ export function EnterCompetition({ competition, allSignups, mayOrganise, onChang
             allSignups={allSignups}
             signupsLocked={!!competition.signupsLocked}
             isDemo={!!competition.isDemo}
-            paymentDestination={competition.paymentDestination ?? null}
-            termsText={competition.termsText ?? null}
             competitionName={competition.name}
             onChanged={onChanged}
             canManage={canEdit() || mayOrganise}
@@ -278,40 +278,23 @@ export function EnterCompetition({ competition, allSignups, mayOrganise, onChang
 
 function SectionSignupCard({
   competitionId, section, allSignups, signupsLocked,
-  competitionName, isDemo, termsText,
+  competitionName, isDemo,
   onChanged, canManage, countsKnown,
 }: {
   competitionId: number;
   section: CompetitionSection;
   allSignups: SectionSignup[];
   signupsLocked: boolean;
-  /** A demo event: a paid entry goes on to the test payment page. */
   isDemo: boolean;
-  paymentDestination: string | null;
-  termsText: string | null;
   competitionName: string;
   onChanged: () => void;
   canManage: boolean;
   /** Only organisers receive the signup list, so places taken is only known to them. */
   countsKnown: boolean;
 }) {
-  const { user, hasRole } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const [fullName, setFullName] = useState('');
-  const [ponyClub, setPonyClub] = useState('');
-  const [contact, setContact] = useState('');
-  const [entryEmail, setEntryEmail] = useState<EntryEmail>({ email: '', optIn: false });
-  // One id per attempt: if the connection drops and the form is sent again, the server returns the first entry.
-  const requestId = useRef<string | null>(null);
-  const [teamCode, setTeamCode] = useState('');
-  const [teamName, setTeamName] = useState('');
-  const [wholeTeam, setWholeTeam] = useState(false);
-  const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
-  const [accepted, setAccepted] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const location = useLocation();
 
   const signups = allSignups.filter((s) => s.competitionSectionId === section.id);
   // Paid and pending entries both take a seat (the API counts them the same way). Only organisers load the
@@ -320,53 +303,9 @@ function SectionSignupCard({
     ? signups.filter((s) => s.status === 0 || s.status === 1).length
     : section.activeSignupsCount ?? 0;
   const known = countsKnown || section.activeSignupsCount != null;
-  const canEnterWholeTeam = section.format === 2 && (hasRole('Manager') || hasRole('Trainer'));
   const max = section.maxParticipants;
   const seatsLeft = max ? Math.max(0, max - takenSeats) : null;
   const full = seatsLeft != null && seatsLeft === 0;
-
-  async function submit() {
-    if (!fullName.trim() || !accepted) return;
-    const emailText = entryEmail.email.trim();
-    if (emailText && !looksLikeEmail(emailText)) { setErr("That email address doesn't look right."); return; }
-    requestId.current ??= newRequestId();
-    setBusy(true);
-    setErr(null);
-    try {
-      const { data: signup } = await api.post<SectionSignup>(`/competitions/${competitionId}/sections/${section.id}/signups`, {
-        fullName: fullName.trim(),
-        ponyClubName: ponyClub.trim() || null,
-        contactInfo: contact.trim() || null,
-        contactEmail: emailText || null,
-        emailOptIn: !!emailText && entryEmail.optIn,
-        emailOptInVersion: emailText && entryEmail.optIn ? EMAIL_OPT_IN_VERSION : null,
-        requestId: requestId.current,
-        teamCode: teamCode.trim() || null,
-        teamName: teamName.trim() || null,
-        wholeTeam: wholeTeam && canEnterWholeTeam,
-        ...privacy,
-        acceptTerms: accepted,
-        consentVersion: CONSENT_VERSION,
-      });
-      setFullName(''); setPonyClub(''); setContact(''); setTeamCode(''); setTeamName(''); setWholeTeam(false);
-      setEntryEmail({ email: '', optIn: false });
-      requestId.current = null;
-      setPrivacy({ useInitialOnly: false, noFilming: false });
-      setAccepted(false);
-      setDone((signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.')
-        + (signup.confirmationEmailStatus === 1 ? ' We have emailed you a confirmation.'
-          : signup.confirmationEmailStatus === 2 ? " We couldn't send the confirmation email, but your entry is saved." : ''));
-      onChanged();
-      setOpen(false);
-      // Demo events only: straight on to the clearly labelled test payment page.
-      if (isDemo && signup.status === 0 && signup.amountMinor > 0) navigate(`/me/signups/${signup.id}/test-payment`);
-    } catch (e) {
-      const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
-      setErr(typeof msg === 'string' ? msg : msg?.message ?? 'Could not sign up.');
-    } finally {
-      setBusy(false);
-    }
-  }
 
   function exportCsv() {
     if (signups.length === 0) return;
@@ -378,16 +317,16 @@ function SectionSignupCard({
 
   const places = max ? Math.round((takenSeats / max) * 100) : 30;
   const scarce = seatsLeft != null && seatsLeft > 0 && seatsLeft <= 4;
-  const wide = open || (canManage && signups.length > 0);
+  const wide = canManage && signups.length > 0;
   return (
-    <div className={`mg-card flex flex-col gap-1.5 p-2.5 ${wide ? 'col-span-2 border-[rgb(var(--mg-heading))]' : ''}`}>
+    <div className={`mg-card flex flex-col gap-1.5 p-3 ${wide ? 'sm:col-span-2 border-[rgb(var(--mg-heading))]' : ''}`}>
       <div className="flex items-baseline gap-1.5">
         <span className="mg-display flex-1 text-base font-bold uppercase leading-none tracking-[0.03em] text-[rgb(var(--mg-heading))]">{section.displayName}</span>
         <span className="mg-display text-base font-bold leading-none">{priceLabel(section.priceMinor)}</span>
       </div>
       {known && (
         <div className="h-1 overflow-hidden rounded-sm bg-[rgb(var(--mg-tint))]" aria-hidden="true">
-          <div className={`h-full ${full ? 'bg-[rgb(var(--mg-dash))]' : scarce ? 'bg-[rgb(var(--mg-late-time))]' : 'bg-[rgb(var(--mg-heading))]'}`} style={{ width: `${places}%` }} />
+          <div className={`h-full transition-[width] duration-200 ${full ? 'bg-[rgb(var(--mg-dash))]' : scarce ? 'bg-[rgb(var(--mg-late-time))]' : 'bg-[rgb(var(--mg-heading))]'}`} style={{ width: `${places}%` }} />
         </div>
       )}
       <span className={`text-xs font-medium ${scarce ? 'text-[rgb(var(--mg-late-ink))]' : 'text-[rgb(var(--mg-muted))]'}`}>
@@ -401,59 +340,14 @@ function SectionSignupCard({
         <span className="flex min-h-9 items-center justify-center rounded-lg bg-[rgb(var(--mg-subtle))] text-[13px] font-semibold text-[rgb(var(--mg-muted))]">Full</span>
       ) : !user ? (
         <Link to="/login" state={{ from: `/competitions/${competitionId}/enter` }} className="mg-btn mg-btn-primary w-full !min-h-11">Sign in to enter</Link>
-      ) : !open ? (
-        <button type="button" onClick={() => setOpen(true)} className="mg-btn mg-btn-primary w-full !min-h-11">
+      ) : (
+        <button
+          type="button"
+          onClick={() => navigate(`/competitions/${competitionId}/enter/${section.id}`, { state: { from: location.pathname } })}
+          className="mg-btn mg-btn-primary w-full !min-h-11"
+        >
           <Trophy className="h-4 w-4" aria-hidden="true" /> Join {section.priceMinor ? `(${priceLabel(section.priceMinor)})` : ''}
         </button>
-      ) : (
-        <div className="flex flex-col gap-2">
-          <label className="rf-fld">Your full name<input placeholder="Your full name" value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
-          <label className="rf-fld">Pony Club<input placeholder="Pony Club (optional)" value={ponyClub} onChange={(e) => setPonyClub(e.target.value)} /></label>
-          <label className="rf-fld">Phone<input type="tel" autoComplete="tel" placeholder="Phone (optional)" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
-          <EntryEmailFields value={entryEmail} onChange={setEntryEmail} />
-          {canEnterWholeTeam && (
-            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
-              <input type="checkbox" checked={wholeTeam} onChange={(e) => setWholeTeam(e.target.checked)} />
-              Enter a whole team
-            </label>
-          )}
-          <label className="rf-fld">{wholeTeam ? 'Team name' : 'Team name (optional)'}
-            <input placeholder={wholeTeam ? 'e.g. Welsh Dragons' : 'Riders with the same team name are put together'} value={teamName} onChange={(e) => setTeamName(e.target.value)} />
-          </label>
-          <p className="-mt-1 text-xs text-[rgb(var(--mg-muted))]">The team name carries through to your team’s dec form, so organisers can match the two up.</p>
-          <label className="rf-fld">Team code
-            <input
-              className="font-mono uppercase"
-              placeholder="Team code (optional) — e.g. STOCKPORT-A"
-              value={teamCode}
-              onChange={(e) => setTeamCode(e.target.value)}
-            />
-          </label>
-          <RiderPrivacyFields value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
-          <TermsTickBox termsText={termsText} checked={accepted} onChange={setAccepted} />
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={submit}
-              disabled={busy || !fullName.trim() || !accepted || (wholeTeam && !teamName.trim())}
-              className="mg-btn mg-btn-primary flex-1 !min-h-11"
-            >
-              <Check className="h-4 w-4" aria-hidden="true" /> {busy ? 'Joining…' : 'Confirm'}
-            </button>
-            <button type="button" onClick={() => setOpen(false)} className="mg-btn mg-btn-secondary !min-h-11">Cancel</button>
-          </div>
-          <p className="rf-note !p-0">
-            {isDemo
-              ? 'This is a demo event. After you confirm, you will see a test payment page. No money is taken.'
-              : 'Paid entries stay pending until the organiser confirms payment.'}
-          </p>
-        </div>
-      )}
-      {err && <p role="alert" className="m-0 text-sm font-semibold text-[rgb(var(--mg-elim))]">{err}</p>}
-      {done && (
-        <p role="status" className="m-0 flex items-center gap-1 text-sm font-semibold text-[rgb(var(--mg-ok))]">
-          <Check className="h-4 w-4" aria-hidden="true" /> {done}
-        </p>
       )}
       {canManage && signups.length > 0 && (
         <details className="text-sm">
@@ -480,16 +374,228 @@ function SectionSignupCard({
   );
 }
 
+/**
+ * Dedicated page for filling in a competition section entry (`/competitions/:id/enter/:sectionId`).
+ */
+export function SectionEntryPage() {
+  const { sectionId } = useParams<{ sectionId: string }>();
+  const { competition } = useCompetition();
+  const { canOrganise } = useAuth();
+  const location = useLocation();
+
+  const section = competition.sections.find((s) => s.id === Number(sectionId)) ?? null;
+  const fromState = (location.state as { from?: string } | null)?.from;
+  const backTarget = fromState && fromState.startsWith('/competitions/')
+    ? fromState
+    : Array.isArray(competition.sessions) && entryPhaseOnly(competition, canOrganise(competition))
+      ? `/competitions/${competition.id}`
+      : `/competitions/${competition.id}/details`;
+
+  usePageHeader({
+    title: section ? `Enter ${section.displayName}` : 'Enter competition',
+    subtitle: competition.name,
+    plain: true,
+    backTo: backTarget,
+    backLabel: 'Back to competition',
+  });
+
+  if (!section) {
+    return (
+      <div className="rf-page mx-auto flex w-full max-w-2xl flex-col gap-3 pb-6 pt-3">
+        <Link to={backTarget} className="mg-text-link !min-h-11 self-start">
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to {competition.name}
+        </Link>
+        <p role="alert" className="mg-notice">Section not found.</p>
+      </div>
+    );
+  }
+
+  return <SectionEntryForm key={`${competition.id}:${section.id}`} section={section} backTarget={backTarget} />;
+}
+
+function SectionEntryForm({ section, backTarget }: { section: CompetitionSection; backTarget: string }) {
+  const { competition, reload } = useCompetition();
+  const { user, hasRole } = useAuth();
+  const navigate = useNavigate();
+
+  const [fullName, setFullName] = useState('');
+  const [ponyClub, setPonyClub] = useState('');
+  const [contact, setContact] = useState('');
+  const [entryEmail, setEntryEmail] = useState<EntryEmail>({ email: '', optIn: false });
+  // One id per attempt: if the connection drops and the form is sent again, the server returns the first entry.
+  const requestId = useRef<string | null>(null);
+  const [teamCode, setTeamCode] = useState('');
+  const [teamName, setTeamName] = useState('');
+  const [wholeTeam, setWholeTeam] = useState(false);
+  const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
+  const [accepted, setAccepted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const canEnterWholeTeam = section.format === 2 && (hasRole('Manager') || hasRole('Trainer'));
+  const enteringWholeTeam = wholeTeam && canEnterWholeTeam;
+  const isDemo = !!competition.isDemo;
+  const max = section.maxParticipants;
+  const takenSeats = section.activeSignupsCount ?? 0;
+  const seatsLeft = max != null && section.activeSignupsCount != null ? Math.max(0, max - takenSeats) : null;
+  const full = seatsLeft === 0;
+
+  async function submit() {
+    if (!fullName.trim() || !accepted) return;
+    const emailText = entryEmail.email.trim();
+    if (emailText && !looksLikeEmail(emailText)) { setErr("That email address doesn't look right."); return; }
+    requestId.current ??= newRequestId();
+    setBusy(true);
+    setErr(null);
+    try {
+      const { data: signup } = await api.post<SectionSignup>(`/competitions/${competition.id}/sections/${section.id}/signups`, {
+        fullName: fullName.trim(),
+        ponyClubName: ponyClub.trim() || null,
+        contactInfo: contact.trim() || null,
+        contactEmail: emailText || null,
+        emailOptIn: !!emailText && entryEmail.optIn,
+        emailOptInVersion: emailText && entryEmail.optIn ? EMAIL_OPT_IN_VERSION : null,
+        requestId: requestId.current,
+        teamCode: teamCode.trim() || null,
+        teamName: teamName.trim() || null,
+        wholeTeam: enteringWholeTeam,
+        ...privacy,
+        acceptTerms: accepted,
+        consentVersion: CONSENT_VERSION,
+      });
+      setFullName(''); setPonyClub(''); setContact(''); setTeamCode(''); setTeamName(''); setWholeTeam(false);
+      setEntryEmail({ email: '', optIn: false });
+      requestId.current = null;
+      setPrivacy({ useInitialOnly: false, noFilming: false });
+      setAccepted(false);
+      setDone((signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.')
+        + (signup.confirmationEmailStatus === 1 ? ' We have emailed you a confirmation.'
+          : signup.confirmationEmailStatus === 2 ? " We couldn't send the confirmation email, but your entry is saved." : ''));
+      reload();
+      // Demo events only: straight on to the clearly labelled test payment page.
+      if (isDemo && signup.status === 0 && signup.amountMinor > 0) navigate(`/me/signups/${signup.id}/test-payment`);
+    } catch (e) {
+      const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
+      setErr(typeof msg === 'string' ? msg : msg?.message ?? 'Could not sign up.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rf-page mx-auto flex w-full max-w-2xl flex-col gap-3 pb-6 pt-3">
+      <Link to={backTarget} className="mg-text-link !min-h-11 self-start">
+        <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to {competition.name}
+      </Link>
+
+      <div className="mg-card flex flex-col gap-2.5 p-4 sm:p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <p className="mg-meta m-0 font-semibold uppercase tracking-[0.06em]">{competition.name}</p>
+            <h1 className="mg-display mt-1 text-2xl font-bold leading-[1.1] text-[rgb(var(--mg-heading))]">
+              Enter {section.displayName}
+            </h1>
+          </div>
+          <span className="mg-display text-xl font-bold text-[rgb(var(--mg-heading))]">{priceLabel(section.priceMinor)}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-[rgb(var(--mg-muted))]">
+          <span>
+            {seatsLeft != null ? `${seatsLeft} of ${max} places left` : max ? `Up to ${max} places` : 'No limit'}
+          </span>
+          {competition.paymentDestination && !isDemo && (section.priceMinor ?? 0) > 0 && (
+            <span>Pay to <span className="font-mono font-semibold text-[rgb(var(--mg-ink))]">{competition.paymentDestination}</span></span>
+          )}
+        </div>
+      </div>
+
+      {competition.signupsLocked && !done ? (
+        <p role="status" className="mg-notice">Entries are closed for this competition.</p>
+      ) : full && !done ? (
+        <p role="status" className="mg-notice">This section is full.</p>
+      ) : !user ? (
+        <div className="mg-card flex flex-col gap-3 p-4 sm:p-5">
+          <p className="m-0 text-sm text-[rgb(var(--mg-body))]">Sign in to enter this section.</p>
+          <Link to="/login" state={{ from: `/competitions/${competition.id}/enter/${section.id}` }} className="mg-btn mg-btn-primary w-full !min-h-11">
+            Sign in to enter
+          </Link>
+        </div>
+      ) : (
+        <div className="mg-card flex flex-col gap-3.5 p-4 sm:p-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="rf-fld">Your full name<input placeholder="Your full name" value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
+            <label className="rf-fld">Pony Club<input placeholder="Pony Club (optional)" value={ponyClub} onChange={(e) => setPonyClub(e.target.value)} /></label>
+          </div>
+          <label className="rf-fld">Phone<input type="tel" autoComplete="tel" placeholder="Phone (optional)" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
+          <EntryEmailFields value={entryEmail} onChange={setEntryEmail} />
+          {canEnterWholeTeam && (
+            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
+              <input type="checkbox" checked={wholeTeam} onChange={(e) => setWholeTeam(e.target.checked)} />
+              Enter a whole team
+            </label>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="rf-fld">{enteringWholeTeam ? 'Team name' : 'Team name (optional)'}
+              <input placeholder={enteringWholeTeam ? 'e.g. Welsh Dragons' : 'Riders with the same team name are put together'} value={teamName} onChange={(e) => setTeamName(e.target.value)} />
+            </label>
+            <label className="rf-fld">Team code
+              <input
+                className="font-mono uppercase"
+                placeholder="Team code (optional), e.g. STOCKPORT-A"
+                value={teamCode}
+                onChange={(e) => setTeamCode(e.target.value)}
+              />
+            </label>
+          </div>
+          <p className="-mt-1 text-xs text-[rgb(var(--mg-muted))]">The team name carries through to your team’s dec form, so organisers can match the two up.</p>
+          <RiderPrivacyFields value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
+          <TermsTickBox termsText={competition.termsText ?? null} checked={accepted} onChange={setAccepted} />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={submit}
+              disabled={busy || !fullName.trim() || !accepted || (enteringWholeTeam && !teamName.trim())}
+              className="mg-btn mg-btn-primary flex-1 !min-h-11"
+            >
+              <Check className="h-4 w-4" aria-hidden="true" /> {busy ? 'Joining…' : 'Confirm'}
+            </button>
+            <button type="button" onClick={() => navigate(backTarget)} className="mg-btn mg-btn-secondary !min-h-11">Cancel</button>
+          </div>
+          <p className="rf-note !p-0">
+            {isDemo
+              ? 'This is a demo event. After you confirm, you will see a test payment page. No money is taken.'
+              : 'Paid entries stay pending until the organiser confirms payment.'}
+          </p>
+          {err && <p role="alert" className="m-0 text-sm font-semibold text-[rgb(var(--mg-elim))]">{err}</p>}
+          {done && (
+            <p role="status" className="m-0 flex items-center gap-1 text-sm font-semibold text-[rgb(var(--mg-ok))]">
+              <Check className="h-4 w-4" aria-hidden="true" /> {done}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SignupRow({ signup, isDemo, onChanged }: { signup: SectionSignup; isDemo: boolean; onChanged: () => void }) {
   const status = SIGNUP_STATUS[signup.status];
   async function setStatus(next: SignupPaymentStatus) {
-    await api.put(`/signups/${signup.id}/status`, { status: next });
-    onChanged();
+    try {
+      await api.put(`/signups/${signup.id}/status`, { status: next });
+      onChanged();
+    } catch {
+      alert('Could not update signup status. Try again.');
+    }
   }
   async function remove() {
     if (!(await confirmDialog({ title: 'Delete this signup?', message: `Delete signup for ${signup.fullName}? This can't be undone.`, confirmLabel: 'Delete signup', destructive: true }))) return;
-    await api.delete(`/signups/${signup.id}`);
-    onChanged();
+    try {
+      await api.delete(`/signups/${signup.id}`);
+      onChanged();
+    } catch {
+      alert('Could not delete signup. Try again.');
+    }
   }
   return (
     <li className="flex flex-wrap items-center gap-1 border-t border-[rgb(var(--mg-rule-soft))] py-1">
@@ -527,13 +633,14 @@ function SignupRow({ signup, isDemo, onChanged }: { signup: SectionSignup; isDem
 function EquipmentBlock({ competitionId }: { competitionId: number }) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<{ lines: EquipmentLine[]; sessions: number; racesCounted: number } | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    if (!open || data) return;
+    if (!open || data || loadError) return;
     api.get<{ lines: EquipmentLine[]; sessions: number; racesCounted: number }>(`/competitions/${competitionId}/equipment`)
       .then((r) => setData(r.data))
-      .catch(() => {});
-  }, [open, competitionId, data]);
+      .catch(() => setLoadError(true));
+  }, [open, competitionId, data, loadError]);
 
   const byBucket = new Map<string, EquipmentLine[]>();
   for (const l of data?.lines ?? []) {
@@ -555,13 +662,15 @@ function EquipmentBlock({ competitionId }: { competitionId: number }) {
           <Hammer className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
           <span className="rf-grow">
             <span className="rf-t1">Equipment required</span>
-            <span className="rf-t2">Deduped across sessions, sized for the biggest heat</span>
+            <span className="rf-t2">Sized for the biggest heat across all sessions</span>
           </span>
           {open ? <ChevronUp className="h-4 w-4 rf-chev" aria-hidden="true" /> : <ChevronDown className="h-4 w-4 rf-chev" aria-hidden="true" />}
         </button>
         {open && (
-          data == null ? (
-            <p className="rf-note px-4">Computing…</p>
+          loadError ? (
+            <p role="alert" className="rf-note px-4">Could not load equipment.</p>
+          ) : data == null ? (
+            <p className="rf-note px-4">Loading…</p>
           ) : data.lines.length === 0 ? (
             <p className="rf-note px-4 italic">No races set up yet, so nothing to count.</p>
           ) : (
@@ -572,11 +681,11 @@ function EquipmentBlock({ competitionId }: { competitionId: number }) {
               {bucketOrder.filter((b) => byBucket.has(b)).map((b) => (
                 <div key={b}>
                   <h4 className="m-0 mb-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">{b}</h4>
-                  <ul className="m-0 grid list-none grid-cols-2 gap-x-4 gap-y-1 p-0 text-sm sm:grid-cols-3">
+                  <ul className="m-0 grid list-none grid-cols-1 gap-x-6 gap-y-1 p-0 text-sm sm:grid-cols-2 md:grid-cols-3">
                     {byBucket.get(b)!.sort((a, b2) => a.kind.localeCompare(b2.kind)).map((l) => (
-                      <li key={`${b}-${l.kind}`} className="flex justify-between">
-                        <span>{l.kind}</span>
-                        <span className="font-mono font-bold tabular-nums">×{l.count}</span>
+                      <li key={`${b}-${l.kind}`} className="flex items-baseline justify-between gap-2">
+                        <span className="min-w-0 truncate">{l.kind}</span>
+                        <span className="shrink-0 font-mono font-bold tabular-nums">×{l.count}</span>
                       </li>
                     ))}
                   </ul>

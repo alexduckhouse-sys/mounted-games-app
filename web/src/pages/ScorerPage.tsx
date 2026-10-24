@@ -112,7 +112,7 @@ export function ScorerPage() {
   );
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-3 p-3 pb-10">
+    <main className="skin mx-auto flex min-h-dvh w-full max-w-4xl flex-col gap-3 p-3 pb-10 sm:p-5">
       <header className="space-y-1 pt-2">
         <p className="mg-meta">Scorer link</p>
         <h1 className="mg-h1 mg-h1-sm">{session ? `${session.competitionName || 'Competition'} · ${session.arenaName}` : 'Score this arena'}</h1>

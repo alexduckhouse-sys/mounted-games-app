@@ -448,11 +448,13 @@ describe('SessionPage', () => {
   });
 
   describe('the scoring page layout', () => {
-    it('has no back arrow, Rules or Set up heats in a header, and keeps the organiser tools together', () => {
+    it('has no back arrow, Rules or Set up heats in a header, and keeps the organiser tools together', async () => {
       mount(scoringData());
       expect(screen.queryByRole('link', { name: /Sessions/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Rules/ })).not.toBeInTheDocument();
       expect(within(screen.getByText('Organiser tools').closest('details')!).getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Race rules' })).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: 'Race rules and arena setup' }));
       expect(screen.getByRole('region', { name: 'Race rules' })).toBeInTheDocument();
     });
 

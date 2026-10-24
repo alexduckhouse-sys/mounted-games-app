@@ -286,7 +286,6 @@ function SellerCatalogueContent() {
         title="Catalogue"
       />
       {error && <LoadError message={error} onRetry={() => void load()} />}
-      <RefineNote>Items you can offer at any event. Each organiser approves them for their own event.</RefineNote>
       {items == null && !error && <p className="rf-note" role="status">Loading your catalogue…</p>}
       {items?.length === 0 && <p className="rf-note">Your catalogue is empty. Add an item once, then reuse it at future events.</p>}
       {items && items.length > 0 && (

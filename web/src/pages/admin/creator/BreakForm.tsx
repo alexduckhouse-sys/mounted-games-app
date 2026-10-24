@@ -30,14 +30,14 @@ export function BreakForm({ date, arenas, busy, onAdd }: {
 
   return (
     <div role="group" aria-label="Add a break or briefing" className="flex flex-col gap-3 border-t border-[rgb(var(--mg-rule-soft))] p-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-2.5 sm:grid-cols-4 sm:gap-3">
         <SelectBox label="Type" value={kind} onChange={(v) => setKind(v === '2' ? 2 : 1)}>
           <option value="1">Break</option>
           <option value="2">Briefing</option>
         </SelectBox>
         <TextBox label="Name" value={name} placeholder={kind === 2 ? 'Briefing' : 'Lunch'} onChange={setName} className="col-span-1 sm:col-span-3" />
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-2.5 sm:grid-cols-4 sm:gap-3">
         <label className="flex flex-col gap-1.5 text-sm font-semibold text-[rgb(var(--mg-body))]">Day
           <span className="mg-field !min-h-11 !rounded-lg"><input type="date" value={day} onChange={(e) => setDay(e.target.value)} /></span>
         </label>

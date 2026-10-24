@@ -1,6 +1,6 @@
 .live-page {
-  display: flex; height: calc(100dvh - var(--mg-shell-h, 104px) - 69px - env(safe-area-inset-bottom)); min-height: 0;
-  flex-direction: column; gap: 12px; overflow: hidden; padding-block: 8px; font-family: 'Barlow', system-ui, sans-serif;
+  display: flex; min-height: calc(100dvh - var(--mg-shell-h, 104px) - 69px - env(safe-area-inset-bottom));
+  flex-direction: column; gap: 12px; padding-block: 8px calc(69px + 16px + env(safe-area-inset-bottom)); font-family: 'Barlow', system-ui, sans-serif;
 }
 .live-page-band { display: flex; min-height: 50px; flex-shrink: 0; align-items: center; gap: 12px; }
 .live-page-band h1 { min-width: 0; flex: 1; }
@@ -76,7 +76,7 @@
 .staff-stream-copy strong { color: rgb(var(--mg-heading)); font-size: 15px; }
 .staff-stream-copy span { color: rgb(var(--mg-muted)); font-size: 13px; }
 .staff-stream-change { display: inline-flex; min-width: 68px; min-height: 44px; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid rgb(var(--mg-control)); border-radius: 10px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)) !important; font-size: 14px; font-weight: 600; }
-.staff-stream-dialog { display: flex; width: min(100%, 560px); flex-direction: column; gap: 10px; padding: 10px 12px calc(24px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; background: rgb(var(--mg-surface)); animation: live-dialog-up .22s ease-out; }
+.staff-stream-dialog { display: flex; width: min(100%, 560px); flex-direction: column; gap: 10px; padding: 10px 12px calc(24px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; background: rgb(var(--mg-surface)); animation: live-dialog-up 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 .staff-stream-editor-wrap { display: flex; flex-direction: column; gap: 7px; }
 .staff-stream-editor { display: flex; gap: 7px; }
 .staff-stream-editor .mg-field { min-width: 0; flex: 1; }
@@ -84,13 +84,14 @@
 .staff-stream-editor .mg-btn { min-height: 48px; padding: 0 10px; font-size: 14px; }
 .staff-stream-editor .mg-btn svg { width: 16px; height: 16px; }
 .staff-stream-error { padding: 8px 10px; border-radius: 8px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font-size: 13px; line-height: 1.3; }
-.live-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-end; justify-content: center; background: rgb(var(--mg-overlay) / .55); }
-.live-all-dialog { display: flex; width: min(100%, 560px); max-height: 82dvh; flex-direction: column; gap: 8px; padding: 10px 12px calc(24px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; background: rgb(var(--mg-surface)); animation: live-dialog-up .22s ease-out; }
+.live-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-end; justify-content: center; background: rgb(var(--mg-overlay) / .55); animation: live-fade-in 160ms cubic-bezier(0.22, 1, 0.36, 1); }
+.live-all-dialog { display: flex; width: min(100%, 560px); max-height: 82dvh; flex-direction: column; gap: 8px; padding: 10px 12px calc(24px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; background: rgb(var(--mg-surface)); animation: live-dialog-up 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 .live-all-head { display: flex; min-height: 50px; flex-shrink: 0; align-items: center; gap: 10px; }
 .live-all-head h2 { min-width: 0; flex: 1; color: rgb(var(--mg-heading)); font: 700 22px/1 'Barlow Condensed', sans-serif; }
 .live-all-dialog .live-announcement-list { flex: 1; }
+@keyframes live-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes live-dialog-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .live-all-dialog, .staff-stream-dialog { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .live-overlay, .live-all-dialog, .staff-stream-dialog { animation: none; } }
 /* Phones keep one column: the two groups are transparent. */
 .live-col { display: contents; }
 .live-compose-field textarea { min-height: 44px; padding: 12px 0; resize: none; }

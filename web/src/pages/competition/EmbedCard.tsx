@@ -65,8 +65,8 @@ export function EmbedCard(props: Props) {
       <RefineSection title="Embed on your website" />
       <div className="rf-list flex flex-col gap-3 p-3">
         <p className="m-0 text-[15px]">
-          Show {props.kind === 'season' ? 'this season’s table' : 'live results'} on your club’s own site. Choose what to show, then copy the code and paste it into a page.
-          It updates by itself and only shows team names, places, points and times.
+          Embed {props.kind === 'season' ? 'this season’s table' : 'live results'} on your club’s website.
+          It updates automatically and only shows team names, places, points and times.
         </p>
 
         {props.kind === 'competition' && (
@@ -141,7 +141,7 @@ export function EmbedCard(props: Props) {
           </span>
         </div>
         <RefineNote>
-          In WordPress, Google Sites or Wix, add an “Embed” or “Custom HTML” block and paste the code in. The box scrolls if the results are longer than the height you set.
+          Paste into an Embed or Custom HTML block on your site.
         </RefineNote>
       </div>
     </>

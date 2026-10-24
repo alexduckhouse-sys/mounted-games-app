@@ -21,7 +21,7 @@ import { usePageWidth } from '../../components/pageWidthState';
 export function EntryPage() {
   usePageWidth('wide');
   const { competition, reload } = useCompetition();
-  const { canOrganise, user } = useAuth();
+  const { canOrganise } = useAuth();
   const mayOrganise = canOrganise(competition);
   const [loaded, setLoaded] = useState<{ id: number; items: SectionSignup[] } | null>(null);
   const allSignups = mayOrganise && loaded?.id === competition.id ? loaded.items : [];
@@ -78,9 +78,6 @@ export function EntryPage() {
 
       <EnterCompetition competition={competition} allSignups={allSignups} mayOrganise={mayOrganise} onChanged={() => { void refreshSignups(); reload(); }} />
 
-      {!user && !competition.signupsLocked && (
-        <p className="rf-note !px-1">You need an account to enter. It takes a minute, and you will come straight back here.</p>
-      )}
 
       <p className="rf-note !px-1">The timetable, toplists and live scores open once the teams are drawn.</p>
 

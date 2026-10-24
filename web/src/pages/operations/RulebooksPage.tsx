@@ -154,7 +154,6 @@ function GlobalRulebooks() {
         context={competition.name}
         actions={actions}
         title={draft ? (draft.id == null ? 'New rulebook' : 'Edit rulebook') : 'Rulebooks'}
-        subtitle={draft ? undefined : 'Choose a rulebook to read it.'}
       />
 
       {error && <p role="alert" className="mg-notice ops-alert">{error} {!draft && <button type="button" className="rf-btn rf-btn-text" onClick={() => (selectedId != null && !selected ? void open(selectedId) : void load())}>Try again</button>}</p>}
@@ -165,7 +164,7 @@ function GlobalRulebooks() {
       {draft && <RulebookEditor draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={() => setDraft(null)} />}
 
       {rulebooks.length > 0 && !draft && (
-        <>
+        <div className="mt-3 flex flex-col gap-4 lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-6">
           <RefineList as="div">
             {rulebooks.map((item) => (
               <button key={item.id} type="button" className="rf-row" aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => void open(item.id)}>
@@ -186,7 +185,7 @@ function GlobalRulebooks() {
             </div>}
             <div className="ops-reader-text">{selected.text}</div>
           </article>}
-        </>
+        </div>
       )}
     </RefinePage>
   );

@@ -317,7 +317,7 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
                 <AlertTriangle className="w-4 h-4" /> Runoff needed
               </div>
               <p className="text-[11px]">
-                {runoff.tied.length} teams tied on {runoff.points} pts at position {topN} — only {runoff.seatsLeft}{' '}
+                {runoff.tied.length} teams tied on {runoff.points} pts at position {topN}, with only {runoff.seatsLeft}{' '}
                 {runoff.seatsLeft === 1 ? 'spot' : 'spots'} left. Run a tie-breaker first:
               </p>
               <ul className="mt-1 space-y-0.5">

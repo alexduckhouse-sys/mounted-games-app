@@ -70,8 +70,15 @@ it('uses the count in the group summary when nothing is late', () => {
   expect(document.querySelector('.tt-summary-late')).toBeNull();
 });
 
-it('folds finished groups into one line under a divider and expands them on tap', () => {
+it('hides finished groups behind "Show full timetable", then folds them into one line under a divider and expands them on tap', () => {
   const { container } = renderBoard();
+  expect(screen.queryByRole('heading', { name: 'Finished today · 1' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Senior Teams · Session 1 · 1 finished/ })).toBeNull();
+
+  const toggle = screen.getByRole('button', { name: 'Show full timetable' });
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(toggle);
+
   expect(screen.getByRole('heading', { name: 'Finished today · 1' })).toBeVisible();
   const folded = screen.getByRole('button', { name: /Senior Teams · Session 1 · 1 finished/ });
   expect(folded).toHaveAttribute('aria-expanded', 'false');
@@ -86,11 +93,9 @@ it('folds finished groups into one line under a divider and expands them on tap'
 
   fireEvent.click(title);
   expect(screen.queryByText('Heat 3')).toBeNull();
-});
 
-it('no longer offers the old "View complete timetable" toggle', () => {
-  renderBoard();
-  expect(screen.queryByRole('button', { name: /complete timetable|completed sessions/i })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Hide finished sessions' }));
+  expect(screen.queryByRole('heading', { name: 'Finished today · 1' })).toBeNull();
 });
 
 it('filters by arena from the menu, flags the live arena and remembers the choice', () => {
@@ -156,9 +161,15 @@ it('offers a segmented day control when the event runs over several days', () =>
 
 it('labels the folded section "Finished" rather than "today" on another day', () => {
   const yesterday = dayKey(new Date(Date.now() - 86_400_000));
-  setCompetition({ startDate: yesterday, endDate: day });
+  setCompetition({
+    startDate: yesterday,
+    endDate: day,
+    sessions: [session(3, { status: 2, orderIndex: 0, arenaName: 'Finished Arena', scheduledStart: `${yesterday}T08:00:00`, heats: [heat(33, { sessionId: 3, label: 'Heat 3', finishedAt: `${yesterday}T08:30:00` })] })],
+  });
   renderBoard();
   fireEvent.click(within(screen.getByRole('group', { name: 'Choose day' })).getAllByRole('button')[0]);
+  fireEvent.click(screen.getByRole('button', { name: 'Show full timetable' }));
+  expect(screen.getByRole('heading', { name: 'Finished · 1' })).toBeVisible();
   expect(screen.queryByText(/Finished today/)).toBeNull();
 });
 

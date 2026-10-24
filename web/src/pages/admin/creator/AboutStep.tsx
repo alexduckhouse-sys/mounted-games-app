@@ -8,7 +8,7 @@ import { fieldClass, StepIntro, TextBox, type StepProps } from './parts';
 export function AboutStep({ draft, change, problems, clear }: StepProps<CreatorDraft>) {
   return (
     <section aria-labelledby="cw-about" className="flex flex-col gap-[18px]">
-      <StepIntro title="About the competition">What people will see first.</StepIntro>
+      <StepIntro title="About the competition" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <TextBox label="Name" value={draft.name} error={problems.name} onChange={(name) => { change({ name }); clear('name'); }} />
         <Field label="Icon">

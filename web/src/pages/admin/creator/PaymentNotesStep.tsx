@@ -17,7 +17,7 @@ export function PaymentNotesStep({ draft, change, payoutsTo, canSetUpPayouts }: 
 }) {
   return (
     <section aria-labelledby="cw-notes" className="flex flex-col gap-[18px]">
-      <StepIntro title="Payment and notes">All optional. You can change these later.</StepIntro>
+      <StepIntro title="Payment and notes" />
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-semibold text-[rgb(var(--mg-body))]">Where entry fees go</span>
         <div className="mg-card flex flex-col gap-1 px-3.5 py-3 text-base" data-testid="payouts-to">

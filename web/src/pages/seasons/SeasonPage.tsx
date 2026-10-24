@@ -170,7 +170,6 @@ function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => 
   return <form className="sv-add" onSubmit={submit}>
     <fieldset disabled={busy} className="sv-fieldset sv-stack">
       <legend className="rf-sec">Add an event round</legend>
-      <p className="rf-note sv-flush">Choose a matching section from a competition you organise.</p>
       {listError && <p role="alert" className="mg-notice">{listError} <button type="button" className="mg-text-link min-h-11" onClick={() => { setListError(''); setListAttempt((value) => value + 1); }}>Try again</button></p>}
       {actionError && <p role="alert" className="mg-notice">{actionError}</p>}
       <label className="rf-fld">Competition<SelectField required value={competitionId} onChange={(event) => chooseCompetition(event.target.value)}><option value="">{competitions ? 'Choose a competition' : 'Loading competitions…'}</option>{competitions?.map((competition) => <option key={competition.id} value={competition.id}>{competition.name} · {new Date(competition.startDate).getFullYear()}</option>)}</SelectField></label>
@@ -217,7 +216,6 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
       {preview && canManage && <section className="sv-stack" aria-label="Publication preview">
         <div><h3 className="rf-sec">Version {preview.nextVersion} preview</h3><p className="rf-note sv-flush">{preview.rankingBasis}. Ties share a place and HC teams are excluded.</p></div>
         <PublicationResults publication={preview} />
-        <p className="rf-note sv-flush">Publishing adds a new version. Earlier versions remain available.</p>
         <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void act(async () => { await api.post(`${base}/publications`, { sourceFingerprint: preview.sourceFingerprint, expectedVersion: preview.nextVersion }); setPreview(null); setNotice('Round results published.'); onChanged(); })}>{busy ? 'Publishing…' : `Publish version ${preview.nextVersion}`}</button>
       </section>}
       {round.publishedVersion ? <PublicationHistory base={base} latest={round.publishedVersion} /> : !canManage && <p className="rf-note sv-flush">There are no published results for this round.</p>}
