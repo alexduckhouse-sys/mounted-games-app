@@ -2,6 +2,7 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
@@ -12,7 +13,8 @@ namespace MountedGames.Api.Services;
 
 /// <param name="Status">Why the team did not finish; null means Eliminated when <paramref name="Eliminated"/> is set.</param>
 /// <param name="Note">The referee's private note. Null keeps the note the result already has; empty clears it.</param>
-public record FinishingPlace(int TeamId, int Place, bool Eliminated, ResultStatus? Status = null, string? Note = null);
+/// <param name="PointsOverride">Optional manual point override for this result.</param>
+public record FinishingPlace(int TeamId, int Place, bool Eliminated, ResultStatus? Status = null, string? Note = null, int? PointsOverride = null);
 
 public sealed class ScoreConflictException(string message) : InvalidOperationException(message);
 public sealed class ScoreSignedOffException(string message) : InvalidOperationException(message);
@@ -78,6 +80,47 @@ public class ScoringService
             actorUserId, null,
             expected?.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status)).ToList(),
             $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, actorLabel);
+
+    public Task<RaceScoreDto> OverrideRacePointsAsync(
+        int raceId, int teamId, int points, string reason,
+        string? actorUserId = null, CancellationToken cancellationToken = default)
+        => ApplyPointChangeAsync(raceId, teamId, points, isDelta: false, reason, actorUserId, cancellationToken);
+
+    public Task<RaceScoreDto> AdjustTeamPointsAsync(
+        int raceId, int teamId, int pointsDelta, string reason,
+        string? actorUserId = null, CancellationToken cancellationToken = default)
+        => ApplyPointChangeAsync(raceId, teamId, pointsDelta, isDelta: true, reason, actorUserId, cancellationToken);
+
+    private async Task<RaceScoreDto> ApplyPointChangeAsync(
+        int raceId, int teamId, int value, bool isDelta, string reason,
+        string? actorUserId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ScoreValidationException("A reason is required when adjusting or overriding points.");
+        var race = await _db.Races.AsNoTracking()
+            .Include(r => r.Results)
+            .Include(r => r.Heat).ThenInclude(h => h!.Entries)
+            .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken)
+            ?? throw new KeyNotFoundException("Race not found.");
+        var entries = race.Heat?.Entries.OrderBy(e => e.LaneIndex).ThenBy(e => e.Id).ToList() ?? [];
+        var existingByTeam = race.Results.ToDictionary(r => r.TeamId);
+        var directive = isDelta ? $"[adj:{value:+#;-#;0}]" : $"[pts:{value}]";
+        var note = $"{directive} {reason.Trim()}";
+        var places = entries.Select((e, idx) =>
+        {
+            if (existingByTeam.TryGetValue(e.TeamId, out var r))
+            {
+                var targetPts = e.TeamId == teamId ? (isDelta ? r.Points + value : value) : r.Points;
+                return new FinishingPlace(e.TeamId, r.Placing ?? 0, r.Eliminated, ResultStatuses.Of(r),
+                    e.TeamId == teamId ? note : r.RefereeNote, targetPts);
+            }
+            return new FinishingPlace(e.TeamId, idx + 1, false, ResultStatus.Finished,
+                e.TeamId == teamId ? note : null,
+                e.TeamId == teamId && !isDelta ? value : null);
+        }).ToList();
+        return await ApplyCoreAsync(raceId, places, actorUserId, null, null,
+            $"adj-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken);
+    }
 
     public async Task<RaceScoreDto> GetAsync(int raceId, CancellationToken cancellationToken = default)
     {
@@ -172,7 +215,7 @@ public class ScoringService
         return await ExecuteTransactionAsync(async () =>
         {
         var race = await _db.Races
-            .Include(r => r.Heat).ThenInclude(h => h!.Entries)
+            .Include(r => r.Heat).ThenInclude(h => h!.Entries).ThenInclude(e => e.Team)
             .Include(r => r.Heat).ThenInclude(h => h!.Races)
             .Include(r => r.Heat).ThenInclude(h => h!.Session)
             .Include(r => r.Results)
@@ -209,11 +252,33 @@ public class ScoringService
         var accepted = strictValidation
             ? finishingPlaces.ToList()
             : finishingPlaces.Where(p => entryTeamIds.Contains(p.TeamId)).ToList();
+        var hcTeamIds = heat.Entries
+            .Where(e => e.Team?.IsHorsConcours == true)
+            .Select(e => e.TeamId)
+            .ToHashSet();
+        var isQualifier = heat.RaceRoundStage == RaceRoundStage.Qualifier;
+        int EffectivePlace(FinishingPlace fp)
+        {
+            if (fp.Eliminated || fp.Place < 1 || hcTeamIds.Count == 0) return fp.Place;
+            var hcAhead = accepted.Count(other =>
+                !other.Eliminated && !sitOut.Contains(other.TeamId) && hcTeamIds.Contains(other.TeamId)
+                && other.Place > 0 && other.Place < fp.Place);
+            return Math.Max(1, fp.Place - hcAhead);
+        }
+        int ResolvePoints(FinishingPlace fp)
+        {
+            var basePoints = sitOut.Contains(fp.TeamId) || hcTeamIds.Contains(fp.TeamId) ? 0
+                : isQualifier ? (fp.Eliminated ? 0 : 1) : PointsForPlace(EffectivePlace(fp), sessionBase, fp.Eliminated);
+            if (fp.PointsOverride.HasValue) return fp.PointsOverride.Value;
+            if (TryParsePointsDirective(fp.Note, out var overridePts, out var deltaPts))
+                return overridePts ?? (basePoints + (deltaPts ?? 0));
+            return basePoints;
+        }
         var incomingCore = accepted.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
-                p.Status ?? ResultStatus.Finished, CleanNoteOrNull(p.Note)))
+                p.Status ?? ResultStatus.Finished, CleanNoteOrNull(p.Note), ResolvePoints(p)))
             .OrderBy(p => p.TeamId).ToList();
         var currentCore = current.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
-                p.Status, p.RefereeNote))
+                p.Status, p.RefereeNote, p.Points))
             .OrderBy(p => p.TeamId).ToList();
         var payloadFingerprint = PayloadFingerprint("results", incomingCore, expectedRevision, reason);
 
@@ -246,7 +311,6 @@ public class ScoringService
             throw new ScoreValidationException("A reason is required when correcting results.");
 
         var now = DateTime.UtcNow;
-        var isQualifier = heat.RaceRoundStage == RaceRoundStage.Qualifier;
         var fresh = accepted.Select(fp => new Result
         {
             RaceId = raceId,
@@ -256,8 +320,7 @@ public class ScoringService
             Status = fp.Eliminated ? fp.Status ?? ResultStatus.Eliminated : ResultStatus.Finished,
             RefereeNote = CleanNoteOrNull(fp.Note),
             IsSitOut = sitOut.Contains(fp.TeamId),
-            Points = sitOut.Contains(fp.TeamId) ? 0
-                : isQualifier ? (fp.Eliminated ? 0 : 1) : PointsForPlace(fp.Place, sessionBase, fp.Eliminated),
+            Points = ResolvePoints(fp),
             RecordedAt = now,
             RecordedByUserId = actorUserId,
         }).ToList();
@@ -267,6 +330,18 @@ public class ScoringService
         race.IsComplete = true;
         race.StartedAt ??= now;
         race.FinishedAt ??= now;
+        if (fresh.Count > 0)
+        {
+            heat.StartedAt ??= now;
+            if (heat.Races.Count > 0 && heat.Races.All(r => r.Id == raceId || r.IsComplete))
+                heat.FinishedAt ??= now;
+            if (heat.Session is { } session)
+            {
+                session.StartedAt ??= now;
+                if (session.Status == SessionStatus.Upcoming)
+                    session.Status = SessionStatus.InArena;
+            }
+        }
         state.Revision++;
         state.UpdatedAt = now;
         _db.Add(new RaceScoreEvent
@@ -284,6 +359,24 @@ public class ScoringService
             CreatedAt = now,
         });
         await _db.SaveChangesAsync(cancellationToken);
+        if (fresh.Count > 0)
+        {
+            if (isQualifier && heat.RaceRoundId is not null)
+                await new RaceFinalService(_db).TryAutoPopulateAsync(raceId, cancellationToken);
+            if (heat.Session is { } session)
+            {
+                var sessionHeats = await _db.Heats.AsNoTracking()
+                    .Include(h => h.Races)
+                    .Where(h => h.SessionId == session.Id)
+                    .ToListAsync(cancellationToken);
+                if (sessionHeats.Count > 0 && sessionHeats.All(h => h.Races.Count > 0 && h.Races.All(r => r.IsComplete)))
+                {
+                    session.Status = SessionStatus.Finished;
+                    session.FinishedAt ??= now;
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+            }
+        }
         return ToDto(raceId, state.Revision, false, null, null, after);
         }, cancellationToken);
     }
@@ -443,7 +536,27 @@ public class ScoringService
         bool replay = false)
         => new(raceId, revision, signedOff, signedOffAt, signedOffBy, results, replay);
 
-    private sealed record CorePlace(int TeamId, int? Place, bool Eliminated, ResultStatus Status, string? Note);
+    private sealed record CorePlace(int TeamId, int? Place, bool Eliminated, ResultStatus Status, string? Note, int Points);
+
+    private static bool TryParsePointsDirective(string? note, out int? overridePts, out int? deltaPts)
+    {
+        overridePts = null;
+        deltaPts = null;
+        if (string.IsNullOrWhiteSpace(note)) return false;
+        var ptsMatch = Regex.Match(note, @"\[pts:(-?\d+(?:\.\d+)?)\]", RegexOptions.IgnoreCase);
+        if (ptsMatch.Success && double.TryParse(ptsMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture, out var pts))
+        {
+            overridePts = (int)Math.Round(pts, MidpointRounding.AwayFromZero);
+            return true;
+        }
+        var adjMatch = Regex.Match(note, @"\[adj:([+-]?\d+(?:\.\d+)?)\]", RegexOptions.IgnoreCase);
+        if (adjMatch.Success && double.TryParse(adjMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture, out var adj))
+        {
+            deltaPts = (int)Math.Round(adj, MidpointRounding.AwayFromZero);
+            return true;
+        }
+        return false;
+    }
 
     private static string? CleanNoteOrNull(string? note) => ResultStatuses.CleanNote(note);
 

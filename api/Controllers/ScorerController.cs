@@ -28,13 +28,18 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         var link = Link;
         var competition = await db.Competitions.AsNoTracking().FirstAsync(c => c.Id == link.CompetitionId, ct);
         var sessions = await db.Sessions.AsNoTracking().AsSplitQuery()
-            .Where(s => s.CompetitionId == link.CompetitionId && s.ArenaName == link.ArenaName)
+            .Where(s => s.CompetitionId == link.CompetitionId)
             .Include(s => s.Section)
             .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
             .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
-            .OrderBy(s => s.OrderIndex).ToListAsync(ct);
-        return new ScorerSessionDto(link.Label, competition.Id, competition.Name, link.ArenaName, link.ExpiresAt,
-            sessions.Select(s => s.ToDto()).ToList());
+            .ToListAsync(ct);
+        var ordered = sessions
+            .OrderBy(s => s.ScheduledStart ?? DateTime.MaxValue)
+            .ThenBy(s => s.OrderIndex)
+            .ThenBy(s => s.Id)
+            .Select(s => s.ToDto())
+            .ToList();
+        return new ScorerSessionDto(link.Label, competition.Id, competition.Name, link.ArenaName, link.ExpiresAt, ordered);
     }
 
     [HttpGet("api/scorer/races/{raceId:int}/score")]
@@ -57,9 +62,8 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         if (!await InScopeAsync(raceId, ct)) return NotFound();
         try
         {
-            // A scorer link can't write referee notes either; leaving one out keeps the note staff set.
-            var withoutNotes = request with { Places = request.Places?.Select(p => p with { RefereeNote = null }).ToList() };
-            var score = await scoring.ApplyVersionedAsync(raceId, withoutNotes, null, ct, ActorLabel);
+            // A scorer link can record why an eliminated team is out; leaving a note null keeps any note staff set.
+            var score = await scoring.ApplyVersionedAsync(raceId, request, null, ct, ActorLabel);
             await BroadcastAsync(raceId);
             return score with { Results = score.Results.Select(r => r with { RefereeNote = null }).ToList() };
         }
@@ -86,7 +90,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         if (req.Reason?.Length > 1000) return BadRequest(new { message = "Correction reason must be 1000 characters or fewer." });
         try
         {
-            await scoring.ApplyLegacyAsync(raceId, req.Places.Select(p => p with { RefereeNote = null }).ToList(), req.Expected, null, req.Reason, ct, ActorLabel);
+            await scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected, null, req.Reason, ct, ActorLabel);
         }
         catch (ScoreConflictException ex) { return await ConflictAsync(race, ex.Message); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
@@ -95,16 +99,18 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         { return await ConflictAsync(race, "These results were changed on another device."); }
 
         var dto = await HeatDtoAsync(race.HeatId);
-        await live.ResultsUpdated(race.Heat!.Session!.CompetitionId, new { sessionId = race.Heat.SessionId, heat = dto });
+        var competitionId = race.Heat!.Session!.CompetitionId;
+        await live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto });
+        await BroadcastSessionAsync(race.Heat.SessionId, competitionId);
         return dto;
     }
 
-    /// <summary>True only for a race in this link's competition and arena.</summary>
+    /// <summary>True only for a race in this link's competition.</summary>
     private Task<bool> InScopeAsync(int raceId, CancellationToken ct)
     {
         var link = Link;
         return db.Races.AsNoTracking().AnyAsync(r => r.Id == raceId
-            && r.Heat!.Session!.CompetitionId == link.CompetitionId && r.Heat.Session.ArenaName == link.ArenaName, ct);
+            && r.Heat!.Session!.CompetitionId == link.CompetitionId, ct);
     }
 
     private async Task<HeatDto> HeatDtoAsync(int heatId)
@@ -126,7 +132,19 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     private async Task BroadcastAsync(int raceId)
     {
         var race = await db.Races.AsNoTracking().Include(r => r.Heat).ThenInclude(h => h!.Session).FirstAsync(r => r.Id == raceId);
-        await live.ResultsUpdated(race.Heat!.Session!.CompetitionId,
+        var competitionId = race.Heat!.Session!.CompetitionId;
+        await live.ResultsUpdated(competitionId,
             new { sessionId = race.Heat.SessionId, heat = await HeatDtoAsync(race.HeatId) });
+        await BroadcastSessionAsync(race.Heat.SessionId, competitionId);
+    }
+
+    private async Task BroadcastSessionAsync(int sessionId, int competitionId)
+    {
+        var session = await db.Sessions.AsNoTracking()
+            .Include(s => s.Section)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstAsync(s => s.Id == sessionId);
+        await live.SessionUpdated(competitionId, session.ToDto());
     }
 }

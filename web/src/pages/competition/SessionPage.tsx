@@ -32,6 +32,16 @@ function formatTime(d: Date | null): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+/** Formats a point total so `.01` run-off tie-breaker fractions are hidden while `.5` half-points remain visible. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatPoints(points: number): string {
+  const halfRounded = Math.round(points * 2) / 2;
+  if (Math.abs(points - halfRounded) <= 0.02) {
+    return Number.isInteger(halfRounded) ? String(halfRounded) : halfRounded.toFixed(1);
+  }
+  return String(Math.round(points * 100) / 100);
+}
+
 function heatStartTime(session: Session, heat: Heat, heatIndex: number): Date | null {
   if (heat.startedAt) return new Date(heat.startedAt);
   const baseStr = session.scheduledStart;
@@ -387,6 +397,15 @@ export function SessionPage() {
                 <Wand2 className="w-3.5 h-3.5" /> Set up heats
               </button>
             </div>
+            {viewHeat && viewHeat.entries.length > 0 && (
+              <ScoreAdjustmentsPanel
+                session={session}
+                heat={viewHeat}
+                activeRaceId={activeRaceId}
+                onChanged={reload}
+                onError={setSaveError}
+              />
+            )}
           </details>
         </>
       ) : (
@@ -484,6 +503,222 @@ function QualifiersControl({ session, onChanged }: { session: Session; onChanged
       </select>
       {error && <span role="alert" className="text-rose-600">Not saved</span>}
     </label>
+  );
+}
+
+/** Run-off +0.01 tie-breaker, per-race manual score override, and team point adjustment for organisers. */
+function ScoreAdjustmentsPanel({
+  session, heat, activeRaceId, onChanged, onError,
+}: {
+  session: Session;
+  heat: Heat;
+  activeRaceId: number | null;
+  onChanged: () => void;
+  onError: (msg: string | null) => void;
+}) {
+  const entries = heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
+  const races = heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+  const defaultTeamId = entries[0]?.teamId ?? 0;
+  const targetRace = races.find((r) => r.id === activeRaceId) ?? races[races.length - 1] ?? null;
+
+  const [runoffWinnerId, setRunoffWinnerId] = useState<number>(defaultTeamId);
+  const [appliedRunoffWinnerId, setAppliedRunoffWinnerId] = useState<number | null>(null);
+
+  const [overrideTeamId, setOverrideTeamId] = useState<number>(defaultTeamId);
+  const [overridePoints, setOverridePoints] = useState<string>('0');
+  const [overrideReason, setOverrideReason] = useState<string>('');
+
+  const [adjustTeamId, setAdjustTeamId] = useState<number>(defaultTeamId);
+  const [adjustDelta, setAdjustDelta] = useState<string>('-1');
+  const [adjustReason, setAdjustReason] = useState<string>('');
+
+  const standings = useMemo(() => {
+    return entries
+      .map((e) => {
+        const rawTotal = races.reduce((sum, r) => sum + (r.results.find((res) => res.teamId === e.teamId)?.points ?? 0), 0);
+        const total = rawTotal + (appliedRunoffWinnerId === e.teamId ? 0.01 : 0);
+        return { teamId: e.teamId, teamName: e.teamName, rawTotal, total };
+      })
+      .sort((a, b) => b.total - a.total || a.teamId - b.teamId);
+  }, [entries, races, appliedRunoffWinnerId]);
+
+  async function recordRunoffWinner() {
+    setAppliedRunoffWinnerId(runoffWinnerId);
+    onError(null);
+    const winnerTotal = standings.find((s) => s.teamId === runoffWinnerId)?.rawTotal;
+    const tiedIds = standings.filter((s) => s.rawTotal === winnerTotal).map((s) => s.teamId);
+    if (tiedIds.length >= 2) {
+      const orderedIds = [runoffWinnerId, ...tiedIds.filter((id) => id !== runoffWinnerId)];
+      try {
+        await api.put(`/competitions/${session.competitionId}/finals/tie-order`, { teamIds: orderedIds });
+        onChanged();
+      } catch {
+        // Keep local +0.01 tie-break order even if finals tie-order endpoint is not applicable
+      }
+    }
+  }
+
+  async function submitPointDirective(teamId: number, directive: string, reason: string) {
+    if (!targetRace) return;
+    const existingByTeam = new Map(targetRace.results.map((r) => [r.teamId, r]));
+    const places = entries.map((e, i) => {
+      const existing = existingByTeam.get(e.teamId);
+      const isTarget = e.teamId === teamId;
+      return {
+        teamId: e.teamId,
+        place: existing ? (existing.eliminated ? 0 : existing.placing ?? i + 1) : i + 1,
+        eliminated: existing?.eliminated ?? false,
+        ...(existing?.status ? { status: existing.status } : {}),
+        ...(isTarget ? { refereeNote: `${directive} ${reason}`.trim() } : {}),
+      };
+    });
+    try {
+      await api.post(`/races/${targetRace.id}/results`, { places, reason });
+      onError(null);
+      onChanged();
+    } catch {
+      onError('Couldn’t save score adjustment. Try again.');
+    }
+  }
+
+  async function saveOverride() {
+    const pts = Number(overridePoints);
+    if (overridePoints.trim() === '' || Number.isNaN(pts)) {
+      onError('Enter a valid points number.');
+      return;
+    }
+    const formatted = formatPoints(pts);
+    const reason = overrideReason.trim() || `Manual score override to ${formatted} pts`;
+    await submitPointDirective(overrideTeamId, `[pts:${formatted}]`, reason);
+    setOverrideReason('');
+  }
+
+  async function applyAdjustment() {
+    const delta = Number(adjustDelta);
+    if (adjustDelta.trim() === '' || Number.isNaN(delta) || delta === 0) {
+      onError('Enter a non-zero point adjustment.');
+      return;
+    }
+    const reason = adjustReason.trim();
+    if (!reason) {
+      onError('Add a reason for this point adjustment.');
+      return;
+    }
+    const formatted = formatPoints(Math.abs(delta));
+    const signed = delta > 0 ? `+${formatted}` : `-${formatted}`;
+    await submitPointDirective(adjustTeamId, `[adj:${signed}]`, reason);
+    setAdjustReason('');
+  }
+
+  return (
+    <div className="mt-3 space-y-3 border-t border-slate-200 dark:border-slate-700 pt-3 text-xs">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1">
+          <span className="font-semibold">Run-off winner</span>
+          <select
+            aria-label="Run-off winner"
+            className="input !min-h-0 !py-1 text-xs"
+            value={runoffWinnerId}
+            onChange={(e) => setRunoffWinnerId(Number(e.target.value))}
+          >
+            {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
+          </select>
+        </label>
+        <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void recordRunoffWinner()}>
+          Record run-off winner
+        </button>
+        {appliedRunoffWinnerId != null && (
+          <ul aria-label="Run-off standings" className="flex flex-wrap gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+            {standings.map((s, idx) => (
+              <li key={s.teamId} data-testid={`runoff-standing-${idx + 1}`}>
+                {idx + 1}. {s.teamName}: {formatPoints(s.total)} pts
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {targetRace && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Override team</span>
+            <select
+              aria-label="Override team"
+              className="input !min-h-0 !py-1 text-xs"
+              value={overrideTeamId}
+              onChange={(e) => setOverrideTeamId(Number(e.target.value))}
+            >
+              {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Custom points</span>
+            <input
+              aria-label="Custom points"
+              type="number"
+              step="0.5"
+              className="input !min-h-0 !py-1 text-xs w-20"
+              value={overridePoints}
+              onChange={(e) => setOverridePoints(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Override reason</span>
+            <input
+              aria-label="Override reason"
+              type="text"
+              placeholder="e.g. Combined heat"
+              className="input !min-h-0 !py-1 text-xs"
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+            />
+          </label>
+          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void saveOverride()}>
+            Save override
+          </button>
+        </div>
+      )}
+
+      {targetRace && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Adjustment team</span>
+            <select
+              aria-label="Adjustment team"
+              className="input !min-h-0 !py-1 text-xs"
+              value={adjustTeamId}
+              onChange={(e) => setAdjustTeamId(Number(e.target.value))}
+            >
+              {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Point adjustment</span>
+            <input
+              aria-label="Point adjustment"
+              type="number"
+              className="input !min-h-0 !py-1 text-xs w-20"
+              value={adjustDelta}
+              onChange={(e) => setAdjustDelta(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="font-semibold">Adjustment reason</span>
+            <input
+              aria-label="Adjustment reason"
+              type="text"
+              placeholder="Required reason"
+              className="input !min-h-0 !py-1 text-xs"
+              value={adjustReason}
+              onChange={(e) => setAdjustReason(e.target.value)}
+            />
+          </label>
+          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void applyAdjustment()}>
+            Apply adjustment
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -7,7 +7,7 @@ import { competition, heat, race, result, session, team } from '../../test/facto
 import type { HeatEntry } from '../../types';
 import type { CompetitionDetail, DeclarationForm } from '../../types';
 import { CompetitionContext } from './context';
-import { SessionPage } from './SessionPage';
+import { SessionPage, formatPoints } from './SessionPage';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('./HeatScores', () => ({ HeatScores: () => <p>Public results</p> }));
@@ -573,6 +573,60 @@ describe('SessionPage', () => {
       await userEvent.click(screen.getByRole('button', { name: /Set up heats/ }));
       expect(await screen.findByText('0 dec forms in')).toBeInTheDocument();
       expect(screen.getByText(/Teams \(3 selected\)/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Run-off tie-breaker, manual score override, and team point adjustments', () => {
+    it('hides .01 run-off tie-breaker fractions while keeping .5 half-points visible', () => {
+      expect(formatPoints(24)).toBe('24');
+      expect(formatPoints(24.01)).toBe('24');
+      expect(formatPoints(24.5)).toBe('24.5');
+      expect(formatPoints(24.51)).toBe('24.5');
+    });
+
+    it('awards +0.01 to the run-off winner and supports manual score override and team point adjustments', async () => {
+      const tiedComp = competition({
+        teams,
+        sessions: [session(1, {
+          status: 1,
+          heats: [heat(1, {
+            entries: entries(2),
+            races: [race(1, {
+              name: 'Bending',
+              isComplete: true,
+              results: [result(1, 1, { points: 5 }), result(2, 1, { points: 5 })],
+            })],
+          })],
+        })],
+      });
+      mount(tiedComp);
+      await screen.findByText('Organiser tools');
+
+      await userEvent.selectOptions(screen.getByLabelText('Run-off winner'), '2');
+      await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
+      expect(await screen.findByTestId('runoff-standing-1')).toHaveTextContent('1. Rider 2: 5 pts');
+      expect(screen.getByTestId('runoff-standing-2')).toHaveTextContent('2. Rider 1: 5 pts');
+
+      const customPts = screen.getByLabelText('Custom points');
+      await userEvent.clear(customPts);
+      await userEvent.type(customPts, '4.5');
+      await userEvent.type(screen.getByLabelText('Override reason'), 'Dead heat');
+      await userEvent.click(screen.getByRole('button', { name: 'Save override' }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/races/1/results', expect.objectContaining({
+        reason: 'Dead heat',
+        places: expect.arrayContaining([
+          expect.objectContaining({ teamId: 1, refereeNote: '[pts:4.5] Dead heat' }),
+        ]),
+      })));
+
+      await userEvent.type(screen.getByLabelText('Adjustment reason'), 'False start penalty');
+      await userEvent.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/races/1/results', expect.objectContaining({
+        reason: 'False start penalty',
+        places: expect.arrayContaining([
+          expect.objectContaining({ teamId: 1, refereeNote: '[adj:-1] False start penalty' }),
+        ]),
+      })));
     });
   });
 });

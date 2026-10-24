@@ -107,7 +107,11 @@ export function ScorerPage() {
   }, [token, load]);
 
   const raceSessions = useMemo(
-    () => (session?.sessions ?? []).filter((s) => (s.kind ?? 0) === 0).slice().sort((a, b) => a.orderIndex - b.orderIndex),
+    () => (session?.sessions ?? []).filter((s) => (s.kind ?? 0) === 0).slice().sort((a, b) => {
+      const ta = a.scheduledStart ? Date.parse(a.scheduledStart) : Number.MAX_SAFE_INTEGER;
+      const tb = b.scheduledStart ? Date.parse(b.scheduledStart) : Number.MAX_SAFE_INTEGER;
+      return (ta - tb) || (a.orderIndex - b.orderIndex);
+    }),
     [session],
   );
 
@@ -300,6 +304,7 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
           onSubmit={submit}
           onUndo={canUndo ? undo : undefined}
           undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
+          allowReasons
           nextLanes={nextLanes}
           correctionReason={activeRace ? reasons[activeRace.id] ?? '' : ''}
           onCorrectionReason={(reason) => { if (activeRace) setReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
