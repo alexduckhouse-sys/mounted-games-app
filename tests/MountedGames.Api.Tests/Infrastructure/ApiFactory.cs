@@ -46,6 +46,10 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimits:StatsPerMinute", "100000");
         builder.UseSetting("RateLimits:EmailResendPerMinute", "100000");
         builder.UseSetting("RateLimits:SignupPerMinute", "100000");
+        builder.UseSetting("RateLimits:TeamJoinPerMinute", "100000");
+        builder.UseSetting("RateLimits:ShopReportsPerMinute", "100000");
+        builder.UseSetting("RateLimits:UnsubscribePerMinute", "100000");
+        builder.UseSetting("RateLimits:ScorerReadsPerMinute", "100000");
         builder.ConfigureServices(services =>
         {
             var scheduler = services.Single(d => d.ImplementationType == typeof(NotificationScheduler));

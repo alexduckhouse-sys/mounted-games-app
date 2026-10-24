@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Entities;
@@ -99,15 +100,69 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Login_AndSignupTrainer_RejectPasswordsOver128Characters()
+    public async Task Login_AcceptsLongPasswords_ForAdminCreatedAndSelfServiceAccounts()
     {
-        var overlong = new string('A', 120) + "a1!bcdefgh";
-        var loginResp = await Anon.PostAsJsonAsync("/api/auth/login", new LoginRequest("someone@example.com", overlong));
-        var signupResp = await Anon.PostAsJsonAsync("/api/auth/signup-trainer",
-            new SignupTrainerRequest(Unique(), overlong, null, "Auth Test Club"));
+        var password = new string('a', 128) + "1!";
+        var email = $"{Unique()}@example.com";
+        var admin = await _f.AdminAsync();
+        var registered = await admin.PostAsJsonAsync("/api/auth/register",
+            new RegisterRequest(email, password, "Test account", Roles.Member, null));
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Anon.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, password))).StatusCode);
 
-        Assert.Equal(HttpStatusCode.BadRequest, loginResp.StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, signupResp.StatusCode);
+        var signup = await Anon.PostAsJsonAsync("/api/auth/signup-trainer",
+            new SignupTrainerRequest(Unique(), password, null, "Auth Test Club"));
+        Assert.Equal(HttpStatusCode.OK, signup.StatusCode);
+        var account = await signup.ReadAsync<AuthResponse>();
+        Assert.Equal(HttpStatusCode.OK, (await Anon.PostAsJsonAsync("/api/auth/login", new LoginRequest(account.User.Email, password))).StatusCode);
+    }
+
+    [Fact]
+    public async Task JoiningReportingAndUnsubscribing_HaveSeparateLimitsFromSigningIn()
+    {
+        using var factory = new ActionLimitedFactory();
+        var trainer = await factory.TrainerAsync();
+        var (other, _) = await factory.SignupAsync();
+        var anonymous = factory.CreateClient();
+        foreach (var client in new[] { trainer, other, anonymous })
+            client.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "198.51.100.44");
+
+        var actions = new (HttpClient Client, string Url, object Body, HttpStatusCode Status)[]
+        {
+            (trainer, "/api/teams/join", new { key = "fake-unknown-key" }, HttpStatusCode.NotFound),
+            (anonymous, "/api/shop/posts/99999999/report", new { reason = "Fake report" }, HttpStatusCode.NotFound),
+            (anonymous, "/api/email/unsubscribe", new { token = "fake-unknown-token" }, HttpStatusCode.OK),
+        };
+        foreach (var action in actions)
+        {
+            for (var i = 0; i < 2; i++)
+                Assert.Equal(action.Status, (await action.Client.PostAsJsonAsync(action.Url, action.Body)).StatusCode);
+            var limited = await action.Client.PostAsJsonAsync(action.Url, action.Body);
+            Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
+            Assert.Equal("60", limited.Headers.GetValues("Retry-After").Single());
+        }
+
+        // Joining is per person, so another signed-in spectator at the same venue can still join.
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await other.PostAsJsonAsync("/api/teams/join", new { key = "fake-unknown-key" })).StatusCode);
+        // Neither these actions nor another person's joins have spent the venue's sign-in allowance.
+        for (var i = 0; i < 2; i++)
+            Assert.Equal(HttpStatusCode.OK, (await anonymous.PostAsJsonAsync("/api/auth/login",
+                new LoginRequest(TestClients.TrainerEmail, TestClients.TrainerPassword))).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await anonymous.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest(TestClients.TrainerEmail, TestClients.TrainerPassword))).StatusCode);
+    }
+
+    private sealed class ActionLimitedFactory : ApiFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.UseSetting("RateLimits:AuthPerMinute", "2");
+            builder.UseSetting("RateLimits:TeamJoinPerMinute", "2");
+            builder.UseSetting("RateLimits:ShopReportsPerMinute", "2");
+            builder.UseSetting("RateLimits:UnsubscribePerMinute", "2");
+        }
     }
 
     [Theory]

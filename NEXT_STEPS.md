@@ -47,12 +47,12 @@ On 23 October the user walked through creating a competition on production and r
 **4. Laptop layouts not done in #124:** Teams side drawer, Seasons filters, team profile in two columns, the scoring heat table beside the race stack, and `shop/manage`, `/me/catalogue`, `/me/orders`, rulebooks and members (still a centred column). `DataTable` exists but nothing uses it yet.
 
 **5. Security follow-ups** from the review of #113, #114 and #116 (all low):
-- [ ] Payouts: allow clearing the responsible person's date of birth. (Privacy page updated on 24 Oct to mention the stored sort code and account holder name.)
+- [x] Payouts: allow clearing the responsible person's date of birth. (Privacy page updated on 24 Oct to mention the stored sort code and account holder name.)
 - [ ] Payouts: pin the paying club on the competition before real money moves (it follows the creator's current club today).
 - [x] Show "Pay to …" on the entry page only to signed-in users.
 - [ ] `IsClubManagerAsync` trusts the Manager role in the token; re-check it against the database, as `ClubPayoutsController.ScopeAsync` does.
 
-**6. Optional:** a TURN key for streaming on weak 4G (`Streaming__Cloudflare__TurnKeyId` is set, its `TurnKeyApiToken` isn't), a tutorial mode for scoring, and `window.prompt`/`alert` left in ShopPage, ChatTab, TimetableManagement and `useTeamNotifications`.
+**6. Optional:** a TURN key for streaming on weak 4G (`Streaming__Cloudflare__TurnKeyId` is set, its `TurnKeyApiToken` isn't), a tutorial mode for scoring, and the remaining browser alert in `useTeamNotifications`.
 
 **7. Housekeeping:** Neon has 9 of 10 branches (backups from 23 October); delete older ones once tonight's changes have settled. Remove the merged agent branches and worktrees (`.claude/worktrees/agent-*`). A stash entry `creator-wip-1` is safe to drop.
 

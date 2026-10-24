@@ -103,13 +103,37 @@ describe('the shop', () => {
   it('lets someone report a post that is not theirs', async () => {
     auth.user = { id: 'buyer', fullName: 'Bea Buyer' };
     vi.mocked(api.post).mockResolvedValue({ data: {} });
-    vi.spyOn(window, 'prompt').mockReturnValue('Looks wrong');
-    vi.spyOn(window, 'alert').mockImplementation(() => {});
     mount();
     await userEvent.click(await screen.findByRole('button', { name: /Grey saddle/ }));
     await userEvent.click(screen.getByRole('button', { name: /Report/ }));
+    await userEvent.type(screen.getByLabelText(/Why are you reporting this post/), 'Looks wrong');
+    await userEvent.click(screen.getByRole('button', { name: 'Send report' }));
     expect(api.post).toHaveBeenCalledWith('/shop/posts/1/report', { reason: 'Looks wrong' });
+    expect(await screen.findByText('Reported. An admin will review.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Remove post' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a failed report open for retry and lets someone cancel without reporting', async () => {
+    auth.user = { id: 'fake-buyer', fullName: 'Fake Buyer' };
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ data: {} });
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: /Grey saddle/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Report' }));
+    await userEvent.type(screen.getByLabelText(/Why are you reporting this post/), 'Fake report reason');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.post).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Report' }));
+    const reason = screen.getByLabelText(/Why are you reporting this post/);
+    expect(reason).toHaveValue('');
+    expect(reason).toHaveAttribute('maxlength', '1000');
+    await userEvent.type(reason, 'Fake report reason');
+    await userEvent.click(screen.getByRole('button', { name: 'Send report' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not send the report. Try again.');
+    expect(reason).toHaveValue('Fake report reason');
+    expect(screen.queryByText('Reported. An admin will review.')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Send report' }));
+    expect(await screen.findByText('Reported. An admin will review.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('marks a removed post', async () => {

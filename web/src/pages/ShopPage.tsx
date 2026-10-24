@@ -290,6 +290,11 @@ function PostRow({
   onChanged: () => void;
 }) {
   const [showComments, setShowComments] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reported, setReported] = useState(false);
+  const [sendingReport, setSendingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
   const ownPost = currentUserId != null && post.authorUserId === currentUserId;
 
   async function remove() {
@@ -297,11 +302,20 @@ function PostRow({
     await api.delete(`/shop/posts/${post.id}`);
     onChanged();
   }
-  async function report() {
-    const reason = window.prompt('Why are you reporting this post? (optional)') ?? '';
-    if (reason === null) return;
-    await api.post(`/shop/posts/${post.id}/report`, { reason: reason.trim() || null }).catch(() => {});
-    alert('Reported. An admin will review.');
+  async function submitReport() {
+    if (sendingReport) return;
+    setSendingReport(true);
+    setReportError(null);
+    try {
+      await api.post(`/shop/posts/${post.id}/report`, { reason: reportReason.trim() || null });
+      setReporting(false);
+      setReportReason('');
+      setReported(true);
+    } catch {
+      setReportError('Could not send the report. Try again.');
+    } finally {
+      setSendingReport(false);
+    }
   }
 
   const where = [post.authorName, post.ponyClubName].filter(Boolean).join(' · ');
@@ -329,13 +343,31 @@ function PostRow({
               {post.commentCount > 0 && <span className="text-[rgb(var(--mg-muted))]">{post.commentCount}</span>}
             </button>
             <div className="ml-auto" />
-            {!post.isDeleted && !ownPost && (
-              <button onClick={report} className="mg-small-btn gap-1.5"><Flag className="h-4 w-4" aria-hidden="true" /> Report</button>
+            {!post.isDeleted && !ownPost && !reported && (
+              <button type="button" onClick={() => { setReporting((v) => !v); setReportError(null); }} disabled={sendingReport} className="mg-small-btn gap-1.5"><Flag className="h-4 w-4" aria-hidden="true" /> Report</button>
             )}
             {(isAdmin || ownPost) && !post.isDeleted && (
               <button onClick={remove} className="mg-small-btn gap-1.5 !text-[rgb(var(--mg-elim))]" aria-label="Remove post"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
             )}
           </div>
+          {reporting && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <input
+                type="text"
+                aria-label="Why are you reporting this post? (optional)"
+                placeholder="Reason (optional)"
+                maxLength={1000}
+                disabled={sendingReport}
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                className="input min-w-[180px] flex-1 text-sm"
+              />
+              <button type="button" disabled={sendingReport} onClick={() => { void submitReport(); }} className="mg-small-btn">{sendingReport ? 'Sending…' : 'Send report'}</button>
+              <button type="button" disabled={sendingReport} onClick={() => { setReporting(false); setReportReason(''); setReportError(null); }} className="mg-small-btn">Cancel</button>
+              {reportError && <p role="alert" className="mg-notice w-full">{reportError}</p>}
+            </div>
+          )}
+          {reported && <p role="status" className="mg-meta">Reported. An admin will review.</p>}
           {showComments && <CommentThread postId={post.id} postAuthorId={post.authorUserId ?? null} currentUserId={currentUserId} />}
         </div>
       )}

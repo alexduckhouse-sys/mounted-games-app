@@ -10,8 +10,8 @@ using MountedGames.Api.Entities;
 namespace MountedGames.Api.Controllers;
 
 /// <summary>
-/// Scorer links: the organiser's side. An owner, a competition admin (team member) or an admin makes a link for one arena of one
-/// competition, lists them and revokes them. Anyone else gets 404. The token is returned once, on creation.
+/// Scorer links: the organiser's side. An owner, a competition admin (team member) or an admin makes a link for one
+/// competition, lists them and revokes them. The arena name is a label only. Anyone else gets 404. The token is returned once, on creation.
 /// </summary>
 [ApiController]
 [Authorize(Policy = CompetitionStaff.Policy)]

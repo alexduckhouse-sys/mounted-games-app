@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
+using MountedGames.Api.Security;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
@@ -23,7 +24,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     private ScorerLink Link => ScorerLinkAccessAttribute.Current(HttpContext);
     private string ActorLabel => $"Scorer link: {Link.Label}";
 
-    [EnableRateLimiting("public-read")]
+    [EnableRateLimiting(RequestLimits.ScorerReadPolicy)]
     [HttpGet("api/scorer/session")]
     public async Task<ActionResult<ScorerSessionDto>> GetSession(CancellationToken ct)
     {
@@ -44,7 +45,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         return new ScorerSessionDto(link.Label, competition.Id, competition.Name, link.ArenaName, link.ExpiresAt, ordered);
     }
 
-    [EnableRateLimiting("public-read")]
+    [EnableRateLimiting(RequestLimits.ScorerReadPolicy)]
     [HttpGet("api/scorer/races/{raceId:int}/score")]
     public async Task<ActionResult<RaceScoreDto>> GetScore(int raceId, CancellationToken ct)
     {

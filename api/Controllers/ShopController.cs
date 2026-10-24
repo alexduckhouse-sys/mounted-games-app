@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
+using MountedGames.Api.Security;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
@@ -194,7 +195,7 @@ public class ShopController : ControllerBase
         return NoContent();
     }
 
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting(RequestLimits.ShopReportPolicy)]
     [HttpPost("posts/{id:int}/report")]
     [AllowAnonymous]
     public async Task<IActionResult> Report(int id, CreateShopReportRequest req)

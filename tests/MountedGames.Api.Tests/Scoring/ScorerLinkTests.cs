@@ -18,7 +18,7 @@ using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Scoring;
 
-/// <summary>Scorer links: a volunteer scores one arena from a link, with no account, and can do nothing else.</summary>
+/// <summary>Scorer links: a volunteer scores a competition from a link, with no account, and can do nothing else.</summary>
 public class ScorerLinkTests : IClassFixture<ApiFactory>
 {
     private readonly ApiFactory _f;
@@ -601,6 +601,29 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         Assert.False(guard.IsBlocked("1.1.1.1"));
         guard.RecordFailure("1.1.1.1");
         Assert.False(guard.IsBlocked("1.1.1.1"));
+    }
+
+    [Fact]
+    public async Task ScorerReads_HaveTheirOwnLimit_AndDoNotPreventSaves()
+    {
+        using var limited = _f.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("RateLimits:PublicReadsPerMinute", "1");
+            b.UseSetting("RateLimits:ScorerReadsPerMinute", "2");
+        });
+        var w = await WorldAsync();
+        var (token, _) = await CreateLinkAsync(w);
+        var scorer = Scorer(token, "198.51.100.45", limited);
+        var share = $"/api/share/competitions/{w.Arena.CompetitionId}";
+
+        Assert.Equal(HttpStatusCode.OK, (await scorer.GetAsync(share)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await scorer.GetAsync(share)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await scorer.GetAsync("/api/scorer/session")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await scorer.GetAsync(Score(w.MainRaces[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await scorer.GetAsync("/api/scorer/session")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await scorer.PutAsJsonAsync(Score(w.MainRaces[0]), Put(w, 0, "read-limit-save"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await Scorer(token, "198.51.100.46", limited).GetAsync("/api/scorer/session")).StatusCode);
     }
 
     [Fact]

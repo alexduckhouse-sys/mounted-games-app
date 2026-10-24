@@ -42,9 +42,6 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest req)
     {
-        if (req.Password is { Length: > 128 })
-            return BadRequest(new { message = "Password must be 128 characters or fewer." });
-
         var user = await _users.FindByEmailAsync(req.Email);
         // The shared organiser account uses the admin key. Old demo databases
         // must not retain a second, well-known password login in production.
@@ -109,8 +106,6 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Username is required." });
         if (string.IsNullOrEmpty(req.Password))
             return BadRequest(new { message = "Password is required." });
-        if (req.Password.Length > 128)
-            return BadRequest(new { message = "Password must be 128 characters or fewer." });
 
         // Identity needs an email-like UserName for uniqueness; synthesise one if a bare username was given.
         var realEmail = raw.Contains('@');

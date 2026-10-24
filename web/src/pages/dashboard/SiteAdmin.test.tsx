@@ -38,6 +38,7 @@ beforeEach(() => {
       return { data: requests };
     }
     if (url === '/auth/me') return { data: { roles: ['Admin'] } };
+    if (url === '/admin/email-status') return { data: { enabled: false, configured: false } };
     if (url === '/ip-blocks/mine') return { data: { ip: null } };
     return { data: [] };
   });
@@ -191,6 +192,7 @@ describe('admin competitions', () => {
       if (url === '/clubs') return { data: [{ id: 1, name: 'Wirral PC', region: 'North', bibColour: null }] };
       if (url === path) return { data: [] };
       if (url === '/auth/me') return { data: { roles: ['Admin'] } };
+      if (url === '/admin/email-status') return { data: { enabled: false, configured: false } };
       return { data: [] };
     });
     vi.mocked(api.post).mockResolvedValue({ data: {} });

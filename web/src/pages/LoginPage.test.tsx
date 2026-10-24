@@ -136,6 +136,25 @@ describe('LoginPage', () => {
       });
     });
 
+    it('lets organisers reveal and hide their key without submitting, and hides it when they return', async () => {
+      mount();
+      await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
+      const key = screen.getByLabelText('Organiser key');
+      await userEvent.type(key, 'fake-organiser-key');
+      expect(key).toHaveAttribute('type', 'password');
+      await userEvent.click(screen.getByRole('button', { name: 'Show key' }));
+      expect(key).toHaveAttribute('type', 'text');
+      expect(key).toHaveValue('fake-organiser-key');
+      expect(screen.getByRole('button', { name: 'Hide key' })).toHaveAttribute('aria-pressed', 'true');
+      await userEvent.click(screen.getByRole('button', { name: 'Hide key' }));
+      expect(key).toHaveAttribute('type', 'password');
+      await userEvent.click(screen.getByRole('button', { name: 'Show key' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
+      expect(screen.getByLabelText('Organiser key')).toHaveAttribute('type', 'password');
+      expect(api.post).not.toHaveBeenCalled();
+    });
+
     it('explains under the field when the key is refused or the request is invalid', async () => {
       vi.mocked(api.post).mockRejectedValue({ response: { status: 401, data: { message: 'Invalid admin key.' } } });
       mount();

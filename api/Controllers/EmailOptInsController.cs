@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MountedGames.Api.Auth;
+using MountedGames.Api.Security;
 using MountedGames.Api.Data;
 using MountedGames.Api.Services.Email;
 
@@ -27,7 +28,7 @@ public class EmailOptInsController(
     /// something, matched something already unsubscribed, or was made up, so it can't be used to find out who is
     /// on the list. Unsubscribing twice is harmless.
     /// </summary>
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting(RequestLimits.UnsubscribePolicy)]
     [HttpPost("api/email/unsubscribe")]
     [AllowAnonymous]
     public async Task<IActionResult> Unsubscribe(UnsubscribeRequest req, CancellationToken ct)
