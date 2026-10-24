@@ -20,6 +20,7 @@ import { WeatherNow, WeatherAt } from '../../components/WeatherChips';
 import { exportTimetableCsv } from '../../lib/timetableCsv';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
+import { defaultRaceList } from '../../lib/defaultRaces';
 import { confirmDialog } from '../../components/ConfirmDialog';
 
 type AddKind = 'break' | 'briefing' | 'custom';
@@ -454,6 +455,7 @@ export function TimetableManagement() {
         <CreateFinalsModal
           competitionId={competition.id}
           sections={competition.sections}
+          sessions={competition.sessions}
           onClose={() => setFinalsOpen(false)}
           onCreated={() => { setFinalsOpen(false); reload(); }}
         />
@@ -1291,11 +1293,13 @@ function HeatAssignmentEditor({
 function CreateFinalsModal({
   competitionId,
   sections,
+  sessions,
   onClose,
   onCreated,
 }: {
   competitionId: number;
   sections: CompetitionSection[];
+  sessions: Session[];
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -1303,7 +1307,7 @@ function CreateFinalsModal({
   const [topN, setTopN] = useState(6);
   const [lanes, setLanes] = useState(6);
   const [name, setName] = useState('');
-  const [raceNames, setRaceNames] = useState('Litter Lifter\nFlag\nBottle\nMug\nBall and Cone');
+  const [raceNames, setRaceNames] = useState('');
   const [lowestFinalFirst, setLowestFinalFirst] = useState(true);
   const [scaffoldOnly, setScaffoldOnly] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1312,6 +1316,19 @@ function CreateFinalsModal({
   const [boundaryVersion, setBoundaryVersion] = useState(0);
   const [rules, setRules] = useState<Record<number, TieBreakRule>>({});
   const section = sectionId === '' ? null : sections.find((s) => s.id === sectionId) ?? null;
+
+  const plannedFinal = sectionId === '' ? undefined : sessions.find((s) =>
+    s.competitionSectionId === sectionId && /^finals\s*·/i.test(s.name.trim()) && s.heats.length === 0 && s.status === 0);
+
+  function selectSection(value: string) {
+    const id = value === '' ? '' : Number(value);
+    setSectionId(id);
+    const selected = sections.find((s) => s.id === id);
+    const planned = sessions.find((s) => s.competitionSectionId === id && /^finals\s*·/i.test(s.name.trim()) && s.heats.length === 0 && s.status === 0);
+    setRaceNames((planned?.plannedRaces?.length ? planned.plannedRaces : selected ? defaultRaceList('Zone', selected.format, selected.ageGroup) : []).join('\n'));
+    if (selected?.finalistCount) setTopN(selected.finalistCount);
+    if (planned?.lanesPerHeat) setLanes(planned.lanesPerHeat);
+  }
 
   // Re-check every finals cut whenever the size of the finals, the section or a tie's settlement changes.
   useEffect(() => {
@@ -1335,6 +1352,7 @@ function CreateFinalsModal({
         const numHeats = Math.max(1, Math.ceil(topN / Math.max(1, lanes)));
         await api.post(`/competitions/${competitionId}/finals/scaffold`, {
           competitionSectionId: sectionId === '' ? null : sectionId,
+          existingSessionId: plannedFinal?.id ?? null,
           raceNames: races,
           lanesPerHeat: lanes,
           numHeats,
@@ -1344,6 +1362,7 @@ function CreateFinalsModal({
       } else {
         await api.post(`/competitions/${competitionId}/finals`, {
           competitionSectionId: sectionId === '' ? null : sectionId,
+          existingSessionId: plannedFinal?.id ?? null,
           topN,
           raceNames: races,
           lanesPerHeat: lanes,
@@ -1384,7 +1403,7 @@ function CreateFinalsModal({
             <SelectField
               className="input mt-1 text-sm"
               value={sectionId}
-              onChange={(e) => setSectionId(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+              onChange={(e) => selectSection(e.target.value)}
             >
               <option value="">All age groups (overall)</option>
               {sections.map((s) => (

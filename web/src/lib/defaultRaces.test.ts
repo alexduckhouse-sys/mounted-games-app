@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AREA_JUNIORS, AREA_PAIRS, AREA_SENIORS, ZONE_JUNIORS, ZONE_PAIRS, ZONE_SENIORS, defaultRaceList, scopeOf } from './defaultRaces';
+import { AREA_INDIVIDUALS, AREA_JUNIORS, AREA_PAIRS, AREA_SENIORS, ZONE_INDIVIDUALS, ZONE_JUNIORS, ZONE_PAIRS, ZONE_SENIORS, defaultRaceList, scopeOf } from './defaultRaces';
 
 describe('default race lists', () => {
   it.each([['ZONE_PAIRS', ZONE_PAIRS], ['AREA_PAIRS', AREA_PAIRS]])('%s has no race twice in a row', (_name, list) => {
@@ -26,13 +26,22 @@ describe('default race lists', () => {
     expect(AREA_JUNIORS).toHaveLength(7);
   });
 
-  it('picks pairs for pairs, juniors and novices for the junior list, and the seniors list otherwise', () => {
+  it('picks pairs for pairs, juniors/under-12s and novices for the junior list, individuals without team-only races, and the seniors list otherwise', () => {
     expect(defaultRaceList('Zone', 1, 'Open')).toEqual(ZONE_PAIRS);
     expect(defaultRaceList('Area', 1, 'Junior')).toEqual(AREA_PAIRS);
     expect(defaultRaceList('Zone', 2, 'Junior')).toEqual(ZONE_JUNIORS);
+    expect(defaultRaceList('Zone', 2, 'Under 10')).toEqual(ZONE_JUNIORS);
+    expect(defaultRaceList('Area', 2, 'Under 12')).toEqual(AREA_JUNIORS);
+    expect(defaultRaceList('Area', 2, 'U12')).toEqual(AREA_JUNIORS);
     expect(defaultRaceList('Area', 2, 'Novices')).toEqual(AREA_JUNIORS);
+    expect(defaultRaceList('Zone', 2, 'Under 14')).toEqual(ZONE_SENIORS);
     expect(defaultRaceList('Zone', 2, 'Open')).toEqual(ZONE_SENIORS);
-    expect(defaultRaceList('Area', 3, 'Seniors')).toEqual(AREA_SENIORS);
+    expect(defaultRaceList('Zone', 3, 'Seniors')).toEqual(ZONE_INDIVIDUALS);
+    expect(defaultRaceList('Area', 3, 'Seniors')).toEqual(AREA_INDIVIDUALS);
+    expect(defaultRaceList('Zone', 3, 'Seniors')).not.toContain('Big Sack');
+    expect(defaultRaceList('Area', 3, 'Seniors')).not.toContain('5 Mug');
+    expect(defaultRaceList('Zone', 3, 'Under 12')).not.toContain('Spell EGUK (JV)');
+    expect(defaultRaceList('Area', 3, 'Under 10')).toEqual(AREA_JUNIORS);
   });
 
   it('hands out copies, so editing one list leaves the standard alone', () => {

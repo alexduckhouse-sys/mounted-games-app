@@ -19,9 +19,12 @@ public record TackCheckSectorDto(int Id, string Name);
 /// <summary><c>Total</c> is the points across sectors; <c>Passed</c>/<c>Failed</c> count the pass-or-fail marks.</summary>
 public record TackCheckTeamDto(
     int TeamId, string TeamName, string ClubName, bool IsHorsConcours, bool Withdrawn,
-    IReadOnlyList<TackCheckMarkDto> Marks, int Total, int Passed, int Failed);
+    IReadOnlyList<TackCheckMarkDto> Marks, int Total, int Passed, int Failed,
+    IReadOnlyList<string>? Riders = null);
 
-public record TackCheckMarkDto(int SectorId, bool? Passed, [Range(0, 100)] int? Points);
+public record TackCheckMarkDto(
+    int SectorId, bool? Passed, [Range(0, 1000)] int? Points,
+    IReadOnlyList<int?>? RiderPoints = null);
 
 /// <summary>
 /// Turns the section's tack check on or off and sets what it counts for. The sectors replace the list: a row

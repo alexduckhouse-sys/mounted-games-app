@@ -43,6 +43,7 @@ public class TackCheckSchemaTests : IClassFixture<ApiFactory>
         var tables = await NamesAsync(db, "SELECT name FROM sqlite_master WHERE type = 'table'");
         Assert.All(Tables, t => Assert.Contains(t, tables));
         Assert.Contains("EnablePassportCheck", await NamesAsync(db, "SELECT name FROM pragma_table_info('Competitions')"));
+        Assert.Contains("RiderScoresJson", await NamesAsync(db, "SELECT name FROM pragma_table_info('TackCheckMarks')"));
         Assert.Equal(competitions, await db.Competitions.AsNoTracking().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name }).ToListAsync());
         Assert.All(await db.Competitions.AsNoTracking().Select(x => x.EnablePassportCheck).ToListAsync(), on => Assert.False(on));
 

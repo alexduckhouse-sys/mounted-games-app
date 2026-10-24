@@ -138,7 +138,7 @@ it('requires the single consent tick and persists it through AcceptTerms', async
   await userEvent.click(await screen.findByRole('button', { name: /Join/ }));
   await userEvent.type(screen.getByLabelText('Your full name'), 'Example Rider');
   const consent = screen.getByRole('checkbox', { name: 'I agree' });
-  expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+  expect(screen.getAllByRole('checkbox', { name: 'I agree' })).toHaveLength(1);
   expect(consent).toHaveAccessibleDescription(/parental or guardian consent/);
   expect(screen.getByRole('button', { name: /Confirm/ })).toBeDisabled();
   await userEvent.click(consent);

@@ -1,6 +1,6 @@
 import { api } from '../../../api';
 import {
-  hatbandsFor, heatSizeOf, minutesOf, parseFinalistCount, parseMaxParticipants, priceGbpToMinor, sectionName, type CreatorDraft,
+  finalSessionName, hatbandsFor, heatSizeOf, minutesOf, parseFinalistCount, parseMaxParticipants, priceGbpToMinor, sectionLocked, sectionName, type CreatorDraft, type SectionDraft,
 } from '../../../lib/creatorDraft';
 import { realFixedItems } from '../../../lib/creatorLoad';
 import { breakWindow, plannedSessions, provisionalTimetable } from '../../../lib/creatorPlan';
@@ -105,7 +105,12 @@ export async function saveCreator(draft: CreatorDraft, opts: {
   const topOrder = (competition?.sessions ?? []).reduce((m, s) => Math.max(m, s.orderIndex), 0);
   const orderOf = (key: string) => topOrder + (rank.get(key) ?? 0) + 1;
 
-  const keptSessions = new Set(draft.sections.flatMap((s) => s.sessions.flatMap((x) => (x.existingId ? [x.existingId] : []))));
+  const wantsFinals = (s: SectionDraft) =>
+    !s.usesRaceFinals && (Boolean(s.finalRaces && s.finalRaces.length > 0) || parseFinalistCount(s.finalistCount) !== null || Boolean(s.finalHasHeats) || Boolean(s.finalScored));
+  const keptSessions = new Set(draft.sections.flatMap((s) => [
+    ...s.sessions.flatMap((x) => (x.existingId ? [x.existingId] : [])),
+    ...(s.finalSessionId && wantsFinals(s) ? [s.finalSessionId] : []),
+  ]));
   const isRace = (s: Session) => (s.kind ?? (s.isBreak ? SessionKind.Break : SessionKind.Race)) === SessionKind.Race;
   for (const old of (competition?.sessions ?? []).filter(isRace)) {
     // A session of a removed age group went with it.
@@ -131,6 +136,29 @@ export async function saveCreator(draft: CreatorDraft, opts: {
         competitionSectionId: sectionIds[p.sectionIndex], name: p.name, arenaName: arena, scheduledStart: row?.start.toISOString() ?? null,
         orderIndex: orderOf(`s${p.key}`), notes: null, isBreak: false, durationMinutes: row && row.minutes > 0 ? row.minutes : null,
         kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: session.races ?? [],
+      }));
+    }
+  }
+
+  let nextFinalOrder = topOrder + rows.length + 1;
+  for (const [sectionIndex, section] of draft.sections.entries()) {
+    if (section.usesRaceFinals) continue;
+    const hasFinalRaces = Boolean(section.finalRaces && section.finalRaces.length > 0);
+    const hasFinalists = parseFinalistCount(section.finalistCount) !== null;
+    const fName = finalSessionName(section);
+    const minutes = minutesOf(section);
+    const arena = section.arena.trim();
+    if (section.finalSessionId) {
+      if (section.finalScored || !wantsFinals(section)) continue;
+      const body = section.finalHasHeats
+        ? { minutesPerHeat: minutes, arenaName: arena }
+        : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: section.finalRaces ?? [] };
+      await step(`Saving ${fName}…`, () => api.put(`${base}/sessions/${section.finalSessionId}`, body));
+    } else if (hasFinalRaces || (!sectionLocked(section) && hasFinalists)) {
+      await step(`Adding ${fName}…`, () => api.post(`${base}/sessions`, {
+        competitionSectionId: sectionIds[sectionIndex], name: fName, arenaName: arena, scheduledStart: null,
+        orderIndex: nextFinalOrder++, notes: null, isBreak: false, durationMinutes: null,
+        kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: section.finalRaces ?? [],
       }));
     }
   }

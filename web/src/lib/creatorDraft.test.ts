@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  defaultDraft, defaultSection, finalistCountOf, firstProblemStep, hatbandsFor, laneCount, isLocked, MAX_SESSIONS, minutesOf, heatSizeOf, newSessionName, parseFinalistCount, parseMaxParticipants,
+  defaultDraft, defaultSection, finalistCountOf, finalSessionName, firstProblemStep, hatbandsFor, laneCount, isLocked, MAX_SESSIONS, minutesOf, heatSizeOf, newSessionName, parseFinalistCount, parseMaxParticipants,
   priceGbpToMinor, readDraft, resizeSessions, sectionLocked, sectionName, setFormat, setRaceFinals, STEP_IDS, validateStep, wholeNumber,
   type CreatorDraft,
 } from './creatorDraft';
@@ -21,6 +21,7 @@ describe('defaults and names', () => {
     expect(newSessionName(one, 0)).toBe('Senior Teams');
     const two = resizeSessions(one, 2);
     expect(newSessionName(two, 1)).toBe('Senior Teams · Session 2');
+    expect(finalSessionName(one)).toBe('Finals · Senior Teams');
   });
 });
 
@@ -128,7 +129,7 @@ describe('readDraft', () => {
 
   it('reads a full draft, keeping the step and ids', () => {
     const d = draft({ step: 3, savedAt: '2026-10-31T10:00:00Z' });
-    d.sections = [{ ...defaultSection(), existingId: 7, hasEntries: true, sessions: [{ existingId: 9, name: 'A', races: ['Bending'], hasHeats: true, scored: true }] }];
+    d.sections = [{ ...defaultSection(), existingId: 7, hasEntries: true, finalRaces: ['Flag'], finalSessionId: 12, finalHasHeats: true, finalScored: true, sessions: [{ existingId: 9, name: 'A', races: ['Bending'], hasHeats: true, scored: true }] }];
     d.breaks = [{ existingId: 4, kind: 2, name: 'Briefing', date: '2026-10-31', time: '09:00', minutes: '15', arena: '' }];
     expect(readDraft(JSON.parse(JSON.stringify(d)))).toEqual(d);
   });

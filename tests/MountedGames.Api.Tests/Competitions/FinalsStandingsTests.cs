@@ -206,6 +206,41 @@ public class FinalsStandingsTests : IClassFixture<ApiFactory>
         Assert.Equal(new[] { s.Teams[4], s.Teams[0], s.Teams[2], s.Teams[1], s.Teams[3] }, rows.Select(r => r.TeamId));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Finals_ReusePlannedSession_AndRefuseToReplaceExistingHeats(bool scaffold)
+    {
+        var setup = await ArrangeAsync(withFinals: false);
+        var plannedId = await _f.WithDbAsync(async db =>
+        {
+            var planned = new Session { CompetitionId = setup.CompetitionId, CompetitionSectionId = setup.SectionId,
+                Name = "Finals · Under 12", ArenaName = "Test arena", MinutesPerHeat = 12, OrderIndex = 10,
+                ScheduledStart = new DateTime(2032, 6, 1, 14, 0, 0, DateTimeKind.Utc) };
+            db.Add(planned);
+            await db.SaveChangesAsync();
+            return planned.Id;
+        });
+        var client = await _f.TrainerAsync();
+        var url = $"/api/competitions/{setup.CompetitionId}/finals" + (scaffold ? "/scaffold" : "");
+        var request = new { competitionSectionId = setup.SectionId, topN = 4, numHeats = 2,
+            lanesPerHeat = 2, raceNames = new[] { "Test final race" }, existingSessionId = plannedId };
+        var response = await client.PostAsJsonAsync(url, request);
+        var result = await response.ReadAsync<SessionDto>();
+        Assert.Equal(plannedId, result.Id);
+        Assert.Equal("Test arena", result.ArenaName);
+        Assert.Equal(12, result.MinutesPerHeat);
+        Assert.Equal(10, result.OrderIndex);
+        Assert.Equal(2, result.Heats.Count);
+        Assert.All(result.Heats, h => Assert.Equal("Test final race", Assert.Single(h.Races).Name));
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, (await client.PostAsJsonAsync(url, request)).StatusCode);
+        var other = await ArrangeAsync(withFinals: false);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
+            $"/api/competitions/{other.CompetitionId}/finals" + (scaffold ? "/scaffold" : ""),
+            new { competitionSectionId = other.SectionId, topN = 4, numHeats = 2, lanesPerHeat = 2,
+                raceNames = new[] { "Test race" }, existingSessionId = plannedId })).StatusCode);
+    }
+
     // ---- season publication ----
 
     private async Task<SeasonPublicationPreviewDto> PreviewAsync(Setup s)
