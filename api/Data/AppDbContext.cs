@@ -126,6 +126,13 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.HasOne<SectionSignup>().WithMany().HasForeignKey(x => x.PairRequestToSignupId)
                 .HasConstraintName("FK_SignupMatchmaking_PairTo").OnDelete(DeleteBehavior.SetNull);
         });
+        b.Entity<SignupTeamLink>(e =>
+        {
+            e.ToTable("SignupTeamLinks");
+            e.HasKey(x => new { x.SignupId, x.TeamId });
+            e.HasOne<SectionSignup>().WithMany().HasForeignKey(x => x.SignupId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Team>().WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
+        });
         b.Entity<SignupExtras>(e =>
         {
             e.ToTable("SignupExtras");
