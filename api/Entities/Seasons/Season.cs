@@ -35,6 +35,7 @@ public class SeasonRound
     public int CompetitionSectionId { get; set; }
     public int OrderIndex { get; set; }
     public bool IsIncluded { get; set; } = true;
+    public double PointsMultiplier { get; set; } = 1.0;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Season? Season { get; set; }
