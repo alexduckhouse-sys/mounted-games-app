@@ -938,6 +938,32 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("CompetitionCollaborators");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.CompetitionDeclarationLock", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DeclarationsCloseAt")
+                        .HasColumnType("text");
+
+                    b.HasKey("CompetitionId");
+
+                    b.ToTable("CompetitionDeclarationLocks", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.CompetitionEntrySettings", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EntriesCloseAt")
+                        .HasColumnType("text");
+
+                    b.HasKey("CompetitionId");
+
+                    b.ToTable("CompetitionEntrySettings", (string)null);
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.CompetitionSection", b =>
                 {
                     b.Property<int>("Id")
@@ -2204,6 +2230,11 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
+                    b.Property<double>("PointsMultiplier")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(1.0);
+
                     b.Property<Guid>("SeasonId")
                         .HasColumnType("uuid");
 
@@ -2668,6 +2699,85 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("ShopReports");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.SignupExtras", b =>
+                {
+                    b.Property<int>("SignupId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IsWaitlist")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("IsWithdrawn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("PaymentMethod")
+                        .HasColumnType("text");
+
+                    b.Property<int>("RefundPending")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("StablesCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("StablingClubOrTeam")
+                        .HasColumnType("text");
+
+                    b.Property<int>("TeamsCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("SignupId");
+
+                    b.ToTable("SignupExtras", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.SignupMatchmaking", b =>
+                {
+                    b.Property<int>("SignupId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LookingForGuestRiders")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("LookingForPair")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int?>("PairRequestFromSignupId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PairRequestStatus")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("PairRequestToSignupId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WaitingForGuestSpot")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("SignupId");
+
+                    b.HasIndex("PairRequestFromSignupId");
+
+                    b.HasIndex("PairRequestToSignupId");
+
+                    b.ToTable("SignupMatchmaking", (string)null);
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.SpecialAward", b =>
                 {
                     b.Property<int>("Id")
@@ -2862,6 +2972,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("RecordedByUserId")
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
+
+                    b.Property<string>("RiderScoresJson")
+                        .HasColumnType("text");
 
                     b.Property<int>("TackCheckSectorId")
                         .HasColumnType("integer");
@@ -3288,6 +3401,26 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Competition");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.CompetitionDeclarationLock", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithOne()
+                        .HasForeignKey("MountedGames.Api.Entities.CompetitionDeclarationLock", "CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_CompetitionDeclarationLocks_Competition");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.CompetitionEntrySettings", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithOne()
+                        .HasForeignKey("MountedGames.Api.Entities.CompetitionEntrySettings", "CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_CompetitionEntrySettings_Competition");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.CompetitionSection", b =>
@@ -3755,6 +3888,38 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Post");
 
                     b.Navigation("Reporter");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.SignupExtras", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.SectionSignup", null)
+                        .WithOne()
+                        .HasForeignKey("MountedGames.Api.Entities.SignupExtras", "SignupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SignupExtras_Signup");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.SignupMatchmaking", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.SectionSignup", null)
+                        .WithMany()
+                        .HasForeignKey("PairRequestFromSignupId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_SignupMatchmaking_PairFrom");
+
+                    b.HasOne("MountedGames.Api.Entities.SectionSignup", null)
+                        .WithMany()
+                        .HasForeignKey("PairRequestToSignupId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_SignupMatchmaking_PairTo");
+
+                    b.HasOne("MountedGames.Api.Entities.SectionSignup", null)
+                        .WithOne()
+                        .HasForeignKey("MountedGames.Api.Entities.SignupMatchmaking", "SignupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SignupMatchmaking_Signup");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.SpecialAward", b =>
