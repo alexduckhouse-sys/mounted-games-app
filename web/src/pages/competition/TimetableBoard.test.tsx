@@ -286,3 +286,47 @@ it('shows ON NOW · Race X of Y when a live heat has races, highlights followed 
   const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
   expect(headings).toEqual(['Under 12 Teams · Session 1', 'Under 15 Teams · Session 1']);
 });
+
+it('filters the timetable down to one team’s heats and shows their lane when heats have teams', () => {
+  setCompetition({
+    sessions: [
+      session(1, {
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T10:00:00`,
+        heats: [
+          heat(11, {
+            sessionId: 1,
+            orderIndex: 0,
+            label: 'Heat 1',
+            entries: [
+              { id: 1, teamId: 101, teamName: 'Cheshire A', laneIndex: 0 },
+              { id: 2, teamId: 102, teamName: 'Oakley B', laneIndex: 2 },
+            ],
+          }),
+          heat(12, {
+            sessionId: 1,
+            orderIndex: 1,
+            label: 'Heat 2',
+            entries: [
+              { id: 3, teamId: 103, teamName: 'Romney C', laneIndex: 1 },
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+  renderBoard();
+  const select = screen.getByRole('combobox', { name: 'Team' });
+  fireEvent.click(select);
+  expect(within(screen.getByRole('listbox', { name: 'Team' })).getAllByRole('option').map((o) => o.textContent))
+    .toEqual(['All teams', 'Cheshire A', 'Oakley B', 'Romney C']);
+
+  fireEvent.click(screen.getByRole('option', { name: 'Oakley B' }));
+  expect(screen.getByText('Heat 1')).toBeVisible();
+  expect(screen.getByText('Lane 3')).toBeVisible();
+  expect(screen.queryByText('Heat 2')).toBeNull();
+
+  fireEvent.click(select);
+  fireEvent.click(screen.getByRole('option', { name: 'All teams' }));
+  expect(screen.getByText('Heat 2')).toBeVisible();
+});

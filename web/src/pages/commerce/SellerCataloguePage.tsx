@@ -8,6 +8,7 @@ import { LoadError } from './commerceUi';
 import { CATEGORY_LABEL, errorMessage, pounds } from './commerceFormat';
 import type { CatalogueItem, CommerceItemCategory, CommerceListingStatus, CompetitionChoice, CompetitionChoicePage, CompetitionListing } from './types';
 import './commerce.css';
+import { NumberField } from '../../components/NumberField';
 import { SelectField } from '../../components/SelectField';
 import { confirmDialog } from '../../components/ConfirmDialog';
 
@@ -342,7 +343,7 @@ function ItemSheet({ title, form, setForm, busy, error, onClose, onSubmit, prima
       <form className="flex flex-col gap-3" onSubmit={onSubmit} noValidate>
         <label className="rf-fld">Name<input maxLength={200} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
         <div className="grid grid-cols-2 gap-2.5">
-          <label className="rf-fld">Price (£)<input inputMode="decimal" placeholder="12.00" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></label>
+          <label className="rf-fld">Price (£)<NumberField decimal min={0} step="0.01" placeholder="12.00" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></label>
           <label className="rf-fld">Category
             <SelectField value={form.category} onChange={(event) => setForm({ ...form, category: Number(event.target.value) as CommerceItemCategory })}>
               {([0, 1, 2, 3] as CommerceItemCategory[]).map((category) => <option key={category} value={category}>{CATEGORY_LABEL[category]}</option>)}
@@ -353,7 +354,7 @@ function ItemSheet({ title, form, setForm, busy, error, onClose, onSubmit, prima
         <details>
           <summary className="rf-btn rf-btn-text" style={{ justifyContent: 'flex-start', padding: 0, listStyle: 'none' }}>+ Stock and image</summary>
           <div className="mt-2 flex flex-col gap-3">
-            <label className="rf-fld">Stock <span className="font-normal">Blank means unlimited</span><input inputMode="numeric" value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} /></label>
+            <label className="rf-fld">Stock <span className="font-normal">Blank means unlimited</span><NumberField min={0} step={1} value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} /></label>
             <label className="rf-fld">Image link <span className="font-normal">Optional HTTPS link</span><input type="url" placeholder="https://…" value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} /></label>
           </div>
         </details>

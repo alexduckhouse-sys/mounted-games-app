@@ -480,6 +480,7 @@ function SessionHeatRows({
   const title = sessionTitle(session);
   const [editingAssignments, setEditingAssignments] = useState(false);
   const [populating, setPopulating] = useState(false);
+  const [populateError, setPopulateError] = useState<string | null>(null);
 
   // A scaffolded finals session: has at least one heat labelled "X Final" and all heats are empty.
   const isEmptyFinals = useMemo(() => {
@@ -491,13 +492,14 @@ function SessionHeatRows({
   async function populateFinals() {
     if (!(await confirmDialog({ title: 'Fill the finals heats?', message: 'Populate these finals heats with the top teams from standings?', confirmLabel: 'Fill finals heats' }))) return;
     setPopulating(true);
+    setPopulateError(null);
     try {
       await api.post(`/competitions/${session.competitionId}/sessions/${session.id}/populate-finals`);
       onUpdated();
     } catch (e) {
       const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message
         ?? 'Could not populate finals.';
-      alert(msg);
+      setPopulateError(msg);
     } finally {
       setPopulating(false);
     }
@@ -558,6 +560,11 @@ function SessionHeatRows({
           >
             <Wand2 className="w-3.5 h-3.5" /> {populating ? 'Populating…' : 'Populate from standings'}
           </button>
+          {populateError && (
+            <p role="alert" className="w-full text-xs font-medium text-red-700 dark:text-red-300">
+              {populateError}
+            </p>
+          )}
         </div>
       )}
       {heats.map((h, idx) => {

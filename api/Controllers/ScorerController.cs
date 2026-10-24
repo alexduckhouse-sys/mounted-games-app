@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
+using MountedGames.Api.Security;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
@@ -10,10 +12,10 @@ using MountedGames.Api.Services;
 namespace MountedGames.Api.Controllers;
 
 /// <summary>
-/// What a scorer link can do: read its arena's timetable, and enter or replace scores for heats in that arena.
+/// What a scorer link can do: read its competition's timetable, and enter or replace scores in every arena.
 /// No account, no JWT: <see cref="ScorerLinkAccessAttribute"/> checks the <c>X-Scorer-Token</c> header. There is
 /// deliberately no clock, sign-off, timetable, team, entry or chat action here. A race outside the link's
-/// competition and arena is 404, exactly as if it didn't exist. Scores still go through <see cref="ScoringService"/>.
+/// competition is 404, exactly as if it didn't exist. Scores still go through <see cref="ScoringService"/>.
 /// </summary>
 [ApiController]
 [ScorerLinkAccess]
@@ -22,6 +24,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     private ScorerLink Link => ScorerLinkAccessAttribute.Current(HttpContext);
     private string ActorLabel => $"Scorer link: {Link.Label}";
 
+    [EnableRateLimiting(RequestLimits.ScorerReadPolicy)]
     [HttpGet("api/scorer/session")]
     public async Task<ActionResult<ScorerSessionDto>> GetSession(CancellationToken ct)
     {
@@ -42,6 +45,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         return new ScorerSessionDto(link.Label, competition.Id, competition.Name, link.ArenaName, link.ExpiresAt, ordered);
     }
 
+    [EnableRateLimiting(RequestLimits.ScorerReadPolicy)]
     [HttpGet("api/scorer/races/{raceId:int}/score")]
     public async Task<ActionResult<RaceScoreDto>> GetScore(int raceId, CancellationToken ct)
     {
@@ -60,6 +64,8 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     public async Task<ActionResult<RaceScoreDto>> UpdateScore(int raceId, UpdateRaceScoreRequest request, CancellationToken ct)
     {
         if (!await InScopeAsync(raceId, ct)) return NotFound();
+        if (request.Places?.Any(p => p.RefereeNote is { Length: > 1000 }) == true)
+            return BadRequest(new { message = "Note must be 1000 characters or fewer." });
         try
         {
             // A scorer link can record why an eliminated team is out; leaving a note null keeps any note staff set.
@@ -88,6 +94,8 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
             .FirstOrDefaultAsync(r => r.Id == raceId, ct);
         if (race is null) return NotFound();
         if (req.Reason?.Length > 1000) return BadRequest(new { message = "Correction reason must be 1000 characters or fewer." });
+        if (req.Places.Any(p => p.RefereeNote is { Length: > 1000 }))
+            return BadRequest(new { message = "Note must be 1000 characters or fewer." });
         try
         {
             await scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected, null, req.Reason, ct, ActorLabel);

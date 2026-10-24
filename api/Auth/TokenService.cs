@@ -18,7 +18,8 @@ public class TokenService
         _users = users;
     }
 
-    public async Task<(string token, DateTime expiresAt, IList<string> roles)> CreateTokenAsync(AppUser user)
+    public async Task<(string token, DateTime expiresAt, IList<string> roles)> CreateTokenAsync(
+        AppUser user, string? fullNameOverride = null, string? emailOverride = null)
     {
         var key = _config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key not configured");
         var issuer = _config["Jwt:Issuer"] ?? "MountedGames.Api";
@@ -30,8 +31,8 @@ public class TokenService
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id),
-            new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
-            new("fullName", user.FullName),
+            new(JwtRegisteredClaimNames.Email, !string.IsNullOrWhiteSpace(emailOverride) ? emailOverride : (user.Email ?? string.Empty)),
+            new("fullName", !string.IsNullOrWhiteSpace(fullNameOverride) ? fullNameOverride : user.FullName),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
         if (user.ClubId.HasValue)

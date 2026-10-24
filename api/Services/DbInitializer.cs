@@ -1190,12 +1190,19 @@ public static class DbInitializer
         return result;
     }
 
+    private static readonly System.Text.RegularExpressions.Regex SqlIdentifierPattern =
+        new("^[A-Za-z_][A-Za-z0-9_]*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
     /// <summary>
     /// Adds a column to an existing table if it isn't present yet. Idempotent.
     /// SQLite-only (uses PRAGMA table_info).
     /// </summary>
     internal static async Task EnsureColumnAsync(AppDbContext db, string table, string column, string columnDef)
     {
+        if (!SqlIdentifierPattern.IsMatch(table))
+            throw new ArgumentException("Invalid SQL table identifier.", nameof(table));
+        if (!SqlIdentifierPattern.IsMatch(column))
+            throw new ArgumentException("Invalid SQL column identifier.", nameof(column));
         var conn = db.Database.GetDbConnection();
         await conn.OpenAsync();
         try

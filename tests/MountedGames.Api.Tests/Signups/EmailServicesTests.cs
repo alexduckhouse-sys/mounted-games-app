@@ -84,7 +84,40 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
         Assert.Contains("Bank 12-34-56", m.TextBody);
         Assert.Contains("https://mg.example.org/competitions/3", m.TextBody);
         Assert.DoesNotContain("new competitions", m.TextBody);
-        Assert.Null(m.HtmlBody);
+        Assert.NotNull(m.HtmlBody);
+        Assert.Contains(EmailHtml.HeaderStyle, m.HtmlBody);
+        Assert.Contains(EmailHtml.CardStyle, m.HtmlBody);
+        Assert.Contains("Spring Games", m.HtmlBody);
+        Assert.Contains("Sunday 14 March 2027", m.HtmlBody);
+        Assert.Contains("Tatton Park", m.HtmlBody);
+        Assert.Contains("Under 12 Teams", m.HtmlBody);
+        Assert.Contains(EmailHtml.Encode("£15.00"), m.HtmlBody);
+        Assert.Contains("Bank 12-34-56", m.HtmlBody);
+        Assert.Contains("href=\"https://mg.example.org/competitions/3\"", m.HtmlBody);
+        Assert.DoesNotContain("Alice Rider", m.HtmlBody);
+    }
+
+    [Fact]
+    public void HtmlBody_EscapesUntrustedStrings_SoMarkupCannotBeInjected()
+    {
+        var (comp, section) = Event(location: "<b>Arena & Field</b>", pay: "<script>alert(1)</script>");
+        comp.Name = "Spring <Games> & Cup";
+        section.DisplayName = "U12 \"Pairs\"";
+
+        var m = SignupConfirmationEmail.Build(
+            Signup(), comp, section, "a@example.org",
+            "https://mg.example.org/competitions/3?a=1&b=2",
+            OptInOutcome.Joined,
+            "https://mg.example.org/unsubscribe?token=a&b=2");
+
+        Assert.NotNull(m.HtmlBody);
+        Assert.DoesNotContain("<script>", m.HtmlBody);
+        Assert.DoesNotContain("<b>Arena", m.HtmlBody);
+        Assert.Contains("Spring &lt;Games&gt; &amp; Cup", m.HtmlBody);
+        Assert.Contains("&lt;b&gt;Arena &amp; Field&lt;/b&gt;", m.HtmlBody);
+        Assert.Contains("&lt;script&gt;alert(1)&lt;/script&gt;", m.HtmlBody);
+        Assert.Contains("href=\"https://mg.example.org/competitions/3?a=1&amp;b=2\"", m.HtmlBody);
+        Assert.Contains("href=\"https://mg.example.org/unsubscribe?token=a&amp;b=2\"", m.HtmlBody);
     }
 
     [Fact]
@@ -200,6 +233,34 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
         Assert.Equal(EmailDeliveryStatus.Sent, status);
         Assert.Contains("\"html\":\"\\u003Cp\\u003Erich\\u003C/p\\u003E\"", body);
         Assert.Contains("\"text\":\"plain\"", body);
+        Assert.DoesNotContain("\"reply_to\"", body);
+    }
+
+    [Fact]
+    public async Task Resend_IncludesReplyTo_WhenConfigured()
+    {
+        var stub = new StubHttp();
+        string? body = null;
+        stub.Respond("api.resend.com", r =>
+        {
+            body = r.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        });
+        var resend = new ResendEmailSender(new StubFactory(stub),
+            Options.Create(new EmailOptions
+            {
+                Enabled = true,
+                ApiKey = "k",
+                From = "f@example.org",
+                ReplyTo = "organiser@example.org",
+                TimeoutSeconds = 99,
+            }),
+            NullLogger<ResendEmailSender>.Instance);
+
+        var status = await resend.SendAsync(new EmailMessage("a@example.org", "Hi", "plain"));
+
+        Assert.Equal(EmailDeliveryStatus.Sent, status);
+        Assert.Contains("\"reply_to\":\"organiser@example.org\"", body);
     }
 
     [Fact]

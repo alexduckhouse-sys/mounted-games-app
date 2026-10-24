@@ -37,7 +37,7 @@ function localInput(date: Date): string {
 type State = { competitionId: number; list: ScorerLinkList } | 'error' | null;
 
 /**
- * Scorer links: a volunteer scores one arena from a link, with no account. The organiser makes a link per
+ * Scorer links: a volunteer scores the competition from a link, with no account. The organiser makes a link per
  * scorer, copies it once (the token is never shown again), and can withdraw it at any time. The API decides who
  * may do this; the card only hides what won't work.
  */
@@ -122,7 +122,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
   }
 
   return (
-    <section aria-label="Scorer links">
+    <section id="scorer-links" aria-label="Scorer links" className="scroll-mt-20">
       <RefineSection title="Scorer links" />
       {state === 'error' && (
         <div role="alert" className="rf-list flex flex-col items-start gap-2 p-3">
@@ -134,11 +134,11 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
       {list && (
         <>
           <RefineNote>
-            Lets a volunteer enter scores for one arena from their phone without an account.
+            Lets a volunteer enter scores in every arena of this competition from their phone without an account. The arena label is for your reference.
           </RefineNote>
 
           {mayEdit && (list.arenas.length === 0
-            ? <p className="rf-note">Name an arena on a session in the timetable first. A link is made for one arena.</p>
+            ? <p className="rf-note">Name an arena on a session in the timetable first. Each link covers the whole competition.</p>
             : (
               <form onSubmit={create} className="rf-list flex flex-col gap-2 p-3">
                 <label className="rf-fld">Scorer’s name

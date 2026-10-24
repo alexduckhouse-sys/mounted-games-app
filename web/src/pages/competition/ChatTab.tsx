@@ -67,6 +67,7 @@ function ChatTabSession() {
   const [mode, setMode] = useState<ComposerMode>('announcement');
   const [sending, setSending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [allOpen, setAllOpen] = useState(false);
   const [lastChatComp, setLastChatComp] = useState<LastChatComp | null>(() => loadLastChatComp());
   const [dismissedCompWarning, setDismissedCompWarning] = useState(false);
@@ -148,13 +149,15 @@ function ChatTabSession() {
   async function blockMessageAuthor(id: number) {
     if (!canModerate) return;
     if (!(await confirmDialog({ title: 'Block this sender?', message: "Block this sender's IP from posting?", confirmLabel: 'Block sender', destructive: true }))) return;
+    setActionError(null);
+    setActionNotice(null);
     try {
       const { data } = await api.post<{ alreadyBlocked: boolean; ipAddress: string }>(`/competitions/${competition.id}/chat/${id}/block-author`, {});
-      alert(data.alreadyBlocked ? `IP ${data.ipAddress} was already blocked.` : `Blocked IP ${data.ipAddress}.`);
+      setActionNotice(data.alreadyBlocked ? `IP ${data.ipAddress} was already blocked.` : `Blocked IP ${data.ipAddress}.`);
     } catch (error) {
       const message = (error as { response?: { data?: { message?: string } } }).response?.data?.message
         ?? 'Could not block this sender. The post may be too old to have an IP recorded.';
-      alert(message);
+      setActionError(message);
     }
   }
 
@@ -225,6 +228,7 @@ function ChatTabSession() {
       </div>
 
       {actionError && !allOpen && <div className="live-action-error" role="alert"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError(null)}><X aria-hidden="true" /></button></div>}
+      {actionNotice && !allOpen && <div className="live-banner" role="status"><span>{actionNotice}</span><button type="button" aria-label="Dismiss notice" onClick={() => setActionNotice(null)}><X aria-hidden="true" /></button></div>}
 
       {canPost ? (
         <>
@@ -443,7 +447,7 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
     </div>
     {canBroadcast && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}><Video aria-hidden="true" />Go live from this device</Link>}
     {streamingNotSetUp && <p className="mg-notice" role="status">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</p>}
-    {canBroadcast && <Link className="mg-text-link self-start text-sm" to={`/competitions/${competitionId}/produce`}>Banners and overlays</Link>}
+    {canBroadcast && <Link className="mg-text-link self-start text-sm" to={`/competitions/${competitionId}/broadcast`}>Banners and overlays</Link>}
     {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
   </div>;
 }

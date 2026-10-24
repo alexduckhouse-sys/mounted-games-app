@@ -17,7 +17,9 @@ import {
   type ShareCard, type SharePage,
 } from './src/lib/shareCard.js';
 
-export const config = { matcher: ['/api/:path*', '/', '/competitions/:path*', '/team-profiles/:path*'] };
+export const config = {
+  matcher: ['/api/:path*', '/', '/events', '/competitions', '/competitions/:path*', '/team-profiles/:path*', '/seasons/:path*', '/stats/:path*', '/shop'],
+};
 
 /** The API project. Override with MG_API_ORIGIN (for example on a preview deployment). */
 const DEFAULT_API_ORIGIN = 'https://mounted-games-api.vercel.app';

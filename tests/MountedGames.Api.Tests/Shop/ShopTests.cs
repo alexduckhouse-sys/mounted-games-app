@@ -42,13 +42,31 @@ public class ShopTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Create_TruncatesOverlongFields()
+    public async Task Create_AcceptsDescriptionWhenBodyIsOmitted()
     {
         var (me, _) = await _f.SignupAsync();
 
-        var post = await CreateAsync(me, Post(new string('t', 250), new string('b', 5000), name: new string('n', 200)));
+        var response = await me.PostAsJsonAsync("/api/shop/posts", new
+        {
+            title = "Test saddle", description = "Test description", authorName = "Test seller",
+        });
 
-        Assert.Equal((200, 4000, 150), (post.Title.Length, post.Body.Length, post.AuthorName.Length));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Test description", (await response.ReadAsync<ShopPostDto>()).Body);
+    }
+
+    [Fact]
+    public async Task Create_RejectsOverlongTitleOrBody_AndTruncatesAuthorName()
+    {
+        var (me, _) = await _f.SignupAsync();
+
+        var longTitle = await me.PostAsJsonAsync("/api/shop/posts", Post(new string('t', 201), "Body"));
+        var longBody = await me.PostAsJsonAsync("/api/shop/posts", Post("Title", new string('b', 4001)));
+        var post = await CreateAsync(me, Post("Title", "Body", name: new string('n', 200)));
+
+        Assert.Equal(HttpStatusCode.BadRequest, longTitle.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, longBody.StatusCode);
+        Assert.Equal(150, post.AuthorName.Length);
     }
 
     [Theory]
@@ -85,13 +103,73 @@ public class ShopTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Create_DropsNegativePrice()
+    public async Task Create_RejectsNegativeOrExcessivePrice()
     {
         var (me, _) = await _f.SignupAsync();
 
-        var post = await CreateAsync(me, Post(price: -5));
+        var neg = await me.PostAsJsonAsync("/api/shop/posts", Post(price: -5));
+        var huge = await me.PostAsJsonAsync("/api/shop/posts", Post(price: 100_000_001));
 
-        Assert.Null(post.PriceMinor);
+        Assert.Equal(HttpStatusCode.BadRequest, neg.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, huge.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_RejectsOversizedImageAndNegativePrice_AndUpdatesValidPost()
+    {
+        var (me, _) = await _f.SignupAsync();
+        var post = await CreateAsync(me, Post("Old Title", "Old Body", 2500));
+
+        var bigImg = await me.PutAsJsonAsync($"/api/shop/posts/{post.Id}",
+            new UpdateShopPostRequest("New Title", "New Body", 2500, ImageBase64: new string('a', 700_001)));
+        var negPrice = await me.PutAsJsonAsync($"/api/shop/posts/{post.Id}",
+            new UpdateShopPostRequest("New Title", "New Body", -1));
+        var updatedResp = await me.PutAsJsonAsync($"/api/shop/posts/{post.Id}",
+            new UpdateShopPostRequest("Updated Title", "Updated Body", 3000));
+
+        Assert.Equal(HttpStatusCode.BadRequest, bigImg.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, negPrice.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, updatedResp.StatusCode);
+        var updated = await updatedResp.ReadAsync<ShopPostDto>();
+        Assert.Equal(("Updated Title", "Updated Body", 3000), (updated.Title, updated.Body, updated.PriceMinor));
+    }
+
+    [Fact]
+    public async Task Update_RequiresTheAuthorOrAdmin_AndRejectsDeletedOrMissingPosts()
+    {
+        var (owner, _) = await _f.SignupAsync();
+        var (other, _) = await _f.SignupAsync();
+        var post = await CreateAsync(owner, Post("Original title"));
+        var url = $"/api/shop/posts/{post.Id}";
+        var request = new UpdateShopPostRequest(Title: "Changed title");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PutAsJsonAsync(url, request)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await other.PutAsJsonAsync(url, request)).StatusCode);
+        Assert.Equal("Original title", (await _f.InDbAsync(db => db.ShopPosts.SingleAsync(p => p.Id == post.Id))).Title);
+
+        var admin = await _f.AdminAsync();
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync(url, request)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.PutAsJsonAsync("/api/shop/posts/999999", request)).StatusCode);
+        await owner.DeleteAsync(url);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.PutAsJsonAsync(url, request)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_DoesNotLetABlockedSenderRewriteAnExistingPost()
+    {
+        var (owner, _) = await _f.SignupAsync();
+        var post = await CreateAsync(owner, Post("Original title"));
+        await _f.InDbAsync(async db =>
+        {
+            db.IpBlocks.Add(new IpBlock { IpAddress = "198.51.100.91" });
+            await db.SaveChangesAsync();
+        });
+        owner.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "198.51.100.91");
+
+        var response = await owner.PutAsJsonAsync($"/api/shop/posts/{post.Id}", new UpdateShopPostRequest(Title: "Changed title"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("Original title", (await _f.InDbAsync(db => db.ShopPosts.SingleAsync(p => p.Id == post.Id))).Title);
     }
 
     [Fact]
@@ -282,15 +360,18 @@ public class ShopTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Comment_Public_HasNoRecipient_AndTruncatesBody()
+    public async Task Comment_Public_HasNoRecipient_AndRejectsOverlongBody()
     {
         var (me, _) = await _f.SignupAsync();
         var post = await CreateAsync(me, Post());
 
+        var overlong = await me.PostAsJsonAsync($"/api/shop/posts/{post.Id}/comments",
+            Comment(new string('c', 1001), to: "ignored"));
         var c = await (await me.PostAsJsonAsync($"/api/shop/posts/{post.Id}/comments",
-            Comment(new string('c', 2500), to: "ignored"))).ReadAsync<ShopCommentDto>();
+            Comment(new string('c', 1000), to: "ignored"))).ReadAsync<ShopCommentDto>();
 
-        Assert.Equal((2000, (string?)null), (c.Body.Length, c.ToUserId));
+        Assert.Equal(HttpStatusCode.BadRequest, overlong.StatusCode);
+        Assert.Equal((1000, (string?)null), (c.Body.Length, c.ToUserId));
     }
 
     [Fact]

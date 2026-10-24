@@ -99,6 +99,10 @@ public class ClubPayoutsController(AppDbContext db, UserManager<AppUser> users, 
             if (problem is not null) errors["personDateOfBirth"] = problem;
             else Assign(ref changed, draft.PersonDateOfBirth, (DateOnly?)dob, v => draft.PersonDateOfBirth = v);
         }
+        else if (req.ClearPersonDateOfBirth == true)
+        {
+            Assign(ref changed, draft.PersonDateOfBirth, (DateOnly?)null, v => draft.PersonDateOfBirth = v);
+        }
 
         if (errors.Count > 0) return Invalid(errors);
         if (account is null || changed) await TouchAsync(account, draft, changed, ct);

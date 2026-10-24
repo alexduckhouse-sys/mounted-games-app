@@ -14,6 +14,21 @@ public static class RequestLimits
     /// <summary>"Resend my confirmation email": per signed-in user (<c>RateLimits:EmailResendPerMinute</c>, 3).</summary>
     public const string EmailResendPolicy = "email-resend";
 
+    /// <summary>Entering a competition section (which can send a confirmation email): per signed-in user or IP (<c>RateLimits:SignupPerMinute</c>, 15).</summary>
+    public const string SignupPolicy = "signup";
+
+    /// <summary>Joining a team: per signed-in user (RateLimits:TeamJoinPerMinute, 10).</summary>
+    public const string TeamJoinPolicy = "team-join";
+
+    /// <summary>Reporting a listing: per IP (RateLimits:ShopReportsPerMinute, 10).</summary>
+    public const string ShopReportPolicy = "shop-report";
+
+    /// <summary>Unsubscribing from emails: per IP (RateLimits:UnsubscribePerMinute, 10).</summary>
+    public const string UnsubscribePolicy = "unsubscribe";
+
+    /// <summary>Interactive scorer-link reads: per IP, separate from previews and weather (RateLimits:ScorerReadsPerMinute, 120).</summary>
+    public const string ScorerReadPolicy = "scorer-read";
+
     /// <summary>
     /// Per-minute limits for sign-in (per IP), geocoding (per IP), API writes (per user, or per IP when anonymous), the public
     /// calendar and link-preview reads (per IP) and sponsor "shown" counts (per IP). <c>RateLimits:AuthPerMinute</c>,
@@ -32,11 +47,21 @@ public static class RequestLimits
         // Each search reads across every competition, so the web waits for a pause in typing before it asks.
         var statsPermits = configuration.GetValue("RateLimits:StatsPerMinute", 60);
         var resendPermits = configuration.GetValue("RateLimits:EmailResendPerMinute", 3);
+        var signupPermits = configuration.GetValue("RateLimits:SignupPerMinute", 15);
+        var joinPermits = configuration.GetValue("RateLimits:TeamJoinPerMinute", 10);
+        var reportPermits = configuration.GetValue("RateLimits:ShopReportsPerMinute", 10);
+        var unsubscribePermits = configuration.GetValue("RateLimits:UnsubscribePerMinute", 10);
+        var scorerReadPermits = configuration.GetValue("RateLimits:ScorerReadsPerMinute", 120);
         return services.AddRateLimiter(options =>
         {
             Configure(options, authPermits, writePermits, geocodePermits, scorerPermits, publicReadPermits, exposurePermits);
             options.AddPolicy(StatsPolicy, context => Partition(context, $"stats:{WritePartition(context)}", statsPermits));
             options.AddPolicy(EmailResendPolicy, context => Partition(context, $"email-resend:{WritePartition(context)}", resendPermits));
+            options.AddPolicy(SignupPolicy, context => Partition(context, $"signup:{WritePartition(context)}", signupPermits));
+            options.AddPolicy(TeamJoinPolicy, context => Partition(context, $"team-join:{WritePartition(context)}", joinPermits));
+            options.AddPolicy(ShopReportPolicy, context => Partition(context, $"shop-report:{context.Connection.RemoteIpAddress}", reportPermits));
+            options.AddPolicy(UnsubscribePolicy, context => Partition(context, $"unsubscribe:{context.Connection.RemoteIpAddress}", unsubscribePermits));
+            options.AddPolicy(ScorerReadPolicy, context => Partition(context, $"scorer-read:{context.Connection.RemoteIpAddress}", scorerReadPermits));
         });
     }
 

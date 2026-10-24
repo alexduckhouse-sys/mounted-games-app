@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, MapPin, Star } from 'lucide-react';
+import { ChevronDown, ChevronRight, MapPin, Star, Users } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { Dropdown } from '../../components/Dropdown';
@@ -55,6 +55,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const [showFinished, setShowFinished] = useState(false);
   const [openDone, setOpenDone] = useState<ReadonlySet<string>>(new Set());
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
+  const [teamFilter, setTeamFilter] = useState('');
   function chooseArena(name: string) {
     setArena(name);
     try { if (name) localStorage.setItem(arenaKey, name); else localStorage.removeItem(arenaKey); } catch { /* storage blocked */ }
@@ -82,7 +83,12 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const dayRows = rows.filter((row) => rowDay(row) === selectedDay);
   const arenas = [...new Set(dayRows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
   const selectedArena = arenas.includes(arena) ? arena : '';
-  const visibleRows = dayRows.filter((row) => !selectedArena || row.session.arenaName?.trim() === selectedArena || !row.session.arenaName?.trim());
+  const teamsInDay = dayTeams(dayRows);
+  const selectedTeam = teamsInDay.some((t) => String(t.id) === teamFilter) ? teamFilter : '';
+  const selectedTeamId = selectedTeam ? Number(selectedTeam) : null;
+  const visibleRows = dayRows
+    .filter((row) => !selectedArena || row.session.arenaName?.trim() === selectedArena || !row.session.arenaName?.trim())
+    .filter((row) => selectedTeamId == null || row.heat?.entries.some((e) => e.teamId === selectedTeamId));
 
   const sessionGroups = (() => {
     const bySession = new Map<number, { key: string; session: TimetableRow['session']; race: boolean; rows: TimetableRow[] }>();
@@ -156,6 +162,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
             competitionId={competition.id}
             showArena={arenas.length > 1 && !selectedArena && !sharedArena}
             hasFollowedTeam={Boolean(row.heat?.entries.some((e) => isTeamFav(e.teamId)))}
+            selectedTeamId={selectedTeamId}
           />
         ))}
       </div>
@@ -165,7 +172,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   return (
     <div className="timetable-board">
       {bandExtra}
-      {(days.length > 1 || arenas.length > 1) && (
+      {(days.length > 1 || arenas.length > 1 || teamsInDay.length > 1) && (
         <div className="tt-strip">
           {days.length > 1 && (
             <div className="tt-days" role="group" aria-label="Choose day">
@@ -175,6 +182,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
             </div>
           )}
           {arenas.length > 1 && <ArenaSelect arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />}
+          {teamsInDay.length > 1 && <TeamSelect teams={teamsInDay} selectedTeam={selectedTeam} onChoose={setTeamFilter} />}
         </div>
       )}
       <div className="tt-body">
@@ -234,6 +242,36 @@ function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
   );
 }
 
+/** Distinct teams entered in any heat on this day, ordered by name. */
+function dayTeams(rows: TimetableRow[]): { id: number; name: string }[] {
+  const byId = new Map<number, string>();
+  for (const row of rows) {
+    for (const entry of row.heat?.entries ?? []) {
+      if (entry.teamName && !byId.has(entry.teamId)) byId.set(entry.teamId, entry.teamName);
+    }
+  }
+  return [...byId.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Filter the day's timetable down to a single team's heats. */
+function TeamSelect({ teams, selectedTeam, onChoose }: {
+  teams: { id: number; name: string }[];
+  selectedTeam: string;
+  onChoose: (id: string) => void;
+}) {
+  const current = teams.find((t) => String(t.id) === selectedTeam);
+  const options = [{ value: '', label: 'All teams' }, ...teams.map((t) => ({ value: String(t.id), label: t.name }))];
+  return (
+    <Dropdown label="Team" value={selectedTeam} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
+      <Users aria-hidden="true" className="tt-arena-pin" size={14} />
+      <span className="tt-arena-text">{current?.name ?? 'All teams'}</span>
+      <ChevronDown aria-hidden="true" className="tt-arena-chevron" size={14} />
+    </Dropdown>
+  );
+}
+
 /** Final heats, one block per age group (in running order), after all the sessions. */
 function finalsByAgeGroup(rows: TimetableRow[]) {
   const groups = new Map<string, { key: string; title: string; rows: TimetableRow[] }>();
@@ -247,13 +285,21 @@ function finalsByAgeGroup(rows: TimetableRow[]) {
 }
 
 /** One timetable line: time, name with a small sub-line, "+N · planned time" when late, status colour dot. */
-function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false }: { row: TimetableRow; competitionId: number; showArena: boolean; hasFollowedTeam?: boolean }) {
+function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false, selectedTeamId }: {
+  row: TimetableRow;
+  competitionId: number;
+  showArena: boolean;
+  hasFollowedTeam?: boolean;
+  selectedTeamId: number | null;
+}) {
   const { session, heat, status, delayMinutes } = row;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
   const name = race ? heatName : session.name;
   const label = race ? (heat ? '' : 'Provisional') : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
-  const sub = [label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
+  const teamEntry = selectedTeamId != null ? heat?.entries.find((e) => e.teamId === selectedTeamId) : undefined;
+  const laneLabel = teamEntry != null ? `Lane ${teamEntry.laneIndex + 1}` : '';
+  const sub = [label, laneLabel, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
   const moved = delayMinutes > 0 && !!row.scheduled;
   const orderedRaces = heat ? heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const runningRaceIndex = orderedRaces.findIndex((r) => !r.isComplete);

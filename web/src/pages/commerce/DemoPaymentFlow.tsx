@@ -185,7 +185,7 @@ export function DemoPaymentFlow({
               </label>
               <div className="grid grid-cols-2 gap-2.5">
                 <label className="rf-fld">Expiry
-                  <input value={expiry} onChange={(event) => setExpiry(event.target.value.slice(0, 5))} inputMode="numeric" autoComplete="off" placeholder="MM/YY" />
+                  <input value={expiry} onChange={(event) => setExpiry(event.target.value.replace(/[^\d/]/g, '').slice(0, 5))} inputMode="numeric" autoComplete="off" placeholder="MM/YY" />
                 </label>
                 <label className="rf-fld">CVC
                   <input value={cvc} onChange={(event) => setCvc(event.target.value.replace(/\D/g, '').slice(0, 3))} inputMode="numeric" autoComplete="off" placeholder="000" />
@@ -274,7 +274,7 @@ export function DemoPaymentFlow({
             <div className="grid grid-cols-2 gap-3">
               <label className="mg-field">
                 <span>Demo expiry</span>
-                <input value={expiry} onChange={(event) => setExpiry(event.target.value.slice(0, 5))} inputMode="numeric" autoComplete="off" placeholder="MM/YY" />
+                <input value={expiry} onChange={(event) => setExpiry(event.target.value.replace(/[^\d/]/g, '').slice(0, 5))} inputMode="numeric" autoComplete="off" placeholder="MM/YY" />
               </label>
               <label className="mg-field">
                 <span>Demo CVC</span>

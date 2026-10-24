@@ -17,6 +17,8 @@ public class EmailOptions
     public string? ApiKey { get; set; }
     /// <summary>Verified sender, e.g. <c>Mounted Games &lt;entries@example.org&gt;</c>.</summary>
     public string? From { get; set; }
+    /// <summary>Optional reply-to address passed to Resend when set.</summary>
+    public string? ReplyTo { get; set; }
     /// <summary>Website address (scheme and host) used for links in emails. Falls back to <c>Sharing:PublicBaseUrl</c>.</summary>
     public string? SiteUrl { get; set; }
     /// <summary>How long a send may take before it is given up as failed. The API scales to zero, so this stays short.</summary>
@@ -63,6 +65,7 @@ public class ResendEmailSender(IHttpClientFactory http, IOptions<EmailOptions> o
                 ["text"] = message.TextBody,
             };
             if (message.HtmlBody is not null) payload["html"] = message.HtmlBody;
+            if (!string.IsNullOrWhiteSpace(o.ReplyTo)) payload["reply_to"] = o.ReplyTo;
             using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
             {
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),

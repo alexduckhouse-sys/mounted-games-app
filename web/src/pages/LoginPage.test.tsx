@@ -100,35 +100,74 @@ describe('LoginPage', () => {
   });
 
   describe('organiser with a shared key', () => {
-    it('swaps to a single key field and back', async () => {
+    it('swaps to title, email and key fields and back', async () => {
       mount();
       await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
       expect(screen.getByRole('heading', { name: 'Organiser sign in' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Title or role')).toHaveAttribute('type', 'text');
+      expect(screen.getByLabelText('Email')).toHaveAttribute('type', 'email');
       expect(screen.getByLabelText('Organiser key')).toHaveAttribute('type', 'password');
-      expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
       expect(screen.queryByText(/New here/)).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
       expect(screen.getByLabelText('Email')).toBeInTheDocument();
+      expect(screen.getByLabelText('Password')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Title or role')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('Organiser key')).not.toBeInTheDocument();
     });
 
-    it('signs in with the key', async () => {
+    it('signs in with the title, email and key', async () => {
       mount();
       await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
-      expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+      const submit = screen.getByRole('button', { name: 'Sign in' });
+      expect(submit).toBeDisabled();
+      await userEvent.type(screen.getByLabelText('Title or role'), ' Chief Steward ');
+      expect(submit).toBeDisabled();
+      await userEvent.type(screen.getByLabelText('Email'), 'steward@example.com');
+      expect(submit).toBeDisabled();
       await userEvent.type(screen.getByLabelText('Organiser key'), 'the-key');
-      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      expect(submit).toBeEnabled();
+      await userEvent.click(submit);
       expect(await screen.findByText('Home page')).toBeInTheDocument();
-      expect(api.post).toHaveBeenCalledWith('/auth/admin-key', { key: 'the-key' });
+      expect(api.post).toHaveBeenCalledWith('/auth/admin-key', {
+        key: 'the-key',
+        title: 'Chief Steward',
+        email: 'steward@example.com',
+      });
     });
 
-    it('explains under the field when the key is refused', async () => {
+    it('lets organisers reveal and hide their key without submitting, and hides it when they return', async () => {
+      mount();
+      await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
+      const key = screen.getByLabelText('Organiser key');
+      await userEvent.type(key, 'fake-organiser-key');
+      expect(key).toHaveAttribute('type', 'password');
+      await userEvent.click(screen.getByRole('button', { name: 'Show key' }));
+      expect(key).toHaveAttribute('type', 'text');
+      expect(key).toHaveValue('fake-organiser-key');
+      expect(screen.getByRole('button', { name: 'Hide key' })).toHaveAttribute('aria-pressed', 'true');
+      await userEvent.click(screen.getByRole('button', { name: 'Hide key' }));
+      expect(key).toHaveAttribute('type', 'password');
+      await userEvent.click(screen.getByRole('button', { name: 'Show key' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
+      expect(screen.getByLabelText('Organiser key')).toHaveAttribute('type', 'password');
+      expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it('explains under the field when the key is refused or the request is invalid', async () => {
       vi.mocked(api.post).mockRejectedValue({ response: { status: 401, data: { message: 'Invalid admin key.' } } });
       mount();
       await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
+      await userEvent.type(screen.getByLabelText('Title or role'), 'Chief Steward');
+      await userEvent.type(screen.getByLabelText('Email'), 'steward@example.com');
       await userEvent.type(screen.getByLabelText('Organiser key'), 'wrong{Enter}');
       expect(await screen.findByRole('alert')).toHaveTextContent('That key did not work.');
       expect(screen.getByLabelText('Organiser key')).toHaveAttribute('aria-invalid', 'true');
+      // A 400 validation error shows the server message.
+      vi.mocked(api.post).mockRejectedValue({ response: { status: 400, data: { message: 'Enter a valid email address.' } } });
+      await userEvent.type(screen.getByLabelText('Organiser key'), 'x{Enter}');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid email address.');
       // Going back clears the message.
       await userEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();

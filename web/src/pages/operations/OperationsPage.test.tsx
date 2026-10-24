@@ -330,4 +330,17 @@ describe('OperationsPage', () => {
       { acknowledgedKeys: ['Lane|Pole|4'], expectedFingerprint: 'equipment-v1' },
     ));
   });
+
+  it('opens the Scorers & team tab from ?tab=scorers or by clicking the tab', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (String(url).endsWith('/scorer-links')) return { data: { arenas: ['Main arena', 'All arenas'], defaultExpiresAt: '2031-05-06T00:00:00Z', links: [] } } as never;
+      if (String(url).endsWith('/team')) return { data: { owner: { id: 'admin-1', fullName: 'Owner', email: 'o@example.com' }, admins: [] } } as never;
+      return { data: readiness } as never;
+    });
+    render(<MemoryRouter initialEntries={['/competitions/7/operations?tab=scorers']}><OperationsPage /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Scorers & team' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Scorer links' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Competition team' })).toBeInTheDocument();
+  });
 });

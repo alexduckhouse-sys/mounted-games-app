@@ -76,7 +76,18 @@ describe('DetailsTab', () => {
     expect(screen.getByText('£45.00')).toBeInTheDocument();
     expect(screen.getByText('Free')).toBeInTheDocument();
     expect(screen.getByText(/Pay to/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Arena setup & race diagrams/ })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /Join/ })).toHaveLength(2);
+  });
+
+  it('hides bank payment details from signed-out visitors on DetailsTab and SectionEntryPage', () => {
+    viewer({ user: null });
+    const view = renderTab();
+    expect(screen.queryByText(/Pay to/)).not.toBeInTheDocument();
+    view.unmount();
+
+    renderTab('/competitions/5/enter/1');
+    expect(screen.queryByText(/Pay to/)).not.toBeInTheDocument();
   });
 
   it('shows places left and a Full tile to organisers, who receive the signup list', async () => {
@@ -86,6 +97,8 @@ describe('DetailsTab', () => {
     renderTab();
     expect((await screen.findAllByText('Full')).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: /Join/ })).toHaveLength(1);
+    expect(screen.getByRole('link', { name: /Scorer QR codes/ })).toHaveAttribute('href', '#scorer-links');
+    expect(screen.getByRole('link', { name: /Go live & stream/ })).toBeInTheDocument();
   });
 
   it('opens the entry form on its own page and returns on Cancel', async () => {

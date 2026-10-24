@@ -131,6 +131,25 @@ describe('PayoutsPage: the stepped flow', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', { personFullName: 'Ann Smith', personDateOfBirth: '1985-03-14' }));
   });
 
+  it('explicitly removes a saved birth date while keeping the responsible person', async () => {
+    loaded = complete({ status: 2, personFullName: 'Fake Responsible Person', personDateOfBirth: '2000-01-01' });
+    vi.mocked(api.put).mockResolvedValue({ data: { ...loaded, status: 1, personDateOfBirth: null, missing: ['personDateOfBirth'] } });
+    mount();
+    await screen.findByText('Payouts are ready', { exact: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Go to step 3: Responsible person' }));
+    await userEvent.clear(screen.getByLabelText('Date of birth'));
+    await next();
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', {
+      personFullName: 'Fake Responsible Person', personDateOfBirth: null, clearPersonDateOfBirth: true,
+    }));
+    expect(await screen.findByText('Step 4 of 6:')).toBeInTheDocument();
+    expect(screen.queryByText('Payouts are ready', { exact: false })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Go to step 3: Responsible person' }));
+    expect(screen.getByLabelText('Date of birth')).toHaveValue('');
+    await next();
+    expect(screen.getByText('Enter their date of birth.')).toBeInTheDocument();
+  });
+
   it('takes a UK bank account with numeric boxes, shows the sort code as 12-34-56, and clears the numbers once sent', async () => {
     loaded = complete({ bank: null, missing: ['bank'] });
     vi.mocked(api.put).mockResolvedValue({ data: complete() });

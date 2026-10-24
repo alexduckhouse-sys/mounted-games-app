@@ -3,12 +3,13 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Trophy,
   Hammer, Check, ChevronDown, ChevronLeft, ChevronUp, Sparkles,
-  CalendarPlus, ClipboardList,
+  CalendarPlus, ClipboardList, Share2, QrCode as QrCodeIcon,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { competitionDateText } from '../../lib/competitionDates';
 import { entryPhaseOnly } from '../../lib/competitionPhase';
-import { competitionCalendarUrl } from '../../lib/sharing';
+import { competitionCalendarUrl, competitionLink } from '../../lib/sharing';
+import { QrCode } from '../../components/QrCode';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
@@ -130,12 +131,14 @@ export function DetailsTab() {
           {linkRow('../declarations', 'Dec forms')}
           {linkRow('../shop', 'Event shop')}
           {linkRow('../rulebooks', 'Rulebooks & game rules')}
+          {linkRow('../arena', 'Arena setup & race diagrams')}
           <li>
             <a className="rf-row" href={competitionCalendarUrl(competition.id, window.location.origin)}>
               <span className="rf-grow rf-t1">Add to calendar</span>
               <CalendarPlus className="h-5 w-5 rf-chev" aria-hidden="true" />
             </a>
           </li>
+          <EventShareRows competitionId={competition.id} competitionName={competition.name} />
           {linkRow(`/event-tools/${competition.id}/print/draw`, 'Print draw')}
           {linkRow(`/event-tools/${competition.id}/print/results`, 'Print results')}
           {mayOrganise && linkRow(`/event-tools/${competition.id}/print/poster`, 'Print venue poster')}
@@ -163,6 +166,12 @@ export function DetailsTab() {
                 >
                   <ClipboardList className="h-4 w-4" aria-hidden="true" /> Dec form setup
                 </Link>
+                <a href="#scorer-links" className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]">
+                  <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> Scorer QR codes
+                </a>
+                <Link to="../broadcast" className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-[15px]">
+                  Go live &amp; stream
+                </Link>
               </div>
             </div>
           </>
@@ -185,6 +194,77 @@ export function DetailsTab() {
 }
 
 /**
+ * Share event link (native share sheet or clipboard) and inline QR code toggle, used on both DetailsTab and EntryPage.
+ */
+export function EventShareRows({ competitionId, competitionName }: { competitionId: number; competitionName: string }) {
+  const [copied, setCopied] = useState(false);
+  const [shareError, setShareError] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  const shareUrl = competitionLink(competitionId, window.location.origin);
+
+  async function shareEvent() {
+    setShareError(false);
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: competitionName, url: shareUrl });
+        return;
+      } catch (error) {
+        if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') return;
+        // A failed share can still be copied on browsers with clipboard access.
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setShareError(true);
+    }
+  }
+
+  return (
+    <>
+      <li>
+        <button type="button" className="rf-row" onClick={() => { void shareEvent(); }}>
+          <span className="rf-grow rf-t1">{copied ? 'Link copied' : 'Share event link'}</span>
+          {copied
+            ? <Check className="h-5 w-5 text-[rgb(var(--mg-ok))]" aria-hidden="true" />
+            : <Share2 className="h-5 w-5 rf-chev" aria-hidden="true" />}
+        </button>
+        {shareError && (
+          <p className="rf-note" role="alert">
+            Couldn’t copy the link. Press and hold <a href={shareUrl}>the event link</a> to copy it, or show the QR code below.
+          </p>
+        )}
+      </li>
+      <li>
+        <button
+          type="button"
+          className="rf-row"
+          aria-expanded={showQr}
+          onClick={() => setShowQr((open) => !open)}
+        >
+          <span className="rf-grow rf-t1">Show event QR code</span>
+          <QrCodeIcon className="h-5 w-5 rf-chev" aria-hidden="true" />
+        </button>
+        {showQr && (
+          <div className="flex items-center gap-3 border-t border-[rgb(var(--mg-rule-soft))] px-4 py-3">
+            <QrCode
+              value={shareUrl}
+              label={`QR code for ${competitionName}`}
+              className="w-36 rounded-lg border border-[rgb(var(--mg-rule))] bg-white p-2"
+            />
+            <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">
+              Point another phone’s camera here to open {competitionName}.
+            </p>
+          </div>
+        )}
+      </li>
+    </>
+  );
+}
+
+/**
  * The per-section entry cards: Join, Sign in to enter, Full or Entries closed. Shown on the Details tab and as the
  * main content of the entry page. Anyone can see it; signing in is asked for only when they press the button.
  */
@@ -194,10 +274,11 @@ export function EnterCompetition({ competition, allSignups = [], mayOrganise }: 
   mayOrganise: boolean;
   onChanged?: () => void;
 }) {
+  const { user } = useAuth();
   if (competition.sections.length === 0) return null;
   return (
     <>
-      <RefineSection title="Enter the competition" meta={competition.paymentDestination ? <>Pay to <span className="font-mono">{competition.paymentDestination}</span></> : undefined} />
+      <RefineSection title="Enter the competition" meta={user && competition.paymentDestination ? <>Pay to <span className="font-mono">{competition.paymentDestination}</span></> : undefined} />
       {mayOrganise && (
         <RefineList label="Organiser entry tools">
           <li>
@@ -415,7 +496,7 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
           <span>
             {seatsLeft != null ? `${seatsLeft} of ${max} places left` : max ? `Up to ${max} places` : 'No limit'}
           </span>
-          {competition.paymentDestination && !isDemo && (section.priceMinor ?? 0) > 0 && (
+          {user && competition.paymentDestination && !isDemo && (section.priceMinor ?? 0) > 0 && (
             <span>Pay to <span className="font-mono font-semibold text-[rgb(var(--mg-ink))]">{competition.paymentDestination}</span></span>
           )}
         </div>

@@ -55,6 +55,7 @@ beforeEach(() => {
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url === '/competitions/5') return { data: comp } as never;
     if (url === '/competitions/5/signups') return { data: signups } as never;
+    if (url === '/competitions/5/scorer-links') return { data: { arenas: ['Main arena', 'Arena 2', 'All arenas'], defaultExpiresAt: '2026-11-02T00:00:00Z', links: [] } } as never;
     if (url === '/race-templates') return { data: [{ id: 1, name: 'Speed Weave', isBuiltIn: true }, { id: 2, name: 'Flag Race', isBuiltIn: true }] } as never;
     return { data: [] } as never;
   });

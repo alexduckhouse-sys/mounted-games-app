@@ -97,7 +97,7 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
               {({ id }) => (
                 <div className="mg-field" data-invalid={dobBad}>
                   <input id={id} value={form.dob} placeholder="dd/mm/yyyy" inputMode="numeric" autoComplete="off" aria-invalid={dobBad}
-                    onChange={(e) => onChange({ dob: e.target.value })} />
+                    onChange={(e) => onChange({ dob: e.target.value.replace(/[^\d/]/g, '').slice(0, 10) })} />
                 </div>
               )}
             </Field>

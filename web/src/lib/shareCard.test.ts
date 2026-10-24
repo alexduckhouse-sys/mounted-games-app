@@ -38,7 +38,7 @@ describe('sharePageFor', () => {
   });
 
   it('gives the home and list pages the generic card', () => {
-    for (const path of ['/', '/competitions', '/competitions/past', '/competitions/']) {
+    for (const path of ['/', '/events', '/competitions', '/competitions/past', '/competitions/', '/seasons', '/stats', '/shop']) {
       expect(sharePageFor(path)).toEqual({ kind: 'generic' });
     }
   });
@@ -124,8 +124,21 @@ describe('cards', () => {
 
   it('gives the generic card for known pages only', () => {
     expect(genericCard(ORIGIN, '/').url).toBe(`${ORIGIN}/`);
+    expect(genericCard(ORIGIN, '/events').url).toBe(`${ORIGIN}/events`);
     expect(genericCard(ORIGIN, '/competitions/').url).toBe(`${ORIGIN}/competitions`);
     expect(genericCard(ORIGIN, '/competitions/past').url).toBe(`${ORIGIN}/competitions/past`);
+    expect(genericCard(ORIGIN, '/seasons')).toMatchObject({
+      title: 'Mounted Games: season tables and standings',
+      url: `${ORIGIN}/seasons`,
+    });
+    expect(genericCard(ORIGIN, '/stats')).toMatchObject({
+      title: 'Mounted Games: rider, pony and team stats',
+      url: `${ORIGIN}/stats`,
+    });
+    expect(genericCard(ORIGIN, '/shop')).toMatchObject({
+      title: 'Mounted Games: equipment and marketplace',
+      url: `${ORIGIN}/shop`,
+    });
     expect(genericCard(ORIGIN, '/anything"><script>').url).toBe(`${ORIGIN}/`);
   });
 });

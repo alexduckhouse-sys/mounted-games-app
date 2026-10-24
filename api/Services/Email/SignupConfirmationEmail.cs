@@ -83,7 +83,55 @@ public static class SignupConfirmationEmail
         var subject = signup.AmountMinor <= 0
             ? $"You're entered in {competition.Name}"
             : $"Your entry for {competition.Name}";
-        return new EmailMessage(toAddress, subject, sb.ToString(), null, $"signup-confirmation-{signup.Id}");
+
+        var html = new StringBuilder();
+        html.Append("<p style=\"margin:0 0 12px;\">Hello,</p>");
+        html.Append($"<p style=\"margin:0 0 16px;\">Thanks for entering <strong>{EmailHtml.Encode(section.DisplayName)}</strong> at <strong>{EmailHtml.Encode(competition.Name)}</strong>. Your entry is in.</p>");
+        html.Append("<table role=\"presentation\" style=\"width:100%;border-collapse:collapse;margin:0 0 16px;\">");
+        html.Append(EmailHtml.Row("Event", competition.Name));
+        html.Append(EmailHtml.Row("Date", FormatDates(competition.StartDate, competition.EndDate)));
+        if (!string.IsNullOrWhiteSpace(competition.Location))
+            html.Append(EmailHtml.Row("Where", competition.Location.Trim()));
+        html.Append(EmailHtml.Row("Class", section.DisplayName));
+        html.Append(EmailHtml.Row("Entry fee", Money(signup.AmountMinor)));
+        if (signup.AmountMinor > 0 && !string.IsNullOrWhiteSpace(competition.PaymentDestination))
+            html.Append(EmailHtml.Row("Payment instructions", competition.PaymentDestination.Trim()));
+        html.Append("</table>");
+
+        if (signup.AmountMinor <= 0)
+        {
+            html.Append("<p style=\"margin:0 0 12px;\">There's nothing to pay for this entry.</p>");
+        }
+        else
+        {
+            html.Append($"<p style=\"margin:0 0 12px;\">You haven't paid yet, and no payment has been taken through this app. Please pay the <strong>{EmailHtml.Encode(Money(signup.AmountMinor))}</strong> entry fee to the organiser. Your place is confirmed once they have received it.</p>");
+            if (string.IsNullOrWhiteSpace(competition.PaymentDestination))
+                html.Append("<p style=\"margin:0 0 12px;\">The organiser will let you know how they'd like to be paid.</p>");
+            else
+                html.Append($"<p style=\"margin:0 0 12px;\"><strong>How the organiser asked to be paid:</strong><br>{EmailHtml.Encode(competition.PaymentDestination.Trim())}</p>");
+        }
+
+        if (!string.IsNullOrEmpty(competitionUrl))
+        {
+            html.Append("<p style=\"margin:0 0 8px;\">The timetable and any updates will be on the competition page:</p>");
+            html.Append(EmailHtml.Button(competitionUrl, "Open competition page"));
+        }
+
+        html.Append("<p style=\"margin:16px 0 12px;color:#475569;font-size:13px;\">If you didn't make this entry, please let the organiser know.</p>");
+
+        if (optIn == OptInOutcome.Joined)
+        {
+            html.Append("<p style=\"margin:0 0 8px;color:#475569;font-size:13px;\">You also asked us to email you when new competitions open.");
+            if (!string.IsNullOrEmpty(unsubscribeUrl))
+                html.Append($" If you change your mind, you can <a href=\"{EmailHtml.Encode(unsubscribeUrl)}\" style=\"color:#17385F;\">stop those emails here</a>.");
+            html.Append("</p>");
+        }
+        else if (optIn == OptInOutcome.AlreadyOnList)
+        {
+            html.Append("<p style=\"margin:0 0 8px;color:#475569;font-size:13px;\">You're already on our list for new competition emails.</p>");
+        }
+
+        return new EmailMessage(toAddress, subject, sb.ToString(), EmailHtml.Wrap(html.ToString()), $"signup-confirmation-{signup.Id}");
     }
 
     public static string Money(int pence)

@@ -8,7 +8,7 @@ interface AuthContextValue {
   loading: boolean;
   trainerNotice: 'requested' | 'approved' | null;
   login: (email: string, password: string) => Promise<void>;
-  loginWithAdminKey: (key: string) => Promise<void>;
+  loginWithAdminKey: (key: string, title?: string, email?: string) => Promise<void>;
   /** `username` is the email; `fullName` is the person's own name (without it the API uses the start of the email). */
   signupTrainer: (username: string, password: string, role?: string, clubName?: string, fullName?: string) => Promise<void>;
   logout: () => void;
@@ -119,10 +119,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const loginWithAdminKey = useCallback(async (key: string) => {
+  const loginWithAdminKey = useCallback(async (key: string, title?: string, email?: string) => {
     setLoading(true);
     try {
-      const { data } = await api.post<StoredAuth>('/auth/admin-key', { key });
+      const { data } = await api.post<StoredAuth>('/auth/admin-key', {
+        key,
+        ...(title ? { title } : {}),
+        ...(email ? { email } : {}),
+      });
       writeStoredAuth(data);
       setAuth(data);
       setSignedOut(false);

@@ -109,6 +109,8 @@ export function SiteAdmin() {
       { label: 'Edit details', onSelect: () => navigate(`/admin/competitions/${c.id}`) },
       { label: 'On the day & format', onSelect: () => navigate(`/admin/competitions/${c.id}/format`) },
       { label: 'Operations & tools', onSelect: () => navigate(`/competitions/${c.id}/operations`) },
+      { label: 'Scorer QR codes', onSelect: () => navigate(`/competitions/${c.id}/operations?tab=scorers`) },
+      { label: 'Go live & stream', onSelect: () => navigate(`/competitions/${c.id}/broadcast`) },
       { label: 'Dec forms', onSelect: () => navigate(`/competitions/${c.id}/declarations`) },
       { label: 'Manage event shop', onSelect: () => navigate(`/competitions/${c.id}/shop/manage`) },
       { label: 'Lock signups', onSelect: () => void setLocked(c, true) },

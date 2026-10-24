@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using MountedGames.Api.Services;
 using System.Text.Json;
 
@@ -6,6 +7,7 @@ namespace MountedGames.Api.Controllers;
 
 [ApiController]
 [Route("api/weather")]
+[EnableRateLimiting("public-read")]
 public class WeatherController : ControllerBase
 {
     // Successful lookups may be reused by browsers and the CDN for 10 minutes; the server cache holds

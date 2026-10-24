@@ -193,10 +193,11 @@ public class AccountEmailService(
             if (reserved != ConfirmationResult.Sent) return reserved;
 
             var link = $"{site}/confirm-email?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(tokens.Create(user))}";
+            var days = (int)EmailConfirmationTokens.Lifetime.TotalDays;
             var text = $"""
                 Hello,
 
-                Someone used this email address to create a Mounted Games account. Please confirm the address so we can reach you. This link works for {(int)EmailConfirmationTokens.Lifetime.TotalDays} days:
+                Someone used this email address to create a Mounted Games account. Please confirm the address so we can reach you. This link works for {days} days:
 
                 {link}
 
@@ -204,7 +205,13 @@ public class AccountEmailService(
 
                 Mounted Games
                 """;
-            var status = await sender.SendAsync(new EmailMessage(user.Email, "Confirm your email address", text, null, $"confirm-email-{user.Id}-{Guid.NewGuid():N}"));
+            var html = EmailHtml.Wrap($"""
+                <p style="margin:0 0 12px;">Hello,</p>
+                <p style="margin:0 0 16px;">Someone used this email address to create a Mounted Games account. Please confirm the address so we can reach you. This link works for {days} days:</p>
+                {EmailHtml.Button(link, "Confirm your email address")}
+                <p style="margin:16px 0 0;color:#475569;font-size:13px;">If that wasn't you, you can ignore this email.</p>
+                """);
+            var status = await sender.SendAsync(new EmailMessage(user.Email, "Confirm your email address", text, html, $"confirm-email-{user.Id}-{Guid.NewGuid():N}"));
             return status switch
             {
                 EmailDeliveryStatus.Sent => ConfirmationResult.Sent,

@@ -8,7 +8,7 @@ import { entryFeeText } from '../../lib/competitionPhase';
 import type { SectionSignup } from '../../types';
 import { Chevron, RefineList } from '../refine/Refine';
 import { useCompetition } from './context';
-import { EnterCompetition } from './DetailsTab';
+import { EnterCompetition, EventShareRows } from './DetailsTab';
 import type { ReactNode } from 'react';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -89,6 +89,7 @@ export function EntryPage() {
             <Chevron />
           </Link>
         </li>
+        <EventShareRows competitionId={competition.id} competitionName={competition.name} />
       </RefineList>
       </div>
       </PageGrid>

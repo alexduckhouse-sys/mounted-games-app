@@ -36,7 +36,7 @@ interface ScoringProps {
   /** Take back the last action. Off (undefined) when there is nothing to undo. */
   onUndo?: () => void;
   undoLabel?: string;
-  /** Ask why each eliminated team is out when the race is marked complete. Off for scorer links, which can't write referee notes. */
+  /** Ask why each eliminated team is out when the race is marked complete, including when using a scorer link. */
   allowReasons?: boolean;
   /** Teams marked hors concours, and how organisers change that. Without the handler there is no HC button. */
   hcTeamIds?: ReadonlySet<number>;

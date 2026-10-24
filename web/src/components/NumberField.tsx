@@ -24,7 +24,10 @@ export function NumberField({ decimal = false, allowNegative, min, onKeyDown, on
   const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     onKeyDown?.(event);
     if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) return;
-    const allowed = /\d/.test(event.key) || (decimal && event.key === '.') || (negative && event.key === '-');
+    const current = event.currentTarget.value;
+    const allowed = /\d/.test(event.key)
+      || (decimal && event.key === '.' && !current.includes('.'))
+      || (negative && event.key === '-' && !current.includes('-'));
     if (!allowed) event.preventDefault();
   };
 

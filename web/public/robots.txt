@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /me
+Disallow: /score
+Disallow: /confirm-email
+Disallow: /unsubscribe
+Disallow: /api/
+Disallow: /hubs/

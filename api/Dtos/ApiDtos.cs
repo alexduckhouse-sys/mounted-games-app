@@ -158,7 +158,8 @@ public record CreateSectionSignupRequest(
     [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
     bool EmailOptIn = false, string? EmailOptInVersion = null,
     [MaxLength(64)] string? RequestId = null,
-    [StringLength(200)] string? TeamName = null, bool WholeTeam = false);
+    string? TeamName = null, bool WholeTeam = false,
+    IReadOnlyList<string>? TeamMembers = null);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 
@@ -171,9 +172,14 @@ public record ShopPostDto(
     int CommentCount, int ReportCount);
 
 public record CreateShopPostRequest(
-    string Title, string Body, int? PriceMinor,
+    string Title, string? Body, int? PriceMinor,
     string? ContactInfo, string AuthorName, string? PonyClubName,
-    string? ImageBase64);
+    string? ImageBase64, string? Description = null);
+
+public record UpdateShopPostRequest(
+    string? Title = null, string? Body = null, int? PriceMinor = null,
+    string? ContactInfo = null, string? AuthorName = null, string? PonyClubName = null,
+    string? ImageBase64 = null, string? Description = null);
 
 public record ShopCommentDto(
     int Id, int PostId, string? AuthorUserId, string AuthorName,

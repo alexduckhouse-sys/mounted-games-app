@@ -18,6 +18,7 @@ public class EmailApiFactory : ApiFactory
         public string To => Body.GetProperty("to")[0].GetString()!;
         public string Subject => Body.GetProperty("subject").GetString()!;
         public string Text => Body.GetProperty("text").GetString()!;
+        public string? Html => Body.TryGetProperty("html", out var h) ? h.GetString() : null;
     }
 
     public ConcurrentQueue<SentMessage> Sent { get; } = new();

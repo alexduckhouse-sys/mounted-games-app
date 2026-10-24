@@ -91,6 +91,8 @@ describe('EventShopPage', () => {
 
     render(<MemoryRouter><EventShopPage /></MemoryRouter>);
     expect(await screen.findByText('Weekend camping')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Shop switcher' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Tack & kit classifieds' })).toHaveAttribute('href', '/shop');
     expect(screen.getByRole('link', { name: 'Your orders' })).toHaveAttribute('href', '/me/orders');
     expect(screen.getByText('One pitch beside the main arena. · 4 left')).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Camping', 'Merchandise']);

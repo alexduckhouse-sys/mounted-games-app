@@ -18,7 +18,7 @@ using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Scoring;
 
-/// <summary>Scorer links: a volunteer scores one arena from a link, with no account, and can do nothing else.</summary>
+/// <summary>Scorer links: a volunteer scores a competition from a link, with no account, and can do nothing else.</summary>
 public class ScorerLinkTests : IClassFixture<ApiFactory>
 {
     private readonly ApiFactory _f;
@@ -130,7 +130,7 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
 
         var list = await w.Owner.GetFromJsonAsync<ScorerLinkListDto>(LinksUrl(w.Arena.CompetitionId), TestClients.Json);
 
-        Assert.Equal(["Main", "Side"], list!.Arenas);
+        Assert.Equal(["Main", "Side", "All arenas"], list!.Arenas);
         var shown = Assert.Single(list.Links);
         Assert.Equal(link.Id, shown.Id);
         Assert.Equal("Pat", shown.Label);
@@ -139,6 +139,35 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         // End of the day after the competition's last day (it starts today and has no end date).
         Assert.Equal(DateTime.UtcNow.Date.AddDays(2), list.DefaultExpiresAt);
         Assert.Equal(list.DefaultExpiresAt, shown.ExpiresAt);
+    }
+
+    [Fact]
+    public async Task DefaultMainArena_AndAllArenasLabels_AllowScoringAcrossTheCompetition()
+    {
+        var w = await WorldAsync();
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Sessions.FindAsync(w.Arena.SessionId))!.ArenaName = null;
+            await db.SaveChangesAsync();
+        });
+
+        var list = await w.Owner.GetFromJsonAsync<ScorerLinkListDto>(LinksUrl(w.Arena.CompetitionId), TestClients.Json);
+        Assert.Equal(["Main arena", "Side", "All arenas"], list!.Arenas);
+
+        var (mainToken, _) = await CreateLinkAsync(w, "Main arena", "MainScorer");
+        var mainScorer = Scorer(mainToken);
+        var mainSession = await mainScorer.GetFromJsonAsync<ScorerSessionDto>("/api/scorer/session", TestClients.Json);
+        Assert.Equal(2, mainSession!.Sessions.Count);
+        Assert.Equal(w.Arena.SessionId, mainSession.Sessions[0].Id);
+        Assert.Equal(HttpStatusCode.OK, (await mainScorer.PutAsJsonAsync(Score(w.MainRaces[0]), Put(w, 0, "main-1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await mainScorer.GetAsync(Score(w.SideRaces[0]))).StatusCode);
+
+        var (allToken, _) = await CreateLinkAsync(w, "All arenas", "AllScorer");
+        var allScorer = Scorer(allToken);
+        var allSession = await allScorer.GetFromJsonAsync<ScorerSessionDto>("/api/scorer/session", TestClients.Json);
+        Assert.Equal(2, allSession!.Sessions.Count);
+        Assert.Equal(HttpStatusCode.OK, (await allScorer.GetAsync(Score(w.MainRaces[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await allScorer.PutAsJsonAsync(Score(w.SideRaces[0]), Put(w, 0, "all-1"))).StatusCode);
     }
 
     [Fact]
@@ -572,6 +601,29 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         Assert.False(guard.IsBlocked("1.1.1.1"));
         guard.RecordFailure("1.1.1.1");
         Assert.False(guard.IsBlocked("1.1.1.1"));
+    }
+
+    [Fact]
+    public async Task ScorerReads_HaveTheirOwnLimit_AndDoNotPreventSaves()
+    {
+        using var limited = _f.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("RateLimits:PublicReadsPerMinute", "1");
+            b.UseSetting("RateLimits:ScorerReadsPerMinute", "2");
+        });
+        var w = await WorldAsync();
+        var (token, _) = await CreateLinkAsync(w);
+        var scorer = Scorer(token, "198.51.100.45", limited);
+        var share = $"/api/share/competitions/{w.Arena.CompetitionId}";
+
+        Assert.Equal(HttpStatusCode.OK, (await scorer.GetAsync(share)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await scorer.GetAsync(share)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await scorer.GetAsync("/api/scorer/session")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await scorer.GetAsync(Score(w.MainRaces[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await scorer.GetAsync("/api/scorer/session")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await scorer.PutAsJsonAsync(Score(w.MainRaces[0]), Put(w, 0, "read-limit-save"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await Scorer(token, "198.51.100.46", limited).GetAsync("/api/scorer/session")).StatusCode);
     }
 
     [Fact]

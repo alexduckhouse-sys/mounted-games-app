@@ -112,7 +112,7 @@ describe('first view', () => {
     renderAt('/competitions/1');
 
     expect(await screen.findByText('Loading the rest of the timetable…')).toBeVisible();
-    expect(state.setCurrent).toHaveBeenCalledWith(expect.objectContaining({ name: 'Partial view' }));
+    await waitFor(() => expect(state.setCurrent).toHaveBeenCalledWith(expect.objectContaining({ name: 'Partial view' })));
     await new Promise((done) => setTimeout(done, 600));
     expect(readSavedCopy(savedCopyKeys.competition(1))).toBeNull();
 

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -79,7 +80,12 @@ public class ChatController : ControllerBase
                 return StatusCode(403, new { message = "Posting from this network is blocked." });
         }
 
-        var authorName = !string.IsNullOrWhiteSpace(user.FullName) ? user.FullName : user.Email ?? "Organiser";
+        var claimName = string.Equals(user.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase)
+            ? User.FindFirstValue("fullName")
+            : null;
+        var authorName = !string.IsNullOrWhiteSpace(claimName) ? claimName
+            : !string.IsNullOrWhiteSpace(user.FullName) ? user.FullName
+            : user.Email ?? "Organiser";
         if (authorName.Length > 60) authorName = authorName[..60];
 
         var msg = new ChatMessage
@@ -145,11 +151,15 @@ public class ChatController : ControllerBase
         if (string.IsNullOrWhiteSpace(req.Body)) return BadRequest();
         if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
         var user = await _users.GetUserAsync(User);
+        var claimName = string.Equals(user?.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase)
+            ? User.FindFirstValue("fullName")
+            : null;
+        var authorName = !string.IsNullOrWhiteSpace(claimName) ? claimName : (user?.FullName ?? "Organiser");
         var msg = new ChatMessage
         {
             CompetitionId = competitionId,
             UserId = user?.Id,
-            AuthorName = user?.FullName ?? "Organiser",
+            AuthorName = authorName,
             Body = req.Body.Trim(),
             Type = ChatMessageType.Announcement,
             Tag = req.Tag

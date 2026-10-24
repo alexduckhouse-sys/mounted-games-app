@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Security;
 using MountedGames.Api.Services;
 using MountedGames.Api.Services.Email;
 
@@ -24,6 +26,7 @@ public class SignupController : ControllerBase
     /// organiser flips it to Paid once funds land in their PaymentDestination.
     /// Entrants must be signed in; the public can't enter. Admins can enter too (for testing and for real club use).
     /// </summary>
+    [EnableRateLimiting(RequestLimits.SignupPolicy)]
     [HttpPost("api/competitions/{competitionId:int}/sections/{sectionId:int}/signups")]
     [Authorize]
     public async Task<ActionResult<SectionSignupDto>> Create(int competitionId, int sectionId, CreateSectionSignupRequest req,
@@ -50,6 +53,16 @@ public class SignupController : ControllerBase
             return StatusCode(403, new { message = "Signups are closed for this competition." });
         var name = req.FullName?.Trim();
         if (string.IsNullOrEmpty(name)) return BadRequest(new { message = "Full name required." });
+        if (name.Length > 120)
+            return BadRequest(new { message = "Full name must be 120 characters or fewer." });
+        if (req.PonyClubName?.Trim().Length > 160)
+            return BadRequest(new { message = "Pony Club name must be 160 characters or fewer." });
+        if (req.ContactInfo?.Trim().Length > 200)
+            return BadRequest(new { message = "Contact info must be 200 characters or fewer." });
+        if (req.TeamName?.Trim().Length > 120)
+            return BadRequest(new { message = "Team name must be 120 characters or fewer." });
+        if (req.TeamMembers is { Count: > 20 } || req.TeamMembers?.Any(m => m?.Trim().Length > 120) == true)
+            return BadRequest(new { message = "Invalid team members." });
         if (!req.AcceptTerms)
             return BadRequest(new { message = "Please tick the box to confirm parental consent and that you accept the event terms." });
         if (req.ConsentVersion != SignupTerms.WordingVersion)

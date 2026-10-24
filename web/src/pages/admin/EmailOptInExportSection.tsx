@@ -1,12 +1,37 @@
-import { useState } from 'react';
-import { Download } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Download, Send } from 'lucide-react';
 import { api } from '../../api';
 import { downloadCsv } from '../../lib/csv';
 
-/** Site admins only: downloads everyone currently opted in to new-competition emails, with when and which wording. */
+interface EmailStatus {
+  enabled: boolean;
+  configured: boolean;
+  fromMasked?: string | null;
+}
+
+/** Site admins only: downloads everyone currently opted in to new-competition emails, with when and which wording, and checks Resend status. */
 export function EmailOptInExportSection() {
   const [busy, setBusy] = useState(false);
+  const [testBusy, setTestBusy] = useState(false);
+  const [status, setStatus] = useState<EmailStatus | null>(null);
+  const [statusUnavailable, setStatusUnavailable] = useState(false);
+  const [testNotice, setTestNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get<EmailStatus>('/admin/email-status')
+      .then((r) => {
+        if (cancelled) return;
+        if (r?.data && typeof r.data.enabled === 'boolean' && typeof r.data.configured === 'boolean') {
+          setStatus(r.data);
+        } else {
+          setStatusUnavailable(true);
+        }
+      })
+      .catch(() => { if (!cancelled) setStatusUnavailable(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   async function download() {
     setBusy(true);
@@ -21,16 +46,63 @@ export function EmailOptInExportSection() {
     }
   }
 
+  async function sendTest() {
+    setTestBusy(true);
+    setError(null);
+    setTestNotice(null);
+    try {
+      const { data } = await api.post<{ status: string; recipientMasked: string }>('/admin/email-test');
+      if (data.status === 'Sent') {
+        setTestNotice(`Test email sent to ${data.recipientMasked}.`);
+      } else if (data.status === 'NotSent') {
+        setTestNotice('Email sending is currently off in settings.');
+      } else {
+        setError('Could not send the test email. Check your Resend settings and try again.');
+      }
+    } catch {
+      setError('Could not send the test email. Try again.');
+    } finally {
+      setTestBusy(false);
+    }
+  }
+
   return (
     <section className="card mb-4 space-y-2 p-5">
-      <h2 className="flex items-center gap-2 font-semibold">Email opt-ins</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 font-semibold">Email opt-ins</h2>
+        {status && (
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+              status.configured
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                : 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200'
+            }`}
+          >
+            {status.configured ? (
+              <>
+                <span>Active (Resend)</span>
+                {status.fromMasked && <span className="font-normal opacity-80">· {status.fromMasked}</span>}
+              </>
+            ) : (
+              'Email sending is off'
+            )}
+          </span>
+        )}
+      </div>
+      {statusUnavailable && <p role="status" className="m-0 text-sm">Could not check email settings. Reload the page to try again.</p>}
       <p className="m-0 text-sm text-slate-600 dark:text-slate-300">
         People who ticked the box to hear when new competitions open. The list only holds those who have not unsubscribed.
         It contains personal data: keep it in your mailing tool and delete the file afterwards.
       </p>
-      <button type="button" className="btn-ghost" onClick={() => void download()} disabled={busy}>
-        <Download className="h-4 w-4" aria-hidden="true" /> {busy ? 'Preparing…' : 'Download opt-in list (CSV)'}
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn-ghost" onClick={() => void download()} disabled={busy}>
+          <Download className="h-4 w-4" aria-hidden="true" /> {busy ? 'Preparing…' : 'Download opt-in list (CSV)'}
+        </button>
+        <button type="button" className="btn-ghost" onClick={() => void sendTest()} disabled={testBusy}>
+          <Send className="h-4 w-4" aria-hidden="true" /> {testBusy ? 'Sending…' : 'Send test email'}
+        </button>
+      </div>
+      {testNotice && <p className="m-0 text-sm font-medium text-emerald-700 dark:text-emerald-300">{testNotice}</p>}
       {error && <p role="alert" className="m-0 text-sm font-semibold text-red-600">{error}</p>}
     </section>
   );
