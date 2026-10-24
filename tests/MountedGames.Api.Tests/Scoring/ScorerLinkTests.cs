@@ -142,7 +142,7 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task DefaultMainArena_AndAllArenasLinks_ScoreMatchingSessions()
+    public async Task DefaultMainArena_AndAllArenasLabels_AllowScoringAcrossTheCompetition()
     {
         var w = await WorldAsync();
         await _f.WithDbAsync(async db =>
@@ -157,10 +157,10 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         var (mainToken, _) = await CreateLinkAsync(w, "Main arena", "MainScorer");
         var mainScorer = Scorer(mainToken);
         var mainSession = await mainScorer.GetFromJsonAsync<ScorerSessionDto>("/api/scorer/session", TestClients.Json);
-        Assert.Single(mainSession!.Sessions);
+        Assert.Equal(2, mainSession!.Sessions.Count);
         Assert.Equal(w.Arena.SessionId, mainSession.Sessions[0].Id);
         Assert.Equal(HttpStatusCode.OK, (await mainScorer.PutAsJsonAsync(Score(w.MainRaces[0]), Put(w, 0, "main-1"))).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await mainScorer.GetAsync(Score(w.SideRaces[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await mainScorer.GetAsync(Score(w.SideRaces[0]))).StatusCode);
 
         var (allToken, _) = await CreateLinkAsync(w, "All arenas", "AllScorer");
         var allScorer = Scorer(allToken);

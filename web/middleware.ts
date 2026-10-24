@@ -18,7 +18,7 @@ import {
 } from './src/lib/shareCard.js';
 
 export const config = {
-  matcher: ['/api/:path*', '/', '/events', '/competitions', '/competitions/:path*', '/team-profiles/:path*', '/seasons/:path*', '/stats/:path*'],
+  matcher: ['/api/:path*', '/', '/events', '/competitions', '/competitions/:path*', '/team-profiles/:path*', '/seasons/:path*', '/stats/:path*', '/shop'],
 };
 
 /** The API project. Override with MG_API_ORIGIN (for example on a preview deployment). */

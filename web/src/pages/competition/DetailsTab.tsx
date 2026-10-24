@@ -198,24 +198,27 @@ export function DetailsTab() {
  */
 export function EventShareRows({ competitionId, competitionName }: { competitionId: number; competitionName: string }) {
   const [copied, setCopied] = useState(false);
+  const [shareError, setShareError] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const shareUrl = competitionLink(competitionId, window.location.origin);
 
   async function shareEvent() {
+    setShareError(false);
     if (typeof navigator.share === 'function') {
       try {
         await navigator.share({ title: competitionName, url: shareUrl });
         return;
-      } catch {
-        // User cancelled or share failed: fall through to clipboard.
+      } catch (error) {
+        if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') return;
+        // A failed share can still be copied on browsers with clipboard access.
       }
     }
     try {
-      await navigator.clipboard?.writeText(shareUrl);
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard unavailable.
+      setShareError(true);
     }
   }
 
@@ -228,6 +231,11 @@ export function EventShareRows({ competitionId, competitionName }: { competition
             ? <Check className="h-5 w-5 text-[rgb(var(--mg-ok))]" aria-hidden="true" />
             : <Share2 className="h-5 w-5 rf-chev" aria-hidden="true" />}
         </button>
+        {shareError && (
+          <p className="rf-note" role="alert">
+            Couldn’t copy the link. Press and hold <a href={shareUrl}>the event link</a> to copy it, or show the QR code below.
+          </p>
+        )}
       </li>
       <li>
         <button

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
@@ -17,6 +18,30 @@ public class SignupTests : IClassFixture<ApiFactory>
 
     private static CreateSectionSignupRequest Entry(string name = "Rider One", string? club = null, string? code = null)
         => new(name, club, "rider@example.com", code, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion);
+
+    [Fact]
+    public async Task Create_RateLimitIsPerSignedInAccount()
+    {
+        using var factory = new SignupLimitedFactory();
+        var section = await factory.NewSectionAsync();
+        var first = await factory.TrainerAsync();
+        var (second, _) = await factory.SignupAsync();
+
+        Assert.Equal(HttpStatusCode.OK, (await first.PostAsJsonAsync(Url(section), Entry("Test entrant one"))).StatusCode);
+        var limited = await first.PostAsJsonAsync(Url(section), Entry("Test entrant two"));
+        Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
+        Assert.Equal("60", limited.Headers.GetValues("Retry-After").Single());
+        Assert.Equal(HttpStatusCode.OK, (await second.PostAsJsonAsync(Url(section), Entry("Test entrant three"))).StatusCode);
+    }
+
+    private sealed class SignupLimitedFactory : ApiFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.UseSetting("RateLimits:SignupPerMinute", "1");
+        }
+    }
 
     [Fact]
     public async Task Create_RecordsPendingSignupAtSectionPrice()

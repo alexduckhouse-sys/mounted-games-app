@@ -88,4 +88,28 @@ describe('Details tab sharing links', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('img', { name: 'QR code for Spring Games' })).toBeInTheDocument();
   });
+
+  it('offers a copyable link when clipboard access is unavailable', async () => {
+    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    renderTab();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Share event link' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t copy the link');
+    expect(screen.getByRole('link', { name: 'the event link' })).toHaveAttribute('href', `${window.location.origin}/competitions/12`);
+    expect(screen.queryByRole('button', { name: 'Link copied' })).not.toBeInTheDocument();
+  });
+
+  it('leaves the clipboard unchanged when the native share sheet is cancelled', async () => {
+    Object.defineProperty(navigator, 'share', { value: vi.fn().mockRejectedValue(new DOMException('Cancelled', 'AbortError')), configurable: true });
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderTab();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Share event link' }));
+
+    expect(writeText).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

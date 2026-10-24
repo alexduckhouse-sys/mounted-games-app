@@ -172,7 +172,7 @@ public record ShopPostDto(
     int CommentCount, int ReportCount);
 
 public record CreateShopPostRequest(
-    string Title, string Body, int? PriceMinor,
+    string Title, string? Body, int? PriceMinor,
     string? ContactInfo, string AuthorName, string? PonyClubName,
     string? ImageBase64, string? Description = null);
 
