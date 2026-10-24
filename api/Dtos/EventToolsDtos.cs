@@ -32,7 +32,7 @@ public record PrintableSessionDto(
 public record PrintableDrawDto(PrintableCompetitionDto Competition, IReadOnlyList<PrintableSessionDto> Sessions);
 
 /// <summary><c>Lane</c> is the team's drawn lane in the heat; <c>Bib</c> is what its bibs look like, if known.</summary>
-public record PrintableScoreCellDto(int TeamId, string TeamName, int? Placing, bool Eliminated, int? Points,
+public record PrintableScoreCellDto(int TeamId, string TeamName, int? Placing, bool Eliminated, double? Points,
     int Lane = 0, string? Bib = null, bool IsSitOut = false, ResultStatus Status = ResultStatus.Finished);
 public record PrintableScoreRaceDto(int RaceId, string Name, IReadOnlyList<PrintableScoreCellDto> Teams);
 public record PrintableScoreHeatDto(
@@ -43,7 +43,7 @@ public record PrintableScoreSheetsDto(PrintableCompetitionDto Competition, IRead
 /// <summary><c>BonusPoints</c> (tack check bonus) is already inside <c>TotalPoints</c>.</summary>
 public record PrintableResultRowDto(
     int Rank, int TeamId, string TeamName, string ClubName,
-    int TotalPoints, int RacesRun, int Wins, int Eliminations, int BonusPoints = 0);
+    double TotalPoints, int RacesRun, int Wins, int Eliminations, int BonusPoints = 0);
 public record PrintableSectionResultsDto(
     int CompetitionSectionId, string SectionName, IReadOnlyList<PrintableResultRowDto> Results);
 public record PrintableResultsDto(

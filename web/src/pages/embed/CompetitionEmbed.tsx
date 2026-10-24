@@ -12,6 +12,7 @@ import { groupRowsBySession, sessionOrdinals, statusLabel, TIMETABLE_COLOURS, ti
 import { buildToplist, toplistNote } from '../../lib/toplist';
 import type { CompetitionDetail, StandingRow } from '../../types';
 import { EmbedFrame, EmbedMessage, StaleNotice } from './EmbedFrame';
+import { formatPoints } from '../../lib/formatPoints';
 
 const FIRST_RESULTS = 8;
 
@@ -94,7 +95,7 @@ function StandingsView({ competition, sectionId, fixed, onPick, standings, faile
             <li className="emb-row">
               <span className="emb-pos">{row.position}<span className="sr-only">{row.joint ? ' (joint)' : ''}</span></span>
               <span className="emb-name"><span>{row.teamName}</span>{note && <small>{note}</small>}</span>
-              <span className="emb-pts">{row.points}<span className="sr-only"> points</span></span>
+              <span className="emb-pts">{formatPoints(row.points)}<span className="sr-only"> points</span></span>
             </li>
             {list.cutAfter === index && index < list.rows.length - 1 && <li role="separator" aria-label="Final cut-off" className="emb-cut">Final cut-off</li>}
           </Fragment>;
@@ -103,7 +104,7 @@ function StandingsView({ competition, sectionId, fixed, onPick, standings, faile
           <li key={team.teamId} className="emb-row emb-row-hc">
             <span className="emb-pos">HC</span>
             <span className="emb-name"><span>{team.teamName}</span><small>Hors concours</small></span>
-            <span className="emb-pts">{team.points}<span className="sr-only"> points</span></span>
+            <span className="emb-pts">{formatPoints(team.points)}<span className="sr-only"> points</span></span>
           </li>
         ))}
       </ol>
@@ -124,7 +125,7 @@ function ResultsView({ competition, sectionId }: { competition: CompetitionDetai
             <li key={row.teamId} className="emb-row">
               <span className="emb-pos">{row.place ?? '–'}</span>
               <span className="emb-name"><span>{row.teamName}</span></span>
-              <span className="emb-pts">{row.points ?? '–'}<span className="sr-only"> points</span></span>
+              <span className="emb-pts">{row.points == null ? '–' : formatPoints(row.points)}<span className="sr-only"> points</span></span>
             </li>
           ))}
         </ol>

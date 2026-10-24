@@ -3,7 +3,12 @@ using MountedGames.Api.Data;
 
 namespace MountedGames.Api.Services;
 
-/// <summary>SQLite guards for the results book's special awards and the organiser's tie orders.</summary>
+/// <summary>
+/// SQLite guards for the results book's special awards and the organiser's tie orders.
+/// Points moved from int to double (half points). Databases made earlier keep an INTEGER-affinity <c>Results.Points</c>
+/// (and <c>SeasonRoundResult.EventPoints</c>) column, which SQLite cannot alter in place and does not need to:
+/// INTEGER affinity stores 2.5 as a REAL without loss (<c>HalfPointTests</c> proves it), so no guard is added for them.
+/// </summary>
 public static class ResultsSqliteSchema
 {
     public static Task EnsureAsync(AppDbContext db) => db.Database.ExecuteSqlRawAsync("""
@@ -27,7 +32,7 @@ public static class ResultsSqliteSchema
             "Id" INTEGER NOT NULL CONSTRAINT "PK_FinalsTieOrders" PRIMARY KEY AUTOINCREMENT,
             "CompetitionId" INTEGER NOT NULL,
             "TeamId" INTEGER NOT NULL,
-            "Points" INTEGER NOT NULL,
+            "Points" REAL NOT NULL,
             "Position" INTEGER NOT NULL,
             "SetAt" TEXT NOT NULL,
             "SetByUserId" TEXT NULL,

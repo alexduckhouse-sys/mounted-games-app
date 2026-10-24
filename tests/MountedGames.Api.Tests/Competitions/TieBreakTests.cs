@@ -344,7 +344,7 @@ public class TieBreakerUnitTests
 
         Assert.Equal(new[] { 1, 1, 1 }, facts.PlacingCounts);
         Assert.Equal(1, facts.Wins);
-        Assert.Equal(new[] { 3, 0, 4, 1 }, facts.RecentPoints);
+        Assert.Equal(new[] { 3.0, 0, 4, 1 }, facts.RecentPoints);
         Assert.Equal(8, facts.Total);
         Assert.Equal(20, Breaker().Facts(7, 1, [R(10, 1, 4)], total: 20).Total);
     }

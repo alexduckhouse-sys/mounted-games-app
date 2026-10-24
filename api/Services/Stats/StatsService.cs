@@ -35,7 +35,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
     private sealed record TeamRow(int TeamId, string TeamName, string ClubName, bool IsHorsConcours, int CompetitionId,
         string CompetitionName, DateTime StartDate, int SectionId, string SectionName, SectionFormat Format);
     private sealed record ResultRow(int TeamId, string RaceName, int SessionId, string SessionName, int SessionOrder,
-        RaceRoundStage Stage, int? Placing, bool Eliminated, int Points);
+        RaceRoundStage Stage, int? Placing, bool Eliminated, double Points);
     private sealed record Placing(int Place, int TeamsPlaced, int? FinalTier, bool SectionHasFinals);
 
     // ----- search -----
@@ -230,7 +230,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         var bases = await SessionBasesAsync(sessionIds, ct);
         // The winner's points: one in a race-finals qualifier, otherwise the session's largest field. Never below
         // what was actually given, so a quota can't pass 100% if a heat was resized after scoring.
-        int MaxFor(ResultRow r) => Math.Max(r.Stage == RaceRoundStage.Qualifier ? 1 : bases.GetValueOrDefault(r.SessionId), r.Points);
+        double MaxFor(ResultRow r) => Math.Max(r.Stage == RaceRoundStage.Qualifier ? 1 : bases.GetValueOrDefault(r.SessionId), r.Points);
         var places = await PlacesAsync(entryTeams.Where(t => !t.IsHorsConcours).ToList(), ct);
 
         var raceScope = results.Where(r => allFormats || teamById[r.TeamId].Format != SectionFormat.Teams).ToList();
@@ -429,7 +429,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
     }
 
     /// <summary>Session points of every team in each session (hors concours left out), for a rank.</summary>
-    private async Task<Dictionary<int, Dictionary<int, int>>> SessionTablesAsync(List<int> sessionIds, CancellationToken ct)
+    private async Task<Dictionary<int, Dictionary<int, double>>> SessionTablesAsync(List<int> sessionIds, CancellationToken ct)
     {
         if (sessionIds.Count == 0) return [];
         var rows = await db.Results.AsNoTracking()

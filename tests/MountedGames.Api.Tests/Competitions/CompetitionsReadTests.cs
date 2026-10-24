@@ -174,7 +174,7 @@ public class CompetitionsReadTests : IClassFixture<ApiFactory>
 
         var race = d.Sessions.Single().Heats.Single().Races.Single();
         Assert.Equal(new[] { "Winners", "Runners-up", "Eliminated" }, race.Results.Select(x => x.TeamName));
-        Assert.Equal(new[] { 5, 4, 0 }, race.Results.Select(x => x.Points));
+        Assert.Equal(new[] { 5.0, 4.0, 0.0 }, race.Results.Select(x => x.Points));
         Assert.True(race.Results[2].Eliminated);
         Assert.Null(race.Results[2].Placing);
     }

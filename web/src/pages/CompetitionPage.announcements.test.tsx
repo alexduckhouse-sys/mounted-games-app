@@ -162,7 +162,8 @@ describe('score cards', () => {
     expect(await screen.findByText('No cards')).toBeVisible();
 
     act(() => state.handlers?.onResultsUpdated({ sessionId: 1, heat: heatOf(true) } as never));
-    expect(await screen.findByText(/Heat 1 \/ Bottle Race$/)).toBeVisible();
+    // The whole competition page renders here, which can take over a second on a busy CI runner.
+    expect(await screen.findByText(/Heat 1 \/ Bottle Race$/, undefined, { timeout: 4000 })).toBeVisible();
 
     act(() => state.handlers?.onResultsUpdated({ sessionId: 1, raceId: 7, started: null } as never));
     expect(screen.getByText(/Bottle Race$/).textContent?.split('|')).toHaveLength(1);
@@ -170,7 +171,7 @@ describe('score cards', () => {
     act(() => state.handlers?.onScoreCardControl('nonsense' as never));
     expect(screen.getByText(/Bottle Race$/)).toBeVisible();
     act(() => state.handlers?.onScoreCardControl({ heatId: 5, raceId: 7, action: 'skip' } as never));
-    expect(await screen.findByText('No cards')).toBeVisible();
+    expect(await screen.findByText('No cards', undefined, { timeout: 4000 })).toBeVisible();
   });
 });
 

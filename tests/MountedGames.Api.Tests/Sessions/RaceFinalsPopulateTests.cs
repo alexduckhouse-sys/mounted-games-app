@@ -189,7 +189,7 @@ public class RaceFinalsPopulateTests : IClassFixture<ApiFactory>
 
         // Two finalists: 3 points for the win and 2 for last, one more than the 1 a qualifier earns.
         var points = await _f.WithDbAsync(db => db.Results.Where(r => r.RaceId == finalRace).OrderBy(r => r.Placing).Select(r => r.Points).ToListAsync());
-        Assert.Equal(new[] { 3, 2 }, points);
+        Assert.Equal(new[] { 3.0, 2 }, points);
         var qualifierPoints = await _f.WithDbAsync(db => db.Results.Where(r => r.RaceId == q1.Races[0].Id).Select(r => r.Points).ToListAsync());
         Assert.All(qualifierPoints, point => Assert.Equal(1, point));
     }

@@ -13,6 +13,7 @@ import {
 } from '../../lib/stats';
 import { SectionFormatLabel, StatsSubjectKind, type StatsEntry, type StatsHit, type StatsProfile } from '../../types';
 import { Chevron, RefineDisclosure, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
+import { formatPoints } from '../../lib/formatPoints';
 
 /** `/stats` browses and searches; `/stats/:kind?name=` shows one rider, pony, team or club. */
 export function StatsPage() {
@@ -173,7 +174,7 @@ function EntryRow({ entry }: { entry: StatsEntry }) {
         <thead><tr className="text-xs uppercase text-[rgb(var(--mg-muted))]"><th scope="col" className="py-1 font-bold">Session</th><th scope="col" className="py-1 font-bold">Points</th><th scope="col" className="py-1 text-right font-bold">Place</th></tr></thead>
         <tbody>{entry.sessions.map((session) => <tr key={session.sessionId} className="border-t border-[rgb(var(--mg-rule-soft))]">
           <td className="py-1.5">{session.name}</td>
-          <td className="py-1.5 tabular-nums">{session.points} of {session.maxPoints}</td>
+          <td className="py-1.5 tabular-nums">{formatPoints(session.points)} of {formatPoints(session.maxPoints)}</td>
           <td className="py-1.5 text-right tabular-nums">{session.rank == null ? 'HC' : `${ordinalPlace(session.rank)} of ${session.teams}`}</td>
         </tr>)}</tbody>
       </table>}

@@ -123,7 +123,7 @@ public class FinalsStandingsTests : IClassFixture<ApiFactory>
         // A Final (12, 7), B Final (10, 5), then the team that never reached a final (20).
         Assert.Equal(new[] { s.Teams[0], s.Teams[1], s.Teams[2], s.Teams[3], s.Teams[4] }, rows.Select(r => r.TeamId));
         Assert.Equal(new int?[] { 0, 0, 1, 1, null }, rows.Select(r => r.FinalTier));
-        Assert.Equal(new[] { 12, 7, 10, 5, 20 }, rows.Select(r => r.TotalPoints));
+        Assert.Equal(new[] { 12.0, 7.0, 10.0, 5.0, 20.0 }, rows.Select(r => r.TotalPoints));
     }
 
     [Fact]

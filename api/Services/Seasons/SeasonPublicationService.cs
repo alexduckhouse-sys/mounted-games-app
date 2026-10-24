@@ -67,7 +67,7 @@ public sealed class SeasonPublicationService(AppDbContext db)
 
         var points = round.Season!.PlacePoints.ToDictionary(x => x.Place, x => x.Points);
         var rows = new List<SeasonPublicationPreviewRow>();
-        (int Tier, int Points)? previous = null;
+        (int Tier, double Points)? previous = null;
         var rank = 0;
         for (var index = 0; index < totals.Count; index++)
         {
@@ -169,7 +169,7 @@ public sealed class SeasonPublicationService(AppDbContext db)
             foreach (var result in race.Results.OrderBy(x => x.TeamId))
             {
                 value.Append(result.TeamId).Append(':')
-                    .Append(result.Placing).Append(':').Append(result.Eliminated).Append(':').Append(result.Points).Append(':')
+                    .Append(result.Placing).Append(':').Append(result.Eliminated).Append(':').Append(PointValues.Format(result.Points)).Append(':')
                     .Append(result.Team?.IsHorsConcours).Append(':')
                     .Append(result.Team?.DisplayName).Append(':')
                     .Append(result.Team?.Club?.Name).Append(':')

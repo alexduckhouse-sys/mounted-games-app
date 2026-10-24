@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, type StoredAuth } from '../../api';
@@ -17,7 +17,8 @@ const seen = () => latest.value!;
 
 function Probe() {
   const value = useNeedsYou();
-  useEffect(() => { latest.value = value; });
+  // A layout effect runs in the same commit that updates the DOM, so once waitFor sees the count, seen() matches it.
+  useLayoutEffect(() => { latest.value = value; });
   return <span data-testid="count">{value.count}</span>;
 }
 

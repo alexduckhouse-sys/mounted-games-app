@@ -3,6 +3,7 @@ import { ChevronRight, Trophy } from 'lucide-react';
 import type { CompetitionSection } from '../../types';
 import { ordinal, toplistNote, type FinalGroup, type Toplist } from '../../lib/toplist';
 import { TeamSheet } from './TeamSheet';
+import { formatPoints } from '../../lib/formatPoints';
 
 type View = 'finals' | 'totals' | 'sessions';
 
@@ -54,7 +55,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                     <span className="truncate text-base font-semibold leading-tight">{row.teamName}</span>
                     {note && <span className="text-[13.5px] font-medium leading-none text-[rgb(var(--mg-body))]">{note}</span>}
                   </span>
-                  <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{row.points}<span className="sr-only"> points</span></span>
+                  <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(row.points)}<span className="sr-only"> points</span></span>
                   {openRow && <ChevronRight aria-hidden="true" className="h-3 w-3 shrink-0 text-[rgb(var(--mg-dash))]" />}
                 </>;
                 return (
@@ -83,7 +84,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                       <span className="truncate text-base font-semibold leading-tight">{team.teamName}</span>
                       {team.racesLeft > 0 && <span className="text-[13.5px] font-medium leading-none">{team.racesLeft} {team.racesLeft === 1 ? 'race' : 'races'} left</span>}
                     </span>
-                    <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums">{team.points}<span className="sr-only"> points</span></span>
+                    <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums">{formatPoints(team.points)}<span className="sr-only"> points</span></span>
                   </li>
                 ))}
               </ul>
@@ -118,7 +119,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                           {cells ? cells[i] : <><span aria-hidden="true" className="text-[rgb(var(--mg-dash))]">–</span><span className="sr-only">No points yet</span></>}
                         </td>
                       ))}
-                      <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">{row.points}</td>
+                      <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(row.points)}</td>
                       <td aria-hidden="true">{openRow && <ChevronRight className="mr-2 h-3 w-3 text-[rgb(var(--mg-dash))]" />}</td>
                     </tr>
                   );
@@ -142,7 +143,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                 <li key={row.teamId} className="flex min-h-12 items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 last:border-b-0">
                   <span className="mg-display w-12 shrink-0 text-base font-bold text-[rgb(var(--mg-muted))]">Lane {i + 1}</span>
                   <span className="min-w-0 flex-1 truncate text-base font-semibold">{row.teamName}</span>
-                  <span className="shrink-0 text-sm font-semibold text-[rgb(var(--mg-body))]">{row.points} pts</span>
+                  <span className="shrink-0 text-sm font-semibold text-[rgb(var(--mg-body))]">{formatPoints(row.points)} pts</span>
                 </li>
               ))}
             </ol>
@@ -175,7 +176,7 @@ function FinalsList({ groups, onOpen }: { groups: FinalGroup[]; onOpen: (teamId:
                     </span>
                   )}
                 </span>
-                <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{row.points ?? '–'}<span className="sr-only"> points</span></span>
+                <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{row.points == null ? '–' : formatPoints(row.points)}<span className="sr-only"> points</span></span>
                 {openRow && <ChevronRight aria-hidden="true" className="h-3 w-3 shrink-0 text-[rgb(var(--mg-dash))]" />}
               </>;
               return (

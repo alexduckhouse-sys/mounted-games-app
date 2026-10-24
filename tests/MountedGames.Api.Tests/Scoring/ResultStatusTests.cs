@@ -45,7 +45,7 @@ public class ResultStatusTests : IClassFixture<ApiFactory>
         }, "u1");
 
         var stored = await StoredAsync(race);
-        Assert.Equal(new[] { 5, 0, 0, 0, 0 }, stored.Select(r => r.Points));
+        Assert.Equal(new[] { 5.0, 0.0, 0.0, 0.0, 0.0 }, stored.Select(r => r.Points));
         Assert.All(stored.Skip(1), r => { Assert.True(r.Eliminated); Assert.Null(r.Placing); });
         Assert.Equal(new[] { ResultStatus.Finished, ResultStatus.Eliminated, ResultStatus.DidNotStart, ResultStatus.DidNotFinish, ResultStatus.Retired },
             stored.Select(r => r.Status));
@@ -77,7 +77,7 @@ public class ResultStatusTests : IClassFixture<ApiFactory>
         }, null);
 
         var stored = await StoredAsync(race);
-        Assert.Equal(new[] { 3, 0, 0 }, stored.Select(r => r.Points));
+        Assert.Equal(new[] { 3.0, 0.0, 0.0 }, stored.Select(r => r.Points));
         Assert.Equal(new[] { ResultStatus.Finished, ResultStatus.DidNotStart, ResultStatus.Eliminated }, stored.Select(r => r.Status));
         Assert.Equal(new[] { false, true, true }, stored.Select(r => r.Eliminated));
     }
@@ -105,7 +105,7 @@ public class ResultStatusTests : IClassFixture<ApiFactory>
             Fin(a.TeamIds[0], 1), Fin(a.TeamIds[1], 2), Out(a.TeamIds[2], ResultStatus.DidNotFinish), Out(a.TeamIds[3], ResultStatus.Retired),
         }, null);
 
-        Assert.Equal(new[] { 1, 1, 0, 0 }, (await StoredAsync(races[0])).Select(r => r.Points));
+        Assert.Equal(new[] { 1.0, 1.0, 0.0, 0.0 }, (await StoredAsync(races[0])).Select(r => r.Points));
     }
 
     [Fact]

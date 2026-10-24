@@ -1090,8 +1090,8 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("CompetitionId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Points")
-                        .HasColumnType("integer");
+                    b.Property<double>("Points")
+                        .HasColumnType("double precision");
 
                     b.Property<int>("Position")
                         .HasColumnType("integer");
@@ -1831,8 +1831,8 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int?>("Placing")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Points")
-                        .HasColumnType("integer");
+                    b.Property<double>("Points")
+                        .HasColumnType("double precision");
 
                     b.Property<int>("RaceId")
                         .HasColumnType("integer");
@@ -2270,8 +2270,8 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
-                    b.Property<int>("EventPoints")
-                        .HasColumnType("integer");
+                    b.Property<double>("EventPoints")
+                        .HasColumnType("double precision");
 
                     b.Property<int>("EventRank")
                         .HasColumnType("integer");

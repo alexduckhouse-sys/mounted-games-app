@@ -20,6 +20,7 @@ import { NumberField } from '../../components/NumberField';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
+import { formatPoints } from '../../lib/formatPoints';
 
 const NO_ROWS: StandingRow[] = [];
 
@@ -317,14 +318,14 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
                 <AlertTriangle className="w-4 h-4" /> Runoff needed
               </div>
               <p className="text-[11px]">
-                {runoff.tied.length} teams tied on {runoff.points} pts at position {topN}, with only {runoff.seatsLeft}{' '}
+                {runoff.tied.length} teams tied on {formatPoints(runoff.points)} pts at position {topN}, with only {runoff.seatsLeft}{' '}
                 {runoff.seatsLeft === 1 ? 'spot' : 'spots'} left. Run a tie-breaker first:
               </p>
               <ul className="mt-1 space-y-0.5">
                 {runoff.tied.map((t) => (
                   <li key={t.teamId} className="flex items-center justify-between text-[11px]">
                     <span className="truncate">{t.teamName}</span>
-                    <span className="font-mono">{t.totalPoints}</span>
+                    <span className="font-mono">{formatPoints(t.totalPoints)}</span>
                   </li>
                 ))}
               </ul>

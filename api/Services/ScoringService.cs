@@ -12,7 +12,8 @@ namespace MountedGames.Api.Services;
 
 /// <param name="Status">Why the team did not finish; null means Eliminated when <paramref name="Eliminated"/> is set.</param>
 /// <param name="Note">The referee's private note. Null keeps the note the result already has; empty clears it.</param>
-public record FinishingPlace(int TeamId, int Place, bool Eliminated, ResultStatus? Status = null, string? Note = null);
+/// <param name="Points">Optional points for a finisher, whole or half (a dead heat, say). Null means the place decides.</param>
+public record FinishingPlace(int TeamId, int Place, bool Eliminated, ResultStatus? Status = null, string? Note = null, double? Points = null);
 
 public sealed class ScoreConflictException(string message) : InvalidOperationException(message);
 public sealed class ScoreSignedOffException(string message) : InvalidOperationException(message);
@@ -64,7 +65,7 @@ public class ScoringService
         if (request.Places is null)
             throw new ScoreValidationException("Places are required.");
         return ApplyCoreAsync(raceId,
-            request.Places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status, p.RefereeNote)).ToList(),
+            request.Places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status, p.RefereeNote, p.Points)).ToList(),
             actorUserId, request.ExpectedRevision, null, request.RequestId, request.Reason,
             strictValidation: true, cancellationToken, actorLabel);
     }
@@ -74,7 +75,7 @@ public class ScoringService
         IReadOnlyList<FinishingPlaceDto>? expected, string? actorUserId, string? reason = null,
         CancellationToken cancellationToken = default, string? actorLabel = null)
         => ApplyCoreAsync(raceId,
-            places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status, p.RefereeNote)).ToList(),
+            places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status, p.RefereeNote, p.Points)).ToList(),
             actorUserId, null,
             expected?.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status)).ToList(),
             $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, actorLabel);
@@ -209,11 +210,14 @@ public class ScoringService
         var accepted = strictValidation
             ? finishingPlaces.ToList()
             : finishingPlaces.Where(p => entryTeamIds.Contains(p.TeamId)).ToList();
+        var isQualifier = heat.RaceRoundStage == RaceRoundStage.Qualifier;
+        double PointsFor(FinishingPlace fp) => sitOut.Contains(fp.TeamId) || fp.Eliminated ? 0
+            : fp.Points ?? (isQualifier ? 1 : PointsForPlace(fp.Place, sessionBase, fp.Eliminated));
         var incomingCore = accepted.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
-                p.Status ?? ResultStatus.Finished, CleanNoteOrNull(p.Note)))
+                p.Status ?? ResultStatus.Finished, CleanNoteOrNull(p.Note), PointsFor(p)))
             .OrderBy(p => p.TeamId).ToList();
         var currentCore = current.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
-                p.Status, p.RefereeNote))
+                p.Status, p.RefereeNote, p.Points))
             .OrderBy(p => p.TeamId).ToList();
         var payloadFingerprint = PayloadFingerprint("results", incomingCore, expectedRevision, reason);
 
@@ -246,7 +250,6 @@ public class ScoringService
             throw new ScoreValidationException("A reason is required when correcting results.");
 
         var now = DateTime.UtcNow;
-        var isQualifier = heat.RaceRoundStage == RaceRoundStage.Qualifier;
         var fresh = accepted.Select(fp => new Result
         {
             RaceId = raceId,
@@ -256,8 +259,7 @@ public class ScoringService
             Status = fp.Eliminated ? fp.Status ?? ResultStatus.Eliminated : ResultStatus.Finished,
             RefereeNote = CleanNoteOrNull(fp.Note),
             IsSitOut = sitOut.Contains(fp.TeamId),
-            Points = sitOut.Contains(fp.TeamId) ? 0
-                : isQualifier ? (fp.Eliminated ? 0 : 1) : PointsForPlace(fp.Place, sessionBase, fp.Eliminated),
+            Points = PointsFor(fp),
             RecordedAt = now,
             RecordedByUserId = actorUserId,
         }).ToList();
@@ -443,7 +445,7 @@ public class ScoringService
         bool replay = false)
         => new(raceId, revision, signedOff, signedOffAt, signedOffBy, results, replay);
 
-    private sealed record CorePlace(int TeamId, int? Place, bool Eliminated, ResultStatus Status, string? Note);
+    private sealed record CorePlace(int TeamId, int? Place, bool Eliminated, ResultStatus Status, string? Note, double Points);
 
     private static string? CleanNoteOrNull(string? note) => ResultStatuses.CleanNote(note);
 
@@ -457,6 +459,8 @@ public class ScoringService
             if (p.Status is { } status && !Enum.IsDefined(status))
                 throw new ScoreValidationException("Unknown result status.");
             ResultStatuses.CleanNote(p.Note);
+            if (p.Points is { } points)
+                PointValues.Validate(points);
             var eliminated = p.Eliminated || p.Status is { } s && s != ResultStatus.Finished;
             return p with
             {

@@ -69,7 +69,7 @@ public sealed class PrintableEventService(AppDbContext db)
                     Eliminations = results.Count(x => x.Eliminated && ResultStatuses.Of(x) == ResultStatus.Eliminated),
                 };
             }).OrderBy(x => x.Tier).ThenByDescending(x => x.Total).ThenBy(x => x.Team.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Team.Id).ToList();
-            (int Tier, int Total)? previous = null;
+            (int Tier, double Total)? previous = null;
             var rank = 0;
             var result = new List<PrintableResultRowDto>();
             for (var i = 0; i < rows.Count; i++)

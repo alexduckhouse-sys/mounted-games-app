@@ -1,6 +1,7 @@
 import { TieBreakRule, type Heat, type Race, type ResultRow } from '../types';
 import { ordinal } from './toplist';
 import { statusLabel } from './resultStatus';
+import { formatPoints } from './formatPoints';
 
 /**
  * What the announcer says after a race: placings, who is out and why, running totals for the heat and, after a
@@ -153,8 +154,8 @@ function ending(input: SummaryInput, totals: TotalRow[]): { heading: string; lin
     return { heading: 'Through to the final', lines };
   }
   const lines = totals.map((t) => t.hc
-    ? `${t.teamName}: hors concours, ${t.points} points, not ranked`
-    : `${ordinal(t.position ?? 0)} ${t.teamName}: ${t.points} ${t.points === 1 ? 'point' : 'points'}${t.why ? `, ahead on tie-break: ${t.why}` : ''}`);
+    ? `${t.teamName}: hors concours, ${formatPoints(t.points)} points, not ranked`
+    : `${ordinal(t.position ?? 0)} ${t.teamName}: ${formatPoints(t.points)} ${t.points === 1 ? 'point' : 'points'}${t.why ? `, ahead on tie-break: ${t.why}` : ''}`);
   const shared = totals.filter((t) => !t.hc).some((t, i, list) => i > 0 && list[i - 1].position === t.position);
   if (shared) lines.push(organiserDecides(input.rule)
     ? 'Teams are level on points: the organiser decides the order.'

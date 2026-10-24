@@ -7,7 +7,7 @@ namespace MountedGames.Api.Services;
 /// <summary>What a team brings to a tie: its total and the results that can separate it from the others.</summary>
 /// <param name="PlacingCounts">Index 0 is the number of 1st places, index 1 the 2nds, and so on (finished races only).</param>
 /// <param name="RecentPoints">Points per race, the most recent race first.</param>
-public sealed record TieFacts(int TeamId, int? SectionId, int Total, int[] PlacingCounts, int[] RecentPoints)
+public sealed record TieFacts(int TeamId, int? SectionId, double Total, int[] PlacingCounts, double[] RecentPoints)
 {
     public int Wins => PlacingCounts.Length > 0 ? PlacingCounts[0] : 0;
 }
@@ -65,7 +65,7 @@ public sealed class TieBreaker
         => sectionId is { } id && _rules.TryGetValue(id, out var rule) ? rule : TieBreakRule.Countback;
 
     /// <param name="total">The team's total when it isn't just the sum of its race points (bonus points).</param>
-    public TieFacts Facts(int teamId, int? sectionId, IEnumerable<Result> results, int? total = null)
+    public TieFacts Facts(int teamId, int? sectionId, IEnumerable<Result> results, double? total = null)
     {
         var list = results.ToList();
         var maxPlace = list.Where(r => !r.Eliminated && r.Placing > 0).Select(r => r.Placing!.Value).DefaultIfEmpty(0).Max();
@@ -141,13 +141,13 @@ public sealed class TieBreaker
     /// Bigger numbers rank higher, compared position by position. Placing counts pad a shorter list with zeros
     /// (no 4ths is 0 4ths); recent points compare only the races both teams have run.
     /// </summary>
-    private static int Lexicographic(int[] a, int[] b, bool padMissing)
+    private static int Lexicographic<T>(T[] a, T[] b, bool padMissing) where T : System.Numerics.INumber<T>
     {
         var length = padMissing ? Math.Max(a.Length, b.Length) : Math.Min(a.Length, b.Length);
         for (var i = 0; i < length; i++)
         {
-            var x = i < a.Length ? a[i] : 0;
-            var y = i < b.Length ? b[i] : 0;
+            var x = i < a.Length ? a[i] : T.Zero;
+            var y = i < b.Length ? b[i] : T.Zero;
             if (x != y) return y.CompareTo(x);
         }
         return 0;
