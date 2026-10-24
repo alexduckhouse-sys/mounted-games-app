@@ -3,6 +3,8 @@ namespace MountedGames.Api.Entities;
 public class SignupMatchmaking
 {
     public int SignupId { get; set; }
+    // Granted only when an organiser forms a team or a pair request is accepted.
+    public bool DeclarationAccessGranted { get; set; }
     public bool LookingForPair { get; set; }
     public bool LookingForGuestRiders { get; set; }
     public bool WaitingForGuestSpot { get; set; }

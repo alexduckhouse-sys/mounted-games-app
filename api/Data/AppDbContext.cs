@@ -115,6 +115,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.ToTable("SignupMatchmaking");
             e.HasKey(x => x.SignupId);
             e.Property(x => x.SignupId).ValueGeneratedNever();
+            e.Property(x => x.DeclarationAccessGranted).HasConversion<int>().HasDefaultValue(false);
             e.Property(x => x.LookingForPair).HasConversion<int>().HasDefaultValue(false);
             e.Property(x => x.LookingForGuestRiders).HasConversion<int>().HasDefaultValue(false);
             e.Property(x => x.WaitingForGuestSpot).HasConversion<int>().HasDefaultValue(false);

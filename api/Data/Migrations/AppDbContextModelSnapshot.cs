@@ -2745,6 +2745,11 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("SignupId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("DeclarationAccessGranted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<int>("LookingForGuestRiders")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
