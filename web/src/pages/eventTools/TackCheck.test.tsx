@@ -43,9 +43,9 @@ describe('tack check tab', () => {
     expect(await screen.findByLabelText('Run a tack check for Under 12')).toBeChecked();
     expect(get).toHaveBeenCalledWith('/event-tools/competitions/12/tack-check');
     expect(screen.getByRole('link', { name: /Print tack check forms/ })).toHaveAttribute('href', '/event-tools/12/print/tack-check');
-    expect(screen.queryByLabelText('Most points for one sector')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Most points per rider per sector')).not.toBeInTheDocument();
     await userEvent.click(screen.getByLabelText(/Bonus points/));
-    const max = screen.getByLabelText('Most points for one sector');
+    const max = screen.getByLabelText('Most points per rider per sector');
     await userEvent.clear(max);
     await userEvent.type(max, '5');
     await userEvent.click(screen.getByRole('button', { name: 'Add a sector' }));
@@ -58,7 +58,7 @@ describe('tack check tab', () => {
     }));
     expect(await screen.findByText('Tack check saved.')).toBeInTheDocument();
     // The saved section now shows the stewards' results.
-    expect(screen.getByText('Points out of 5 for each sector')).toBeInTheDocument();
+    expect(screen.getByText('Points out of 5 per rider in each sector')).toBeInTheDocument();
   });
 
   it('checks the sectors and maximum before saving, and shows a refusal from the server', async () => {
@@ -72,7 +72,7 @@ describe('tack check tab', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Give every sector a name');
     await userEvent.type(first, 'Hat');
     await userEvent.click(screen.getByLabelText(/Tack & Turnout table/));
-    const max = screen.getByLabelText('Most points for one sector');
+    const max = screen.getByLabelText('Most points per rider per sector');
     await userEvent.clear(max);
     await userEvent.type(max, '0');
     await userEvent.click(screen.getByRole('button', { name: 'Save tack check' }));

@@ -77,7 +77,7 @@ function SettingsForm({ competitionId, section, onSaved }: { competitionId: stri
     event.preventDefault();
     const max = Number(maxPoints);
     const issue = sectorProblem(sectors.map((s) => s.name))
-      ?? (Number.isInteger(max) && max >= 1 && max <= 100 ? null : 'The most points for a sector must be a whole number from 1 to 100.');
+      ?? (Number.isInteger(max) && max >= 1 && max <= 100 ? null : 'The most points per rider per sector must be a whole number from 1 to 100.');
     if (issue) { setProblem(issue); return; }
     setBusy(true); setProblem(null);
     try {
@@ -100,7 +100,7 @@ function SettingsForm({ competitionId, section, onSaved }: { competitionId: stri
         <span>{option.label}<span className="tools-check-sub">{option.detail}</span></span>
       </label>)}
     </fieldset>
-    {isScored(mode) && <label className="rf-fld">Most points for one sector<NumberField min={1} max={100} value={maxPoints} onChange={(event) => edit(() => setMaxPoints(event.target.value))} /></label>}
+    {isScored(mode) && <label className="rf-fld">Most points per rider per sector<NumberField min={1} max={100} value={maxPoints} onChange={(event) => edit(() => setMaxPoints(event.target.value))} /></label>}
     <fieldset className="tools-fields"><legend className="rf-fld">Sectors</legend>
       {sectors.map((sector, index) => <div key={sector.key} className="tools-row">
         <label className="rf-fld">Sector {index + 1}<input value={sector.name} maxLength={MAX_SECTOR_NAME} onChange={(event) => edit(() => setSectors((list) => list.map((s) => (s.key === sector.key ? { ...s, name: event.target.value } : s))))} /></label>
@@ -118,7 +118,7 @@ function SettingsForm({ competitionId, section, onSaved }: { competitionId: stri
 function Marks({ competitionId, section, onSaved }: { competitionId: string; section: TackCheckSection; onSaved: (s: TackCheckSection) => void }) {
   if (section.teams.length === 0) return <RefineNote>No teams in this age group yet.</RefineNote>;
   return <>
-    <RefineSection title="Results" meta={isScored(section.mode) ? `Points out of ${section.maxPoints} for each sector` : 'Pass or fail for each sector'} />
+    <RefineSection title="Results" meta={isScored(section.mode) ? `Points out of ${section.maxPoints} per rider in each sector` : 'Pass or fail for each sector'} />
     {section.teams.map((team) => <TeamMarks key={`${team.teamId}:${section.mode}:${section.sectors.map((s) => s.id).join(',')}:${JSON.stringify(team.marks)}`}competitionId={competitionId} section={section} team={team} onSaved={onSaved} />)}
   </>;
 }
