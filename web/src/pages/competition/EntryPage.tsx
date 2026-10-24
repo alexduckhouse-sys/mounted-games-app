@@ -9,6 +9,7 @@ import type { SectionSignup } from '../../types';
 import { Chevron, RefineList } from '../refine/Refine';
 import { useCompetition } from './context';
 import { EnterCompetition, EventShareRows } from './DetailsTab';
+import { useEntrySettings } from './entrySettings';
 import type { ReactNode } from 'react';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -44,6 +45,7 @@ export function EntryPage() {
     return () => { cancelled = true; };
   }, [competition.id, mayOrganise]);
 
+  const { closed: entriesClosed } = useEntrySettings(competition);
   const fee = entryFeeText(competition.sections);
   const dates = competitionDateText(competition.startDate, competition.endDate, true);
   const row = (icon: ReactNode, label: string, value: ReactNode) => (
@@ -58,7 +60,7 @@ export function EntryPage() {
       <PageGrid railFirst className="!gap-2.5 lg:!gap-6" aside={(
       <div className="mg-card flex flex-col gap-4 p-4">
         <div>
-          <span className="mg-badge bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]">{competition.signupsLocked ? 'Entries closed' : 'Entries open'}</span>
+          <span className="mg-badge bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]">{entriesClosed ? 'Entries closed' : 'Entries open'}</span>
           <h1 className="mg-display mt-2 text-2xl font-bold leading-[1.1] text-[rgb(var(--mg-heading))]">{competition.name}</h1>
           {competition.organiserName && <p className="mg-meta mt-1">Organised by <span className="font-semibold">{competition.organiserName}</span></p>}
           {competition.description && <p className="mg-lede mt-2 whitespace-pre-wrap">{competition.description}</p>}
@@ -72,7 +74,7 @@ export function EntryPage() {
       )} asideLabel="About this event">
       <div className="flex flex-col gap-2.5">
 
-      {competition.signupsLocked && (
+      {entriesClosed && (
         <p role="status" className="mg-notice flex items-center gap-2"><Lock className="h-4 w-4 shrink-0" aria-hidden="true" /> Entries for this event are closed.</p>
       )}
 

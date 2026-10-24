@@ -577,3 +577,12 @@ describe('DeclarationsTab: around the form', () => {
     expect(screen.getByLabelText('Rider')).toBeInTheDocument();
   });
 });
+
+it.each([true, false])('only opens a secondary signup team when the trusted grant is %s', async (granted) => {
+  state.user = { ...state.user!, id: 'synthetic-member', clubId: null, roles: ['Member'] };
+  state.get.mockImplementation(async (url: string) => ({ data: url === '/me/signups' ? [{ id: 101, competitionId: 4, competitionSectionId: 5, teamId: 7, linkedTeams: [{ id: 7, name: 'Synthetic A' }, { id: 8, name: 'Synthetic B' }], status: 1, declarationAccessGranted: granted }] : [] }));
+  mount({ teams: [team(7, { competitionId: 4, competitionSectionId: 5, trainerUserId: null }), team(8, { competitionId: 4, competitionSectionId: 5, displayName: 'Synthetic B', trainerUserId: null })] }, '/competitions/4/declarations?team=8');
+  await waitFor(() => expect(state.get).toHaveBeenCalledWith('/me/signups'));
+  if (granted) expect(await screen.findByRole('heading', { name: 'Synthetic B' })).toBeInTheDocument();
+  else expect(screen.queryByLabelText('Team name')).not.toBeInTheDocument();
+});
