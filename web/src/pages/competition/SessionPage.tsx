@@ -26,20 +26,11 @@ import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offlin
 import { LANE_ROTATION_LABELS, LaneRotationMode, type LaneRotationModeValue } from '../../lib/lanes';
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
 import { useRaceNotes } from './useRaceNotes';
+import { formatPoints } from '../../lib/formatPoints';
 
 function formatTime(d: Date | null): string {
   if (!d) return '—';
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-/** Formats a point total so `.01` run-off tie-breaker fractions are hidden while `.5` half-points remain visible. */
-// eslint-disable-next-line react-refresh/only-export-components
-export function formatPoints(points: number): string {
-  const halfRounded = Math.round(points * 2) / 2;
-  if (Math.abs(points - halfRounded) <= 0.02) {
-    return Number.isInteger(halfRounded) ? String(halfRounded) : halfRounded.toFixed(1);
-  }
-  return String(Math.round(points * 100) / 100);
 }
 
 function heatStartTime(session: Session, heat: Heat, heatIndex: number): Date | null {
@@ -554,7 +545,8 @@ function ScoreAdjustmentsPanel({
         await api.put(`/competitions/${session.competitionId}/finals/tie-order`, { teamIds: orderedIds });
         onChanged();
       } catch {
-        // Keep local +0.01 tie-break order even if finals tie-order endpoint is not applicable
+        // The order on screen is only local until the server has it, and finals seeding reads the server's.
+        onError('Couldn’t save the run-off result. Try again.');
       }
     }
   }
@@ -584,8 +576,8 @@ function ScoreAdjustmentsPanel({
 
   async function saveOverride() {
     const pts = Number(overridePoints);
-    if (overridePoints.trim() === '' || Number.isNaN(pts)) {
-      onError('Enter a valid points number.');
+    if (overridePoints.trim() === '' || Number.isNaN(pts) || pts < 0 || !Number.isInteger(pts * 2)) {
+      onError('Enter whole or half points, such as 3 or 2.5.');
       return;
     }
     const formatted = formatPoints(pts);
@@ -598,6 +590,10 @@ function ScoreAdjustmentsPanel({
     const delta = Number(adjustDelta);
     if (adjustDelta.trim() === '' || Number.isNaN(delta) || delta === 0) {
       onError('Enter a non-zero point adjustment.');
+      return;
+    }
+    if (!Number.isInteger(delta * 2)) {
+      onError('Adjust by whole or half points, such as 1 or -0.5.');
       return;
     }
     const reason = adjustReason.trim();
@@ -698,6 +694,7 @@ function ScoreAdjustmentsPanel({
             <input
               aria-label="Point adjustment"
               type="number"
+              step="0.5"
               className="input !min-h-0 !py-1 text-xs w-20"
               value={adjustDelta}
               onChange={(e) => setAdjustDelta(e.target.value)}

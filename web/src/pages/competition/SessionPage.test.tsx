@@ -7,7 +7,8 @@ import { competition, heat, race, result, session, team } from '../../test/facto
 import type { HeatEntry } from '../../types';
 import type { CompetitionDetail, DeclarationForm } from '../../types';
 import { CompetitionContext } from './context';
-import { SessionPage, formatPoints } from './SessionPage';
+import { SessionPage } from './SessionPage';
+import { formatPoints } from '../../lib/formatPoints';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('./HeatScores', () => ({ HeatScores: () => <p>Public results</p> }));
@@ -627,6 +628,43 @@ describe('SessionPage', () => {
           expect.objectContaining({ teamId: 1, refereeNote: '[adj:-1] False start penalty' }),
         ]),
       })));
+    });
+
+    it('accepts only whole or half points, and says when a run-off result could not be saved', async () => {
+      const tiedComp = competition({
+        teams,
+        sessions: [session(1, {
+          status: 1,
+          heats: [heat(1, {
+            entries: entries(2),
+            races: [race(1, {
+              name: 'Bending',
+              isComplete: true,
+              results: [result(1, 1, { points: 5 }), result(2, 1, { points: 5 })],
+            })],
+          })],
+        })],
+      });
+      vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
+      mount(tiedComp);
+      await screen.findByText('Organiser tools');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
+      expect(await screen.findByText('Couldn’t save the run-off result. Try again.')).toBeInTheDocument();
+
+      const customPts = screen.getByLabelText('Custom points');
+      await userEvent.clear(customPts);
+      await userEvent.type(customPts, '2.25');
+      await userEvent.click(screen.getByRole('button', { name: 'Save override' }));
+      expect(await screen.findByText('Enter whole or half points, such as 3 or 2.5.')).toBeInTheDocument();
+
+      const delta = screen.getByLabelText('Point adjustment');
+      await userEvent.clear(delta);
+      await userEvent.type(delta, '0.3');
+      await userEvent.type(screen.getByLabelText('Adjustment reason'), 'Typo');
+      await userEvent.click(screen.getByRole('button', { name: 'Apply adjustment' }));
+      expect(await screen.findByText('Adjust by whole or half points, such as 1 or -0.5.')).toBeInTheDocument();
+      expect(api.post).not.toHaveBeenCalled();
     });
   });
 });
