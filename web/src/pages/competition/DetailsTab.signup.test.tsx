@@ -47,7 +47,7 @@ function mount(roles: string[] = ['Member'], userId = 'u1') {
 async function openForm() {
   await userEvent.click(await screen.findByRole('button', { name: /Join/ }));
   await userEvent.type(screen.getByLabelText('Your full name'), 'Alice Rider');
-  await userEvent.click(screen.getByRole('checkbox', { name: /parental consent/ }));
+  await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
 }
 
 beforeEach(() => {
@@ -130,4 +130,20 @@ describe('organiser entry link', () => {
     expect(link).toHaveAttribute('href', '/competitions/1/operations');
     expect(screen.queryByText(/Manage \(/)).not.toBeInTheDocument();
   });
+});
+
+
+it('requires the single consent tick and persists it through AcceptTerms', async () => {
+  mount();
+  await userEvent.click(await screen.findByRole('button', { name: /Join/ }));
+  await userEvent.type(screen.getByLabelText('Your full name'), 'Example Rider');
+  const consent = screen.getByRole('checkbox', { name: 'I agree' });
+  expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+  expect(consent).toHaveAccessibleDescription(/parental or guardian consent/);
+  expect(screen.getByRole('button', { name: /Confirm/ })).toBeDisabled();
+  await userEvent.click(consent);
+  await userEvent.click(screen.getByRole('button', { name: /Confirm/ }));
+  await waitFor(() => expect(api.post).toHaveBeenCalled());
+  expect(vi.mocked(api.post).mock.calls[0][1]).toMatchObject({ acceptTerms: true, consentVersion: '2026-10-v2' });
+  expect(vi.mocked(api.post).mock.calls[0][1]).not.toHaveProperty('agreed');
 });

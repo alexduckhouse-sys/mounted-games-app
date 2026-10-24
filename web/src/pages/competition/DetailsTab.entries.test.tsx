@@ -88,7 +88,7 @@ describe('DetailsTab entries (seats and whole-team entry)', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Enter a whole team' }));
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
     await userEvent.type(screen.getByPlaceholderText('e.g. Welsh Dragons'), 'Welsh Dragons');
-    await userEvent.click(screen.getByRole('checkbox', { name: /parental consent/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({
       fullName: 'Pat Manager', teamName: 'Welsh Dragons', wholeTeam: true,

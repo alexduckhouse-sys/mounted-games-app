@@ -71,6 +71,37 @@ public class CompetitionsReadTests : IClassFixture<ApiFactory>
         Assert.DoesNotContain(pastPage.Items, i => i.Id == future);
     }
 
+    [Theory]
+    [InlineData("year=0")]
+    [InlineData("year=10000")]
+    public async Task Picker_RejectsInvalidFilters(string query)
+        => Assert.Equal(HttpStatusCode.BadRequest, (await _f.CreateClient().GetAsync($"/api/competitions/picker?{query}")).StatusCode);
+
+    [Fact]
+    public async Task MyPicker_IsAccountScopedAndCannotBeCached()
+    {
+        const string url = "/api/competitions/picker/mine?past=true";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().GetAsync(url)).StatusCode);
+        var (member, auth) = await _f.SignupAsync("Member");
+        var (other, _) = await _f.SignupAsync("Member");
+        var id = await _f.InDbAsync(async db =>
+        {
+            var comp = new Competition { Name = "Example private selection", StartDate = DateTime.UtcNow.Date.AddDays(-3) };
+            db.SectionSignups.Add(new SectionSignup { UserId = auth.User.Id, Status = SignupPaymentStatus.Paid,
+                Section = new CompetitionSection { Competition = comp, AgeGroup = "Senior", DisplayName = "Seniors" } });
+            await db.SaveChangesAsync();
+            return comp.Id;
+        });
+        var response = await member.GetAsync(url);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.CacheControl!.NoStore);
+        Assert.True(response.Headers.CacheControl.Private);
+        Assert.Null(response.Headers.ETag);
+        Assert.Contains((await response.ReadAsync<CompetitionPickerPage>()).Items, c => c.Id == id);
+        Assert.DoesNotContain((await (await other.GetAsync(url)).ReadAsync<CompetitionPickerPage>()).Items, c => c.Id == id);
+        Assert.Contains((await (await _f.CreateClient().GetAsync("/api/competitions/picker?past=true")).ReadAsync<CompetitionPickerPage>()).Items, c => c.Id == id);
+    }
+
     // ---- list ----
 
     [Fact]

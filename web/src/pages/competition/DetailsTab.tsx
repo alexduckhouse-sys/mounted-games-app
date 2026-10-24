@@ -18,7 +18,6 @@ import { ScorerLinksCard } from './ScorerLinksCard';
 import { EventSponsorsSection, SponsorsCard } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
-import { TermsTickBox } from '../../components/TermsTickBox';
 import { CONSENT_VERSION } from '../../lib/termsTick';
 import { EntryEmailFields, type EntryEmail } from '../../components/EntryEmailFields';
 import { EMAIL_OPT_IN_VERSION, looksLikeEmail, newRequestId } from '../../lib/emailOptIn';
@@ -464,7 +463,6 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
   const [lookingForGuestRiders, setLookingForGuestRiders] = useState(false);
   const [waitingForGuestSpot, setWaitingForGuestSpot] = useState(section.format === 2 && !!(location.state as { waitingForGuestSpot?: boolean } | null)?.waitingForGuestSpot);
   const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
-  const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -481,7 +479,7 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
   const full = seatsLeft === 0;
 
   async function submit() {
-    if (!fullName.trim() || !accepted) return;
+    if (!fullName.trim() || !privacy.agreed) return;
     const emailText = entryEmail.email.trim();
     if (emailText && !looksLikeEmail(emailText)) { setErr("That email address doesn't look right."); return; }
     requestId.current ??= newRequestId();
@@ -502,15 +500,15 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
         lookingForGuestRiders: enteringWholeTeam && lookingForGuestRiders,
         waitingForGuestSpot: guestWaiting,
         wholeTeam: enteringWholeTeam,
-        ...privacy,
-        acceptTerms: accepted,
+        useInitialOnly: privacy.useInitialOnly,
+        noFilming: privacy.noFilming,
+        acceptTerms: privacy.agreed,
         consentVersion: CONSENT_VERSION,
       });
       setFullName(''); setPonyClub(''); setContact(''); setTeamCode(''); setTeamName(''); setWholeTeam(false); setLookingForPair(false); setLookingForGuestRiders(false); setWaitingForGuestSpot(false);
       setEntryEmail({ email: '', optIn: false });
       requestId.current = null;
       setPrivacy({ useInitialOnly: false, noFilming: false });
-      setAccepted(false);
       setDone((signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.')
         + (signup.confirmationEmailStatus === 1 ? ' We have emailed you a confirmation.'
           : signup.confirmationEmailStatus === 2 ? " We couldn't send the confirmation email, but your entry is saved." : ''));
@@ -593,13 +591,12 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
             </label>
           </div>}
           {section.format !== 3 && !guestWaiting && <p className="-mt-1 text-xs text-[rgb(var(--mg-muted))]">The team name carries through to your team’s dec form, so organisers can match the two up.</p>}
-          <RiderPrivacyFields value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
-          <TermsTickBox termsText={competition.termsText ?? null} checked={accepted} onChange={setAccepted} />
+          <RiderPrivacyFields termsText={competition.termsText} value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
           <div className="flex gap-2">
             <button
               type="button"
               onClick={submit}
-              disabled={busy || !fullName.trim() || !accepted || (enteringWholeTeam && !teamName.trim())}
+              disabled={busy || !fullName.trim() || !privacy.agreed || (enteringWholeTeam && !teamName.trim())}
               className="mg-btn mg-btn-primary flex-1 !min-h-11"
             >
               <Check className="h-4 w-4" aria-hidden="true" /> {busy ? 'Joining…' : 'Confirm'}

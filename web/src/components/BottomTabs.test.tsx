@@ -9,7 +9,7 @@ const current = (path: string) => {
 };
 
 describe('BottomTabs', () => {
-  it('links to the four places inside the competition', () => {
+  it('links to the four places inside the competition without a Following tab', () => {
     render(<MemoryRouter initialEntries={['/competitions/12']}><BottomTabs competitionId={12} /></MemoryRouter>);
     expect(screen.getByRole('navigation', { name: 'Competition' })).toBeInTheDocument();
     expect(screen.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
@@ -18,6 +18,7 @@ describe('BottomTabs', () => {
       ['Live & stream', '/competitions/12/chat'],
       ['Details', '/competitions/12/details'],
     ]);
+    expect(screen.queryByRole('link', { name: /Following/i })).not.toBeInTheDocument();
   });
 
   describe('while entries are the only thing to do', () => {

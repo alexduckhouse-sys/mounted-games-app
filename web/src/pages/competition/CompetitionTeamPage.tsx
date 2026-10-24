@@ -16,6 +16,8 @@ import { useCompetition } from './context';
 import { HeatScores } from './HeatScores';
 import { formatPoints } from '../../lib/formatPoints';
 import { publicRiderName } from '../../lib/riderNames';
+import { statsProfileHref } from '../../lib/stats';
+import { StatsSubjectKind } from '../../types';
 
 
 export function CompetitionTeamPage() {
@@ -276,7 +278,7 @@ export function CompetitionTeamPage() {
               .map((rider) => (
                 <li key={rider.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                   <span className="min-w-0 flex-1 truncate font-semibold text-[rgb(var(--mg-ink))]">
-                    {publicRiderName(rider)}
+                    <Link to={statsProfileHref(StatsSubjectKind.Rider, publicRiderName(rider))}>{publicRiderName(rider)}</Link>
                     {rider.isCaptain && (
                       <span className="ml-1.5 rounded bg-[rgb(var(--mg-tint))] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[rgb(var(--mg-heading))]">
                         Capt
@@ -294,7 +296,7 @@ export function CompetitionTeamPage() {
                     )}
                   </span>
                   <span className="shrink-0 text-xs font-medium text-[rgb(var(--mg-muted))]">
-                    {rider.horseName || '—'}
+                    {rider.horseName ? <Link to={statsProfileHref(StatsSubjectKind.Pony, rider.horseName)}>{rider.horseName}</Link> : '—'}
                     {rider.ponyHeightHands != null ? ` · ${heightText(rider.ponyHeightHands)} hh` : ''}
                   </span>
                 </li>

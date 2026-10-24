@@ -149,9 +149,34 @@ function ProfileBody({ profile }: { profile: StatsProfile }) {
       <RefineSection title="Competitions" meta={profile.entries?.length ?? 0} />
       {profile.entries?.length ? <RefineList as="div" label="Competitions">{profile.entries.map((entry) => <EntryRow key={`${entry.teamId}`} entry={entry} />)}</RefineList>
         : <RefineNote>No finished competitions yet.</RefineNote>}
+      {profile.seasons?.length ? <>
+        <RefineSection title="Seasons" meta={profile.seasons.length} />
+        <RefineList label="Seasons">{profile.seasons.map((season) => <li key={`${season.seasonId}:${season.teamProfileId}`} className="rf-row">
+          <span className="rf-grow">
+            <Link to={`/seasons/${season.seasonId}`} className="rf-t1">{season.seasonName}</Link>
+            <span className="rf-t2">{season.teamName} · {plural(season.eventsEntered, 'competition')} · {formatPoints(season.points)} pts{season.rank != null ? ` · ${ordinalPlace(season.rank)}` : ''}</span>
+          </span>
+        </li>)}</RefineList>
+      </> : null}
+      {profile.clubs?.length ? <>
+        <RefineSection title="Clubs represented" meta={profile.clubs.length} />
+        <RefineList label="Clubs represented">{profile.clubs.map((club) => <li key={club.clubName}>
+          <Link to={statsProfileHref(StatsSubjectKind.Club, club.clubName.toLowerCase())} className="rf-row">
+            <span className="rf-grow">
+              <span className="rf-t1">{club.clubName}</span>
+              <span className="rf-t2">{plural(club.entries, 'entry', 'entries')} · {plural(club.competitions, 'competition')}</span>
+            </span>
+            <Chevron />
+          </Link>
+        </li>)}</RefineList>
+      </> : null}
       <RefineSection title={PARTNER_TITLES[profile.kind]} meta={profile.partnerships?.length ?? 0} />
       {profile.partnerships?.length ? <RefineList label={PARTNER_TITLES[profile.kind]}>{profile.partnerships.map((pair) => <li key={`${pair.riderName}|${pair.ponyName}`} className="rf-row">
-        <span className="rf-grow"><span className="rf-t1">{profile.kind === StatsSubjectKind.Rider ? pair.ponyName : profile.kind === StatsSubjectKind.Pony ? pair.riderName : `${pair.riderName} on ${pair.ponyName}`}</span>
+        <span className="rf-grow"><span className="rf-t1">{profile.kind === StatsSubjectKind.Rider
+          ? <Link to={statsProfileHref(StatsSubjectKind.Pony, pair.ponyName.toLowerCase())}>{pair.ponyName}</Link>
+          : profile.kind === StatsSubjectKind.Pony
+            ? <Link to={statsProfileHref(StatsSubjectKind.Rider, pair.riderName.toLowerCase())}>{pair.riderName}</Link>
+            : <><Link to={statsProfileHref(StatsSubjectKind.Rider, pair.riderName.toLowerCase())}>{pair.riderName}</Link> on <Link to={statsProfileHref(StatsSubjectKind.Pony, pair.ponyName.toLowerCase())}>{pair.ponyName}</Link></>}</span>
           <span className="rf-t2">{plural(pair.entries, 'entry', 'entries')} · {plural(pair.competitions, 'competition')}</span></span>
       </li>)}</RefineList> : <RefineNote>No ponies were named on the declaration forms.</RefineNote>}
       <RefineNote>Places come from each age group’s final standings. Hors concours teams have no place.</RefineNote>

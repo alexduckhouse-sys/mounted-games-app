@@ -54,7 +54,13 @@ function raceName(row: TimetableRow, ordinals: Map<number, number>) {
     const group = displaySectionName(row.session.sectionName || row.session.name);
     title = /\bfinals?\b/i.test(group) ? group : `${group} Finals`;
   }
-  return heat ? `${title} · ${heat}` : title;
+  const base = heat ? `${title} · ${heat}` : title;
+  if (row.status === 'live' && row.heat && row.heat.races.length > 0) {
+    const ordered = [...row.heat.races].sort((a, b) => a.orderIndex - b.orderIndex);
+    const raceNum = ordered.findIndex((r) => !r.isComplete) + 1;
+    return `${base} · Race ${raceNum}/${ordered.length}`;
+  }
+  return base;
 }
 
 /** "Lunch break", "Riders briefing"; custom items keep their own name. */
