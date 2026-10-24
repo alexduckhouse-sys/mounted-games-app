@@ -26,7 +26,7 @@ public class TackCheckSection
 
     public bool IsEnabled { get; set; }
     public TackCheckMode Mode { get; set; }
-    /// <summary>The most points a team can get in one sector, in the points modes.</summary>
+    /// <summary>The most points each rider can get in one sector, in the points modes.</summary>
     public int MaxPoints { get; set; } = 10;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

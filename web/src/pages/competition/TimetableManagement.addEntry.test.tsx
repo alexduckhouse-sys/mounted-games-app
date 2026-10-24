@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { competition, session } from '../../test/factories';
+import { competition, session, heat } from '../../test/factories';
 import { api } from '../../api';
 import { TimetableManagement } from './TimetableManagement';
 import { chooseOption, optionLabels } from '../../test/select';
@@ -86,4 +86,21 @@ it('combines two small sections into one heat with BySection or Combined scoring
     scoringMode: 'BySection',
     removeSourceSession: true,
   }));
+});
+
+
+it('uses the creator final race list and planned session when creating finals', async () => {
+  vi.mocked(api.get).mockResolvedValue({ data: null });
+  state.value = { competition: competition({
+    sections: [{ id: 5, competitionId: 1, format: 2, ageGroup: 'Seniors', displayName: 'Senior Teams', finalistCount: 4 }],
+    sessions: [session(1, { heats: [heat(1)] }), session(9, { name: 'Finals · Senior Teams', plannedRaces: ['Test final one', 'Test final two'], lanesPerHeat: 4 })],
+  }), reload: vi.fn(), updatedAt: null };
+  render(<MemoryRouter><TimetableManagement /></MemoryRouter>);
+  fireEvent.click(screen.getByRole('button', { name: /Create Finals Seed/ }));
+  chooseOption(screen.getByRole('combobox', { name: 'Section' }), 'Senior Teams');
+  expect(screen.getByLabelText('Race names (one per line)')).toHaveValue('Test final one\nTest final two');
+  fireEvent.click(screen.getByRole('button', { name: 'Create finals' }));
+  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/finals', expect.objectContaining({
+    existingSessionId: 9, competitionSectionId: 5, raceNames: ['Test final one', 'Test final two'], topN: 4, lanesPerHeat: 4,
+  })));
 });

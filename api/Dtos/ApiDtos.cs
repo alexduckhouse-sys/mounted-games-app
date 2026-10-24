@@ -273,7 +273,8 @@ public record CreateFinalsRequest(
     IReadOnlyList<string> RaceNames,
     int? LanesPerHeat,
     string? Name,
-    bool? LowestFinalFirst = true);
+    bool? LowestFinalFirst = true,
+    int? ExistingSessionId = null);
 
 public record ScaffoldFinalsRequest(
     int? CompetitionSectionId,
@@ -283,7 +284,8 @@ public record ScaffoldFinalsRequest(
     string? Name,
     int? MinutesPerHeat,
     DateTime? ScheduledStart,
-    bool? LowestFinalFirst = true);
+    bool? LowestFinalFirst = true,
+    int? ExistingSessionId = null);
 
 public record AutoTimetableRequest(
     int? RacesPerHeat,
