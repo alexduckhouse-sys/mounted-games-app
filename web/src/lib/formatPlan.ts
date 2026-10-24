@@ -69,8 +69,8 @@ export function planTimetable({ sessions, fixed, eventStart, gapMinutes = 10 }: 
     const key = arenaKey(session.arena);
     const sizes = heatSizes(session.teamCount, session.lanes);
     const minutes = sizes.length === 0 ? 0
-      : session.raceFinals ? 3 * session.raceCount * session.minutesPerHeat
-        : sizes.length * session.raceCount * session.minutesPerHeat;
+      : session.raceFinals ? 3 * session.minutesPerHeat
+        : sizes.length * session.minutesPerHeat;
     let start = cursors.get(key) ?? eventStart.getTime();
     if (minutes > 0) {
       let moved = true;

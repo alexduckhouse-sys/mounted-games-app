@@ -787,7 +787,7 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
         Assert.Equal(SessionKind.Race, s.Kind);
         Assert.Equal(2, s.Heats.Count);                       // 7 teams, max 6 per heat
         Assert.Equal(t.Length, s.Heats.Sum(h => h.Entries.Count));
-        Assert.All(s.Heats, h => { Assert.Equal(5, h.Races.Count); Assert.Equal(75, h.DurationMinutes); });
+        Assert.All(s.Heats, h => { Assert.Equal(5, h.Races.Count); Assert.Equal(15, h.DurationMinutes); });
         Assert.Equal(new[] { "Heat 1", "Heat 2" }, s.Heats.Select(h => h.Label));
     }
 
@@ -801,8 +801,8 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
             Auto(races: 2, sessions: 2, lanes: 2, minutes: 10, gap: 5))).ReadAsync<CompetitionDetail>();
 
         Assert.Equal(new[] { "Multi · Session 1", "Multi · Session 2" }, d.Sessions.Select(s => s.Name));
-        // 4 teams / 2 lanes = 2 heats * 2 races * 10 min = 40 min + 5 min gap
-        Assert.Equal(d.Sessions[0].ScheduledStart!.Value.AddMinutes(45), d.Sessions[1].ScheduledStart);
+        // 4 teams / 2 lanes = 2 whole heats * 10 min = 20 min + 5 min gap
+        Assert.Equal(d.Sessions[0].ScheduledStart!.Value.AddMinutes(25), d.Sessions[1].ScheduledStart);
         Assert.Equal(d.Sessions[0].OrderIndex + 1, d.Sessions[1].OrderIndex);
     }
 

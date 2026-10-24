@@ -42,13 +42,13 @@ describe('computeTimings', () => {
     expect(timings.heats.some((h) => h.shifted)).toBe(false);
   });
 
-  it('uses a heat’s own duration, then minutes per heat per race, then the default', () => {
+  it('uses a heat’s own duration, then minutes per heat, then the default', () => {
     const own = heat(1, { durationMinutes: 20 });
     const perRace = heat(2, { races: [race(1), race(2), race(3)] });
     const perHeat = heat(3);
     const timings = computeTimings([session(1, { scheduledStart: at(0), minutesPerHeat: 7, heats: [own, perRace, perHeat] })]).get(1)!;
-    expect(timings.heats.map((h) => timeOf(h.scheduled))).toEqual([ms(0), ms(20), ms(41)]);
-    expect(timeOf(timings.effectiveEnd)).toBe(ms(48));
+    expect(timings.heats.map((h) => timeOf(h.scheduled))).toEqual([ms(0), ms(20), ms(27)]);
+    expect(timeOf(timings.effectiveEnd)).toBe(ms(34));
     const fallback = computeTimings([session(1, { scheduledStart: at(0), heats: [heat(1), heat(2)] })]).get(1)!;
     expect(timeOf(fallback.heats[1].scheduled)).toBe(ms(30));
   });
