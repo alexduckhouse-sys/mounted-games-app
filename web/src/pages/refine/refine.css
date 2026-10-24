@@ -2,8 +2,12 @@
    One level of lists, status as coloured text, sheets for rare edits. Everything reads --mg-* tokens, so all themes work. */
 
 /* On signed-in routes AppShell's <main> has top padding, which showed the page background as a white bar between the app header and the header band. The band should butt up against the app header. */
-main:has(> .rf-page:first-child) { padding-top: 0; }
-.rf-page { font-family: 'Barlow', system-ui, sans-serif; color: rgb(var(--mg-ink)); }
+main:has(.rf-hd) { padding-top: 0; }
+.rf-page { width: 100%; font-family: 'Barlow', system-ui, sans-serif; color: rgb(var(--mg-ink)); animation: rf-page-in 180ms cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes rf-page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* Header band: back / context / actions, then the title, an optional line and underline tabs. */
 .rf-hd { border-image: conic-gradient(rgb(var(--mg-header)) 0 0) fill 0 // 0 100vmax; color: #fff; padding-bottom: 10px; margin-inline: -16px; padding-inline: 4px 8px; }
@@ -23,12 +27,15 @@ main:has(> .rf-page:first-child) { padding-top: 0; }
 /* Lists: full-width rows, never cards in cards. */
 .rf-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0; padding: 14px 0 6px; font: 700 12px/1.2 'Barlow', sans-serif; letter-spacing: .04em; text-transform: uppercase; color: rgb(var(--mg-muted)); }
 .rf-sec > span { text-transform: none; letter-spacing: 0; font-weight: 500; }
-.rf-list { padding: 0; list-style: none; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-rule)); border-radius: 10px; overflow: hidden; }
-.rf-list > li + li, .rf-list > .rf-row + .rf-row, .rf-list > details + details, .rf-list > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
-.rf-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 16px; width: 100%; box-sizing: border-box; background: rgb(var(--mg-surface)); color: inherit !important; text-align: left; text-decoration: none !important; font: inherit; border: 0; }
+:where(.rf-list) { padding: 0; list-style: none; }
+.rf-list { background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-rule)); border-radius: 10px; overflow: hidden; }
+.rf-list > li + li, .rf-list > .rf-row + .rf-row, .rf-list > details + details, .rf-list:not(.flex-col) > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.rf-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 16px; width: 100%; box-sizing: border-box; background: rgb(var(--mg-surface)); color: inherit !important; text-align: left; text-decoration: none !important; font: inherit; border: 0; transition: background-color 150ms cubic-bezier(0.22, 1, 0.36, 1); }
 a.rf-row:hover, button.rf-row:hover, summary.rf-row:hover { background: rgb(var(--mg-subtle)); }
+a.rf-row:active, button.rf-row:active, summary.rf-row:active { background: rgb(var(--mg-tint) / .65); }
 summary.rf-row { list-style: none; cursor: pointer; }
 summary.rf-row::-webkit-details-marker { display: none; }
+.rf-chev-down { transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1); }
 details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 .rf-grow { flex: 1; min-width: 0; }
 .rf-t1 { display: block; font-weight: 600; overflow-wrap: anywhere; }
@@ -50,7 +57,8 @@ details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 .rf-demo { display: inline-block; font: 700 11px/1 'Barlow', sans-serif; letter-spacing: .08em; background: #ffe27a; color: #3a2a00; border-radius: 3px; padding: 4px 6px; vertical-align: middle; }
 
 /* Buttons and fields */
-.rf-btn { min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1.5px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 15px/1 'Barlow', sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; text-decoration: none !important; white-space: nowrap; box-sizing: border-box; }
+.rf-btn { min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1.5px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 15px/1 'Barlow', sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; text-decoration: none !important; white-space: nowrap; box-sizing: border-box; transition: background-color 150ms cubic-bezier(0.22, 1, 0.36, 1), border-color 150ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms cubic-bezier(0.22, 1, 0.36, 1), transform 120ms cubic-bezier(0.22, 1, 0.36, 1); }
+.rf-btn:active:not(:disabled) { transform: scale(0.98); }
 .rf-btn:disabled { opacity: .55; cursor: not-allowed; }
 .rf-btn-primary { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: #fff; }
 .rf-btn-danger { background: rgb(var(--mg-elim)); border-color: rgb(var(--mg-elim)); color: #fff; }
@@ -58,7 +66,7 @@ details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 .rf-wide { width: 100%; }
 .rf-btn:focus-visible, .rf-row:focus-visible, .rf-qty button:focus-visible, .rf-tab:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 .rf-fld { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: rgb(var(--mg-body)); }
-.rf-fld input, .rf-fld select, .rf-fld textarea { min-height: 44px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 8px; padding: 0 10px; font: 500 16px 'Barlow', sans-serif; color: rgb(var(--mg-ink)); background: rgb(var(--mg-surface)); box-sizing: border-box; width: 100%; }
+.rf-fld input, .rf-fld select, .rf-fld textarea { min-height: 44px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 8px; padding: 0 10px; font: 500 16px 'Barlow', sans-serif; color: rgb(var(--mg-ink)); background: rgb(var(--mg-surface)); box-sizing: border-box; width: 100%; transition: border-color 150ms cubic-bezier(0.22, 1, 0.36, 1); }
 .rf-fld input[readonly] { background: rgb(var(--mg-subtle)); }
 .rf-fld input:focus-visible, .rf-fld select:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 1px; }
 .rf-qty { display: inline-flex; align-items: center; border: 1.5px solid rgb(var(--mg-control)); border-radius: 8px; overflow: hidden; flex: none; }
@@ -76,14 +84,18 @@ details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 .rf-foot.rf-above-tabs { --rf-foot-offset: 66px; padding-bottom: 12px; }
 
 /* Bottom sheet */
-.rf-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(var(--mg-overlay) / .55); }
-.rf-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-width: 32rem; margin-inline: auto; max-height: 90vh; overflow-y: auto; background: rgb(var(--mg-surface)); border-radius: 14px 14px 0 0; box-shadow: 0 -8px 24px rgb(var(--mg-overlay) / .25); padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; animation: rf-up .2s ease-out; }
+.rf-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(var(--mg-overlay) / .55); animation: rf-fade 160ms cubic-bezier(0.22, 1, 0.36, 1); }
+.rf-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-width: 32rem; margin-inline: auto; max-height: 90vh; overflow-y: auto; background: rgb(var(--mg-surface)); border-radius: 14px 14px 0 0; box-shadow: 0 -8px 24px rgb(var(--mg-overlay) / .25); padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; animation: rf-up 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 .rf-grab { width: 40px; height: 4px; border-radius: 2px; background: rgb(var(--mg-control)); align-self: center; }
 .rf-sheet-head { display: flex; align-items: center; justify-content: space-between; }
 .rf-sheet h2 { margin: 0; font: 700 22px 'Barlow Condensed', sans-serif; color: rgb(var(--mg-heading)); }
 .rf-actions { display: flex; gap: 8px; }
+@keyframes rf-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rf-up { from { transform: translateY(24px); opacity: .6; } to { transform: translateY(0); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .rf-sheet { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .rf-page, .rf-sheet, .rf-scrim { animation: none; }
+  .rf-btn, .rf-row, .rf-chev-down, .rf-fld input, .rf-fld select, .rf-fld textarea { transition: none; }
+}
 
 /* Tables (standings, rounds, history) */
 .rf-table { border-collapse: collapse; width: 100%; background: rgb(var(--mg-surface)); font-size: 15px; }
@@ -93,6 +105,9 @@ details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 .rf-table th:last-child, .rf-table td:last-child { padding-right: 16px; text-align: right; }
 .rf-table a { color: inherit !important; font-weight: 600; display: flex; align-items: center; min-height: 44px; text-decoration: none !important; }
 .rf-table-wrap { margin-inline: -16px; border-block: 1px solid rgb(var(--mg-rule)); }
+@media (min-width: 640px) {
+  .rf-table-wrap { margin-inline: 0; border: 1px solid rgb(var(--mg-rule)); border-radius: 10px; overflow: hidden; }
+}
 
 /* Demo checkout outcome icons and the padlock screen */
 .rf-state-ok { fill: rgb(var(--mg-ok) / .14); }
@@ -100,8 +115,3 @@ details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 .rf-state-mut { fill: rgb(var(--mg-tint)); }
 .rf-lockwrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 56px 24px 0; text-align: center; }
 .rf-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-
-/* Screens outside the competition shell (stats, seasons, team profiles) sit in a plain <main> padded 12px on phones, not the
-   16px the header, tables and footer bleed assume, so the header band overhung the screen by 4px each side. Pad the page
-   to 16px so everything lines up with the rest of the app. */
-@media (max-width: 639px) { main:not(.skin) .rf-page { padding-inline: 4px; } }

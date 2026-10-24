@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { useCompetition } from './context';
@@ -16,6 +16,7 @@ interface Cell { points: number; eliminated: boolean; sitOut: boolean; status?: 
 /** The public heat page: who is racing, the score for every race so far and the running total. */
 export function HeatScores({ session, heats, activeHeatId }: { session: Session; heats: Heat[]; activeHeatId: number | null }) {
   const { competition, streams } = useCompetition();
+  const [showRules, setShowRules] = useState(false);
   const canWatch = !!competition.streamUrl || streams.some((stream) => stream.status !== 2);
   // The page can be reached with ?heat=<id> while already mounted (next-heat link), so the URL wins over the parent's initial pick.
   const [searchParams] = useSearchParams();
@@ -145,19 +146,6 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
         </section>
       )}
 
-      {heat && races.length > 0 && (
-        <section aria-label="Races in this heat" className="mg-card px-3">
-          <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-            {columns.map(({ race, label }, i) => (
-              <li key={race.id} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate py-2">{label}{i === runningIndex && <span className="mg-meta"> · running</span>}</span>
-                <RaceRulesButton raceName={race.name} className="!h-11 !w-11" />
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
       {finished ? (
         <div className="grid grid-cols-2 gap-2.5">
           {session.competitionSectionId != null && <Link to={`/competitions/${competition.id}/toplists?section=${session.competitionSectionId}`} className="mg-btn mg-btn-primary">Toplist</Link>}
@@ -170,6 +158,30 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
           {canWatch && <Link to={`/competitions/${competition.id}/chat`} className="mg-btn mg-btn-primary flex-1">Watch stream</Link>}
           {session.competitionSectionId != null && <Link to={`/competitions/${competition.id}/toplists?section=${session.competitionSectionId}`} className={`mg-btn flex-1 ${canWatch ? 'mg-btn-secondary' : 'mg-btn-primary'}`}>{section ? `${section} toplist` : 'Toplist'}</Link>}
         </div>
+      )}
+
+      {heat && races.length > 0 && (
+        <button
+          type="button"
+          className="mg-text-link self-center"
+          aria-expanded={showRules}
+          onClick={() => setShowRules((open) => !open)}
+        >
+          {showRules ? 'Close race rules and setup' : 'Race rules and arena setup'}
+        </button>
+      )}
+
+      {heat && races.length > 0 && showRules && (
+        <section aria-label="Races in this heat" className="mg-card px-3">
+          <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+            {columns.map(({ race, label }, i) => (
+              <li key={race.id} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate py-2">{label}{i === runningIndex && <span className="mg-meta"> · running</span>}</span>
+                <RaceRulesButton raceName={race.name} className="!h-11 !w-11" />
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
     </div>
   );

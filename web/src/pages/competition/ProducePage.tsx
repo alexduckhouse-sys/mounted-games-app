@@ -128,7 +128,7 @@ function Producer() {
   return (
     <div className="mx-auto flex w-full flex-col gap-4 py-4">
       <div className="flex items-center gap-2">
-        <Link to={`/competitions/${competition.id}/chat`} className="mg-nav-btn !px-0" aria-label="Back to Live & stream"><ChevronLeft className="h-5 w-5" /></Link>
+        <Link to={`/competitions/${competition.id}/chat`} className="mg-btn mg-btn-secondary !min-h-11 !w-11 !px-0" aria-label="Back to Live & stream"><ChevronLeft className="h-5 w-5" /></Link>
         <h1 className="mg-h1 mg-h1-sm flex-1">Producer</h1>
         <span className="text-sm text-[rgb(var(--mg-muted))]">{streams.filter((s) => s.status !== 2).length} live</span>
       </div>
@@ -145,8 +145,8 @@ function Producer() {
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-1">
       <section className="mg-card flex flex-col gap-3 p-4" aria-labelledby="banner-title">
         <div className="flex items-center justify-between gap-2">
-          <h2 id="banner-title" className="flex items-center gap-2 font-bold"><Megaphone className="h-4 w-4" aria-hidden="true" />Banner</h2>
-          <span className="text-sm">{overlay.bannerText ? <>On air: <strong>{overlay.bannerText}</strong></> : 'No banner up'}</span>
+          <h2 id="banner-title" className="flex shrink-0 items-center gap-2 font-bold"><Megaphone className="h-4 w-4" aria-hidden="true" />Banner</h2>
+          <span className="min-w-0 truncate text-sm">{overlay.bannerText ? <>On air: <strong>{overlay.bannerText}</strong></> : 'No banner up'}</span>
         </div>
         <label className="mg-field">
           <span className="sr-only">Banner text</span>

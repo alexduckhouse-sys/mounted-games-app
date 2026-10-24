@@ -38,7 +38,6 @@ export function TackCheckTab({ competitionId }: { competitionId: string }) {
   return <section aria-labelledby="tack-title">
     <RefineSection title="Tack check" />
     <h2 id="tack-title" className="sr-only">Tack check</h2>
-    <RefineNote>Turn the tack check on for an age group, choose what it counts for, then record each team’s result. Blank forms to fill in by hand are under Print sheets.</RefineNote>
     <nav aria-label="Tack check form"><RefineList as="div">
       <Link className="rf-row" to={`/event-tools/${competitionId}/print/tack-check`}>
         <span className="rf-grow"><span className="rf-t1">Print tack check forms</span><span className="rf-t2">One form per age group, with each team’s riders and ponies</span></span><Chevron />

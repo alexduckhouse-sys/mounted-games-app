@@ -226,7 +226,7 @@ export function ManageTeamBlock({ team, onSaved }: { team: Team; onSaved: () => 
       <label className="block text-xs">
         <span className="text-[rgb(var(--mg-muted))]">Trainer</span>
         <SelectField className="input mt-1 min-h-11 text-sm" value={trainerId} onChange={(e) => setTrainerId(e.target.value)}>
-          <option value="">— no trainer yet —</option>
+          <option value="">No trainer yet</option>
           {trainers.map((tr) => <option key={tr.userId} value={tr.userId}>{tr.fullName}</option>)}
         </SelectField>
       </label>

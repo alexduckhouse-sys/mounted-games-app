@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
@@ -7,6 +8,7 @@ import { competition, heat, session, team } from '../../test/factories';
 import type { CompetitionDetail, CompetitionSection } from '../../types';
 import { CompetitionContext, type CompetitionCtx } from './context';
 import { AfterDrawOnly, CompetitionHome } from './CompetitionHome';
+import { SectionEntryPage } from './DetailsTab';
 import { entryFeeText } from '../../lib/competitionPhase';
 
 vi.mock('../../api', async (importOriginal) => ({
@@ -38,6 +40,7 @@ function mount(roles: string[] | null, extra: Partial<CompetitionDetail> = {}, p
         <CompetitionContext.Provider value={ctx}>
           <Routes>
             <Route path="/competitions/:id" element={<CompetitionHome />} />
+            <Route path="/competitions/:id/enter/:sectionId" element={<SectionEntryPage />} />
             <Route path="/competitions/:id/toplists" element={<AfterDrawOnly><p>Toplists</p></AfterDrawOnly>} />
           </Routes>
         </CompetitionContext.Provider>
@@ -65,10 +68,13 @@ describe('the entry page', () => {
     expect(screen.queryByText('Timetable board')).not.toBeInTheDocument();
   });
 
-  it('lets a signed-in member join a section', async () => {
+  it('lets a signed-in member join a section on its own entry page', async () => {
     mount(['Member']);
-    expect(await screen.findAllByRole('button', { name: /Join/ })).toHaveLength(2);
+    const joins = await screen.findAllByRole('button', { name: /Join/ });
+    expect(joins).toHaveLength(2);
     expect(screen.queryByRole('link', { name: 'Sign in to enter' })).not.toBeInTheDocument();
+    await userEvent.click(joins[0]);
+    expect(await screen.findByPlaceholderText('Your full name')).toBeInTheDocument();
   });
 
   it('shows Entries closed instead of a button', async () => {

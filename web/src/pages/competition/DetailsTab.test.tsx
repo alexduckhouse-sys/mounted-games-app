@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
-import { DetailsTab } from './DetailsTab';
+import { DetailsTab, SectionEntryPage } from './DetailsTab';
 import { useCompetition } from './context';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
@@ -42,7 +42,17 @@ beforeEach(() => {
   viewer();
 });
 
-const renderTab = () => render(<CompactPageBarProvider><MemoryRouter><HeaderProbe /><DetailsTab /></MemoryRouter></CompactPageBarProvider>);
+const renderTab = (initialPath = '/competitions/5/details') => render(
+  <CompactPageBarProvider>
+    <MemoryRouter initialEntries={[initialPath]}>
+      <HeaderProbe />
+      <Routes>
+        <Route path="/competitions/:id/details" element={<DetailsTab />} />
+        <Route path="/competitions/:id/enter/:sectionId" element={<SectionEntryPage />} />
+      </Routes>
+    </MemoryRouter>
+  </CompactPageBarProvider>,
+);
 
 describe('DetailsTab', () => {
   it('puts the page title and refresh in the app header', async () => {
@@ -78,11 +88,19 @@ describe('DetailsTab', () => {
     expect(screen.getAllByRole('button', { name: /Join/ })).toHaveLength(1);
   });
 
-  it('keeps the entry form inside its tile and opens it in full width', async () => {
+  it('opens the entry form on its own page and returns on Cancel', async () => {
     renderTab();
     await userEvent.click(screen.getAllByRole('button', { name: /Join/ })[0]);
+    expect(screen.getByRole('heading', { name: 'Enter Under 10' })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Your full name')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByPlaceholderText('Your full name')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Details & entries', level: 1 })).toBeInTheDocument();
+  });
+
+  it('shows Section not found when the sectionId in the URL does not exist', () => {
+    renderTab('/competitions/5/enter/999');
+    expect(screen.getByRole('alert')).toHaveTextContent('Section not found.');
     expect(screen.queryByPlaceholderText('Your full name')).not.toBeInTheDocument();
   });
 });

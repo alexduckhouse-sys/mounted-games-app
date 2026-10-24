@@ -72,9 +72,9 @@ function heatHeadline(session: Session, heatLabel: string): string {
     && sessionPart.toLowerCase() !== sectionPart.toLowerCase()
     && !sectionPart.toLowerCase().includes(sessionPart.toLowerCase());
   if (looksLikeExtraInfo) {
-    return `${sectionPart} · ${sessionPart} — ${heatLabel}`;
+    return `${sectionPart} · ${sessionPart} · ${heatLabel}`;
   }
-  return `${sectionPart} — ${heatLabel}`;
+  return `${sectionPart} · ${heatLabel}`;
 }
 
 interface TimeChipProps {
@@ -269,7 +269,7 @@ export function TimetableManagement() {
       {anyShift && (
         <div className="text-[11px] text-amber-700 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-md p-1.5 flex items-center gap-1.5">
           <AlertTriangle className="w-3 h-3" />
-          Times have shifted from the scheduled plan — old times shown struck through, new times in amber.
+          Times have shifted from the scheduled plan.
         </div>
       )}
 
@@ -384,10 +384,10 @@ function SessionHeatRows({
           <Trophy className="w-5 h-5 text-amber-600 dark:text-amber-300 shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="font-bold text-sm text-amber-900 dark:text-amber-100 truncate">
-              {title} — finals scaffolded
+              {title} · Finals ready to seed
             </div>
             <div className="text-xs text-amber-700 dark:text-amber-200">
-              {heats.length} empty {heats.length === 1 ? 'heat' : 'heats'} ({heats.map((h) => h.label).filter(Boolean).join(', ')}). Populate when you're ready to seed from current standings.
+              {heats.length} empty {heats.length === 1 ? 'heat' : 'heats'} ({heats.map((h) => h.label).filter(Boolean).join(', ')}). Seed from the current standings when qualifying finishes.
             </div>
           </div>
           <button
@@ -518,7 +518,7 @@ function HeatRow({
             <span
               key={e.id}
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700/60 text-[11px]"
-              title={`Lane ${e.laneIndex} — ${e.teamName}`}
+              title={`Lane ${e.laneIndex}: ${e.teamName}`}
             >
               <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm bg-slate-900 text-white text-[9px] font-black tabular-nums">
                 {e.laneIndex}
@@ -874,7 +874,7 @@ function FinalsCta({ onOpen }: { onOpen: () => void }) {
       <div className="text-left flex-1">
         <div className="font-bold text-base sm:text-lg text-amber-900 dark:text-amber-100">Create Finals</div>
         <div className="text-xs sm:text-sm text-amber-700 dark:text-amber-200">
-          Seed a finals session from current standings — top teams advance.
+          Seed a finals session from the current standings.
         </div>
       </div>
       <Plus className="w-5 h-5 text-amber-700 dark:text-amber-200 shrink-0" />
@@ -1271,11 +1271,9 @@ function CreateFinalsModal({
               onChange={(e) => setScaffoldOnly(e.target.checked)}
             />
             <span>
-              <span className="font-semibold">Scaffold only — populate later.</span>{' '}
+              <span className="font-semibold">Create empty finals now, seed teams later.</span>{' '}
               <span className="text-slate-500 dark:text-slate-300">
-                Creates the finals session with empty A/B/C Final heats and the race list.
-                You can fill them with the top teams from standings later via the
-                "Populate from standings" button on the timetable.
+                Adds the finals session and heats to the timetable now so you can fill the teams from standings once qualifying finishes.
               </span>
             </span>
           </label>

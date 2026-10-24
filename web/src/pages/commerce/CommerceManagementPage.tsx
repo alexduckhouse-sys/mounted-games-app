@@ -91,7 +91,7 @@ function CommerceManagementContent() {
   const reviewed = listings?.filter((listing) => listing.status !== 0) ?? [];
 
   return (
-    <div className="skin commerce-page mx-auto w-full max-w-3xl pb-6">
+    <div className="skin commerce-page mx-auto w-full max-w-4xl pb-6">
       <header className="commerce-title-block"><p className="mg-eyebrow">{competition.name}</p><h1 className="mg-h1">Manage shop</h1><p className="mg-lede">Approve listings, check orders and choose how this event records payments.</p></header>
       <div className="mg-seg w-full" aria-label="Shop management view">
         <button type="button" aria-pressed={view === 'listings'} onClick={() => setView('listings')}>Listings{pending.length > 0 ? ` (${pending.length})` : ''}</button>
@@ -107,7 +107,7 @@ function CommerceManagementContent() {
         </div>
         {settings == null ? <p role="status">Loading payment mode…</p> : (
           <div className="flex flex-wrap items-center gap-3">
-            <StatusPill tone={settings.isDemo ? 'test' : 'neutral'}>{settings.isDemo ? 'DEMO — no money is taken' : 'Manual payments'}</StatusPill>
+            <StatusPill tone={settings.isDemo ? 'test' : 'neutral'}>{settings.isDemo ? 'DEMO · no money is taken' : 'Manual payments'}</StatusPill>
             <div className="mg-toggle">
               <button type="button" aria-pressed={!settings.isDemo} disabled={busy || settings.isLocked} onClick={() => void setDemo(false)}>Manual</button>
               <button type="button" aria-pressed={settings.isDemo} disabled={busy || settings.isLocked} onClick={() => void setDemo(true)}>Demo</button>

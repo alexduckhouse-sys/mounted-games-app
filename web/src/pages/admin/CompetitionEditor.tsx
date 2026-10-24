@@ -183,7 +183,7 @@ export function CompetitionEditor() {
   return (
     <div ref={pageRef} className="skin mx-auto flex w-full max-w-5xl flex-col gap-6 pb-40 pt-6 sm:pt-10">
       <div className="flex flex-col gap-2">
-        <h1 className="mg-display text-[44px] font-bold leading-none text-[rgb(var(--mg-heading))]">{isEdit ? 'Edit competition' : 'New competition'}</h1>
+        <h1 className="mg-display text-[34px] font-bold leading-none text-[rgb(var(--mg-heading))] sm:text-[44px]">{isEdit ? 'Edit competition' : 'New competition'}</h1>
         {savedText && (
           <p className="text-sm font-medium text-[rgb(var(--mg-muted))]">
             {savedText}{' '}
@@ -208,9 +208,8 @@ export function CompetitionEditor() {
       </div>
 
       <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
-        <div className="mx-auto max-w-5xl px-3 sm:px-4">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 py-3">
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm font-medium text-[rgb(var(--mg-muted))]">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-3 py-3 sm:px-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm font-medium text-[rgb(var(--mg-muted))]">
               {!mayOrganise && <span>Only admins and trainers can save changes.</span>}
               {Object.keys(problems).length > 0 && <span role="alert" className="text-[rgb(var(--mg-elim))]">Please fix the highlighted fields.</span>}
               {error && (
@@ -225,7 +224,6 @@ export function CompetitionEditor() {
             {last
               ? <button type="button" onClick={() => void create()} disabled={busy || !mayOrganise} className="mg-btn mg-btn-primary !min-h-12">{busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create competition'}</button>
               : <button type="button" onClick={next} className="mg-btn mg-btn-primary !min-h-12">Next</button>}
-          </div>
         </div>
       </footer>
     </div>

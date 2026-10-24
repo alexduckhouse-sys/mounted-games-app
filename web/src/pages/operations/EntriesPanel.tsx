@@ -207,7 +207,7 @@ function StatusSheetView({ competitionId, sheet, onClose, onDone }: {
       <form className="ops-form" onSubmit={(event) => void submit(event)}>
         {next === 0
           ? <RefineNote>The team goes back into the heats it left, if they haven’t been scored or re-drawn since.</RefineNote>
-          : <RefineNote>The team leaves every heat that hasn’t been scored. Scored, signed-off and started heats keep it, and its points stay. Phones following this event update straight away. Nothing else changes until you apply a re-draw.</RefineNote>}
+          : <RefineNote>Removes the team from unscored heats. Scored or started heats keep the team and its points.</RefineNote>}
         <label className="rf-fld">{next === 0 ? 'Note (optional)' : next === 2 ? 'Reason (optional)' : 'Reason'}
           <textarea className="ops-note-input" value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
         </label>

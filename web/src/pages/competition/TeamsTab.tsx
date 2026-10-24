@@ -141,7 +141,7 @@ export function TeamsTab() {
               onChange={(e) => setDraft({ ...form, clubId: parseInt(e.target.value, 10) })}
               required
             >
-              <option value={0}>— pick club —</option>
+              <option value={0}>Choose a club</option>
               {clubs.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -197,7 +197,7 @@ export function TeamsTab() {
                         </span>
                       )}
                       {t.isHorsConcours && (
-                        <span title="Hors Concours — competes but does not score" className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-100 text-[9px] font-semibold">
+                        <span title="Hors Concours: competes without scoring" className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-100 text-[9px] font-semibold">
                           <Ban className="w-2.5 h-2.5" /> HC
                         </span>
                       )}

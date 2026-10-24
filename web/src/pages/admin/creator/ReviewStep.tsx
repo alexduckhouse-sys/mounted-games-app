@@ -26,7 +26,7 @@ export function ReviewStep({ draft, change, problems, teamCounts, real }: StepPr
 
   return (
     <section aria-labelledby="cw-review" className="flex flex-col gap-[18px]">
-      <StepIntro title="Review">Check it over. You can go back to any step, and change everything later.</StepIntro>
+      <StepIntro title="Review" />
 
       <div className="mg-card flex flex-col gap-1 p-4">
         <strong className="text-[19px] text-[rgb(var(--mg-heading))]">{draft.name.trim() || 'Untitled competition'}</strong>

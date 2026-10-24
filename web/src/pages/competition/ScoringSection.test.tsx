@@ -112,10 +112,13 @@ describe('the race stack', () => {
     expect(screen.getByRole('button', { name: /^Alpha, lane S/ })).toBeDisabled();
   });
 
-  it('lists the lane view after the races on a phone, and the heat table and rules below', () => {
+  it('lists the lane view after the races on a phone, and opens the race rules on click', async () => {
+    const user = userEvent.setup();
     render(<Harness />);
     expect(screen.getByRole('region', { name: 'Lane view' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Heat table' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Race rules' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Race rules and arena setup' }));
     expect(screen.getByRole('region', { name: 'Race rules' })).toHaveTextContent('Rules for Race 2');
   });
 });

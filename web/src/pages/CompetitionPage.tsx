@@ -314,7 +314,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   return (
     <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
       <div className="flex flex-col gap-4">
-        <div className="pt-4 empty:hidden"><ScoreOutboxPanel competitionId={data.id} /></div>
+        <div className="pt-4 empty:hidden -mb-4 has-[+.rf-page]:mb-0"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />
         {partial && <p role="status" className="mg-notice mx-auto w-full max-w-xl">Loading the rest of the timetable…</p>}
         {/* Connection trouble is shown by the pill in the header; this only explains a saved copy. */}

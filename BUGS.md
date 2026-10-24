@@ -285,3 +285,323 @@ Issues #66 to #78 hold these bugs, grouped by area. Bugs 03, 05, 07, 14, 15, 16,
   - `App.tsx:111` redirects `/shop` to `/competitions`, leaving `ShopPage.tsx` and `ShopController.cs` (tack/equipment classifieds with photos, prices, and private/public comments) orphaned and unreachable, while `EventShopPage.tsx` (`/competitions/:id/shop`) only shows organiser-approved basket items for a single competition.
 - **Fix:**
   - Merge both into a single unified Shop experience accessible both at `/shop` (global marketplace + event shops) and `/competitions/:id/shop` (event add-ons/merch + tack & equipment listings to collect at the event).
+
+### BUG-27 — `FormatPage.generate()`, `SessionsController.GenerateHeats`, `GenerateRaceFinals` & `AutoTimetable` Use Unseeded `rng.Next()` Instead of the Fair Seeded Draw (`CompetitionDrawService`)
+- **Where:**
+  - `web/src/pages/admin/FormatPage.tsx` (Lines 184–202, `generate()`)
+  - `api/Controllers/SessionsController.cs` (Lines 244–259 `GenerateRaceFinals` & Lines 481, 529–539 `GenerateHeats` / `SplitIntoBalancedGroups`)
+  - `api/Controllers/CompetitionsController.cs` (Lines 815–879, `AutoTimetable`)
+  - `api/Services/Operations/CompetitionDrawService.cs` (Lines 42–43)
+- **What happens:**
+  1. When the organiser generates heats on `FormatPage.tsx:196-198`, it calls `generate-heats` or `generate-race-finals` on each session one by one.
+  2. `SessionsController.GenerateHeats` (`Line 481`) and `CompetitionsController.AutoTimetable` use `SplitIntoBalancedGroups` (`teamIds.OrderBy(_ => rng.Next())`) per session independently — completely bypassing `CompetitionDrawService` (`opponentCounts`, `laneCounts`, and `SmallHeatCost`), so the same teams can be drawn against each other in the same lanes across every session!
+  3. Similarly, `SessionsController.GenerateRaceFinals` (`Lines 244–259`) uses `teamIds.OrderBy(_ => rng.Next())` for each race's `Q1` and `Q2` in `Heat-Heat-Final` (`usesRaceFinals`) without balancing opponent meetings, lane counts, or smaller-heat assignments across races, and `CompetitionDrawService.cs:42-43` rejects `RaceRoundStage != RaceRoundStage.None` (`"Race-finals heats cannot be redrawn with the section draw."`).
+- **Fix:**
+  - Make `FormatPage.generate()`, `GenerateHeats`, `GenerateRaceFinals`, and `AutoTimetable` always use the fair seeded draw engine (`CompetitionDrawService` — minimising repeated opponents, balancing lanes `1..N`, and balancing `SmallHeatCost` when heat sizes are unequal) across all sessions/races in the section.
+
+### BUG-28 — `CompetitionDrawService` Includes Scaffolded `A / B / C Final` Sessions in the Qualifier Section Draw
+- **Where:**
+  - `api/Services/Operations/CompetitionDrawService.cs` (Lines 32–38)
+  - `api/Controllers/CompetitionsController.cs` (`ScaffoldFinals`)
+- **What happens:**
+  - When `ScaffoldFinals` creates placeholder `A Final`, `B Final`, `C Final` sessions before the competition starts, it sets `Kind = SessionKind.Race` and leaves `Heat.RaceRoundStage = RaceRoundStage.None` (`0`).
+  - When the organiser later runs the Section Draw (`CompetitionDrawService.PreviewAsync`, lines 32–38), it selects **all** sessions where `s.Kind == SessionKind.Race && !s.IsBreak` — accidentally including the scaffolded `A / B / C Final` sessions and pre-filling them with random qualifier teams!
+- **Fix:**
+  - Mark finals sessions (`Session.IsFinal = true` or exclude sessions whose heats are `A Final / B Final / C Final`) in `ScaffoldFinals` and `CreateFinals`, and exclude Finals sessions from `CompetitionDrawService`.
+
+### BUG-29 — `FormTeams` Names `Individual` Riders `"Club A" / "Club B"` Instead of Rider Name, `DetailsTab.tsx` Shows `"Team Name"` & `"Team Code"` on `Individual` Sections, and `Admin` Is Blocked From Whole-Team Entry
+- **Where:**
+  - `api/Controllers/SignupController.cs` (Lines 77, 369–378 & 422)
+  - `web/src/pages/competition/DetailsTab.tsx` (Lines 309, 400–416)
+- **What happens:**
+  1. **Individual Riders Named `"Club A"`, `"Club B"` (`SignupController.cs:369-378, 422`):** When `section.Format == SectionFormat.Individual` (`ridersPerTeam == 1`), `FormTeams` assigns `suffix = "A", "B", "C"` and sets `DisplayName = $"{preview.ClubName} {suffix}"` — so Individual riders from the same club appear on the scoreboard as `"Rockwood A"`, `"Rockwood B"` instead of the rider's actual name (`slice[0].FullName`), and for `SectionFormat.Pairs` without a custom pair name it uses `"Rockwood A"` instead of `"Rider 1 & Rider 2"`.
+  2. **`DetailsTab.tsx` Shows `"Team name"` and `"Team code"` on Individual Sections (`DetailsTab.tsx:406-416`):** An `Individual` section entry form asks the solo rider for `"Team name (optional) — Riders with the same team name are put together"` and `"Team code — e.g. STOCKPORT-A"`.
+  3. **`Admin` Blocked From Entering a Whole Team (`DetailsTab.tsx:309` & `SignupController.cs:77`):** `canEnterWholeTeam` and `SignupController.Create` check `Manager` and `Trainer` but omit `Roles.Admin`, blocking Admins from entering a whole team.
+- **Fix:**
+  - In `SignupController.FormTeams`, when `section.Format == SectionFormat.Individual`, set `DisplayName = slice[0].FullName` (with `Suffix = ""`), and when `section.Format == SectionFormat.Pairs` without a custom `TeamName`, set `DisplayName = string.Join(" & ", slice.Select(x => x.FullName))`.
+  - Hide `"Team name"` and `"Team code"` on `SectionFormat.Individual` in `DetailsTab.tsx`, label Pairs fields `"Pair / Partner"` (with the `"Looking for a Pair"` option), and include `Roles.Admin` in `canEnterWholeTeam` and `SignupController.Create`.
+
+### BUG-30 — Self-Entered `Individual` & `Pairs` Riders (`Roles.Member` / `Roles.Rider`) Are Blocked From Submitting Their Declaration Form (`403 Forbid`), and `DeclarationsTab.tsx` Shows Delete Buttons on Other Clubs' Forms
+- **Where:**
+  - `api/Controllers/DeclarationFormsController.cs` (Lines 84, 95–98 & 211–218)
+  - `web/src/pages/competition/DeclarationsTab.tsx` (Lines 26–31 & 133)
+- **What happens:**
+  1. **Self-Entered Riders Blocked From Filling In Their Own Dec Form:** `DeclarationFormsController.Submit` (`Line 84`) has `[Authorize(Roles = Roles.TeamWork)]` (which excludes `Roles.Member` and `Roles.Rider`), lines 95–98 never check whether the user is linked to the team via `SectionSignup` (`_db.SectionSignups.AnyAsync(s => s.TeamId == team.Id && s.UserId == userId)`), and `DeclarationsTab.tsx:26-31` only checks `t.trainerUserId === user.id || (manager && t.clubId === user.clubId)`. As a result, a Rider who enters themselves in an `Individual` or `Pairs` competition sees `"You have no teams in this competition"` and is completely blocked from submitting their declaration form!
+  2. **Delete Button Shown on Every Club's Declaration Form (`DeclarationsTab.tsx:133` & `DeclarationFormsController.cs:217`):** `DeclarationsTab.tsx:133` passes `canDelete={user != null}`, showing a red delete button on **every team's declaration card** to any logged-in user, while `DeclarationFormsController.Delete` (`Line 217`) omits `IsClubManagerAsync` and `CanManageAsync` (so even a Club's Team Manager or Competition Co-Organiser gets `403 Forbid` when deleting a declaration).
+- **Fix:**
+  - Allow `[Authorize]` on `DeclarationFormsController.Submit` and `Delete`, permit submission/editing by any user who entered that team/pair/individual (`SectionSignup.UserId == userId` / connected Entry ID) as well as the Club's `Manager`, assigned `Trainer`, or Competition Organiser/Admin, include the user's own entered `Team`s in `DeclarationsTab.tsx` (`myTeams`), and scope `canDelete` on `DecFormCard` to users who actually have permission to manage that team's declaration.
+
+### BUG-31 — `HeatScores.tsx` Splits a `Heat-Heat-Final` (`Race-Finals`) Session Into 1 Table Per Race Instead of 1 Unified Session Table
+- **Where:**
+  - `web/src/pages/competition/HeatScores.tsx` (Lines 34–44, 63–88)
+  - `api/Controllers/SessionsController.cs` (Lines 248–259, `GenerateRaceFinals`)
+- **What happens:**
+  - In `GenerateRaceFinals`, each race in the session is assigned a different `RaceRoundId` (`1, 2, 3…`).
+  - `HeatScores.tsx:37` filters `roundHeats` by `heats.filter((item) => item.raceRoundId === heat.raceRoundId)` — which only groups `Q1 + Q2 + Final` of **one single race**!
+  - Instead of seeing one unified session scoreboard of **all teams × all races (`Race 1..N`)** for the `Heat-Heat-Final` session, spectators and riders only see a single race at a time and have to click `"Next heat"` 8–10 times to see the session's races.
+- **Fix:**
+  - When a session uses `Heat-Heat-Final` (`heats.some(h => h.raceRoundStage != null && h.raceRoundStage !== 0)`), render **one unified table for the whole session** on `HeatScores.tsx` with all teams in the session down the side, one column per race (`Race 1..N`) showing the team's combined/final points earned in that race (`Q1`/`Q2` `1 pt` or `0 pt` elim for non-finalists, or `Final` `2..N+1 pts` / `0 pt` elim for finalists), and a separate **"Session & Heat Draw (Who's in Q1 vs Q2)"** box (with no scores) so riders can see which heat and lane they are in for each race.
+
+### BUG-32 — `competitionPhase.ts` Exits `'entry'` Phase Prematurely as Soon as 1 Team Exists, and `AfterDrawOnly` Blocks Other Competition Tabs Before the Draw
+- **Where:**
+  - `web/src/lib/competitionPhase.ts` (Lines 14–28)
+  - `web/src/pages/competition/CompetitionHome.tsx` (Lines 11–24)
+- **What happens:**
+  1. `competitionPhase.ts:18` checks `if (competition.teams.length > 0) return 'running';`. The moment even 1 team exists in the competition (even while entries are still open and no timetable/heats have been generated yet!), `CompetitionHome.tsx` stops showing the **Entry Page (`EntryPage.tsx`)** and switches the competition home page to an empty Timetable!
+  2. Conversely, while in `'entry'` phase (`competition.teams.length === 0`), `AfterDrawOnly` (`CompetitionHome.tsx:19-24`) redirects all other tabs back to `/competitions/${competition.id}` instead of leaving the other pages visible.
+- **Fix:**
+  - Keep `CompetitionHome.tsx` on the **Entry Page (`EntryPage.tsx`)** until the timetable/heats are actually generated (`competition.sessions.some(s => s.heats.length > 0 || s.status !== 0)`), while leaving all other competition tabs visible and accessible (even when empty before the draw). Once the timetable/heats are generated, switch the default landing view to the Timetable & Live Heats.
+
+### BUG-33 — `HeatScores.tsx` Does Not Pre-Fill Sit-Out `"S"` Cells Before Races Are Scored, Does Not Sort Rows by Heat Leader While Live, and Does Not Highlight Followed Teams
+- **Where:**
+  - `web/src/pages/competition/HeatScores.tsx` (Lines 63–88, 125–140)
+  - `web/src/pages/competition/ToplistView.tsx` (Lines 47–75, 107–125)
+- **What happens:**
+  1. **Sit-Out `"S"` Only Appears After a Race Is Scored (`HeatScores.tsx:78, 132-135`):** `HeatScores.tsx` only sets `cell.sitOut = true` from saved `race.results`. Before a race is scored (`cell == null`), it renders **`–`** instead of pre-filling **`S`** from `sitsOutOf(heat, entry, raceIdx, laneRules)` so teams can see in advance which race they sit out.
+  2. **Heat Table Rows Stay in Starting Lane Order While Live (`HeatScores.tsx:85`):** Line 85 checks `list.sort((a, b) => (finished ? b.total - a.total : 0) || a.lane - b.lane)`. While a heat is live in progress (after Race 1, Race 2, etc., when `finished === false`), the table never sorts by who is winning the heat (`b.total - a.total`), instead keeping teams frozen in their starting lane order until the entire heat finishes!
+  3. **No Highlighting for Followed Teams (`HeatScores.tsx` & `ToplistView.tsx`):** Neither `HeatScores.tsx` nor `ToplistView.tsx` reads `useFavourites()` to highlight rows belonging to teams the viewer is following.
+- **Fix:**
+  - Pre-fill **`S`** in `HeatScores.tsx` for every `(team, raceIndex)` where `sitsOutOf(heat, entry, raceIndex, laneRules)` is true even before the race is scored.
+  - Sort `HeatScores.tsx` rows by **starting lane (`a.lane - b.lane`) before any race in the heat is scored**, and as soon as at least 1 race has results (`races.some(r => r.results.length > 0)`), sort rows by **who is winning the heat (`b.total - a.total`)** from top to bottom while displaying each team's current/starting lane underneath or alongside their name.
+  - Highlight followed teams (`useFavourites`) across `ToplistView.tsx`, `HeatScores.tsx`, and `TimetableBoard.tsx`.
+
+### BUG-34 — `TeamsTab.tsx` Excludes `Roles.Manager`, Forces a `<SelectField>` Club Dropdown + Mandatory 4-Char `Suffix`, and `TeamsController.Create` Cannot Create Free-Text Clubs or Custom Team Names
+- **Where:**
+  - `web/src/pages/competition/TeamsTab.tsx` (Lines 36, 83, 112–157)
+  - `api/Controllers/TeamsController.cs` (Lines 31–68, `Create`)
+- **What happens:**
+  1. `TeamsTab.tsx:36` (`if (!hasRole('Admin') && !hasRole('Trainer')) return;`) and `Line 83` (`const canCreate = hasRole('Trainer') || hasRole('Admin');`) exclude `hasRole('Manager')` and `canOrganise(competition)`, so Club Team Managers never see `DEC` badges on `TeamsTab.tsx` and cannot add teams.
+  2. `TeamsTab.tsx:128-149` and `TeamsController.Create` (`Lines 37–42`) require picking a pre-existing `ClubId` from a `<SelectField>` dropdown and a mandatory `Suffix` (`maxLength={4}`, `required`), making it impossible to type a new club name or a custom team name (e.g. `"Welsh Dragons"`) without an `A`/`B` suffix.
+- **Fix:**
+  - Include `hasRole('Manager')` and `canOrganise(competition)` in `TeamsTab.tsx`, replace the strict club `<SelectField>` + required suffix with free-text **Club Name** + **Team Name** (auto-creating/matching the `Club` in `TeamsController.Create`), and link each team row to its Competition Team Page (`/competitions/:id/teams/:teamId`).
+
+### BUG-35 — Withdrawing a Team Leaves a Gap in `LaneIndex` (`1, 3, 4, 5`), `WithdrawalRedrawService` Skips `Heat-Heat-Final` Qualifiers, and Moved Teams Are Never Sent Push Notifications
+- **Where:**
+  - `api/Services/Operations/TeamEntryService.cs` (Lines 137–155, `RemoveFromUnscoredHeatsAsync`)
+  - `api/Services/Operations/WithdrawalRedrawService.cs` (Lines 80–81 & 201–275, `ApplyAsync`)
+  - `api/Controllers/WithdrawalsController.cs` (Lines 58–75)
+- **What happens:**
+  1. **Gap Left in `LaneIndex` (`1, 3, 4, 5`) When 1 Team Withdraws:** When a team in Lane 2 of a 5-team heat withdraws, `RemoveFromUnscoredHeatsAsync` removes its `HeatEntry` without closing up the lanes (`1..4`) if no cross-heat rebalance is needed.
+  2. **No Push Notifications Sent When Teams Move Heats (`WithdrawalRedrawService.ApplyAsync`):** When withdrawals leave a heat with 2+ fewer teams (`e.g. 5 and 3 → 4 and 4`) and `ApplyRedraw` moves a team to a different heat/lane (`session.Moves`), it never triggers `WebPushService` notifications to alert the moved team's followers/manager/trainer of their new heat and lane.
+  3. **`Heat-Heat-Final` Qualifier Heats (`Q1`/`Q2`) Skipped by `WithdrawalRedrawService` (`Line 80`):** Line 80 skips any session where `heats.Any(h => h.RaceRoundStage != RaceRoundStage.None)`, refusing to rebalance unscored `Q1` and `Q2` qualifier heats after a withdrawal.
+- **Fix:**
+  - Close up `LaneIndex` (`1..N`) in `RemoveFromUnscoredHeatsAsync` when a single team withdraws and no cross-heat move is needed; only flag cross-heat rebalancing when heat sizes differ by `≥ 2` (or drop below `MinHeatSize`); support rebalancing unscored `Q1`/`Q2` heats (`RaceRoundStage.Qualifier`); and send push notifications (`WebPushService`) to every moved team in `session.Moves` when `ApplyRedraw` runs.
+
+### BUG-36 — `RiderSwapService` & `RiderSwapSheet.tsx` Block Emergency Rider / Pony Substitutions (`GR1.4–GR1.9`) When a Team Has Only 4 Riders Declared (No 5th Reserve)
+- **Where:**
+  - `api/Services/Operations/RiderSwapService.cs` (Lines 54–59)
+  - `web/src/pages/operations/RiderSwapSheet.tsx` (Lines 65, 96)
+- **What happens:**
+  - `RiderSwapService.SwapAsync` requires `inRider` to already exist on the `DeclarationForm` with `inRider.IsReserve == true`, and `RiderSwapSheet.tsx:96` renders `"The declaration lists no reserve to bring in."` if `reserves.length === 0`.
+  - In Mounted Games (`GR1.4–GR1.9`), many teams ride as a squad of 4 with no 5th reserve declared, or a Pairs/Individual rider has a lame pony or injured partner and gets Referee approval to bring in an emergency guest rider or replacement pony mid-competition. Currently the app completely blocks this!
+- **Fix:**
+  - Allow `RiderSwapSheet.tsx` and `RiderSwapService.cs` both to swap in an existing 5th reserve **and** to add/substitute an **Emergency Replacement Rider (or Guest Rider) / Replacement Pony** with a Referee approval reason logged in `RiderSwapEvent`.
+
+### BUG-37 — `decForm.ts` (`teamIsFull` / `canSubmit`) Blocks 4-Rider Teams From Submitting Their Declaration Form
+- **Where:**
+  - `web/src/lib/decForm.ts` (Lines 27–35, 125–126 & 157–159)
+  - `web/src/pages/competition/decform/DecFormEditor.tsx` (Lines 75–76 & 113–114)
+- **What happens:**
+  - `ridersRequired(SectionFormat.Teams)` returns `5`, and `teamIsFull(slots)` checks `ridersAdded(slots) === slots.length - 1` (`=== 5`).
+  - In Mounted Games, a Team is valid with **4 or 5 riders** (4 riders ride in each race, and the 5th squad rider is optional if a team only has 4 riders). Because `canSubmit` requires `teamIsFull(slots)` (`5` riders), a 4-rider team cannot click Submit on `DecFormEditor.tsx`!
+  - Furthermore, `decForm.ts:85, 179-180` strips `horseName` and `ponyHeightHands` to `null` for the reserve slot (`index === slots.length - 1`), even when a 6th reserve rider brings a pony or hops on.
+- **Fix:**
+  - In `decForm.ts`, allow a `Teams` declaration form to be submitted with **4 or 5 riding members** (minimum 4 for `SectionFormat.Teams`, 2 for `Pairs`, 1 for `Individual`), and allow optional pony details on a reserve slot.
+
+### BUG-38 — `MinutesPerHeat` Multiplied by `raceCount` (`10 min × 8 races × 2 heats = 160 min`) Inflates Session Durations to 2.5–5 Hours per Session
+- **Where:**
+  - `web/src/lib/creatorDraft.ts` (Lines 10–11, 203–204)
+  - `web/src/lib/formatPlan.ts` (Lines 71–73)
+  - `web/src/lib/time.ts` (Lines 31–35)
+  - `api/Services/EventTools/PrintableEventService.cs` (Line 132)
+  - `api/Controllers/CompetitionsController.cs` (Lines 815, 849)
+- **What happens:**
+  - `Session.MinutesPerHeat` is the **minutes for a whole heat** (set per age category/section), and `creatorDraft.ts:11` sets `DEFAULT_MINUTES = 10` (`AutoTimetable` sets `15`).
+  - However, `formatPlan.ts:72-73`, `time.ts:33`, `PrintableEventService.cs:132`, and `CompetitionsController.cs:849` multiply `MinutesPerHeat * h.races.length * heats.length`!
+  - For a standard 8-race session with 2 heats (`DEFAULT_MINUTES = 10`), the timetable schedules **`2 × 8 × 10 = 160 minutes` (2 hours 40 minutes) for a single session**, and for a 10-race `Heat-Heat-Final` session (`3 × 10 × 10`), it schedules **`300 minutes` (5 hours)** for a single session!
+- **Fix:**
+  - Treat `Session.MinutesPerHeat` as the **duration of 1 whole heat** (set per age group/section in the creator, e.g. `heats.length * session.minutesPerHeat`), never multiplying `minutesPerHeat` by `raceCount`.
+
+### BUG-39 — `ScorerController` Strips Elimination Reasons (`RefereeNote = null`), and Scoring Races Does Not Automatically Transition `Session.Status` (`InArena` / `Finished`) or Auto-Populate `Heat-Heat-Final` Finals on `ScorerPage.tsx`
+- **Where:**
+  - `api/Controllers/ScorerController.cs` (Lines 61, 89)
+  - `web/src/pages/ScorerPage.tsx` (Lines 286–306)
+  - `api/Services/ScoringService.cs` (Lines 120–240)
+- **What happens:**
+  1. `ScorerController.cs:61, 89` explicitly strips `RefereeNote = null` on every score submission from a Scorer Link, and `ScorerPage.tsx:286` omits `allowReasons`, preventing ring scorers using a Scorer Link from picking/recording why a team was eliminated.
+  2. When a scorer starts scoring a heat/session (via `SessionPage.tsx` or `ScorerPage.tsx`), `ScoringService` does not automatically mark `Session.Status = SessionStatus.InArena` (and `StartedAt`/`Heat.StartedAt`) when the first race is scored, nor `SessionStatus.Finished` (and `FinishedAt`) when all heats/races in the session are complete.
+- **Fix:**
+  - Enable `allowReasons` on `ScorerPage.tsx` and preserve `RefereeNote` in `ScorerController.cs` when submitted by a scorer link (while still keeping `RefereeNote` private from public reads).
+  - In `ScoringService`, automatically set `heat.StartedAt` and `session.Status = SessionStatus.InArena` (`session.StartedAt`) when the first race is scored, auto-populate the `Heat-Heat-Final` `Final` heat when both `Q1` and `Q2` of a round are complete, and automatically mark `heat.FinishedAt` / `session.Status = SessionStatus.Finished` when all races in the heat/session are complete.
+
+### BUG-40 — Competition Creator Wizard Labels `MinutesPerHeat` as `"Minutes per race"` and Has No Way to Set Final Races Before the Competition
+- **Where:**
+  - `web/src/pages/admin/creator/StructureStep.tsx` (Lines 59–61)
+  - `web/src/lib/creatorDraft.ts` (Lines 10–11, 204)
+  - `web/src/pages/admin/creator/RacesStep.tsx` (Lines 38–58)
+  - `web/src/pages/admin/creator/save.ts` (Lines 117–136)
+  - `web/src/pages/competition/TimetableManagement.tsx` (Line 1137)
+- **What happens:**
+  1. `StructureStep.tsx:59` labels `s.minutesPerRace` (which saves into `Session.MinutesPerHeat`) as `"Minutes per race"` with hint `"A heat runs every race, so it takes this times the races"`, contradicting the domain rule that **Minutes per heat** is set per age category for the whole heat.
+  2. In `RacesStep.tsx` and `save.ts`, an organiser can only choose races for the qualifying sessions (`Session 1..N`) and has **no way to set the Final races before the competition**, even when `finalistCount` is configured! Later, `CreateFinalsModal` (`TimetableManagement.tsx:1137`) falls back to a hardcoded 5-race string (`'Litter Lifter\nFlag\nBottle\nMug\nBall and Cone'`).
+- **Fix:**
+  - Relabel `StructureStep.tsx:59` and `creatorDraft.ts` validation to **`Minutes per heat`** (`"How long a single heat takes in the arena"`).
+  - Add `finalRaces: string[] | null` to `SectionDraft` in `creatorDraft.ts` and show a **`Finals`** race-list row in `RacesStep.tsx` (for non-`Heat-Heat-Final` sections) so Final races are set before the competition, saved/scaffolded in `save.ts`, and pre-filled in `CreateFinalsModal`.
+
+### BUG-41 — Tack & Turnout Scoring (`TackCheckService.cs` & `TackCheckTab.tsx`) Only Marks One Score Per Team Per Sector Instead of a Per-Rider Grid Out of 10
+- **Where:**
+  - `api/Services/TackCheck/TackCheckService.cs` (Lines 86–132, 239–249)
+  - `web/src/pages/eventTools/TackCheckTab.tsx` (Lines 123–168)
+- **What happens:**
+  - `TackCheckTab.tsx` (`TeamMarks`) only renders a single input per sector for the entire team (`team.marks`).
+  - In real competitions that run a scored Tack & Turnout competition, the admin defines custom text columns/sectors and scores **each rider on the team in a grid** (`Rider × Sector`, each box out of 10), and the rider boxes are summed into each rider's total and the team's grand total.
+- **Fix:**
+  - Support a **per-rider scoring grid** on `TackCheckTab.tsx` and `TackCheckService.cs` where each declared rider (or `Rider 1..N` slot for that section format) has an input box (out of `10` / `maxPoints`) for each custom sector column typed by the admin, with per-rider row totals and the summed team total automatically calculated and saved.
+
+### BUG-42 — `ScorerController` Restricts Scorer Links by `ArenaName` Instead of Giving Access to All Competition Scoring
+- **Where:**
+  - `api/Controllers/ScorerController.cs` (Lines 30–35 & 103–108)
+- **What happens:**
+  - `ScorerController.GetSession` and `InScopeAsync` filter by `s.ArenaName == link.ArenaName`. If a competition has sessions with different arena names (or blank/renamed arena names), the scorer link hides those sessions and returns `404` when trying to score them, even though scorer links are meant to have access to all scoring in the competition ordered by session start time.
+- **Fix:**
+  - In `ScorerController.cs`, scope scorer links to `s.CompetitionId == link.CompetitionId` across all race sessions in the competition, ordered chronologically by `ScheduledStart` then `OrderIndex`.
+
+### BUG-43 — `CreateFinals` & `ScaffoldFinals` Default to `A Final` First Instead of `C → B → A Final`, and `PopulateFinals` Assigns Top Teams by `OrderIndex` Instead of Final Tier (`A/B/C`)
+- **Where:**
+  - `api/Controllers/CompetitionsController.cs` (Lines 648–670, 739–754, 768–791)
+  - `web/src/pages/competition/TimetableManagement.tsx` (Lines 1122–1230)
+- **What happens:**
+  1. `CreateFinals` and `ScaffoldFinals` always create `A Final` at `OrderIndex = 1` and the lowest final last, whereas in Mounted Games competitions finals normally run **lowest final first (`C Final → B Final → A Final`)** so the `A Final` is the climax of the section.
+  2. Worse still, `PopulateFinals` (`CompetitionsController.cs:768-791`) iterates `session.Heats.OrderBy(h => h.OrderIndex)` instead of ordering by final tier (`FinalsTiers.ParseLabel(h.Label)`). If a session's heats are ordered `C Final (OrderIndex = 1), B Final (OrderIndex = 2), A Final (OrderIndex = 3)`, `PopulateFinals` puts the **1st–6th place top teams into the C Final** and the bottom teams into the A Final!
+- **Fix:**
+  - Default `CreateFinals` and `ScaffoldFinals` to **lowest final first (`C → B → A Final`)** with a toggle in `CreateFinalsModal` for `A → B → C`.
+  - In `PopulateFinals`, sort heats by `FinalsTiers.ParseLabel(h.Label) ?? int.MaxValue` (`A Final = 0, B Final = 1, C Final = 2`) when assigning ranked teams so `A Final` always receives the top qualifiers regardless of running order.
+
+### BUG-44 — `ScoringService` Awards Race Points to Hors Concours (`IsHorsConcours`) Teams Instead of Treating Them Like an Elimination (`0 pts` & Moving Competitive Teams Up)
+- **Where:**
+  - `api/Services/ScoringService.cs` (Lines 175–263)
+- **What happens:**
+  - When a team with `Team.IsHorsConcours == true` races in a heat and finishes e.g. 2nd, `ScoringService` gives them `2nd` place points and pushes the competitive teams behind them down to `3rd, 4th...` points.
+  - In real competitions, an `HC` team is treated like an elimination for points purposes (`0` competitive points, while competitive teams behind them move up in effective place/points).
+- **Fix:**
+  - Load `Team.IsHorsConcours` for heat entries in `ScoringService.ApplyCoreAsync`; give `IsHorsConcours` teams `0` points and compact the effective scoring places of non-eliminated, non-`HC` teams so competitive teams behind an `HC` team receive full points for their competitive finishing order. Also support manual point overrides / dead-heat half-points (`.5`).
+
+### BUG-45 — `NavigationDrawer.tsx` Hides the `Seasons` Link Whenever Viewing a Competition Not Yet in a Season, and `SeasonsPage.tsx` Hides `"Create season"` for Admins Unless `editorMode` Is Toggled
+- **Where:**
+  - `web/src/components/NavigationDrawer.tsx` (Line 135)
+  - `web/src/pages/seasons/SeasonsPage.tsx` (Line 14)
+- **What happens:**
+  1. `NavigationDrawer.tsx:135` renders `{(seasons === null || seasons.length > 0) && <NavLink to={seasonsTo}>Seasons</NavLink>}`. Whenever a user is inside a competition (`currentId != null`) that has not yet been linked to a season (`seasons.length === 0`), the `Seasons` link completely disappears from the drawer!
+  2. `SeasonsPage.tsx:14` gates the `"Create season"` button behind `(!hasRole('Admin') || canEdit())`, hiding `"Create season"` from signed-in Admins unless they first unlock `editorMode`.
+- **Fix:**
+  - Always show the `Seasons` link in `NavigationDrawer.tsx` (linking to `/seasons/${seasons[0].id}` when the competition is in 1 season, or `/seasons` otherwise).
+  - Allow `canOrganise()` (including Admins and Season Organisers) to see and use **"Create season"** on `SeasonsPage.tsx` without requiring `editorMode`.
+
+### BUG-46 — `PrintEventPage.tsx` Splits `Draw` and `ScoreSheets` Instead of Printing a Unified Timetable + Draw + Race Columns Table
+- **Where:**
+  - `web/src/pages/eventTools/PrintEventPage.tsx` (Lines 85–120)
+- **What happens:**
+  - `PrintEventPage.tsx` (`Draw`) prints `Lane | Team | Club | Races` with all race names jammed into one comma-separated cell and no columns for scoring, while `ScoreSheets` prints each heat on a separate page break.
+- **Fix:**
+  - Combine the printed Draw and Score Sheet table so `Draw` (and `ScoreSheets`) renders the unified table with **Session & Heat Start Time**, **Lane**, **Team**, **Club**, **Bib**, and individual columns for **`1. Race 1` … `N. Race N` + `Total`**.
+
+### BUG-47 — Missing Post-Final Prize Giving View (Ordered Last-to-First with Riders, Ponies & `"Trained by"`) on `ToplistView.tsx` & `SessionEndTransition.tsx`
+- **Where:**
+  - `web/src/pages/competition/ToplistView.tsx` (Lines 157–194)
+  - `web/src/pages/competition/SessionEndTransition.tsx` (Lines 110–190)
+- **What happens:**
+  - Prize giving takes place immediately after each Final (`C Final`, `B Final`, `A Final`) and is announced in **reverse order (last place to 1st place)** with each team's **Riders, Ponies, and `"Trained by <Trainer>"`**.
+  - Currently `ToplistView.tsx` (`FinalsList`) only shows `1st → 6th` with team names and points (no riders, ponies, or trainer), and `SessionEndTransition.tsx` shows no prize-giving readout when a Final finishes.
+- **Fix:**
+  - Add a **Prize Giving (Last to First)** toggle/panel on `ToplistView.tsx` (`FinalsList`) and `SessionEndTransition.tsx` that displays each Final's results from **last place up to 1st place**, including **Team Name, Club, `"Trained by <Trainer>"`, and each Rider + Pony** from the team's declaration.
+
+### BUG-48 — `defaultRaces.ts` Gives `Under 10` and `Under 12` Sections the Seniors Race List Instead of the Juniors Race List, and Gives `Individual` (`format === 3`) Sections Team-Only Games
+- **Where:**
+  - `web/src/lib/defaultRaces.ts` (Lines 32–37)
+  - `web/src/pages/admin/RaceListDialog.tsx` (Lines 46–66)
+- **What happens:**
+  1. `defaultRaceList` checks `const junior = /junior|novice/i.test(ageGroup);`. When an organiser picks the built-in presets `"Under 10"` or `"Under 12"` (`AGE_GROUP_PRESETS` in `creatorDraft.ts:7`), `junior` evaluates to `false` and `defaultRaceList` assigns the **Seniors** race list (`Big Sack`, `5 Mug`, full `Spell EGUK`) instead of the **Juniors** race list!
+  2. When `format === 3` (`Individual`), `defaultRaceList` falls through to `ZONE_SENIORS` / `AREA_SENIORS`, which includes team-only games (`Big Sack`, `5 Mug`, `PGUK Pyramid`, `PGSports UK Shopping Spree`) that cannot be ridden by a solo Individual rider.
+- **Fix:**
+  - Match `Under 10` / `Under 12` (`/\b(junior|novice|(u|under\s*)(8|9|10|11|12))\b/i`) as `junior` in `defaultRaces.ts`, and provide an Individual-eligible default race list when `format === 3`.
+
+### BUG-49 — `Season` Locks Each Season to a Single Age Group, Hides Per-Round Columns & Dropped Scores on `SeasonPage.tsx`, Ignores Most Round Wins (`1st` Places) on Ties in `SeasonStandingsCalculator.cs`, and Tracks Pairs by Team Instead of Individual Rider
+- **Where:**
+  - `api/Services/Seasons/SeasonStandingsCalculator.cs` (Lines 25–40)
+  - `api/Services/Seasons/SeasonPublicationService.cs` (Lines 43–87)
+  - `api/Controllers/SeasonsController.cs` (Lines 98–100, 124–125)
+  - `web/src/pages/seasons/SeasonPage.tsx` (Lines 93–109)
+  - `web/src/pages/seasons/SeasonSettingsForm.tsx` (Lines 85–96)
+- **What happens:**
+  1. `SeasonsController.AddRound` (`124-125`) rejects any competition section whose `AgeGroup` or `Format` differs from `season.AgeGroup` / `season.Format`, preventing a single Season from holding **all age groups** (with division/age-group tabs on `SeasonPage.tsx`).
+  2. `SeasonStandingsCalculator.cs:26-28` orders teams only by `TotalPoints` then `TeamName`, failing to break Season point ties by **most round wins (`1st` places, `EventRank == 1`)**!
+  3. `SeasonPage.tsx:101-107` only renders `Pos | Team | Rds | Pts` without showing each round's score column (`R1..RN`) or styling dropped rounds (`!r.counted` when `BestResultsToCount` is set) in grey/crossed-out.
+  4. `SeasonSettingsForm.tsx` does not let the organiser select/add multiple competitions at once when creating a season, there is no per-competition points multiplier (`1×`, `1.5×`, `2×`), and `Pairs` season standings do not support tracking **Individual Riders** when pairs change partners across the season.
+- **Fix:**
+  - Allow a Season to include sections across **all age groups** (with an Age Group / Division tab switcher on `SeasonPage.tsx`), allow selecting multiple competitions at once when creating a season (plus adding rounds later or linking from the Competition Creator), support a round/competition points multiplier, display per-round columns on `SeasonPage.tsx` with dropped rounds crossed out/greyed, break Season ties by **most round wins (`EventRank == 1`)**, and track `Pairs` season points per **Individual Rider**.
+
+### BUG-50 — `EntryPage.tsx`, `DetailsTab.tsx`, `SignupController.cs` & `MySignupsPage.tsx` Lack Step-2 Stabling Booking, Multi-Team Club Entry Stepper, Entries Closing Date, Waiting List When Full, Bank Transfer (`Mark as Paid`), and Pre-Draw Self-Withdrawal
+- **Where:**
+  - `web/src/pages/competition/EntryPage.tsx` & `web/src/pages/competition/DetailsTab.tsx`
+  - `api/Controllers/SignupController.cs`
+  - `web/src/pages/MySignupsPage.tsx`
+- **What happens:**
+  1. There is no `EntriesCloseAt` closing date check (after which public entries close while Admins can still key in late entries).
+  2. Entering a team/rider does not have a **Step 2: Stabling & Extras** step (with **Number of Stables** and **Pony Club / Team Name** + organiser Stabling List).
+  3. When a Club Manager enters `"Enter a team"`, they can only enter 1 team at a time instead of choosing **Number of teams (`1, 2, 3...`)** in one checkout.
+  4. When a section reaches `MaxParticipants`, entrants are blocked with no **Waiting List** option.
+  5. `MySignupsPage.tsx` has no **"Withdraw Entry"** button before the draw to free up a spot and notify the organiser for refund, and `SignupController.cs` has no BACS/Bank Transfer option with an organiser **"Mark as Paid"** button.
+- **Fix:**
+  - Add `EntriesCloseAt` support (allowing Admin late entry), a **Step 2 Stabling booking** (number of stables + Pony Club / Team name + organiser Stabling List), a **Multi-Team stepper (`1..N` teams)** for club managers, a **Section Waiting List** when full, **Card or Bank Transfer (BACS)** with Admin `"Mark as Paid"`, and a pre-draw **"Withdraw Entry"** button on `MySignupsPage.tsx`.
+
+### BUG-51 — `DeclarationFormsController.Submit` Overwrites/Discards Multiple Horse Combos for the Same Rider (`s.FullName == r.FullName`), `ClubsController.SavedRiders` Blocks Self-Entered Riders (`Roles.Rider`), and Declarations Lack a Set Closing Time (`DeclarationsCloseAt`)
+- **Where:**
+  - `api/Controllers/DeclarationFormsController.cs` (Lines 145, 174–200)
+  - `api/Controllers/ClubsController.cs` (Lines 30–40)
+  - `web/src/pages/competition/decform/DecFormEditor.tsx`
+- **What happens:**
+  1. In `DeclarationFormsController.cs:174-176`, when saving declared riders to `SavedRiders`, it checks `s.ClubId == team.ClubId && s.FullName == r.FullName` without comparing `HorseName`, and uses `existing.HorseName ??= r.HorseName`! If a rider has 2 different ponies (e.g. one pony for Pairs and another for Individuals, or a spare pony), the second `(Rider + Horse)` combo is silently discarded instead of being saved as a separate selectable combo!
+  2. `ClubsController.SavedRiders` (`[HttpGet("{id:int}/saved-riders")]`) is gated by `[Authorize(Roles = Roles.TeamWork)]`, blocking self-entered `Roles.Rider` accounts from loading their own saved rider+pony combos (`r.CreatedByUserId == uid`).
+  3. Declarations do not have a configurable **set lock/closing time (`DeclarationsCloseAt`)**, and `DecFormEditor.tsx` only shows `r.fullName` in the saved-rider picker instead of `"{r.fullName} — {r.horseName}"`.
+- **Fix:**
+  - Match `SavedRiders` by `(ClubId, FullName, HorseName)` so one rider can save multiple distinct `(Rider + Horse)` combinations, display `"{fullName} — {horseName}"` in `DecFormEditor.tsx`, allow `[Authorize]` on `ClubsController.SavedRiders` (returning club roster for club trainers/managers and own saved combos for riders), auto-fill club default `BibColour` on new teams while allowing per-team override, and enforce an optional set `DeclarationsCloseAt` time.
+
+### BUG-52 — `SessionPage.tsx`, `TimetableManagement.tsx` & `StructureStep.tsx` Lack Mid-Session Race Change/Cancel with Quick Announcement, Clear/Re-Run Race, `"Under Review"` Result Flag, 1-Tap Mark Team `HC`, Combined Section Heat Scoring Mode, Hold/Resume Time Delay, and Default Finalist Count / Max Lanes in Creator
+- **Where:**
+  - `web/src/pages/competition/SessionPage.tsx`
+  - `web/src/pages/competition/TimetableManagement.tsx`
+  - `web/src/pages/admin/creator/StructureStep.tsx` & `web/src/lib/creatorDraft.ts`
+- **What happens:**
+  1. In `StructureStep.tsx:48`, `finalistCount` defaults to `""` (`"Not set"`) instead of defaulting to the heat size (`maxTeamsPerHeat`), and `Max lanes` per heat/arena is not clearly labelled alongside `Max teams per heat`.
+  2. On `SessionPage.tsx`, there is no quick button to **Change / Cancel a Race** across the session and simultaneously **post an Announcement** saying what the race is becoming; no 1-tap **"Clear / Re-run Race"** button when a race is stopped and re-run; no **"Under Review / Provisional"** flag next to an elimination/result; and no 1-tap option to switch a short-handed team to **Hors Concours (`HC`)**.
+  3. There is no option to **Combine two small sections into one arena heat** (choosing between scoring within each section vs across the combined heat), and no **"Hold / Delay — We will continue at HH:MM"** control that lets the organiser set a custom resume time and post an announcement.
+- **Fix:**
+  - Default `finalistCount` to heat size and expose `Max lanes` clearly in `StructureStep.tsx`; add Mid-Session **Change/Cancel Race + Quick Announcement**, **Clear / Re-run Race**, **"Under Review" flag**, and **Mark Team HC** on `SessionPage.tsx`; and add **Hold / Set Resume Time** + **Combine Small Sections Into One Heat** (with section-relative vs combined scoring option) on `TimetableManagement.tsx` / `SessionsController.cs`.
+
+### BUG-53 — `TopBarTicker.tsx` / `ticker.ts`, `NotificationScheduler.cs` / `ScoringService.cs`, `StatsService.cs` / `StatsPage.tsx`, `RiderPrivacyFields.tsx`, `CompetitionPicker.tsx`, `DashboardPage.tsx`, `ChatTab.tsx`, and `RaceRulesButton.tsx` Gaps (`#32–#40`)
+- **Where:**
+  - `web/src/components/BottomTabs.tsx`
+  - `web/src/components/TopBarTicker.tsx` & `web/src/lib/ticker.ts`
+  - `api/Services/NotificationScheduler.cs`, `api/Services/ScoringService.cs`, `api/Controllers/CompetitionsController.cs`, `api/Controllers/SessionsController.cs`
+  - `api/Services/Stats/StatsService.cs`, `api/Dtos/StatsDtos.cs`, `web/src/pages/stats/StatsPage.tsx`
+  - `web/src/components/RiderPrivacyFields.tsx` & `web/src/pages/competition/decform/DecFormEditor.tsx`
+  - `web/src/competition/CompetitionPicker.tsx`
+  - `web/src/pages/DashboardPage.tsx`
+  - `web/src/pages/competition/ChatTab.tsx`
+  - `web/src/components/RaceRulesButton.tsx`
+- **What happens:**
+  1. **Top-Bar Ticker (`ticker.ts` / `TopBarTicker.tsx` — `#33`):** `raceName(row, ordinals)` omits the live race progress (`"Race X/Y"`), and when a new Organiser Announcement arrives, `TopBarTicker.tsx` rotates away after `4.5s` instead of flashing/holding the new announcement for **10 seconds** (`10_000 ms`).
+  2. **Push Notifications (`NotificationScheduler.cs`, `ScoringService.cs`, `CompetitionsController.cs`, `SessionsController.cs` — `#34`):**
+     - `(A)` `NotificationScheduler.cs` fires a generic session alert (`"1 hour to {s.Name}"`) instead of `"60 minutes until your heat"` with the team's heat and starting lane.
+     - `(B)` Completing all races in a heat (`ScoringService.cs`) does not push `"Your heat's results are in (1st in Heat 2 — 38 pts)"` to the team's trainer/supporters.
+     - `(C)` Publishing a finals draw (`PopulateFinals` / `RaceFinalService`) does not push `"Finals draw published — you are in the A Final, Lane 3"`.
+     - `(D)` Updating a session delay (`SessionsController.cs`) or redraw does not push a `"Timetable delay / Redraw alert"`.
+  3. **Rider & Pony Career Stats (`StatsService.cs`, `StatsDtos.cs`, `StatsPage.tsx` — `#35`):** `StatsProfileDto` is missing **(C) Season standings they are currently in** (`Seasons` list) and **(D) Clubs represented** (`Clubs` list on Rider/Pony profiles), and Rider/Pony names on team/declaration views do not link to `/stats/riders?name=...` or `/stats/ponies?name=...`.
+  4. **Rider Consent Tick Box (`RiderPrivacyFields.tsx` — `#36`):** Renders two separate initial-only/no-filming checkboxes per rider instead of summing rider/media/terms agreement into **1 single `"I agree"` tick box**.
+  5. **Past Competitions Archive Filters (`CompetitionPicker.tsx` — `#37`):** Only has a text search box (`Name or venue`); when viewing past competitions (`past === true`), it lacks filters for **Year (`2026`, `2025`...)**, **Country/Region**, and **"My Club / Competitions I rode in"**.
+  6. **Dashboard (`DashboardPage.tsx` — `Me` tab — `#38`):** Places the event banner/jumps above `Needs you`, omits `"Pair-up request waiting"` from `Needs you`, omits the **Session name** and **Starting Lane (`Lane X`)** from `Your teams today`, and omits **Club Members (`/members`)** from `Shortcuts`.
+  7. **Live Stream Page (`ChatTab.tsx` — `#39`):** Below the video player (`LiveVideo`), `ChatTab.tsx` only shows Announcements/Chat instead of showing the **Live Heat Score Table** for the heat currently in the arena with quick tabs to switch between **Live Heat Scores**, **Timetable**, **Toplist**, and **Announcements / Chat** without stopping the video.
+  8. **Race Rules & Arena Setup Popup (`RaceRulesButton.tsx` — `#40`):** Does not include a structured **3-bullet "How to win / Common eliminations" summary** alongside `<RaceDiagram>` and equipment, and tapping a race name in `HeatScores.tsx` / `SessionPage.tsx` does not open the popup.
+- **Fix:**
+  - Keep `BottomTabs.tsx` to `Timetable · Toplists · Live & stream · Details` (no `Following` tab, `#32`); include `"Race X/Y"` in `ticker.ts` and hold/flash new announcements for `10s` in `TopBarTicker.tsx` (`#33`); wire all 4 push notifications `(A)–(D)` (`#34`); add `(C) Season standings` & `(D) Clubs` + clickable Rider/Pony links to `/stats` (`#35`); sum rider consent into 1 `"I agree"` tick box (`#36`); add Year, Region & `"My Club / I rode in"` filters to `CompetitionPicker.tsx` (`#37`); reorder `DashboardPage.tsx` into `(1) Action items → (2) Today's upcoming heats (with session, heat & starting lane) → (3) Quick links (My Teams, My Signups, Dec Forms, Club Members)` (`#38`); add the tabbed `Live Heat Score Table · Timetable · Toplist · Announcements` view below the video player on `ChatTab.tsx` (`#39`); and add the 3-bullet `"How to win / Common eliminations"` summary + clickable race names to `RaceRulesButton.tsx` (`#40`).
+

@@ -86,7 +86,7 @@ export function SiteAdmin() {
       try { window.localStorage.removeItem(`competitionEditor:edit:${c.id}`); } catch { /* ignore */ }
       load();
     } catch {
-      setNotice(`Couldn’t delete ${c.name}. Check the API logs.`);
+      setNotice(`Couldn’t delete ${c.name}. Try again.`);
     }
   }
 
@@ -96,7 +96,7 @@ export function SiteAdmin() {
   const clubsByRegion = useMemo(() => {
     const m = new Map<string, Club[]>();
     for (const c of clubs) {
-      const k = c.region ?? '—';
+      const k = c.region ?? 'No region';
       if (!m.has(k)) m.set(k, []);
       m.get(k)!.push(c);
     }
@@ -132,14 +132,14 @@ export function SiteAdmin() {
               const action = stageAction(stage, c.id);
               return (
                 <li key={c.id} className={`${ROW_GRID} min-h-[68px] grid-cols-[minmax(0,1fr)_auto] gap-y-2 py-2 pl-4 pr-3 ${i ? 'border-t border-[rgb(var(--mg-rule-soft))]' : ''}`}>
-                  <span className="flex min-w-0 flex-col gap-[3px]">
+                  <span className="flex min-w-0 flex-col gap-[3px] max-sm:col-span-2">
                     <strong className="truncate text-base font-semibold">{c.name}</strong>
                     <span className="truncate text-[13px] text-[rgb(var(--mg-muted))]">{[competitionDateText(c.startDate, c.endDate), c.location].filter(Boolean).join(' · ')}</span>
                   </span>
-                  <span className={`justify-self-start whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold max-sm:order-3 ${STAGE_CLASS[stage]}`}>{STAGE_LABEL[stage]}</span>
-                  <span className="mg-display text-right text-xl font-bold tabular-nums max-sm:order-4" aria-label={`${c.teamCount} entries`}>{c.teamCount}</span>
-                  <span className="flex items-center justify-end gap-2 max-sm:order-2">
-                    <Link to={action.to} className="inline-flex min-h-11 w-[132px] items-center justify-center rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] px-3.5 text-sm font-semibold !text-[rgb(var(--mg-ink))] hover:border-[rgb(var(--mg-heading))]">{action.label}<span className="sr-only">: {c.name}</span></Link>
+                  <span className={`justify-self-start whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold ${STAGE_CLASS[stage]}`}>{STAGE_LABEL[stage]}</span>
+                  <span className="mg-display text-right text-xl font-bold tabular-nums max-sm:hidden" aria-label={`${c.teamCount} entries`}>{c.teamCount}</span>
+                  <span className="flex items-center justify-end gap-2">
+                    <Link to={action.to} className="inline-flex min-h-11 items-center justify-center rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] px-3.5 text-sm font-semibold !text-[rgb(var(--mg-ink))] hover:border-[rgb(var(--mg-heading))] sm:w-[132px]">{action.label}<span className="sr-only">: {c.name}</span></Link>
                     <MoreMenu label={`More for ${c.name}`} items={menuFor(c)} />
                   </span>
                 </li>
@@ -157,7 +157,7 @@ export function SiteAdmin() {
           <div className={`flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm ${iAmBlocked ? 'bg-[rgb(var(--mg-live-row))] text-[rgb(var(--mg-elim))]' : 'bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]'}`}>
             <span className="flex-1">
               Your IP <span className="font-mono">{myIp}</span> is <strong>{iAmBlocked ? 'BLOCKED' : 'NOT blocked'}</strong>.
-              {iAmBlocked && ' (admin posts still go through.)'}
+              {iAmBlocked && ' (admins can still post)'}
             </span>
             {iAmBlocked && (
               <button type="button" onClick={() => { const mine = blocks.find((b) => b.ipAddress === myIp); if (mine) removeBlock(mine.id); }} className="mg-small-btn">Unblock me</button>

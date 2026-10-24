@@ -224,7 +224,7 @@ export function DemoPaymentFlow({
       <header className="demo-pay__banner">
         <ShieldCheck aria-hidden="true" className="h-5 w-5 shrink-0" />
         <div>
-          <p className="font-extrabold">DEMO — no money is taken</p>
+          <p className="font-extrabold">DEMO · no money is taken</p>
           <p className="text-sm">Use the made-up details on this screen. Never enter real card details here.</p>
         </div>
       </header>
@@ -296,8 +296,7 @@ export function DemoPaymentFlow({
         {step === 'processing' && (
           <motion.div key="processing" className="demo-pay__processing" role="status" aria-live="polite" initial={reducedMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, y: -6 }} transition={transition}>
             <DemoPaymentLock state="waiting" reducedMotion={reducedMotion} />
-            <h3 className="mg-h2">Checking the demo payment</h3>
-            <p>The result will come from the test payment service.</p>
+            <h3 className="mg-h2">Checking demo payment…</h3>
           </motion.div>
         )}
 
@@ -349,10 +348,10 @@ function resultTitle(status: TestPaymentStatus): string {
 }
 
 function resultCopy(status: TestPaymentStatus): string {
-  if (status === 0) return 'The test service approved this payment. No money was taken.';
-  if (status === 1) return 'The test service declined this payment. No money was taken.';
-  if (status === 2) return 'You cancelled this test payment. No money was taken.';
-  return 'The test service recorded the refund. No money moved.';
+  if (status === 0) return 'Approved. No money was taken.';
+  if (status === 1) return 'Declined. No money was taken.';
+  if (status === 2) return 'Cancelled. No money was taken.';
+  return 'Refund recorded. No money moved.';
 }
 
 export type DemoPaymentLockState = 'waiting' | 'success' | 'failed' | 'cancelled' | 'refunded';

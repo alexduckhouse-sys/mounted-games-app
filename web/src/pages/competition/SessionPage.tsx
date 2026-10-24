@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ChevronLeft, Coffee, Wand2, X, Clock, ClipboardList, Users, CheckCircle2,
+  AlertTriangle, ChevronLeft, Coffee, Wand2, X, Clock, ClipboardList, Users, CheckCircle2,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -448,10 +448,10 @@ function LaneRotationControl({ session, onChanged }: { session: Session; onChang
     } catch { setError(true); }
   }
   return (
-    <label className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+    <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
       <span>Lanes after each race</span>
       <select
-        className="input !min-h-0 !py-1 text-xs"
+        className="input min-h-10 py-1.5 text-xs"
         value={session.laneRotationMode ?? LaneRotationMode.MoveUp}
         onChange={(e) => void change(Number(e.target.value) as LaneRotationModeValue)}
       >
@@ -477,9 +477,9 @@ function QualifiersControl({ session, onChanged }: { session: Session; onChanged
     } catch { setError(true); }
   }
   return (
-    <label className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+    <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
       <span>Through to the final</span>
-      <select className="input !min-h-0 !py-1 text-xs" value={qualifiersOf(session)} onChange={(e) => void change(Number(e.target.value))}>
+      <select className="input min-h-10 py-1.5 text-xs" value={qualifiersOf(session)} onChange={(e) => void change(Number(e.target.value))}>
         {Array.from({ length: 10 }, (_, i) => i + 1).map((count) => <option key={count} value={count}>{count} from each</option>)}
       </select>
       {error && <span role="alert" className="text-rose-600">Not saved</span>}
@@ -577,7 +577,7 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
     const visible = sectionTeams.filter((t) => showAll || decdTeamIds.has(t.id));
     const m = new Map<string, typeof sectionTeams>();
     for (const t of visible) {
-      const key = t.clubName ?? '—';
+      const key = t.clubName ?? 'No club';
       if (!m.has(key)) m.set(key, []);
       m.get(key)!.push(t);
     }
@@ -686,7 +686,7 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
                               style={{ background: bibAccent(t.bibColour) }}
                             />
                             {t.suffix || t.displayName}
-                            {!hasDec && <span className="text-[9px] text-amber-600">⚠</span>}
+                            {!hasDec && <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" aria-hidden="true" />}
                           </span>
                         </label>
                       );
@@ -727,10 +727,9 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
             {sizes.length === 0
               ? 'Pick at least one team.'
               : <>
-                  Will create <span className="font-semibold">{sizes.length}</span> heat{sizes.length === 1 ? '' : 's'} of{' '}
+                  Creates <span className="font-semibold">{sizes.length}</span> heat{sizes.length === 1 ? '' : 's'} of{' '}
                   <span className="font-semibold">{sizes.join(', ')}</span> teams,
                   each running {raceCount} race{raceCount === 1 ? '' : 's'}.
-                  Lanes are randomly assigned then rotate by 1 every race within a heat.
                 </>
             }
           </div>

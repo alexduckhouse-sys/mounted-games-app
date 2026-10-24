@@ -1,11 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { competition } from '../../test/factories';
 import type { CompetitionSection, Role } from '../../types';
-import { DetailsTab } from './DetailsTab';
+import { DetailsTab, SectionEntryPage } from './DetailsTab';
 
 const state = vi.hoisted(() => ({ roles: ['Member'] as string[], organise: false }));
 const section = (extra: Partial<CompetitionSection> = {}): CompetitionSection => ({
@@ -31,7 +31,14 @@ vi.mock('./CompetitionTeamCard', () => ({ CompetitionTeamCard: () => null }));
 
 function mount(sections: CompetitionSection[]) {
   data.sections = sections;
-  return render(<MemoryRouter><DetailsTab /></MemoryRouter>);
+  return render(
+    <MemoryRouter initialEntries={['/competitions/1/details']}>
+      <Routes>
+        <Route path="/competitions/:id/details" element={<DetailsTab />} />
+        <Route path="/competitions/:id/enter/:sectionId" element={<SectionEntryPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
 }
 
 describe('DetailsTab entries (seats and whole-team entry)', () => {

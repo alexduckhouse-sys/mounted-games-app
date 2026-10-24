@@ -234,9 +234,9 @@ export function FormatPage() {
   const breakDate = (() => { const d = defaultEventStart(new Date(competition.startDate)); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
 
   return (
-    <div className="skin mx-auto flex w-full max-w-[880px] flex-col gap-9 pb-40 pt-6 sm:pt-10">
+    <div className="skin mx-auto flex w-full max-w-5xl flex-col gap-9 pb-40 pt-6 sm:pt-10">
       <div className="flex flex-col gap-2.5">
-        <h1 className="mg-display text-[44px] font-bold leading-none text-[rgb(var(--mg-heading))]">On the day</h1>
+        <h1 className="mg-display text-[34px] font-bold leading-none text-[rgb(var(--mg-heading))] sm:text-[44px]">On the day</h1>
         <p className="text-[15px] text-[rgb(var(--mg-muted))]">{subtitle}</p>
         <p className="text-sm text-[rgb(var(--mg-muted))]">
           Sessions, timing and heat, heat, final are set in the creator.{' '}
@@ -264,128 +264,131 @@ export function FormatPage() {
       {error && <p role="alert" className="mg-notice !bg-[rgb(var(--mg-live-row))] !text-[rgb(var(--mg-elim))]">{error}</p>}
       {notice && <p role="status" className="mg-notice">{notice}</p>}
 
-      <Panel id="fm-lock" title="Close signups" done={!!competition.signupsLocked} meta={`${totalPaid} paid · ${totalPending} pending`}>
-        <p className="text-sm text-[rgb(var(--mg-body))]">
-          {competition.sections.length} age {competition.sections.length === 1 ? 'group' : 'groups'}. Pending signups won’t be put into teams until they’re marked paid.
-        </p>
-        <button type="button" onClick={() => void toggleLock()} disabled={busy} className="mg-btn mg-btn-secondary !min-h-11 self-start">
-          {competition.signupsLocked ? <Unlock className="h-4 w-4" aria-hidden="true" /> : <Lock className="h-4 w-4" aria-hidden="true" />}
-          {competition.signupsLocked ? 'Re-open signups' : 'Close signups now'}
-        </button>
-      </Panel>
+      <div className="flex flex-col gap-9 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:items-start lg:gap-7">
+        <div className="flex min-w-0 flex-col gap-9">
+          <Panel id="fm-lock" title="Close signups" done={!!competition.signupsLocked} meta={`${totalPaid} paid · ${totalPending} pending`}>
+            <p className="text-sm text-[rgb(var(--mg-body))]">
+              {competition.sections.length} age {competition.sections.length === 1 ? 'group' : 'groups'}. Pending signups won’t be put into teams until they’re marked paid.
+            </p>
+            <button type="button" onClick={() => void toggleLock()} disabled={busy} className="mg-btn mg-btn-secondary !min-h-11 self-start">
+              {competition.signupsLocked ? <Unlock className="h-4 w-4" aria-hidden="true" /> : <Lock className="h-4 w-4" aria-hidden="true" />}
+              {competition.signupsLocked ? 'Re-open signups' : 'Close signups now'}
+            </button>
+          </Panel>
 
-      <Panel id="fm-dec" title="Dec form" done={false} meta="What trainers fill in">
-        <DecFormConfigEditor competitionId={competition.id} />
-      </Panel>
+          <Panel id="fm-dec" title="Dec form" done={false} meta="What trainers fill in">
+            <DecFormConfigEditor competitionId={competition.id} />
+          </Panel>
 
-      <Panel id="fm-teams" title="Form teams" done={teamsFormed} meta={teamsFormed ? `${competition.teams.length} formed` : undefined}>
-        {competition.sections.length === 0 ? (
-          <p className="text-sm text-[rgb(var(--mg-muted))]">No age groups yet. Add at least one in the creator before forming teams.</p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {teamsFormed && <p className="text-sm text-[rgb(var(--mg-body))]">Forming teams only creates teams from signups that aren’t in a team yet. Unused teams are replaced if you leave that box ticked.</p>}
-            {competition.sections.map((sec) => (
-              <FormTeamsSectionCard key={sec.id} competitionId={competition.id} section={sec} paidCount={paidBySection.get(sec.id) ?? 0} onChanged={reload} setError={setError} />
-            ))}
-          </div>
-        )}
-      </Panel>
-
-      <Panel id="fm-races" title="Race lists" done={racesSet} keepOpen meta={steps[2].meta || undefined}>
-        <p className="text-sm text-[rgb(var(--mg-body))]">The races each heat runs. Anything you chose in the creator is already here; settle the rest, or change a list, up to the day.</p>
-        {competition.sections.map((section) => {
-          const mine = raceSessions.filter((s) => s.competitionSectionId === section.id);
-          return (
-            <section key={section.id} aria-label={displaySectionName(section.displayName)} className="mg-card overflow-visible">
-              <div className="flex items-baseline gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-4 py-2.5">
-                <strong className="min-w-0 flex-1 truncate text-[15px]">{displaySectionName(section.displayName)}</strong>
-                <span className="text-xs text-[rgb(var(--mg-muted))]">{activeTeams(section).length} {activeTeams(section).length === 1 ? 'team' : 'teams'}{section.usesRaceFinals ? ' · heat, heat, final' : ''}</span>
+          <Panel id="fm-teams" title="Form teams" done={teamsFormed} meta={teamsFormed ? `${competition.teams.length} formed` : undefined}>
+            {competition.sections.length === 0 ? (
+              <p className="text-sm text-[rgb(var(--mg-muted))]">No age groups yet. Add at least one in the creator before forming teams.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {teamsFormed && <p className="text-sm text-[rgb(var(--mg-body))]">Forming teams only creates teams from signups that aren’t in a team yet. Unused teams are replaced if you leave that box ticked.</p>}
+                {competition.sections.map((sec) => (
+                  <FormTeamsSectionCard key={sec.id} competitionId={competition.id} section={sec} paidCount={paidBySection.get(sec.id) ?? 0} onChanged={reload} setError={setError} />
+                ))}
               </div>
-              {mine.length === 0 && <p className="px-4 py-3 text-sm text-[rgb(var(--mg-muted))]">No sessions yet. Add them in the creator.</p>}
-              <ul>
-                {mine.map((s, i) => {
-                  const races = racesFor(s);
-                  const chosen = (s.plannedRaces?.length ?? 0) > 0 || s.heats.length > 0;
-                  return (
-                    <li key={s.id} className={`flex min-h-[60px] items-center gap-3 px-4 py-1.5 ${i ? 'border-t border-[rgb(var(--mg-rule-soft))]' : ''}`}>
-                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <strong className="truncate text-[15px] font-semibold">{s.name}</strong>
-                        <span className="text-xs text-[rgb(var(--mg-muted))]">{heatsText(s)} · {startText(s)}</span>
-                      </span>
-                      {hasScores(s) ? <span className="text-xs text-[rgb(var(--mg-muted))]">Started</span> : (
-                        <button type="button" onClick={() => setEditing(s.id)} aria-label={`Races for ${s.name}: ${races.length} races`}
-                          className="flex min-h-11 min-w-0 max-w-[55%] items-center gap-1.5 rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] px-2.5 text-left">
+            )}
+          </Panel>
+
+          <Panel id="fm-races" title="Race lists" done={racesSet} keepOpen meta={steps[2].meta || undefined}>
+            <p className="text-sm text-[rgb(var(--mg-body))]">The races each heat runs. Anything you chose in the creator is already here; settle the rest, or change a list, up to the day.</p>
+            {competition.sections.map((section) => {
+              const mine = raceSessions.filter((s) => s.competitionSectionId === section.id);
+              return (
+                <section key={section.id} aria-label={displaySectionName(section.displayName)} className="mg-card overflow-visible">
+                  <div className="flex items-baseline gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-4 py-2.5">
+                    <strong className="min-w-0 flex-1 truncate text-[15px]">{displaySectionName(section.displayName)}</strong>
+                    <span className="text-xs text-[rgb(var(--mg-muted))]">{activeTeams(section).length} {activeTeams(section).length === 1 ? 'team' : 'teams'}{section.usesRaceFinals ? ' · heat, heat, final' : ''}</span>
+                  </div>
+                  {mine.length === 0 && <p className="px-4 py-3 text-sm text-[rgb(var(--mg-muted))]">No sessions yet. Add them in the creator.</p>}
+                  <ul>
+                    {mine.map((s, i) => {
+                      const races = racesFor(s);
+                      const chosen = (s.plannedRaces?.length ?? 0) > 0 || s.heats.length > 0;
+                      return (
+                        <li key={s.id} className={`flex min-h-[60px] items-center gap-3 px-4 py-1.5 ${i ? 'border-t border-[rgb(var(--mg-rule-soft))]' : ''}`}>
                           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                            <span className="truncate text-sm font-semibold">{races.slice(0, 2).join(', ')}{races.length > 2 ? '…' : ''}</span>
-                            <span className="text-[11px] text-[rgb(var(--mg-muted))]">{races.length} races{chosen ? '' : ' · standard list'}</span>
+                            <strong className="truncate text-[15px] font-semibold">{s.name}</strong>
+                            <span className="text-xs text-[rgb(var(--mg-muted))]">{heatsText(s)} · {startText(s)}</span>
                           </span>
-                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
+                          {hasScores(s) ? <span className="text-xs text-[rgb(var(--mg-muted))]">Started</span> : (
+                            <button type="button" onClick={() => setEditing(s.id)} aria-label={`Races for ${s.name}: ${races.length} races`}
+                              className="flex min-h-11 min-w-0 max-w-[55%] items-center gap-1.5 rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] px-2.5 text-left">
+                              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                <span className="truncate text-sm font-semibold">{races.slice(0, 2).join(', ')}{races.length > 2 ? '…' : ''}</span>
+                                <span className="text-[11px] text-[rgb(var(--mg-muted))]">{races.length} races{chosen ? '' : ' · standard list'}</span>
+                              </span>
+                              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              );
+            })}
+          </Panel>
+
+          <section aria-labelledby="fm-breaks" className="flex flex-col gap-4">
+            <PartHead id="fm-breaks" title="Breaks and briefings" />
+            <div className="mg-card overflow-hidden">
+              {fixedItems.length === 0 && <p className="px-4 py-3 text-sm text-[rgb(var(--mg-muted))]">None yet.</p>}
+              <ul>
+                {fixedItems.map((b, i) => (
+                  <li key={b.id} className={`grid min-h-14 grid-cols-[64px_minmax(0,1fr)_auto_40px] items-center gap-3 py-1 pl-4 pr-3 ${i ? 'border-t border-[rgb(var(--mg-rule-soft))]' : ''}`}>
+                    <span className="mg-line-time">{b.scheduledStart ? formatTime(new Date(b.scheduledStart)) : '–'}</span>
+                    <span className="flex min-w-0 flex-col gap-0.5"><strong className="truncate text-[15px] font-semibold">{b.name}</strong><span className="text-xs text-[rgb(var(--mg-muted))]">{[b.arenaName?.trim() || 'All arenas', b.location?.trim()].filter(Boolean).join(' · ')}</span></span>
+                    <span className="text-[13px] text-[rgb(var(--mg-muted))]">{b.durationMinutes ? `${b.durationMinutes} min` : ''}</span>
+                    <button type="button" aria-label={`Remove ${b.name}`} disabled={busy} onClick={() => removeBreak(b)} className="flex h-11 w-10 items-center justify-center text-[rgb(var(--mg-muted))]"><Trash2 className="h-[18px] w-[18px]" aria-hidden="true" /></button>
+                  </li>
+                ))}
               </ul>
-            </section>
-          );
-        })}
-      </Panel>
-
-      <section aria-labelledby="fm-timetable" className="flex flex-col gap-4">
-        <PartHead id="fm-timetable" title="Timetable" meta={raceSessions.length === 0 ? undefined : <Pill tone={generated ? 'plain' : 'provisional'}>{generated ? 'Exact' : 'Provisional'}</Pill>} />
-        {!generated && raceSessions.length > 0 && (
-          <p className="text-sm text-[rgb(var(--mg-muted))]">An estimate from the structure{teamsFormed ? ' and the teams formed so far' : ''}. Generating makes it exact. Breaks and briefings stay where you put them.</p>
-        )}
-        <ul className="mg-card mg-list" aria-label="Timetable so far">
-          {lines.length === 0 && <li className="p-4 text-sm text-[rgb(var(--mg-muted))]">No sessions yet.</li>}
-          {lines.map((line) => (
-            <li key={line.key} className="grid min-h-14 grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 py-1 pl-4 pr-3">
-              <span className="mg-line-time">{line.start ? formatTime(line.start) : '–'}</span>
-              <span className="flex min-w-0 flex-col gap-0.5"><strong className="truncate text-[15px] font-semibold">{line.title}</strong><span className="text-xs text-[rgb(var(--mg-muted))]">{line.sub}</span></span>
-              <span className="text-[13px] text-[rgb(var(--mg-muted))]">{line.minutes ? `${line.minutes} min` : ''}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {competition.laneHatbands && competition.laneHatbands.length > 0 && (
-        <section aria-labelledby="fm-hatbands" className="flex flex-col gap-4">
-          <PartHead id="fm-hatbands" title="Hatbands by lane" />
-          <HatbandList hatbands={competition.laneHatbands} />
-        </section>
-      )}
-
-      <section aria-labelledby="fm-breaks" className="flex flex-col gap-4">
-        <PartHead id="fm-breaks" title="Breaks and briefings" />
-        <div className="mg-card overflow-hidden">
-          {fixedItems.length === 0 && <p className="px-4 py-3 text-sm text-[rgb(var(--mg-muted))]">None yet.</p>}
-          <ul>
-            {fixedItems.map((b, i) => (
-              <li key={b.id} className={`grid min-h-14 grid-cols-[64px_minmax(0,1fr)_auto_40px] items-center gap-3 py-1 pl-4 pr-3 ${i ? 'border-t border-[rgb(var(--mg-rule-soft))]' : ''}`}>
-                <span className="mg-line-time">{b.scheduledStart ? formatTime(new Date(b.scheduledStart)) : '–'}</span>
-                <span className="flex min-w-0 flex-col gap-0.5"><strong className="truncate text-[15px] font-semibold">{b.name}</strong><span className="text-xs text-[rgb(var(--mg-muted))]">{[b.arenaName?.trim() || 'All arenas', b.location?.trim()].filter(Boolean).join(' · ')}</span></span>
-                <span className="text-[13px] text-[rgb(var(--mg-muted))]">{b.durationMinutes ? `${b.durationMinutes} min` : ''}</span>
-                <button type="button" aria-label={`Remove ${b.name}`} disabled={busy} onClick={() => removeBreak(b)} className="flex h-11 w-10 items-center justify-center text-[rgb(var(--mg-muted))]"><Trash2 className="h-[18px] w-[18px]" aria-hidden="true" /></button>
-              </li>
-            ))}
-          </ul>
-          <BreakForm date={breakDate} arenas={arenas} busy={busy} onAdd={(b) => void addBreak(b)} />
+              <BreakForm date={breakDate} arenas={arenas} busy={busy} onAdd={(b) => void addBreak(b)} />
+            </div>
+          </section>
         </div>
-      </section>
 
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="mg-meta">Ready to run:</span>
-        <Link to={`/competitions/${competition.id}`} className="mg-small-btn">Timetable</Link>
-        <Link to={`/competitions/${competition.id}/declarations`} className="mg-small-btn">Dec forms</Link>
-        <Link to={`/competitions/${competition.id}/details`} className="mg-small-btn">Equipment list</Link>
+        <div className="flex min-w-0 flex-col gap-6 lg:sticky lg:top-[calc(var(--mg-shell-h,64px)+24px)]">
+          <section aria-labelledby="fm-timetable" className="flex flex-col gap-4">
+            <PartHead id="fm-timetable" title="Timetable" meta={raceSessions.length === 0 ? undefined : <Pill tone={generated ? 'plain' : 'provisional'}>{generated ? 'Exact' : 'Provisional'}</Pill>} />
+            {!generated && raceSessions.length > 0 && (
+              <p className="text-sm text-[rgb(var(--mg-muted))]">An estimate from the structure{teamsFormed ? ' and the teams formed so far' : ''}. Generating makes it exact. Breaks and briefings stay where you put them.</p>
+            )}
+            <ul className="mg-card mg-list" aria-label="Timetable so far">
+              {lines.length === 0 && <li className="p-4 text-sm text-[rgb(var(--mg-muted))]">No sessions yet.</li>}
+              {lines.map((line) => (
+                <li key={line.key} className="grid min-h-14 grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 py-1 pl-4 pr-3">
+                  <span className="mg-line-time">{line.start ? formatTime(line.start) : '–'}</span>
+                  <span className="flex min-w-0 flex-col gap-0.5"><strong className="truncate text-[15px] font-semibold">{line.title}</strong><span className="text-xs text-[rgb(var(--mg-muted))]">{line.sub}</span></span>
+                  <span className="text-[13px] text-[rgb(var(--mg-muted))]">{line.minutes ? `${line.minutes} min` : ''}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {competition.laneHatbands && competition.laneHatbands.length > 0 && (
+            <section aria-labelledby="fm-hatbands" className="flex flex-col gap-4">
+              <PartHead id="fm-hatbands" title="Hatbands by lane" />
+              <HatbandList hatbands={competition.laneHatbands} />
+            </section>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="mg-meta">Ready to run:</span>
+            <Link to={`/competitions/${competition.id}`} className="mg-small-btn">Timetable</Link>
+            <Link to={`/competitions/${competition.id}/declarations`} className="mg-small-btn">Dec forms</Link>
+            <Link to={`/competitions/${competition.id}/details`} className="mg-small-btn">Equipment list</Link>
+          </div>
+        </div>
       </div>
 
       <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
-        <div className="mx-auto max-w-5xl px-3 sm:px-4">
-          <div className="mx-auto flex max-w-[880px] flex-wrap items-center gap-3 py-4">
-            <span className="min-w-40 flex-1 text-sm font-medium text-[rgb(var(--mg-muted))]">Exact start times come from Generate</span>
-            <button type="button" onClick={() => void generate()} disabled={busy} className="mg-btn mg-btn-primary !min-h-[50px] !rounded-[10px] !px-[18px] !text-base">{busy ? 'Working…' : 'Generate timetable'}</button>
-          </div>
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-end gap-3 px-3 py-4 sm:px-4">
+          <button type="button" onClick={() => void generate()} disabled={busy} className="mg-btn mg-btn-primary !min-h-[50px] !rounded-[10px] !px-[18px] !text-base">{busy ? 'Working…' : 'Generate timetable'}</button>
         </div>
       </footer>
 
@@ -460,7 +463,7 @@ function FormTeamsSectionCard({
       setCommitted(true);
       await onChanged();
     } catch (e) {
-      setError(message(e, 'Form-teams failed.'));
+      setError(message(e, 'Could not form teams.'));
     } finally {
       setBusy(false);
     }
@@ -497,7 +500,7 @@ function FormTeamsSectionCard({
       {preview && (
         <div className="space-y-1 rounded-lg bg-[rgb(var(--mg-subtle))] p-2.5 text-xs">
           <p className="font-semibold">
-            {committed ? '✔ Created' : 'Preview'} · {preview.teams.length} team{preview.teams.length === 1 ? '' : 's'} from {preview.paidSignups} signup{preview.paidSignups === 1 ? '' : 's'}
+            {committed ? 'Created' : 'Preview'} · {preview.teams.length} team{preview.teams.length === 1 ? '' : 's'} from {preview.paidSignups} signup{preview.paidSignups === 1 ? '' : 's'}
           </p>
           <ul className="max-h-48 space-y-0.5 overflow-y-auto">
             {preview.teams.map((t, i) => (

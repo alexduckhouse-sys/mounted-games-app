@@ -122,10 +122,23 @@ All items below have been reviewed and confirmed for upcoming implementation:
   - Rate-limit `GET /api/geocode` (which calls the paid What3Words API) and cap anonymous `LiveHub.WatchStream` connections per IP.
   - Add a public `/privacy` & cookie notice page, hash or drop raw IP addresses after 30 days on `ChatMessages`/`ShopPosts`, and add self-service account deletion (`DELETE /api/auth/me`).
 
-### 4. Whole-Team Entries, Individuals, Pairs, Lockable Declarations, Saved Riders, Guest Riders, Team Bib Description & Tack/Passport Checks
-- **Entries by Section Format (`DetailsTab.tsx` & `SignupController.cs`):**
-  - **`SectionFormat.Teams`:** **Team Managers** enter the **whole team** (or multiple teams) directly for their club (creating/linking the `Team` immediately and declaring the 5 riders on `DeclarationsTab.tsx`), rather than requiring 5 separate individual rider signups first.
-  - **`SectionFormat.Pairs` & `SectionFormat.Individual`:** **Both** Riders themselves (self-entry) **and** Team Managers (on behalf of riders in their club) can enter Pairs and Individuals.
+### 4. Whole-Team Entries, "Looking for a Pair" (50% Pay), Guest Rider Waiting List, Individuals, Pairs, Lockable Declarations, Saved Riders & Team Bib Description
+- **Competition Home Phase & Visible Tabs (`CompetitionHome.tsx` & `competitionPhase.ts` — `BUG-32`):**
+  - **Stage A (Before Timetable Is Generated):** Keep `CompetitionHome.tsx` on the **Entry Page (`EntryPage.tsx`)** until the timetable/heats are generated (do NOT switch away just because `competition.teams.length > 0`), while keeping all other competition tabs visible and accessible (even when empty before the draw).
+  - **Stage B (Once Timetable / Heats Are Generated):** Automatically switch the default competition home page to the **Timetable & Live Heats** view.
+- **Entries by Section Format, Team Names & Declaration Linking (`DetailsTab.tsx`, `SignupController.cs`, `DeclarationsTab.tsx` — `BUG-29`, `BUG-30`, `BUG-34`):**
+  - **Entries Do NOT Require Declaration Forms at Entry Time:** Entering on `DetailsTab.tsx` only submits the entry (Team / Pair / Individual name, Club name, contact, payment). Later, **one person** (the Team Manager, Trainer, or one rider in a Pair/Individual) fills in the Declaration form (`DeclarationsTab.tsx`), using the **Team Name** (or Pair / Rider name) to identify and connect the entry to its Declaration Form.
+  - **"Looking for a Pair / Partner" (Both Solo Riders Pay Half to Reserve a Spot, Mutual Agreement to Pair Up):**
+    - When a solo rider enters a `Pairs` section as **"Looking for a Pair / Partner"**, they **pay half (`section.PriceMinor / 2`)** on entry, and **paying half reserves a spot** in the section.
+    - Other solo riders (who also pay half `section.PriceMinor / 2` to reserve their spot) can see the **"Looking for a Partner"** list on `DetailsTab.tsx` / `EntryPage.tsx` and **request to pair up** — once **the other person agrees/accepts**, the two solo entries are linked together into a Pair.
+  - **Whole-Team Booking + "Looking for Guest Rider(s)" & Free "Wait for a Guest Ride Spot" List:**
+    - In `SectionFormat.Teams`, the Club / Team Manager (or Trainer / Admin) books and pays for the **whole team slot** as normal, and can flag that the team is **looking for Guest Rider(s)** (guest riders do not pay in-app).
+    - Individual riders without a team can join a **free "Waiting for a Guest Ride Spot" list** on that section (`0` fee in-app) so teams needing a guest rider can invite/claim them (automatically adding them as `IsGuestRider = true` on the team's Declaration Form).
+  - **4 or 5 Active Riders on a Team + 6th Rider / Emergency Replacements (`DecFormEditor.tsx` & `RiderSwapService.cs` — `BUG-36`, `BUG-37`):**
+    - A Team declaration is valid with **4 or 5 riding members** (5th riders ride with the team; 4-rider teams must not be blocked from submitting `DecFormEditor.tsx`), plus an optional **6th reserve rider** who can hop on.
+    - On competition day (once declarations are locked), **Admins / Organisers** can make **Emergency Rider or Pony Replacements** (`RiderSwapSheet.tsx` / `RiderSwapService.cs`), even if no reserve was pre-declared on the form.
+  - **`SectionFormat.Teams`:** **Team Managers** (as well as Trainers and Admins) enter the **whole team** (or multiple teams) directly for their club (creating/linking the `Team` immediately and declaring the 5 riders on `DeclarationsTab.tsx`), rather than requiring 5 separate individual rider signups first.
+  - **`SectionFormat.Pairs` & `SectionFormat.Individual`:** **Both** Riders themselves (self-entry) **and** Team Managers (on behalf of riders in their club) can enter Pairs and Individuals, and self-entered riders can submit/edit their own Declaration Form on `DeclarationsTab.tsx` (`BUG-30`).
   - Include a public `ActiveSignupsCount` on `CompetitionSectionDto` so `DetailsTab.tsx` shows the real number of entries and remaining places (`seatsLeft`) to all users, not just the competition organiser.
 - **Edit Existing Declarations & Admin "Lock Declarations" Toggle (`Competition.DeclarationsLocked`):**
   - Fix `DeclarationFormsController.Submit` and `DeclarationsTab.tsx` so clicking a team that already has a declaration **loads and updates that existing `DeclarationForm`** instead of creating a duplicate row.
@@ -158,7 +171,22 @@ All items below have been reviewed and confirmed for upcoming implementation:
     - All remaining teams in `Q1`/`Q2` automatically receive the non-finalist **`1 pt`** — and **any click on a remaining team after the qualifiers are selected marks that team as Eliminated (`0 pts`)**!
     - Once `Q1` and `Q2` of a race are scored on `SessionPage.tsx`, **automatically populate that race's `Final` heat** (`Q1[1], Q2[1], Q1[2], Q2[2]…`) right inside `SessionPage.tsx` and advance the scorer straight to the `Final`.
     - In the `Final`, non-eliminated Finalists score **`2, 3, 4, 5…`** (reversed so last non-eliminated place gets `2 pts`) and an Eliminated Finalist gets **`0 pts`** (with manual override available).
-    - Render the public `HeatScores.tsx` view for Heat-Heat-Final as **one massive unified table** of all teams × all races.
+    - **Per-Race Rider/Team Sets & 3-Sub-Tab Section Page (`Draw / Heats` · `Heat Scores` · `Toplist`):**
+      - In `Heat-Heat-Final` (`Race-Finals`), each race has its own drawn set of riders/teams in `Q1` and `Q2` (using the fair seeded draw).
+      - Give each Age Group / Section page **3 clean sub-tabs**:
+        1. **`Draw / Heats` (No Scores):** Shows each Session and which teams/riders are in each Heat & Lane (or `Q1`/`Q2` per race in `Heat-Heat-Final`) with start times and arena.
+        2. **`Heat Scores`:** All heat score tables for that section (or the 1 unified session table for `Heat-Heat-Final` — `BUG-31`).
+        3. **`Toplist`:** Overall standings (`Totals` / `By Session` / `Finals`), shown automatically at the end of each section's Final once completed.
+    - **Run-Off Race Scoring (`+0.01` Hidden Tie-Breaker vs `.5` Visible Half-Points):**
+      - When a **Run-Off Race** is run on `SessionPage.tsx` after qualifiers or a Final, resolve the tie by adding a hidden **`+0.01`** tie-breaker increment to the run-off winner (so it sorts 1st/2nd automatically while remaining **invisible** on the public scoreboard, whereas `.5` dead-heat split points **are** displayed visibly).
+  - **Public Heat Table (`HeatScores.tsx`), Pre-Filled Sit-Out `"S"`, Live Leader Ordering, Followed Highlighting & Dedicated Competition Team Page (`BUG-33`):**
+    - **Pre-Fill `"S"` (Sit-Out) Before Races Are Scored:** In `HeatScores.tsx`, pre-populate **`S`** for every `(team, raceIndex)` where a team sits out (`sitsOutOf(heat, entry, raceIndex, laneRules)`), even before the race is scored (instead of showing `–` until after scoring).
+    - **Row Ordering on `HeatScores.tsx`:** Before any race in the heat is scored, order rows by **starting lane (`1..6`)**. As soon as racing starts in the heat (and when finished), order rows from top to bottom by **who is winning the heat (`Total` points highest at the top going down)**, while showing each team's **current lane** (or starting lane) underneath their name (no hatband colour needed on the public heat table).
+    - **Highlight Followed Teams Across the App:** When a viewer follows a team or club (`useFavourites`), **highlight that team's row** on the **Toplist (`ToplistView.tsx`)**, **Sessions / Timetable (`TimetableBoard.tsx`)**, and **Heat Table (`HeatScores.tsx`)**.
+    - **Dedicated Competition Team Page (`/competitions/:id/teams/:teamId`):** Clicking a team on the **Toplist (`ToplistView.tsx`)**, **Heat Table (`HeatScores.tsx`)**, or **Teams / Following** opens a dedicated page for that team in the competition showing:
+      - Team Name, Section/Age Group, Club, **Bib Colour / Description**, and current **Toplist Ranking & Total Points**,
+      - Declared Riders & Ponies (respecting `UseInitialOnly`), and
+      - **All of the Heat Tables they are in** (Session 1, Session 2, Finals) with their race-by-race scores and totals.
   - **Fix Auto-Advance Order (`SessionPage.tsx:397-433`) — Normal vs Alternating vs Heat-Heat-Final:**
     - Currently `SessionPage.tsx` *always* jumps across heats (`H1 Race 1 → H2 Race 1`).
     - Fix it so:
@@ -235,9 +263,88 @@ All items below have been reviewed and confirmed for upcoming implementation:
   - Allow the Producer/Admin to choose whether live stream score cards display **Session/Heat Points**, **Overall Competition Standings**, or **Both** (e.g. transitioning from the heat table to overall standings if display time allows), with smooth row-movement animations (`layout` transitions) showing teams moving up and down.
 - **Merge the Two Shops Into One Unified Shop (`EventShopPage.tsx` + `ShopPage.tsx` — `BUG-26`):**
   - Merge the orphaned classifieds shop (`ShopPage.tsx` / `ShopController.cs`) and the per-competition event shop (`EventShopPage.tsx` / `CommerceController.cs`) into a single unified Shop experience at `/shop` and `/competitions/:id/shop` supporting both organiser event items/add-ons (stabling, hook-up, camping, merch) and community tack & equipment listings (with photos, prices, and comments/messages).
-- **Clickable Weather Icon Forecast Popover (`WeatherChips.tsx`, `TimetableBoard.tsx` & `TimetableManagement.tsx`):**
-  - Remove per-heat weather chips (`HeatWeatherChip`) from individual heat rows in `TimetableManagement.tsx`.
-  - Show a single compact **Weather Icon / Chip (`WeatherNow`)** in the timetable header (`TimetableBoard.tsx`), and when the user **clicks on the weather icon**, open a clean **Hourly / Session Weather Forecast Sheet** showing how temperature, rain, and wind evolve across the competition day(s).
+- **Clickable Weather Icon Toggle — Show Timetable With Weather (`WeatherChips.tsx`, `TimetableBoard.tsx` & `TimetableManagement.tsx`):**
+  - Remove per-heat weather chips (`HeatWeatherChip`) from individual heat rows in `TimetableManagement.tsx` by default.
+  - Show a single compact **Weather Icon / Chip (`WeatherNow`)** in the timetable header (`TimetableBoard.tsx`), and when the user **clicks on the weather icon**, toggle the timetable into **Timetable with Weather** view (displaying the hourly weather forecast inline alongside the timetable sessions/heats).
+- **Always Use Fair Seeded Draw in `FormatPage.generate()`, `GenerateHeats`, `GenerateRaceFinals` & `AutoTimetable` (`CompetitionDrawService` — `BUG-27`, `BUG-28`):**
+  - Make `FormatPage.generate()`, `SessionsController.GenerateHeats`, `SessionsController.GenerateRaceFinals`, and `CompetitionsController.AutoTimetable` always use the **Fair Seeded Draw (`CompetitionDrawService`)** automatically (minimising repeated opponents, balancing lanes `1..N`, balancing `SmallHeatCost` when heat sizes are unequal, and excluding scaffolded `A / B / C Final` sessions).
+- **Live Stream Camera / Arena Switcher (`BroadcastPage.tsx`, `ProducerPage.tsx`):**
+  - Usually 1 live stream per competition, sometimes 2 (e.g. `Arena 1` and `Arena 2`). Keep single-stream automatic by default, and when a 2nd stream is active simultaneously, show a simple Arena/Camera switcher pill for viewers.
+- **Final Races Set Before the Competition (`creatorDraft.ts`, `RacesStep.tsx`, `save.ts`, `TimetableManagement.tsx` — `BUG-40`):**
+  - Final races are chosen **before the competition** in the Competition Creator (`RacesStep.tsx`), stored per section (`finalRaces`), scaffolded/pre-filled into the Finals session, and `"Minutes per race"` in `StructureStep.tsx` is corrected to **`Minutes per heat`** (set per age category).
+- **Per-Rider Tack & Turnout Scoring Grid (`TackCheckTab.tsx` & `TackCheckService.cs` — `BUG-41`):**
+  - Sometimes Tack & Turnout is scored on a dedicated Tack Score page (as well as printable paper forms): the admin can type custom text columns/criteria, and mark each team in a **per-rider grid** (`Rider 1..N × Criterion 1..K`, out of 10 per box), with each rider's row summed and all riders summed into the team total.
+- **End-of-Qualifiers Finals Boundary Ties (`TieBreaker.cs`, `FinalsTiePanel.tsx`):**
+  - Support all 3 tie-break options for cut-off boundary ties (`A / B / C Final`): **Run-Off race**, **Result of Last Race (`LastRace`)**, **Countback (most wins)**, or **Manual Organiser Order**.
+- **Final Starting Lanes, Lane Rotation & Carried-Forward (`CF`) Column (`CompetitionsController.cs`, `HeatScores.tsx`, `StandingsService.cs`):**
+  - Final starting lanes are assigned straight by qualifying rank (`1st → Lane 1, 2nd → Lane 2, ...`).
+  - Finals support configurable lane rotation (`MoveUp`, `MoveDown`, or `Stay` in the same lane).
+  - When points carry forward into the Finals (`CarryAcrossToFinals`), display a **`CF` (Carried Forward)** column on the Final Heat Score Table (`HeatScores.tsx`) before `R1..RN` so spectators see prior heat points + final race scores + Grand Total.
+  - On the final **Toplist**, all **A Final** teams always rank above all **B Final** teams (`FinalsTiers`), regardless of raw points scored in a lower final.
+- **Ring Crew Live Next-Race View (`OperationsPage.tsx` / `ArenaPage.tsx`):**
+  - Provide a Ring Crew view showing the **Next Race** with a **quick picture/diagram (`RaceDiagram`)**, **short description**, and **exact equipment required**.
+- **Timetable Session-Time Ordering & Full Scorer Link Access (`TimetableBoard.tsx`, `ScorerController.cs` — `BUG-42`):**
+  - Organise timetable sessions chronologically by **session and starting time (`ScheduledStart`)**.
+  - Give **Scorer Links** access to **all scoring across the competition** (`s.CompetitionId == link.CompetitionId`), not restricted by arena name.
+- **Competition Team Page (`/competitions/:id/teams/:teamId`):**
+  - Primarily focused on **this competition** (Bib colour, Toplist rank & points, Follow button, Next Heat, Heat score tables, Declared Riders & Ponies), with a compact section for **Season results**.
+- **Live Stream Broadcast Overlays (`mounted-games-overlays`):**
+  - Automatically support all 3 broadcast graphics as scores arrive:
+    - **(A) Pre-race Lower-Third:** `Session + Heat + Race X of Y (Game Name)` + Lane lineup (`Lane 1..6` + Bib colours),
+    - **(B) Between Races:** Live **Heat Leaderboard** (sorted by heat leader, with `+0.01` run-offs hidden and `"S"` for sit-outs),
+    - **(C) End of Final:** Full-screen **Podium / Final Standings** graphic.
+- **Finals Running Order (`C → B → A Final` Default with Toggle) & Tier-Safe `PopulateFinals` (`CompetitionsController.cs`, `TimetableManagement.tsx` — `BUG-43`):**
+  - Default Finals running order to **lowest final first (`C Final → B Final → A Final`)** so the `A Final` runs last, with a toggle for `A → B → C`, and ensure `PopulateFinals` always seeds teams by final tier (`A`, `B`, `C`) rather than `OrderIndex`.
+- **Dead Heats (Half-Points in Manual Point Override) & Hors Concours (`HC`) Scoring (`ScoringService.cs`, `SessionPage.tsx` — `BUG-44`):**
+  - Allow dead heats / half-points (`.5`) in the manual point override on `SessionPage.tsx`.
+  - Treat `IsHorsConcours` (`HC`) teams like an elimination for points purposes (`0` competitive points, moving competitive teams behind them up in points).
+- **Optional Per-Pony Passport / Vaccination Tick in App (`PassportCheckService.cs`, `PassportCheckTab.tsx`):**
+  - Keep the simple in-app tick box on every declared pony (`PassportCheckTab.tsx`) as an optional check for organisers who want to tick horses off in the app, with no separate collecting-ring screen needed.
+- **Unified Printable Timetable + Draw + Score Sheet Table (`PrintEventPage.tsx` — `BUG-46`):**
+  - Mix **(B) Master Timetable & Heat Draw** and **(A) Blank Race Score Columns (`Race 1..N + Total`)** into **1 unified table** per heat/session on `PrintEventPage.tsx`.
+- **Prize Giving After Each Final — Last to First with Riders, Ponies & `"Trained by"` (`ToplistView.tsx`, `SessionEndTransition.tsx` — `BUG-47`):**
+  - Prize giving happens after each Final (`C Final`, `B Final`, `A Final`) from **last place to 1st place**, showing each team's **Place, Team Name, Club, `"Trained by <TrainerName>"`, and Declared Riders & Ponies**.
+- **Create Season Flow & Position-Based Season Points (`SeasonsPage.tsx`, `SeasonSettingsForm.tsx`, `NavigationDrawer.tsx` — `BUG-45`, `BUG-49`):**
+  - Keep `Seasons` always visible in `NavigationDrawer.tsx` and allow any Organiser/Trainer/Admin (`Roles.Organiser`) to create a Season.
+  - **Multi-Age-Group Seasons (#1):** A single Season holds **all age groups** (with tabs on `SeasonPage.tsx` per age group/division).
+  - **Select Multiple Competitions at Once (#8) & Multiplier Option (#3):** When creating a Season, allow selecting multiple competitions at once (plus adding more later or linking from the Competition Creator), and support a points multiplier (`1×`, `1.5×`, `2×`) for major competitions.
+  - **Dropped Rounds Shown in Grey/Crossed-Out (#4), Position Points Down Through B/C Finals (#6) & Tie-Break by Most Round Wins (#7):** Show per-round columns on `SeasonPage.tsx` with dropped rounds (`BestResultsToCount`) styled in grey/crossed-out, support position points down through lower finals, and break Season point ties by **most round wins (`1st` places)**.
+  - **Pairs Season Points Track Individual Riders (#5):** In `Pairs` divisions, track Season points per **Individual Rider** so riders keep their points even if they change partners mid-season.
+- **Entries Closing Date, Step-2 Stabling, Multi-Team Checkout, Bank Transfer, Waiting List & Pre-Draw Withdrawal (`EntryPage.tsx`, `DetailsTab.tsx`, `SignupController.cs`, `MySignupsPage.tsx` — `BUG-50`):**
+  - **Entries Closing Date & Admin Late Entry (#9):** Support an `EntriesCloseAt` deadline per competition; after closing, public entries close while Admins/Organisers can still key in late entries.
+  - **Step 2: Stabling & Extras (#10, #11):** Make Stabling Step 2 of the Entry flow (`EntryPage.tsx` / `DetailsTab.tsx`), capturing **Number of Stables** and **Pony Club / Team Name** so they book together and generate a **Stabling List** for the organiser.
+  - **100% Upfront Payment + Card & Bank Transfer (`Mark as Paid`) (#12, #13):** Charge 100% upfront (50% for `"Looking for a Pair"`), and support both **Card (Stripe)** and **Bank Transfer (BACS)** (showing bank details + an organiser **"Mark as Paid"** button).
+  - **Pre-Draw Self-Withdrawal (#14) & Full-Section Waiting List (#15):** Allow entrants to click **"Withdraw Entry"** on `MySignupsPage.tsx` before the draw (freeing up their spot and flagging for refund), and when a section hits `MaxParticipants`, allow entrants to join a **Waiting List**.
+  - **Enter Multiple Teams at Once (#16):** Add a **"Number of teams (`1, 2, 3...`)"** stepper when a Club Manager/Trainer enters teams so they can enter and pay for multiple club teams in one go.
+- **Declarations Set Lock Time, Multiple Rider+Horse Combos, Shared Club Roster, Club Default Bibs & Supporter Invite Links (`DeclarationFormsController.cs`, `ClubsController.cs`, `DecFormEditor.tsx`, `TeamSharing.tsx` — `BUG-51`):**
+  - **Set Declaration Lock Time (#17):** Support a configurable set time (`DeclarationsCloseAt`) when declarations lock for self-edits.
+  - **Shared Club Roster (#18) & Multiple Saved Rider+Horse Combos (#19):** Share `SavedRiders` across all Trainers and Team Managers of the same Club, allow self-entered riders (`Roles.Rider`) to save and reuse their own details, and deduplicate by `(FullName, HorseName)` so one rider can save multiple separate `(Rider + Horse)` combinations (displayed as `"Rider — Horse"`).
+  - **No Pony/Trainer Cross-Section Timetable Warnings Needed (#20, #21).**
+  - **Club Default Bib Auto-Fill with Per-Team Override (#22) & Open Supporter/Parent Invite Links (#23):** Auto-fill a new team's bib colour from `Club.BibColour` while allowing per-team override (`BibDescription` / `BibColour`), and allow `supporterJoinKey` invite links to be used by any supporter or child's parent.
+- **Competition Day Controls — Combined Section Heats, Race Swap + Announcement, Re-Run Clear, Under-Review Flag, Short-Handed `HC`, Max Lanes & Hold/Resume Time (`SessionPage.tsx`, `TimetableManagement.tsx`, `StructureStep.tsx` — `BUG-52`):**
+  - **All Sessions Drawn Randomly via Fair Seeded Draw (#24).**
+  - **Combine Small Age Groups Into One Arena Heat (#25):** Support combining two small sections into one arena heat with both scoring options (**points within each own section** vs **points across the combined heat**).
+  - **Change/Cancel Race Mid-Session + Quick Announcement (#26):** Add a quick button on the heat/session page (`SessionPage.tsx`) to change or cancel a race across the session and post an announcement saying what the race is becoming.
+  - **Re-Run Race Clear (#27), `"Under Review"` Elimination/Result Flag (#28) & Short-Handed Team Goes `HC` (#29):** Add a 1-tap **"Clear / Re-run Race"** button, an **"Under Review"** flag by an elimination/result, and a quick toggle to mark a short-handed team **Hors Concours (`HC`)**.
+  - **Finalist Count Defaulted to Heat Size + Explicit Max Lanes in Competition Editor (#30):** Default `finalistCount` to the heat size (`maxTeamsPerHeat`) in `StructureStep.tsx` (editable by admin) and ensure **Max lanes** is an explicit option in the Competition Editor.
+  - **Hold / Delay Banner with Custom Resume Time (#31):** Allow the organiser to set a custom resume time (or `+X min` delay) with an announcement/banner (`"We will continue at HH:MM"`).
+- **Navigation, Top-Bar Ticker, Push Notifications, Career Stats, Single `"I Agree"` Consent, Archive Filters, Dashboard Priority Order, Live Stream Score Table & Race Rules Popup (`#32–#40` — `BUG-53`):**
+  - **Bottom Tab Bar Inside a Competition (#32):** Keep `BottomTabs.tsx` to `Timetable · Toplists · Live & stream · Details` (plus `Me` when signed in) — **no separate `Following` tab** in the bottom bar (followed teams are highlighted directly inside Timetable/Sessions and Toplists).
+  - **Top-Bar Ticker Live Race Progress & 10-Second Announcement Flash (#33):** Show `"ON NOW: <Session> · <Heat> · Race X/Y"` in `TopBarTicker.tsx` / `ticker.ts`, and flash/hold any new Organiser Announcement for **10 seconds** when posted.
+  - **4 Push Notifications for Teams & Followers (#34):**
+    - **(A)** `"60 minutes until your heat"` (with session, heat & starting lane),
+    - **(B)** `"Your heat's results are in (1st in Heat 2 — 38 pts)"`,
+    - **(C)** `"Finals draw published — you are in the A Final, Lane 3"`,
+    - **(D)** `"Timetable delay / Redraw alert"`.
+  - **Rider & Pony Career Stats (`/stats` — #35):** Show all 4 sections on `StatsPage.tsx` / `StatsService.cs`: **(A)** Competitions & Finals reached (`A / B / C Finals` count), **(B)** Total points & win rate, **(C)** Current Season standings they are in, and **(D)** Clubs represented & rider/pony partnerships; make Rider and Pony names clickable links to their `/stats` profile.
+  - **Single `"I Agree"` Consent Tick Box (#36):** Sum rider/media/terms consent into **1 single tick box saying `"I agree"`** instead of separate initial-only/no-filming checkboxes.
+  - **Past Competitions Archive Filters (#37):** On `CompetitionPicker.tsx` (`past === true`), allow filtering by **Year (`2026`, `2025`...)**, **Country/Region**, and **"My Club / Competitions I rode in"**.
+  - **Dashboard (`Me` Tab) 1 → 2 → 3 Priority Order (#38):** Order `DashboardPage.tsx` as:
+    1. **Action items** (`"Dec form needed"`, `"Pair-up request waiting"`, `"Unpaid entry"`),
+    2. **Today's upcoming heats for My Teams** (with live estimated start time, **session**, **heat**, and **starting lane**),
+    3. **Quick links** to **My Teams (`/teams`)**, **My Signups (`/me/signups`)**, **Dec Forms (`/declarations`)**, and **Club Members (`/members`)**.
+  - **Live Stream Page Below Video Player (#39):** On `ChatTab.tsx` (`Live & stream`), display the **Live Heat Score Table** for the heat currently in the arena below the video player (updating race-by-race via SignalR), with quick tabs to switch to **Timetable**, **Toplist**, or **Announcements / Chat** without stopping the video.
+  - **Race Rules & Arena Setup Popup (#40):** Clicking a race name or info icon (`RaceRulesButton.tsx`) opens `<RaceDiagram>`, equipment required, and a **3-bullet "How to win / Common eliminations" summary**.
 - **Deposit Paid Status & Entry Add-Ons (Stabling / Hook-Up / Camping).**
 - **Venue Layout Photo Upload on `DetailsTab.tsx` (#8).**
 - **Custom Top-Bar Banner / Pinned Status Item (`AppShell.tsx`).**
@@ -251,7 +358,7 @@ All items below have been reviewed and confirmed for upcoming implementation:
 
 ## Code-Verified Scoring, Finals, Multi-Arena, Permissions & Equipment Bugs to Fix First
 
-> **Full Bug Catalogue:** See [`BUGS.md`](./BUGS.md) for the complete list of all **26 code-verified bugs (`BUG-01` through `BUG-26`)** with exact file paths, line numbers, root causes, and fix specifications.
+> **Full Bug Catalogue:** See [`BUGS.md`](./BUGS.md) for the complete list of all **39 code-verified bugs (`BUG-01` through `BUG-39`)** with exact file paths, line numbers, root causes, and fix specifications.
 
 1. **CRITICAL BUG in `SessionPage.tsx` (Lines 232–249 & 397–433) — Elimination Place Shift (`BUG-01`) & Wrong Auto-Advance Order (`BUG-02`):**
    - Always compute `place` from `cur.filter(p => !p.eliminated).length + 1`, and re-index non-eliminated places whenever a team is eliminated or un-eliminated.

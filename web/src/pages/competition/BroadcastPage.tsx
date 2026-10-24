@@ -92,14 +92,16 @@ function BroadcastStudio() {
   if (live) return createPortal(<div className="mg-font fixed inset-0 z-[100] bg-[rgb(var(--mg-header-deep))] text-white">
     {preview}
     <OverlayLayer>
-      <div className="absolute left-4 right-20 top-4 flex flex-wrap items-center gap-2 text-sm">
-        <span className="mg-badge mg-badge-live">LIVE {time}</span>
-        <span className="mg-stream-glass flex items-center gap-1 px-2 py-1"><Eye className="h-4 w-4" />{snapshot.viewerCount}</span>
-        <span className={`mg-stream-glass flex items-center gap-1 border px-2 py-1 ${snapshot.signal === 'poor' ? 'border-[rgb(var(--mg-red))]' : snapshot.signal === 'fair' ? 'border-amber-400' : 'border-transparent'}`}><Wifi className="h-4 w-4" />{snapshot.signal === 'good' ? 'Good' : snapshot.signal === 'fair' ? 'Fair' : 'Weak signal'}</span>
-        <span className="mg-stream-glass px-2 py-1">{arena} · {angle}</span>
+      <div className="pointer-events-none absolute left-4 right-20 top-4 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="mg-badge mg-badge-live">LIVE {time}</span>
+          <span className="mg-stream-glass flex items-center gap-1 px-2 py-1"><Eye className="h-4 w-4" />{snapshot.viewerCount}</span>
+          <span className={`mg-stream-glass flex items-center gap-1 border px-2 py-1 ${snapshot.signal === 'poor' ? 'border-[rgb(var(--mg-red))]' : snapshot.signal === 'fair' ? 'border-amber-400' : 'border-transparent'}`}><Wifi className="h-4 w-4" />{snapshot.signal === 'good' ? 'Good' : snapshot.signal === 'fair' ? 'Fair' : 'Weak signal'}</span>
+          <span className="mg-stream-glass px-2 py-1">{arena} · {angle}</span>
+        </div>
+        <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
       </div>
       <SponsorOverlay arenaName={arena} track={false} />
-      <div className="absolute left-4 right-24 top-14"><FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} /></div>
       <div className="pointer-events-auto absolute bottom-4 right-3 top-16 flex flex-col justify-center gap-2 overflow-y-auto text-center text-xs">
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={flip}><RefreshCw />Flip</button>
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={() => run(() => publisher.current!.mute(!snapshot.audioMuted))}>{snapshot.audioMuted ? <MicOff /> : <Mic />}{snapshot.audioMuted ? 'Sound off' : 'Sound on'}</button>

@@ -3,7 +3,7 @@ import { RefreshCw, Save } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
-import { RefineDisclosure, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
+import { RefineDisclosure, RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import type { RaceScore, RaceScoreEventKind, RaceScoreHistory, ScorePlace } from './types';
 import { apiMessage } from './types';
 import { STATUS_CHOICES, effectiveStatus, statusLetter } from '../../lib/resultStatus';
@@ -112,77 +112,74 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
     }
   }
 
-  if (loading) return <RefinePage><p role="status" className="rf-note">Loading score history…</p></RefinePage>;
+  if (loading) return <div><p role="status" className="rf-note">Loading score history…</p></div>;
 
   const heading = `score-audit-${raceId}`;
   return (
-    <RefinePage>
-      <section aria-labelledby={heading}>
-        <RefineSection title="Score record" meta={`Revision ${score?.revision ?? 0}`} />
-        <h2 id={heading} className="sr-only">Score record</h2>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
-        {message && <p role="status" className="rf-note ops-ok">{message}</p>}
+    <section aria-labelledby={heading}>
+      <RefineSection title="Score record" meta={`Revision ${score?.revision ?? 0}`} />
+      <h2 id={heading} className="sr-only">Score record</h2>
+      {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+      {message && <p role="status" className="rf-note ops-ok">{message}</p>}
 
-        {score && <>
-          <RefineList as="div">
-            <div className="rf-row">
-              <span className="rf-grow">
-                <span className="rf-t1">{score.isSignedOff ? 'Signed off' : 'Open for scoring'}</span>
-                {score.signedOffAt && <span className="rf-t2">{new Date(score.signedOffAt).toLocaleString('en-GB')}{score.signedOffByUserId ? <> · Actor <code className="break-all">{score.signedOffByUserId}</code></> : null}</span>}
-              </span>
-              <button type="button" className="rf-btn rf-btn-text" aria-label="Refresh score record" onClick={() => void load()} disabled={loading || busy}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />Refresh</button>
-            </div>
-          </RefineList>
+      {score && <>
+        <RefineList as="div">
+          <div className="rf-row">
+            <span className="rf-grow">
+              <span className="rf-t1">{score.isSignedOff ? 'Signed off' : 'Open for scoring'}</span>
+              {score.signedOffAt && <span className="rf-t2">{new Date(score.signedOffAt).toLocaleString('en-GB')}{score.signedOffByUserId ? <> · Signed off by <code className="break-all">{score.signedOffByUserId}</code></> : null}</span>}
+            </span>
+            <button type="button" className="rf-btn rf-btn-text" aria-label="Refresh score record" onClick={() => void load()} disabled={loading || busy}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />Refresh</button>
+          </div>
+        </RefineList>
 
-          {canManage(competition) && <>
-            <RefineSection title={score.isSignedOff ? 'Reopen' : 'Sign off'} />
-            <div className="ops-form ops-panel">
-              <label className="rf-fld" htmlFor={`score-action-reason-${raceId}`}>{score.isSignedOff ? 'Reason for reopening' : 'Sign-off note (optional)'}
-                <textarea id={`score-action-reason-${raceId}`} className="ops-note-input" value={actionReason} onChange={(event) => setActionReason(event.target.value)} maxLength={1000} />
-              </label>
-              <button type="button" className="rf-btn rf-btn-primary" disabled={busy || loading} onClick={() => void changeSignOff(!score.isSignedOff)}>{score.isSignedOff ? 'Reopen results' : 'Sign off results'}</button>
-            </div>
-          </>}
-
-          {canManage(competition) && !score.isSignedOff && draft.length > 0 && <>
-            <RefineSection title="Corrections" />
-            <RefineList as="div">
-              <RefineDisclosure title="Correct placings" sub="Every correction needs a reason">
-                <form className="ops-form ops-panel" onSubmit={updateScore}>
-                  <p className="rf-note">Use the recorded team IDs below.</p>
-                  <ul className="ops-places">{draft.map((result, index) => (
-                    <li key={result.teamId} className="ops-place">
-                      <span className="rf-grow"><span className="rf-t1">Team {result.teamId}</span><span className="rf-t2">Points now {result.points}</span></span>
-                      <label className="rf-fld ops-place-field">Place<NumberField aria-label={`Place for team ${result.teamId}`}  min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
-                      <label className="ops-elim"><input aria-label={`Eliminated team ${result.teamId}`} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked, status: event.target.checked ? effectiveStatus(true, item.status) : 0 } : item))} />Did not finish</label>
-                      {result.eliminated && <label className="rf-fld ops-place-field">Why<SelectField aria-label={`Reason for team ${result.teamId}`} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</SelectField></label>}
-                      <label className="rf-fld ops-place-field">Referee note<input aria-label={`Referee note for team ${result.teamId}`} type="text" maxLength={500} value={result.refereeNote ?? ''} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, refereeNote: event.target.value } : item))} /></label>
-                    </li>
-                  ))}</ul>
-                  <label className="rf-fld">Correction reason<textarea className="ops-note-input" required maxLength={1000} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} /></label>
-                  <button type="submit" className="rf-btn rf-btn-primary" disabled={busy || loading}><Save aria-hidden="true" className="h-4 w-4" />{busy ? 'Saving…' : 'Save correction'}</button>
-                </form>
-              </RefineDisclosure>
-            </RefineList>
-          </>}
-
-          <RefineSection title="History" />
-          {history.length === 0
-            ? <RefineNote>No score changes have been recorded yet.</RefineNote>
-            : <RefineList as="ol" label="Score history">{history.map((entry) => (
-              <li key={entry.revision} className="rf-row ops-history">
-                <span className="rf-grow">
-                  <span className="rf-t1">{eventLabel(entry.kind)}</span>
-                  <span className="rf-t2">Revision {entry.revision} · {new Date(entry.createdAt).toLocaleString('en-GB')}</span>
-                  <span className="ops-reason">{entry.reason}</span>
-                  {entry.actorUserId && <span className="rf-t2">Actor <code className="break-all">{entry.actorUserId}</code></span>}
-                  <span className="rf-t2">{scoreSummary(entry.before)} → {scoreSummary(entry.after)}</span>
-                </span>
-              </li>
-            ))}</RefineList>}
+        {canManage(competition) && <>
+          <RefineSection title={score.isSignedOff ? 'Reopen' : 'Sign off'} />
+          <div className="ops-form ops-panel">
+            <label className="rf-fld" htmlFor={`score-action-reason-${raceId}`}>{score.isSignedOff ? 'Reason for reopening' : 'Sign-off note (optional)'}
+              <textarea id={`score-action-reason-${raceId}`} className="ops-note-input" value={actionReason} onChange={(event) => setActionReason(event.target.value)} maxLength={1000} />
+            </label>
+            <button type="button" className="rf-btn rf-btn-primary" disabled={busy || loading} onClick={() => void changeSignOff(!score.isSignedOff)}>{score.isSignedOff ? 'Reopen results' : 'Sign off results'}</button>
+          </div>
         </>}
-      </section>
-    </RefinePage>
+
+        {canManage(competition) && !score.isSignedOff && draft.length > 0 && <>
+          <RefineSection title="Corrections" />
+          <RefineList as="div">
+            <RefineDisclosure title="Correct placings" sub="Every correction needs a reason">
+              <form className="ops-form ops-panel" onSubmit={updateScore}>
+                <ul className="ops-places">{draft.map((result, index) => (
+                  <li key={result.teamId} className="ops-place">
+                    <span className="rf-grow"><span className="rf-t1">Team {result.teamId}</span><span className="rf-t2">Points now {result.points}</span></span>
+                    <label className="rf-fld ops-place-field">Place<NumberField aria-label={`Place for team ${result.teamId}`}  min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
+                    <label className="ops-elim"><input aria-label={`Eliminated team ${result.teamId}`} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked, status: event.target.checked ? effectiveStatus(true, item.status) : 0 } : item))} />Did not finish</label>
+                    {result.eliminated && <label className="rf-fld ops-place-field">Why<SelectField aria-label={`Reason for team ${result.teamId}`} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</SelectField></label>}
+                    <label className="rf-fld ops-place-field">Referee note<input aria-label={`Referee note for team ${result.teamId}`} type="text" maxLength={500} value={result.refereeNote ?? ''} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, refereeNote: event.target.value } : item))} /></label>
+                  </li>
+                ))}</ul>
+                <label className="rf-fld">Correction reason<textarea className="ops-note-input" required maxLength={1000} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} /></label>
+                <button type="submit" className="rf-btn rf-btn-primary" disabled={busy || loading}><Save aria-hidden="true" className="h-4 w-4" />{busy ? 'Saving…' : 'Save correction'}</button>
+              </form>
+            </RefineDisclosure>
+          </RefineList>
+        </>}
+
+        <RefineSection title="History" />
+        {history.length === 0
+          ? <RefineNote>No score changes have been recorded yet.</RefineNote>
+          : <RefineList as="ol" label="Score history">{history.map((entry) => (
+            <li key={entry.revision} className="rf-row ops-history">
+              <span className="rf-grow">
+                <span className="rf-t1">{eventLabel(entry.kind)}</span>
+                <span className="rf-t2">Revision {entry.revision} · {new Date(entry.createdAt).toLocaleString('en-GB')}</span>
+                <span className="ops-reason">{entry.reason}</span>
+                {entry.actorUserId && <span className="rf-t2">By <code className="break-all">{entry.actorUserId}</code></span>}
+                <span className="rf-t2">{scoreSummary(entry.before)} → {scoreSummary(entry.after)}</span>
+              </span>
+            </li>
+          ))}</RefineList>}
+      </>}
+    </section>
   );
 }
 

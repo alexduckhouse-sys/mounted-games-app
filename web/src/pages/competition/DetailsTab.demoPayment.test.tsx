@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { competition } from '../../test/factories';
-import { DetailsTab } from './DetailsTab';
+import { DetailsTab, SectionEntryPage } from './DetailsTab';
 
 const state = vi.hoisted(() => ({ detail: null as unknown }));
 
@@ -30,6 +30,7 @@ function renderDetails() {
     <MemoryRouter initialEntries={['/competitions/1/details']}>
       <Routes>
         <Route path="/competitions/:id/details" element={<DetailsTab />} />
+        <Route path="/competitions/:id/enter/:sectionId" element={<SectionEntryPage />} />
         <Route path="/me/signups/:signupId/test-payment" element={<p>Test payment page</p>} />
       </Routes>
     </MemoryRouter>,

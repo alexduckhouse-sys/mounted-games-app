@@ -134,7 +134,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
       {list && (
         <>
           <RefineNote>
-            A scorer link lets a volunteer enter scores for one arena from their phone, without an account. It can’t start the clock, sign off results or change anything else.
+            Lets a volunteer enter scores for one arena from their phone without an account.
           </RefineNote>
 
           {mayEdit && (list.arenas.length === 0
@@ -163,16 +163,19 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
             ))}
 
           {created && (
-            <div role="status" className="rf-list flex flex-col items-start gap-2 p-3">
+            <div role="status" className="rf-list mt-2 flex flex-col items-start gap-2 p-3">
               <p className="font-medium">{created.label}’s link is ready. Copy it now: it can’t be shown again.</p>
-              <input readOnly aria-label={`Link for ${created.label}`} className="w-full break-all" value={created.url} onFocus={(event) => event.currentTarget.select()} />
+              <div className="rf-fld w-full">
+                <input readOnly aria-label={`Link for ${created.label}`} className="w-full break-all" value={created.url} onFocus={(event) => event.currentTarget.select()} />
+              </div>
               <button type="button" className="mg-btn mg-btn-primary" onClick={() => void copy(created.url)}>Copy link</button>
               <p className="mg-meta">Or let them scan this with their phone’s camera.</p>
               <QrCode value={created.url} label={`QR code for ${created.label}’s scorer link`} className="w-48 max-w-full" />
             </div>
           )}
 
-          <RefineList label="Scorer links">
+          <div className="mt-2">
+            <RefineList label="Scorer links">
             {list.links.map((link) => {
               const status = statusOf(link, now);
               return (
@@ -195,6 +198,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
             })}
             {list.links.length === 0 && <li className="p-3 mg-meta">No scorer links yet.</li>}
           </RefineList>
+          </div>
         </>
       )}
       {notice && <p role={notice.kind === 'error' ? 'alert' : 'status'} className="mg-notice">{notice.text}</p>}

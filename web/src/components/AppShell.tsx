@@ -123,7 +123,7 @@ function Shell({ width }: { width: PageWidth }) {
       </div>
       <main className={publicPage
         ? `skin mx-auto w-full ${cap} flex-1 px-4 ${/\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : tabsCompetitionId != null || globalTabs ? 'pb-28' : 'pb-10'}`
-        : `mx-auto w-full ${cap} flex-1 px-3 py-3 sm:px-4 sm:py-5`}>
+        : `skin mx-auto w-full ${cap} flex-1 px-4 py-3 sm:py-5`}>
         {storageError && <p role="status" className={publicPage ? 'mg-notice mt-4' : 'mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900'}>{storageError}</p>}
         <TrainerAccountNotice />
         <PageLoadBoundary page={location.pathname}>
