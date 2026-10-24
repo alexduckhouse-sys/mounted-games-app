@@ -1,18 +1,19 @@
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services.Calendar;
 
 namespace MountedGames.Api.Services;
 
 /// <summary>
 /// Polls every minute and fires background pushes for the same conditions the
 /// foreground hook (<c>useTeamNotifications</c>) covers:
-///   * 1 hour before a race session that one of your teams runs in,
+///   * 1 hour before a heat that one of your teams runs in,
 ///   * 30 minutes before a briefing in any comp where you have a team.
 /// Schedule-slip pushes piggy-back on the existing live SignalR
 /// <c>sessionUpdated</c> path (when an admin marks a session finished early,
 /// the controller can call PushNotifier directly).
-/// Dedupe is per-(session, kind, user) so we don't re-fire on each tick.
+/// Dedupe is per-(heat, team) for heat reminders and per-session for briefings so we don't re-fire on each tick.
 /// </summary>
 public class NotificationScheduler : BackgroundService
 {
@@ -74,31 +75,42 @@ public class NotificationScheduler : BackgroundService
         var push = scope.ServiceProvider.GetRequiredService<PushNotifier>();
         var now = DateTime.UtcNow;
 
-        // Pull upcoming non-finished sessions in the next 90 minutes (covers
-        // both the 1-hour-before and 30-min briefing windows with some slack).
-        var horizonStart = now.AddMinutes(-1);
+        // Include earlier sessions in each relevant competition so delays cascade to later heats.
+        var horizonStart = now.AddDays(-2);
         var horizonEnd = now.AddMinutes(90);
+        var competitionIds = db.Sessions.Where(s =>
+            (s.ScheduledStart >= horizonStart && s.ScheduledStart <= horizonEnd)
+                || (s.StartedAt >= horizonStart && s.StartedAt <= horizonEnd)
+                || s.Status == SessionStatus.InArena
+                || s.Heats.Any(h => h.ScheduledStart >= horizonStart && h.ScheduledStart <= horizonEnd))
+            .Select(s => s.CompetitionId);
         var sessions = await db.Sessions
             .Include(s => s.Section)
-            .Include(s => s.Heats)
-            .Where(s => s.ScheduledStart != null
-                && s.ScheduledStart >= horizonStart
-                && s.ScheduledStart <= horizonEnd
-                && s.Status != SessionStatus.Finished)
-            .ToListAsync(ct);
+            .Include(s => s.Heats).ThenInclude(h => h.Races)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+            .Where(s => competitionIds.Contains(s.CompetitionId)).ToListAsync(ct);
+        var timings = sessions.GroupBy(s => s.CompetitionId)
+            .SelectMany(group => TimetableTimes.Compute(group)).ToDictionary(pair => pair.Key, pair => pair.Value);
 
         foreach (var s in sessions)
         {
-            if (!s.ScheduledStart.HasValue) continue;
-            var minsAhead = (s.ScheduledStart.Value - now).TotalMinutes;
+            if (s.Status == SessionStatus.Finished) continue;
+            var minsAhead = s.ScheduledStart.HasValue ? (double?)(s.ScheduledStart.Value - now).TotalMinutes : null;
             var kind = s.Kind;
 
             // 1 hour before a race session. A race session with no heats yet is only the provisional timetable's
             // estimate (made in the competition creator), so it says nothing to anyone until heats exist.
-            if (kind == SessionKind.Race && s.Heats.Count > 0 && minsAhead is <= 60 and > 55)
+            if (kind == SessionKind.Race && s.Heats.Count > 0)
             {
-                await FireForSession(db, push, s, "1h", $"1 hour to {s.Name}",
-                    $"Starts at {UkTime(s.ScheduledStart.Value):HH:mm} — {s.Section?.DisplayName ?? "—"}.", ct);
+                if (s.Heats.Any(h => h.Entries.Count > 0))
+                {
+                    await FireForSessionHeats(push, s, timings, now, ct);
+                }
+                else if (minsAhead is <= 60 and > 55 && s.ScheduledStart is { } scheduled)
+                {
+                    await FireForSession(db, push, s, "1h", $"1 hour to {s.Name}",
+                        $"Starts at {UkTime(scheduled):HH:mm} — {s.Section?.DisplayName ?? "—"}.", ct);
+                }
             }
             // 30 minutes before a briefing.
             if (kind == SessionKind.Briefing && minsAhead is <= 30 and > 25)
@@ -107,6 +119,33 @@ public class NotificationScheduler : BackgroundService
                     s.Name, ct);
             }
         }
+    }
+
+    private async Task FireForSessionHeats(
+        PushNotifier push, Session s, IReadOnlyDictionary<int, HeatTime> timings, DateTime now, CancellationToken ct)
+    {
+        var messages = new List<(int TeamId, PushPayload Payload)>();
+        foreach (var h in s.Heats.OrderBy(h => h.OrderIndex))
+        {
+            if (h.StartedAt.HasValue || h.FinishedAt.HasValue || (h.Races.Count > 0 && h.Races.All(r => r.IsComplete))) continue;
+            var start = timings.GetValueOrDefault(h.Id).Start;
+            if (!start.HasValue || (start.Value - now).TotalMinutes is not (<= 60 and > 55)) continue;
+            var timeText = $"{UkTime(start.Value):HH:mm}";
+            var heatLabel = !string.IsNullOrWhiteSpace(h.Label) ? h.Label! : $"Heat {h.OrderIndex}";
+            foreach (var entry in h.Entries.OrderBy(e => e.LaneIndex))
+            {
+                var dedupeKey = $"1h:{s.Id}:h{h.Id}:t{entry.TeamId}";
+                if (!_fired.Add(dedupeKey)) continue;
+                var teamName = entry.Team?.DisplayName ?? $"Team {entry.TeamId}";
+                messages.Add((entry.TeamId, new PushPayload(
+                    Title: "60 minutes until your heat",
+                    Body: $"{teamName} — {s.Name} ({heatLabel}, Lane {entry.LaneIndex}) starts around {timeText}.",
+                    Tag: dedupeKey,
+                    Url: $"/competitions/{s.CompetitionId}")));
+            }
+        }
+        if (messages.Count > 0)
+            await push.NotifyPerTeamAsync(messages, ct);
     }
 
     private async Task FireForSession(

@@ -8,7 +8,7 @@ namespace MountedGames.Api.Services;
 /// Heat-heat-final: two qualifier heats feed a final. The top finishers of each qualifier are
 /// interleaved (Q1 first, Q2 first, Q1 second, ...) into the final's lanes.
 /// </summary>
-public sealed class RaceFinalService(AppDbContext db)
+public sealed class RaceFinalService(AppDbContext db, PushNotifier? push = null)
 {
     /// <summary>How many teams go through from each qualifier when the session doesn't say.</summary>
     public const int DefaultQualifiers = 3;
@@ -67,13 +67,38 @@ public sealed class RaceFinalService(AppDbContext db)
         foreach (var teamId in interleaved)
             db.HeatEntries.Add(new HeatEntry { HeatId = finalHeat.Id, TeamId = teamId, LaneIndex = lane++ });
         await db.SaveChangesAsync(ct);
+
+        if (push is not null && db.Database.CurrentTransaction is null)
+            await NotifyDrawAsync(finalHeat.Id, ct);
         return null;
+    }
+
+    /// <summary>Deliver only after the final entries and their triggering score have committed.</summary>
+    public async Task NotifyDrawAsync(int finalHeatId, CancellationToken ct = default)
+    {
+        if (push is null) return;
+        try
+        {
+            var final = await db.Heats.AsNoTracking().Include(h => h.Session)
+                .Include(h => h.Entries).ThenInclude(e => e.Team).SingleAsync(h => h.Id == finalHeatId, ct);
+            var heatLabel = !string.IsNullOrWhiteSpace(final.Label) ? final.Label : $"Heat {final.OrderIndex}";
+            var messages = final.Entries.Select(entry => (entry.TeamId, new PushPayload(
+                Title: "Finals draw published",
+                Body: $"You are in the {heatLabel}, Lane {entry.LaneIndex} ({entry.Team?.DisplayName ?? $"Team {entry.TeamId}"})",
+                Tag: $"finals-draw:{final.Id}:{entry.TeamId}",
+                Url: $"/competitions/{final.Session!.CompetitionId}")));
+            await push.NotifyPerTeamAsync(messages, ct);
+        }
+        catch
+        {
+            // Delivery failure must not turn a committed score or draw into a failed save.
+        }
     }
 
     /// <summary>
     /// After a qualifier race is scored: once both qualifiers of the round are complete, fill the round's
     /// final from them (using the session's qualifier count). Leaves a final that already has results
-    /// alone. Returns the session id when the final was filled, otherwise null.
+    /// alone. Returns the final heat id when the final was filled, otherwise null.
     /// </summary>
     public async Task<int?> TryAutoPopulateAsync(int raceId, CancellationToken ct = default)
     {
@@ -91,6 +116,6 @@ public sealed class RaceFinalService(AppDbContext db)
         if (final.Races.Any(r => r.IsComplete)) return null;
 
         var error = await PopulateAsync(final, heat.Session?.QualifiersPerHeat ?? DefaultQualifiers, ct);
-        return error is null ? heat.SessionId : null;
+        return error is null ? final.Id : null;
     }
 }

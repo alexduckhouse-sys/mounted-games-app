@@ -313,10 +313,10 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
                         <span className="heat-name">CF<span className="sr-only"> (Carried forward)</span></span>
                       </th>
                     )}
-                    {columns.map(({ key, label }, i) => (
+                    {columns.map(({ key, race, label }, i) => (
                       <th key={key} scope="col" className="heat-race" title={label}>
                         {(i > 0 || showCarriedForward) && <span aria-hidden="true" className="heat-sep" />}
-                        <span className={`heat-name ${i === runningIndex ? 'heat-name-running' : ''}`}>{label}{i === runningIndex && <span className="sr-only"> (running)</span>}</span>
+                        <RaceRulesButton raceName={race.name} className={`heat-name ${i === runningIndex ? 'heat-name-running' : ''}`} label={<>{label}{i === runningIndex && <span className="sr-only"> (running)</span>}</>} />
                       </th>
                     ))}
                     <th scope="col" className="heat-pts">

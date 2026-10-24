@@ -6,7 +6,7 @@ import { api, type StoredAuth } from '../api';
 import { AuthProvider } from '../auth/AuthContext';
 import { CurrentCompetitionProvider } from '../competition/CurrentCompetitionContext';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
-import { team } from '../test/factories';
+import { competition, heat, race, session, team } from '../test/factories';
 import { ProfilePage } from './ProfilePage';
 import { NeedsYouProvider } from './profile/NeedsYouProvider';
 
@@ -381,5 +381,26 @@ describe('ProfilePage: the dashboard', () => {
     mount({ roles: ['Member'] });
     expect(screen.queryByRole('region', { name: 'Quick actions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Site admin' })).not.toBeInTheDocument();
+  });
+});
+
+
+describe('ProfilePage: your teams today', () => {
+  it('shows the session, heat, lane and delay below Needs you', async () => {
+    const today = new Date();
+    const at = (h: number, m: number) => new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m).toISOString();
+    responses['/trainer/my-teams'] = [team(1, { competitionId: 4, displayName: 'Example Club A', sectionName: 'Open', relationship: 'trainer' })];
+    responses['/competitions/4'] = competition({ id: 4, startDate: at(9, 0), sessions: [session(1, {
+      name: 'Open session', scheduledStart: at(9, 0), startedAt: at(9, 10), status: 1,
+      heats: [heat(1, { label: 'Heat 1', entries: [{ id: 1, teamId: 1, teamName: 'Example Club A', laneIndex: 3 }], races: [race(1)] })],
+    })] });
+    responses['/declaration-forms'] = [];
+    mount({ roles: ['Admin'] });
+    const todaySection = await screen.findByRole('region', { name: 'Your teams today' });
+    expect(todaySection).toHaveTextContent('09:10');
+    expect(todaySection).toHaveTextContent('Open session · Heat 1 · Lane 3 · +10 min');
+    expect(within(todaySection).getByRole('link')).toHaveAttribute('href', '/competitions/4/teams/1');
+    const needs = await screen.findByRole('region', { name: 'Needs you' });
+    expect(needs.compareDocumentPosition(todaySection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

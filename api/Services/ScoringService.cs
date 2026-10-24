@@ -30,8 +30,15 @@ public class ScoringService
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly AppDbContext _db;
+    private readonly PushNotifier? _push;
+    private readonly ILogger<ScoringService>? _log;
 
-    public ScoringService(AppDbContext db) => _db = db;
+    public ScoringService(AppDbContext db, PushNotifier? push = null, ILogger<ScoringService>? log = null)
+    {
+        _db = db;
+        _push = push;
+        _log = log;
+    }
 
     /// <summary>The largest field that races at once in the session: a heat with more teams than lanes races only the lanes.</summary>
     public async Task<int> GetSessionBaseAsync(int sessionId)
@@ -324,8 +331,11 @@ public class ScoringService
         if (reason?.Trim().Length > 1000)
             throw new ScoreValidationException("Reason must be 1000 characters or fewer.");
         requestId = requestId.Trim();
-        return await ExecuteTransactionAsync(async () =>
+        int? populatedFinalHeatId = null;
+        var dto = await ExecuteTransactionAsync(async () =>
         {
+        // Reset on every execution-strategy attempt, including an idempotent replay after an ambiguous commit.
+        populatedFinalHeatId = null;
         var race = await _db.Races
             .Include(r => r.Heat).ThenInclude(h => h!.Entries).ThenInclude(e => e.Team)
             .Include(r => r.Heat).ThenInclude(h => h!.Races)
@@ -506,7 +516,7 @@ public class ScoringService
         if (fresh.Count > 0)
         {
             if (isQualifier && heat.RaceRoundId is not null)
-                await new RaceFinalService(_db).TryAutoPopulateAsync(raceId, cancellationToken);
+                populatedFinalHeatId = await new RaceFinalService(_db).TryAutoPopulateAsync(raceId, cancellationToken);
             if (heat.Session is { } session)
             {
                 var sessionHeats = await _db.Heats.AsNoTracking()
@@ -523,6 +533,63 @@ public class ScoringService
         }
         return ToDto(raceId, state.Revision, false, null, null, after);
         }, cancellationToken);
+        if (!dto.IdempotentReplay && _push is not null)
+        {
+            if (populatedFinalHeatId.HasValue)
+                await new RaceFinalService(_db, _push).NotifyDrawAsync(populatedFinalHeatId.Value, cancellationToken);
+            await TryNotifyHeatCompleteAsync(raceId, cancellationToken);
+        }
+        return dto;
+    }
+
+    private async Task TryNotifyHeatCompleteAsync(int raceId, CancellationToken ct)
+    {
+        try
+        {
+            var heat = await _db.Heats.AsNoTracking()
+                .Include(h => h.Session)
+                .Include(h => h.Entries).ThenInclude(e => e.Team)
+                .Include(h => h.Races).ThenInclude(r => r.Results)
+                .FirstOrDefaultAsync(h => h.Races.Any(r => r.Id == raceId), ct);
+            if (heat is null || heat.Races.Count == 0 || heat.Races.Any(r => !r.IsComplete))
+                return;
+
+            var heatLabel = !string.IsNullOrWhiteSpace(heat.Label) ? heat.Label! : $"Heat {heat.OrderIndex}";
+            var compId = heat.Session?.CompetitionId ?? 0;
+            var url = compId > 0 ? $"/competitions/{compId}" : null;
+
+            var teamTotals = heat.Entries
+                .Select(e => new
+                {
+                    e.TeamId,
+                    TeamName = e.Team?.DisplayName ?? $"Team {e.TeamId}",
+                    Points = heat.Races.SelectMany(r => r.Results).Where(res => res.TeamId == e.TeamId).Sum(res => res.Points),
+                })
+                .OrderByDescending(x => x.Points)
+                .ThenBy(x => x.TeamId)
+                .ToList();
+
+            var messages = new List<(int TeamId, PushPayload Payload)>();
+            var rank = 1;
+            for (var i = 0; i < teamTotals.Count; i++)
+            {
+                if (i > 0 && teamTotals[i].Points < teamTotals[i - 1].Points)
+                    rank = i + 1;
+                var row = teamTotals[i];
+                var ord = PushNotifier.Ordinal(rank);
+                messages.Add((row.TeamId, new PushPayload(
+                    Title: "Your heat's results are in",
+                    Body: $"{ord} in {heatLabel} — {PointValues.Format(row.Points)} pts ({row.TeamName})",
+                    Tag: $"heat-results:{heat.Id}:{row.TeamId}",
+                    Url: url)));
+            }
+            await _push!.NotifyPerTeamAsync(messages, ct);
+        }
+        catch (Exception ex)
+        {
+            // Keep the committed score, and log no recipient, payload or exception message.
+            _log?.LogWarning("Heat result notification failed for race {RaceId} ({FailureType}).", raceId, ex.GetType().Name);
+        }
     }
 
     private async Task<RaceScoreDto> ApplyActionAsync(
