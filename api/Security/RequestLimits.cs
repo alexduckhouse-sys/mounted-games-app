@@ -14,6 +14,9 @@ public static class RequestLimits
     /// <summary>"Resend my confirmation email": per signed-in user (<c>RateLimits:EmailResendPerMinute</c>, 3).</summary>
     public const string EmailResendPolicy = "email-resend";
 
+    /// <summary>Entering a competition section (which can send a confirmation email): per signed-in user or IP (<c>RateLimits:SignupPerMinute</c>, 15).</summary>
+    public const string SignupPolicy = "signup";
+
     /// <summary>
     /// Per-minute limits for sign-in (per IP), geocoding (per IP), API writes (per user, or per IP when anonymous), the public
     /// calendar and link-preview reads (per IP) and sponsor "shown" counts (per IP). <c>RateLimits:AuthPerMinute</c>,
@@ -32,11 +35,13 @@ public static class RequestLimits
         // Each search reads across every competition, so the web waits for a pause in typing before it asks.
         var statsPermits = configuration.GetValue("RateLimits:StatsPerMinute", 60);
         var resendPermits = configuration.GetValue("RateLimits:EmailResendPerMinute", 3);
+        var signupPermits = configuration.GetValue("RateLimits:SignupPerMinute", 15);
         return services.AddRateLimiter(options =>
         {
             Configure(options, authPermits, writePermits, geocodePermits, scorerPermits, publicReadPermits, exposurePermits);
             options.AddPolicy(StatsPolicy, context => Partition(context, $"stats:{WritePartition(context)}", statsPermits));
             options.AddPolicy(EmailResendPolicy, context => Partition(context, $"email-resend:{WritePartition(context)}", resendPermits));
+            options.AddPolicy(SignupPolicy, context => Partition(context, $"signup:{WritePartition(context)}", signupPermits));
         });
     }
 

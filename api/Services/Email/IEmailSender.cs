@@ -1,3 +1,4 @@
+using System.Net;
 using MountedGames.Api.Entities;
 
 namespace MountedGames.Api.Services.Email;
@@ -18,6 +19,39 @@ public record EmailMessage(
 public interface IEmailSender
 {
     Task<EmailDeliveryStatus> SendAsync(EmailMessage message, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Dependency-free HTML layout for outgoing emails. Every dynamic value goes through <see cref="Encode"/>
+/// so user or competition strings can never inject markup.
+/// </summary>
+public static class EmailHtml
+{
+    public const string HeaderStyle = "background:#17385F;color:#ffffff;padding:16px 20px;font-family:system-ui,-apple-system,sans-serif;font-weight:700;font-size:18px;";
+    public const string CardStyle = "background:#ffffff;border:1px solid #d8dee9;border-radius:10px;padding:20px;color:#0f172a;font-family:system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.5;";
+
+    public static string Encode(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
+
+    public static string Wrap(string innerHtml) =>
+        $"""
+        <!doctype html>
+        <html lang="en">
+        <body style="margin:0;padding:16px;background:#f8fafc;color:#0f172a;font-family:system-ui,-apple-system,sans-serif;">
+        <div style="max-width:560px;margin:0 auto;">
+        <div style="{HeaderStyle}">Mounted Games</div>
+        <div style="{CardStyle}">
+        {innerHtml}
+        </div>
+        </div>
+        </body>
+        </html>
+        """;
+
+    public static string Button(string href, string label) =>
+        $"<p style=\"margin:16px 0;\"><a href=\"{Encode(href)}\" style=\"display:inline-block;background:#17385F;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px;\">{Encode(label)}</a></p>";
+
+    public static string Row(string label, string value) =>
+        $"<tr><td style=\"padding:6px 12px 6px 0;color:#475569;font-weight:600;vertical-align:top;white-space:nowrap;\">{Encode(label)}</td><td style=\"padding:6px 0;color:#0f172a;\">{Encode(value)}</td></tr>";
 }
 
 public static class EmailAddresses

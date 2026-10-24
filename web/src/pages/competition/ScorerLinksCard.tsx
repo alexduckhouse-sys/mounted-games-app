@@ -122,7 +122,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
   }
 
   return (
-    <section aria-label="Scorer links">
+    <section id="scorer-links" aria-label="Scorer links" className="scroll-mt-20">
       <RefineSection title="Scorer links" />
       {state === 'error' && (
         <div role="alert" className="rf-list flex flex-col items-start gap-2 p-3">

@@ -24,8 +24,8 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn());
 });
 
-it('covers the API, home, competition and team profile paths', () => {
-  expect(config.matcher).toEqual(['/api/:path*', '/', '/competitions/:path*', '/team-profiles/:path*']);
+it('covers the API, home, competition, team profile, seasons and stats paths', () => {
+  expect(config.matcher).toEqual(['/api/:path*', '/', '/events', '/competitions', '/competitions/:path*', '/team-profiles/:path*', '/seasons/:path*', '/stats/:path*']);
 });
 
 it('still forwards the visitor IP on API requests', async () => {

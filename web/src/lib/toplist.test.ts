@@ -124,6 +124,57 @@ describe('buildToplist final cut-off', () => {
     expect(list.runoff).toBeNull();
     expect(list.cutAfter).toBe(2);
   });
+
+  it('calculates the true points needed using heat slot conservation and marks mathematically eliminated teams as null', () => {
+    // 4 teams in a single heat (slots 4, 3, 2, 1) with 1 race left and top 2 making the final:
+    // Team 1 has 12, Team 2 has 10 (cut-off), Team 3 has 8, Team 4 has 5.
+    // Naive gap for Team 3 would be 10 - 8 + 1 = 3 (reaching 11), but if Team 3 takes 3 pts,
+    // the remaining slots are {4, 2, 1} so Team 2 gets at least 1 pt (reaching 11).
+    // Thus Team 3 actually needs 4 pts (1st place, reaching 12 while Team 2 gets 1 pt -> 11).
+    // Team 4 (5 pts, maxGain 4 -> 9 < 10) is mathematically eliminated (needed: null).
+    const sessions = [session(1, [heat(1, [1, 2, 3, 4], [scored(1, [1, 4], [2, 3], [3, 2], [4, 1]), race(2)])], { lanesPerHeat: 4 })];
+    const list = buildToplist(
+      [standing(1, 12), standing(2, 10), standing(3, 8), standing(4, 5)],
+      sessions,
+      [],
+      SECTION,
+      2,
+    );
+    expect(list.rows.find((r) => r.teamId === 3)?.needed).toBe(4);
+    expect(list.rows.find((r) => r.teamId === 4)?.needed).toBeNull();
+  });
+
+  it('returns maxGain when winning every remaining race ties the cut-off for a run-off, or null if rivals still pull ahead', () => {
+    // 4-team heat, 1 race left (slots 4, 3, 2, 1), top 2 make the final.
+    // Team 1 = 20, Team 2 = 13, Team 3 = 10 (maxGain = 4 -> 14), Team 4 = 9 (maxGain = 4 -> 13, but Team 2 gets at least +1 -> 14).
+    const sessions = [session(1, [heat(1, [1, 2, 3, 4], [race(1)])], { lanesPerHeat: 4 })];
+    const list = buildToplist(
+      [standing(1, 20), standing(2, 13), standing(3, 10), standing(4, 9)],
+      sessions,
+      [],
+      SECTION,
+      2,
+    );
+    // Team 3 scoring 4 reaches 14, tying Team 2 (13 + 1 = 14) for a run-off.
+    expect(list.rows.find((r) => r.teamId === 3)?.needed).toBe(4);
+    // Team 4 scoring 4 only reaches 13 while Team 2 reaches at least 14, so Team 4 is eliminated.
+    expect(list.rows.find((r) => r.teamId === 4)?.needed).toBeNull();
+  });
+
+  it('handles qualifier round stage (1 point per finisher) and sit-out entries when computing points needed', () => {
+    const sitOutRace = race(1, { isComplete: false, results: [result(3, null, { isSitOut: true })] });
+    const qualifierHeat = heat(1, [1, 2, 3, 4], [sitOutRace, race(2)], { raceRoundStage: 1 });
+    const sessions = [session(1, [qualifierHeat])];
+    const list = buildToplist(
+      [standing(1, 5), standing(2, 3), standing(3, 2), standing(4, 2)],
+      sessions,
+      [],
+      SECTION,
+      2,
+    );
+    // Team 3 sits out race 1, so maxGain is 1 (from race 2); 2 + 1 = 3 ties Team 2 if Team 2 didn't score, but in stage 1 every active team gets 1 pt per race.
+    expect(list.rows.find((r) => r.teamId === 3)?.needed).toBeNull();
+  });
 });
 
 describe('buildToplist from sessions', () => {
@@ -320,5 +371,63 @@ describe('buildToplist started', () => {
   it('ignores results in other age groups', () => {
     const other = session(1, [heat(1, [1, 2], [scored(1, [1, 0])])], { competitionSectionId: SECTION + 1 });
     expect(buildToplist([standing(1, 0), standing(2, 0)], [other], [], SECTION, null).started).toBe(false);
+  });
+});
+
+describe('buildToplist byGame', () => {
+  it('groups non-final race results across heats by game name, excluding HC teams and ranking with ties', () => {
+    const r1 = race(1, {
+      name: 'Bending',
+      orderIndex: 1,
+      isComplete: true,
+      results: [
+        result(1, 1, { points: 5, teamName: 'Alpha' }),
+        result(2, 2, { points: 4, teamName: 'Bravo' }),
+        result(99, 3, { points: 3, teamName: 'Guest HC' }),
+      ],
+    });
+    const r2 = race(2, {
+      name: 'bending',
+      orderIndex: 1,
+      isComplete: true,
+      results: [
+        result(3, 1, { points: 5, teamName: 'Charlie' }),
+        result(4, null, { points: 0, eliminated: true, teamName: 'Delta' }),
+      ],
+    });
+    const unscored = race(3, { name: 'Mug', orderIndex: 2, isComplete: false, results: [] });
+    const s1 = session(1, [
+      heat(1, [1, 2, 99], [r1, unscored], { label: 'Heat 1', orderIndex: 1 }),
+      heat(2, [3, 4], [r2], { orderIndex: 2 }),
+    ], { orderIndex: 1 });
+    const s2 = session(2, [
+      heat(3, [1], [race(4, { name: 'Flag', isComplete: true, results: [result(1, 1, { points: 5, teamName: 'Alpha' })] })], { label: 'Heat 1', orderIndex: 1 }),
+    ], { orderIndex: 2 });
+
+    const singleSessionList = buildToplist(
+      [standing(1, 5), standing(2, 4), standing(3, 5), standing(4, 0)],
+      [s1],
+      [team(99, { isHorsConcours: true })],
+      SECTION,
+      null,
+    );
+    expect(singleSessionList.byGame).toHaveLength(1);
+    expect(singleSessionList.byGame[0].name).toBe('Bending');
+    expect(singleSessionList.byGame[0].rows.map((r) => [r.teamName, r.heatLabel, r.position, r.joint, r.points])).toEqual([
+      ['Alpha', 'Heat 1', 1, true, 5],
+      ['Charlie', 'Heat 2', 1, true, 5],
+      ['Bravo', 'Heat 1', 3, false, 4],
+      ['Delta', 'Heat 2', 4, false, 0],
+    ]);
+
+    const multiSessionList = buildToplist(
+      [standing(1, 10)],
+      [s1, s2],
+      [team(99, { isHorsConcours: true })],
+      SECTION,
+      null,
+    );
+    expect(multiSessionList.byGame.map((g) => g.name)).toEqual(['Bending', 'Flag']);
+    expect(multiSessionList.byGame[1].rows[0].heatLabel).toBe('S2 · Heat 1');
   });
 });

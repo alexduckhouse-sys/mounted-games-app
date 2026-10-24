@@ -21,9 +21,9 @@ it('moves the live heat identity into the score table and publishes the compact 
   const shownSession = session(1, { sectionName: 'Teams Under 12', arenaName: 'Main Arena', status: 1, scheduledStart: '2026-10-16T10:00:00', heats: [shownHeat] });
   state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
   render(<CompactPageBarProvider><MemoryRouter><BarProbe /><HeatScores session={shownSession} heats={[shownHeat]} activeHeatId={1} /></MemoryRouter></CompactPageBarProvider>);
-  expect(screen.getByRole('heading', { name: 'Under 12 Teams Heat 2 scores' })).toHaveClass('sr-only');
-  expect(screen.getByRole('columnheader', { name: /Under 12 TeamsHeat 2Race 1 of 1 · Bending Team/ })).toBeVisible();
-  expect(screen.getByTestId('bar')).toHaveTextContent('Autumn Games|Under 12 Teams heats · Main Arena|live');
+  expect(screen.getByRole('heading', { name: 'Under 12 Heat 2 scores' })).toHaveClass('sr-only');
+  expect(screen.getByRole('columnheader', { name: /Under 12Heat 2Race 1 of 1 · Bending Team/ })).toBeVisible();
+  expect(screen.getByTestId('bar')).toHaveTextContent('Autumn Games|Under 12 heats · Main Arena|live');
   expect(screen.queryByText('Timetable')).toBeNull();
 });
 
@@ -115,4 +115,28 @@ it('shows the letters for a team that did not start, did not finish, retired or 
   // Results saved before the choice existed have no status and were all eliminations.
   expect(cell('Team 4')).toHaveTextContent('E');
   expect(screen.getByText('Did not start')).toBeInTheDocument();
+});
+
+it('pre-fills S for a team scheduled to sit out an unscored race and links team names to the team page', () => {
+  const entries = [1, 2, 3].map((id) => ({ id, teamId: id, teamName: `Team ${id}`, laneIndex: id }));
+  const shownHeat = heat(17, {
+    sessionId: 7,
+    orderIndex: 0,
+    label: 'Heat 1',
+    entries,
+    races: [race(51, { name: 'Bending', orderIndex: 0, isComplete: false, results: [] })],
+  });
+  const shownSession = session(7, { sectionName: 'Teams Seniors', status: 1, lanesPerHeat: 2, laneRotationMode: 0, scheduledStart: '2026-10-16T10:00:00', heats: [shownHeat] });
+  state.competition = competition({
+    id: 42,
+    name: 'Autumn Games',
+    startDate: '2026-10-16',
+    teams: [team(1, { bibDescription: '[flag:gb] Red bibs' }), team(2), team(3)],
+    sessions: [shownSession],
+  });
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[shownHeat]} activeHeatId={17} /></MemoryRouter></CompactPageBarProvider>);
+
+  expect(screen.getByRole('link', { name: 'Team 1' })).toHaveAttribute('href', '/competitions/42/teams/1');
+  const row3 = screen.getByRole('row', { name: /Team 3/ });
+  expect(within(row3).getByText('Sat out this race')).toBeInTheDocument();
 });

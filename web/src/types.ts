@@ -921,6 +921,8 @@ export interface StatsGame {
   points: number;
   maxPoints: number;
   pointQuotaPercent: number | null;
+  averagePoints?: number | null;
+  averagePlace?: number | null;
 }
 
 export interface StatsSession {

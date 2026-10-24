@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -26,6 +26,7 @@ interface Extra {
   activeIdx?: number;
   heatOverride?: Heat;
   queued?: QueuedScore[];
+  onSelectRace?: (id: number) => void;
   onSubmit?: (places?: PendingPlace[]) => void;
   allowReasons?: boolean;
   onSetHc?: (teamId: number, hc: boolean) => Promise<void>;
@@ -36,12 +37,12 @@ interface Extra {
   hatbands?: string[] | null;
 }
 
-function Harness({ activeIdx = 1, heatOverride = h, queued = [], onSubmit = () => {}, allowReasons, onSetHc, hcTeamIds, onUndo, initial = [], lanes = null, hatbands }: Extra) {
+function Harness({ activeIdx = 1, heatOverride = h, queued = [], onSelectRace = vi.fn(), onSubmit = () => {}, allowReasons, onSetHc, hcTeamIds, onUndo, initial = [], lanes = null, hatbands }: Extra) {
   const rules = { lanesPerHeat: lanes, mode: LaneRotationMode.MoveUp };
   const [pending, setPending] = useState<PendingPlace[]>(initial);
   return (
     <ScoringSection
-      heat={heatOverride} races={heatOverride.races} activeRace={heatOverride.races[activeIdx] ?? null} onSelectRace={vi.fn()} sessionBase={3}
+      heat={heatOverride} races={heatOverride.races} activeRace={heatOverride.races[activeIdx] ?? null} onSelectRace={onSelectRace} sessionBase={3}
       laneRules={rules} qualifiers={3} pending={pending} canScore queued={queued}
       onClickTeam={(teamId) => setPending((p) => [...p, { teamId, place: p.length + 1, eliminated: false }])}
       onToggleElim={(teamId) => setPending((p) => [...p.filter((x) => x.teamId !== teamId), { teamId, place: 0, eliminated: true }])}
@@ -295,3 +296,68 @@ describe('team colours and hatbands', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 });
+
+describe('race switcher bar, press-and-hold, and score override sheet', () => {
+  it('switches races via Previous race and Next race buttons and disables them at the ends', async () => {
+    const user = userEvent.setup();
+    const onSelectRace = vi.fn();
+    const { rerender } = render(<Harness activeIdx={0} onSelectRace={onSelectRace} />);
+    expect(screen.getByText('Race 1 of 3 · Scored')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous race' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Next race' }));
+    expect(onSelectRace).toHaveBeenCalledWith(2);
+
+    rerender(<Harness activeIdx={2} onSelectRace={onSelectRace} />);
+    expect(screen.getByText('Race 3 of 3 · Scoring')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next race' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Previous race' }));
+    expect(onSelectRace).toHaveBeenCalledWith(2);
+  });
+
+  it('eliminates a team on press-and-hold (650ms) and on Delete key', () => {
+    vi.useFakeTimers();
+    try {
+      render(<Harness />);
+      const bravoBtn = screen.getByRole('button', { name: /^Bravo, lane/ });
+      fireEvent.pointerDown(bravoBtn);
+      act(() => { vi.advanceTimersByTime(650); });
+      expect(within(screen.getByRole('region', { name: /^Scoring/ })).getByLabelText('Eliminated')).toBeInTheDocument();
+
+      const alphaBtn = screen.getByRole('button', { name: /^Alpha, lane/ });
+      fireEvent.keyDown(alphaBtn, { key: 'Delete' });
+      expect(within(screen.getByRole('region', { name: /^Scoring/ })).getAllByLabelText('Eliminated')).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('opens the score override sheet, sets manual points on a team, and removes the override when set back to Automatic', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(screen.getByRole('button', { name: 'Score override' }));
+    const sheet = screen.getByRole('dialog', { name: 'Score override' });
+    expect(within(sheet).getByText('Race 2 · pick a team')).toBeInTheDocument();
+
+    await user.click(within(sheet).getByRole('button', { name: /Bravo/ }));
+    await user.click(within(sheet).getByRole('radio', { name: /Set points/ }));
+    await user.click(within(sheet).getByRole('button', { name: 'One point more' }));
+    await user.click(within(sheet).getByRole('button', { name: 'One point more' }));
+    await user.click(within(sheet).getByRole('button', { name: 'Save override' }));
+
+    await user.click(within(sheet).getByRole('button', { name: 'Close' }));
+    const bravoRow = screen.getByRole('button', { name: /^Bravo, lane/ }).closest('li') as HTMLElement;
+    expect(bravoRow).toHaveTextContent('Manual');
+    expect(bravoRow).toHaveTextContent('2 pts · manual');
+    // Bravo had 3 points from Race 1 + 2 manual points in Race 2 = Heat total 5.
+    expect(bravoRow).toHaveTextContent('Heat total 5');
+
+    await user.click(screen.getByRole('button', { name: 'Score override' }));
+    const sheetAgain = screen.getByRole('dialog', { name: 'Score override' });
+    await user.click(within(sheetAgain).getByRole('button', { name: /Bravo/ }));
+    await user.click(within(sheetAgain).getByRole('radio', { name: /Automatic/ }));
+    await user.click(within(sheetAgain).getByRole('button', { name: 'Remove override' }));
+    await user.click(within(sheetAgain).getByRole('button', { name: 'Close' }));
+    expect(bravoRow).not.toHaveTextContent('Manual');
+  });
+});
+

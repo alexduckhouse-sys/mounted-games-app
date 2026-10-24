@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, ChevronDown } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import type { Club, CompetitionSummary } from '../../types';
@@ -37,6 +37,7 @@ export function SiteAdmin() {
   const [myIp, setMyIp] = useState<string | null>(null);
   const [blockBusy, setBlockBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showAllComps, setShowAllComps] = useState(false);
   const now = useMemo(() => new Date(), []);
 
   function load() {
@@ -92,6 +93,8 @@ export function SiteAdmin() {
 
   const iAmBlocked = useMemo(() => myIp != null && blocks.some((b) => b.ipAddress === myIp), [myIp, blocks]);
   const rows = useMemo(() => comps.map((c) => ({ c, stage: stageOf(c, now) })), [comps, now]);
+  const visibleRows = showAllComps ? rows : rows.slice(0, 4);
+  const hiddenCompCount = Math.max(0, rows.length - 4);
 
   const clubsByRegion = useMemo(() => {
     const m = new Map<string, Club[]>();
@@ -109,6 +112,8 @@ export function SiteAdmin() {
       { label: 'Edit details', onSelect: () => navigate(`/admin/competitions/${c.id}`) },
       { label: 'On the day & format', onSelect: () => navigate(`/admin/competitions/${c.id}/format`) },
       { label: 'Operations & tools', onSelect: () => navigate(`/competitions/${c.id}/operations`) },
+      { label: 'Scorer QR codes', onSelect: () => navigate(`/competitions/${c.id}/operations?tab=scorers`) },
+      { label: 'Go live & stream', onSelect: () => navigate(`/competitions/${c.id}/broadcast`) },
       { label: 'Dec forms', onSelect: () => navigate(`/competitions/${c.id}/declarations`) },
       { label: 'Manage event shop', onSelect: () => navigate(`/competitions/${c.id}/shop/manage`) },
       { label: 'Lock signups', onSelect: () => void setLocked(c, true) },
@@ -133,7 +138,7 @@ export function SiteAdmin() {
           </div>
           {rows.length === 0 && <p className="px-4 py-3 text-sm text-[rgb(var(--mg-muted))]">No competitions yet.</p>}
           <ul>
-            {rows.map(({ c, stage }, i) => {
+            {visibleRows.map(({ c, stage }, i) => {
               const action = stageAction(stage, c.id);
               return (
                 <li key={c.id} className={`${ROW_GRID} min-h-[68px] grid-cols-[minmax(0,1fr)_auto] gap-y-2 py-2 pl-4 pr-3 ${i ? 'border-t border-[rgb(var(--mg-rule-soft))]' : ''}`}>
@@ -151,6 +156,19 @@ export function SiteAdmin() {
               );
             })}
           </ul>
+          {hiddenCompCount > 0 && (
+            <div className="border-t border-[rgb(var(--mg-rule-soft))] px-4 py-2.5">
+              <button
+                type="button"
+                aria-expanded={showAllComps}
+                onClick={() => setShowAllComps((v) => !v)}
+                className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))] hover:underline"
+              >
+                <span>{showAllComps ? 'Show fewer competitions' : `Show ${hiddenCompCount} more competition${hiddenCompCount === 1 ? '' : 's'}`}</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${showAllComps ? 'rotate-180' : ''}`} aria-hidden="true" />
+              </button>
+            </div>
+          )}
         </div>
       </section>
 

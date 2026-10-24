@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -17,6 +18,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
     [AllowAnonymous]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<SeasonDto>>> List(CancellationToken ct)
     {
         var seasons = await db.Set<Season>()
@@ -35,6 +37,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
     /// <summary>The seasons a competition counts towards, for the menu: no standings, so it stays small.</summary>
     [HttpGet("for-competition/{competitionId:int}")]
     [AllowAnonymous]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<SeasonLinkDto>>> ForCompetition(int competitionId, CancellationToken ct) =>
         await db.Set<Season>().AsNoTracking()
             .Where(x => x.Rounds.Any(r => r.CompetitionId == competitionId && r.IsIncluded))
@@ -44,6 +47,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
 
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<SeasonDto>> Get(Guid id, CancellationToken ct)
     {
         var season = await LoadSeasonAsync(id, ct);
@@ -52,6 +56,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
 
     [HttpGet("{id:guid}/standings")]
     [AllowAnonymous]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<SeasonStandingsDto>> Standings(Guid id, CancellationToken ct)
     {
         var standings = await SeasonStandingsCalculator.CalculateAsync(db, id, ct);

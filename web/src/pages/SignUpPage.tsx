@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Plus, Send } from 'lucide-react';
+import { Eye, EyeOff, Plus, Send } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { PasswordChecklist } from '../components/PasswordChecklist';
@@ -38,6 +38,7 @@ export function SignUpPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [emailLeft, setEmailLeft] = useState(false);
   const rulesId = useId();
   const [club, setClub] = useState('');
@@ -145,9 +146,18 @@ export function SignUpPage() {
           <Field label="Password" error={errors.password}>
             {({ id, invalid, describedBy }) => (
               <div className="mg-field" data-invalid={invalid}>
-                <input id={id} type="password" value={password} autoComplete="new-password" aria-invalid={invalid}
+                <input id={id} type={showPassword ? 'text' : 'password'} value={password} autoComplete="new-password" aria-invalid={invalid}
                   aria-describedby={[describedBy, rulesId].filter(Boolean).join(' ')}
                   onChange={(e) => { setPassword(e.target.value); setErrors((cur) => ({ ...cur, password: undefined })); }} />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]"
+                >
+                  {showPassword ? <EyeOff aria-hidden="true" className="h-[18px] w-[18px]" /> : <Eye aria-hidden="true" className="h-[18px] w-[18px]" />}
+                </button>
               </div>
             )}
           </Field>
@@ -155,7 +165,7 @@ export function SignUpPage() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Field label="Club">
+          <Field label="Club / team name">
             {({ id }) => (
               <div className="mg-field">
                 <input id={id} value={club} placeholder="Start typing" autoComplete="off"

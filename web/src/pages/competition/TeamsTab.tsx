@@ -6,6 +6,7 @@ import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { Club, DeclarationForm, Team } from '../../types';
+import { bibAccent, bibLabel, parseBibAndFlag } from '../../lib/bib';
 import { displaySectionName } from '../../lib/section';
 import { SelectField } from '../../components/SelectField';
 import { PageGrid } from '../../components/PageGrid';
@@ -93,8 +94,8 @@ export function TeamsTab() {
   const canCreate = hasRole('Trainer') || hasRole('Admin');
 
   const addButton = canCreate && (
-    <button onClick={() => setShowForm((s) => !s)} className="btn-primary !py-2">
-      <Plus className="w-4 h-4" /> {showForm ? 'Close' : 'Add custom team'}
+    <button onClick={() => setShowForm((s) => !s)} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 !py-2 text-sm">
+      <Plus className="h-4 w-4" /> {showForm ? 'Close' : 'Add custom team'}
     </button>
   );
   const sectionRail = (
@@ -119,9 +120,9 @@ export function TeamsTab() {
   const teamBlocks = (
     <>
       {showForm && canCreate && (
-        <form onSubmit={submit} className="card p-5 grid sm:grid-cols-12 gap-3">
+        <form onSubmit={submit} className="mg-card grid gap-3 p-4 sm:grid-cols-12">
           <label className="sm:col-span-5">
-            <span className="text-xs text-slate-500">Section</span>
+            <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">Section</span>
             <SelectField
               className="input mt-1"
               value={form.competitionSectionId}
@@ -134,7 +135,7 @@ export function TeamsTab() {
             </SelectField>
           </label>
           <label className="sm:col-span-5">
-            <span className="text-xs text-slate-500">Club</span>
+            <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">Club</span>
             <SelectField
               className="input mt-1"
               value={form.clubId}
@@ -148,7 +149,7 @@ export function TeamsTab() {
             </SelectField>
           </label>
           <label className="sm:col-span-2">
-            <span className="text-xs text-slate-500">Suffix</span>
+            <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">Suffix</span>
             <input
               className="input mt-1 uppercase" maxLength={4}
               value={form.suffix}
@@ -156,61 +157,71 @@ export function TeamsTab() {
               required
             />
           </label>
-          <div className="sm:col-span-12 flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setShowForm(false)}>Cancel</button>
-            <button type="submit" disabled={busy || !form.clubId} className="btn-primary">
-              <Save className="w-4 h-4" /> {busy ? 'Creating…' : 'Create team'}
+          <div className="flex justify-end gap-2 sm:col-span-12">
+            <button type="button" className="mg-btn mg-btn-secondary !min-h-10 !px-3.5 text-sm" onClick={() => setShowForm(false)}>Cancel</button>
+            <button type="submit" disabled={busy || !form.clubId} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 text-sm">
+              <Save className="h-4 w-4" /> {busy ? 'Creating…' : 'Create team'}
             </button>
           </div>
         </form>
       )}
 
       {grouped.map(([section, teams]) => (
-        <div key={section} className="card p-3 sm:p-4">
-          <h3 className="font-semibold flex items-center gap-2 mb-2 text-sm">
-            <Users className="w-4 h-4 text-brand-600" /> {displaySectionName(section)}
+        <div key={section} className="mg-card p-3 sm:p-4">
+          <h3 className="mg-display mb-2 flex items-center gap-2 text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+            <Users className="h-4 w-4 text-[rgb(var(--mg-heading))]" /> {displaySectionName(section)}
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {teams.map((t) => {
               const hasDec = decFormTeamIds.has(t.id);
+              const parsedBib = parseBibAndFlag(t.bibDescription);
               return (
                 <div key={t.id}
-                  className={`p-2.5 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-50 flex items-center gap-2 shadow-soft ${
+                  className={`flex items-center gap-2 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-2.5 text-[rgb(var(--mg-ink))] ${
                     t.isHorsConcours || t.isWithdrawn ? 'opacity-70' : ''
                   }`}>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate flex items-center gap-1.5">
-                      {t.displayName}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 truncate text-sm font-semibold">
+                      {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
+                      <Link to={`/competitions/${competition.id}/teams/${t.id}`} className="truncate text-[rgb(var(--mg-heading))] hover:underline">
+                        {t.displayName}
+                      </Link>
                       {hasDec && (
-                        <span title="Dec form submitted" className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200 text-[9px] font-semibold">
-                          <ClipboardList className="w-2.5 h-2.5" /> DEC
+                        <span title="Dec form submitted" className="mg-tag mg-tag-ok inline-flex items-center gap-0.5 !rounded-full !px-1.5 !py-0.5 !text-[9px]">
+                          <ClipboardList className="h-2.5 w-2.5" /> DEC
                         </span>
                       )}
                       {flagged.has(t.id) && (
                         <span title="A dec form answer is outside the limits set for this event" className="mg-flag inline-flex items-center gap-0.5 !rounded-full !px-1.5 !py-0.5 !text-[9px]">
-                          <Flag className="w-2.5 h-2.5" aria-hidden="true" /> {flagged.get(t.id)} flagged
+                          <Flag className="h-2.5 w-2.5" aria-hidden="true" /> {flagged.get(t.id)} flagged
                         </span>
                       )}
                       {t.isWithdrawn && (
-                        <span title="Withdrawn from the rest of the event" className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 text-[9px] font-semibold">
+                        <span title="Withdrawn from the rest of the event" className="mg-tag mg-tag-late inline-flex items-center gap-0.5 !rounded-full !px-1.5 !py-0.5 !text-[9px]">
                           Withdrawn
                         </span>
                       )}
                       {t.isHorsConcours && (
-                        <span title="Hors Concours: competes without scoring" className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-100 text-[9px] font-semibold">
-                          <Ban className="w-2.5 h-2.5" /> HC
+                        <span title="Hors Concours: competes without scoring" className="mg-tag inline-flex items-center gap-0.5 !rounded-full !px-1.5 !py-0.5 !text-[9px]">
+                          <Ban className="h-2.5 w-2.5" /> HC
                         </span>
                       )}
                     </div>
+                    {parsedBib.bib && (
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[rgb(var(--mg-body))]">
+                        <span aria-hidden="true" className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-black/15" style={{ background: bibAccent(t.bibDescription) }} />
+                        <span className="truncate">{bibLabel(t.bibDescription)}</span>
+                      </div>
+                    )}
                     {mayAssignTrainers ? (
                       <TrainerPicker competitionId={competition.id} team={t} onSaved={reload} />
                     ) : (
-                      <div className="text-[10px] text-slate-400 truncate">
+                      <div className="truncate text-[10px] text-[rgb(var(--mg-muted))]">
                         {t.trainerName ?? 'No trainer assigned'}
                       </div>
                     )}
                   </div>
-                  <button className="btn-ghost min-h-11 min-w-11 !px-2" aria-pressed={followed.has(t.id)} aria-label={`${followed.has(t.id) ? 'Unfollow' : 'Follow'} ${t.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: t.id })}>
+                  <button className="mg-icon-btn" aria-pressed={followed.has(t.id)} aria-label={`${followed.has(t.id) ? 'Unfollow' : 'Follow'} ${t.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: t.id })}>
                     <Star aria-hidden="true" className={`h-5 w-5 ${followed.has(t.id) ? 'fill-current' : ''}`} />
                   </button>
                   {canEdit() && (
@@ -222,8 +233,8 @@ export function TeamsTab() {
                         reload();
                       }}
                       title={t.isHorsConcours ? 'Mark as scoring' : 'Mark as Hors Concours (no score)'}
-                      className={`btn-ghost !py-1 !px-1.5 text-[10px] ${
-                        t.isHorsConcours ? 'text-emerald-600' : 'text-slate-500'
+                      className={`mg-small-btn !min-h-9 !px-2 !text-[10px] ${
+                        t.isHorsConcours ? '!text-[rgb(var(--mg-ok))]' : '!text-[rgb(var(--mg-muted))]'
                       }`}
                     >
                       {t.isHorsConcours ? 'Unmark HC' : 'Mark HC'}
@@ -240,33 +251,39 @@ export function TeamsTab() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 pt-2">
       <Link className="mg-btn mg-btn-secondary" to="../following"><Star className="h-4 w-4" />View followed teams</Link>
       {favouriteError && <p role="alert" className="mg-notice">{favouriteError}</p>}
       {desktop ? (
         <PageGrid variant="left" aside={sectionRail}>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {teamBlocks}
           </div>
         </PageGrid>
       ) : (
         <>
-      <div className="card p-3 flex flex-wrap gap-2 items-center">
-          <button
-            onClick={() => setSectionId('all')}
-            className={`pill ${sectionId === 'all' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700'}`}
-          >
-            All sections
-          </button>
-          {competition.sections.map((s) => (
+        <div className="mg-card flex flex-wrap items-center gap-2 p-2.5">
+          <div className="mg-chips flex-1">
             <button
-              key={s.id}
-              onClick={() => setSectionId(s.id)}
-              className={`pill ${sectionId === s.id ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+              type="button"
+              aria-pressed={sectionId === 'all'}
+              onClick={() => setSectionId('all')}
+              className="mg-chip !min-h-9 !px-3 !text-sm"
             >
-              {s.displayName}
+              All sections
             </button>
-          ))}
+            {competition.sections.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                aria-pressed={sectionId === s.id}
+                onClick={() => setSectionId(s.id)}
+                className="mg-chip !min-h-9 !px-3 !text-sm"
+              >
+                {s.displayName}
+              </button>
+            ))}
+          </div>
           {canCreate && <span className="ml-auto">{addButton}</span>}
         </div>
 
@@ -299,7 +316,7 @@ function TrainerPicker({ competitionId, team, onSaved }: { competitionId: number
     } catch { setError(true); }
   }
   return (
-    <label className="block text-[10px] text-slate-400">
+    <label className="block text-[10px] text-[rgb(var(--mg-muted))]">
       <span className="sr-only">Trainer for {team.displayName}</span>
       <SelectField
         className="input !min-h-0 !py-0.5 text-[11px]"
@@ -310,7 +327,7 @@ function TrainerPicker({ competitionId, team, onSaved }: { competitionId: number
         <option value="">No trainer assigned</option>
         {options.map((t) => <option key={t.userId} value={t.userId}>{t.fullName}</option>)}
       </SelectField>
-      {error && <span role="alert" className="text-rose-600"> Could not change the trainer.</span>}
+      {error && <span role="alert" className="text-[rgb(var(--mg-elim))]"> Could not change the trainer.</span>}
     </label>
   );
 }

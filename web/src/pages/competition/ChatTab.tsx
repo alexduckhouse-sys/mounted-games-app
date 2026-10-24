@@ -67,6 +67,7 @@ function ChatTabSession() {
   const [mode, setMode] = useState<ComposerMode>('announcement');
   const [sending, setSending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [allOpen, setAllOpen] = useState(false);
   const [lastChatComp, setLastChatComp] = useState<LastChatComp | null>(() => loadLastChatComp());
   const [dismissedCompWarning, setDismissedCompWarning] = useState(false);
@@ -148,13 +149,15 @@ function ChatTabSession() {
   async function blockMessageAuthor(id: number) {
     if (!canModerate) return;
     if (!(await confirmDialog({ title: 'Block this sender?', message: "Block this sender's IP from posting?", confirmLabel: 'Block sender', destructive: true }))) return;
+    setActionError(null);
+    setActionNotice(null);
     try {
       const { data } = await api.post<{ alreadyBlocked: boolean; ipAddress: string }>(`/competitions/${competition.id}/chat/${id}/block-author`, {});
-      alert(data.alreadyBlocked ? `IP ${data.ipAddress} was already blocked.` : `Blocked IP ${data.ipAddress}.`);
+      setActionNotice(data.alreadyBlocked ? `IP ${data.ipAddress} was already blocked.` : `Blocked IP ${data.ipAddress}.`);
     } catch (error) {
       const message = (error as { response?: { data?: { message?: string } } }).response?.data?.message
         ?? 'Could not block this sender. The post may be too old to have an IP recorded.';
-      alert(message);
+      setActionError(message);
     }
   }
 
@@ -220,16 +223,13 @@ function ChatTabSession() {
   return (
     <div className={`live-page ${canPost ? 'live-page-staff' : 'live-page-public'}`}>
       <div className="live-page-band mg-band">
-        <h1 className="mg-h1 mg-h1-sm">Live &amp; stream</h1>
+        <h1 className="mg-h1 mg-h1-sm">Live stream</h1>
         {canPost ? <span className="live-role-badge">Organiser</span> : liveNow && <span className="mg-badge mg-badge-live">Live</span>}
       </div>
 
       {actionError && !allOpen && <div className="live-action-error" role="alert"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError(null)}><X aria-hidden="true" /></button></div>}
+      {actionNotice && !allOpen && <div className="live-banner" role="status"><span>{actionNotice}</span><button type="button" aria-label="Dismiss notice" onClick={() => setActionNotice(null)}><X aria-hidden="true" /></button></div>}
 
-      {canPost ? (
-        <>
-          <div className="live-col live-col-rail">
-        <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
       {banner && (
         <div className="live-banner" role="status">
           <Megaphone aria-hidden="true" />
@@ -238,6 +238,11 @@ function ChatTabSession() {
         </div>
       )}
 
+      {canPost ? (
+        <>
+          <div className="live-col live-col-rail">
+            <div className="mg-section-head live-stream-head"><h2>Stream</h2></div>
+        <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
           </div>
           <div className="live-col live-col-main">
       <section className="live-announcements" aria-labelledby="announcements-title">
@@ -292,17 +297,10 @@ function ChatTabSession() {
       ) : (
         <>
           <div className="live-col live-col-main">
+            <div className="mg-section-head live-stream-head"><h2>Stream</h2></div>
       <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
           </div>
           <div className="live-col live-col-rail">
-      {banner && (
-        <div className="live-banner" role="status">
-          <Megaphone aria-hidden="true" />
-          <div><strong>{banner.body}</strong><span>{canPost ? 'Pinned banner · everyone sees this' : `Pinned by organisers · ${messageTime(banner)}`}</span></div>
-          {canModerate && <button type="button" onClick={() => void unpinBanners()}>Unpin</button>}
-        </div>
-      )}
-
       <section className="live-announcements" aria-labelledby="announcements-title">
         <div className="mg-section-head">
           <h2 id="announcements-title">Announcements</h2>
@@ -443,7 +441,6 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
     </div>
     {canBroadcast && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}><Video aria-hidden="true" />Go live from this device</Link>}
     {streamingNotSetUp && <p className="mg-notice" role="status">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</p>}
-    {canBroadcast && <Link className="mg-text-link self-start text-sm" to={`/competitions/${competitionId}/produce`}>Banners and overlays</Link>}
     {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
   </div>;
 }

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -65,6 +66,7 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
 
     [HttpGet("print/score-sheets")]
     [AllowAnonymous]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<PrintableScoreSheetsDto>> PrintableScoreSheets(int competitionId, CancellationToken ct)
     {
         var result = await new PrintableEventService(db).ScoreSheetsAsync(competitionId, ct);
@@ -73,6 +75,7 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
 
     [HttpGet("print/results")]
     [AllowAnonymous]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<PrintableResultsDto>> PrintableResults(int competitionId, CancellationToken ct)
     {
         var result = await new PrintableEventService(db).ResultsAsync(competitionId, ct);
@@ -82,6 +85,7 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
     /// <summary>The results book as the public sees it: standings, finals and awards, nothing private.</summary>
     [HttpGet("results-book")]
     [AllowAnonymous]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<ResultsBookDto>> ResultsBook(int competitionId, [FromServices] ResultsBookService book, CancellationToken ct)
     {
         var result = await book.BuildAsync(competitionId, includePrivate: false, ct);
@@ -110,6 +114,7 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
 
     [HttpGet("awards")]
     [AllowAnonymous]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<SpecialAwardDto>>> Awards(int competitionId, CancellationToken ct)
     {
         if (!await db.Competitions.AnyAsync(c => c.Id == competitionId, ct)) return NotFound();

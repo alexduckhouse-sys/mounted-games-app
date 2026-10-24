@@ -22,9 +22,12 @@ const form = (teamId: number): DeclarationForm => ({
   submittedAt: '2026-06-01T09:00:00Z', isLocked: false, riders: [],
 });
 
+const emptyScorerLinks = { arenas: ['Main arena', 'All arenas'], defaultExpiresAt: '2026-11-02T00:00:00Z', links: [] };
+
 function mount(data: CompetitionDetail, forms: DeclarationForm[] = [], reload = vi.fn()) {
   vi.mocked(api.get).mockImplementation((url: string) => {
     if (url === '/declaration-forms') return Promise.resolve({ data: forms });
+    if (String(url).endsWith('/scorer-links')) return Promise.resolve({ data: emptyScorerLinks });
     return Promise.resolve({ data: [] });
   });
   return render(
@@ -329,6 +332,7 @@ describe('SessionPage', () => {
           { teamId: 1, place: 1, eliminated: false, points: 2, refereeNote: 'Quick start' },
           { teamId: 2, place: 0, eliminated: true, points: 0, status: 3, refereeNote: null },
         ] } });
+        if (String(url).endsWith('/scorer-links')) return Promise.resolve({ data: emptyScorerLinks });
         return Promise.resolve({ data: [] });
       });
       render(
@@ -452,7 +456,9 @@ describe('SessionPage', () => {
       mount(scoringData());
       expect(screen.queryByRole('link', { name: /Sessions/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Rules/ })).not.toBeInTheDocument();
-      expect(within(screen.getByText('Organiser tools').closest('details')!).getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
+      const details = screen.getByText('Organiser tools').closest('details')!;
+      expect(within(details).getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
+      expect(within(details).getByRole('region', { name: 'Scorer links' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Race rules' })).toBeNull();
       await userEvent.click(screen.getByRole('button', { name: 'Race rules and arena setup' }));
       expect(screen.getByRole('region', { name: 'Race rules' })).toBeInTheDocument();

@@ -108,19 +108,20 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
   });
 
-  it('has no Team history link and keeps Privacy inside Settings', async () => {
+  it('has no Team history or Privacy link in the drawer and links to Settings', async () => {
     mount();
     expect(screen.queryByRole('link', { name: 'Team history' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Privacy' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    await userEvent.click(screen.getByRole('link', { name: 'Privacy' }));
+    const settingsLink = screen.getByRole('link', { name: 'Settings' });
+    expect(settingsLink).toHaveAttribute('href', '/settings');
+    await userEvent.click(settingsLink);
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId('probe')).toHaveTextContent('/privacy');
+    expect(screen.getByTestId('probe')).toHaveTextContent('/settings');
   });
 
-  it('offers to change competition and see past ones', async () => {
+  it('offers to browse events and see past ones', async () => {
     mount();
-    await userEvent.click(screen.getByRole('link', { name: 'Change competition' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Events' }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('probe')).toHaveTextContent('/events');
     await userEvent.click(screen.getByRole('link', { name: 'Past competitions' }));
@@ -162,11 +163,16 @@ describe('NavigationDrawer: following a competition', () => {
     expect(screen.queryByText(/Oct/)).not.toBeInTheDocument();
   });
 
-  it('links to the competition’s extra pages (omitting duplicate bottom-tab links)', () => {
+  it('links to the competition’s extra pages (omitting duplicate bottom-tab links)', async () => {
     mount({ competition: true });
     expect(links('Main navigation')).toEqual([
       ['Following', '/competitions/4/following'], ['Event shop', '/competitions/4/shop'], ['Rulebooks', '/competitions/4/rulebooks'],
     ]);
+    const communityShop = screen.getByRole('link', { name: 'Tack & kit shop' });
+    expect(communityShop).toHaveAttribute('href', '/shop');
+    await userEvent.click(communityShop);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('probe')).toHaveTextContent('/shop');
   });
 
   it('highlights the page being viewed', () => {
@@ -268,42 +274,14 @@ describe('NavigationDrawer: signed in', () => {
   });
 });
 
-describe('NavigationDrawer: settings', () => {
-  const openSettings = () => userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-
-  it('keeps settings folded away until asked for', async () => {
-    mount();
-    expect(screen.queryByRole('region', { name: 'Settings' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-expanded', 'false');
-    await openSettings();
-    expect(screen.getByRole('region', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-expanded', 'true');
-    await openSettings();
-    expect(screen.queryByRole('region', { name: 'Settings' })).not.toBeInTheDocument();
+describe('NavigationDrawer: settings and weather', () => {
+  it('links to the Settings page and highlights it when active', () => {
+    mount({ path: '/settings' });
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('switches the colour theme', async () => {
+  it('hides the weather row by default', () => {
     mount();
-    await openSettings();
-    const themes = within(screen.getByRole('group', { name: 'Colour theme' }));
-    expect(themes.getByRole('button', { name: 'EGUK Navy' })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(themes.getByRole('button', { name: 'Stable Night' }));
-    expect(themes.getByRole('button', { name: 'Stable Night' })).toHaveAttribute('aria-pressed', 'true');
-    expect(document.documentElement.dataset.theme).toBe('dark');
-  });
-
-  it('shows or hides the weather, remembering the choice', async () => {
-    mount();
-    expect(screen.queryByText('Weather')).not.toBeInTheDocument();
-    await openSettings();
-    const toggle = screen.getByRole('switch', { name: 'Show weather' });
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-checked', 'true');
-    expect(localStorage.getItem('mg.showWeather')).toBe('1');
-    expect(screen.getByText('Weather', { selector: 'span.font-medium' })).toBeInTheDocument();
-    await userEvent.click(toggle);
-    expect(localStorage.getItem('mg.showWeather')).toBeNull();
     expect(screen.queryByText('Weather', { selector: 'span.font-medium' })).not.toBeInTheDocument();
   });
 
@@ -313,65 +291,14 @@ describe('NavigationDrawer: settings', () => {
     expect(screen.getByText('Weather', { selector: 'span.font-medium' })).toBeInTheDocument();
   });
 
-  it('still works when storage is blocked', async () => {
+  it('still works when storage is blocked', () => {
     const realGet = Storage.prototype.getItem;
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function getItem(this: Storage, key: string) {
       if (key === 'mg.showWeather') throw new Error('blocked');
       return realGet.call(this, key);
     });
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function setItem(this: Storage, key: string) {
-      if (key === 'mg.showWeather') throw new Error('blocked');
-    });
-    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(function removeItem(this: Storage, key: string) {
-      if (key === 'mg.showWeather') throw new Error('blocked');
-    });
     mount();
-    await openSettings();
-    const toggle = screen.getByRole('switch', { name: 'Show weather' });
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-checked', 'true');
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
-  });
-
-  it('offers to remember the competition only when one is followed, and toggles that choice', async () => {
-    mount();
-    await openSettings();
-    expect(screen.queryByRole('switch', { name: /Remember this competition/ })).not.toBeInTheDocument();
-  });
-
-  it('remembers or forgets the followed competition on this device', async () => {
-    mount({ competition: true });
-    await openSettings();
-    const toggle = screen.getByRole('switch', { name: 'Remember this competition on this device' });
-    expect(toggle).toHaveAttribute('aria-checked', 'true');
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByTestId('probe')).toHaveTextContent('|visit');
-    await userEvent.click(toggle);
-    expect(screen.getByTestId('probe')).toHaveTextContent('|remember');
-  });
-});
-
-describe('NavigationDrawer: forgetting the competition', () => {
-  const openSettings = () => userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-
-  it('is offered only when a competition is followed', async () => {
-    mount();
-    await openSettings();
-    expect(screen.queryByRole('button', { name: 'Forget this competition' })).not.toBeInTheDocument();
-  });
-
-  it('clears the competition and what the device kept, closes the menu and opens the events list', async () => {
-    mount({ competition: true, path: '/competitions/4' });
-    await openSettings();
-    await userEvent.click(screen.getByRole('button', { name: 'Forget this competition' }));
-    expect(document.cookie).not.toContain('mg.competition');
-    expect(sessionStorage.getItem('mg.competitionVisit')).toBeNull();
-    expect(screen.getByTestId('probe')).toHaveTextContent('/events|ask');
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('switch', { name: /Remember this competition/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: 'Menu' })).toBeInTheDocument();
+    expect(screen.queryByText('Weather', { selector: 'span.font-medium' })).not.toBeInTheDocument();
   });
 });
 

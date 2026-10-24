@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -51,29 +52,62 @@ public class ShopController : ControllerBase
         if (!string.IsNullOrEmpty(ip) && await _db.IpBlocks.AnyAsync(b => b.IpAddress == ip))
             return StatusCode(403, new { message = "Posting from this network is blocked." });
         var title = req.Title?.Trim();
-        var body = req.Body?.Trim();
+        var body = (req.Body ?? req.Description)?.Trim();
         var name = req.AuthorName?.Trim();
         if (string.IsNullOrEmpty(title) || string.IsNullOrEmpty(body) || string.IsNullOrEmpty(name))
             return BadRequest(new { message = "Title, body and your name are all required." });
+        if (title.Length > 200 || body.Length > 4000 || req.Description?.Length > 4000)
+            return BadRequest(new { message = "Title must be 200 characters or fewer and description 4000 or fewer." });
+        if (req.PriceMinor is < 0 or > 100_000_000)
+            return BadRequest(new { message = "Price must be zero or positive." });
         var image = req.ImageBase64;
-        if (!string.IsNullOrEmpty(image))
-        {
-            if (image.Length > MaxImageBase64Bytes)
-                return BadRequest(new { message = "Image is too large — please resize to under 500 KB." });
-        }
+        if (image is { Length: > MaxImageBase64Bytes })
+            return BadRequest(new { message = "Image is too large (max ~500 KB after compression)." });
         var post = new ShopPost
         {
             AuthorUserId = userId,
             AuthorName = name.Length > 150 ? name[..150] : name,
             PonyClubName = req.PonyClubName?.Trim(),
-            Title = title.Length > 200 ? title[..200] : title,
-            Body = body.Length > 4000 ? body[..4000] : body,
-            PriceMinor = req.PriceMinor.HasValue && req.PriceMinor.Value >= 0 ? req.PriceMinor : null,
+            Title = title,
+            Body = body,
+            PriceMinor = req.PriceMinor,
             ContactInfo = req.ContactInfo?.Trim(),
             ImageBase64 = string.IsNullOrEmpty(image) ? null : image,
             IpAddress = ip,
         };
         _db.ShopPosts.Add(post);
+        await _db.SaveChangesAsync();
+        return post.ToDto();
+    }
+
+    [HttpPut("posts/{id:int}")]
+    [Authorize]
+    public async Task<ActionResult<ShopPostDto>> Update(int id, UpdateShopPostRequest req)
+    {
+        if (req.ImageBase64 is { Length: > MaxImageBase64Bytes })
+            return BadRequest(new { message = "Image is too large (max ~500 KB after compression)." });
+        if (req.PriceMinor is < 0 or > 100_000_000)
+            return BadRequest(new { message = "Price must be zero or positive." });
+
+        var title = req.Title?.Trim();
+        var body = (req.Body ?? req.Description)?.Trim();
+        if (title is { Length: > 200 } || body is { Length: > 4000 } || req.Description?.Length > 4000)
+            return BadRequest(new { message = "Title must be 200 characters or fewer and description 4000 or fewer." });
+
+        var post = await _db.ShopPosts
+            .Include(p => p.Comments).Include(p => p.Reports)
+            .FirstOrDefaultAsync(p => p.Id == id);
+        if (post is null || post.IsDeleted) return NotFound();
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var canEdit = User.IsInRole(Roles.Admin) || post.AuthorUserId == userId;
+        if (!canEdit) return Forbid();
+
+        if (!string.IsNullOrEmpty(title)) post.Title = title;
+        if (!string.IsNullOrEmpty(body)) post.Body = body;
+        if (req.PriceMinor.HasValue) post.PriceMinor = req.PriceMinor;
+        if (req.ContactInfo is not null) post.ContactInfo = req.ContactInfo.Trim();
+        if (req.PonyClubName is not null) post.PonyClubName = req.PonyClubName.Trim();
+        if (req.ImageBase64 is not null) post.ImageBase64 = string.IsNullOrEmpty(req.ImageBase64) ? null : req.ImageBase64;
         await _db.SaveChangesAsync();
         return post.ToDto();
     }
@@ -127,12 +161,14 @@ public class ShopController : ControllerBase
         var name = req.AuthorName?.Trim();
         if (string.IsNullOrEmpty(body) || string.IsNullOrEmpty(name))
             return BadRequest(new { message = "Comment body and your name required." });
+        if (body.Length > 1000)
+            return BadRequest(new { message = "Comment must be 1000 characters or fewer." });
         var c = new ShopComment
         {
             PostId = id,
             AuthorUserId = userId,
             AuthorName = name.Length > 150 ? name[..150] : name,
-            Body = body.Length > 2000 ? body[..2000] : body,
+            Body = body,
             IsPrivate = req.IsPrivate,
             ToUserId = req.IsPrivate ? (req.ToUserId ?? post.AuthorUserId) : null,
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
@@ -155,10 +191,13 @@ public class ShopController : ControllerBase
         return NoContent();
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("posts/{id:int}/report")]
     [AllowAnonymous]
     public async Task<IActionResult> Report(int id, CreateShopReportRequest req)
     {
+        if (req.Reason is not null && req.Reason.Trim().Length > 1000)
+            return BadRequest(new { message = "Report reason must be 1000 characters or fewer." });
         var post = await _db.ShopPosts.FindAsync(id);
         if (post is null) return NotFound();
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;

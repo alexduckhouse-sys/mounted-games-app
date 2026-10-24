@@ -47,6 +47,23 @@ button.tt-group-title:focus-visible, .tt-collapsed:focus-visible, a.tt-row:focus
 .tt-collapsed-chevron { flex: none; }
 
 .tt-card { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
+.tt-card > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.tt-row-wrap { display: flex; align-items: stretch; background: rgb(var(--mg-surface)); }
+.tt-row-wrap > .tt-row { flex: 1; min-width: 0; }
+.tt-lanes-btn {
+  display: inline-flex; align-items: center; gap: 4px; padding: 0 12px; border-left: 1px solid rgb(var(--mg-rule-soft));
+  color: rgb(var(--mg-heading)); font: 600 12px/1 var(--mg-font); white-space: nowrap; transition: background .15s;
+}
+.tt-lanes-btn:hover { background: rgb(var(--mg-subtle)); }
+.tt-lanes-btn:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.tt-lanes {
+  margin: 0; padding: 6px 12px 8px; list-style: none; border-top: 1px solid rgb(var(--mg-rule-soft));
+  background: rgb(var(--mg-subtle)); display: flex; flex-direction: column; gap: 4px;
+}
+.tt-lane-item { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.35; }
+.tt-lane-num { font-weight: 600; color: rgb(var(--mg-muted)); font-variant-numeric: tabular-nums; min-width: 52px; }
+.tt-lane-team { font-weight: 600; color: rgb(var(--mg-ink)); text-decoration: none; }
+.tt-lane-team:hover { text-decoration: underline; }
 .tt-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr) 8px 14px; align-items: center; column-gap: 10px;
   min-height: 54px; padding: 0 10px 0 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important;

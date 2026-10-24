@@ -73,14 +73,14 @@ it('uses the count in the group summary when nothing is late', () => {
 it('hides finished groups behind "Show full timetable", then folds them into one line under a divider and expands them on tap', () => {
   const { container } = renderBoard();
   expect(screen.queryByRole('heading', { name: 'Finished today · 1' })).toBeNull();
-  expect(screen.queryByRole('button', { name: /Senior Teams · Session 1 · 1 finished/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Seniors · Session 1 · 1 finished/ })).toBeNull();
 
   const toggle = screen.getByRole('button', { name: 'Show full timetable' });
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   fireEvent.click(toggle);
 
   expect(screen.getByRole('heading', { name: 'Finished today · 1' })).toBeVisible();
-  const folded = screen.getByRole('button', { name: /Senior Teams · Session 1 · 1 finished/ });
+  const folded = screen.getByRole('button', { name: /Seniors · Session 1 · 1 finished/ });
   expect(folded).toHaveAttribute('aria-expanded', 'false');
   expect(screen.queryByText('Heat 3')).toBeNull();
   // Active groups come first, the folded one last.
@@ -88,7 +88,7 @@ it('hides finished groups behind "Show full timetable", then folds them into one
 
   fireEvent.click(folded);
   expect(screen.getByText('Heat 3')).toBeVisible();
-  const title = screen.getByRole('button', { name: /Senior Teams · Session 1/ });
+  const title = screen.getByRole('button', { name: /Seniors · Session 1/ });
   expect(title).toHaveAttribute('aria-expanded', 'true');
 
   fireEvent.click(title);
@@ -224,7 +224,7 @@ it('links race rows to their heat and shows the legend', () => {
 });
 
 it('shows a session with no heats as provisional to organisers, and hides it from everyone else', () => {
-  const planned = session(4, { arenaName: 'Main Arena', name: 'Open Teams', scheduledStart: `${day}T13:00:00`, durationMinutes: 60, orderIndex: 4 });
+  const planned = session(4, { arenaName: 'Main Arena', name: 'Open', scheduledStart: `${day}T13:00:00`, durationMinutes: 60, orderIndex: 4 });
   setCompetition({ sessions: [...(state.value as { competition: { sessions: unknown[] } }).competition.sessions, planned] });
   const { unmount } = renderBoard();
   expect(screen.queryByText('Heats to follow')).not.toBeInTheDocument();
@@ -237,3 +237,97 @@ it('shows a session with no heats as provisional to organisers, and hides it fro
   expect(row).toHaveTextContent('Provisional');
   expect(screen.getByRole('note')).toHaveTextContent('Provisional timetable');
 });
+
+it('filters the timetable down to one team’s heats and shows their lane when heats have teams', () => {
+  setCompetition({
+    sessions: [
+      session(1, {
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T10:00:00`,
+        heats: [
+          heat(11, {
+            sessionId: 1,
+            orderIndex: 0,
+            label: 'Heat 1',
+            entries: [
+              { id: 1, teamId: 101, teamName: 'Cheshire A', laneIndex: 0 },
+              { id: 2, teamId: 102, teamName: 'Oakley B', laneIndex: 2 },
+            ],
+          }),
+          heat(12, {
+            sessionId: 1,
+            orderIndex: 1,
+            label: 'Heat 2',
+            entries: [
+              { id: 3, teamId: 103, teamName: 'Romney C', laneIndex: 1 },
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+  renderBoard();
+  const select = screen.getByRole('combobox', { name: 'Team' });
+  fireEvent.click(select);
+  expect(within(screen.getByRole('listbox', { name: 'Team' })).getAllByRole('option').map((o) => o.textContent))
+    .toEqual(['All teams', 'Cheshire A', 'Oakley B', 'Romney C']);
+
+  fireEvent.click(screen.getByRole('option', { name: 'Oakley B' }));
+  expect(screen.getByText('Heat 1')).toBeVisible();
+  expect(screen.getByText('Lane 3')).toBeVisible();
+  expect(screen.queryByText('Heat 2')).toBeNull();
+
+  fireEvent.click(select);
+  fireEvent.click(screen.getByRole('option', { name: 'All teams' }));
+  expect(screen.getByText('Heat 2')).toBeVisible();
+});
+
+it('hides the arena selector when viewing a specific section', () => {
+  setCompetition({
+    sessions: [
+      session(1, { competitionSectionId: 9, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, heats: [heat(11, { sessionId: 1, label: 'Heat 1' })] }),
+      session(2, { competitionSectionId: 9, arenaName: 'Arena Two', scheduledStart: `${day}T11:00:00`, heats: [heat(22, { sessionId: 2, label: 'Heat 2' })] }),
+    ],
+  });
+  renderBoard(<TimetableBoard sectionId={9} title="Under 12" />);
+  expect(screen.queryByRole('combobox', { name: 'Arena' })).toBeNull();
+});
+
+it('toggles the lanes dropdown on a heat row to reveal lane numbers and team links', () => {
+  setCompetition({
+    sessions: [
+      session(1, {
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T10:00:00`,
+        heats: [
+          heat(11, {
+            sessionId: 1,
+            orderIndex: 0,
+            label: 'Heat 1',
+            entries: [
+              { id: 1, teamId: 101, teamName: 'Cheshire A', laneIndex: 0 },
+              { id: 2, teamId: 102, teamName: 'Oakley B', laneIndex: 2 },
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+  renderBoard();
+  const toggle = screen.getByRole('button', { name: 'Lanes for Heat 1' });
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByRole('list', { name: 'Lanes for Heat 1' })).toBeNull();
+
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  const lanesList = screen.getByRole('list', { name: 'Lanes for Heat 1' });
+  expect(within(lanesList).getByText('Lane 1')).toBeVisible();
+  expect(within(lanesList).getByText('Lane 3')).toBeVisible();
+  expect(within(lanesList).getByRole('link', { name: 'Cheshire A' })).toHaveAttribute('href', '/competitions/1/teams/101');
+  expect(within(lanesList).getByRole('link', { name: 'Oakley B' })).toHaveAttribute('href', '/competitions/1/teams/102');
+
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByRole('list', { name: 'Lanes for Heat 1' })).toBeNull();
+});
+

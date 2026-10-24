@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../auth/AuthContext';
 import { CurrentCompetitionProvider } from '../competition/CurrentCompetitionContext';
+import { LiteModeProvider } from '../lite/LiteModeContext';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { api } from '../api';
 import { AgeGroupsProvider } from './AgeGroupsContext';
@@ -24,19 +25,19 @@ const spring = { id: 4, name: 'Spring Games' };
 const remembered = () => { document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify(spring))}; Path=/`; };
 
 function Probe() {
-  const { pathname } = useLocation();
-  return <span data-testid="probe">{pathname}</span>;
+  const { pathname, hash } = useLocation();
+  return <span data-testid="probe">{pathname}{hash}</span>;
 }
 function mount(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider><CompactPageBarProvider>
+      <LiteModeProvider><AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider><CompactPageBarProvider>
         <Routes>
           <Route element={<AppShell />}>
             <Route path="*" element={<Probe />} />
           </Route>
         </Routes>
-      </CompactPageBarProvider></CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider>
+      </CompactPageBarProvider></CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider></LiteModeProvider>
     </MemoryRouter>,
   );
 }
@@ -55,7 +56,7 @@ describe('AppShell: choosing a competition', () => {
   it('opens the events list from the header title, with no dialog', async () => {
     remembered();
     mount('/competitions/4');
-    await userEvent.click(screen.getByRole('link', { name: /Spring Games.*Change competition/ }));
+    await userEvent.click(screen.getByRole('link', { name: /Spring Games.*Events/ }));
     expect(screen.getByTestId('probe')).toHaveTextContent('/events');
     expect(screen.queryByRole('dialog', { name: 'Select a competition' })).not.toBeInTheDocument();
   });
@@ -64,20 +65,26 @@ describe('AppShell: choosing a competition', () => {
     remembered();
     mount('/competitions/4');
     await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    await userEvent.click(screen.getByRole('link', { name: 'Change competition' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Events' }));
     expect(screen.getByTestId('probe')).toHaveTextContent('/events');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('forgets the competition from the menu without asking to remember anything afterwards', async () => {
-    sessionStorage.setItem('mg.competitionVisit', JSON.stringify(spring));
+  it('opens the Settings page from the menu and closes the drawer', async () => {
+    remembered();
     mount('/competitions/4');
     await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Forget this competition' }));
-    expect(screen.getByTestId('probe')).toHaveTextContent('/events');
-    expect(sessionStorage.getItem('mg.competitionVisit')).toBeNull();
+    await userEvent.click(screen.getByRole('link', { name: 'Settings' }));
+    expect(screen.getByTestId('probe')).toHaveTextContent('/settings');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('takes the user to the Lite mode section of Settings when the Lite mode header icon is clicked', async () => {
+    localStorage.setItem('mg.liteMode', 'on');
+    mount('/events');
+    const liteButton = screen.getByRole('button', { name: 'Lite mode is on. Open the setting' });
+    await userEvent.click(liteButton);
+    expect(screen.getByTestId('probe')).toHaveTextContent('/settings#lite-mode');
   });
 
   it('does not ask to remember a competition on the events list', () => {
@@ -97,5 +104,12 @@ describe('AppShell: pages outside a competition', () => {
   it('has no Live tab', () => {
     mount('/events');
     expect(screen.queryByRole('link', { name: 'Live' })).not.toBeInTheDocument();
+  });
+
+  it('hides the header bar and bottom tabs in filming mode (/broadcast)', () => {
+    remembered();
+    mount('/competitions/4/broadcast');
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
 });

@@ -36,7 +36,7 @@ describe('plannedSessions', () => {
       section({ ageGroup: 'Juniors', existingId: 3, sessions: [{ existingId: 8, name: 'Juniors', races: ['A', 'B'], hasHeats: true }] }),
     ]);
     const plan = plannedSessions(d, { 3: 4 });
-    expect(plan.map((p) => p.name)).toEqual(['Open Teams · Session 1', 'Open Teams · Session 2', 'Juniors']);
+    expect(plan.map((p) => p.name)).toEqual(['Open · Session 1', 'Open · Session 2', 'Juniors']);
     expect(plan[0].races).toBe(10);
     expect(plan[0].racesChosen).toBe(false);
     expect(plan[2]).toMatchObject({ races: 2, racesChosen: true, fixed: true, existingId: 8 });
@@ -56,7 +56,7 @@ describe('provisionalTimetable', () => {
     const d = draft([section({ sessions: [{ races: tenRaces() }] })]);
     const { rows, finishes, overrun } = provisionalTimetable(d);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ kind: 'session', name: 'Senior Teams', minutes: 100, start: at(9), end: at(10, 40) });
+    expect(rows[0]).toMatchObject({ kind: 'session', name: 'Seniors', minutes: 100, start: at(9), end: at(10, 40) });
     expect(rows[0].detail).toBe('1 heat of 6, 10 races');
     expect(finishes).toEqual(at(10, 40));
     expect(overrun).toBe(false);
@@ -77,9 +77,9 @@ describe('provisionalTimetable', () => {
       section({ ageGroup: 'Novices', arena: 'Arena 2', sessions: [{ races: tenRaces(2) }], minutesPerRace: '10' }),
     ]);
     const starts = provisionalTimetable(d).rows.filter((r) => r.kind === 'session').map((r) => [r.name, r.start] as const);
-    expect(starts).toContainEqual(['Open Teams', at(9)]);
-    expect(starts).toContainEqual(['Junior Teams', at(9, 30)]);
-    expect(starts).toContainEqual(['Novice Teams', at(9)]);
+    expect(starts).toContainEqual(['Open', at(9)]);
+    expect(starts).toContainEqual(['Juniors', at(9, 30)]);
+    expect(starts).toContainEqual(['Novices', at(9)]);
   });
 
   it('works around breaks and briefings, which stay in the list', () => {
@@ -88,7 +88,7 @@ describe('provisionalTimetable', () => {
     });
     const { rows } = provisionalTimetable(d);
     expect(rows.map((r) => [r.kind, r.name, r.start.getHours() * 60 + r.start.getMinutes()])).toEqual([
-      ['briefing', 'Briefing', 510], ['break', 'Lunch', 540], ['session', 'Senior Teams', 585],
+      ['briefing', 'Briefing', 510], ['break', 'Lunch', 540], ['session', 'Seniors', 585],
     ]);
   });
 
@@ -156,6 +156,6 @@ describe('small helpers', () => {
   });
 
   it('names the age groups', () => {
-    expect(sectionNames(draft([section({ ageGroup: 'Juniors', format: 3 }), section({ ageGroup: 'Open' })]))).toEqual(['Junior Individuals', 'Open Teams']);
+    expect(sectionNames(draft([section({ ageGroup: 'Juniors', format: 3 }), section({ ageGroup: 'Open' })]))).toEqual(['Junior Individuals', 'Open']);
   });
 });

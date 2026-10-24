@@ -42,11 +42,11 @@ export function SeasonsPage() {
 
   const years = seasons ? [...new Set(seasons.map((season) => season.year))].sort((a, b) => b - a) : [];
   return <RefinePage>
-    <ResultsStatsNav />
     <RefineHeader
       context="Published standings" title="Seasons"
       actions={canCreate ? <Link className="rf-btn" to="?new=1"><Plus className="h-4 w-4" aria-hidden="true" />Create season</Link> : undefined}
     />
+    <ResultsStatsNav />
     {error && <div role="alert" className="mg-notice sv-msg">{error} <button className="mg-text-link min-h-11" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div>}
     {!seasons && !error && <p role="status" className="rf-note">Loading seasons…</p>}
     {seasons?.length === 0 && <div className="sv-empty"><h2>No seasons yet</h2><p>Published season tables will appear here.</p>{canCreate && <Link className="rf-btn rf-btn-primary" style={{ marginTop: 12 }} to="?new=1">Create the first season</Link>}</div>}

@@ -30,6 +30,7 @@ const CompetitionsPage = lazy(() => import('./pages/CompetitionsPage').then((mod
 const ScoringTab = lazy(() => import('./pages/competition/ScoringTab').then((module) => ({ default: module.ScoringTab })));
 const SessionPage = lazy(() => import('./pages/competition/SessionPage').then((module) => ({ default: module.SessionPage })));
 const TeamsTab = lazy(() => import('./pages/competition/TeamsTab').then((module) => ({ default: module.TeamsTab })));
+const CompetitionTeamPage = lazy(() => import('./pages/competition/CompetitionTeamPage').then((module) => ({ default: module.CompetitionTeamPage })));
 const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab').then((module) => ({ default: module.DeclarationsTab })));
 const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').then((module) => ({ default: module.BroadcastPage })));
 const ProducePage = lazy(() => import('./pages/competition/ProducePage').then((module) => ({ default: module.ProducePage })));
@@ -64,9 +65,11 @@ const ScorerPage = lazy(() => import('./pages/ScorerPage').then((module) => ({ d
 const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage').then((module) => ({ default: module.UnsubscribePage })));
 const ConfirmEmailPage = lazy(() => import('./pages/ConfirmEmailPage').then((module) => ({ default: module.ConfirmEmailPage })));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then((module) => ({ default: module.PrivacyPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({ default: module.AccountPage })));
 const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymentPage').then((module) => ({ default: module.TestEntryPaymentPage })));
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
 
 export default function App() {
   return (
@@ -107,6 +110,7 @@ export default function App() {
                 <Route path="arena" element={<ArenaPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="teams" element={<TeamsTab />} />
+                <Route path="teams/:teamId" element={<CompetitionTeamPage />} />
                 <Route path="following" element={<FollowingTab />} />
                 <Route path="shop" element={<EventShopPage />} />
                 <Route path="shop/manage" element={<ProtectedRoute roles={['Admin', 'Trainer']}><CommerceManagementPage /></ProtectedRoute>} />
@@ -155,6 +159,7 @@ export default function App() {
                 <ProtectedRoute roles={['Admin']}><RulesPage /></ProtectedRoute>
               } />
               <Route path="privacy" element={<PrivacyPage />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="unsubscribe" element={<UnsubscribePage />} />
               <Route path="confirm-email" element={<ConfirmEmailPage />} />
               <Route path="me/account"element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
@@ -164,8 +169,8 @@ export default function App() {
               <Route path="me/signups/:signupId/test-payment" element={
                 <ProtectedRoute><TestEntryPaymentPage /></ProtectedRoute>
               } />
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>
           </PageLoadBoundary>

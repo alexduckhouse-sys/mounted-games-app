@@ -299,6 +299,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       <p>Couldn’t load this competition. Check your connection or choose another event.</p>
       <div className="flex flex-wrap gap-2">
         <button className="mg-btn mg-btn-primary" onClick={load}>Try again</button>
+        <button type="button" className="mg-btn mg-btn-secondary" onClick={() => window.history.back()}>Go back</button>
         <Link className="mg-btn mg-btn-secondary" to="/events">Choose another competition</Link>
       </div>
     </div>

@@ -25,22 +25,22 @@ const racing = (extra: Partial<Session> = {}) => session([heat(1), heat(2)], { s
 describe('tickerItems: what is on now', () => {
   it('names the race using the age group and session number', () => {
     const items = tickerItems([session([heat(1, { label: 'Heat 1' })], { status: 1 })], [], now);
-    expect(items[0]).toEqual({ key: 'live-heat-1', kind: 'live', text: 'Now: Senior Teams Session 1 · Heat 1', sessionId: 1 });
+    expect(items[0]).toEqual({ key: 'live-heat-1', kind: 'live', text: 'Now: Seniors Session 1 · Heat 1', sessionId: 1 });
   });
 
   it('numbers an unlabelled heat from its position', () => {
     const items = tickerItems([session([heat(1), heat(2)], { status: 1 })], [], now);
-    expect(items[0].text).toBe('Now: Senior Teams Session 1 · Heat 1');
+    expect(items[0].text).toBe('Now: Seniors Session 1 · Heat 1');
   });
 
   it('shows a session without heats by its title alone', () => {
     const items = tickerItems([session([], { status: 1 })], [], now);
-    expect(items[0].text).toBe('Now: Senior Teams Session 1');
+    expect(items[0].text).toBe('Now: Seniors Session 1');
   });
 
   it('treats the first unfinished heat as the live one', () => {
     const items = tickerItems([session([heat(1, { finishedAt: at(-20) }), heat(2), heat(3)], { status: 1 })], [], now);
-    expect(find(items, 'live')!.text).toBe('Now: Senior Teams Session 1 · Heat 2');
+    expect(find(items, 'live')!.text).toBe('Now: Seniors Session 1 · Heat 2');
   });
 
   it('shows at most two live races', () => {
@@ -57,9 +57,9 @@ describe('tickerItems: what is on now', () => {
       name: 'Seniors Finals', sectionName: 'Teams Seniors', orderIndex: 90, heats: [heat(9, { label: 'Final A', raceRoundStage: 2 })], ...extra,
     });
     expect(tickerItems([finals({ scheduledStart: at(25) })], [], now)[0])
-      .toEqual({ key: 'next-heat-9', kind: 'finals', text: `Next ${clock(25)}: Senior Teams Finals · Final A`, sessionId: 3 });
+      .toEqual({ key: 'next-heat-9', kind: 'finals', text: `Next ${clock(25)}: Seniors Finals · Final A`, sessionId: 3 });
     expect(tickerItems([finals({ status: 1 })], [], now)[0])
-      .toEqual({ key: 'live-heat-9', kind: 'finals', text: 'Now: Senior Teams Finals · Final A', sessionId: 3 });
+      .toEqual({ key: 'live-heat-9', kind: 'finals', text: 'Now: Seniors Finals · Final A', sessionId: 3 });
   });
 
   it('does not repeat "finals" when the age group already says it, and falls back to the session name', () => {
@@ -75,7 +75,7 @@ describe('tickerItems: timekeeping', () => {
     const items = tickerItems([racing()], [], now);
     expect(kinds(items)).toEqual(['live', 'ontime', 'next']);
     expect(items[1].text).toBe('On time');
-    expect(items[2].text).toBe(`Next ${clock(20)}: Senior Teams Session 1 · Heat 2`);
+    expect(items[2].text).toBe(`Next ${clock(20)}: Seniors Session 1 · Heat 2`);
   });
 
   it('reports running behind when the session started late', () => {
@@ -88,7 +88,7 @@ describe('tickerItems: timekeeping', () => {
     const items = tickerItems([session([heat(1), heat(2)], { scheduledStart: at(-30) })], [], now);
     expect(kinds(items)).toEqual(['late', 'next']);
     expect(items[0].text).toBe('Running 30 min behind');
-    expect(items[1].text).toBe(`Next ${clock(-30)}: Senior Teams Session 1 · Heat 1`);
+    expect(items[1].text).toBe(`Next ${clock(-30)}: Seniors Session 1 · Heat 1`);
   });
 
   it('does not count a small delay as running behind', () => {
@@ -123,7 +123,7 @@ describe('tickerItems: breaks and briefings', () => {
   it('shows a break coming up with its name and start time, keeping the next heat listed', () => {
     const items = tickerItems(lunchAfterHeats(), [], now);
     expect(kinds(items)).toEqual(['live', 'ontime', 'next', 'break']);
-    expect(items[2].text).toBe(`Next ${clock(60)}: Junior Teams Session 1 · Heat 1`);
+    expect(items[2].text).toBe(`Next ${clock(60)}: Juniors Session 1 · Heat 1`);
     expect(items[3].text).toBe(`Lunch break ${clock(15)}`);
   });
 
@@ -228,7 +228,7 @@ describe('tickerItems: results and announcements', () => {
 
   it('puts fresh announcements first and older ones after the timetable lines', () => {
     const items = tickerItems([racing()], [note(1, 'Arena 2 closed', 90), note(2, 'Lunch moved to 1pm', 3)], now);
-    expect(texts(items)).toEqual(['Lunch moved to 1pm', 'Now: Senior Teams Session 1 · Heat 1', 'On time', `Next ${clock(20)}: Senior Teams Session 1 · Heat 2`, 'Arena 2 closed']);
+    expect(texts(items)).toEqual(['Lunch moved to 1pm', 'Now: Seniors Session 1 · Heat 1', 'On time', `Next ${clock(20)}: Seniors Session 1 · Heat 2`, 'Arena 2 closed']);
   });
 });
 

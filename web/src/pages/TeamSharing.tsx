@@ -14,9 +14,9 @@ export function JoinQr({ team }: { team: Pick<Team, 'displayName' | 'supporterJo
       <QrCode
         value={joinTeamLink(team.supporterJoinKey, window.location.origin)}
         label={`QR code to join ${team.displayName}`}
-        className="w-28 shrink-0 rounded-md border border-slate-200"
+        className="w-28 shrink-0 rounded-md border border-[rgb(var(--mg-rule))]"
       />
-      <p className="text-[11px] text-slate-500 dark:text-slate-300">
+      <p className="text-[11px] text-[rgb(var(--mg-muted))]">
         Supporters can scan this to join {team.displayName}. They’ll need to sign in first, and you still approve them.
       </p>
     </div>
@@ -90,21 +90,21 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
 
   return (
     <div className="space-y-1.5" aria-label={`Calendar link for ${team.displayName}`} role="group">
-      <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-300 flex items-center gap-1.5">
-        <CalendarPlus className="w-3.5 h-3.5" /> Team calendar
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[rgb(var(--mg-muted))]">
+        <CalendarPlus className="h-3.5 w-3.5" /> Team calendar
       </div>
-      <p className="text-[11px] text-slate-500 dark:text-slate-300">
+      <p className="text-[11px] text-[rgb(var(--mg-muted))]">
         Add {team.displayName}’s heats to a phone calendar. The times change by themselves if the timetable moves.
         Anyone with the link can see the heat times, so share it only with people you trust.
       </p>
       {links && (
-        <div className="space-y-1.5 rounded-md bg-brand-50 p-2 dark:bg-brand-900/40">
-          <p className="text-[11px] font-semibold">Here’s your link. Copy it now, because it won’t be shown again.</p>
-          <input className="input !py-1 text-xs font-mono w-full" readOnly value={links.https} aria-label="Calendar link" onFocus={(event) => event.target.select()} />
+        <div className="space-y-1.5 rounded-md border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-2">
+          <p className="text-[11px] font-semibold text-[rgb(var(--mg-heading))]">Here’s your link. Copy it now, because it won’t be shown again.</p>
+          <input className="input w-full !py-1 font-mono text-xs" readOnly value={links.https} aria-label="Calendar link" onFocus={(event) => event.target.select()} />
           <div className="flex flex-wrap gap-1.5">
-            <a className="btn-primary !py-1 !px-2 text-xs" href={links.webcal}><CalendarPlus className="w-3.5 h-3.5" /> Add to calendar</a>
-            <button type="button" onClick={copy} className="btn-ghost !py-1 !px-2 text-xs">
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />} {copied ? 'Copied' : 'Copy link'}
+            <a className="mg-btn mg-btn-primary !min-h-8 !px-2.5 !py-1 text-xs" href={links.webcal}><CalendarPlus className="h-3.5 w-3.5" /> Add to calendar</a>
+            <button type="button" onClick={copy} className="mg-small-btn gap-1.5 !min-h-8 !px-2.5 !py-1 text-xs">
+              {copied ? <Check className="h-3.5 w-3.5 text-[rgb(var(--mg-ok))]" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy link'}
             </button>
           </div>
         </div>
@@ -114,15 +114,15 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
       )}
       <div className="flex flex-wrap gap-1.5">
         {status && (
-          <button type="button" onClick={make} disabled={busy} className={status.enabled ? 'btn-ghost !py-1 !px-2 text-xs' : 'btn-primary !py-1 !px-2 text-xs'}>
+          <button type="button" onClick={make} disabled={busy} className={status.enabled ? 'mg-small-btn !min-h-8 !px-2.5 !py-1 text-xs' : 'mg-btn mg-btn-primary !min-h-8 !px-2.5 !py-1 text-xs'}>
             {status.enabled ? 'Make a new link' : 'Create calendar link'}
           </button>
         )}
         {status?.enabled && (
-          <button type="button" onClick={turnOff} disabled={busy} className="btn-ghost !py-1 !px-2 text-xs text-rose-500">Turn off</button>
+          <button type="button" onClick={turnOff} disabled={busy} className="mg-small-btn !min-h-8 !px-2.5 !py-1 text-xs !text-[rgb(var(--mg-elim))]">Turn off</button>
         )}
       </div>
-      {error && <p role="alert" className="text-[11px] text-rose-700 dark:text-rose-300">{error}</p>}
+      {error && <p role="alert" className="text-[11px] text-[rgb(var(--mg-elim))]">{error}</p>}
     </div>
   );
 }

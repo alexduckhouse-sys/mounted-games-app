@@ -10,7 +10,7 @@ const ITEMS = [
 export function ResultsStatsNav() {
   const { pathname } = useLocation();
   return (
-    <nav aria-label="Results and statistics" className="mx-auto flex w-full max-w-xl flex-wrap gap-2 pb-1 pt-2 lg:max-w-none">
+    <nav aria-label="Results and statistics" className="mx-auto flex w-full max-w-xl flex-wrap gap-2 pb-0.5 pt-2.5 lg:max-w-none">
       {ITEMS.map((item) => {
         const active = item.match(pathname);
         return (
@@ -18,7 +18,7 @@ export function ResultsStatsNav() {
             key={item.to}
             to={item.to}
             aria-current={active ? 'page' : undefined}
-            className="mg-chip !min-h-10 !px-3.5 !text-sm !no-underline hover:!no-underline"
+            className="mg-chip !min-h-9 !px-3.5 !text-sm !no-underline hover:!no-underline"
           >
             {item.label}
           </Link>

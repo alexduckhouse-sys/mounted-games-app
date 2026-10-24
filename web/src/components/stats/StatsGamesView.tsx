@@ -1,4 +1,5 @@
 import type { StatsGame } from '../../types';
+import { formatPoints } from '../../lib/formatPoints';
 import { formatPercent } from '../../lib/stats';
 
 interface Props {
@@ -9,7 +10,14 @@ interface Props {
   emptyText?: string;
 }
 
-/** Per-game figures: best and weakest games, then every game with its point quota. */
+function formatGameAvg(game: StatsGame): string {
+  const avgPts = game.averagePoints ?? (game.races > 0 ? Math.round((game.points / game.races) * 10) / 10 : null);
+  if (avgPts == null) return '—';
+  const ptsText = `${formatPoints(avgPts)} pts`;
+  return game.averagePlace != null ? `${ptsText} (${game.averagePlace})` : ptsText;
+}
+
+/** Per-game figures: best and weakest games, then every game with its average and point quota. */
 export function StatsGamesView({ games, best, worst, emptyText = 'No races to show yet.' }: Props) {
   if (games.length === 0) return <p className="rf-note">{emptyText}</p>;
   return (
@@ -24,7 +32,7 @@ export function StatsGamesView({ games, best, worst, emptyText = 'No races to sh
         <table className="rf-table">
           <caption className="sr-only">Games, best point quota first. Point quota is points won out of the most the race could give.</caption>
           <thead>
-            <tr><th scope="col">Game</th><th scope="col">Races</th><th scope="col">Won</th><th scope="col">Not finished</th><th scope="col">Quota</th></tr>
+            <tr><th scope="col">Game</th><th scope="col">Races</th><th scope="col">Won</th><th scope="col">Avg</th><th scope="col">Not finished</th><th scope="col">Quota</th></tr>
           </thead>
           <tbody>
             {games.map((game) => (
@@ -32,6 +40,7 @@ export function StatsGamesView({ games, best, worst, emptyText = 'No races to sh
                 <td className="font-semibold">{game.name}</td>
                 <td className="tabular-nums">{game.races}</td>
                 <td className="tabular-nums">{game.wins} <span className="text-[13px] text-[rgb(var(--mg-muted))]">({formatPercent(game.winPercent)})</span></td>
+                <td className="tabular-nums">{formatGameAvg(game)}</td>
                 <td className="tabular-nums">{game.nonFinishes}</td>
                 <td className="tabular-nums font-semibold">{formatPercent(game.pointQuotaPercent)}</td>
               </tr>

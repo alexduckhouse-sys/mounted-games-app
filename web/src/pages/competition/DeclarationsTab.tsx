@@ -6,6 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { DeclarationForm, RiderEntry, Team } from '../../types';
 import { toCsv, downloadCsv, safeFilename } from '../../lib/csv';
+import { parseBibAndFlag } from '../../lib/bib';
 import { decDraftKey, dobText, heightText, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
 import { DecFormEditor } from './decform/DecFormEditor';
 import { confirmDialog } from '../../components/ConfirmDialog';
@@ -117,7 +118,7 @@ export function DeclarationsTab() {
           dobText(r.dateOfBirth),
           r.horseName ?? '',
           heightText(r.ponyHeightHands),
-          f.bibDescription ?? '',
+          parseBibAndFlag(f.bibDescription).bib,
           f.trainerName ?? f.submittedByName ?? '',
           f.trainerPhone ?? f.submittedByPhone ?? '',
           f.submittedByName ?? '',
@@ -141,7 +142,7 @@ export function DeclarationsTab() {
   const cards = (
     <div className={`grid grid-cols-1 gap-2 ${teamRail ? 'xl:grid-cols-2' : 'lg:grid-cols-2'}`}>
       {forms?.length === 0 && (
-        <div className="card p-3 text-xs text-[rgb(var(--mg-muted))]">No declaration forms submitted yet.</div>
+        <div className="mg-card p-3 text-xs text-[rgb(var(--mg-muted))]">No declaration forms submitted yet.</div>
       )}
       {forms?.map((f) => <DecFormCard key={f.id} f={f} config={config ?? STANDARD_CONFIG} onDelete={() => remove(f.id)} canDelete={user != null} />)}
     </div>
@@ -164,7 +165,7 @@ export function DeclarationsTab() {
   );
   const exportButton = (
     <div className="flex justify-end">
-      <button onClick={exportCsv} disabled={count === 0} className="btn-ghost !px-2.5 !py-1.5 text-xs" title="Download all submitted dec forms as CSV">
+      <button onClick={exportCsv} disabled={count === 0} className="mg-small-btn gap-1.5 !min-h-9 !px-3 !text-xs" title="Download all submitted dec forms as CSV">
         <Download className="h-3.5 w-3.5" /> Export CSV ({count})
       </button>
     </div>
@@ -172,17 +173,17 @@ export function DeclarationsTab() {
 
   if (teamRail) {
     return (
-      <div className="flex flex-col gap-4 pt-4">
+      <div className="flex flex-col gap-3 pt-2">
         {exportButton}
         <PageGrid variant="left" aside={rail}>
-          <div className="flex flex-col gap-4">{editor}{cards}</div>
+          <div className="flex flex-col gap-3">{editor}{cards}</div>
         </PageGrid>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4 pt-4">
+    <div className="flex flex-col gap-3 pt-2">
       {exportButton}
 
       {!user ? (
@@ -233,11 +234,13 @@ function detailLine(r: RiderEntry, config: DecFormConfig): string {
 }
 
 function DecFormCard({ f, config, onDelete, canDelete }: CardProps) {
+  const parsedBib = parseBibAndFlag(f.bibDescription);
   return (
-    <div className="card p-3">
+    <div className="mg-card card p-3">
       <div className="mb-2 flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))]">
+            {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
             <span className="truncate">{f.teamName}</span>
             {(f.flagCount ?? 0) > 0 && (
               <span className="mg-flag inline-flex shrink-0 items-center gap-1 !px-1.5 !py-0.5 !text-[11px]" title="Someone's answer is outside the limits set for this event">
@@ -257,19 +260,19 @@ function DecFormCard({ f, config, onDelete, canDelete }: CardProps) {
           </p>
         </div>
         {canDelete && (
-          <button onClick={onDelete} className="text-rose-500 hover:text-rose-700" title="Delete" aria-label={`Delete the dec form for ${f.teamName}`}>
+          <button onClick={onDelete} className="text-[rgb(var(--mg-elim))] hover:opacity-80" title="Delete" aria-label={`Delete the dec form for ${f.teamName}`}>
             <Trash2 className="h-4 w-4" />
           </button>
         )}
       </div>
-      {f.bibDescription && <p className="mb-2 text-[11px] text-[rgb(var(--mg-body))]">Bibs: {f.bibDescription}</p>}
+      {parsedBib.bib && <p className="mb-2 text-[11px] text-[rgb(var(--mg-body))]">Bibs: {parsedBib.bib}</p>}
       <ol className="space-y-1">
         {f.riders.map((r) => (
           <li key={r.id} className="flex flex-wrap items-center gap-x-2 text-xs">
             <span className="flex-1 truncate font-medium text-[rgb(var(--mg-ink))]">
               {r.fullName}
-              {r.isReserve && <Shield aria-label="Reserve" className="ml-1 inline h-3 w-3 text-sky-500" />}
-              {r.isGuestRider && <span className="ml-1.5 rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-bold uppercase text-emerald-800">Guest</span>}
+              {r.isReserve && <Shield aria-label="Reserve" className="ml-1 inline h-3 w-3 text-[rgb(var(--mg-heading))]" />}
+              {r.isGuestRider && <span className="mg-tag mg-tag-ok ml-1.5 !px-1 !py-0.5 !text-[9px] font-bold uppercase">Guest</span>}
             </span>
             <span className="truncate text-[rgb(var(--mg-muted))]">
               {r.horseName ?? '—'}{r.ponyHeightHands != null ? ` · ${heightText(r.ponyHeightHands)} hh` : ''}

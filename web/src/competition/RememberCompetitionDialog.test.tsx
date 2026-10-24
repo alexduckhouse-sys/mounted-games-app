@@ -54,4 +54,34 @@ describe('RememberCompetitionDialog', () => {
     act(() => unmount());
     expect(close).toHaveBeenCalled();
   });
+
+  it('dismisses for this visit when swiped down with touch', () => {
+    mount();
+    const dialog = screen.getByRole('dialog');
+    fireEvent.touchStart(dialog, { touches: [{ clientY: 100 }] });
+    fireEvent.touchMove(dialog, { touches: [{ clientY: 160 }] });
+    expect(dialog).toHaveStyle({ transform: 'translateY(60px)' });
+    fireEvent.touchEnd(dialog, { changedTouches: [{ clientY: 160 }] });
+    expect(screen.getByTestId('choice')).toHaveTextContent('visit');
+  });
+
+  it('keeps the dialog open on a short swipe and dismisses on a full pointer swipe down', () => {
+    mount();
+    const dialog = screen.getByRole('dialog');
+    fireEvent.pointerMove(dialog, { clientY: 200 });
+    fireEvent.pointerUp(dialog, { clientY: 200 });
+    expect(screen.getByTestId('choice')).toHaveTextContent('ask');
+
+    fireEvent.pointerDown(dialog, { clientY: 100 });
+    fireEvent.pointerMove(dialog, { clientY: 120 });
+    expect(dialog).toHaveStyle({ transform: 'translateY(20px)' });
+    fireEvent.touchEnd(dialog, { changedTouches: [] });
+    expect(dialog.style.transform).toBe('');
+    expect(screen.getByTestId('choice')).toHaveTextContent('ask');
+
+    fireEvent.pointerDown(dialog, { clientY: 100 });
+    fireEvent.pointerMove(dialog, { clientY: 155 });
+    fireEvent.pointerUp(dialog, { clientY: 155 });
+    expect(screen.getByTestId('choice')).toHaveTextContent('visit');
+  });
 });

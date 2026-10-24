@@ -93,6 +93,7 @@ public class CompetitionsController : ControllerBase
 
     [HttpGet("picker")]
     [AllowAnonymous]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionPickerPage>> Picker(
         [FromQuery] bool past = false, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
         CancellationToken ct = default)
@@ -103,6 +104,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpGet]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<CompetitionSummary>> List([FromQuery] bool includeArchived = false)
     {
         var q = _db.Competitions
@@ -119,6 +121,7 @@ public class CompetitionsController : ControllerBase
         _db.Set<EventCommerceSettings>().AsNoTracking().AnyAsync(x => x.CompetitionId == competitionId && x.IsDemo);
 
     [HttpGet("{id:int}")]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionDetail>> Get(int id)
     {
         var c = await _db.Competitions
@@ -156,6 +159,7 @@ public class CompetitionsController : ControllerBase
     /// racing in them. The web shows it straight away and swaps in the full timetable when that arrives.
     /// </summary>
     [HttpGet("{id:int}/first-view")]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionDetail>> FirstView(int id)
     {
         var c = await _db.Competitions.AsNoTracking().Include(x => x.Sections).FirstOrDefaultAsync(x => x.Id == id);
@@ -460,6 +464,7 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpGet("{id:int}/standings")]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<StandingRow>>> Standings(int id,
         [FromServices] StandingsService standings, [FromQuery] int? sectionId = null)
         => await standings.RowsAsync(id, sectionId, HttpContext.RequestAborted);

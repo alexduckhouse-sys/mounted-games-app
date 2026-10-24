@@ -18,9 +18,10 @@ export function SessionsTab() {
         <Download aria-hidden="true" className="h-[18px] w-[18px]" />Download timetable
       </button>
     )}
-    {canManage(competition)
-      ? <Link className="mg-text-link self-center" to={`/admin/competitions/${competition.id}/format`}>Manage timetable</Link>
-      : <Link className="mg-text-link self-center" to="arena">Arena setup</Link>}
+    <Link className="mg-text-link self-center" to="arena">Arena setup</Link>
+    {canManage(competition) && (
+      <Link className="mg-text-link self-center" to={`/admin/competitions/${competition.id}/format`}>Manage timetable</Link>
+    )}
   </>;
   return <TimetableBoard footer={footer} />;
 }

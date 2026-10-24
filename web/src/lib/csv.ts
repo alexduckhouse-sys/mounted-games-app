@@ -5,7 +5,10 @@
 
 function escape(v: unknown): string {
   if (v == null) return '';
-  const s = String(v);
+  let s = String(v);
+  if (typeof v !== 'number' && typeof v !== 'boolean' && /^[=+\-@\t\r]/.test(s) && !/^-[0-9]+(\.[0-9]+)?$/.test(s)) {
+    s = `'${s}`;
+  }
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }

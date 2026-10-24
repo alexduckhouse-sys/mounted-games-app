@@ -15,7 +15,7 @@ describe('BottomTabs', () => {
     expect(screen.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
       ['Timetable', '/competitions/12'],
       ['Toplists', '/competitions/12/toplists'],
-      ['Live & stream', '/competitions/12/chat'],
+      ['Live stream', '/competitions/12/chat'],
       ['Details', '/competitions/12/details'],
     ]);
   });
@@ -52,7 +52,7 @@ describe('BottomTabs', () => {
     ['/competitions/12/session/3', 'Timetable'],
     ['/competitions/12/scoring', 'Timetable'],
     ['/competitions/12/toplists', 'Toplists'],
-    ['/competitions/12/chat', 'Live & stream'],
+    ['/competitions/12/chat', 'Live stream'],
     ['/competitions/12/details/', 'Details'],
     ['/competitions/12/sponsors', 'Details'],
   ])('highlights the right tab at %s', (path, tab) => {

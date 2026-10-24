@@ -8,7 +8,9 @@ import { displaySectionName } from '../../lib/section';
 import { timetableRows } from '../../lib/timetableRows';
 import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
+import { parseBibAndFlag } from '../../lib/bib';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
+import { lanesOf, sitsOutOf } from './laneRules';
 import './heat.css';
 import { formatPoints } from '../../lib/formatPoints';
 
@@ -41,6 +43,7 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
   const columns = useMemo(() => roundHeats.flatMap((item) => item.races.slice().sort((a, b) => a.orderIndex - b.orderIndex)
     .map((race) => ({ race, label: roundHeats.length > 1 ? (item.label ?? race.name) : race.name }))), [roundHeats]);
   const races = useMemo(() => columns.map((column) => column.race), [columns]);
+  const laneRules = useMemo(() => lanesOf(session), [session]);
   const heatLabel = heat
     ? roundHeats.length > 1 ? (heat.label ?? '').replace(/\s*·\s*(Q\d|Final)$/i, '') || `Heat ${index + 1}` : heat.label || `Heat ${index + 1}`
     : session.name;
@@ -124,22 +127,36 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
                   </tr>
                 </thead>
                 <tbody>
-                  {grid.teams.map((team) => (
-                    <tr key={team.id}>
-                      {finished && <td className="heat-rank-cell"><span className="sr-only">Position </span>{team.position}</td>}
-                      <th scope="row" className="heat-team" title={team.name}>{team.name}</th>
-                      {races.map((race, i) => {
-                        const cell = grid.cells.get(`${team.id}|${race.id}`);
-                        return <td key={race.id} className={`heat-cell ${i === 0 ? 'heat-cell-first' : ''}`}>
-                          {cell == null ? <><span aria-hidden="true" className="heat-dash">–</span><span className="sr-only">Not raced yet</span></>
-                            : cell.sitOut ? <><span aria-hidden="true" className="heat-dash">S</span><span className="sr-only">Sat out this race</span></>
-                            : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">{statusLetter(true, cell.status)}</span><span className="sr-only">{statusLabel(true, cell.status)}</span></>
-                            : formatPoints(cell.points)}
-                        </td>;
-                      })}
-                      <td className="heat-total">{formatPoints(team.total)}</td>
-                    </tr>
-                  ))}
+                  {grid.teams.map((team) => {
+                    const compTeam = competition.teams.find((t) => t.id === team.id);
+                    const flag = parseBibAndFlag(compTeam?.bibDescription).flag;
+                    return (
+                      <tr key={team.id}>
+                        {finished && <td className="heat-rank-cell"><span className="sr-only">Position </span>{team.position}</td>}
+                        <th scope="row" className="heat-team" title={team.name}>
+                          <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="inline-flex max-w-full items-center gap-1.5 hover:underline">
+                            {flag && <img src={`/flags/${flag}.png`} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
+                            <span className="truncate">{team.name}</span>
+                          </Link>
+                        </th>
+                        {races.map((race, i) => {
+                          const cell = grid.cells.get(`${team.id}|${race.id}`);
+                          const entry = cell == null && roundHeats.length === 1 ? heat.entries.find((e) => e.teamId === team.id) : undefined;
+                          const prefilledSitOut = entry != null && sitsOutOf(heat, entry, i, laneRules);
+                          return <td key={race.id} className={`heat-cell ${i === 0 ? 'heat-cell-first' : ''}`}>
+                            {cell == null
+                              ? prefilledSitOut
+                                ? <><span aria-hidden="true" className="heat-dash">S</span><span className="sr-only">Sat out this race</span></>
+                                : <><span aria-hidden="true" className="heat-dash">–</span><span className="sr-only">Not raced yet</span></>
+                              : cell.sitOut ? <><span aria-hidden="true" className="heat-dash">S</span><span className="sr-only">Sat out this race</span></>
+                              : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">{statusLetter(true, cell.status)}</span><span className="sr-only">{statusLabel(true, cell.status)}</span></>
+                              : formatPoints(cell.points)}
+                          </td>;
+                        })}
+                        <td className="heat-total">{formatPoints(team.total)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

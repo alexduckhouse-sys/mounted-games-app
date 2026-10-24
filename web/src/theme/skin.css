@@ -326,6 +326,7 @@ a.mg-row:active, button.mg-row:active { background: rgb(var(--mg-tint) / .65); }
 
 /* Full-bleed bands: the colour runs edge to edge while the content stays in its column. */
 .mg-band { border-image: linear-gradient(rgb(var(--mg-surface)) calc(100% - 1px), rgb(var(--mg-rule)) 0) fill 0 // 0 100vmax; }
+@media (min-width: 1024px) { .mg-band { border-image: none; } }
 .mg-band-header { border-image: conic-gradient(rgb(var(--mg-header)) 0 0) fill 0 // 0 100vmax; color: #fff; }
 .mg-band-deep { border-image: conic-gradient(rgb(var(--mg-header-deep)) 0 0) fill 0 // 0 100vmax; color: #fff; }
 
@@ -441,12 +442,11 @@ a.mg-sponsor:focus-visible { outline: 3px solid rgb(var(--mg-heading)); outline-
 .mg-ov-sponsor-bug .mg-sponsor-logo { height: 2.4em; }
 
 /* Lite mode (slow connection or Data Saver): see src/lite. */
-.mg-lite-chip { flex-shrink: 0; display: inline-flex; align-items: center; min-height: 44px; padding: 0; background: transparent; cursor: pointer; }
-.mg-lite-chip > span {
-  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 14px;
-  background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 700 12.5px/1 var(--mg-font); white-space: nowrap;
+.mg-lite-chip {
+  flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px;
+  padding: 0; border-radius: 10px; border: 1px solid rgb(var(--mg-header-line)); background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); cursor: pointer;
 }
-.mg-lite-chip svg { width: 14px; height: 14px; }
+.mg-lite-chip svg { width: 18px; height: 18px; }
 /* A picture that waits for a tap. Takes the size and shape of the image it stands in for. */
 .mg-tap-image {
   display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 64px; padding: 10px 14px; border-radius: 12px;

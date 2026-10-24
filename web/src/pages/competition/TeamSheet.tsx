@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { X } from 'lucide-react';
+import type { Team } from '../../types';
+import { bibAccent, bibLabel, parseBibAndFlag } from '../../lib/bib';
 import { ordinal, type TeamBlock, type TeamDetail } from '../../lib/toplist';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { formatPoints } from '../../lib/formatPoints';
@@ -8,7 +11,19 @@ import { formatPoints } from '../../lib/formatPoints';
 const eyebrow = 'text-[10px] font-bold uppercase tracking-[0.08em]';
 
 /** A team's points by session and its final, as a bottom sheet. Esc or the backdrop closes it and focus goes back to the row. */
-export function TeamSheet({ detail, sectionName, onClose }: { detail: TeamDetail; sectionName: string | null; onClose: () => void }) {
+export function TeamSheet({
+  detail,
+  sectionName,
+  competitionId,
+  team,
+  onClose,
+}: {
+  detail: TeamDetail;
+  sectionName: string | null;
+  competitionId?: number;
+  team?: Team | null;
+  onClose: () => void;
+}) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   useEffect(() => { closeRef.current = onClose; });
@@ -38,6 +53,7 @@ export function TeamSheet({ detail, sectionName, onClose }: { detail: TeamDetail
   const rode = detail.blocks.filter((block) => block.kind === 'session' && block.points != null).length;
   const rodeText = rode > 0 ? `rode ${rode} ${rode === 1 ? 'session' : 'sessions'}` : null;
   const sub = [sectionName, [rodeText, detail.final?.label].filter(Boolean).join(' + ')].filter(Boolean).join(' · ');
+  const parsedBib = parseBibAndFlag(team?.bibDescription);
 
   return createPortal(
     <div className="mg-font fixed inset-0 z-[80] flex items-end justify-center bg-[rgb(var(--mg-overlay)/0.55)]" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -45,11 +61,27 @@ export function TeamSheet({ detail, sectionName, onClose }: { detail: TeamDetail
         <span aria-hidden="true" className="mx-auto h-1 w-9 shrink-0 rounded-sm bg-[rgb(var(--mg-control))]" />
         <div className="sticky -top-2 z-[1] -mx-4 -mt-1.5 flex items-start gap-2.5 border-b border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-4 pb-2.5 pt-1.5">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <h2 id="team-sheet-title" className="mg-display text-2xl font-bold leading-none text-[rgb(var(--mg-heading))]">{detail.teamName}</h2>
+            <h2 id="team-sheet-title" className="mg-display text-2xl font-bold leading-none text-[rgb(var(--mg-heading))]">
+              {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="mr-1.5 inline-block h-4 w-6 rounded-[2px] object-cover align-middle" />}
+              {detail.teamName}
+            </h2>
             {sub && <p className="text-[13px] font-medium leading-snug text-[rgb(var(--mg-muted))]">{sub}</p>}
+            {parsedBib.bib && (
+              <p className="flex items-center gap-1.5 text-xs font-medium text-[rgb(var(--mg-body))]">
+                <span aria-hidden="true" className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-black/15" style={{ background: bibAccent(team?.bibDescription) }} />
+                <span className="truncate">{bibLabel(team?.bibDescription)}</span>
+              </p>
+            )}
           </div>
           <button type="button" onClick={onClose} aria-label="Close team breakdown" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[rgb(var(--mg-control))] text-[rgb(var(--mg-heading))]"><X aria-hidden="true" className="h-4 w-4" /></button>
         </div>
+
+        {competitionId != null && (
+          <Link to={`/competitions/${competitionId}/teams/${detail.teamId}`} onClick={onClose} className="mg-tint-link !min-h-10 justify-between !px-3 !text-sm">
+            <span>Full team page &amp; riders</span>
+            <span aria-hidden="true">→</span>
+          </Link>
+        )}
 
         <div className={`grid gap-2 ${detail.final ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-tint))] px-3 py-2.5">

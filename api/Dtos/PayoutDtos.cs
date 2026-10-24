@@ -32,7 +32,8 @@ public record SavePayoutDetailsRequest(
     string? ContactEmail = null, string? ContactPhone = null,
     string? RegistrationNumber = null, string? VatNumber = null,
     string? PersonFullName = null, DateOnly? PersonDateOfBirth = null,
-    string? StatementDescriptor = null, PayoutSchedule? Schedule = null);
+    string? StatementDescriptor = null, PayoutSchedule? Schedule = null,
+    bool? ClearPersonDateOfBirth = null);
 
 /// <summary>
 /// Bank details. UK clubs send a sort code and account number; Ireland and EU clubs send an IBAN (and may add a BIC).

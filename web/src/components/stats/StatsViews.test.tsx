@@ -30,14 +30,17 @@ describe('StatsSummaryView', () => {
 });
 
 describe('StatsGamesView', () => {
-  it('lists every game with best and weakest', () => {
-    render(<StatsGamesView games={[game('Bending'), game('Flag Race', { wins: 0, winPercent: 0, nonFinishes: 1, pointQuotaPercent: null })]} best={['Bending']} worst={['Flag Race']} />);
+  it('lists every game with best, weakest, and per-race average', () => {
+    render(<StatsGamesView games={[
+      game('Bending', { averagePoints: 2.5, averagePlace: 1.5 }),
+      game('Flag Race', { races: 0, wins: 0, winPercent: 0, nonFinishes: 1, points: 0, pointQuotaPercent: null }),
+    ]} best={['Bending']} worst={['Flag Race']} />);
     expect(screen.getByText('Best').nextSibling).toHaveTextContent('Bending');
     expect(screen.getByText('Weakest').nextSibling).toHaveTextContent('Flag Race');
     const rows = within(screen.getByRole('table')).getAllByRole('row');
     expect(rows).toHaveLength(3);
-    expect(rows[1]).toHaveTextContent('Bending21 (50%)062.5%');
-    expect(rows[2]).toHaveTextContent('Flag Race20 (0%)1—');
+    expect(rows[1]).toHaveTextContent('Bending21 (50%)2.5 pts (1.5)062.5%');
+    expect(rows[2]).toHaveTextContent('Flag Race00 (0%)—1—');
   });
 
   it('skips the best and weakest lines when there are none', () => {

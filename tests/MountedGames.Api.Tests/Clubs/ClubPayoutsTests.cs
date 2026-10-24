@@ -109,6 +109,10 @@ public class ClubPayoutsTests : IClassFixture<ApiFactory>
         Assert.Equal("Ashdown Pony Club", dto.LegalName);
         Assert.Null(dto.TradingName);
         Assert.Equal("GB123456789", dto.VatNumber);
+        Assert.Equal(new DateOnly(1985, 3, 14), dto.PersonDateOfBirth);
+
+        var cleared = await (await manager.PutAsJsonAsync(Url(clubId), new SavePayoutDetailsRequest(PersonFullName: "Ann Smith", PersonDateOfBirth: null))).ReadAsync<ClubPayoutsDto>();
+        Assert.Null(cleared.PersonDateOfBirth);
     }
 
     [Theory]

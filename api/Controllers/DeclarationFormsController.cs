@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -24,6 +25,7 @@ public class DeclarationFormsController : ControllerBase
     }
 
     [HttpGet]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<DeclarationFormDto>> List(
         [FromQuery] int? competitionId = null,
         [FromQuery] int? teamId = null)
@@ -54,6 +56,7 @@ public class DeclarationFormsController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<DeclarationFormDto>> Get(int id)
     {
         var d = await _db.DeclarationForms
@@ -153,7 +156,10 @@ public class DeclarationFormsController : ControllerBase
             else
                 return BadRequest(new { message = "Enter the trainer's phone number as a UK or Irish number, like 07123 456789." });
         }
-        if (config.Bib == FieldRequirement.Required && explicitConfig is not null && string.IsNullOrWhiteSpace(req.BibDescription))
+        var bibWithoutFlag = System.Text.RegularExpressions.Regex.Replace(req.BibDescription ?? string.Empty, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        var flagMatch = System.Text.RegularExpressions.Regex.Match(req.BibDescription ?? string.Empty, @"^(\[flag:[a-z0-9-]+\])", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var flagPrefix = flagMatch.Success ? flagMatch.Groups[1].Value : null;
+        if (config.Bib == FieldRequirement.Required && explicitConfig is not null && string.IsNullOrWhiteSpace(bibWithoutFlag))
             return BadRequest(new { message = "The bib or number is needed." });
 
         var submitter = userId is null ? null : await _users.FindByIdAsync(userId);
@@ -167,8 +173,13 @@ public class DeclarationFormsController : ControllerBase
         var teamName = req.TeamName?.Trim();
         if (!string.IsNullOrEmpty(teamName)) team.DisplayName = teamName;
 
-        if (req.BibDescription is not null && config.Bib != FieldRequirement.Off)
-            team.BibDescription = string.IsNullOrWhiteSpace(req.BibDescription) ? null : req.BibDescription.Trim();
+        if (req.BibDescription is not null)
+        {
+            var effectiveBib = config.Bib == FieldRequirement.Off ? string.Empty : bibWithoutFlag;
+            var combined = string.Join(" ", new[] { flagPrefix, effectiveBib }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            if (config.Bib != FieldRequirement.Off || flagPrefix is not null)
+                team.BibDescription = string.IsNullOrWhiteSpace(combined) ? null : combined;
+        }
 
         // One declaration per team: submitting again updates it instead of adding a second form.
         var forms = await _db.DeclarationForms.Include(f => f.Riders)

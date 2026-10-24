@@ -39,8 +39,10 @@ public sealed class StreamSweeper(IServiceScopeFactory scopes, CompetitionStream
             foreach (var stream in streams)
             {
                 if (stream.Status is LiveStreamStatus.Live or LiveStreamStatus.Paused
-                    && now - _started >= TimeSpan.FromSeconds(_options.HeartbeatTimeoutSeconds)
-                    && now - stream.LastHeartbeatAt > TimeSpan.FromSeconds(_options.HeartbeatTimeoutSeconds))
+                    && ((now - _started >= TimeSpan.FromSeconds(_options.HeartbeatTimeoutSeconds)
+                        && now - stream.LastHeartbeatAt > TimeSpan.FromSeconds(_options.HeartbeatTimeoutSeconds))
+                        || (_options.MaxStreamDurationMinutes > 0
+                            && now - stream.StartedAt > TimeSpan.FromMinutes(_options.MaxStreamDurationMinutes))))
                 {
                     await lifecycle.EndAsync(stream, ct);
                     continue;

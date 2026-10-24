@@ -31,6 +31,16 @@ export function NeedsYouProvider({ children }: { children: ReactNode }) {
   }, [approves, userId]);
 
   useEffect(() => {
+    function onRequestsChanged(e: Event) {
+      const removedId = (e as CustomEvent<{ userId?: string }>).detail?.userId;
+      if (!removedId) return;
+      setLoaded((cur) => (cur ? { ...cur, requests: cur.requests.filter((r) => r.userId !== removedId) } : cur));
+    }
+    window.addEventListener('mg:trainer-requests-changed', onRequestsChanged);
+    return () => window.removeEventListener('mg:trainer-requests-changed', onRequestsChanged);
+  }, []);
+
+  useEffect(() => {
     if (!userId) return;
     let cancelled = false;
     api.get<Team[]>('/trainer/my-teams').then(({ data }) => {
@@ -53,6 +63,7 @@ export function NeedsYouProvider({ children }: { children: ReactNode }) {
       return false;
     }
     setLoaded((cur) => (cur ? { ...cur, requests: cur.requests.filter((r) => r.userId !== request.userId) } : cur));
+    window.dispatchEvent(new CustomEvent('mg:trainer-requests-changed', { detail: { userId: request.userId } }));
     return true;
   }, []);
 

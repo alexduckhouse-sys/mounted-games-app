@@ -29,6 +29,16 @@ export function TrainerRequestsSection() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    function onRequestsChanged(e: Event) {
+      const removedId = (e as CustomEvent<{ userId?: string }>).detail?.userId;
+      if (!removedId) return;
+      setRequests((cur) => cur.filter((r) => r.userId !== removedId));
+    }
+    window.addEventListener('mg:trainer-requests-changed', onRequestsChanged);
+    return () => window.removeEventListener('mg:trainer-requests-changed', onRequestsChanged);
+  }, []);
+
   async function review(request: TrainerRequest, action: 'approve' | 'decline') {
     if (action === 'decline' && !(await confirmDialog({ title: 'Decline this request?', message: `Decline the request from ${request.fullName}? Their account will stay a member.`, confirmLabel: 'Decline request', destructive: true }))) return;
     setBusy(true);
@@ -36,6 +46,7 @@ export function TrainerRequestsSection() {
     try {
       await api.post(`/admin/trainer-requests/${encodeURIComponent(request.userId)}/${action}`);
       await load();
+      window.dispatchEvent(new CustomEvent('mg:trainer-requests-changed', { detail: { userId: request.userId } }));
     } catch (err) {
       setError(apiErrorMessage(err, 'Could not update trainer requests. Refresh the list and try again.'));
     } finally {

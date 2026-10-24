@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -22,13 +23,16 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     private ScorerLink Link => ScorerLinkAccessAttribute.Current(HttpContext);
     private string ActorLabel => $"Scorer link: {Link.Label}";
 
+    [EnableRateLimiting("public-read")]
     [HttpGet("api/scorer/session")]
     public async Task<ActionResult<ScorerSessionDto>> GetSession(CancellationToken ct)
     {
         var link = Link;
+        var isAllArenas = link.ArenaName == "All arenas";
+        var isMainArena = link.ArenaName == "Main arena";
         var competition = await db.Competitions.AsNoTracking().FirstAsync(c => c.Id == link.CompetitionId, ct);
         var sessions = await db.Sessions.AsNoTracking().AsSplitQuery()
-            .Where(s => s.CompetitionId == link.CompetitionId && s.ArenaName == link.ArenaName)
+            .Where(s => s.CompetitionId == link.CompetitionId && (isAllArenas || s.ArenaName == link.ArenaName || (isMainArena && (s.ArenaName == null || s.ArenaName == ""))))
             .Include(s => s.Section)
             .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
             .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
@@ -37,6 +41,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
             sessions.Select(s => s.ToDto()).ToList());
     }
 
+    [EnableRateLimiting("public-read")]
     [HttpGet("api/scorer/races/{raceId:int}/score")]
     public async Task<ActionResult<RaceScoreDto>> GetScore(int raceId, CancellationToken ct)
     {
@@ -55,6 +60,8 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     public async Task<ActionResult<RaceScoreDto>> UpdateScore(int raceId, UpdateRaceScoreRequest request, CancellationToken ct)
     {
         if (!await InScopeAsync(raceId, ct)) return NotFound();
+        if (request.Places?.Any(p => p.RefereeNote is { Length: > 1000 }) == true)
+            return BadRequest(new { message = "Note must be 1000 characters or fewer." });
         try
         {
             // A scorer link can't write referee notes either; leaving one out keeps the note staff set.
@@ -84,6 +91,8 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
             .FirstOrDefaultAsync(r => r.Id == raceId, ct);
         if (race is null) return NotFound();
         if (req.Reason?.Length > 1000) return BadRequest(new { message = "Correction reason must be 1000 characters or fewer." });
+        if (req.Places.Any(p => p.RefereeNote is { Length: > 1000 }))
+            return BadRequest(new { message = "Note must be 1000 characters or fewer." });
         try
         {
             await scoring.ApplyLegacyAsync(raceId, req.Places.Select(p => p with { RefereeNote = null }).ToList(), req.Expected, null, req.Reason, ct, ActorLabel);
@@ -103,8 +112,11 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     private Task<bool> InScopeAsync(int raceId, CancellationToken ct)
     {
         var link = Link;
+        var isAllArenas = link.ArenaName == "All arenas";
+        var isMainArena = link.ArenaName == "Main arena";
         return db.Races.AsNoTracking().AnyAsync(r => r.Id == raceId
-            && r.Heat!.Session!.CompetitionId == link.CompetitionId && r.Heat.Session.ArenaName == link.ArenaName, ct);
+            && r.Heat!.Session!.CompetitionId == link.CompetitionId
+            && (isAllArenas || r.Heat.Session.ArenaName == link.ArenaName || (isMainArena && (r.Heat.Session.ArenaName == null || r.Heat.Session.ArenaName == ""))), ct);
     }
 
     private async Task<HeatDto> HeatDtoAsync(int heatId)

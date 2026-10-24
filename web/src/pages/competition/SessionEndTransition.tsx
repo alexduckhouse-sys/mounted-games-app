@@ -156,28 +156,28 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur flex items-center justify-center p-3"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgb(var(--mg-overlay)/0.6)] p-3 backdrop-blur"
     >
       <motion.div
         initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
-        className="bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-slate-200 dark:border-slate-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        className="mg-card max-h-[90vh] w-full max-w-2xl overflow-y-auto !rounded-2xl"
       >
-        <div className="p-4 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800">
-          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-          <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-sm sm:text-base truncate">Session complete</h2>
-            <p className="text-[11px] text-slate-500 dark:text-slate-300 truncate">{finishedSession.name}</p>
+        <div className="flex items-center gap-2 border-b border-[rgb(var(--mg-rule-soft))] p-4">
+          <CheckCircle2 className="h-5 w-5 text-[rgb(var(--mg-ok))]" />
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-sm font-bold text-[rgb(var(--mg-heading))] sm:text-base">Session complete</h2>
+            <p className="truncate text-[11px] text-[rgb(var(--mg-muted))]">{finishedSession.name}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
-            <X className="w-4 h-4" />
+          <button onClick={onClose} className="mg-icon-btn !h-9 !w-9" aria-label="Close">
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
+        <div className="space-y-4 p-4">
           {completedFinalHeats.length > 0 && (
             <div className="space-y-3" aria-label="Prize giving">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                <Trophy className="w-4 h-4" /> Prize Giving (Last to First)
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[rgb(var(--mg-late-ink))]">
+                <Trophy className="h-4 w-4" /> Prize Giving (Last to First)
               </h3>
               {completedFinalHeats.map((heat) => {
                 const finalLabel = /\bfinals?\b/i.test(heat.label?.trim() ?? '')
@@ -188,9 +188,9 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                   <section
                     key={heat.id}
                     aria-label={finalLabel}
-                    className="rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-950/20 p-3 space-y-2"
+                    className="space-y-2 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3"
                   >
-                    <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">{finalLabel}</h4>
+                    <h4 className="text-sm font-bold text-[rgb(var(--mg-heading))]">{finalLabel}</h4>
                     <ol className="space-y-2">
                       {rows.map((row) => {
                         const team = competition.teams.find((t) => t.id === row.teamId);
@@ -205,35 +205,35 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                         return (
                           <li
                             key={row.teamId}
-                            className="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-1"
+                            className="space-y-1 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-2.5"
                           >
                             <div className="flex items-baseline justify-between gap-2">
-                              <div className="flex items-baseline gap-2 min-w-0">
-                                <span className="font-bold text-sm text-amber-600 dark:text-amber-400 shrink-0">
+                              <div className="flex min-w-0 items-baseline gap-2">
+                                <span className="shrink-0 text-sm font-bold text-[rgb(var(--mg-late-ink))]">
                                   {ordinal(row.place)}
                                 </span>
-                                <span className="font-semibold text-sm text-slate-900 dark:text-slate-50 truncate">
+                                <span className="truncate text-sm font-semibold text-[rgb(var(--mg-ink))]">
                                   {teamName}
                                 </span>
                                 {clubName && (
-                                  <span className="text-xs text-slate-500 dark:text-slate-300 truncate">
+                                  <span className="truncate text-xs text-[rgb(var(--mg-muted))]">
                                     {clubName}
                                   </span>
                                 )}
                               </div>
-                              <span className="font-bold text-xs text-slate-700 dark:text-slate-200 shrink-0">
+                              <span className="shrink-0 text-xs font-bold text-[rgb(var(--mg-heading))]">
                                 {row.points} pts
                               </span>
                             </div>
                             {trainerName && (
-                              <p className="text-xs text-slate-600 dark:text-slate-300">
+                              <p className="text-xs text-[rgb(var(--mg-muted))]">
                                 Trained by {trainerName}
                               </p>
                             )}
                             {form && form.riders.length > 0 && (
-                              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1 pt-0.5">
+                              <ul className="grid grid-cols-1 gap-1 pt-0.5 sm:grid-cols-2">
                                 {form.riders.map((r) => (
-                                  <li key={r.id} className="text-xs text-slate-700 dark:text-slate-200">
+                                  <li key={r.id} className="text-xs text-[rgb(var(--mg-body))]">
                                     {r.fullName}
                                     {r.horseName?.trim() ? ` — ${r.horseName.trim()}` : ''}
                                   </li>
@@ -251,63 +251,63 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
           )}
 
           {!next ? (
-            <div className="text-center py-6">
-              <Trophy className="w-10 h-10 mx-auto text-amber-500 mb-2" />
-              <p className="font-semibold">That was the final session.</p>
-              <p className="text-sm text-slate-500 dark:text-slate-300">Check the standings to crown the winners.</p>
+            <div className="py-6 text-center">
+              <Trophy className="mx-auto mb-2 h-10 w-10 text-[rgb(var(--mg-late-time))]" />
+              <p className="font-semibold text-[rgb(var(--mg-heading))]">That was the final session.</p>
+              <p className="text-sm text-[rgb(var(--mg-muted))]">Check the standings to crown the winners.</p>
             </div>
           ) : next.isBreak ? (
-            <div className="text-center py-3">
-              <Coffee className="w-10 h-10 mx-auto text-amber-500 mb-2" />
-              <p className="font-semibold text-lg">{next.name}</p>
+            <div className="py-3 text-center">
+              <Coffee className="mx-auto mb-2 h-10 w-10 text-[rgb(var(--mg-late-time))]" />
+              <p className="text-lg font-semibold text-[rgb(var(--mg-heading))]">{next.name}</p>
               {next.durationMinutes && (
-                <p className="text-sm text-slate-500 dark:text-slate-300">
+                <p className="text-sm text-[rgb(var(--mg-muted))]">
                   Break for {next.durationMinutes} minutes
                 </p>
               )}
               {nextRealSession && (
-                <p className="text-xs text-slate-400 mt-3">
-                  Next up after break: <span className="font-medium text-slate-600 dark:text-slate-200">{nextRealSession.name}</span>
+                <p className="mt-3 text-xs text-[rgb(var(--mg-muted))]">
+                  Next up after break: <span className="font-medium text-[rgb(var(--mg-ink))]">{nextRealSession.name}</span>
                 </p>
               )}
             </div>
           ) : (
             <div>
-              <p className="text-xs text-slate-500 dark:text-slate-300 mb-1">Up next</p>
-              <h3 className="font-bold text-base">{next.name}</h3>
-              {next.sectionName && <p className="text-xs text-slate-500 dark:text-slate-300">{displaySectionName(next.sectionName)}</p>}
+              <p className="mb-1 text-xs text-[rgb(var(--mg-muted))]">Up next</p>
+              <h3 className="text-base font-bold text-[rgb(var(--mg-heading))]">{next.name}</h3>
+              {next.sectionName && <p className="text-xs text-[rgb(var(--mg-muted))]">{displaySectionName(next.sectionName)}</p>}
             </div>
           )}
 
           {nextRealSession && (
             <div>
-              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-300 flex items-center gap-1.5 mb-2">
-                <Users className="w-3.5 h-3.5" /> Riders for {nextRealSession.name}
+              <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-[rgb(var(--mg-muted))]">
+                <Users className="h-3.5 w-3.5" /> Riders for {nextRealSession.name}
               </h4>
               {forms.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-300 italic">No declaration forms submitted yet for this session.</p>
+                <p className="text-xs italic text-[rgb(var(--mg-muted))]">No declaration forms submitted yet for this session.</p>
               ) : (
                 <ul className="space-y-2">
                   {forms.map((f) => (
-                    <li key={f.id} className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
-                      <div className="flex items-baseline gap-2 mb-1.5">
-                        <span className="font-semibold text-sm">{f.teamName}</span>
+                    <li key={f.id} className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] p-2">
+                      <div className="mb-1.5 flex items-baseline gap-2">
+                        <span className="text-sm font-semibold text-[rgb(var(--mg-ink))]">{f.teamName}</span>
                         {f.submittedByName && (
-                          <span className="text-[11px] text-slate-500 dark:text-slate-300">
+                          <span className="text-[11px] text-[rgb(var(--mg-muted))]">
                             {f.submittedByName}
                             {f.submittedByPhone && (
-                              <span className="inline-flex items-center gap-0.5 ml-1">
-                                <Phone className="w-2.5 h-2.5" />{f.submittedByPhone}
+                              <span className="ml-1 inline-flex items-center gap-0.5">
+                                <Phone className="h-2.5 w-2.5" />{f.submittedByPhone}
                               </span>
                             )}
                           </span>
                         )}
                       </div>
-                      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                      <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                         {f.riders.map((r) => (
                           <li key={r.id} className="flex items-center gap-2 text-[11px]">
                             <span
-                              className="inline-flex shrink-0 w-5 h-5 rounded-full items-center justify-center border text-[8px] font-bold uppercase"
+                              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[8px] font-bold uppercase"
                               style={{
                                 background: bibSwatch(r.bibColour),
                                 color: ['white', 'yellow'].includes((r.bibColour ?? '').toLowerCase()) ? '#111' : '#fff',
@@ -316,8 +316,8 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                             >
                               {(r.bibColour ?? '—').slice(0, 2)}
                             </span>
-                            <span className="font-medium truncate text-slate-900 dark:text-slate-50">{r.fullName}</span>
-                            <span className="text-slate-500 dark:text-slate-300 truncate">{r.horseName ?? ''}</span>
+                            <span className="truncate font-medium text-[rgb(var(--mg-ink))]">{r.fullName}</span>
+                            <span className="truncate text-[rgb(var(--mg-muted))]">{r.horseName ?? ''}</span>
                           </li>
                         ))}
                       </ul>
@@ -329,14 +329,14 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
           )}
         </div>
 
-        <div className="p-3 border-t border-slate-100 dark:border-slate-800 flex gap-2 sticky bottom-0 bg-white dark:bg-slate-900">
-          <button className="btn-ghost !py-2 !px-3 text-sm" onClick={onClose}>Stay here</button>
+        <div className="sticky bottom-0 flex gap-2 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-3">
+          <button className="mg-btn mg-btn-secondary !min-h-10 !px-3 !py-2 text-sm" onClick={onClose}>Stay here</button>
           <button
-            className="btn-primary !py-2 !px-4 text-sm ml-auto"
+            className="mg-btn mg-btn-primary ml-auto !min-h-10 !px-4 !py-2 text-sm"
             onClick={continueFlow}
             disabled={busy}
           >
-            {next?.isBreak ? <Coffee className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+            {next?.isBreak ? <Coffee className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
             {!next ? 'Done' : next.isBreak ? 'Start break' : 'Continue'}
           </button>
         </div>

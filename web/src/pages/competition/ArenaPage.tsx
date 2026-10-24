@@ -113,14 +113,14 @@ export function ArenaPage() {
 
   if (!target) {
     return (
-      <div className="space-y-3">
-        <Link to=".." className="btn-ghost !py-1.5 !px-2.5 text-sm">
-          <ChevronLeft className="w-4 h-4" /> Back
+      <div className="space-y-2.5 pt-2">
+        <Link to=".." className="mg-btn mg-btn-secondary !min-h-10 !px-3 !py-1.5 text-sm">
+          <ChevronLeft className="h-4 w-4" /> Back
         </Link>
         {arenaBar}
-        <div className="card p-6 text-center">
-          <Activity className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-          <p className="text-sm text-slate-500">Nothing currently in the arena.</p>
+        <div className="mg-card p-6 text-center">
+          <Activity className="mx-auto mb-2 h-10 w-10 text-[rgb(var(--mg-faint))]" />
+          <p className="text-sm text-[rgb(var(--mg-muted))]">Nothing currently in the arena.</p>
         </div>
       </div>
     );
@@ -132,32 +132,32 @@ export function ArenaPage() {
   const prevRace = activeIdx > 0 ? orderedRaces[activeIdx - 1] : null;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 flex-wrap">
-        <Link to=".." className="btn-ghost !py-1.5 !px-2.5 text-sm">
-          <ChevronLeft className="w-4 h-4" /> Back
+    <div className="space-y-2.5 pt-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Link to=".." className="mg-btn mg-btn-secondary !min-h-10 !px-3 !py-1.5 text-sm">
+          <ChevronLeft className="h-4 w-4" /> Back
         </Link>
-        <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-          <Activity className="w-5 h-5 text-arena-live" /> Arena setup
+        <h1 className="mg-h1 mg-h1-sm flex items-center gap-2">
+          <Activity className="h-5 w-5 text-[rgb(var(--mg-red))]" /> Arena setup
         </h1>
         <RulesLink className="ml-auto" />
       </div>
       {arenaBar}
 
       <PageGrid aside={(
-      <div className="card p-3">
-        <div className="text-xs uppercase tracking-wide text-slate-500 mb-1.5">All races in this heat</div>
+      <div className="mg-card p-3">
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[rgb(var(--mg-muted))]">All races in this heat</div>
         <div className="flex flex-wrap gap-1.5 lg:flex-col lg:gap-1">
           {orderedRaces.map((r, i) => (
             <button
               key={r.id}
               onClick={() => setOffsetTo(i - (baseIdx >= 0 ? baseIdx : 0))}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition lg:min-h-10 lg:px-3 lg:text-left lg:text-sm ${
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition lg:min-h-10 lg:px-3 lg:text-left lg:text-sm ${
                 i === activeIdx
-                  ? 'bg-brand-600 text-white'
+                  ? 'bg-[rgb(var(--mg-button))] text-[rgb(var(--mg-button-ink))]'
                   : r.isComplete
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
-                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-100'
+                    ? 'mg-tag-ok'
+                    : 'bg-[rgb(var(--mg-subtle))] text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-tint))]'
               }`}
             >
               {i + 1}. {r.name}
@@ -166,32 +166,32 @@ export function ArenaPage() {
         </div>
       </div>
       )} asideLabel="Races in this heat">
-        <div className="space-y-3">
-      <div className="card p-3 flex items-center gap-3 flex-wrap">
-        <div className="flex-1 min-w-0">
-          <div className="text-xs uppercase tracking-wide text-slate-500">Heat in arena</div>
-          <div className="font-bold text-lg truncate">
+        <div className="space-y-2.5">
+      <div className="mg-card flex flex-wrap items-center gap-3 p-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--mg-muted))]">Heat in arena</div>
+          <div className="truncate text-lg font-bold text-[rgb(var(--mg-heading))]">
             {displaySectionName(target.session.sectionName ?? target.session.name)} · {target.heat.label ?? `Heat ${target.heatIndex + 1}`}
           </div>
         </div>
         {heatTiming && (
-          <div className="flex items-center gap-1 text-sm font-mono tabular-nums text-slate-600 dark:text-slate-200">
-            <Clock className="w-4 h-4 text-slate-400" /> {formatTime(roundTo5Min(heatTiming.effective ?? heatTiming.scheduled))}
+          <div className="flex items-center gap-1 font-mono text-sm tabular-nums text-[rgb(var(--mg-body))]">
+            <Clock className="h-4 w-4 text-[rgb(var(--mg-muted))]" /> {formatTime(roundTo5Min(heatTiming.effective ?? heatTiming.scheduled))}
           </div>
         )}
-        <div className="text-xs text-slate-500 inline-flex items-center gap-1 shrink-0">
-          <Users className="w-3 h-3" /> {target.heat.entries.length} teams
+        <div className="inline-flex shrink-0 items-center gap-1 text-xs text-[rgb(var(--mg-muted))]">
+          <Users className="h-3 w-3" /> {target.heat.entries.length} teams
         </div>
       </div>
 
-      <div className="card p-3 sm:p-4">
-        <div className="flex items-center gap-2 flex-wrap mb-2">
-          <span className="text-xs uppercase tracking-wide text-slate-500">Race {activeIdx + 1} of {orderedRaces.length}</span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold flex-1 min-w-0 truncate">
+      <div className="mg-card p-3 sm:p-4">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--mg-muted))]">Race {activeIdx + 1} of {orderedRaces.length}</span>
+          <h2 className="mg-display min-w-0 flex-1 truncate text-2xl font-bold text-[rgb(var(--mg-heading))] sm:text-3xl">
             {activeRace?.name ?? 'No race'}
           </h2>
           {activeRace?.isComplete && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200 text-xs font-bold">
+            <span className="mg-pill mg-pill-done">
               Done
             </span>
           )}
@@ -200,9 +200,9 @@ export function ArenaPage() {
         {template ? (
           <>
             {template.summary && (
-              <p className="text-sm text-slate-700 dark:text-slate-200 mb-2">{template.summary}</p>
+              <p className="mb-2 text-sm text-[rgb(var(--mg-body))]">{template.summary}</p>
             )}
-            <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+            <div className="overflow-hidden rounded-lg border border-[rgb(var(--mg-rule))]">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeRace?.id ?? activeIdx}
@@ -214,20 +214,20 @@ export function ArenaPage() {
               </AnimatePresence>
             </div>
             {template.rules && (
-              <div className="mt-3 rounded-md border border-brand-200 dark:border-brand-700 bg-brand-50/60 dark:bg-brand-900/20 p-3">
-                <div className="text-sm font-bold flex items-center gap-1.5 text-brand-800 dark:text-brand-200 mb-1">
-                  <BookOpen className="w-4 h-4" /> Set-up rules
+              <div className="mt-3 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3">
+                <div className="mb-1 flex items-center gap-1.5 text-sm font-bold text-[rgb(var(--mg-heading))]">
+                  <BookOpen className="h-4 w-4" /> Set-up rules
                 </div>
-                <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">
+                <p className="whitespace-pre-wrap text-sm text-[rgb(var(--mg-body))]">
                   {template.rules}
                 </p>
               </div>
             )}
           </>
         ) : (
-          <div className="rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700 p-6 text-center">
-            <Flag className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-            <p className="text-sm text-slate-500">No setup diagram for "{activeRace?.name}" yet. Add it under Admin → Race rules.</p>
+          <div className="rounded-lg border-2 border-dashed border-[rgb(var(--mg-dash))] p-6 text-center">
+            <Flag className="mx-auto mb-2 h-8 w-8 text-[rgb(var(--mg-faint))]" />
+            <p className="text-sm text-[rgb(var(--mg-muted))]">No setup diagram for "{activeRace?.name}" yet. Add it under Admin → Race rules.</p>
           </div>
         )}
       </div>
@@ -236,19 +236,19 @@ export function ArenaPage() {
         <button
           onClick={() => bumpOffset(-1)}
           disabled={!prevRace}
-          className="btn-ghost !py-2 !px-3 text-sm"
+          className="mg-btn mg-btn-secondary !min-h-11 !px-3 !py-2 text-sm"
         >
-          <ChevronLeft className="w-4 h-4" /> Previous
+          <ChevronLeft className="h-4 w-4" /> Previous
         </button>
-        <div className="flex-1 text-center text-xs text-slate-500">
+        <div className="flex-1 text-center text-xs text-[rgb(var(--mg-muted))]">
           Heat {target.heat.label ?? target.heatIndex + 1}
         </div>
         <button
           onClick={() => bumpOffset(1)}
           disabled={!nextRace}
-          className="btn-primary !py-2 !px-4 text-sm"
+          className="mg-btn mg-btn-primary !min-h-11 !px-4 !py-2 text-sm"
         >
-          {nextRace ? <>Next race · {nextRace.name} <ArrowRight className="w-4 h-4" /></> : <>End of heat</>}
+          {nextRace ? <>Next race · {nextRace.name} <ArrowRight className="h-4 w-4" /></> : <>End of heat</>}
         </button>
       </div>
         </div>

@@ -10,8 +10,9 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { StandingRow } from '../../types';
 import { buildToplist } from '../../lib/toplist';
-import { ToplistView } from './ToplistView';
+import { ToplistView, type ToplistViewTab } from './ToplistView';
 import { TackLeaderboard } from './TackLeaderboard';
+import { HeatScores } from './HeatScores';
 import { ToplistRowsSkeleton } from '../../components/Skeletons';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
@@ -86,7 +87,9 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const requestedSection = Number(searchParams.get('section'));
   const sectionId = competition.sections.find((s) => s.id === requestedSection)?.id ?? competition.sections[0]?.id ?? null;
   const [showToplist, setShowToplist] = useState(toplistOnly);
+  const [showHeatScores, setShowHeatScores] = useState(false);
   const [showFinals, setShowFinals] = useState(false);
+  const [chosenView, setChosenView] = useState<ToplistViewTab | null>(null);
 
   const [standingsResult, setStandingsResult] = useState<{ sectionId: number; rows: StandingRow[]; error: boolean; savedCopy: boolean } | null>(null);
   const [retry, setRetry] = useState(0);
@@ -142,17 +145,40 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     </>
   );
   const sectionLabel = `Toplist${sectionName ? `, ${sectionName}` : ''}`;
-  // The page version draws its own tab band edge to edge, so its notices sit in their own column above it.
+  const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
+  const rail = desktop && competition.sections.length > 1
+    ? <AgeGroupRail sections={competition.sections} teams={competition.teams} value={sectionId} onChange={chooseSection} /> : null;
+  const sectionHeats = useMemo(() => {
+    if (sectionId == null) return [];
+    const out: { session: typeof competition.sessions[number]; orderedHeats: typeof competition.sessions[number]['heats']; heat: typeof competition.sessions[number]['heats'][number] }[] = [];
+    const sessions = competition.sessions
+      .filter((s) => s.competitionSectionId === sectionId && (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
+      .slice()
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    for (const s of sessions) {
+      const orderedHeats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+      const seenRounds = new Set<number>();
+      for (const h of orderedHeats) {
+        if (h.raceRoundStage && h.raceRoundId != null) {
+          if (seenRounds.has(h.raceRoundId)) continue;
+          seenRounds.add(h.raceRoundId);
+        }
+        out.push({ session: s, orderedHeats, heat: h });
+      }
+    }
+    return out;
+  }, [competition, sectionId]);
+  // The page version draws its own tab band edge to edge on phones, so its notices sit in their own column above it.
   const toplist = toplistOnly ? (
     <section aria-label={sectionLabel} className="flex flex-col">
       <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
-      {standings.length > 0 && <ToplistView key={sectionId} list={list} section={section} standalone />}
+      {standings.length > 0 && <ToplistView list={list} section={section} standalone={!rail} competitionId={competition.id} teams={competition.teams} heats={sectionHeats} chosenView={chosenView} onChooseView={setChosenView} />}
       {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
     </section>
   ) : (
     <section aria-label={sectionLabel} className="flex flex-col gap-2.5">
       {notices}
-      {standings.length > 0 && <ToplistView key={sectionId} list={list} section={section} />}
+      {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} heats={sectionHeats} chosenView={chosenView} onChooseView={setChosenView} />}
       {sectionId != null && <TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} />}
     </section>
   );
@@ -173,10 +199,8 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     </AnimatePresence>
   );
 
-  const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
-  const rail = desktop && competition.sections.length > 1
-    ? <AgeGroupRail sections={competition.sections} teams={competition.teams} value={sectionId} onChange={chooseSection} /> : null;
   const ageGroups = !rail && competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} onChange={chooseSection} />;
+
   if (toplistOnly || sectionId == null) {
     const page = (
       <div className={`mx-auto flex w-full flex-col ${rail ? '' : 'max-w-[560px]'}`}>
@@ -191,37 +215,56 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
         {finalsModal}
       </div>
     );
-    return rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups">{page}</PageGrid> : page;
+    return rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className="pt-3">{page}</PageGrid> : page;
   }
 
-  const board = (
+  const leadControls = (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="mg-tint-link flex-1" aria-expanded={showToplist} onClick={() => setShowToplist((v) => !v)}>
+          <Trophy aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
+          <span className="flex-1">{showToplist ? 'Hide toplist' : `Show ${sectionName ? `${sectionName} ` : ''}toplist`}</span>
+          <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none ${showToplist ? 'rotate-90' : ''}`} />
+        </button>
+        <button type="button" className="mg-tint-link" aria-pressed={showHeatScores} onClick={() => setShowHeatScores((v) => !v)}>
+          <span>{showHeatScores ? 'Show timetable' : 'Heat scores'}</span>
+        </button>
+      </div>
+      <AnimatePresence initial={false}>
+        {showToplist && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+            {toplist}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {finalsButton}
+    </div>
+  );
+
+  const board = showHeatScores ? (
+    <div className={`mx-auto flex w-full flex-col gap-3 ${rail ? '' : 'max-w-[560px]'}`}>
+      {ageGroups}
+      {leadControls}
+      {sectionHeats.length === 0 ? (
+        <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No heat scores yet.</p>
+      ) : (
+        sectionHeats.map(({ session: s, orderedHeats, heat: h }) => (
+          <HeatScores key={h.id} session={s} heats={orderedHeats} activeHeatId={h.id} />
+        ))
+      )}
+    </div>
+  ) : (
       <TimetableBoard
         sectionId={sectionId}
         title={sectionName || 'Age group'}
         bandExtra={ageGroups}
-        lead={
-          <div className="flex flex-col gap-3">
-            <button type="button" className="mg-tint-link" aria-expanded={showToplist} onClick={() => setShowToplist((v) => !v)}>
-              <Trophy aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
-              <span className="flex-1">{showToplist ? 'Hide toplist' : `Show ${sectionName ? `${sectionName} ` : ''}toplist`}</span>
-              <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none ${showToplist ? 'rotate-90' : ''}`} />
-            </button>
-            <AnimatePresence initial={false}>
-              {showToplist && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                  {toplist}
-                </motion.div>
-              )}
-            </AnimatePresence>
-            {finalsButton}
-          </div>
-        }
+        lead={leadControls}
       />
   );
 
   return (
     <>
-      {rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups">{board}</PageGrid> : board}
+      {rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className={showHeatScores ? 'pt-3' : ''}>{board}</PageGrid> : board}
       {finalsModal}
     </>
   );

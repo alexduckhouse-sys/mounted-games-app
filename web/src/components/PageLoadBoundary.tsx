@@ -8,9 +8,12 @@ export class PageLoadBoundary extends Component<{ children: ReactNode; page: str
   }
   render() {
     if (this.state.failed) return (
-      <div className="card space-y-3 p-4" role="alert">
+      <div className="mg-card space-y-3 p-4" role="alert">
         <p>This page couldn’t open. Check your connection and reload to try again.</p>
-        <button className="btn-primary min-h-11" onClick={() => window.location.reload()}>Reload page</button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="mg-btn mg-btn-primary min-h-11" onClick={() => window.location.reload()}>Reload page</button>
+          <button type="button" className="mg-btn mg-btn-secondary min-h-11" onClick={() => window.history.back()}>Go back</button>
+        </div>
       </div>
     );
     return this.props.children;

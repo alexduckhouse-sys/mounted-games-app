@@ -1,6 +1,5 @@
 import { useId, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, HelpCircle } from 'lucide-react';
 import { useDialogFocus } from './useDialogFocus';
 
 export interface ConfirmOptions {
@@ -26,12 +25,10 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', cancel
   useDialogFocus(dialogRef, () => onAnswer(false), '[data-confirm-cancel]');
   const [typed, setTyped] = useState('');
   const blocked = requireText != null && typed.trim() !== requireText;
-  const Icon = destructive ? AlertTriangle : HelpCircle;
   return (
     <div className="mg-confirm-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) onAnswer(false); }}>
       <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={bodyId} className={`mg-confirm ${destructive ? 'mg-confirm-danger' : ''}`}>
         <div className="mg-confirm-head">
-          <Icon aria-hidden="true" className="h-6 w-6 shrink-0" />
           <h2 id={titleId}>{title}</h2>
         </div>
         <p id={bodyId} className="mg-confirm-body">{message}</p>

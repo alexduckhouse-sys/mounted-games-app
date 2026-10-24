@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
@@ -41,6 +42,9 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest req)
     {
+        if (req.Password is { Length: > 128 })
+            return BadRequest(new { message = "Password must be 128 characters or fewer." });
+
         var user = await _users.FindByEmailAsync(req.Email);
         // The shared organiser account uses the admin key. Old demo databases
         // must not retain a second, well-known password login in production.
@@ -68,12 +72,28 @@ public class AuthController : ControllerBase
                 SHA256.HashData(Encoding.UTF8.GetBytes(req.Key)), SHA256.HashData(Encoding.UTF8.GetBytes(expected))))
             return Unauthorized(new { message = "Invalid admin key." });
 
+        string? titleOverride = null;
+        if (!string.IsNullOrWhiteSpace(req.Title))
+        {
+            titleOverride = req.Title.Trim();
+            if (titleOverride.Length > 100)
+                return BadRequest(new { message = "Title must be 100 characters or fewer." });
+        }
+
+        string? emailOverride = null;
+        if (!string.IsNullOrWhiteSpace(req.Email))
+        {
+            if (!EmailValidation.TryNormalise(req.Email, out var normEmail))
+                return EmailRejected(EmailProblem.Format);
+            emailOverride = normEmail;
+        }
+
         var user = await _users.FindByEmailAsync("admin@mg.local");
         if (user is null) return StatusCode(500, new { message = "Shared admin account missing — re-seed the database." });
 
-        var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
+        var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user, titleOverride, emailOverride);
         return new AuthResponse(token, expiresAt,
-            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, null, roles.ToList(), user.EmailConfirmed));
+            new UserProfile(user.Id, emailOverride ?? user.Email!, titleOverride ?? user.FullName, user.ClubId, null, roles.ToList(), user.EmailConfirmed));
     }
 
     [EnableRateLimiting("auth")]
@@ -89,6 +109,8 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Username is required." });
         if (string.IsNullOrEmpty(req.Password))
             return BadRequest(new { message = "Password is required." });
+        if (req.Password.Length > 128)
+            return BadRequest(new { message = "Password must be 128 characters or fewer." });
 
         // Identity needs an email-like UserName for uniqueness; synthesise one if a bare username was given.
         var realEmail = raw.Contains('@');
@@ -304,6 +326,11 @@ public class AuthController : ControllerBase
         if (user is null) return Unauthorized();
         var roles = await _users.GetRolesAsync(user);
         var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
-        return new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed);
+        var isSharedAdmin = string.Equals(user.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase);
+        var claimName = isSharedAdmin ? User.FindFirstValue("fullName") : null;
+        var claimEmail = isSharedAdmin ? (User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email")) : null;
+        var email = !string.IsNullOrWhiteSpace(claimEmail) ? claimEmail : user.Email!;
+        var fullName = !string.IsNullOrWhiteSpace(claimName) ? claimName : user.FullName;
+        return new UserProfile(user.Id, email, fullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed);
     }
 }

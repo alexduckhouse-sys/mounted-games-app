@@ -155,7 +155,7 @@ Full spec: `docs/specs/live-stream.md`. Design: `docs/designs/live-stream-propos
 ## Sharing links, calendars and QR codes (22 October 2026)
 - **Link previews:** a shared competition link (any tab), team profile link, the home page and the competitions list show a title, description and branded image in WhatsApp, Facebook, iMessage and similar. Crawlers don't run JavaScript, so `web/middleware.ts` answers them with a tags-only page built from the public `/api/share/*` cards (competition name, date, venue, team count; team profile name, club, event count). Nothing staff-only or personal. Search engines get the normal app.
 - **Add to calendar:** the Details tab has an **Add to calendar** download (`.ics`) for the event. Trainers can make a **team calendar** link on My Teams: a subscribable feed of that team's heats, in the phone's own time zone, that moves when the timetable moves. The link holds a private token; it's shown once, making a new one stops the old one, and anyone with it can see the team's heat times and nothing else.
-- **QR codes:** organisers (owner, helpers and admins) can print a **venue poster** (name, date, venue, big QR to the event page) from the Details tab or Event tools. Trainers see a QR for each team's supporter join key under Supporters; scanning opens My Teams with the key filled in, after sign-in.
+- **QR codes:** organisers (owner, helpers and admins) can print a **venue poster** (name, date, venue, big QR to the event page) from the Details tab or Operations → Print sheets. Scorer QR links (`ScorerLinksCard`) let volunteers score from their phone without an account (`/score#t=...`), scoped to a named arena, default `"Main arena"` (when sessions are unnamed), or `"All arenas"`, and are reachable from Operations (`Scorers & team`), On the day (`FormatPage`), the session scoring page (`SessionPage`), Details (`#scorer-links`), and Site admin. Trainers see a QR for each team's supporter join key under Supporters; scanning opens My Teams with the key filled in, after sign-in.
 
 ## Trainer / supporter notifications
 - **Foreground-only** browser notifications via the Web Notification API. Hook: `useTeamNotifications` (`web/src/hooks/`). Toggle lives in the My Teams header.
@@ -323,10 +323,8 @@ next to `Edit` for jumping straight into the post-signups flow.
   `/api/competitions/:id/signups` endpoint; format as anonymised counts
   per club rather than a name list to avoid PII concerns.
 
-## Legacy marketplace
-The older peer-to-peer marketplace endpoints remain in the API. Its former
-`/shop` page is not routed; that path opens competition selection. The event
-shop described below is the current buying and selling flow.
+## Community Tack & kit classifieds (`/shop`)
+The peer-to-peer marketplace endpoints remain in the API and `/shop` is routed as the community Tack & kit classifieds (`ShopPage`) alongside the per-competition Event shop (`/competitions/:id/shop`), with a switcher between them on `EventShopPage` and a `Tack & kit shop` link in the navigation drawer.
 
 - **Entities**: `ShopPost { Title, Body, PriceMinor?, ContactInfo?,
   AuthorName, PonyClubName?, ImageBase64?, IsDeleted, DeletedAt,
@@ -411,4 +409,4 @@ An event’s Details page links to CSV team import, duplicate setup and print sh
 
 ### Event organiser page refinement
 
-Event checks separates readiness, equipment and draw work into focused views. Readiness groups long issue lists by task. Rulebooks open as readable text, with a separate editor. The Claude Design reference is `docs/designs/event-platform-refinement.html`; implementation preserves the existing API, permission and payment behaviour where static mock-ups simplify those details.
+`/competitions/:id/operations` hosts all organiser tools in one place (Readiness, Equipment, Draw, Entries, Scorers & team, Tack check, Passport check, Import teams, Print sheets, Results book and Duplicate event), while `/competitions/:id/broadcast` hosts both camera broadcast and stream overlays. Readiness groups long issue lists by task. Rulebooks open as readable text, with a separate editor. The Claude Design reference is `docs/designs/event-platform-refinement.html`; implementation preserves the existing API, permission and payment behaviour where static mock-ups simplify those details.

@@ -68,13 +68,22 @@ public class SignupTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Create_TruncatesOverlongName()
+    public async Task Create_RejectsOverlongFields()
     {
         var section = await _f.NewSectionAsync();
+        var trainer = await _f.TrainerAsync();
 
-        var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry(new string('x', 300)));
+        var longName = await trainer.PostAsJsonAsync(Url(section), Entry(new string('x', 121)));
+        var longClub = await trainer.PostAsJsonAsync(Url(section), Entry("Rider", club: new string('c', 161)));
+        var longContact = await trainer.PostAsJsonAsync(Url(section),
+            new CreateSectionSignupRequest("Rider", "Club", new string('p', 201), AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion));
+        var longTeam = await trainer.PostAsJsonAsync(Url(section),
+            new CreateSectionSignupRequest("Rider", "Club", null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, TeamName: new string('t', 121)));
 
-        Assert.Equal(200, (await resp.ReadAsync<SectionSignupDto>()).FullName.Length);
+        Assert.Equal(HttpStatusCode.BadRequest, longName.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, longClub.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, longContact.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, longTeam.StatusCode);
     }
 
     [Fact]

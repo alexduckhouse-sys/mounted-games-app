@@ -43,10 +43,16 @@ describe('NumberField', () => {
     const { rerender } = render(<Harness decimal />);
     expect(keyPrevented('.')).toBe(false);
     expect(keyPrevented('-')).toBe(true);
+    fireEvent.change(box(), { target: { value: '5.2' } });
+    expect(keyPrevented('.')).toBe(true);
     rerender(<Harness allowNegative />);
+    fireEvent.change(box(), { target: { value: '5' } });
     expect(keyPrevented('-')).toBe(false);
     expect(keyPrevented('.')).toBe(true);
+    fireEvent.change(box(), { target: { value: '-5' } });
+    expect(keyPrevented('-')).toBe(true);
     rerender(<Harness min={-5} />);
+    fireEvent.change(box(), { target: { value: '5' } });
     expect(keyPrevented('-')).toBe(false);
   });
 

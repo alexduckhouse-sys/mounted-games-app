@@ -44,20 +44,16 @@ describe('LiteChip', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('shows while lite mode is on and opens the setting when tapped', () => {
+  it('shows an icon-only button while lite mode is on and opens the setting when tapped', () => {
     const onOpen = vi.fn();
     const Wrapper = liteWrapper('on');
     render(<Wrapper><LiteChip onOpen={onOpen} /></Wrapper>);
     const chip = screen.getByRole('button', { name: 'Lite mode is on. Open the setting' });
-    expect(chip).toHaveTextContent('Lite mode');
+    expect(chip).toHaveAttribute('title', 'Lite mode is on');
+    expect(chip).toHaveTextContent('');
+    expect(chip.querySelector('svg')).not.toBeNull();
     fireEvent.click(chip);
     expect(onOpen).toHaveBeenCalledOnce();
-  });
-
-  it('has a shorter label for the crowded header', () => {
-    const Wrapper = liteWrapper('on');
-    render(<Wrapper><LiteChip onOpen={vi.fn()} short /></Wrapper>);
-    expect(screen.getByRole('button')).toHaveTextContent(/^Lite$/);
   });
 });
 

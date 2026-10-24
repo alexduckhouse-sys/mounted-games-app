@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { CircleCheck, Plus, X } from 'lucide-react';
 import { api } from '../../../api';
 import { useAuth } from '../../../auth/AuthContext';
+import { FLAG_COMPETITION_ICONS } from '../../../competition/icons';
 import { apiErrorMessage } from '../../../lib/apiError';
+import { parseBibAndFlag } from '../../../lib/bib';
 import { competitionDateText } from '../../../lib/competitionDates';
 import {
   blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, panelTitle, riderFromSaved,
@@ -40,9 +42,11 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const section = competition.sections.find((s) => s.id === team.competitionSectionId);
   const required = ridersRequired(section?.format);
 
+  const initialBib = parseBibAndFlag(existing?.bibDescription ?? team.bibDescription ?? '');
   const [slots, setSlots] = useState<Slot[]>(() => draft?.slots ?? (existing ? slotsFromForm(existing, required, config) : emptySlots(required)));
   const [teamName, setTeamName] = useState(draft?.teamName ?? team.displayName);
-  const [bibs, setBibs] = useState(draft?.bibs ?? existing?.bibDescription ?? team.bibDescription ?? '');
+  const [bibs, setBibs] = useState(draft?.bibs ?? initialBib.bib);
+  const [flag, setFlag] = useState(draft?.flag ?? initialBib.flag ?? '');
   const [trainerName, setTrainerName] = useState(draft?.trainerName ?? existing?.trainerName ?? existing?.submittedByName ?? user?.fullName ?? '');
   const [phone, setPhone] = useState(draft?.phone ?? existing?.trainerPhone ?? existing?.submittedByPhone ?? priorPhone ?? '');
   const [notes, setNotes] = useState(draft?.notes ?? existing?.notes ?? '');
@@ -68,9 +72,9 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   // Keep the work in progress, so a dropped signal or a reload doesn't lose it. The tick is never kept.
   useEffect(() => {
     if (submitted || !touched) return;
-    const draftToKeep: DecFormDraft = { teamId: team.id, teamName, bibs, trainerName, phone, notes, slots };
+    const draftToKeep: DecFormDraft = { teamId: team.id, teamName, bibs, flag, trainerName, phone, notes, slots };
     try { localStorage.setItem(decDraftKey(competition.id, team.id), JSON.stringify(draftToKeep)); } catch { /* storage full or blocked */ }
-  }, [submitted, touched, competition.id, team.id, teamName, bibs, trainerName, phone, notes, slots]);
+  }, [submitted, touched, competition.id, team.id, teamName, bibs, flag, trainerName, phone, notes, slots]);
 
   const choices = useMemo(() => savedChoices(saved, slots), [saved, slots]);
   const reserve = active != null && isReserveSlot(slots, active);
@@ -121,7 +125,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
     setError(null);
     try {
       const { data } = await api.post<DeclarationForm>('/declaration-forms',
-        buildSubmitBody({ teamId: team.id, teamName, bibs, trainerName, phone, notes }, slots, config));
+        buildSubmitBody({ teamId: team.id, teamName, bibs, flag, trainerName, phone, notes }, slots, config));
       try { localStorage.removeItem(decDraftKey(competition.id, team.id)); } catch { /* ignore */ }
       setSubmitted(true);
       setActive(null);
@@ -136,7 +140,10 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h2 className="mg-h1 lg:!text-[44px] lg:!leading-none">{teamName.trim() || 'Team name'}</h2>
+        <h2 className="mg-h1 lg:!text-[44px] lg:!leading-none">
+          {flag && <img src={`/flags/${flag}.png`} alt="" className="inline-block h-6 w-8 rounded-sm object-cover align-middle mr-2" />}
+          {teamName.trim() || 'Team name'}
+        </h2>
         <p className="mg-meta !text-base">{subtitleOf([section?.displayName, competition.name, when])}</p>
         {entryName && entryName.trim().toLowerCase() !== teamName.trim().toLowerCase() && (
           <p className="text-sm text-[rgb(var(--mg-muted))]">Entered as “{entryName}”.</p>
@@ -161,6 +168,17 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
                 {({ id }) => <div className="mg-field"><input id={id} value={bibs} placeholder="e.g. Yellow with navy stars" maxLength={200} onChange={(e) => changed(setBibs)(e.target.value)} /></div>}
               </Field>
             )}
+            <Field label={<>Flag / nation <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>} className="lg:col-span-2">
+              {({ id }) => (
+                <div className="mg-field flex items-center gap-2">
+                  {flag && <img src={`/flags/${flag}.png`} alt="" className="h-5 w-7 shrink-0 rounded-sm object-cover" />}
+                  <select id={id} value={flag} onChange={(e) => changed(setFlag)(e.target.value)}>
+                    <option value="">No flag</option>
+                    {FLAG_COMPETITION_ICONS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+                </div>
+              )}
+            </Field>
             <Field label="Trainer name">
               {({ id }) => <div className="mg-field"><input id={id} value={trainerName} autoComplete="name" maxLength={200} onChange={(e) => changed(setTrainerName)(e.target.value)} /></div>}
             </Field>

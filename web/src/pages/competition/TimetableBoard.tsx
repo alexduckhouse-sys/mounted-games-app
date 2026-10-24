@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, MapPin } from 'lucide-react';
+import { ChevronDown, ChevronRight, MapPin, Users } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { Dropdown } from '../../components/Dropdown';
@@ -46,6 +46,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const [showFinished, setShowFinished] = useState(false);
   const [openDone, setOpenDone] = useState<ReadonlySet<string>>(new Set());
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
+  const [teamFilter, setTeamFilter] = useState('');
   function chooseArena(name: string) {
     setArena(name);
     try { if (name) localStorage.setItem(arenaKey, name); else localStorage.removeItem(arenaKey); } catch { /* storage blocked */ }
@@ -72,8 +73,14 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const selectedDay = pickedDay && days.includes(pickedDay) ? pickedDay : defaultTimetableDay(days, today);
   const dayRows = rows.filter((row) => rowDay(row) === selectedDay);
   const arenas = [...new Set(dayRows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
-  const selectedArena = arenas.includes(arena) ? arena : '';
-  const visibleRows = dayRows.filter((row) => !selectedArena || row.session.arenaName?.trim() === selectedArena || !row.session.arenaName?.trim());
+  const showArenaSelect = sectionId == null && arenas.length > 1;
+  const selectedArena = showArenaSelect && arenas.includes(arena) ? arena : '';
+  const teamsInDay = dayTeams(dayRows);
+  const selectedTeam = teamsInDay.some((t) => String(t.id) === teamFilter) ? teamFilter : '';
+  const selectedTeamId = selectedTeam ? Number(selectedTeam) : null;
+  const visibleRows = dayRows
+    .filter((row) => !selectedArena || row.session.arenaName?.trim() === selectedArena || !row.session.arenaName?.trim())
+    .filter((row) => selectedTeamId == null || row.heat?.entries.some((e) => e.teamId === selectedTeamId));
 
   const sessionGroups = groupRowsBySession(visibleRows.filter((row) => row.group === 'Heats')).map((group) => ({
     key: group.key,
@@ -117,7 +124,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
         ? <button type="button" className="tt-group-title" aria-expanded="true" onClick={() => toggleDone(group.key)}>{titleRow}</button>
         : <div className="tt-group-title">{titleRow}</div>)}
       <div className="tt-card">
-        {group.rows.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena && !sharedArena} />)}
+        {group.rows.map((row) => <TimetableEvent key={row.key} row={row} competitionId={competition.id} showArena={arenas.length > 1 && !selectedArena && !sharedArena} selectedTeamId={selectedTeamId} />)}
       </div>
     </section>;
   }
@@ -125,7 +132,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   return (
     <div className="timetable-board">
       {bandExtra}
-      {(days.length > 1 || arenas.length > 1) && (
+      {(days.length > 1 || showArenaSelect || teamsInDay.length > 1) && (
         <div className="tt-strip">
           {days.length > 1 && (
             <div className="tt-days" role="group" aria-label="Choose day">
@@ -134,7 +141,8 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
               </button>)}
             </div>
           )}
-          {arenas.length > 1 && <ArenaSelect arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />}
+          {showArenaSelect && <ArenaSelect arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />}
+          {teamsInDay.length > 1 && <TeamSelect teams={teamsInDay} selectedTeam={selectedTeam} onChoose={setTeamFilter} />}
         </div>
       )}
       <div className="tt-body">
@@ -194,6 +202,36 @@ function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
   );
 }
 
+/** Distinct teams entered in any heat on this day, ordered by name. */
+function dayTeams(rows: TimetableRow[]): { id: number; name: string }[] {
+  const byId = new Map<number, string>();
+  for (const row of rows) {
+    for (const entry of row.heat?.entries ?? []) {
+      if (entry.teamName && !byId.has(entry.teamId)) byId.set(entry.teamId, entry.teamName);
+    }
+  }
+  return [...byId.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Filter the day's timetable down to a single team's heats. */
+function TeamSelect({ teams, selectedTeam, onChoose }: {
+  teams: { id: number; name: string }[];
+  selectedTeam: string;
+  onChoose: (id: string) => void;
+}) {
+  const current = teams.find((t) => String(t.id) === selectedTeam);
+  const options = [{ value: '', label: 'All teams' }, ...teams.map((t) => ({ value: String(t.id), label: t.name }))];
+  return (
+    <Dropdown label="Team" value={selectedTeam} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
+      <Users aria-hidden="true" className="tt-arena-pin" size={14} />
+      <span className="tt-arena-text">{current?.name ?? 'All teams'}</span>
+      <ChevronDown aria-hidden="true" className="tt-arena-chevron" size={14} />
+    </Dropdown>
+  );
+}
+
 /** Final heats, one block per age group (in running order), after all the sessions. */
 function finalsByAgeGroup(rows: TimetableRow[]) {
   const groups = new Map<string, { key: string; title: string; rows: TimetableRow[] }>();
@@ -206,15 +244,27 @@ function finalsByAgeGroup(rows: TimetableRow[]) {
   return [...groups.values()];
 }
 
-/** One timetable line: time, name with a small sub-line, "+N · planned time" when late, status colour dot. */
-function TimetableEvent({ row, competitionId, showArena }: { row: TimetableRow; competitionId: number; showArena: boolean }) {
+/** One timetable line: time, name with a small sub-line, "+N · planned time" when late, status colour dot, and a Lanes dropdown when entries exist. */
+function TimetableEvent({ row, competitionId, showArena, selectedTeamId }: {
+  row: TimetableRow;
+  competitionId: number;
+  showArena: boolean;
+  selectedTeamId: number | null;
+}) {
   const { session, heat, status, delayMinutes } = row;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
   const name = race ? heatName : session.name;
   const label = race ? (heat ? '' : 'Provisional') : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
-  const sub = [label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
+  const teamEntry = selectedTeamId != null ? heat?.entries.find((e) => e.teamId === selectedTeamId) : undefined;
+  const laneLabel = teamEntry != null ? `Lane ${teamEntry.laneIndex + 1}` : '';
+  const sub = [label, laneLabel, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
   const moved = delayMinutes > 0 && !!row.scheduled;
+  const [lanesOpen, setLanesOpen] = useState(false);
+  const sortedEntries = useMemo(
+    () => (race && heat && heat.entries.length > 0 ? [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex) : []),
+    [race, heat],
+  );
   const content = <>
     <span className="tt-time">{moved && <span className="sr-only">Planned {formatTime(row.scheduled)}, now </span>}{formatTime(row.effective)}</span>
     <span className="tt-event">
@@ -228,5 +278,36 @@ function TimetableEvent({ row, competitionId, showArena }: { row: TimetableRow; 
     {race ? <ChevronRight className="tt-chevron" size={14} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
   </>;
   const className = `tt-row tt-${status}`;
+  if (sortedEntries.length > 0) {
+    return (
+      <div className="tt-item">
+        <div className="tt-row-wrap">
+          <Link className={className} to={`/competitions/${competitionId}/session/${session.id}?heat=${heat!.id}`}>{content}</Link>
+          <button
+            type="button"
+            className="tt-lanes-btn"
+            aria-expanded={lanesOpen}
+            aria-label={`Lanes for ${name}`}
+            onClick={() => setLanesOpen((open) => !open)}
+          >
+            <span>Lanes</span>
+            <ChevronDown size={14} aria-hidden="true" className={lanesOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
+          </button>
+        </div>
+        {lanesOpen && (
+          <ol className="tt-lanes" aria-label={`Lanes for ${name}`}>
+            {sortedEntries.map((entry) => (
+              <li key={entry.id ?? `${entry.teamId}-${entry.laneIndex}`} className="tt-lane-item">
+                <span className="tt-lane-num">Lane {entry.laneIndex + 1}</span>
+                <Link to={`/competitions/${competitionId}/teams/${entry.teamId}`} className="tt-lane-team">
+                  {entry.teamName}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    );
+  }
   return race ? <Link className={className} to={`/competitions/${competitionId}/session/${session.id}${heat ? `?heat=${heat.id}` : ''}`}>{content}</Link> : <div className={className}>{content}</div>;
 }

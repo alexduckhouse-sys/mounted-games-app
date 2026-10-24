@@ -84,10 +84,17 @@ public class ScorerLinksController(AppDbContext db, TimeProvider time) : Control
     internal static DateTime DefaultExpiry(Competition competition) =>
         DateTime.SpecifyKind((competition.EndDate ?? competition.StartDate).Date.AddDays(2), DateTimeKind.Utc);
 
-    private Task<List<string>> ArenasAsync(int competitionId, CancellationToken ct) =>
-        db.Sessions.AsNoTracking()
+    private async Task<List<string>> ArenasAsync(int competitionId, CancellationToken ct)
+    {
+        var arenas = await db.Sessions.AsNoTracking()
             .Where(s => s.CompetitionId == competitionId && s.ArenaName != null && s.ArenaName != "")
             .Select(s => s.ArenaName!).Distinct().OrderBy(a => a).ToListAsync(ct);
+        var hasUnnamed = arenas.Count == 0 || await db.Sessions.AsNoTracking()
+            .AnyAsync(s => s.CompetitionId == competitionId && s.Kind == SessionKind.Race && !s.IsBreak && (s.ArenaName == null || s.ArenaName == ""), ct);
+        if (hasUnnamed && !arenas.Contains("Main arena")) arenas.Insert(0, "Main arena");
+        if (!arenas.Contains("All arenas")) arenas.Add("All arenas");
+        return arenas;
+    }
 
     private static ScorerLinkDto ToDto(ScorerLink l) =>
         new(l.Id, l.Label, l.ArenaName, l.CreatedAt, l.ExpiresAt, l.LastUsedAt, l.RevokedAt);

@@ -103,12 +103,13 @@ describe('the shop', () => {
   it('lets someone report a post that is not theirs', async () => {
     auth.user = { id: 'buyer', fullName: 'Bea Buyer' };
     vi.mocked(api.post).mockResolvedValue({ data: {} });
-    vi.spyOn(window, 'prompt').mockReturnValue('Looks wrong');
-    vi.spyOn(window, 'alert').mockImplementation(() => {});
     mount();
     await userEvent.click(await screen.findByRole('button', { name: /Grey saddle/ }));
     await userEvent.click(screen.getByRole('button', { name: /Report/ }));
+    await userEvent.type(screen.getByLabelText(/Why are you reporting this post/), 'Looks wrong');
+    await userEvent.click(screen.getByRole('button', { name: 'Send report' }));
     expect(api.post).toHaveBeenCalledWith('/shop/posts/1/report', { reason: 'Looks wrong' });
+    expect(await screen.findByText('Reported. An admin will review.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Remove post' })).not.toBeInTheDocument();
   });
 

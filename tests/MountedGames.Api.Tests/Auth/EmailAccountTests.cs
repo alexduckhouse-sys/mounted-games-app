@@ -216,6 +216,11 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
         // The name is typed by whoever signs up, so it never goes into someone else's inbox.
         Assert.DoesNotContain("Sam Lee", mail.Text);
         Assert.StartsWith("Hello,", mail.Text);
+        Assert.NotNull(mail.Html);
+        Assert.DoesNotContain("Sam Lee", mail.Html);
+        Assert.Contains(EmailHtml.HeaderStyle, mail.Html);
+        Assert.Contains(EmailHtml.CardStyle, mail.Html);
+        Assert.Contains("/confirm-email?userId=", mail.Html);
         Assert.StartsWith("confirm-email-", mail.IdempotencyKey);
         var (userId, _) = LinkIn(mail);
         Assert.Equal(auth.User.Id, userId);

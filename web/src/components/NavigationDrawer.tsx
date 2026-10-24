@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeftRight, X, Settings, History, SlidersHorizontal, Bell, CloudSun, Pin, Star, BookOpen, ShoppingBag, ShieldCheck, ChevronRight, BarChart3, PinOff, Trophy } from 'lucide-react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
+import { ArrowLeftRight, X, Settings, History, SlidersHorizontal, CloudSun, Star, BookOpen, ShoppingBag, ChevronRight, BarChart3, Trophy } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
-import { THEMES } from '../theme/themes';
-import { useTheme } from '../theme/ThemeContext';
 import { useLiteMode } from '../lite/LiteModeContext';
-import { LiteModeSetting } from '../lite/LiteModeSetting';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { competitionDateText } from '../lib/competitionDates';
 import { initialsOf, roleLabel } from '../lib/profile';
@@ -21,24 +18,16 @@ const itemClass = (active: boolean) => `flex min-h-12 w-full items-center gap-3 
   : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`;
 const iconClass = (active: boolean) => `h-5 w-5 shrink-0 ${active ? '' : 'text-[rgb(var(--mg-muted))]'}`;
 
-export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = false }: { onClose: () => void; settingsOpen?: boolean }) {
+export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const { current, rememberChoice, setRememberChoice, forget } = useCurrentCompetition();
-  const navigate = useNavigate();
+  const { current } = useCurrentCompetition();
   const { user, hasRole } = useAuth();
   const { extras } = useNavExtras();
   const { meta } = useCompetitionMeta();
   const ageGroups = useAgeGroups();
   const location = useLocation();
-  const { theme, setTheme } = useTheme();
   const { lite } = useLiteMode();
-  const [settingsOpen, setSettingsOpen] = useState(startWithSettings);
-  const [showWeather, setShowWeather] = useState(() => { try { return localStorage.getItem(WEATHER_KEY) === '1'; } catch { return false; } });
-  function toggleWeather() {
-    const next = !showWeather;
-    setShowWeather(next);
-    try { if (next) localStorage.setItem(WEATHER_KEY, '1'); else localStorage.removeItem(WEATHER_KEY); } catch { /* storage blocked */ }
-  }
+  const showWeather = (() => { try { return localStorage.getItem(WEATHER_KEY) === '1'; } catch { return false; } })();
   // The Seasons link goes straight to the season when the followed competition is in one, or the season list otherwise.
   const [seasonLinks, setSeasonLinks] = useState<{ competitionId: number; seasons: { id: string }[] } | null>(null);
   const currentId = current?.id ?? null;
@@ -131,31 +120,12 @@ export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = fa
           <div className="h-px bg-[rgb(var(--mg-rule-soft))]" />
 
           <div className="flex flex-col">
-            <NavLink to="/events" end onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ArrowLeftRight className={iconClass(isActive)} />Change competition</>}</NavLink>
+            <NavLink to="/events" end onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ArrowLeftRight className={iconClass(isActive)} />Events</>}</NavLink>
+            {current && <NavLink to="/shop" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShoppingBag className={iconClass(isActive)} />Tack &amp; kit shop</>}</NavLink>}
             <NavLink to={seasonsTo} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>
             <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
             <NavLink to="/stats" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><BarChart3 className={iconClass(isActive)} />Rider and team stats</>}</NavLink>
-            <button onClick={() => setSettingsOpen((v) => !v)} className={itemClass(settingsOpen)} aria-expanded={settingsOpen}><SlidersHorizontal className={iconClass(settingsOpen)} />Settings</button>
-            {settingsOpen && (
-              <section aria-label="Settings" className="mt-2 flex flex-col gap-4 rounded-xl border border-[rgb(var(--mg-rule))] p-3">
-                <div role="group" aria-label="Colour theme" className="flex flex-col gap-1">
-                  <h3 className="px-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Colour theme</h3>
-                  {THEMES.map((item) => (
-                    <button key={item.id} aria-pressed={theme === item.id} onClick={() => setTheme(item.id)} className={itemClass(theme === item.id)}>
-                      <span className="h-5 w-5 rounded-md border border-[rgb(var(--mg-control))]" style={{ background: item.swatch }} />{item.label}
-                    </button>
-                  ))}
-                </div>
-                <LiteModeSetting />
-                <div className="flex flex-col gap-1">
-                  <h3 className="px-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Options</h3>
-                  <SettingSwitch icon={CloudSun} label="Show weather" checked={showWeather} onChange={toggleWeather} />
-                  {current && <SettingSwitch icon={Pin} label="Remember this competition on this device" checked={rememberChoice === 'remember'} onChange={() => setRememberChoice(rememberChoice === 'remember' ? 'visit' : 'remember')} />}
-                  {current && <button onClick={() => { forget(); onClose(); navigate('/events'); }} className={itemClass(false)}><PinOff className={iconClass(false)} />Forget this competition</button>}
-                </div>
-                <NavLink to="/privacy" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShieldCheck className={iconClass(isActive)} />Privacy</>}</NavLink>
-              </section>
-            )}
+            <NavLink to="/settings" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><SlidersHorizontal className={iconClass(isActive)} />Settings</>}</NavLink>
           </div>
 
           {(accountLinks.length > 0 || extras.length > 0) && (
@@ -168,15 +138,5 @@ export function NavigationDrawer({ onClose, settingsOpen: startWithSettings = fa
 
       </div>
     </dialog>
-  );
-}
-
-function SettingSwitch({ icon: Icon, label, checked, onChange }: { icon: typeof Bell; label: string; checked: boolean; onChange: () => void }) {
-  return (
-    <button role="switch" aria-checked={checked} onClick={onChange} className={itemClass(false)}>
-      <Icon className={iconClass(false)} />
-      <span className="flex-1">{label}</span>
-      <span aria-hidden="true" className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-[rgb(var(--mg-button))]' : 'bg-[rgb(var(--mg-control))]'}`}><span className={`h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : ''}`} /></span>
-    </button>
   );
 }

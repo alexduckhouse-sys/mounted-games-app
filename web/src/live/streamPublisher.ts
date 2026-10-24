@@ -306,9 +306,17 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
         update({ hasAudio: true, audioMuted: false }); applyAudio(); recover();
         return;
       }
-      await patch({ audioMuted: muted }); update({ audioMuted: muted }); applyAudio();
+      const previous = snapshot.audioMuted;
+      update({ audioMuted: muted }); applyAudio();
+      try { await patch({ audioMuted: muted }); }
+      catch (error) { update({ audioMuted: previous }); applyAudio(); throw error; }
     },
-    async pause(value: boolean) { await patch({ status: value ? 1 : 0 }); paused = value; applyAudio(); update({ state: value ? 'paused' : 'live' }); },
+    async pause(value: boolean) {
+      const previous = paused;
+      paused = value; applyAudio(); update({ state: value ? 'paused' : 'live' });
+      try { await patch({ status: value ? 1 : 0 }); }
+      catch (error) { paused = previous; applyAudio(); update({ state: previous ? 'paused' : 'live' }); throw error; }
+    },
     async caption(value: string) { await patch({ caption: value }); caption = value || null; },
     viewers(count: number) { update({ viewerCount: count }); },
     stop,

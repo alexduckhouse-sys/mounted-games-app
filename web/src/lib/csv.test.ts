@@ -18,6 +18,12 @@ describe('toCsv', () => {
   it('produces just the header when there are no rows', () => {
     expect(toCsv(['A'], [])).toBe('A');
   });
+
+  it('prefixes formula-like text with an apostrophe while leaving plain negative numbers alone', () => {
+    expect(toCsv(['Name', 'Phone', 'Note', 'Diff'], [['=1+1', '+447700900123', '@SUM(A1)', '-12.5']])).toBe(
+      "Name,Phone,Note,Diff\r\n'=1+1,'+447700900123,'@SUM(A1),-12.5",
+    );
+  });
 });
 
 describe('safeFilename', () => {

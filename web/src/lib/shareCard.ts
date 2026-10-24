@@ -32,7 +32,22 @@ export type SharePage =
 
 const COMPETITION_PATH = /^\/competitions\/(\d{1,9})(?:\/[A-Za-z0-9/_-]*)?$/;
 const TEAM_PROFILE_PATH = /^\/team-profiles\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
-const GENERIC_PATHS = new Set(['/', '/events', '/competitions', '/competitions/past']);
+const GENERIC_PATHS = new Set(['/', '/events', '/competitions', '/competitions/past', '/seasons', '/stats', '/shop']);
+
+const GENERIC_COPY: Record<string, { title: string; description: string }> = {
+  '/seasons': {
+    title: `${SITE_NAME}: season tables and standings`,
+    description: 'Season leagues, points tables and event standings for Mounted Games.',
+  },
+  '/stats': {
+    title: `${SITE_NAME}: rider, pony and team stats`,
+    description: 'Career results, heat history and performance stats for Mounted Games.',
+  },
+  '/shop': {
+    title: `${SITE_NAME}: equipment and marketplace`,
+    description: 'Equipment, event merchandise and marketplace listings for Mounted Games.',
+  },
+};
 
 /** Which share card a page path should show, or null for pages that get no special handling. */
 export function sharePageFor(pathname: string): SharePage | null {
@@ -115,9 +130,10 @@ function absolute(origin: string, path: string): string {
 export function genericCard(origin: string, pathname: string): ShareCard {
   const trimmed = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
   const path = GENERIC_PATHS.has(trimmed) ? trimmed : '/';
+  const custom = GENERIC_COPY[path];
   return {
-    title: `${SITE_NAME}: live scores, timetables and results`,
-    description: GENERIC_DESCRIPTION,
+    title: custom?.title ?? `${SITE_NAME}: live scores, timetables and results`,
+    description: custom?.description ?? GENERIC_DESCRIPTION,
     url: absolute(origin, path),
     image: absolute(origin, SHARE_IMAGE_PATH),
   };

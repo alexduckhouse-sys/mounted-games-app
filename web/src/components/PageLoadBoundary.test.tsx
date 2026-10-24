@@ -18,11 +18,14 @@ describe('PageLoadBoundary', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('explains the failure and offers a reload when the page cannot open', async () => {
+  it('explains the failure and offers a reload or back button when the page cannot open', async () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
     render(<PageLoadBoundary page="/a"><Broken /></PageLoadBoundary>);
     expect(screen.getByRole('alert')).toHaveTextContent('This page couldn’t open');
     await userEvent.click(screen.getByRole('button', { name: 'Reload page' }));
     expect(reload).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    expect(back).toHaveBeenCalledTimes(1);
   });
 
   it('tries again when the visitor moves to another page', () => {

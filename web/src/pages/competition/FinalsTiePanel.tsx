@@ -49,17 +49,17 @@ export function FinalsTiePanel({ competitionId, section, rule, onRuleChange, bou
 
   return <div className="space-y-2">
     {section && <label className="block">
-      <span className="text-xs font-semibold">Teams level on points</span>
+      <span className="text-xs font-semibold text-[rgb(var(--mg-body))]">Teams level on points</span>
       <SelectField className="input mt-1 text-sm" value={rule} disabled={busy}
         onChange={(event) => changeRule(Number(event.target.value) as TieBreakRule)}>
         {TIE_BREAK_RULES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
       </SelectField>
-      <span className="text-[11px] text-slate-500 dark:text-slate-300">{TIE_BREAK_RULES.find((r) => r.value === rule)?.hint}</span>
+      <span className="text-[11px] text-[rgb(var(--mg-muted))]">{TIE_BREAK_RULES.find((r) => r.value === rule)?.hint}</span>
     </label>}
     {ties.map((tie) => <TieCard key={`${tie.cutoff}:${tie.settledBy}:${tie.teams.map((t) => t.id).join(',')}`} tie={tie} competitionId={competitionId} canOrder={section !== null}
       runoffRaceName={boundary?.runoffRaceName} onChanged={onChanged} />)}
-    {!section && ties.length > 0 && <p className="text-[11px] text-slate-500 dark:text-slate-300">Pick an age group to settle these ties.</p>}
-    {error && <div role="alert" className="text-xs text-rose-700 dark:text-rose-300">{error}</div>}
+    {!section && ties.length > 0 && <p className="text-[11px] text-[rgb(var(--mg-muted))]">Pick an age group to settle these ties.</p>}
+    {error && <div role="alert" className="text-xs text-[rgb(var(--mg-elim))]">{error}</div>}
   </div>;
 }
 
@@ -93,11 +93,11 @@ function TieCard({ tie, competitionId, canOrder, runoffRaceName, onChanged }: {
   }
 
   const tone = open
-    ? 'text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800'
-    : 'text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800';
-  return <section aria-label={cutLabel(tie.cutoff)} className={`text-xs border rounded-md p-2 space-y-1.5 ${tone}`}>
-    <div className="font-semibold flex items-center gap-1.5">
-      {open ? <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" /> : <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />}
+    ? 'border-[rgb(var(--mg-late-ink)/0.35)] bg-[rgb(var(--mg-late-bg))] text-[rgb(var(--mg-late-ink))]'
+    : 'border-[rgb(var(--mg-ok)/0.35)] bg-[rgb(var(--mg-ok)/0.12)] text-[rgb(var(--mg-ok))]';
+  return <section aria-label={cutLabel(tie.cutoff)} className={`space-y-1.5 rounded-lg border p-2.5 text-xs ${tone}`}>
+    <div className="flex items-center gap-1.5 font-semibold">
+      {open ? <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
       {cutLabel(tie.cutoff)} · {tie.totalAtCutoff} pts
     </div>
     <p>{tieStatus(tie, runoffRaceName)}</p>
@@ -106,18 +106,18 @@ function TieCard({ tie, competitionId, canOrder, runoffRaceName, onChanged }: {
         <span className="w-5 text-right tabular-nums">{showOrder ? tie.teams[0].position + index : team.position}.</span>
         <span className="flex-1">{team.name} <span className="opacity-70">· {team.wins} {team.wins === 1 ? 'win' : 'wins'}</span></span>
         {showOrder && <>
-          <button type="button" className="btn-ghost !p-1" disabled={index === 0 || busy} aria-label={`Move ${team.name} up`}
-            onClick={() => setOrder((current) => move(current, index, -1))}><ArrowUp className="w-3.5 h-3.5" /></button>
-          <button type="button" className="btn-ghost !p-1" disabled={index === list.length - 1 || busy} aria-label={`Move ${team.name} down`}
-            onClick={() => setOrder((current) => move(current, index, 1))}><ArrowDown className="w-3.5 h-3.5" /></button>
+          <button type="button" className="mg-icon-btn !h-7 !w-7" disabled={index === 0 || busy} aria-label={`Move ${team.name} up`}
+            onClick={() => setOrder((current) => move(current, index, -1))}><ArrowUp className="h-3.5 w-3.5" /></button>
+          <button type="button" className="mg-icon-btn !h-7 !w-7" disabled={index === list.length - 1 || busy} aria-label={`Move ${team.name} down`}
+            onClick={() => setOrder((current) => move(current, index, 1))}><ArrowDown className="h-3.5 w-3.5" /></button>
         </>}
       </li>)}
     </ol>
     {canOrder && <div className="flex gap-2">
-      {showOrder && <button type="button" className="btn-primary !py-1 !px-2 text-xs" disabled={busy} onClick={save}>Save this order</button>}
-      {!showOrder && tie.settledBy === TieSettlement.Rule && <button type="button" className="btn-ghost !py-1 !px-2 text-xs" onClick={() => setEditing(true)}>Change the order</button>}
-      {tie.settledBy === TieSettlement.Organiser && <button type="button" className="btn-ghost !py-1 !px-2 text-xs" disabled={busy} onClick={clear}>Clear my order</button>}
+      {showOrder && <button type="button" className="mg-btn mg-btn-primary !min-h-8 !px-2.5 !py-1 text-xs" disabled={busy} onClick={save}>Save this order</button>}
+      {!showOrder && tie.settledBy === TieSettlement.Rule && <button type="button" className="mg-small-btn !min-h-8 !px-2.5 !py-1 text-xs" onClick={() => setEditing(true)}>Change the order</button>}
+      {tie.settledBy === TieSettlement.Organiser && <button type="button" className="mg-small-btn !min-h-8 !px-2.5 !py-1 text-xs" disabled={busy} onClick={clear}>Clear my order</button>}
     </div>}
-    {error && <div role="alert" className="text-rose-700 dark:text-rose-300">{error}</div>}
+    {error && <div role="alert" className="text-[rgb(var(--mg-elim))]">{error}</div>}
   </section>;
 }
