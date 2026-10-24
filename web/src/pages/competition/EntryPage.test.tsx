@@ -127,3 +127,11 @@ describe('entryFeeText', () => {
     expect(entryFeeText(at(...(prices as number[])))).toBe(text);
   });
 });
+
+it('shows a passed server closing date on the entry page and section cards', async () => {
+  vi.mocked(api.get).mockImplementation(async (url) => ({ data: url === '/auth/me' ? { roles: ['Member'] } : url.endsWith('/entry-settings') ? { competitionId: 1, entriesCloseAt: '2020-01-01T00:00:00Z', entriesClosed: true } : [] }));
+  mount(['Member']);
+  expect(await screen.findByText('Entries for this event are closed.')).toBeInTheDocument();
+  expect(await screen.findAllByText('Entries closed.')).toHaveLength(2);
+  expect(screen.queryByRole('button', { name: /Join/ })).not.toBeInTheDocument();
+});

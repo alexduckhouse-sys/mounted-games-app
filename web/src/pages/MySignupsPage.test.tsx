@@ -107,4 +107,63 @@ describe('MySignupsPage', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/5/pair-respond', { accept: true }));
     expect(await screen.findByText(/Alice Partner & Ellie Hart/)).toBeInTheDocument();
   });
+
+  it('lets a rider or manager withdraw an upcoming pre-draw entry and shows Withdrawn — refund pending', async () => {
+    const entry: ExtendedMySignup = {
+      ...signup(8, { status: 1, paidAt: '2026-10-12T10:00:00Z', amountMinor: 4000, teamName: 'Cheshire A' }),
+      stablesCount: 2,
+      stablingClubOrTeam: 'Cheshire PC',
+      drawComplete: false,
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: [entry] });
+    vi.mocked(api.post).mockResolvedValue({
+      data: { ...entry, status: 3, isWithdrawn: true, refundPending: true, teamId: null, teamName: null },
+    });
+    mount();
+    expect(await screen.findByText(/Stabling: 2 stables \(Cheshire PC\)/)).toBeInTheDocument();
+    const withdrawBtn = screen.getByRole('button', { name: 'Withdraw Entry' });
+    await userEvent.click(withdrawBtn);
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/8/withdraw', {}));
+    expect(await screen.findByText('Withdrawn — refund pending')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Withdraw Entry' })).not.toBeInTheDocument();
+  });
+
+  it('hides Withdraw Entry once the draw has taken place', async () => {
+    const drawnEntry: ExtendedMySignup = {
+      ...signup(9, { status: 1, amountMinor: 4000 }),
+      drawComplete: true,
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: [drawnEntry] });
+    mount();
+    expect(await screen.findByText('Event 9')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Withdraw Entry' })).not.toBeInTheDocument();
+  });
+});
+
+describe('withdrawal and trusted multi-team declarations', () => {
+  it('shows completed refunds rather than stale withdrawal text', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(1, { status: 2 }), isWithdrawn: true, refundPending: false }] });
+    mount();
+    expect(await screen.findByText('Refunded')).toBeInTheDocument();
+    expect(screen.queryByText('Withdrawn — refund pending')).not.toBeInTheDocument();
+  });
+  it('links every granted team and keeps the primary-team fallback', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [
+      { ...signup(1, { status: 1 }), declarationAccessGranted: true, linkedTeams: [{ id: 21, name: 'Synthetic A' }, { id: 22, name: 'Synthetic B' }] },
+      { ...signup(2, { status: 1, teamId: 23, teamName: 'Synthetic C' }), declarationAccessGranted: true },
+      { ...signup(3, { status: 1 }), declarationAccessGranted: false, linkedTeams: [{ id: 24, name: 'Untrusted' }] },
+      { ...signup(4, { status: 3 }), declarationAccessGranted: true, linkedTeams: [{ id: 25, name: 'Cancelled' }] },
+    ] });
+    mount();
+    expect(await screen.findByRole('link', { name: 'Dec form for Synthetic A' })).toHaveAttribute('href', '/competitions/11/declarations?team=21');
+    expect(screen.getByRole('link', { name: 'Dec form for Synthetic B' })).toHaveAttribute('href', '/competitions/11/declarations?team=22');
+    expect(screen.getByRole('link', { name: 'Dec form for Synthetic C' })).toHaveAttribute('href', '/competitions/12/declarations?team=23');
+    expect(screen.getAllByRole('link', { name: /Dec form for/ })).toHaveLength(3);
+  });
+});
+
+it('keeps withdrawal available after the event starts if no draw exists', async () => {
+  vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(1, { competitionStart: old, status: 1 }), drawComplete: false }] });
+  mount();
+  expect(await screen.findByRole('button', { name: 'Withdraw Entry' })).toBeInTheDocument();
 });

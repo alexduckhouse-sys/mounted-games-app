@@ -9,6 +9,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Security;
 using MountedGames.Api.Services;
 using MountedGames.Api.Services.Email;
@@ -33,7 +34,12 @@ public record CreateSectionSignupInput(
     bool LookingForPair = false,
     bool LookingForGuestRiders = false,
     bool WaitingForGuestSpot = false,
-    IReadOnlyList<string>? TeamMembers = null
+    IReadOnlyList<string>? TeamMembers = null,
+    [Range(0, 100)] int StablesCount = 0,
+    [StringLength(200)] string? StablingClubOrTeam = null,
+    [StringLength(20)] string? PaymentMethod = null,
+    bool IsWaitlist = false,
+    [Range(1, 20)] int TeamsCount = 1
 );
 
 public record SectionSignupExtendedDto(
@@ -47,13 +53,19 @@ public record SectionSignupExtendedDto(
     DateTime? ConfirmationEmailAt = null,
     string? TeamName = null, bool IsWholeTeam = false,
     bool LookingForPair = false, bool LookingForGuestRiders = false, bool WaitingForGuestSpot = false,
-    int? PairRequestFromSignupId = null, int? PairRequestToSignupId = null, string? PairRequestStatus = null
+    int? PairRequestFromSignupId = null, int? PairRequestToSignupId = null, string? PairRequestStatus = null,
+    int StablesCount = 0, string? StablingClubOrTeam = null,
+    string? PaymentMethod = null,
+    bool IsWaitlist = false, bool IsWithdrawn = false, bool RefundPending = false,
+    int TeamsCount = 1
 ) : SectionSignupDto(
     Id, CompetitionSectionId, SectionName, FullName, PonyClubName, ContactInfo,
     AmountMinor, Status, PaidAt, TeamId, CreatedAt,
     UseInitialOnly, NoFilming, TermsAccepted, TermsAcceptedAt, TermsWordingVersion,
     ContactEmail, ConfirmationEmailStatus, ConfirmationEmailAt, TeamName, IsWholeTeam
 );
+
+public record SignupLinkedTeamDto(int Id, string Name);
 
 public record MySignupExtendedDto(
     int Id, int CompetitionId, string CompetitionName,
@@ -65,10 +77,37 @@ public record MySignupExtendedDto(
     bool LookingForPair = false, bool LookingForGuestRiders = false, bool WaitingForGuestSpot = false,
     int? PairRequestFromSignupId = null, string? PairRequestFromName = null, string? PairRequestFromClub = null,
     int? PairRequestToSignupId = null, string? PairRequestToName = null,
-    string? PairRequestStatus = null, bool DeclarationAccessGranted = false
+    string? PairRequestStatus = null, bool DeclarationAccessGranted = false,
+    int StablesCount = 0, string? StablingClubOrTeam = null,
+    string? PaymentMethod = null,
+    bool IsWaitlist = false, bool IsWithdrawn = false, bool RefundPending = false,
+    int TeamsCount = 1, bool DrawComplete = false, IReadOnlyList<SignupLinkedTeamDto>? LinkedTeams = null
 ) : MySignupDto(
     Id, CompetitionId, CompetitionName, CompetitionStart, CompetitionSectionId, SectionName,
     FullName, PonyClubName, ContactInfo, AmountMinor, Status, PaidAt, TeamId, TeamName, CreatedAt
+);
+
+public record CompetitionEntrySettingsDto(
+    int CompetitionId,
+    DateTime? EntriesCloseAt,
+    bool EntriesClosed
+);
+
+public record UpdateEntrySettingsInput(DateTime? EntriesCloseAt);
+
+public record StablingBookingDto(
+    int SignupId,
+    int SectionId,
+    string SectionName,
+    string FullName,
+    string PonyClubOrTeam,
+    int StablesCount,
+    SignupPaymentStatus Status
+);
+
+public record StablingSummaryDto(
+    int TotalStables,
+    IReadOnlyList<StablingBookingDto> Bookings
 );
 
 public record MatchmakingEntryDto(
@@ -102,6 +141,41 @@ public class SignupController : ControllerBase
         var ids = signupIds.Distinct().ToArray();
         return _db.Set<SignupMatchmaking>().Where(x => ids.Contains(x.SignupId)).ToDictionaryAsync(x => x.SignupId);
     }
+
+    private Task<Dictionary<int, SignupExtras>> LoadExtrasMapAsync(IEnumerable<int> signupIds)
+    {
+        var ids = signupIds.Distinct().ToArray();
+        return _db.Set<SignupExtras>().Where(x => ids.Contains(x.SignupId)).ToDictionaryAsync(x => x.SignupId);
+    }
+
+    private Task<DateTime?> GetEntriesCloseAtAsync(int competitionId) => _db.Set<CompetitionEntrySettings>()
+        .Where(x => x.CompetitionId == competitionId).Select(x => x.EntriesCloseAt).SingleOrDefaultAsync();
+
+    private async Task SetEntriesCloseAtAsync(int competitionId, DateTime? closeAt)
+    {
+        var settings = await _db.Set<CompetitionEntrySettings>().FindAsync(competitionId);
+        if (settings is null) { settings = new() { CompetitionId = competitionId }; _db.Add(settings); }
+        settings.EntriesCloseAt = closeAt is { Kind: DateTimeKind.Unspecified } value
+            ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : closeAt?.ToUniversalTime();
+        await _db.SaveChangesAsync();
+    }
+
+    private Task<int> ActivePlacesAsync(int sectionId, int? exceptSignupId = null) => _db.SectionSignups
+        .Where(s => s.CompetitionSectionId == sectionId && s.Id != exceptSignupId
+            && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
+            && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
+            && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || x.IsWaitlist)))
+        .SumAsync(s => _db.Set<SignupExtras>().Where(x => x.SignupId == s.Id).Select(x => (int?)x.TeamsCount).FirstOrDefault() ?? 1);
+
+    private Task<T> InEntryTransactionAsync<T>(Func<Task<T>> action) =>
+        _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            _db.ChangeTracker.Clear();
+            await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+            var result = await action();
+            await transaction.CommitAsync();
+            return result;
+        });
 
     private async Task SetMatchmakingAsync(int signupId, bool lookingForPair, bool lookingForGuestRiders, bool waitingForGuestSpot, int? fromId = null, int? toId = null, string? status = null)
     {
@@ -144,7 +218,7 @@ public class SignupController : ControllerBase
         meta.DeclarationAccessGranted = true;
     }
 
-    private static SectionSignupExtendedDto ToExtendedDto(SectionSignup s, SignupMatchmaking? m)
+    private static SectionSignupExtendedDto ToExtendedDto(SectionSignup s, SignupMatchmaking? m, SignupExtras? ex = null)
     {
         var b = s.ToDto();
         return new SectionSignupExtendedDto(
@@ -154,8 +228,71 @@ public class SignupController : ControllerBase
             b.ContactEmail, b.ConfirmationEmailStatus, b.ConfirmationEmailAt,
             b.TeamName, b.IsWholeTeam,
             m?.LookingForPair == true, m?.LookingForGuestRiders == true, m?.WaitingForGuestSpot == true,
-            m?.PairRequestFromSignupId, m?.PairRequestToSignupId, m?.PairRequestStatus
+            m?.PairRequestFromSignupId, m?.PairRequestToSignupId, m?.PairRequestStatus,
+            ex?.StablesCount ?? 0, ex?.StablingClubOrTeam,
+            ex?.PaymentMethod,
+            ex?.IsWaitlist == true, ex?.IsWithdrawn == true, ex?.RefundPending == true,
+            ex?.TeamsCount > 0 ? ex.TeamsCount : 1
         );
+    }
+
+    [HttpGet("api/competitions/{competitionId:int}/entry-settings")]
+    [AllowAnonymous]
+    public async Task<ActionResult<CompetitionEntrySettingsDto>> GetEntrySettings(int competitionId, [FromServices] TimeProvider clock)
+    {
+        var comp = await _db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == competitionId);
+        if (comp is null) return NotFound();
+        var closeAt = await GetEntriesCloseAtAsync(competitionId);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var closed = comp.SignupsLocked || (closeAt.HasValue && closeAt.Value <= now);
+        return new CompetitionEntrySettingsDto(competitionId, closeAt, closed);
+    }
+
+    [HttpPut("api/competitions/{competitionId:int}/entry-settings")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<CompetitionEntrySettingsDto>> UpdateEntrySettings(
+        int competitionId, UpdateEntrySettingsInput req, [FromServices] TimeProvider clock)
+    {
+        var comp = await _db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == competitionId);
+        if (comp is null) return NotFound();
+        await SetEntriesCloseAtAsync(competitionId, req.EntriesCloseAt);
+        var closeAt = await GetEntriesCloseAtAsync(competitionId);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var closed = comp.SignupsLocked || (closeAt.HasValue && closeAt.Value <= now);
+        return new CompetitionEntrySettingsDto(competitionId, closeAt, closed);
+    }
+
+    [HttpGet("api/competitions/{competitionId:int}/stabling")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<StablingSummaryDto>> GetStablingList(int competitionId)
+    {
+        var rows = await _db.SectionSignups
+            .Include(s => s.Section)
+            .Where(s => s.Section!.CompetitionId == competitionId
+                && s.Status != SignupPaymentStatus.Cancelled
+                && s.Status != SignupPaymentStatus.Refunded)
+            .OrderBy(s => s.CreatedAt)
+            .ToListAsync();
+        var extras = await LoadExtrasMapAsync(rows.Select(r => r.Id));
+        var bookings = new List<StablingBookingDto>();
+        foreach (var r in rows)
+        {
+            if (!extras.TryGetValue(r.Id, out var ex) || ex.StablesCount <= 0 || ex.IsWithdrawn || ex.IsWaitlist) continue;
+            var clubOrTeam = (ex.StablingClubOrTeam ?? r.PonyClubName ?? r.TeamName ?? "Unaffiliated").Trim();
+            if (string.IsNullOrEmpty(clubOrTeam)) clubOrTeam = "Unaffiliated";
+            bookings.Add(new StablingBookingDto(
+                r.Id,
+                r.CompetitionSectionId,
+                r.Section?.DisplayName ?? string.Empty,
+                r.FullName,
+                clubOrTeam,
+                ex.StablesCount,
+                r.Status
+            ));
+        }
+        return new StablingSummaryDto(bookings.Sum(b => b.StablesCount), bookings);
     }
 
     /// <summary>
@@ -168,10 +305,19 @@ public class SignupController : ControllerBase
     [EnableRateLimiting(RequestLimits.SignupPolicy)]
     [HttpPost("api/competitions/{competitionId:int}/sections/{sectionId:int}/signups")]
     [Authorize]
-    public async Task<ActionResult<SectionSignupExtendedDto>> Create(int competitionId, int sectionId, CreateSectionSignupInput req,
-        // Taken here, not in the constructor, so only entering a competition needs the email services.
+    public Task<ActionResult<SectionSignupExtendedDto>> Create(int competitionId, int sectionId, CreateSectionSignupInput req,
         [FromServices] SignupConfirmationService confirmation, [FromServices] EmailOptInService optIns, [FromServices] TimeProvider clock)
     {
+        // Keep retries within this HTTP request idempotent even when the client did not supply a key.
+        if (string.IsNullOrWhiteSpace(req.RequestId)) req = req with { RequestId = Guid.NewGuid().ToString("N") };
+        return _db.Database.CreateExecutionStrategy().ExecuteAsync(() => CreateOnceAsync(competitionId, sectionId, req, confirmation, optIns, clock));
+    }
+
+    private async Task<ActionResult<SectionSignupExtendedDto>> CreateOnceAsync(int competitionId, int sectionId, CreateSectionSignupInput req,
+        SignupConfirmationService confirmation, EmailOptInService optIns, TimeProvider clock)
+    {
+        _db.ChangeTracker.Clear();
+        await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         var section = await _db.CompetitionSections
             .Include(s => s.Competition)
             .Include(s => s.Signups)
@@ -188,12 +334,18 @@ public class SignupController : ControllerBase
             if (replay is not null)
             {
                 var replayMeta = await LoadMatchmakingMapAsync(new[] { replay.Id });
-                return ToExtendedDto(replay, replayMeta.GetValueOrDefault(replay.Id));
+                var replayExtras = await LoadExtrasMapAsync(new[] { replay.Id });
+                return ToExtendedDto(replay, replayMeta.GetValueOrDefault(replay.Id), replayExtras.GetValueOrDefault(replay.Id));
             }
         }
 
-        if (section.Competition?.SignupsLocked == true)
+        var isCompetitionOrganiser = User.IsInRole(Roles.Admin) || await _db.CanManageAsync(User, competitionId);
+        var closeAt = await GetEntriesCloseAtAsync(competitionId);
+        var nowUtc = clock.GetUtcNow().UtcDateTime;
+        var entriesClosed = section.Competition?.SignupsLocked == true || (closeAt.HasValue && closeAt.Value <= nowUtc);
+        if (entriesClosed && !isCompetitionOrganiser)
             return StatusCode(403, new { message = "Signups are closed for this competition." });
+
         var name = req.FullName?.Trim();
         if (string.IsNullOrEmpty(name)) return BadRequest(new { message = "Full name required." });
         if (name.Length > 120)
@@ -223,6 +375,7 @@ public class SignupController : ControllerBase
         if (req.EmailOptIn && req.EmailOptInVersion != EmailOptInWording.Version)
             return BadRequest(new { message = "The wording next to the email box has changed. Please reload the page and read it again." });
 
+        var teamsCount = req.WholeTeam ? req.TeamsCount : 1;
         var teamName = req.TeamName?.Trim();
         if (string.IsNullOrEmpty(teamName)) teamName = null;
         if (req.WholeTeam)
@@ -233,9 +386,14 @@ public class SignupController : ControllerBase
             var canWholeTeam = User.IsInRole(Roles.Manager)
                 || User.IsInRole(Roles.Trainer)
                 || User.IsInRole(Roles.Admin)
-                || await _db.CanManageAsync(User, competitionId);
+                || isCompetitionOrganiser;
             if (!canWholeTeam)
                 return StatusCode(403, new { message = "Only a team manager or trainer can enter a whole team." });
+            if (teamsCount > 1 && teamName is null)
+            {
+                var clubFallback = req.PonyClubName?.Trim();
+                if (!string.IsNullOrEmpty(clubFallback)) teamName = clubFallback;
+            }
             if (teamName is null)
                 return BadRequest(new { message = "Give the team a name." });
         }
@@ -251,16 +409,9 @@ public class SignupController : ControllerBase
         if (req.LookingForGuestRiders && !req.WholeTeam)
             return BadRequest(new { message = "Enter a whole team before looking for guest riders." });
 
-        // Honour the section's signup cap, counting Paid + Pending only (free guest ride waiting list spots don't consume team capacity).
-        if (!req.WaitingForGuestSpot && section.MaxParticipants.HasValue)
-        {
-            var active = await _db.SectionSignups.CountAsync(s => s.CompetitionSectionId == sectionId
-                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
-                && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
-                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && x.IsWithdrawn));
-            if (active >= section.MaxParticipants.Value)
-                return StatusCode(403, new { message = $"Section is full ({section.MaxParticipants} max)." });
-        }
+        if (!req.WaitingForGuestSpot && !req.IsWaitlist && section.MaxParticipants.HasValue
+            && (long)await ActivePlacesAsync(sectionId) + teamsCount > section.MaxParticipants.Value)
+            return StatusCode(403, new { message = $"Section is full ({section.MaxParticipants} max)." });
 
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         if (!string.IsNullOrEmpty(ip) && await _db.IpBlocks.AnyAsync(b => b.IpAddress == ip))
@@ -283,13 +434,16 @@ public class SignupController : ControllerBase
         }
 
         // Free entries (including "Wait for a Guest Ride Spot") are complete immediately.
-        // "Looking for a Pair" pays 50% of the section price.
-        var amountMinor = req.WaitingForGuestSpot
+        // Waitlist entries start at 0 amount and Pending until promoted.
+        // "Looking for a Pair" pays 50% of the section price; standard entries pay 100% upfront (multiplied by teamsCount).
+        var amount = (req.WaitingForGuestSpot || req.IsWaitlist)
             ? 0
             : req.LookingForPair
                 ? section.PriceMinor / 2
-                : section.PriceMinor;
-        var isFree = amountMinor == 0;
+                : (long)section.PriceMinor * teamsCount;
+        if (amount > int.MaxValue) return BadRequest(new { message = "The total entry fee is too large." });
+        var amountMinor = (int)amount;
+        var isFree = amountMinor == 0 && !req.IsWaitlist;
         var signup = new SectionSignup
         {
             CompetitionSectionId = sectionId,
@@ -339,15 +493,28 @@ public class SignupController : ControllerBase
         catch (DbUpdateException) when (requestId is not null)
         {
             // Two copies of the same submit arrived together; the other one won. Return its entry.
+            await transaction.RollbackAsync();
             _db.ChangeTracker.Clear();
             var winner = await FindReplayAsync(sectionId, userId, requestId);
             if (winner is not null)
             {
                 var winnerMeta = await LoadMatchmakingMapAsync(new[] { winner.Id });
-                return ToExtendedDto(winner, winnerMeta.GetValueOrDefault(winner.Id));
+                var winnerExtras = await LoadExtrasMapAsync(new[] { winner.Id });
+                return ToExtendedDto(winner, winnerMeta.GetValueOrDefault(winner.Id), winnerExtras.GetValueOrDefault(winner.Id));
             }
             throw;
         }
+
+        var stablingClub = req.StablingClubOrTeam?.Trim();
+        _db.Add(new SignupExtras
+        {
+            SignupId = signup.Id, StablesCount = req.StablesCount,
+            StablingClubOrTeam = string.IsNullOrEmpty(stablingClub) && req.StablesCount > 0
+                ? req.PonyClubName?.Trim() ?? teamName : stablingClub,
+            PaymentMethod = req.PaymentMethod?.Trim(), IsWaitlist = req.IsWaitlist, TeamsCount = teamsCount,
+        });
+        await _db.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         // One confirmation, sent here and now (the API can be asleep a moment later). Whatever happens, the entry stays.
         if (contactEmail is not null)
@@ -369,7 +536,8 @@ public class SignupController : ControllerBase
             .Include(s => s.Section)
             .FirstAsync(s => s.Id == signup.Id);
         var meta = await LoadMatchmakingMapAsync(new[] { loaded.Id });
-        return ToExtendedDto(loaded, meta.GetValueOrDefault(loaded.Id));
+        var extras = await LoadExtrasMapAsync(new[] { loaded.Id });
+        return ToExtendedDto(loaded, meta.GetValueOrDefault(loaded.Id), extras.GetValueOrDefault(loaded.Id));
     }
 
     private Task<SectionSignup?> FindReplayAsync(int sectionId, string? userId, string requestId)
@@ -387,8 +555,53 @@ public class SignupController : ControllerBase
             .Where(s => s.Section!.CompetitionId == competitionId)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
-        var meta = await LoadMatchmakingMapAsync(rows.Select(r => r.Id));
-        return rows.Select(r => ToExtendedDto(r, meta.GetValueOrDefault(r.Id)));
+        var ids = rows.Select(r => r.Id).ToList();
+        var meta = await LoadMatchmakingMapAsync(ids);
+        var extras = await LoadExtrasMapAsync(ids);
+        return rows.Select(r => ToExtendedDto(r, meta.GetValueOrDefault(r.Id), extras.GetValueOrDefault(r.Id)));
+    }
+
+    /// <summary>Organiser/admin marks a signup as paid (e.g. after receiving a BACS bank transfer) and triggers FormTeams.</summary>
+    [HttpPost("api/competitions/{competitionId:int}/signups/{signupId:int}/mark-paid")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public Task<ActionResult<SectionSignupExtendedDto>> MarkPaid(int competitionId, int signupId) =>
+        InEntryTransactionAsync(() => MarkPaidOnceAsync(competitionId, signupId));
+
+    private async Task<ActionResult<SectionSignupExtendedDto>> MarkPaidOnceAsync(int competitionId, int signupId)
+    {
+        var signup = await _db.SectionSignups.Include(s => s.Section)
+            .FirstOrDefaultAsync(s => s.Id == signupId && s.Section!.CompetitionId == competitionId);
+        if (signup is null) return NotFound();
+        if (await _db.Set<EventCommerceSettings>().AnyAsync(x => x.CompetitionId == competitionId && x.IsDemo)
+            || await _db.Set<TestPaymentRecord>().AnyAsync(x => x.Target == TestPaymentTarget.SectionSignup && x.TargetId == signupId))
+            return Conflict(new { message = "Demo entry payments can only be changed through the labelled test checkout." });
+        var ex = await _db.Set<SignupExtras>().FindAsync(signup.Id);
+        var meta = await _db.Set<SignupMatchmaking>().FindAsync(signup.Id);
+        if (signup.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded || ex?.IsWithdrawn == true)
+            return Conflict(new { message = "A cancelled or withdrawn entry cannot be marked paid. Create a new entry instead." });
+        if (ex?.IsWaitlist == true)
+        {
+            if (signup.Section!.MaxParticipants is int cap && meta?.WaitingForGuestSpot != true
+                && (long)await ActivePlacesAsync(signup.CompetitionSectionId, signup.Id) + ex.TeamsCount > cap)
+                return Conflict(new { message = "There is no space to promote this waitlist entry yet." });
+            var amount = meta?.WaitingForGuestSpot == true ? 0L : meta?.LookingForPair == true
+                ? signup.Section!.PriceMinor / 2 : (long)signup.Section!.PriceMinor * ex.TeamsCount;
+            if (amount > int.MaxValue) return BadRequest(new { message = "The total entry fee is too large." });
+            signup.AmountMinor = (int)amount;
+            ex.IsWaitlist = false;
+        }
+        if (signup.Status != SignupPaymentStatus.Paid)
+        {
+            signup.Status = SignupPaymentStatus.Paid;
+            signup.PaidAt = DateTime.UtcNow;
+        }
+        await _db.SaveChangesAsync();
+        // Payment only forms this entrant's team. Pair seekers keep their explicit mutual-selection flow.
+        if (meta?.LookingForPair != true && meta?.WaitingForGuestSpot != true)
+            await FormTeamsCoreAsync(competitionId, signup.CompetitionSectionId,
+                new FormTeamsFromSignupsRequest(null, Preview: false, ReplaceExisting: false), signup.Id);
+        return ToExtendedDto(signup, await _db.Set<SignupMatchmaking>().FindAsync(signup.Id), ex);
     }
 
     /// <summary>Public matchmaking listings for a competition: solo riders looking for a pair, whole teams looking for guest riders, and riders waiting for a guest ride spot.</summary>
@@ -400,7 +613,7 @@ public class SignupController : ControllerBase
             .Include(s => s.Section)
             .Where(s => s.Section!.CompetitionId == competitionId
                 && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
-                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && x.IsWithdrawn))
+                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || x.IsWaitlist)))
             .OrderBy(s => s.CreatedAt)
             .ToListAsync();
         var meta = await LoadMatchmakingMapAsync(rows.Select(r => r.Id));
@@ -433,7 +646,10 @@ public class SignupController : ControllerBase
     [HttpPut("api/signups/{id:int}/status")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id", CompetitionResource.Signup)]
-    public async Task<ActionResult<SectionSignupDto>> UpdateStatus(int id, UpdateSignupStatusRequest req)
+    public Task<ActionResult<SectionSignupDto>> UpdateStatus(int id, UpdateSignupStatusRequest req) =>
+        InEntryTransactionAsync(() => UpdateStatusOnceAsync(id, req));
+
+    private async Task<ActionResult<SectionSignupDto>> UpdateStatusOnceAsync(int id, UpdateSignupStatusRequest req)
     {
         var signup = await _db.SectionSignups
             .Include(s => s.Section)
@@ -445,6 +661,20 @@ public class SignupController : ControllerBase
             .AnyAsync(x => x.Target == TestPaymentTarget.SectionSignup && x.TargetId == id);
         if (isDemo || hasTestPayment)
             return Conflict(new { message = "Demo entry payments can only be changed through the labelled test checkout." });
+        if (!Enum.IsDefined(req.Status)) return BadRequest(new { message = "Invalid payment status." });
+        var extras = await _db.Set<SignupExtras>().FindAsync(signup.Id);
+        if (req.Status is SignupPaymentStatus.Paid or SignupPaymentStatus.Pending
+            && extras?.IsWithdrawn == true)
+            return Conflict(new { message = "A cancelled or withdrawn entry cannot be reopened. Create a new entry instead." });
+        if (req.Status == SignupPaymentStatus.Paid && extras?.IsWaitlist == true)
+            return Conflict(new { message = "Use Mark paid to promote a waitlist entry when space is available." });
+        if (req.Status is SignupPaymentStatus.Paid or SignupPaymentStatus.Pending
+            && signup.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded
+            && signup.Section!.MaxParticipants is int cap
+            && !await _db.Set<SignupMatchmaking>().AnyAsync(m => m.SignupId == signup.Id && m.WaitingForGuestSpot)
+            && (long)await ActivePlacesAsync(signup.CompetitionSectionId, signup.Id) + (extras?.TeamsCount ?? 1) > cap)
+            return Conflict(new { message = "There is no space to reopen this entry yet." });
+        if (req.Status == SignupPaymentStatus.Refunded && extras is not null) extras.RefundPending = false;
         signup.Status = req.Status;
         if (req.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded)
             await ReleasePendingPairAsync(signup.Id);
@@ -499,12 +729,21 @@ public class SignupController : ControllerBase
 
     private async Task<List<MySignupExtendedDto>> BuildMySignupDtosAsync(List<SectionSignup> rows)
     {
-        var teamIds = rows.Where(r => r.TeamId.HasValue).Select(r => r.TeamId!.Value).ToList();
+        var signupIds = rows.Select(r => r.Id).ToArray();
+        var links = await _db.Set<SignupTeamLink>().Where(x => signupIds.Contains(x.SignupId)).ToListAsync();
+        var teamIds = rows.Where(r => r.TeamId.HasValue).Select(r => r.TeamId!.Value).Concat(links.Select(x => x.TeamId)).Distinct().ToList();
         var teams = teamIds.Count == 0
             ? new Dictionary<int, Team>()
             : await _db.Teams.Where(t => teamIds.Contains(t.Id))
                 .ToDictionaryAsync(t => t.Id, t => t);
-        var meta = await LoadMatchmakingMapAsync(rows.Select(r => r.Id));
+        var ids = rows.Select(r => r.Id).ToList();
+        var meta = await LoadMatchmakingMapAsync(ids);
+        var extras = await LoadExtrasMapAsync(ids);
+        var compIds = rows.Select(r => r.Section?.CompetitionId ?? 0).Where(id => id > 0).Distinct().ToList();
+        var drawnSections = await _db.Heats.AsNoTracking()
+            .Where(h => compIds.Contains(h.Session!.CompetitionId) && h.Entries.Count > 0)
+            .Select(h => new { h.Session!.CompetitionId, h.Session.CompetitionSectionId }).Distinct().ToListAsync();
+
         var otherSignupIds = meta.Values
             .SelectMany(m => new[] { m.PairRequestFromSignupId, m.PairRequestToSignupId })
             .Where(id => id.HasValue)
@@ -521,6 +760,7 @@ public class SignupController : ControllerBase
         {
             var baseDto = r.ToMyDto(r.TeamId.HasValue && teams.TryGetValue(r.TeamId.Value, out var t) ? t : null);
             meta.TryGetValue(r.Id, out var m);
+            extras.TryGetValue(r.Id, out var ex);
             SectionSignup? fromSignup = m?.PairRequestFromSignupId is { } fid && otherSignups.TryGetValue(fid, out var fs) ? fs : null;
             SectionSignup? toSignup = m?.PairRequestToSignupId is { } tid && otherSignups.TryGetValue(tid, out var ts) ? ts : null;
             return new MySignupExtendedDto(
@@ -532,9 +772,98 @@ public class SignupController : ControllerBase
                 m?.LookingForPair == true, m?.LookingForGuestRiders == true, m?.WaitingForGuestSpot == true,
                 m?.PairRequestFromSignupId, fromSignup is null ? null : RiderNames.Display(fromSignup.FullName, fromSignup.UseInitialOnly, false), fromSignup?.PonyClubName,
                 m?.PairRequestToSignupId, toSignup is null ? null : RiderNames.Display(toSignup.FullName, toSignup.UseInitialOnly, false),
-                m?.PairRequestStatus, m?.DeclarationAccessGranted == true
+                m?.PairRequestStatus, m?.DeclarationAccessGranted == true,
+                ex?.StablesCount ?? 0, ex?.StablingClubOrTeam,
+                ex?.PaymentMethod,
+                ex?.IsWaitlist == true, ex?.IsWithdrawn == true, ex?.RefundPending == true,
+                ex?.TeamsCount > 0 ? ex.TeamsCount : 1,
+                drawnSections.Any(x => x.CompetitionId == baseDto.CompetitionId
+                    && (x.CompetitionSectionId == null || x.CompetitionSectionId == r.CompetitionSectionId)),
+                links.Where(x => x.SignupId == r.Id).Select(x => x.TeamId)
+                    .Concat(r.TeamId is int primary ? new[] { primary } : Array.Empty<int>()).Distinct()
+                    .Where(id => teams.TryGetValue(id, out var linked) && linked.CompetitionSectionId == r.CompetitionSectionId)
+                    .Select(id => new SignupLinkedTeamDto(id, teams[id].DisplayName)).ToList()
             );
         }).ToList();
+    }
+
+    /// <summary>
+    /// Allows an entrant to withdraw their own signup before the draw is made, freeing up their spot in
+    /// MaxParticipants, detaching/removing any un-drawn team, and flagging the signup as "Withdrawn — refund pending".
+    /// </summary>
+    [HttpPost("api/my/signups/{signupId:int}/withdraw")]
+    [Authorize]
+    public Task<ActionResult<MySignupExtendedDto>> WithdrawMySignup(int signupId) =>
+        InEntryTransactionAsync(() => WithdrawMySignupOnceAsync(signupId));
+
+    private async Task<ActionResult<MySignupExtendedDto>> WithdrawMySignupOnceAsync(int signupId)
+    {
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var mySignup = await _db.SectionSignups
+            .Include(s => s.Section).ThenInclude(sec => sec!.Competition)
+            .FirstOrDefaultAsync(s => s.Id == signupId);
+        if (mySignup is null) return NotFound();
+        if (mySignup.UserId != userId && !User.IsInRole(Roles.Admin)) return Forbid();
+
+        var compId = mySignup.Section?.CompetitionId ?? 0;
+        var drawAlreadyMade = await _db.Heats.AnyAsync(h =>
+            h.Session!.CompetitionId == compId
+            && (h.Session.CompetitionSectionId == null || h.Session.CompetitionSectionId == mySignup.CompetitionSectionId)
+            && h.Entries.Count > 0);
+        if (drawAlreadyMade)
+            return Conflict(new { message = "Cannot withdraw automatically after the draw has been made. Please contact the organiser." });
+
+        var ex = await _db.Set<SignupExtras>().FindAsync(mySignup.Id);
+        if (ex?.IsWithdrawn == true)
+            return (await BuildMySignupDtosAsync(new List<SectionSignup> { mySignup })).Single();
+        if (mySignup.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded)
+            return Conflict(new { message = "This entry is no longer active." });
+        var links = await _db.Set<SignupTeamLink>().Where(x => x.SignupId == mySignup.Id).ToListAsync();
+        var meta = await _db.Set<SignupMatchmaking>().FindAsync(mySignup.Id);
+        // A public supporter code only associates an entry; it does not confer control of that team.
+        var teamIds = meta?.DeclarationAccessGranted == true
+            ? links.Select(x => x.TeamId).Concat(mySignup.TeamId is int primary ? new[] { primary } : Array.Empty<int>()).Distinct().ToArray()
+            : Array.Empty<int>();
+        var teams = await _db.Teams.Include(t => t.HeatEntries).Include(t => t.DeclarationForms)
+            .Where(t => teamIds.Contains(t.Id) && t.CompetitionSectionId == mySignup.CompetitionSectionId).ToListAsync();
+        if (teams.Any(t => t.HeatEntries.Count > 0))
+            return Conflict(new { message = "Cannot withdraw automatically after the draw has been made. Please contact the organiser." });
+        var needsRefund = mySignup.Status == SignupPaymentStatus.Paid && mySignup.AmountMinor > 0;
+        mySignup.TeamId = null;
+        _db.RemoveRange(links);
+        foreach (var team in teams)
+        {
+            var shared = await _db.SectionSignups.AnyAsync(s => s.Id != mySignup.Id
+                && (s.Status == SignupPaymentStatus.Pending || s.Status == SignupPaymentStatus.Paid)
+                && (s.TeamId == team.Id || _db.Set<SignupTeamLink>().Any(l => l.SignupId == s.Id && l.TeamId == team.Id)));
+            if (shared) continue;
+            if (team.DeclarationForms.Count == 0) _db.Teams.Remove(team);
+            else
+            {
+                team.EntryStatus = TeamEntryStatus.Withdrawn;
+                _db.Add(new TeamStatusEvent
+                {
+                    CompetitionId = compId, TeamId = team.Id, Status = TeamEntryStatus.Withdrawn,
+                    ActorUserId = userId, Reason = "Entry withdrawn by the entrant before the draw.",
+                });
+            }
+        }
+        await ReleasePendingPairAsync(mySignup.Id);
+        if (meta is not null)
+        {
+            meta.LookingForPair = meta.LookingForGuestRiders = meta.WaitingForGuestSpot = false;
+            meta.DeclarationAccessGranted = false;
+        }
+        mySignup.Status = SignupPaymentStatus.Cancelled;
+        if (ex is null) { ex = new SignupExtras { SignupId = mySignup.Id }; _db.Add(ex); }
+        ex.IsWaitlist = false;
+        ex.IsWithdrawn = true;
+        ex.RefundPending = needsRefund;
+        await _db.SaveChangesAsync();
+
+        return (await BuildMySignupDtosAsync(new List<SectionSignup> { mySignup })).Single();
     }
 
     [HttpPost("api/my/signups/{signupId:int}/pair-request")]
@@ -560,7 +889,7 @@ public class SignupController : ControllerBase
         if (mySignup is null) return NotFound();
         if (mySignup.UserId != userId && !User.IsInRole(Roles.Admin)) return Forbid();
         if (mySignup.Status is not (SignupPaymentStatus.Pending or SignupPaymentStatus.Paid)
-            || await _db.Set<SignupExtras>().AnyAsync(x => x.SignupId == mySignup.Id && x.IsWithdrawn))
+            || await _db.Set<SignupExtras>().AnyAsync(x => x.SignupId == mySignup.Id && (x.IsWithdrawn || x.IsWaitlist)))
             return BadRequest(new { message = "This entry is no longer active." });
         if (mySignup.Section?.Format != SectionFormat.Pairs)
             return BadRequest(new { message = "Pair requests are only available in Pairs sections." });
@@ -573,7 +902,7 @@ public class SignupController : ControllerBase
         if (target is null || target.Id == mySignup.Id)
             return BadRequest(new { message = "Target pair rider not found in this section." });
         if (target.Status is not (SignupPaymentStatus.Pending or SignupPaymentStatus.Paid)
-            || await _db.Set<SignupExtras>().AnyAsync(x => x.SignupId == target.Id && x.IsWithdrawn))
+            || await _db.Set<SignupExtras>().AnyAsync(x => x.SignupId == target.Id && (x.IsWithdrawn || x.IsWaitlist)))
             return BadRequest(new { message = "That entry is no longer active." });
         if (target.TeamId != null)
             return BadRequest(new { message = "That rider has already paired up." });
@@ -619,7 +948,7 @@ public class SignupController : ControllerBase
         if (mySignup is null) return NotFound();
         if (mySignup.UserId != userId && !User.IsInRole(Roles.Admin)) return Forbid();
         if (mySignup.Status is not (SignupPaymentStatus.Pending or SignupPaymentStatus.Paid)
-            || await _db.Set<SignupExtras>().AnyAsync(x => x.SignupId == mySignup.Id && x.IsWithdrawn))
+            || await _db.Set<SignupExtras>().AnyAsync(x => x.SignupId == mySignup.Id && (x.IsWithdrawn || x.IsWaitlist)))
             return BadRequest(new { message = "This entry is no longer active." });
 
         var meta = await LoadMatchmakingMapAsync(new[] { mySignup.Id });
@@ -638,7 +967,7 @@ public class SignupController : ControllerBase
         if (requester.CompetitionSectionId != mySignup.CompetitionSectionId || requester.TeamId != null
             || requester.Status is not (SignupPaymentStatus.Pending or SignupPaymentStatus.Paid)
             || requesterMeta?.PairRequestToSignupId != mySignup.Id || requesterMeta.PairRequestStatus != "Pending"
-            || await _db.Set<SignupExtras>().AnyAsync(x => x.SignupId == requester.Id && x.IsWithdrawn))
+            || await _db.Set<SignupExtras>().AnyAsync(x => x.SignupId == requester.Id && (x.IsWithdrawn || x.IsWaitlist)))
             return Conflict(new { message = "This pair request is no longer available." });
 
         if (!req.Accept)
@@ -704,12 +1033,27 @@ public class SignupController : ControllerBase
     [HttpPost("api/competitions/{competitionId:int}/sections/{sectionId:int}/form-teams")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
-    public async Task<ActionResult<FormTeamsResult>> FormTeams(int competitionId, int sectionId, FormTeamsFromSignupsRequest req)
+    public Task<ActionResult<FormTeamsResult>> FormTeams(int competitionId, int sectionId, FormTeamsFromSignupsRequest req) =>
+        InEntryTransactionAsync(() => FormTeamsOnceAsync(competitionId, sectionId, req));
+
+    private async Task<ActionResult<FormTeamsResult>> FormTeamsOnceAsync(int competitionId, int sectionId, FormTeamsFromSignupsRequest req)
+    {
+        var sectionExists = await _db.CompetitionSections
+            .AnyAsync(s => s.Id == sectionId && s.CompetitionId == competitionId);
+        if (!sectionExists) return NotFound();
+
+        var result = await FormTeamsCoreAsync(competitionId, sectionId, req);
+        if (result is null)
+            return BadRequest(new { message = "No paid signups to form teams from." });
+        return result;
+    }
+
+    private async Task<FormTeamsResult?> FormTeamsCoreAsync(int competitionId, int sectionId, FormTeamsFromSignupsRequest req, int? onlySignupId = null)
     {
         var section = await _db.CompetitionSections
             .Include(s => s.Competition)
             .FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == competitionId);
-        if (section is null) return NotFound();
+        if (section is null) return null;
 
         var defaultSize = section.Format switch
         {
@@ -726,23 +1070,36 @@ public class SignupController : ControllerBase
             .Include(t => t.DeclarationForms)
             .Where(t => t.CompetitionSectionId == sectionId)
             .ToListAsync();
-        var replaceable = req.ReplaceExisting
-            ? sectionTeams.Where(t => t.HeatEntries.Count == 0 && t.DeclarationForms.Count == 0).ToList()
-            : new List<Team>();
-        var replaceableIds = replaceable.Select(t => t.Id).ToHashSet();
-
-        var allPaidSignups = (await _db.SectionSignups
-                .Where(s => s.CompetitionSectionId == sectionId && s.Status == SignupPaymentStatus.Paid)
-                .OrderBy(s => s.CreatedAt)
-                .ToListAsync())
-            .Where(s => s.TeamId == null || replaceableIds.Contains(s.TeamId.Value))
-            .ToList();
-        var paidMeta = await LoadMatchmakingMapAsync(allPaidSignups.Select(s => s.Id));
+        var sectionSignups = await _db.SectionSignups.Where(s => s.CompetitionSectionId == sectionId).ToListAsync();
+        var sectionSignupIds = sectionSignups.Select(s => s.Id).ToArray();
+        var sectionLinks = await _db.Set<SignupTeamLink>().Where(l => sectionSignupIds.Contains(l.SignupId)).ToListAsync();
+        var linkedIds = sectionSignups.ToDictionary(s => s.Id, s => sectionLinks.Where(l => l.SignupId == s.Id)
+            .Select(l => l.TeamId).Concat(s.TeamId is int id ? new[] { id } : Array.Empty<int>()).ToHashSet());
+        var replaceableIds = req.ReplaceExisting
+            ? sectionTeams.Where(t => t.HeatEntries.Count == 0 && t.DeclarationForms.Count == 0).Select(t => t.Id).ToHashSet()
+            : new HashSet<int>();
+        // A multi-team entry is indivisible: preserving one used team also preserves its unused siblings.
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var ids in linkedIds.Values.Where(ids => ids.Any(id => !replaceableIds.Contains(id))))
+                foreach (var id in ids) changed |= replaceableIds.Remove(id);
+        } while (changed);
+        var replaceable = sectionTeams.Where(t => replaceableIds.Contains(t.Id)).ToList();
+        var allPaidSignups = sectionSignups.Where(s => s.Status == SignupPaymentStatus.Paid
+                && (onlySignupId == null || s.Id == onlySignupId)
+                && linkedIds[s.Id].All(replaceableIds.Contains))
+            .OrderBy(s => s.CreatedAt).ToList();
+        var paidIds = allPaidSignups.Select(s => s.Id).ToList();
+        var paidMeta = await LoadMatchmakingMapAsync(paidIds);
+        var paidExtras = await LoadExtrasMapAsync(paidIds);
         var paidSignups = allPaidSignups
-            .Where(s => !(paidMeta.TryGetValue(s.Id, out var mm) && mm.WaitingForGuestSpot == true))
+            .Where(s => !(paidMeta.TryGetValue(s.Id, out var mm) && mm.WaitingForGuestSpot == true)
+                     && !(paidExtras.TryGetValue(s.Id, out var ex) && (ex.IsWaitlist || ex.IsWithdrawn)))
             .ToList();
         if (paidSignups.Count == 0)
-            return BadRequest(new { message = "No paid signups to form teams from." });
+            return null;
 
         // Resolve each signup's club from its free-text PonyClubName (case-insensitive). A name that
         // isn't a club yet becomes its own club when the teams are formed, so different new clubs
@@ -778,8 +1135,32 @@ public class SignupController : ControllerBase
             var clubId = known?.Id ?? 0;
 
             foreach (var whole in group.Where(s => s.IsWholeTeam))
-                previews.Add(new FormedTeamPreview(clubName, clubId, string.Empty,
-                    new[] { whole.Id }, new[] { whole.FullName }, whole.TeamName));
+            {
+                var tCount = paidExtras.TryGetValue(whole.Id, out var wEx) && wEx.TeamsCount > 1 ? wEx.TeamsCount : 1;
+                if (tCount <= 1)
+                {
+                    previews.Add(new FormedTeamPreview(clubName, clubId, string.Empty,
+                        new[] { whole.Id }, new[] { whole.FullName }, whole.TeamName));
+                }
+                else
+                {
+                    var customNames = (whole.TeamName ?? string.Empty)
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .ToList();
+                    var baseName = customNames.Count == 1 ? customNames[0] : clubName;
+                    if (baseName.EndsWith(" A", StringComparison.OrdinalIgnoreCase) && baseName.Length > 2)
+                        baseName = baseName[..^2].TrimEnd();
+                    for (var k = 0; k < tCount; k++)
+                    {
+                        var suffix = ((char)('A' + k)).ToString();
+                        var tName = customNames.Count > 1 && k < customNames.Count
+                            ? customNames[k]
+                            : $"{baseName} {suffix}".Trim();
+                        previews.Add(new FormedTeamPreview(clubName, clubId, suffix,
+                            new[] { whole.Id }, new[] { whole.FullName }, tName));
+                    }
+                }
+            }
             var singles = group.Where(s => !s.IsWholeTeam).OrderBy(s => s.CreatedAt).ToList();
             foreach (var named in singles.Where(s => !string.IsNullOrWhiteSpace(s.TeamName))
                          .GroupBy(s => s.TeamName!.Trim(), StringComparer.OrdinalIgnoreCase))
@@ -830,6 +1211,7 @@ public class SignupController : ControllerBase
                 var linkedSignups = await _db.SectionSignups
                     .Where(s => s.TeamId == t.Id).ToListAsync();
                 foreach (var s in linkedSignups) s.TeamId = null;
+                _db.RemoveRange(sectionLinks.Where(l => l.TeamId == t.Id));
                 _db.Teams.Remove(t);
             }
             await _db.SaveChangesAsync();
@@ -865,13 +1247,14 @@ public class SignupController : ControllerBase
             await _db.SaveChangesAsync();
             created.Add(team);
 
-            // Link each signup in the preview to the new team.
+            // Link each signup in the preview to the new team (keep first created team if multiple teams came from 1 signup).
             foreach (var signupId in preview.SignupIds)
             {
                 var signup = await _db.SectionSignups.FindAsync(signupId);
                 if (signup is not null)
                 {
-                    signup.TeamId = team.Id;
+                    signup.TeamId ??= team.Id;
+                    _db.Add(new SignupTeamLink { SignupId = signup.Id, TeamId = team.Id });
                     await GrantDeclarationAccessAsync(signup.Id);
                 }
             }

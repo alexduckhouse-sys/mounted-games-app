@@ -86,22 +86,26 @@ public class DeclarationFormsController : ControllerBase
     private async Task<HashSet<int>> HelpingAsync(string? uid) => string.IsNullOrEmpty(uid) ? []
         : (await _db.CompetitionCollaborators.AsNoTracking().Where(k => k.UserId == uid).Select(k => k.CompetitionId).ToListAsync()).ToHashSet();
 
-    private async Task<HashSet<int>> SignedUpTeamIdsAsync(string? uid) => string.IsNullOrEmpty(uid) ? []
-        : (await _db.SectionSignups.AsNoTracking()
-            .Where(s => s.UserId == uid && s.TeamId != null
-                && _db.Teams.Any(t => t.Id == s.TeamId && t.CompetitionSectionId == s.CompetitionSectionId)
-                && (s.Status == SignupPaymentStatus.Pending || s.Status == SignupPaymentStatus.Paid)
-                && _db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.DeclarationAccessGranted)
-                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && x.IsWithdrawn))
-            .Select(s => s.TeamId!.Value).ToListAsync()).ToHashSet();
+    private IQueryable<SectionSignup> TrustedEntries(string uid) => _db.SectionSignups.AsNoTracking()
+        .Where(s => s.UserId == uid
+            && (s.Status == SignupPaymentStatus.Pending || s.Status == SignupPaymentStatus.Paid)
+            && _db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.DeclarationAccessGranted)
+            && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || x.IsWaitlist)));
+
+    private async Task<HashSet<int>> SignedUpTeamIdsAsync(string? uid)
+    {
+        if (string.IsNullOrEmpty(uid)) return [];
+        var trusted = TrustedEntries(uid);
+        return (await _db.Teams.AsNoTracking().Where(t => trusted.Any(s =>
+                s.CompetitionSectionId == t.CompetitionSectionId
+                && (s.TeamId == t.Id || _db.Set<SignupTeamLink>().Any(l => l.SignupId == s.Id && l.TeamId == t.Id))))
+            .Select(t => t.Id).ToListAsync()).ToHashSet();
+    }
 
     private Task<bool> HasTeamSignupAsync(string? userId, Team team) => string.IsNullOrEmpty(userId)
         ? Task.FromResult(false)
-        : _db.SectionSignups.AsNoTracking().AnyAsync(s => s.UserId == userId && s.TeamId == team.Id
-            && s.CompetitionSectionId == team.CompetitionSectionId
-            && (s.Status == SignupPaymentStatus.Pending || s.Status == SignupPaymentStatus.Paid)
-            && _db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.DeclarationAccessGranted)
-            && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && x.IsWithdrawn));
+        : TrustedEntries(userId).AnyAsync(s => s.CompetitionSectionId == team.CompetitionSectionId
+            && (s.TeamId == team.Id || _db.Set<SignupTeamLink>().Any(l => l.SignupId == s.Id && l.TeamId == team.Id)));
 
     private bool CanReadPrivate(DeclarationForm form, HashSet<int> helping, HashSet<int> mySignupTeamIds)
     {

@@ -6,9 +6,12 @@ import {
   CalendarPlus, ClipboardList, Share2, QrCode as QrCodeIcon,
 } from 'lucide-react';
 import { useCompetition } from './context';
+import { EntryManagement, type ExtendedSectionSignup } from './EntryManagement';
+import { useEntrySettings } from './entrySettings';
 import { competitionDateText } from '../../lib/competitionDates';
 import { entryPhaseOnly } from '../../lib/competitionPhase';
 import { competitionCalendarUrl, competitionLink } from '../../lib/sharing';
+import { NumberField } from '../../components/NumberField';
 import { QrCode } from '../../components/QrCode';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
@@ -267,13 +270,14 @@ export function EventShareRows({ competitionId, competitionName }: { competition
  * The per-section entry cards: Join, Sign in to enter, Full or Entries closed. Shown on the Details tab and as the
  * main content of the entry page. Anyone can see it; signing in is asked for only when they press the button.
  */
-export function EnterCompetition({ competition, allSignups = [], mayOrganise }: {
+export function EnterCompetition({ competition, allSignups = [], mayOrganise, onChanged }: {
   competition: CompetitionDetail;
   allSignups?: SectionSignup[];
   mayOrganise: boolean;
   onChanged?: () => void;
 }) {
   const { user } = useAuth();
+  const entrySettings = useEntrySettings(competition);
   if (competition.sections.length === 0) return null;
   return (
     <>
@@ -295,11 +299,12 @@ export function EnterCompetition({ competition, allSignups = [], mayOrganise }: 
             competitionId={competition.id}
             section={sec}
             allSignups={allSignups}
-            signupsLocked={!!competition.signupsLocked}
+            signupsLocked={entrySettings.closed && !mayOrganise}
             countsKnown={mayOrganise}
           />
         ))}
       </div>
+      {mayOrganise && <EntryManagement key={competition.id} competition={competition} signups={allSignups} entriesCloseAt={entrySettings.entriesCloseAt} onChanged={onChanged} />}
     </>
   );
 }
@@ -322,7 +327,7 @@ function SectionSignupCard({
   // Paid and pending entries both take a seat (the API counts them the same way). Only organisers load the
   // signup list, so everyone else reads the count the API sends with the section.
   const takenSeats = allSignups.length > 0
-    ? signups.filter((s) => (s.status === 0 || s.status === 1) && !(s as SectionSignup & { waitingForGuestSpot?: boolean }).waitingForGuestSpot).length
+    ? (signups as ExtendedSectionSignup[]).filter((s) => s.status < 2 && !s.waitingForGuestSpot && !s.isWaitlist && !s.isWithdrawn).reduce((sum, s) => sum + (s.teamsCount ?? 1), 0)
     : section.activeSignupsCount ?? 0;
   const known = countsKnown || section.activeSignupsCount != null;
   const max = section.maxParticipants;
@@ -350,7 +355,7 @@ function SectionSignupCard({
       {signupsLocked ? (
         <p className="rf-note !p-0 italic">Entries closed.</p>
       ) : full ? (
-        <span className="flex min-h-9 items-center justify-center rounded-lg bg-[rgb(var(--mg-subtle))] text-[13px] font-semibold text-[rgb(var(--mg-muted))]">Full</span>
+        <Link className="mg-btn mg-btn-secondary !min-h-11" to={`/competitions/${competitionId}/enter/${section.id}?waitlist=1`} state={{ from: location.pathname, isWaitlist: true }}>Join waiting list (Free)</Link>
       ) : !user ? (
         <Link to="/login" state={{ from: `/competitions/${competitionId}/enter` }} className="mg-btn mg-btn-primary w-full !min-h-11">Sign in to enter</Link>
       ) : (
@@ -459,6 +464,11 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
   const [teamCode, setTeamCode] = useState('');
   const [teamName, setTeamName] = useState('');
   const [wholeTeam, setWholeTeam] = useState(false);
+  const [teamsCount, setTeamsCount] = useState<number | ''>(1);
+  const isWaitlist = new URLSearchParams(location.search).get('waitlist') === '1' || !!(location.state as { isWaitlist?: boolean } | null)?.isWaitlist;
+  const [stablesCount, setStablesCount] = useState(0);
+  const [stablingClubOrTeam, setStablingClubOrTeam] = useState('');
+  const entrySettings = useEntrySettings(competition);
   const [lookingForPair, setLookingForPair] = useState(false);
   const [lookingForGuestRiders, setLookingForGuestRiders] = useState(false);
   const [waitingForGuestSpot, setWaitingForGuestSpot] = useState(section.format === 2 && !!(location.state as { waitingForGuestSpot?: boolean } | null)?.waitingForGuestSpot);
@@ -469,9 +479,10 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
 
   const canEnterWholeTeam = section.format === 2 && (hasRole('Manager') || hasRole('Trainer') || hasRole('Admin') || canOrganise(competition));
   const enteringWholeTeam = wholeTeam && canEnterWholeTeam;
-  const guestWaiting = section.format === 2 && !enteringWholeTeam && waitingForGuestSpot;
+  const guestWaiting = !isWaitlist && section.format === 2 && !enteringWholeTeam && waitingForGuestSpot;
   const pairSeeking = section.format === 1 && lookingForPair;
-  const effectivePriceMinor = guestWaiting ? 0 : pairSeeking ? Math.floor((section.priceMinor ?? 0) / 2) : section.priceMinor;
+  const effectiveTeamsCount = enteringWholeTeam && teamsCount !== '' ? teamsCount : 1;
+  const effectivePriceMinor = guestWaiting || isWaitlist ? 0 : pairSeeking ? Math.floor((section.priceMinor ?? 0) / 2) : (section.priceMinor ?? 0) * effectiveTeamsCount;
   const isDemo = !!competition.isDemo;
   const max = section.maxParticipants;
   const takenSeats = section.activeSignupsCount ?? 0;
@@ -495,11 +506,16 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
         emailOptInVersion: emailText && entryEmail.optIn ? EMAIL_OPT_IN_VERSION : null,
         requestId: requestId.current,
         teamCode: section.format === 3 || guestWaiting ? null : teamCode.trim() || null,
-        teamName: section.format === 3 || guestWaiting ? null : teamName.trim() || null,
+        teamName: section.format === 3 || guestWaiting ? null : teamName.trim() || (enteringWholeTeam && effectiveTeamsCount > 1 ? ponyClub.trim() : null) || null,
         lookingForPair: pairSeeking,
         lookingForGuestRiders: enteringWholeTeam && lookingForGuestRiders,
         waitingForGuestSpot: guestWaiting,
         wholeTeam: enteringWholeTeam,
+        teamsCount: effectiveTeamsCount,
+        isWaitlist,
+        stablesCount: guestWaiting || isWaitlist ? 0 : stablesCount,
+        stablingClubOrTeam: guestWaiting || isWaitlist ? null : stablingClubOrTeam.trim() || ponyClub.trim() || teamName.trim() || null,
+        paymentMethod: effectivePriceMinor > 0 ? (competition.isDemo ? 'card' : 'bacs') : null,
         useInitialOnly: privacy.useInitialOnly,
         noFilming: privacy.noFilming,
         acceptTerms: privacy.agreed,
@@ -509,7 +525,7 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
       setEntryEmail({ email: '', optIn: false });
       requestId.current = null;
       setPrivacy({ useInitialOnly: false, noFilming: false });
-      setDone((signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.')
+      setDone((isWaitlist ? 'You are on the waiting list. The organiser will contact you if a space opens up.' : signup.status === 1 ? 'Your entry is confirmed.' : 'Your entry is saved. Payment is still due.')
         + (signup.confirmationEmailStatus === 1 ? ' We have emailed you a confirmation.'
           : signup.confirmationEmailStatus === 2 ? " We couldn't send the confirmation email, but your entry is saved." : ''));
       reload();
@@ -549,14 +565,14 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
         </div>
       </div>
 
-      {competition.signupsLocked && !done ? (
+      {entrySettings.closed && !canOrganise(competition) && !done ? (
         <p role="status" className="mg-notice">Entries are closed for this competition.</p>
-      ) : full && !guestWaiting && !done ? (
+      ) : full && !guestWaiting && !isWaitlist && !done ? (
         <p role="status" className="mg-notice">This section is full.</p>
       ) : !user ? (
         <div className="mg-card flex flex-col gap-3 p-4 sm:p-5">
           <p className="m-0 text-sm text-[rgb(var(--mg-body))]">Sign in to enter this section.</p>
-          <Link to="/login" state={{ from: `/competitions/${competition.id}/enter/${section.id}` }} className="mg-btn mg-btn-primary w-full !min-h-11">
+          <Link to="/login" state={{ from: `/competitions/${competition.id}/enter/${section.id}${location.search}` }} className="mg-btn mg-btn-primary w-full !min-h-11">
             Sign in to enter
           </Link>
         </div>
@@ -569,7 +585,7 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
           <label className="rf-fld">Phone<input type="tel" autoComplete="tel" placeholder="Phone (optional)" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
           <EntryEmailFields value={entryEmail} onChange={setEntryEmail} />
           {section.format === 1 && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={lookingForPair} onChange={(e) => setLookingForPair(e.target.checked)} />Looking for a Pair (Pay 50%)</label>}
-          {section.format === 2 && !enteringWholeTeam && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={waitingForGuestSpot} onChange={(e) => setWaitingForGuestSpot(e.target.checked)} />Wait for a Guest Ride Spot (Free)</label>}
+          {section.format === 2 && !enteringWholeTeam && !isWaitlist && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={waitingForGuestSpot} onChange={(e) => setWaitingForGuestSpot(e.target.checked)} />Wait for a Guest Ride Spot (Free)</label>}
           {enteringWholeTeam && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={lookingForGuestRiders} onChange={(e) => setLookingForGuestRiders(e.target.checked)} />Looking for Guest Riders</label>}
           {canEnterWholeTeam && (
             <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
@@ -577,6 +593,7 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
               Enter a whole team
             </label>
           )}
+          {enteringWholeTeam && <label className="rf-fld">Number of teams<NumberField min={1} max={20} value={teamsCount} onChange={(e) => setTeamsCount(e.target.value === '' ? '' : Math.max(1, Math.min(20, Number(e.target.value) || 1)))} /></label>}
           {section.format !== 3 && !guestWaiting && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="rf-fld">{enteringWholeTeam ? 'Team name' : 'Team name (optional)'}
               <input placeholder={enteringWholeTeam ? 'e.g. Welsh Dragons' : 'Riders with the same team name are put together'} value={teamName} onChange={(e) => setTeamName(e.target.value)} />
@@ -591,12 +608,17 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
             </label>
           </div>}
           {section.format !== 3 && !guestWaiting && <p className="-mt-1 text-xs text-[rgb(var(--mg-muted))]">The team name carries through to your team’s dec form, so organisers can match the two up.</p>}
+          {!guestWaiting && !isWaitlist && <fieldset className="flex flex-col gap-2"><legend className="font-semibold">Stabling (optional)</legend>
+            <label className="rf-fld">Number of stables<NumberField min={0} max={100} value={stablesCount} onChange={(e) => setStablesCount(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} /></label>
+            {stablesCount > 0 && <label className="rf-fld">Stabling club or team<input value={stablingClubOrTeam} maxLength={200} onChange={(e) => setStablingClubOrTeam(e.target.value)} placeholder="Use your club or team name" /></label>}
+          </fieldset>}
+          {effectivePriceMinor > 0 && !isDemo && <div className="mg-notice"><strong>Pay by Bank Transfer (BACS)</strong><p>Transfer {priceLabel(effectivePriceMinor)} {competition.paymentDestination ? `to ${competition.paymentDestination}` : 'using the organiser’s payment details'}. Use your name or team name as the reference. The organiser confirms when payment arrives.</p></div>}
           <RiderPrivacyFields termsText={competition.termsText} value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
           <div className="flex gap-2">
             <button
               type="button"
               onClick={submit}
-              disabled={busy || !fullName.trim() || !privacy.agreed || (enteringWholeTeam && !teamName.trim())}
+              disabled={busy || !fullName.trim() || !privacy.agreed || (enteringWholeTeam && !teamName.trim() && (effectiveTeamsCount === 1 || !ponyClub.trim()))}
               className="mg-btn mg-btn-primary flex-1 !min-h-11"
             >
               <Check className="h-4 w-4" aria-hidden="true" /> {busy ? 'Joining…' : 'Confirm'}
