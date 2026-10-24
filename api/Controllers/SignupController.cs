@@ -9,6 +9,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Security;
 using MountedGames.Api.Services;
 using MountedGames.Api.Services.Email;
@@ -154,7 +155,8 @@ public class SignupController : ControllerBase
     {
         var settings = await _db.Set<CompetitionEntrySettings>().FindAsync(competitionId);
         if (settings is null) { settings = new() { CompetitionId = competitionId }; _db.Add(settings); }
-        settings.EntriesCloseAt = closeAt?.ToUniversalTime();
+        settings.EntriesCloseAt = closeAt is { Kind: DateTimeKind.Unspecified } value
+            ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : closeAt?.ToUniversalTime();
         await _db.SaveChangesAsync();
     }
 
@@ -831,7 +833,15 @@ public class SignupController : ControllerBase
                 && (s.TeamId == team.Id || _db.Set<SignupTeamLink>().Any(l => l.SignupId == s.Id && l.TeamId == team.Id)));
             if (shared) continue;
             if (team.DeclarationForms.Count == 0) _db.Teams.Remove(team);
-            else team.EntryStatus = TeamEntryStatus.Withdrawn;
+            else
+            {
+                team.EntryStatus = TeamEntryStatus.Withdrawn;
+                _db.Add(new TeamStatusEvent
+                {
+                    CompetitionId = compId, TeamId = team.Id, Status = TeamEntryStatus.Withdrawn,
+                    ActorUserId = userId, Reason = "Entry withdrawn by the entrant before the draw.",
+                });
+            }
         }
         await ReleasePendingPairAsync(mySignup.Id);
         var meta = await _db.Set<SignupMatchmaking>().FindAsync(mySignup.Id);

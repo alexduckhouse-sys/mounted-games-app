@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Controllers;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
@@ -47,6 +48,7 @@ public class EntryLifecycleTests : IClassFixture<ApiFactory>
             var teams = await db.Teams.Where(t => t.CompetitionSectionId == section.Id).ToListAsync();
             Assert.Equal(2, teams.Count);
             Assert.All(teams, t => Assert.Equal(TeamEntryStatus.Withdrawn, t.EntryStatus));
+            Assert.Equal(2, await db.Set<TeamStatusEvent>().CountAsync(x => x.CompetitionId == section.CompetitionId));
         });
         (await admin.PutAsJsonAsync($"/api/signups/{signup.Id}/status", new UpdateSignupStatusRequest(SignupPaymentStatus.Refunded))).EnsureSuccessStatusCode();
         var refunded = (await (await entrant.GetAsync("/api/me/signups")).ReadAsync<List<MySignupExtendedDto>>()).Single(s => s.Id == signup.Id);
