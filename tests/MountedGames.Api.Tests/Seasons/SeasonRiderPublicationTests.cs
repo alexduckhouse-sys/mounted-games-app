@@ -40,7 +40,7 @@ public class SeasonRiderPublicationTests(ApiFactory factory) : IClassFixture<Api
                 TeamId = team.Id, SubmittedByUserId = ownerId, IsLocked = locked,
                 Riders = roster.Skip(index * 2).Take(2).Select((rider, order) => new RiderEntry
                 {
-                    SavedRiderId = saved ? rider.Id : null, FullName = rider.FullName,
+                    SavedRiderId = saved ? rider.Id : null, FullName = rider.FullName, HorseName = "Fake Pony",
                     UseInitialOnly = initials, OrderIndex = order, MedicalNotes = "FAKE_PRIVATE_NOTE",
                 }).ToList(),
             }).ToArray();
@@ -148,7 +148,7 @@ public class SeasonRiderPublicationTests(ApiFactory factory) : IClassFixture<Api
             db.DeclarationForms.Add(new DeclarationForm
             {
                 TeamId = world.TeamIds[0], IsLocked = true, SubmittedAt = DateTime.UtcNow.AddDays(1),
-                Riders = entries.Take(2).Select(x => new RiderEntry { FullName = x.FullName, SavedRiderId = x.SavedRiderId }).ToList(),
+                Riders = entries.Take(2).Select(x => new RiderEntry { FullName = x.FullName, SavedRiderId = x.SavedRiderId, HorseName = x.HorseName }).ToList(),
             });
             await db.SaveChangesAsync();
         });
@@ -165,6 +165,14 @@ public class SeasonRiderPublicationTests(ApiFactory factory) : IClassFixture<Api
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.DoesNotContain("Surname", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
         }
+        var (member, _) = await factory.SignupAsync("Member");
+        var memberStatsResponse = await member.GetAsync($"/api/stats/team-profiles/{profileId}");
+        var memberStats = await memberStatsResponse.ReadAsync<StatsProfileDto>();
+        Assert.NotEmpty(memberStats.Partnerships!);
+        Assert.DoesNotContain("Surname", await memberStatsResponse.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        var ponyStatsResponse = await member.GetAsync("/api/stats/ponies?name=Fake%20Pony");
+        Assert.Equal(HttpStatusCode.OK, ponyStatsResponse.StatusCode);
+        Assert.DoesNotContain("Surname", await ponyStatsResponse.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
         var publicProfiles = await (await factory.CreateClient().GetAsync("/api/team-profiles")).ReadAsync<List<TeamProfileDto>>();
         Assert.DoesNotContain("Surname", publicProfiles.Single(x => x.Id == profileId).DisplayName);
         if (!changeSectionFormat)
@@ -174,6 +182,31 @@ public class SeasonRiderPublicationTests(ApiFactory factory) : IClassFixture<Api
         }
         Assert.Equal(storedName, await factory.WithDbAsync(db => db.Set<TeamProfile>().Where(x => x.Id == profileId).Select(x => x.DisplayName).SingleAsync()));
         Assert.Equal(1, await factory.WithDbAsync(db => db.Set<SeasonRoundPublication>().CountAsync(x => x.SeasonRoundId == world.RoundId)));
+    }
+
+    [Fact]
+    public async Task DeletedRiderSourcesAndChangedFormatsCannotUnmaskPublishedNames()
+    {
+        var world = await CreateWorldAsync(initials: false);
+        var preview = await PreviewAsync(world);
+        await PublishAsync(world, preview);
+        var profileId = preview.Results[0].TeamProfileId;
+        await factory.WithDbAsync(async db =>
+        {
+            db.RiderEntries.RemoveRange(await db.RiderEntries.Where(x => world.RiderIds.Contains(x.Id)).ToListAsync());
+            (await db.CompetitionSections.FindAsync(world.SectionId))!.Format = SectionFormat.Teams;
+            await db.SaveChangesAsync();
+        });
+        foreach (var url in new[] { $"{RoundUrl(world)}/publications/1", $"/api/seasons/{world.SeasonId}/standings", $"/api/team-profiles/{profileId}/history" })
+            Assert.DoesNotContain("Surname", await factory.CreateClient().GetStringAsync(url), StringComparison.OrdinalIgnoreCase);
+        // Profiles can outlive all their results; absence of lineage must stay private too.
+        await factory.WithDbAsync(async db =>
+        {
+            db.Set<SeasonRoundResult>().RemoveRange(await db.Set<SeasonRoundResult>().Where(x => x.TeamProfileId == profileId).ToListAsync());
+            await db.SaveChangesAsync();
+        });
+        Assert.DoesNotContain("Surname", await factory.CreateClient().GetStringAsync($"/api/team-profiles/{profileId}/history"), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Surname", await factory.CreateClient().GetStringAsync($"/api/share/team-profiles/{profileId}"), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -375,7 +375,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         if (ids.Count == 0) return [];
         var riders = await PublicRiders()
             .Where(r => ids.Contains(r.DeclarationForm!.TeamId) && r.HorseName != null)
-            .Select(r => new { r.FullName, r.UseInitialOnly, r.HorseName, r.DeclarationForm!.TeamId })
+            .Select(r => new { r.FullName, UseInitialOnly = r.UseInitialOnly || (r.SavedRider != null && r.SavedRider.UseInitialOnly), r.HorseName, r.DeclarationForm!.TeamId })
             .ToListAsync(ct);
         return Partnerships(riders
             .Where(r => PonyName(r.HorseName) is not null)
@@ -436,7 +436,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
     private static IQueryable<RiderRow> RiderRows(IQueryable<RiderEntry> q, int max) => q
         .OrderByDescending(r => r.DeclarationForm!.Team!.Competition!.StartDate).ThenByDescending(r => r.Id)
         .Take(max)
-        .Select(r => new RiderRow(r.FullName, r.UseInitialOnly, r.HorseName, r.IsReserve,
+        .Select(r => new RiderRow(r.FullName, r.UseInitialOnly || (r.SavedRider != null && r.SavedRider.UseInitialOnly), r.HorseName, r.IsReserve,
             r.DeclarationForm!.TeamId, r.DeclarationForm.Team!.CompetitionId, r.DeclarationForm.Team.Section!.Format));
 
     /// <summary>

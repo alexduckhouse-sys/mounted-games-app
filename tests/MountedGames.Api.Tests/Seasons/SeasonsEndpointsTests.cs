@@ -120,7 +120,7 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
     {
         var trainer = await _f.TrainerAsync();
         var clubId = await _f.SeedClubAsync("Explicit Identity Club");
-        var body = new CreateTeamProfileRequest(clubId, "A", "Explicit Identity Club A");
+        var body = new CreateTeamProfileRequest(clubId, "A", "Fake  Explicit Identity Club A");
 
         var first = await (await trainer.PostAsJsonAsync("/api/team-profiles", body)).ReadAsync<TeamProfileDto>();
         var secondResponse = await trainer.PostAsJsonAsync("/api/team-profiles", body);
@@ -129,7 +129,7 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
         Assert.NotEqual(first.Id, second.Id);
         var publicList = await (await _f.CreateClient().GetAsync("/api/team-profiles")).ReadAsync<List<TeamProfileDto>>();
-        Assert.Contains(publicList, x => x.Id == first.Id);
+        Assert.Contains(publicList, x => x.Id == first.Id && x.DisplayName == body.DisplayName);
         Assert.Contains(publicList, x => x.Id == second.Id);
 
         var updated = await (await trainer.PutAsJsonAsync($"/api/team-profiles/{first.Id}",
