@@ -133,6 +133,32 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
         Assert.Equal(expected, scenario.Push.Received);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Tick_RemindsUnscheduledSession_WhenHeatHasInheritedOrPinnedTime(bool pinned)
+    {
+        using var scenario = await ArrangeAsync();
+        await _f.InDbAsync(async db =>
+        {
+            if (!pinned) db.Sessions.Add(new Session { CompetitionId = scenario.Section.CompetitionId,
+                CompetitionSectionId = scenario.Section.Id, Name = "Previous block", Kind = SessionKind.Break,
+                Status = SessionStatus.Finished, ScheduledStart = DateTime.UtcNow.AddMinutes(28), DurationMinutes = 30, OrderIndex = 1 });
+            var session = new Session { CompetitionId = scenario.Section.CompetitionId, CompetitionSectionId = scenario.Section.Id,
+                Name = "Inherited time", Kind = SessionKind.Race, OrderIndex = 2, MinutesPerHeat = 30 };
+            var heat = new Heat { OrderIndex = 1, ScheduledStart = pinned ? DateTime.UtcNow.AddMinutes(58) : null };
+            heat.Entries.Add(new HeatEntry { TeamId = scenario.TeamId, LaneIndex = 1 });
+            heat.Races.Add(new Race { Name = "Example race", OrderIndex = 1 });
+            session.Heats.Add(heat);
+            db.Sessions.Add(session);
+            await db.SaveChangesAsync();
+        });
+        var scheduler = NewScheduler();
+        await scheduler.TickAsync(CancellationToken.None);
+        await scheduler.TickAsync(CancellationToken.None);
+        Assert.Equal(1, scenario.Push.Received);
+    }
+
     [Fact]
     public async Task Tick_SaysNothing_AboutARaceSessionThatOnlyHasAnEstimatedStart()
     {

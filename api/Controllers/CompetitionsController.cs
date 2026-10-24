@@ -97,11 +97,32 @@ public class CompetitionsController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<CompetitionPickerPage>> Picker(
         [FromQuery] bool past = false, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
-        CancellationToken ct = default)
+        CancellationToken ct = default, [FromQuery] int? year = null,
+        [FromQuery] string? location = null, [FromQuery] string? search = null)
+        => await PickerPage(past, page, pageSize, year, location, search, null, ct);
+
+    // Separate path deliberately excluded from both server and service-worker public-cache allowlists.
+    [HttpGet("picker/mine")]
+    [Authorize]
+    public async Task<ActionResult<CompetitionPickerPage>> MyPicker(
+        [FromQuery] bool past = true, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
+        CancellationToken ct = default, [FromQuery] int? year = null,
+        [FromQuery] string? location = null, [FromQuery] string? search = null)
+    {
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+        Response.Headers.CacheControl = "private, no-store";
+        return await PickerPage(past, page, pageSize, year, location, search, userId, ct);
+    }
+
+    private async Task<ActionResult<CompetitionPickerPage>> PickerPage(bool past, int page, int pageSize,
+        int? year, string? location, string? search, string? userId, CancellationToken ct)
     {
         if (page is < 1 or > 10000 || pageSize is < 1 or > 50)
             return Problem(statusCode: 400, title: "Invalid page", detail: "Use a page from 1 to 10000 and a page size from 1 to 50.");
-        return await CompetitionPickerQuery.LoadAsync(_db, past, page, pageSize, DateTime.UtcNow.Date, ct);
+        if (year is < 1 or > 9999 || location?.Length > 200 || search?.Length > 200)
+            return Problem(statusCode: 400, title: "Invalid filter", detail: "Use a valid year and at most 200 characters for a location or search.");
+        return await CompetitionPickerQuery.LoadAsync(_db, past, page, pageSize, DateTime.UtcNow.Date, ct, year, location, search, userId);
     }
 
     [HttpGet]

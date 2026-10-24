@@ -7,7 +7,9 @@ import { readSavedCopy, savedCopyKeys, writeSavedCopy } from '../offline/savedCo
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { CompetitionPicker } from './CompetitionPicker';
 import { CurrentCompetitionProvider, useCurrentCompetition } from './CurrentCompetitionContext';
-import { NeedsYouContext } from '../pages/profile/needsYou';
+import { canCachePublicApi } from '../offline/cachePolicy';
+const authState = vi.hoisted(() => ({ user: { id: 'example-member' } as { id: string } | null }));
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: authState.user }) }));
 
 vi.mock('../api', () => ({ api: { get: vi.fn() } }));
 const get = vi.mocked(api.get);
@@ -36,6 +38,7 @@ function renderPicker(props: Parameters<typeof CompetitionPicker>[0] = {}) {
 const loaded = (name: string | RegExp) => screen.findByText(name);
 
 beforeEach(() => {
+  authState.user = { id: 'example-member' };
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 9, 17, 12, 0));
   reply(page([today, autumn, festival]));
@@ -236,31 +239,56 @@ describe('CompetitionPicker: search and tags', () => {
     expect(onToday).not.toHaveTextContent('Demo event');
   });
 
-  it('filters past competitions by year, region and my club / competitions I rode in', async () => {
+  it('filters the full archive on the server, resetting pagination and showing complete facets', async () => {
     const older: CompetitionPickerItem = { id: 9, name: 'Summer Classic', startDate: '2025-07-10T09:00:00', endDate: null, icon: 'gb', location: 'York' };
-    reply(page([today, autumn, older]));
-    render(
-      <MemoryRouter initialEntries={['/competitions/past']}>
-        <NeedsYouContext.Provider value={{ requests: [], teams: [{ id: 10, competitionId: 9 }] as never, decForms: [], count: 0, review: async () => false }}>
-          <CurrentCompetitionProvider><CompetitionPicker past /></CurrentCompetitionProvider>
-        </NeedsYouContext.Provider>
-      </MemoryRouter>,
-    );
+    get.mockImplementation(async (url, config) => {
+      const params = config?.params as { year?: number; location?: string; page?: number; search?: string };
+      const items = url.endsWith('/mine') || params?.year === 2025 || params?.search === 'Summer' ? [older] : [autumn];
+      return { data: { items, hasMore: !params.year && !params.search && !url.endsWith('/mine'), years: [2026, 2025], locations: ['Hillside', 'York'] }, headers: {} };
+    });
+    renderPicker({ past: true });
     await loaded('Autumn Open');
-    await userEvent.selectOptions(screen.getByLabelText('Filter by year'), '2025');
-    expect(screen.getByText('Summer Classic')).toBeInTheDocument();
-    expect(screen.queryByText('Autumn Open')).not.toBeInTheDocument();
-
-    await userEvent.selectOptions(screen.getByLabelText('Filter by year'), 'all');
-    await userEvent.selectOptions(screen.getByLabelText('Filter by region'), 'Hillside');
-    expect(screen.getByText('Autumn Open')).toBeInTheDocument();
     expect(screen.queryByText('Summer Classic')).not.toBeInTheDocument();
-
-    await userEvent.selectOptions(screen.getByLabelText('Filter by region'), 'all');
-    await userEvent.click(screen.getByRole('button', { name: 'My club / competitions I rode in' }));
-    expect(screen.getByText('Summer Classic')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '2025' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Load more competitions' }));
+    await waitFor(() => expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 2 } })));
+    await userEvent.selectOptions(screen.getByLabelText('Filter by year'), '2025');
+    await loaded('Summer Classic');
+    expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1, year: 2025 } }));
     expect(screen.queryByText('Autumn Open')).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Filter by location'), 'York');
+    await waitFor(() => expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1, year: 2025, location: 'York' } })));
+    await userEvent.type(screen.getByRole('searchbox'), 'Summer');
+    await waitFor(() => expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1, year: 2025, location: 'York', search: 'Summer' } })));
   });
+
+  it('keeps Mine out of offline storage and clears it on sign-out', async () => {
+    const mine = { ...autumn, id: 88, name: 'Example member event' };
+    get.mockImplementation(async (url) => ({ data: page(url.endsWith('/mine') ? [mine] : [autumn]), headers: {} }));
+    const { rerender } = renderPicker({ past: true });
+    await loaded('Autumn Open');
+    await userEvent.click(screen.getByRole('button', { name: 'My club / competitions I rode in' }));
+    await loaded('Example member event');
+    expect(get).toHaveBeenLastCalledWith('/competitions/picker/mine', expect.objectContaining({ params: { past: true, page: 1 } }));
+    expect(readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(true))?.data.items).toEqual([autumn]);
+    expect(canCachePublicApi('/api/competitions/picker/mine')).toBe(false);
+    authState.user = null;
+    get.mockReturnValue(new Promise(() => {}));
+    rerender(<MemoryRouter><CurrentCompetitionProvider><CompetitionPicker past /></CurrentCompetitionProvider></MemoryRouter>);
+    expect(screen.queryByText('Example member event')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'My club / competitions I rode in' })).toBeDisabled();
+  });
+
+  it('does not show or save another filter’s page when a filtered request fails', async () => {
+    reply({ ...page([autumn]), years: [2026, 2025], locations: ['Hillside'] });
+    renderPicker({ past: true }); await loaded('Autumn Open');
+    get.mockRejectedValue(new Error('offline'));
+    await userEvent.selectOptions(screen.getByLabelText('Filter by year'), '2025');
+    await screen.findByRole('alert');
+    expect(screen.queryByText('Autumn Open')).not.toBeInTheDocument();
+    expect(readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(true))?.data.items).toEqual([autumn]);
+  });
+
 });
 
 describe('CompetitionPicker: more pages', () => {

@@ -78,9 +78,12 @@ public class NotificationScheduler : BackgroundService
         // Include earlier sessions in each relevant competition so delays cascade to later heats.
         var horizonStart = now.AddDays(-2);
         var horizonEnd = now.AddMinutes(90);
-        var competitionIds = db.Sessions.Where(s => s.Status != SessionStatus.Finished
-            && ((s.ScheduledStart >= horizonStart && s.ScheduledStart <= horizonEnd)
-                || s.Status == SessionStatus.InArena)).Select(s => s.CompetitionId);
+        var competitionIds = db.Sessions.Where(s =>
+            (s.ScheduledStart >= horizonStart && s.ScheduledStart <= horizonEnd)
+                || (s.StartedAt >= horizonStart && s.StartedAt <= horizonEnd)
+                || s.Status == SessionStatus.InArena
+                || s.Heats.Any(h => h.ScheduledStart >= horizonStart && h.ScheduledStart <= horizonEnd))
+            .Select(s => s.CompetitionId);
         var sessions = await db.Sessions
             .Include(s => s.Section)
             .Include(s => s.Heats).ThenInclude(h => h.Races)
@@ -91,8 +94,8 @@ public class NotificationScheduler : BackgroundService
 
         foreach (var s in sessions)
         {
-            if (!s.ScheduledStart.HasValue || s.Status == SessionStatus.Finished) continue;
-            var minsAhead = (s.ScheduledStart.Value - now).TotalMinutes;
+            if (s.Status == SessionStatus.Finished) continue;
+            var minsAhead = s.ScheduledStart.HasValue ? (double?)(s.ScheduledStart.Value - now).TotalMinutes : null;
             var kind = s.Kind;
 
             // 1 hour before a race session. A race session with no heats yet is only the provisional timetable's
@@ -103,10 +106,10 @@ public class NotificationScheduler : BackgroundService
                 {
                     await FireForSessionHeats(push, s, timings, now, ct);
                 }
-                else if (minsAhead is <= 60 and > 55)
+                else if (minsAhead is <= 60 and > 55 && s.ScheduledStart is { } scheduled)
                 {
                     await FireForSession(db, push, s, "1h", $"1 hour to {s.Name}",
-                        $"Starts at {UkTime(s.ScheduledStart.Value):HH:mm} — {s.Section?.DisplayName ?? "—"}.", ct);
+                        $"Starts at {UkTime(scheduled):HH:mm} — {s.Section?.DisplayName ?? "—"}.", ct);
                 }
             }
             // 30 minutes before a briefing.
@@ -124,7 +127,7 @@ public class NotificationScheduler : BackgroundService
         var messages = new List<(int TeamId, PushPayload Payload)>();
         foreach (var h in s.Heats.OrderBy(h => h.OrderIndex))
         {
-            if (h.StartedAt.HasValue || (h.Races.Count > 0 && h.Races.All(r => r.IsComplete))) continue;
+            if (h.StartedAt.HasValue || h.FinishedAt.HasValue || (h.Races.Count > 0 && h.Races.All(r => r.IsComplete))) continue;
             var start = timings.GetValueOrDefault(h.Id).Start;
             if (!start.HasValue || (start.Value - now).TotalMinutes is not (<= 60 and > 55)) continue;
             var timeText = $"{UkTime(start.Value):HH:mm}";

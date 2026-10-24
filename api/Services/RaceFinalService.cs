@@ -68,39 +68,37 @@ public sealed class RaceFinalService(AppDbContext db, PushNotifier? push = null)
             db.HeatEntries.Add(new HeatEntry { HeatId = finalHeat.Id, TeamId = teamId, LaneIndex = lane++ });
         await db.SaveChangesAsync(ct);
 
-        if (push is not null && interleaved.Count > 0)
-        {
-            try
-            {
-                var teamNames = await db.Teams.AsNoTracking()
-                    .Where(t => interleaved.Contains(t.Id))
-                    .ToDictionaryAsync(t => t.Id, t => t.DisplayName, ct);
-                var heatLabel = !string.IsNullOrWhiteSpace(finalHeat.Label) ? finalHeat.Label! : $"Heat {finalHeat.OrderIndex}";
-                var compId = finalHeat.Session?.CompetitionId ?? 0;
-                var url = compId > 0 ? $"/competitions/{compId}" : null;
-                var messages = interleaved.Select((teamId, idx) =>
-                {
-                    var name = teamNames.GetValueOrDefault(teamId, $"Team {teamId}");
-                    return (teamId, new PushPayload(
-                        Title: "Finals draw published",
-                        Body: $"You are in the {heatLabel}, Lane {idx + 1} ({name})",
-                        Tag: $"finals-draw:{finalHeat.Id}:{teamId}",
-                        Url: url));
-                });
-                await push.NotifyPerTeamAsync(messages, ct);
-            }
-            catch
-            {
-                // Never fail final population if push notification delivery fails.
-            }
-        }
+        if (push is not null && db.Database.CurrentTransaction is null)
+            await NotifyDrawAsync(finalHeat.Id, ct);
         return null;
+    }
+
+    /// <summary>Deliver only after the final entries and their triggering score have committed.</summary>
+    public async Task NotifyDrawAsync(int finalHeatId, CancellationToken ct = default)
+    {
+        if (push is null) return;
+        try
+        {
+            var final = await db.Heats.AsNoTracking().Include(h => h.Session)
+                .Include(h => h.Entries).ThenInclude(e => e.Team).SingleAsync(h => h.Id == finalHeatId, ct);
+            var heatLabel = !string.IsNullOrWhiteSpace(final.Label) ? final.Label : $"Heat {final.OrderIndex}";
+            var messages = final.Entries.Select(entry => (entry.TeamId, new PushPayload(
+                Title: "Finals draw published",
+                Body: $"You are in the {heatLabel}, Lane {entry.LaneIndex} ({entry.Team?.DisplayName ?? $"Team {entry.TeamId}"})",
+                Tag: $"finals-draw:{final.Id}:{entry.TeamId}",
+                Url: $"/competitions/{final.Session!.CompetitionId}")));
+            await push.NotifyPerTeamAsync(messages, ct);
+        }
+        catch
+        {
+            // Delivery failure must not turn a committed score or draw into a failed save.
+        }
     }
 
     /// <summary>
     /// After a qualifier race is scored: once both qualifiers of the round are complete, fill the round's
     /// final from them (using the session's qualifier count). Leaves a final that already has results
-    /// alone. Returns the session id when the final was filled, otherwise null.
+    /// alone. Returns the final heat id when the final was filled, otherwise null.
     /// </summary>
     public async Task<int?> TryAutoPopulateAsync(int raceId, CancellationToken ct = default)
     {
@@ -118,6 +116,6 @@ public sealed class RaceFinalService(AppDbContext db, PushNotifier? push = null)
         if (final.Races.Any(r => r.IsComplete)) return null;
 
         var error = await PopulateAsync(final, heat.Session?.QualifiersPerHeat ?? DefaultQualifiers, ct);
-        return error is null ? heat.SessionId : null;
+        return error is null ? final.Id : null;
     }
 }

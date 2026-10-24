@@ -153,6 +153,8 @@ export interface CompetitionPickerItem {
 }
 
 export interface CompetitionPickerPage {
+  years?: number[] | null;
+  locations?: string[] | null;
   items: CompetitionPickerItem[];
   hasMore: boolean;
 }
