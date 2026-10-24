@@ -51,7 +51,7 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
     private static List<ResultsBookStandingDto> Rank(IReadOnlyList<StandingRow> rows)
     {
         var result = new List<ResultsBookStandingDto>();
-        (int Tier, int Total)? previous = null;
+        (int Tier, double Total)? previous = null;
         var rank = 0;
         for (var i = 0; i < rows.Count; i++)
         {
@@ -91,7 +91,7 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
 
                 var rows = new List<ResultsBookFinalRowDto>();
                 var rank = 0;
-                int? previous = null;
+                double? previous = null;
                 for (var i = 0; i < table.Count; i++)
                 {
                     if (previous != table[i].Points) rank = i + 1;
@@ -111,7 +111,7 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
     {
         if (result is null) return string.Empty;
         if (result.IsSitOut) return "S";
-        return ResultStatuses.Letter(result.Eliminated, result.Status) ?? result.Points.ToString();
+        return ResultStatuses.Letter(result.Eliminated, result.Status) ?? PointValues.Format(result.Points);
     }
 
     private static IEnumerable<ResultsBookNoteDto> NotesOf(string sectionName, IEnumerable<Session> sessions)

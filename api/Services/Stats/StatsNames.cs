@@ -34,6 +34,6 @@ public static class StatsNames
             .ToList();
 
     /// <summary>A percentage to one decimal place, or null when there is nothing to divide by.</summary>
-    public static double? Percent(int part, int whole)
+    public static double? Percent(double part, double whole)
         => whole <= 0 ? null : Math.Round(100.0 * part / whole, 1, MidpointRounding.AwayFromZero);
 }

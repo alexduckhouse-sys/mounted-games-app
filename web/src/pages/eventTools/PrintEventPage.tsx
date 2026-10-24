@@ -9,6 +9,7 @@ import { PosterPage } from './PosterPage';
 import { TackCheckForms, type PrintableTackCheck } from './TackCheckPrint';
 import { statusLetter } from '../../lib/resultStatus';
 import './printEvent.css';
+import { formatPoints } from '../../lib/formatPoints';
 
 /** What each print view loads and is called. The book and entry list are not under /print because they have their own access rules. */
 const VIEWS = {
@@ -105,7 +106,7 @@ function scoreText(cell: { points: number | null; eliminated: boolean; isSitOut?
   if (!cell) return '';
   if (cell.isSitOut) return 'S';
   if (cell.eliminated) return statusLetter(true, cell.status) ?? 'E';
-  return cell.points === null || cell.points === undefined ? '' : String(cell.points);
+  return cell.points === null || cell.points === undefined ? '' : formatPoints(cell.points);
 }
 
 function ScoreSheets({ data }: { data: PrintableScoreSheets }) {
@@ -124,7 +125,7 @@ function ScoreSheets({ data }: { data: PrintableScoreSheets }) {
           return <tr key={team.teamId}>
             <td>{team.lane || ''}</td><td>{team.teamName}</td><td>{team.bib ?? ''}</td>
             {cells.map((cell, index) => <td key={heat.races[index].raceId}>{scoreText(cell)}</td>)}
-            <td>{scored.length > 0 ? scored.reduce((sum, cell) => sum + (cell!.points ?? 0), 0) : ''}</td>
+            <td>{scored.length > 0 ? formatPoints(scored.reduce((sum, cell) => sum + (cell!.points ?? 0), 0)) : ''}</td>
           </tr>;
         })}</tbody>
       </table></div>}

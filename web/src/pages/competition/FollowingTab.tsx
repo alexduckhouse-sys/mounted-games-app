@@ -12,6 +12,7 @@ import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { sessionOrdinals } from '../../lib/timetableRows';
 import { useCompetition } from './context';
 import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, shouldNoticeSavedCopy } from '../../offline/savedCopies';
+import { formatPoints } from '../../lib/formatPoints';
 
 const dayText = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
@@ -160,7 +161,7 @@ export function FollowingTab() {
               <strong className="mg-line-title">{score.team.displayName}{score.team.isHorsConcours ? ' (HC)' : ''}</strong>
               <span className="mg-line-sub">{where(row)} · {row.status === 'finished' ? 'finished' : 'in progress'}</span>
             </span>
-            <span className="flex flex-col items-end gap-0.5"><span className="mg-line-time">{score.points} pts</span><span className="text-[11px] text-[rgb(var(--mg-muted))]">{score.racesRun} {score.racesRun === 1 ? 'race' : 'races'}</span></span>
+            <span className="flex flex-col items-end gap-0.5"><span className="mg-line-time">{formatPoints(score.points)} pts</span><span className="text-[11px] text-[rgb(var(--mg-muted))]">{score.racesRun} {score.racesRun === 1 ? 'race' : 'races'}</span></span>
           </Link>))}</div>}
         <p className="mg-meta px-1">These are heat totals. Final standings and any corrections appear in the toplists.</p>
       </section>

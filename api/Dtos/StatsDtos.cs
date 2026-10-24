@@ -46,12 +46,12 @@ public record StatsSummaryDto(
     int Firsts, int Seconds, int Thirds, double? AveragePlace,
     int EntriesWithFinals, int FinalsReached, int AFinals, double? AFinalPercent,
     int Races, int Wins, double? WinPercent,
-    int Points, int MaxPoints, double? PointQuotaPercent);
+    double Points, double MaxPoints, double? PointQuotaPercent);
 
 /// <summary>One game (race name) across every counted race. <c>NonFinishes</c> covers E, DNS, DNF and R.</summary>
 public record StatsGameDto(
     string Name, int Races, int Wins, double? WinPercent, int NonFinishes,
-    int Points, int MaxPoints, double? PointQuotaPercent);
+    double Points, double MaxPoints, double? PointQuotaPercent);
 
 /// <param name="Place">Place in the age group's final standings; null for hors concours.</param>
 /// <param name="FinalTier">0 for the A Final, 1 for the B Final and so on; null when not in a lettered final.</param>
@@ -61,11 +61,11 @@ public record StatsEntryDto(
     int TeamId, string TeamName, string ClubName, bool IsHorsConcours,
     string? RiderName, string? PonyName,
     int? Place, int TeamsPlaced, int? FinalTier,
-    int Races, int Points, int MaxPoints, double? PointQuotaPercent,
+    int Races, double Points, double MaxPoints, double? PointQuotaPercent,
     IReadOnlyList<StatsSessionDto> Sessions);
 
 /// <param name="Rank">Place on session points among the session's teams (hors concours left out); null for hors concours.</param>
-public record StatsSessionDto(int SessionId, string Name, int Points, int MaxPoints, int? Rank, int Teams);
+public record StatsSessionDto(int SessionId, string Name, double Points, double MaxPoints, int? Rank, int Teams);
 
 /// <summary>A rider and pony who were declared together, and how often.</summary>
 public record StatsPartnershipDto(string RiderName, string PonyName, int Entries, int Competitions);

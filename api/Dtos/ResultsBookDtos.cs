@@ -19,14 +19,14 @@ public record ResultsBookSectionDto(
 /// <summary>One row of the final standings. <c>BonusPoints</c> (tack check bonus) is already inside <c>TotalPoints</c>.</summary>
 public record ResultsBookStandingDto(
     int Rank, int TeamId, string TeamName, string ClubName, string? FinalLabel,
-    int TotalPoints, int BonusPoints, int RacesRun, int Wins, int Eliminations, bool Withdrawn);
+    double TotalPoints, int BonusPoints, int RacesRun, int Wins, int Eliminations, bool Withdrawn);
 
 /// <summary>One final (A Final, B Final, or a race final): each team's points in every race of it. A cell is the points, or E, DNS, DNF, R or S.</summary>
 public record ResultsBookFinalDto(
     string Label, string SessionName, IReadOnlyList<string> RaceNames, IReadOnlyList<ResultsBookFinalRowDto> Rows);
 
 public record ResultsBookFinalRowDto(
-    int Rank, int TeamId, string TeamName, string ClubName, int Points, IReadOnlyList<string> RaceCells);
+    int Rank, int TeamId, string TeamName, string ClubName, double Points, IReadOnlyList<string> RaceCells);
 
 public record ResultsBookNoteDto(
     string SectionName, string HeatLabel, string RaceName, string TeamName, string? StatusLetter, string Note);

@@ -66,7 +66,7 @@ public class SeasonRoundResult
     public string TeamName { get; set; } = string.Empty;
     public string ClubName { get; set; } = string.Empty;
     public int EventRank { get; set; }
-    public int EventPoints { get; set; }
+    public double EventPoints { get; set; }
     public int SeasonPoints { get; set; }
 
     public SeasonRoundPublication? SeasonRoundPublication { get; set; }

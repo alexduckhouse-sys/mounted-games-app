@@ -4,6 +4,7 @@ import type { LiveStream, StreamOverlay } from '../../types';
 import { bannerShowsIn, type OverlayLook, type OverlayPlace } from '../../lib/overlays';
 import type { QueuedScoreCard } from '../../lib/scoreCard';
 import { statusLetter } from '../../lib/resultStatus';
+import { formatPoints } from '../../lib/formatPoints';
 
 const CORNERS: Partial<Record<OverlayPlace, string>> = {
   'top-left': 'left-3 top-3', 'top-right': 'right-3 top-3', 'bottom-left': 'left-3 bottom-14', 'bottom-right': 'right-3 bottom-14',
@@ -100,7 +101,7 @@ export function ScoreCardOverlay({ stream, overlay, look, cards }: { stream: Liv
             {row.change === 'up' && <ArrowUp className="mg-ov-card-up" aria-label="moved up" />}
             {row.change === 'down' && <ArrowDown className="mg-ov-card-down" aria-label="moved down" />}
             <span className={`mg-ov-card-added ${row.eliminated ? 'is-out' : ''}`}>{row.eliminated ? statusLetter(true, row.status) : row.sitOut ? 'S' : `+${row.added}`}</span>
-            <span className="mg-ov-card-total">{row.total}</span>
+            <span className="mg-ov-card-total">{formatPoints(row.total)}</span>
           </li>
         ))}
       </ol>

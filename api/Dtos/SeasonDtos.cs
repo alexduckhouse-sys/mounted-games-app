@@ -21,7 +21,7 @@ public record TeamProfileHistoryResultDto(
     Guid SeasonId, string SeasonTitle, int SeasonYear,
     Guid RoundId, int RoundOrder, string CompetitionName, DateTime CompetitionDate,
     int PublicationVersion, DateTime PublishedAt,
-    int EventRank, int EventPoints, int SeasonPoints);
+    int EventRank, double EventPoints, int SeasonPoints);
 
 public record TeamProfileHistoryDto(
     TeamProfileDto Profile,
@@ -53,7 +53,7 @@ public record SeasonDto(
 
 public record SeasonPublicationPreviewRow(
     Guid TeamProfileId, int EventTeamId, string TeamName, string ClubName,
-    int EventRank, int EventPoints, int SeasonPoints);
+    int EventRank, double EventPoints, int SeasonPoints);
 
 public record SeasonPublicationPreviewDto(
     Guid SeasonId, Guid RoundId, int CompetitionId, int CompetitionSectionId,

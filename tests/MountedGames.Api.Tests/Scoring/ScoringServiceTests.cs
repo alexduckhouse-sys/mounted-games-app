@@ -66,7 +66,7 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
             new[] { new FinishingPlace(a.TeamIds[1], 1, false), new FinishingPlace(a.TeamIds[0], 2, false), new FinishingPlace(a.TeamIds[2], 9, true) },
             "user-1");
 
-        Assert.Equal(new[] { 3, 2, 0 }, fresh.Select(r => r.Points));
+        Assert.Equal(new[] { 3.0, 2.0, 0.0 }, fresh.Select(r => r.Points));
         Assert.All(fresh, r => Assert.Equal("user-1", r.RecordedByUserId));
         Assert.Null(fresh[2].Placing);
         Assert.True(fresh[2].Eliminated);
@@ -130,7 +130,7 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
                 new FinishingPlace(a.TeamIds[2], 2, true),
             }, null);
 
-        Assert.Equal(new[] { 1, 1, 0 }, fresh.Select(r => r.Points));
+        Assert.Equal(new[] { 1.0, 1.0, 0.0 }, fresh.Select(r => r.Points));
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
             new[] { new FinishingPlace(a.TeamIds[0], 1, false), new FinishingPlace(a.TeamIds[1], 2, false) }, null);
 
         // A final is scored on its own field of four: 5 for the win, down to 2 for last (one more than a qualifier's 1).
-        Assert.Equal(new[] { 5, 4 }, fresh.Select(r => r.Points));
+        Assert.Equal(new[] { 5.0, 4.0 }, fresh.Select(r => r.Points));
     }
 
     [Fact]

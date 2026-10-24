@@ -5,6 +5,7 @@ import { ordinal } from '../../lib/toplist';
 import type { Heat, HeatEntry, Race, TieBreakRule } from '../../types';
 import { displayLaneFor, type LaneRules } from './laneRules';
 import './scoring.css';
+import { formatPoints } from '../../lib/formatPoints';
 
 /**
  * A clean one-page copy of the heat for printing: lanes in each race, teams with their bib and hatband colours,
@@ -23,7 +24,7 @@ export function HeatPrintSheet({ heat, races, rules, hcTeamIds, tieRule, hatband
   const teams = inLaneOrder(heat, 0, rules);
   const cell = (race: Race, i: number, e: HeatEntry) => {
     const r = race.isComplete ? race.results.find((x) => x.teamId === e.teamId && !x.isSitOut) : undefined;
-    const result = !r ? '' : r.eliminated ? statusLetter(true, r.status) ?? 'E' : `${ordinal(r.placing ?? 0)} (${r.points})`;
+    const result = !r ? '' : r.eliminated ? statusLetter(true, r.status) ?? 'E' : `${ordinal(r.placing ?? 0)} (${formatPoints(r.points)})`;
     return `Lane ${displayLaneFor(heat, e, i, rules)}${result ? `: ${result}` : ''}`;
   };
   return (
@@ -48,7 +49,7 @@ export function HeatPrintSheet({ heat, races, rules, hcTeamIds, tieRule, hatband
                   const hat = hatbandFor(hatbands, displayLaneFor(heat, e, i, rules));
                   return <td key={r.id}>{cell(r, i, e)}{hat ? ` · ${hat} hatband` : ''}</td>;
                 })}
-                <td>{t?.points ?? 0}</td>
+                <td>{formatPoints(t?.points ?? 0)}</td>
                 <td>{t?.hc ? 'HC' : t?.position ?? ''}</td>
               </tr>
             );

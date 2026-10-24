@@ -528,8 +528,8 @@ public class CompetitionsController : ControllerBase
         };
     }
 
-    private sealed record BoundaryTeam(int Id, string Name, int Total, int Wins, int Position, bool GoesThrough);
-    private sealed record BoundaryTie(int Cutoff, int TotalAtCutoff, int WinsAtCutoff, IReadOnlyList<BoundaryTeam> Teams,
+    private sealed record BoundaryTeam(int Id, string Name, double Total, int Wins, int Position, bool GoesThrough);
+    private sealed record BoundaryTie(int Cutoff, double TotalAtCutoff, int WinsAtCutoff, IReadOnlyList<BoundaryTeam> Teams,
         TieBreakRule Rule, TieSettlement SettledBy, bool Settled);
 
     /// <summary>Active, non-HC teams in finals order: points, then the age group's tie-break or the organiser's order.</summary>
@@ -586,7 +586,7 @@ public class CompetitionsController : ControllerBase
             .Select(t => t.Id)
             .ToList();
         if (!levelIds.ToHashSet().SetEquals(teamIds))
-            return Conflict(new { message = $"Order every team on {total} points in this age group together.", teamIds = levelIds });
+            return Conflict(new { message = $"Order every team on {PointValues.Format(total)} points in this age group together.", teamIds = levelIds });
 
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         _db.FinalsTieOrders.RemoveRange(await _db.FinalsTieOrders.Where(o => teamIds.Contains(o.TeamId)).ToListAsync());

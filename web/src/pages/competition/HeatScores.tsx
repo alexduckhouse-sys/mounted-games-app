@@ -10,6 +10,7 @@ import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import './heat.css';
+import { formatPoints } from '../../lib/formatPoints';
 
 interface Cell { points: number; eliminated: boolean; sitOut: boolean; status?: number }
 
@@ -133,10 +134,10 @@ export function HeatScores({ session, heats, activeHeatId }: { session: Session;
                           {cell == null ? <><span aria-hidden="true" className="heat-dash">–</span><span className="sr-only">Not raced yet</span></>
                             : cell.sitOut ? <><span aria-hidden="true" className="heat-dash">S</span><span className="sr-only">Sat out this race</span></>
                             : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">{statusLetter(true, cell.status)}</span><span className="sr-only">{statusLabel(true, cell.status)}</span></>
-                            : cell.points}
+                            : formatPoints(cell.points)}
                         </td>;
                       })}
-                      <td className="heat-total">{team.total}</td>
+                      <td className="heat-total">{formatPoints(team.total)}</td>
                     </tr>
                   ))}
                 </tbody>

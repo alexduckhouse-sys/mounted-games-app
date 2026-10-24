@@ -14,6 +14,7 @@ import type { Heat, HeatEntry, Race } from '../../types';
 import { displayLaneFor, type LaneRules } from './laneRules';
 import './heat.css';
 import './scoring.css';
+import { formatPoints } from '../../lib/formatPoints';
 
 /** One team in the race being scored. A tap places it, a swipe down eliminates it; the Out and HC buttons are for everyone who can't swipe. */
 export function ScoreRow({
@@ -195,7 +196,7 @@ export function SummaryCard({ summary, raceNumber }: { summary: RaceSummary; rac
       <p className="sc-sub">{summary.raceName}</p>
       <h4>Placings</h4>
       <ol>
-        {summary.placings.map((p) => <li key={p.teamId}>{ordinal(p.place)} {p.teamName}{p.hc ? ' (HC)' : ''}, {p.points} {p.points === 1 ? 'point' : 'points'}</li>)}
+        {summary.placings.map((p) => <li key={p.teamId}>{ordinal(p.place)} {p.teamName}{p.hc ? ' (HC)' : ''}, {formatPoints(p.points)} {p.points === 1 ? 'point' : 'points'}</li>)}
       </ol>
       {summary.out.length > 0 && <>
         <h4>Out</h4>
@@ -203,7 +204,7 @@ export function SummaryCard({ summary, raceNumber }: { summary: RaceSummary; rac
       </>}
       <h4>Heat totals so far</h4>
       <ol>
-        {summary.totals.map((t) => <li key={t.teamId}>{t.hc ? `${t.teamName}: HC, ${t.points} points` : `${ordinal(t.position ?? 0)} ${t.teamName}: ${t.points} ${t.points === 1 ? 'point' : 'points'}${t.why ? ` (tie-break: ${t.why})` : ''}`}</li>)}
+        {summary.totals.map((t) => <li key={t.teamId}>{t.hc ? `${t.teamName}: HC, ${formatPoints(t.points)} points` : `${ordinal(t.position ?? 0)} ${t.teamName}: ${formatPoints(t.points)} ${t.points === 1 ? 'point' : 'points'}${t.why ? ` (tie-break: ${t.why})` : ''}`}</li>)}
       </ol>
       {summary.ending && <>
         <h4>{summary.ending.heading}</h4>
@@ -256,7 +257,7 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
     if (!r) return <span className="heat-dash">–</span>;
     if (r.isSitOut) return <span className="heat-dash">S</span>;
     if (r.eliminated) return <span className="heat-elim">{statusLetter(true, r.status)}</span>;
-    return <>{r.points}</>;
+    return <>{formatPoints(r.points)}</>;
   }
 
   return (
