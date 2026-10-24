@@ -54,10 +54,24 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
 
     [HttpGet("{id:guid}/standings")]
     [AllowAnonymous]
-    public async Task<ActionResult<SeasonStandingsDto>> Standings(Guid id, [FromQuery] string? ageGroup = null, CancellationToken ct = default)
+    public async Task<ActionResult<SeasonStandingsDto>> Standings(Guid id, [FromQuery] string? ageGroup = null, [FromQuery] SectionFormat? format = null, CancellationToken ct = default)
     {
-        var standings = await SeasonStandingsCalculator.CalculateAsync(db, id, ct, ageGroup);
+        if (format.HasValue && !Enum.IsDefined(format.Value)) return BadRequest();
+        var standings = await SeasonStandingsCalculator.CalculateAsync(db, id, ct, ageGroup, format);
         return standings is null ? NotFound() : standings;
+    }
+
+    [HttpGet("available-competitions")]
+    [Authorize(Roles = SeasonOrganiserRoles)]
+    public async Task<ActionResult<IReadOnlyList<SeasonCompetitionOptionDto>>> AvailableCompetitions(CancellationToken ct)
+    {
+        var ownerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(ownerId)) return Unauthorized();
+        var isAdmin = User.IsInRole(Roles.Admin);
+        return await db.Competitions.AsNoTracking()
+            .Where(x => isAdmin || x.CreatedByUserId == ownerId)
+            .OrderByDescending(x => x.StartDate).ThenBy(x => x.Id)
+            .Select(x => new SeasonCompetitionOptionDto(x.Id, x.Name, x.StartDate)).ToListAsync(ct);
     }
 
     [HttpPost]
@@ -81,37 +95,34 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
             PlacePoints = request.PlacePoints.OrderBy(x => x.Place)
                 .Select(x => new SeasonPlacePoints { Place = x.Place, Points = x.Points }).ToList(),
         };
-        db.Set<Season>().Add(season);
-        await db.SaveChangesAsync(ct);
-
-        var compIds = request.CompetitionIds?.Where(x => x > 0).Distinct().ToArray() ?? [];
-        var secIds = request.CompetitionSectionIds?.Where(x => x > 0).Distinct().ToArray() ?? [];
+        var compIds = request.CompetitionIds?.Distinct().ToArray() ?? [];
+        var secIds = request.CompetitionSectionIds?.Distinct().ToArray() ?? [];
+        if (request.CompetitionIds?.Count > 1000 || request.CompetitionSectionIds?.Count > 1000 || compIds.Any(x => x <= 0) || secIds.Any(x => x <= 0))
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Choose up to 1000 competitions or sections with valid IDs" });
         if (compIds.Length > 0 || secIds.Length > 0)
         {
-            var candidateSections = await db.CompetitionSections
+            var competitions = await db.Competitions.AsNoTracking().Where(x => compIds.Contains(x.Id)).ToListAsync(ct);
+            if (competitions.Count != compIds.Length || competitions.Any(x => !CanManageCompetition(x.CreatedByUserId)))
+                return NotFound();
+            var candidateSections = await db.CompetitionSections.AsNoTracking()
                 .Include(x => x.Competition)
                 .Where(x => compIds.Contains(x.CompetitionId) || secIds.Contains(x.Id))
                 .ToListAsync(ct);
-            var orderedSections = candidateSections
-                .Where(x => x.Competition is not null && CanManageCompetition(x.Competition.CreatedByUserId))
-                .OrderBy(x => x.Competition!.StartDate)
-                .ThenBy(x => x.CompetitionId)
-                .ThenBy(x => x.Id)
-                .ToList();
-            var nextOrder = 1;
-            foreach (var sec in orderedSections)
-            {
-                db.Set<SeasonRound>().Add(new SeasonRound
+            if (secIds.Any(id => candidateSections.All(x => x.Id != id))
+                || candidateSections.Any(x => x.Competition is null || !CanManageCompetition(x.Competition.CreatedByUserId)))
+                return NotFound();
+            if (candidateSections.Count > 1000)
+                return BadRequest(new ProblemDetails { Status = 400, Title = "Choose up to 1000 rounds" });
+            season.Rounds = candidateSections.OrderBy(x => x.Competition!.StartDate).ThenBy(x => x.CompetitionId).ThenBy(x => x.Id)
+                .Select((section, index) => new SeasonRound
                 {
-                    SeasonId = season.Id,
-                    CompetitionId = sec.CompetitionId,
-                    CompetitionSectionId = sec.Id,
-                    OrderIndex = nextOrder++,
-                });
-            }
-            if (orderedSections.Count > 0)
-                await db.SaveChangesAsync(ct);
+                    SeasonId = season.Id, CompetitionId = section.CompetitionId,
+                    CompetitionSectionId = section.Id, OrderIndex = index + 1,
+                }).ToList();
         }
+        // Season and selected rounds are one atomic save, after every requested link has been authorised.
+        db.Set<Season>().Add(season);
+        await db.SaveChangesAsync(ct);
 
         var loaded = await LoadSeasonAsync(season.Id, ct) ?? season;
         return CreatedAtAction(nameof(Get), new { id = season.Id }, await ToDtoAsync(loaded, ct));
@@ -155,7 +166,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
             return Conflict(new ProblemDetails { Status = 409, Title = "Round already linked" });
 
         var multiplier = request.PointsMultiplier ?? 1.0;
-        if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier is <= 0 or > 10)
+        if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier is < 0.1 or > 10)
             return BadRequest(new ProblemDetails { Status = 400, Title = "Points multiplier must be between 0.1 and 10" });
 
         var orderIndex = request.OrderIndex ?? season.Rounds.Select(x => x.OrderIndex).DefaultIfEmpty(0).Max() + 1;
@@ -192,10 +203,9 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
 
         if (request.PointsMultiplier is { } multiplier)
         {
-            if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier is <= 0 or > 10)
+            if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier is < 0.1 or > 10)
                 return BadRequest(new ProblemDetails { Status = 400, Title = "Points multiplier must be between 0.1 and 10" });
             round.PointsMultiplier = multiplier;
-
         }
         round.IsIncluded = request.IsIncluded;
         round.Season.UpdatedAt = DateTime.UtcNow;
@@ -209,7 +219,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
         Guid id, Guid roundId, SetSeasonRoundMultiplierRequest request, CancellationToken ct)
     {
         var multiplier = request.PointsMultiplier;
-        if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier is <= 0 or > 10)
+        if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier is < 0.1 or > 10)
             return BadRequest(new ProblemDetails { Status = 400, Title = "Points multiplier must be between 0.1 and 10" });
         var round = await db.Set<SeasonRound>()
             .Include(x => x.Season)
@@ -262,7 +272,10 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
         var publication = await db.Set<SeasonRoundPublication>()
             .AsNoTracking().Include(x => x.Results)
             .SingleOrDefaultAsync(x => x.SeasonRoundId == roundId && x.SeasonRound!.SeasonId == id && x.Version == version, ct);
-        return publication is null ? NotFound() : SeasonPublicationService.ToDto(publication);
+        if (publication is null) return NotFound();
+        var initialOnly = await SeasonRiderPrivacy.InitialOnlyProfilesAsync(db, publication.Results.Select(x => x.TeamProfileId), ct);
+        var dto = SeasonPublicationService.ToDto(publication);
+        return dto with { Results = dto.Results.Select(row => row with { TeamName = SeasonRiderPrivacy.Display(row.TeamProfileId, row.TeamName, initialOnly) }).ToArray() };
     }
 
     private async Task<SeasonRound?> AuthorisedRoundAsync(Guid seasonId, Guid roundId, CancellationToken ct)
@@ -363,7 +376,8 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
         var profiles = await db.Set<TeamProfile>().AsNoTracking().Include(x => x.Club)
             .OrderBy(x => x.DisplayName).ThenBy(x => x.Id)
             .ToListAsync(ct);
-        return profiles.Select(ToDto).ToArray();
+        var initialOnly = await SeasonRiderPrivacy.InitialOnlyProfilesAsync(db, profiles.Select(x => x.Id), ct);
+        return profiles.Select(x => ToDto(x) with { DisplayName = SeasonRiderPrivacy.Display(x.Id, x.DisplayName, initialOnly) }).ToArray();
     }
 
     [HttpGet("{id:guid}/history")]
@@ -400,8 +414,9 @@ public sealed class TeamProfilesController(AppDbContext db) : ControllerBase
                 x.SeasonRoundPublication.PublishedAt,
                 x.EventRank, x.EventPoints, x.SeasonPoints))
             .ToArray();
+        var initialOnly = await SeasonRiderPrivacy.InitialOnlyProfilesAsync(db, [id], ct);
         return new TeamProfileHistoryDto(
-            ToDto(profile),
+            ToDto(profile) with { DisplayName = SeasonRiderPrivacy.Display(id, profile.DisplayName, initialOnly) },
             profile.EventTeams.OrderByDescending(x => x.Competition!.StartDate)
                 .Select(x => new EventTeamProfileLinkDto(x.Id, x.TeamProfileId, x.CompetitionId,
                     x.Competition!.Name, x.TeamId, x.Team!.DisplayName, x.LinkedAt)).ToArray(),

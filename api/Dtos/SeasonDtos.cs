@@ -2,6 +2,8 @@ using MountedGames.Api.Entities;
 
 namespace MountedGames.Api.Dtos;
 
+public record SeasonCompetitionOptionDto(int Id, string Name, DateTime StartDate);
+
 public record SeasonPointsRule(int Place, int Points);
 
 /// <summary>The suffix may be empty. A club can be given by <c>ClubName</c> (matched ignoring case, or created) instead of <c>ClubId</c>.</summary>

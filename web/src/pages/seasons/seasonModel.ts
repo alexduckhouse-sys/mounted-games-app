@@ -1,3 +1,4 @@
+import type { SectionFormat } from '../../types';
 import type { StatusTone } from '../refine/Refine';
 import type { SeasonRoundView, SeasonView, StandingView } from './seasonViewTypes';
 
@@ -27,12 +28,14 @@ export function seasonDivisions(rounds: SeasonRoundView[], fallbackAgeGroup = ''
   return [...seen];
 }
 
-export function filterStandingsByDivision(season: SeasonView, standings: StandingView[], division: string): StandingView[] {
-  if (!division || division === 'all') return standings;
+export function filterStandingsByDivision(season: SeasonView, standings: StandingView[], division: string, format?: SectionFormat): StandingView[] {
+  const allAges = !division || division === 'all';
+  if (allAges && (format == null || season.rounds.filter((round) => round.isIncluded).every((round) => (round.format ?? season.format) === format))) return standings;
   const target = division.trim().toLowerCase();
   const roundOrder = new Map<string, number>();
   for (const round of season.rounds) {
-    if (round.isIncluded && roundDivision(round, season.ageGroup).toLowerCase() === target) {
+    if (round.isIncluded && (allAges || roundDivision(round, season.ageGroup).toLowerCase() === target)
+      && (format == null || (round.format ?? season.format) === format)) {
       roundOrder.set(round.id, round.orderIndex);
     }
   }

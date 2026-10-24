@@ -471,6 +471,74 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task BulkCreationRejectsUnknownOrForeignLinksWithoutSavingASeason()
+    {
+        var trainer = await _f.TrainerAsync();
+        var ownerId = await _f.TrainerIdAsync();
+        var owned = await _f.SeedCompetitionAsync(ownerUserId: ownerId);
+        var ownSection = await _f.SeedSectionAsync(owned, "Fake owned section");
+        var (_, otherAuth) = await _f.ApprovedTrainerAsync();
+        var foreign = await _f.SeedCompetitionAsync(ownerUserId: otherAuth.User.Id);
+        var foreignSection = await _f.SeedSectionAsync(foreign, "Fake other section");
+        var before = await _f.WithDbAsync(db => db.Set<Season>().CountAsync());
+        var rejected = new[]
+        {
+            SeasonBody() with { CompetitionIds = [owned, foreign] },
+            SeasonBody() with { CompetitionIds = [owned, int.MaxValue] },
+            SeasonBody() with { CompetitionSectionIds = [ownSection, foreignSection] },
+            SeasonBody() with { CompetitionSectionIds = [ownSection, int.MaxValue] },
+        };
+        foreach (var request in rejected)
+            Assert.Equal(HttpStatusCode.NotFound, (await trainer.PostAsJsonAsync("/api/seasons", request)).StatusCode);
+        foreach (var request in new[]
+        {
+            SeasonBody() with { CompetitionIds = [0] },
+            SeasonBody() with { CompetitionSectionIds = [-1] },
+            SeasonBody() with { CompetitionIds = Enumerable.Range(1, 1001).ToArray() },
+        })
+            Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync("/api/seasons", request)).StatusCode);
+        Assert.Equal(before, await _f.WithDbAsync(db => db.Set<Season>().CountAsync()));
+
+        var options = await (await trainer.GetAsync("/api/seasons/available-competitions")).ReadAsync<List<SeasonCompetitionOptionDto>>();
+        Assert.Contains(options, x => x.Id == owned);
+        Assert.DoesNotContain(options, x => x.Id == foreign);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().GetAsync("/api/seasons/available-competitions")).StatusCode);
+        var adminOptions = await (await (await _f.AdminAsync()).GetAsync("/api/seasons/available-competitions")).ReadAsync<List<SeasonCompetitionOptionDto>>();
+        Assert.Contains(adminOptions, x => x.Id == foreign);
+    }
+
+    [Fact]
+    public async Task MultiplierChangesAreBoundedAuthorisedPersistedAndInvalidatePreview()
+    {
+        var setup = await ArrangeCompletedRoundAsync(tied: false);
+        var owner = await _f.TrainerAsync();
+        var season = await (await owner.PostAsJsonAsync("/api/seasons", SeasonBody())).ReadAsync<SeasonDto>();
+        foreach (var invalid in new[] { 0.0, 0.09, 10.01 })
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync($"/api/seasons/{season.Id}/rounds",
+                new AddSeasonRoundRequest(setup.SectionId, PointsMultiplier: invalid))).StatusCode);
+        var round = await (await owner.PostAsJsonAsync($"/api/seasons/{season.Id}/rounds", new AddSeasonRoundRequest(setup.SectionId))).ReadAsync<SeasonRoundDto>();
+        var url = $"/api/seasons/{season.Id}/rounds/{round.Id}";
+        var preview = await (await owner.GetAsync($"{url}/publication-preview")).ReadAsync<SeasonPublicationPreviewDto>();
+        var (other, _) = await _f.ApprovedTrainerAsync();
+        Assert.Equal(HttpStatusCode.NotFound, (await other.PutAsJsonAsync($"{url}/multiplier", new SetSeasonRoundMultiplierRequest(2))).StatusCode);
+        foreach (var invalid in new[] { 0.0, 0.09, 10.01 })
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync($"{url}/multiplier", new SetSeasonRoundMultiplierRequest(invalid))).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync($"{url}/included", new SetSeasonRoundIncludedRequest(true, invalid))).StatusCode);
+        }
+        foreach (var valid in new[] { 0.1, 10.0, 1.0000001 })
+        {
+            Assert.Equal(HttpStatusCode.OK, (await owner.PutAsJsonAsync($"{url}/multiplier", new SetSeasonRoundMultiplierRequest(valid))).StatusCode);
+            Assert.Equal(valid, await _f.WithDbAsync(db => db.Set<SeasonRound>().Where(x => x.Id == round.Id).Select(x => x.PointsMultiplier).SingleAsync()));
+        }
+        var changed = await (await owner.GetAsync($"{url}/publication-preview")).ReadAsync<SeasonPublicationPreviewDto>();
+        Assert.NotEqual(preview.SourceFingerprint, changed.SourceFingerprint);
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync($"{url}/publications", new PublishSeasonRoundRequest(preview.SourceFingerprint, preview.NextVersion))).StatusCode);
+        var updated = await (await owner.PutAsJsonAsync($"{url}/included", new SetSeasonRoundIncludedRequest(true, 1.5))).ReadAsync<SeasonRoundDto>();
+        Assert.Equal(1.5, updated.PointsMultiplier);
+    }
+
+    [Fact]
     public async Task RoundMultiplier_ScalesPublishedSeasonPoints()
     {
         var setup = await ArrangeCompletedRoundAsync(tied: false);
@@ -552,6 +620,19 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
         var standings = await (await _f.CreateClient().GetAsync($"/api/seasons/{seasonId}/standings")).ReadAsync<SeasonStandingsDto>();
         Assert.Equal(["Zeta", "Alpha"], standings.Standings.Select(x => x.TeamName));
         Assert.Equal([1, 2], standings.Standings.Select(x => x.Rank));
+        await _f.WithDbAsync(async db =>
+        {
+            var rounds = await db.Set<SeasonRound>().Include(x => x.CompetitionSection).Where(x => x.SeasonId == seasonId).OrderBy(x => x.OrderIndex).ToListAsync();
+            rounds[0].CompetitionSection!.Format = SectionFormat.Pairs;
+            rounds[1].CompetitionSection!.AgeGroup = "Under 12";
+            await db.SaveChangesAsync();
+        });
+        var pairs = await (await _f.CreateClient().GetAsync($"/api/seasons/{seasonId}/standings?ageGroup=Seniors&format=1")).ReadAsync<SeasonStandingsDto>();
+        Assert.Equal([10L, 8L], pairs.Standings.Select(x => x.TotalPoints));
+        Assert.All(pairs.Standings, x => Assert.Single(x.Rounds));
+        var noMatch = await (await _f.CreateClient().GetAsync($"/api/seasons/{seasonId}/standings?ageGroup=Under%2012&format=1")).ReadAsync<SeasonStandingsDto>();
+        Assert.Empty(noMatch.Standings);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _f.CreateClient().GetAsync($"/api/seasons/{seasonId}/standings?format=99")).StatusCode);
     }
 
     [Fact]
@@ -572,21 +653,26 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
             db.AddRange(s1, s2);
             await db.SaveChangesAsync();
 
-            // Round 1: Alice & Bob (1st), Charlie & Dana (2nd)
-            var t1A = new Team { CompetitionId = comp1.Id, CompetitionSectionId = s1.Id, ClubId = club.Id, Suffix = "A", DisplayName = "Alice & Bob" };
-            var t1B = new Team { CompetitionId = comp1.Id, CompetitionSectionId = s1.Id, ClubId = club.Id, Suffix = "B", DisplayName = "Charlie & Dana" };
+            var saved = new[] { "Fake Alpha Rider", "Fake Beta Rider", "Fake Gamma Rider", "Fake Delta Rider" }
+                .Select(name => new SavedRider { ClubId = club.Id, CreatedByUserId = ownerId, FullName = name }).ToArray();
+            db.SavedRiders.AddRange(saved);
+            await db.SaveChangesAsync();
+
+            // Round 1: Fake Alpha & Fake Beta (1st), Fake Gamma & Fake Delta (2nd)
+            var t1A = new Team { CompetitionId = comp1.Id, CompetitionSectionId = s1.Id, ClubId = club.Id, Suffix = "A", DisplayName = "Fake Alpha & Fake Beta" };
+            var t1B = new Team { CompetitionId = comp1.Id, CompetitionSectionId = s1.Id, ClubId = club.Id, Suffix = "B", DisplayName = "Fake Gamma & Fake Delta" };
             db.AddRange(t1A, t1B);
             await db.SaveChangesAsync();
             db.DeclarationForms.AddRange(
                 new DeclarationForm
                 {
-                    TeamId = t1A.Id, SubmittedByUserId = ownerId,
-                    Riders = [new RiderEntry { FullName = "Alice Rider", OrderIndex = 1 }, new RiderEntry { FullName = "Bob Rider", OrderIndex = 2 }],
+                    TeamId = t1A.Id, SubmittedByUserId = ownerId, IsLocked = true,
+                    Riders = [new RiderEntry { SavedRiderId = saved[0].Id, FullName = "Fake Alpha Rider", OrderIndex = 1 }, new RiderEntry { SavedRiderId = saved[1].Id, FullName = "Fake Beta Rider", OrderIndex = 2 }],
                 },
                 new DeclarationForm
                 {
-                    TeamId = t1B.Id, SubmittedByUserId = ownerId,
-                    Riders = [new RiderEntry { FullName = "Charlie Rider", OrderIndex = 1 }, new RiderEntry { FullName = "Dana Rider", OrderIndex = 2 }],
+                    TeamId = t1B.Id, SubmittedByUserId = ownerId, IsLocked = true,
+                    Riders = [new RiderEntry { SavedRiderId = saved[2].Id, FullName = "Fake Gamma Rider", OrderIndex = 1 }, new RiderEntry { SavedRiderId = saved[3].Id, FullName = "Fake Delta Rider", OrderIndex = 2 }],
                 });
             var sess1 = new Session { CompetitionId = comp1.Id, CompetitionSectionId = s1.Id, Name = "S1", OrderIndex = 1 };
             db.Add(sess1);
@@ -602,21 +688,21 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
                 new Result { RaceId = r1.Id, TeamId = t1A.Id, Placing = 1, Points = 5 },
                 new Result { RaceId = r1.Id, TeamId = t1B.Id, Placing = 2, Points = 4 });
 
-            // Round 2: Alice & Charlie (1st), Bob & Dana (2nd)
-            var t2A = new Team { CompetitionId = comp2.Id, CompetitionSectionId = s2.Id, ClubId = club.Id, Suffix = "A", DisplayName = "Alice & Charlie" };
-            var t2B = new Team { CompetitionId = comp2.Id, CompetitionSectionId = s2.Id, ClubId = club.Id, Suffix = "B", DisplayName = "Bob & Dana" };
+            // Round 2: Fake Alpha & Fake Gamma (1st), Fake Beta & Fake Delta (2nd)
+            var t2A = new Team { CompetitionId = comp2.Id, CompetitionSectionId = s2.Id, ClubId = club.Id, Suffix = "A", DisplayName = "Fake Alpha & Fake Gamma" };
+            var t2B = new Team { CompetitionId = comp2.Id, CompetitionSectionId = s2.Id, ClubId = club.Id, Suffix = "B", DisplayName = "Fake Beta & Fake Delta" };
             db.AddRange(t2A, t2B);
             await db.SaveChangesAsync();
             db.DeclarationForms.AddRange(
                 new DeclarationForm
                 {
-                    TeamId = t2A.Id, SubmittedByUserId = ownerId,
-                    Riders = [new RiderEntry { FullName = "Alice Rider", OrderIndex = 1 }, new RiderEntry { FullName = "Charlie Rider", OrderIndex = 2 }],
+                    TeamId = t2A.Id, SubmittedByUserId = ownerId, IsLocked = true,
+                    Riders = [new RiderEntry { SavedRiderId = saved[0].Id, FullName = "Fake Alpha Rider", OrderIndex = 1 }, new RiderEntry { SavedRiderId = saved[2].Id, FullName = "Fake Gamma Rider", OrderIndex = 2 }],
                 },
                 new DeclarationForm
                 {
-                    TeamId = t2B.Id, SubmittedByUserId = ownerId,
-                    Riders = [new RiderEntry { FullName = "Bob Rider", OrderIndex = 1 }, new RiderEntry { FullName = "Dana Rider", OrderIndex = 2 }],
+                    TeamId = t2B.Id, SubmittedByUserId = ownerId, IsLocked = true,
+                    Riders = [new RiderEntry { SavedRiderId = saved[1].Id, FullName = "Fake Beta Rider", OrderIndex = 1 }, new RiderEntry { SavedRiderId = saved[3].Id, FullName = "Fake Delta Rider", OrderIndex = 2 }],
                 });
             var sess2 = new Session { CompetitionId = comp2.Id, CompetitionSectionId = s2.Id, Name = "S1", OrderIndex = 1 };
             db.Add(sess2);
@@ -648,7 +734,7 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
         await trainer.PostAsJsonAsync($"/api/seasons/{season.Id}/rounds/{round2.Id}/publications", new PublishSeasonRoundRequest(p2.SourceFingerprint, p2.NextVersion));
 
         var standings = await (await _f.CreateClient().GetAsync($"/api/seasons/{season.Id}/standings")).ReadAsync<SeasonStandingsDto>();
-        Assert.Equal(["Alice Rider", "Bob Rider", "Charlie Rider", "Dana Rider"], standings.Standings.Select(x => x.TeamName));
+        Assert.Equal(["Fake Alpha Rider", "Fake Beta Rider", "Fake Gamma Rider", "Fake Delta Rider"], standings.Standings.Select(x => x.TeamName));
         Assert.Equal([20L, 18L, 18L, 16L], standings.Standings.Select(x => x.TotalPoints));
         Assert.Equal([1, 2, 2, 4], standings.Standings.Select(x => x.Rank));
     }

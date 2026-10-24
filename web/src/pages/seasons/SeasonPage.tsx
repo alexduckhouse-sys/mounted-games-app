@@ -78,14 +78,18 @@ function SeasonDetail({ id }: { id: string }) {
 }
 
 function Standings({ season, table }: { season: SeasonView; table: StandingsView }) {
-  const divisions = seasonDivisions(season.rounds, season.ageGroup);
+  const formats = [...new Set(season.rounds.filter((round) => round.isIncluded).map((round) => round.format ?? season.format))];
+  const [selectedFormat, setSelectedFormat] = useState(season.format);
+  const activeFormat = formats.includes(selectedFormat) ? selectedFormat : formats[0] ?? season.format;
+  const formatRounds = season.rounds.filter((round) => (round.format ?? season.format) === activeFormat);
+  const divisions = seasonDivisions(formatRounds, season.ageGroup);
   const hasMultipleDivisions = divisions.length > 1;
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
   const activeDivision = hasMultipleDivisions && divisions.includes(selectedDivision) ? selectedDivision : 'all';
-  const divisionRounds = season.rounds.filter((round) => activeDivision === 'all' || roundDivision(round, season.ageGroup) === activeDivision);
+  const divisionRounds = formatRounds.filter((round) => activeDivision === 'all' || roundDivision(round, season.ageGroup) === activeDivision);
   const included = divisionRounds.filter((round) => round.isIncluded);
   const publishedRounds = [...included].filter((round) => round.publishedVersion != null).sort((a, b) => a.orderIndex - b.orderIndex);
-  const visibleStandings = filterStandingsByDivision(season, table.standings, activeDivision);
+  const visibleStandings = filterStandingsByDivision(season, table.standings, activeDivision, activeFormat);
   const stale = season.rounds.some((round) => round.publishedVersion && !round.publicationIsCurrent);
   const labels = positionLabels(visibleStandings);
   const latest = lastPublishedRound(divisionRounds);
@@ -139,7 +143,7 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
           </SelectField>
         )}
       </label>
-      <label className="rf-fld"><span className="sr-only">Format</span><SelectField disabled aria-label="Format" title="Season format" value={season.format}><option value={season.format}>{SectionFormatLabel[season.format]}</option></SelectField></label>
+      <label className="rf-fld"><span className="sr-only">Format</span><SelectField disabled={formats.length < 2} aria-label="Format" title="Season format" value={activeFormat} onChange={(event) => { setSelectedFormat(Number(event.target.value) as typeof activeFormat); setSelectedDivision('all'); }}>{(formats.length ? formats : [activeFormat]).map((format) => <option key={format} value={format}>{SectionFormatLabel[format]}</option>)}</SelectField></label>
     </div>
     {stale && <p className="mg-notice sv-msg">A result or points rule has changed since publication. The table stays on the published version until the organiser publishes again.</p>}
     {!visibleStandings.length ? <div className="sv-empty"><h2>No standings yet</h2><p>Results will appear after the first round is published.</p></div> : <>
@@ -148,7 +152,7 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
         <thead>
           <tr>
             <th scope="col" className="sv-pos">Pos</th>
-            <th scope="col">Team</th>
+            <th scope="col">{activeFormat === 1 ? 'Rider' : 'Team'}</th>
             {publishedRounds.map((round) => (
               <th key={round.id} scope="col" className="sv-mid" title={round.competitionName}>R{round.orderIndex}</th>
             ))}
@@ -315,7 +319,7 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
 }
 
 function PublicationResults({ publication }: { publication: Pick<PublicationView, 'results'> }) {
-  return <div className="rf-table-wrap"><table className="rf-table sv-table"><thead><tr><th className="sv-pos" scope="col">Pos</th><th scope="col">Team</th><th scope="col" className="sv-mid">Event pts</th><th scope="col">Season pts</th></tr></thead><tbody>{publication.results.map((row) => <tr key={row.teamProfileId}><td className="rf-num">{row.eventRank}</td><th scope="row" className="sv-rowhead">{row.teamName}</th><td className="sv-mid">{row.eventPoints}</td><td className="rf-num sv-end">{row.seasonPoints}</td></tr>)}</tbody></table>{!publication.results.length && <p className="rf-note" style={{ paddingInline: 16 }}>No eligible teams in this publication.</p>}</div>;
+  return <div className="rf-table-wrap"><table className="rf-table sv-table"><thead><tr><th className="sv-pos" scope="col">Pos</th><th scope="col">Team or rider</th><th scope="col" className="sv-mid">Event pts</th><th scope="col">Season pts</th></tr></thead><tbody>{publication.results.map((row) => <tr key={row.teamProfileId}><td className="rf-num">{row.eventRank}</td><th scope="row" className="sv-rowhead">{row.teamName}</th><td className="sv-mid">{row.eventPoints}</td><td className="rf-num sv-end">{row.seasonPoints}</td></tr>)}</tbody></table>{!publication.results.length && <p className="rf-note" style={{ paddingInline: 16 }}>No eligible teams in this publication.</p>}</div>;
 }
 
 function PublicationHistory({ base, latest }: { base: string; latest: number }) {

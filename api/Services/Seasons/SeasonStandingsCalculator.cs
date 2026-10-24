@@ -2,12 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities.Seasons;
+using MountedGames.Api.Entities;
 
 namespace MountedGames.Api.Services.Seasons;
 
 public static class SeasonStandingsCalculator
 {
-    public static async Task<SeasonStandingsDto?> CalculateAsync(AppDbContext db, Guid seasonId, CancellationToken ct, string? ageGroup = null)
+    public static async Task<SeasonStandingsDto?> CalculateAsync(AppDbContext db, Guid seasonId, CancellationToken ct, string? ageGroup = null, SectionFormat? format = null)
     {
         var season = await db.Set<Season>()
             .AsNoTracking()
@@ -23,6 +24,7 @@ public static class SeasonStandingsCalculator
             && !string.Equals(filterAge, "All age groups", StringComparison.OrdinalIgnoreCase);
 
         var includedRounds = season.Rounds.Where(x => x.IsIncluded);
+        if (format.HasValue) includedRounds = includedRounds.Where(x => x.CompetitionSection?.Format == format);
         if (hasAgeFilter)
         {
             includedRounds = includedRounds.Where(x =>
@@ -41,6 +43,9 @@ public static class SeasonStandingsCalculator
             .ThenBy(x => x.TeamName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(x => x.TeamProfileId)
             .ToList();
+
+        var initialOnly = await SeasonRiderPrivacy.InitialOnlyProfilesAsync(db, latest.Select(x => x.TeamProfileId), ct);
+        latest = latest.Select(row => row with { TeamName = SeasonRiderPrivacy.Display(row.TeamProfileId, row.TeamName, initialOnly) }).ToList();
 
         (long TotalPoints, int Wins)? previous = null;
         var rank = 0;

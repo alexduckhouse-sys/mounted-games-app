@@ -1,3 +1,4 @@
+using MountedGames.Api.Services.Seasons;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
@@ -179,7 +180,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         return await TeamsProfileAsync(StatsSubjectKind.Club, key, rows, viewer, ct);
     }
 
-    /// <summary>A season team profile: the event teams an organiser linked to it, so no name matching is needed.</summary>
+    /// <summary>A season profile uses explicit links and its latest published event memberships, never names.</summary>
     public async Task<StatsProfileDto?> TeamProfileAsync(Guid id, StatsViewer viewer, CancellationToken ct = default)
     {
         var profile = await db.Set<TeamProfile>().AsNoTracking()
@@ -187,8 +188,17 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             .Select(p => new { p.DisplayName, Teams = p.EventTeams.Select(e => e.TeamId).ToList() })
             .SingleOrDefaultAsync(ct);
         if (profile is null) return null;
-        var memberships = profile.Teams.Select(teamId => new Membership(teamId, null, null, false)).ToList();
-        return await BuildAsync(StatsSubjectKind.Team, StatsNames.Tidy(profile.DisplayName), id.ToString(), memberships, viewer, ct);
+        var publishedTeams = await db.Set<SeasonRoundResult>().AsNoTracking()
+            .Where(result => result.TeamProfileId == id
+                && !db.Set<SeasonRoundPublication>().Any(newer =>
+                    newer.SeasonRoundId == result.SeasonRoundPublication!.SeasonRoundId
+                    && newer.Version > result.SeasonRoundPublication.Version))
+            .Select(result => result.EventTeamId).Distinct().ToListAsync(ct);
+        var memberships = profile.Teams.Concat(publishedTeams).Distinct()
+            .Select(teamId => new Membership(teamId, null, null, false)).ToList();
+        var initialOnly = await SeasonRiderPrivacy.InitialOnlyProfilesAsync(db, [id], ct);
+        var name = SeasonRiderPrivacy.Display(id, profile.DisplayName, initialOnly);
+        return await BuildAsync(StatsSubjectKind.Team, StatsNames.Tidy(name), id.ToString(), memberships, viewer, ct);
     }
 
     private async Task<StatsProfileDto?> TeamsProfileAsync(StatsSubjectKind kind, string key, List<NameRow> rows, StatsViewer viewer, CancellationToken ct)

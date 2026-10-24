@@ -47,9 +47,11 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
   /** The create form always shows its actions; the edit form shows them only once something has changed. */
   create?: boolean;
 }) {
+  const [competitionError, setCompetitionError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saved] = useState(() => toDraft(value));
   const [draft, setDraft] = useState<Draft>(saved);
-  const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
+  const [competitions, setCompetitions] = useState<Pick<CompetitionSummary, 'id' | 'name' | 'startDate'>[]>([]);
   const [selectedCompetitionIds, setSelectedCompetitionIds] = useState<number[]>(value.competitionIds ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -61,14 +63,15 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
   useEffect(() => {
     if (!create) return;
     const controller = new AbortController();
-    const req = api.get<CompetitionSummary[]>('/competitions', { params: { includeArchived: true }, signal: controller.signal });
-    if (req && typeof req.then === 'function') {
-      req.then((res) => {
-        if (!controller.signal.aborted && Array.isArray(res?.data)) setCompetitions(res.data);
-      }).catch(() => {});
-    }
+    api.get<Pick<CompetitionSummary, 'id' | 'name' | 'startDate'>[]>('/seasons/available-competitions', { signal: controller.signal })
+      .then(({ data }) => {
+        if (!controller.signal.aborted) {
+          setCompetitions(data);
+          setCompetitionError(false);
+        }
+      }).catch(() => { if (!controller.signal.aborted) setCompetitionError(true); });
     return () => controller.abort();
-  }, [create]);
+  }, [create, loadAttempt]);
 
   function toggleCompetition(compId: number) {
     setSelectedCompetitionIds((current) =>
@@ -119,9 +122,10 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
           <p className="rf-note sv-flush">A season can include sections across all age groups and formats.</p>
         </fieldset>
       </RefineDisclosure>
-      {create && <RefineDisclosure title="Competitions" sub={selectedCompetitionIds.length ? `${selectedCompetitionIds.length} selected` : 'Optional — or add rounds later'} defaultOpen>
+      {create && <RefineDisclosure title="Competitions" sub={selectedCompetitionIds.length ? `${selectedCompetitionIds.length} selected` : 'Optional. You can add rounds later'} defaultOpen>
         <fieldset disabled={busy} className="sv-fieldset sv-body">
           <legend className="sr-only">Include competitions</legend>
+          {competitionError && <p role="alert" className="rf-note sv-flush">Competitions couldn’t be loaded. <button type="button" className="rf-btn rf-btn-text" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></p>}
           {competitions.length === 0 ? (
             <p className="rf-note sv-flush">You can also add competition rounds after creating the season.</p>
           ) : (
@@ -161,9 +165,10 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
         </fieldset>
       </RefineDisclosure>
       <RefineDisclosure title="Ties" sub="Most round wins (1st places), then share the place">
-        <p className="rf-note sv-body">Season point ties break on most round wins (1st places) first; still-tied teams share a place and its points.</p>
+        <p className="rf-note sv-body">When season points are tied, the rider or team with more round wins comes first. If they have the same number of wins, they share the place.</p>
       </RefineDisclosure>
     </RefineList>
+    <RefineNote>Pairs results follow saved riders across rounds. Riders entered without a saved record appear separately for each event.</RefineNote>
     <RefineNote>Saving doesn’t change published rounds. Preview and publish a new version of each affected round to apply new points.</RefineNote>
     {(create || dirty) && <RefineFoot>
       <span className="rf-grow rf-t2" role="status">{create ? '' : `${changes} unsaved ${changes === 1 ? 'change' : 'changes'}`}</span>
