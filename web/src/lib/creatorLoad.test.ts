@@ -32,6 +32,7 @@ describe('draftFromCompetition', () => {
         session(2, { name: 'B', orderIndex: 2, plannedRaces: ['Bending'], arenaName: ' Arena 2 ', minutesPerHeat: 7, lanesPerHeat: 3 }),
         session(1, { name: 'A', orderIndex: 1, plannedRaces: [], heats: [heat(1, { races: [race(1, { isComplete: true })] })] }),
         session(3, { name: 'C', orderIndex: 3, status: 2 }),
+        session(4, { name: 'Finals · Senior Pairs', orderIndex: 4, plannedRaces: ['Flag', 'Mug'], status: 1, heats: [heat(2)] }),
       ],
     }));
     const [s] = d.sections;
@@ -39,7 +40,7 @@ describe('draftFromCompetition', () => {
     expect(s.sessions[0]).toMatchObject({ existingId: 1, races: null, hasHeats: true, scored: true });
     expect(s.sessions[1]).toMatchObject({ existingId: 2, races: ['Bending'] });
     expect(s.sessions[2]).toMatchObject({ scored: true });
-    expect(s).toMatchObject({ format: 1, hasEntries: true, maxTeamsPerHeat: '4', minutesPerRace: '10' });
+    expect(s).toMatchObject({ format: 1, hasEntries: true, maxTeamsPerHeat: '4', minutesPerRace: '10', finalRaces: ['Flag', 'Mug'], finalSessionId: 4, finalHasHeats: true, finalScored: true });
   });
 
   it('takes timing from the first session and marks sections that have teams', () => {

@@ -417,14 +417,17 @@ public class CompetitionsController : ControllerBase
 
     /// <summary>Entries that count towards a section's cap (paid and pending), by section id.</summary>
     private async Task<Dictionary<int, int>> ActiveSignupCountsAsync(int competitionId)
-        => await _db.SectionSignups.AsNoTracking()
+    {
+        var rows = await _db.SectionSignups.AsNoTracking()
             .Where(s => s.Section!.CompetitionId == competitionId
                 && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
                 && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
-                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && x.IsWithdrawn))
-            .GroupBy(s => s.CompetitionSectionId)
-            .Select(g => new { g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.Key, x => x.Count);
+                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || x.IsWaitlist)))
+            .Select(s => new { s.CompetitionSectionId,
+                Count = _db.Set<SignupExtras>().Where(x => x.SignupId == s.Id).Select(x => (int?)x.TeamsCount).FirstOrDefault() ?? 1 })
+            .ToListAsync();
+        return rows.GroupBy(s => s.CompetitionSectionId).ToDictionary(g => g.Key, g => g.Sum(s => s.Count));
+    }
 
     [HttpPut("{id:int}/sections/{sectionId:int}")]
     [Authorize(Policy = CompetitionStaff.Policy)]
@@ -659,16 +662,25 @@ public class CompetitionsController : ControllerBase
         var maxHeatSize = req.LanesPerHeat ?? top.Count;
         if (maxHeatSize <= 0) maxHeatSize = top.Count;
 
-        var session = new Session
+        Session? session = null;
+        if (req.ExistingSessionId is { } existingId)
         {
-            CompetitionId = id,
-            CompetitionSectionId = req.CompetitionSectionId,
-            Name = name,
-            OrderIndex = maxOrder + 1,
-            Status = SessionStatus.Upcoming,
-            LanesPerHeat = maxHeatSize
-        };
-        _db.Sessions.Add(session);
+            session = await _db.Sessions.Include(s => s.Heats).SingleOrDefaultAsync(s =>
+                s.Id == existingId && s.CompetitionId == id && s.CompetitionSectionId == req.CompetitionSectionId);
+            if (session is null) return BadRequest("The planned finals session was not found in this age group.");
+            if (session.Heats.Count > 0 || session.Status != SessionStatus.Upcoming || session.Kind != SessionKind.Race)
+                return Conflict("The planned finals session already has heats or has started. Reload the timetable.");
+        }
+        if (session is null)
+        {
+            session = new Session
+            {
+                CompetitionId = id, CompetitionSectionId = req.CompetitionSectionId,
+                Name = name, OrderIndex = maxOrder + 1, Status = SessionStatus.Upcoming,
+            };
+            _db.Sessions.Add(session);
+        }
+        session.LanesPerHeat = maxHeatSize;
         await _db.SaveChangesAsync();
 
         var groups = SplitIntoRankedGroups(top, maxHeatSize);
@@ -780,18 +792,27 @@ public class CompetitionsController : ControllerBase
             : "Finals";
         var name = string.IsNullOrWhiteSpace(req.Name) ? $"Finals · {sectionLabel}" : req.Name!.Trim();
 
-        var session = new Session
+        Session? session = null;
+        if (req.ExistingSessionId is { } existingId)
         {
-            CompetitionId = id,
-            CompetitionSectionId = req.CompetitionSectionId,
-            Name = name,
-            OrderIndex = maxOrder + 1,
-            Status = SessionStatus.Upcoming,
-            LanesPerHeat = req.LanesPerHeat,
-            MinutesPerHeat = req.MinutesPerHeat,
-            ScheduledStart = req.ScheduledStart,
-        };
-        _db.Sessions.Add(session);
+            session = await _db.Sessions.Include(s => s.Heats).SingleOrDefaultAsync(s =>
+                s.Id == existingId && s.CompetitionId == id && s.CompetitionSectionId == req.CompetitionSectionId);
+            if (session is null) return BadRequest("The planned finals session was not found in this age group.");
+            if (session.Heats.Count > 0 || session.Status != SessionStatus.Upcoming || session.Kind != SessionKind.Race)
+                return Conflict("The planned finals session already has heats or has started. Reload the timetable.");
+        }
+        if (session is null)
+        {
+            session = new Session
+            {
+                CompetitionId = id, CompetitionSectionId = req.CompetitionSectionId,
+                Name = name, OrderIndex = maxOrder + 1, Status = SessionStatus.Upcoming,
+            };
+            _db.Sessions.Add(session);
+        }
+        session.LanesPerHeat = req.LanesPerHeat;
+        session.MinutesPerHeat = req.MinutesPerHeat ?? session.MinutesPerHeat;
+        session.ScheduledStart = req.ScheduledStart ?? session.ScheduledStart;
         await _db.SaveChangesAsync();
 
         var lowestFirst = req.LowestFinalFirst != false;

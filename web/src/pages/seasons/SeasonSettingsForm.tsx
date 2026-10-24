@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react';
-import { SectionFormatLabel, type SectionFormat } from '../../types';
+import { useEffect, useState, type FormEvent } from 'react';
+import { api } from '../../api';
+import { SectionFormatLabel, type CompetitionSummary, type SectionFormat } from '../../types';
 import { RefineDisclosure, RefineFoot, RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { ordinal } from './seasonModel';
 import { seasonError, type SeasonSettings } from './seasonViewTypes';
@@ -8,7 +9,7 @@ import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
 
 const initial: SeasonSettings = {
-  title: '', year: new Date().getFullYear(), format: 2, ageGroup: '',
+  title: '', year: new Date().getFullYear(), format: 2, ageGroup: 'All age groups',
   bestResultsToCount: null, placePoints: [10, 8, 6, 4, 2, 1].map((points, i) => ({ place: i + 1, points })),
 };
 
@@ -46,8 +47,12 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
   /** The create form always shows its actions; the edit form shows them only once something has changed. */
   create?: boolean;
 }) {
+  const [competitionError, setCompetitionError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saved] = useState(() => toDraft(value));
   const [draft, setDraft] = useState<Draft>(saved);
+  const [competitions, setCompetitions] = useState<Pick<CompetitionSummary, 'id' | 'name' | 'startDate'>[]>([]);
+  const [selectedCompetitionIds, setSelectedCompetitionIds] = useState<number[]>(value.competitionIds ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const changes = changeCount(draft, saved);
@@ -55,21 +60,44 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }));
   const setPoint = (index: number, text: string) => setDraft((current) => ({ ...current, points: current.points.map((item, i) => (i === index ? text : item)) }));
 
+  useEffect(() => {
+    if (!create) return;
+    const controller = new AbortController();
+    api.get<Pick<CompetitionSummary, 'id' | 'name' | 'startDate'>[]>('/seasons/available-competitions', { signal: controller.signal })
+      .then(({ data }) => {
+        if (!controller.signal.aborted) {
+          setCompetitions(data);
+          setCompetitionError(false);
+        }
+      }).catch(() => { if (!controller.signal.aborted) setCompetitionError(true); });
+    return () => controller.abort();
+  }, [create, loadAttempt]);
+
+  function toggleCompetition(compId: number) {
+    setSelectedCompetitionIds((current) =>
+      current.includes(compId) ? current.filter((id) => id !== compId) : [...current, compId],
+    );
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     const title = draft.title.trim();
-    const ageGroup = draft.ageGroup.trim();
+    const ageGroup = draft.ageGroup.trim() || 'All age groups';
     const year = Number(draft.year);
     const best = draft.best.trim() === '' ? null : Number(draft.best);
     const values = draft.points.map((text) => (text.trim() === '' ? Number.NaN : Number(text)));
     if (!title) { setError('Give the season a name.'); return; }
     if (!Number.isInteger(year) || year < 2000 || year > 2200) { setError('Enter a year between 2000 and 2200.'); return; }
-    if (!ageGroup) { setError('Enter an age group, for example Seniors.'); return; }
     if (best !== null && (!Number.isInteger(best) || best < 1 || best > 1000)) { setError('Results that count must be a whole number from 1 to 1,000, or blank to count every round.'); return; }
     if (!values.length || values.length > 100 || values.some((n, i) => !Number.isSafeInteger(n) || n < 0 || n > 1000000 || (i > 0 && n > values[i - 1]))) { setError(POINTS_ERROR); return; }
     setBusy(true); setError('');
     try {
-      await onSave({ title, year, format: draft.format, ageGroup, bestResultsToCount: best, placePoints: values.map((n, i) => ({ place: i + 1, points: n })) });
+      const payload: SeasonSettings = {
+        title, year, format: draft.format, ageGroup, bestResultsToCount: best,
+        placePoints: values.map((n, i) => ({ place: i + 1, points: n })),
+        ...(create && selectedCompetitionIds.length > 0 ? { competitionIds: selectedCompetitionIds } : {}),
+      };
+      await onSave(payload);
     } catch (reason) { setError(seasonError(reason, 'The season couldn’t be saved. Check your connection and try again.')); }
     finally { setBusy(false); }
   }
@@ -82,7 +110,7 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
     {error && <p role="alert" className="mg-notice mt-3">{error}</p>}
     <RefineSection title="How standings are worked out" meta={create ? undefined : 'Organisers only'} />
     <RefineList as="div">
-      <RefineDisclosure title="Sections" sub={`${draft.ageGroup.trim() || 'No age group'} · ${SectionFormatLabel[draft.format]}`} defaultOpen={create}>
+      <RefineDisclosure title="Sections" sub={`${draft.ageGroup.trim() || 'All age groups'} · ${SectionFormatLabel[draft.format]}`} defaultOpen={create}>
         <fieldset disabled={busy} className="sv-fieldset sv-body">
           <legend className="sr-only">Season details</legend>
           <label className="rf-fld">Season name<input required maxLength={200} value={draft.title} onChange={(e) => patch({ title: e.target.value })} /></label>
@@ -90,10 +118,32 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
             <label className="rf-fld">Year<NumberField required min={2000} max={2200} value={draft.year} onChange={(e) => patch({ year: e.target.value })} /></label>
             <label className="rf-fld">Format<SelectField value={draft.format} onChange={(e) => patch({ format: Number(e.target.value) as SectionFormat })}>{([2, 1, 3] as SectionFormat[]).map((format) => <option key={format} value={format}>{SectionFormatLabel[format]}</option>)}</SelectField></label>
           </div>
-          <label className="rf-fld">Age group<input required maxLength={50} value={draft.ageGroup} onChange={(e) => patch({ ageGroup: e.target.value })} placeholder="For example, Seniors" /></label>
-          <p className="rf-note sv-flush">Use the same age group and format as the competition sections you want to include.</p>
+          <label className="rf-fld">Age group<input maxLength={50} value={draft.ageGroup} onChange={(e) => patch({ ageGroup: e.target.value })} placeholder="All age groups (or e.g. Seniors)" /></label>
+          <p className="rf-note sv-flush">A season can include sections across all age groups and formats.</p>
         </fieldset>
       </RefineDisclosure>
+      {create && <RefineDisclosure title="Competitions" sub={selectedCompetitionIds.length ? `${selectedCompetitionIds.length} selected` : 'Optional. You can add rounds later'} defaultOpen>
+        <fieldset disabled={busy} className="sv-fieldset sv-body">
+          <legend className="sr-only">Include competitions</legend>
+          {competitionError && <p role="alert" className="rf-note sv-flush">Competitions couldn’t be loaded. <button type="button" className="rf-btn rf-btn-text" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></p>}
+          {competitions.length === 0 ? (
+            <p className="rf-note sv-flush">You can also add competition rounds after creating the season.</p>
+          ) : (
+            <div className="sv-stack">
+              {competitions.map((comp) => (
+                <label key={comp.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedCompetitionIds.includes(comp.id)}
+                    onChange={() => toggleCompetition(comp.id)}
+                  />
+                  <span>{comp.name} · {new Date(comp.startDate).getFullYear()}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </fieldset>
+      </RefineDisclosure>}
       <RefineDisclosure title="Place points" sub={pointsSummary} defaultOpen>
         <fieldset disabled={busy} className="sv-fieldset sv-body">
           <legend className="sr-only">Points by place</legend>
@@ -114,10 +164,11 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
           <label className="rf-fld">Best results to count<NumberField min={1} max={1000} value={draft.best} onChange={(e) => patch({ best: e.target.value })} placeholder="Leave blank to count every round" /></label>
         </fieldset>
       </RefineDisclosure>
-      <RefineDisclosure title="Ties" sub="Share the place (=3, then 5th)">
-        <p className="rf-note sv-body">Tied teams share a place and its points. The next place is skipped.</p>
+      <RefineDisclosure title="Ties" sub="Most round wins (1st places), then share the place">
+        <p className="rf-note sv-body">When season points are tied, the rider or team with more round wins comes first. If they have the same number of wins, they share the place.</p>
       </RefineDisclosure>
     </RefineList>
+    <RefineNote>Pairs results follow saved riders across rounds. Riders entered without a saved record appear separately for each event.</RefineNote>
     <RefineNote>Saving doesn’t change published rounds. Preview and publish a new version of each affected round to apply new points.</RefineNote>
     {(create || dirty) && <RefineFoot>
       <span className="rf-grow rf-t2" role="status">{create ? '' : `${changes} unsaved ${changes === 1 ? 'change' : 'changes'}`}</span>

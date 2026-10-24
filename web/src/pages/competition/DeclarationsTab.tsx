@@ -40,7 +40,7 @@ export function DeclarationsTab() {
   const [params] = useSearchParams();
   // null until the forms have come back, so the editor starts from the team's real declaration.
   const [forms, setForms] = useState<DeclarationForm[] | null>(null);
-  const [signupResult, setSignupResult] = useState<{ userId: string; items: (SectionSignup & { competitionId?: number; declarationAccessGranted?: boolean })[] } | null>(null);
+  const [signupResult, setSignupResult] = useState<{ userId: string; items: (SectionSignup & { competitionId?: number; declarationAccessGranted?: boolean; linkedTeams?: { id: number; name: string }[] })[] } | null>(null);
   const signupUserId = user?.id;
   const [chosen, setChosen] = useState<number | null>(null);
   // What this competition's dec form asks. Null until it has come back; the standard form if it can't be fetched.
@@ -92,7 +92,7 @@ export function DeclarationsTab() {
   useEffect(() => {
     if (!signupUserId) return;
     let cancelled = false;
-    Promise.resolve(api.get<(SectionSignup & { competitionId?: number; declarationAccessGranted?: boolean })[]>('/me/signups'))
+    Promise.resolve(api.get<(SectionSignup & { competitionId?: number; declarationAccessGranted?: boolean; linkedTeams?: { id: number; name: string }[] })[]>('/me/signups'))
       .then((r) => { if (!cancelled && Array.isArray(r?.data)) setSignupResult({ userId: signupUserId, items: r.data }); })
       .catch(() => { if (!cancelled) setSignupResult({ userId: signupUserId, items: [] }); });
     return () => { cancelled = true; };
@@ -110,7 +110,7 @@ export function DeclarationsTab() {
     return competition.teams.filter((t) =>
       t.trainerUserId === user.id
       || (manager && t.clubId === user.clubId)
-      || compSignups.some((s) => s.teamId === t.id && s.competitionSectionId === t.competitionSectionId)
+      || compSignups.some((s) => (s.teamId === t.id || s.linkedTeams?.some((linked) => linked.id === t.id)) && s.competitionSectionId === t.competitionSectionId)
     );
   }, [competition, hasRole, canOrganise, user, signupResult]);
 

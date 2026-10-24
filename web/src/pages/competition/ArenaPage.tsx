@@ -12,6 +12,7 @@ import { RaceDiagram } from '../../components/RaceDiagram';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
+import { equipmentFromDiagram, type EquipmentCount } from '../../lib/raceEquipment';
 import { displaySectionName } from '../../lib/section';
 import { formatTime, roundTo5Min, computeTimings } from '../../lib/time';
 
@@ -48,6 +49,22 @@ function ArenaBar({ arenas, selected, onChoose }: { arenas: string[]; selected: 
       <div className="mg-chips" role="group" aria-label="Choose arena">
         {arenas.map((name) => (
           <button key={name} type="button" className="mg-chip" aria-pressed={selected === name} onClick={() => onChoose(name)}>{name}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EquipmentList({ items }: { items: EquipmentCount[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-2" aria-label="Equipment required">
+      <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Equipment required (per lane)</div>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((item) => (
+          <span key={item.label} className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
+            {item.count} × {item.label}
+          </span>
         ))}
       </div>
     </div>
@@ -128,7 +145,11 @@ export function ArenaPage() {
 
   const activeRace = orderedRaces[activeIdx];
   const template = activeRace ? tmplByName.get(activeRace.name.toLowerCase().trim()) : null;
+  const activeEquipment = equipmentFromDiagram(template?.diagramJson);
   const nextRace = orderedRaces[activeIdx + 1] ?? null;
+  const nextTemplate = nextRace ? tmplByName.get(nextRace.name.toLowerCase().trim()) : null;
+  const nextEquipment = equipmentFromDiagram(nextTemplate?.diagramJson);
+  const nextDescription = nextTemplate?.summary || nextTemplate?.rules || null;
   const prevRace = activeIdx > 0 ? orderedRaces[activeIdx - 1] : null;
 
   return (
@@ -213,6 +234,7 @@ export function ArenaPage() {
                 </motion.div>
               </AnimatePresence>
             </div>
+            <EquipmentList items={activeEquipment} />
             {template.rules && (
               <div className="mt-3 rounded-md border border-brand-200 dark:border-brand-700 bg-brand-50/60 dark:bg-brand-900/20 p-3">
                 <div className="text-sm font-bold flex items-center gap-1.5 text-brand-800 dark:text-brand-200 mb-1">
@@ -231,6 +253,32 @@ export function ArenaPage() {
           </div>
         )}
       </div>
+
+      {nextRace && (
+        <section aria-label="Next race" className="card p-3 sm:p-4 space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs uppercase tracking-wide text-brand-600 dark:text-brand-300 font-semibold">
+              Up next · Race {activeIdx + 2} of {orderedRaces.length}
+            </span>
+            <h3 className="text-lg sm:text-xl font-bold flex-1 min-w-0 truncate">
+              {nextRace.name}
+            </h3>
+          </div>
+          {nextTemplate ? (
+            <>
+              {nextDescription && (
+                <p className="text-sm text-slate-700 dark:text-slate-200">{nextDescription}</p>
+              )}
+              <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                <RaceDiagram diagramJson={nextTemplate.diagramJson} height={150} />
+              </div>
+              <EquipmentList items={nextEquipment} />
+            </>
+          ) : (
+            <p className="text-xs text-slate-500">No setup diagram for "{nextRace.name}" yet.</p>
+          )}
+        </section>
+      )}
 
       <div className="flex items-center gap-2">
         <button

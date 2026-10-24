@@ -8,6 +8,7 @@ export interface SeasonSettings {
   ageGroup: string;
   bestResultsToCount: number | null;
   placePoints: { place: number; points: number }[];
+  competitionIds?: number[];
 }
 export interface SeasonRoundView {
   id: string;
@@ -16,6 +17,9 @@ export interface SeasonRoundView {
   competitionDate: string;
   competitionSectionId: number;
   sectionName: string;
+  ageGroup?: string;
+  format?: SectionFormat;
+  pointsMultiplier?: number;
   orderIndex: number;
   isIncluded: boolean;
   publishedVersion: number | null;
@@ -33,7 +37,15 @@ export interface StandingView {
   teamName: string;
   clubName: string;
   totalPoints: number;
-  rounds: { roundId: string; eventRank: number; seasonPoints: number; counted: boolean }[];
+  rounds: {
+    roundId: string;
+    eventRank: number;
+    seasonPoints: number;
+    counted: boolean;
+    ageGroup?: string;
+    sectionName?: string;
+    pointsMultiplier?: number;
+  }[];
 }
 export interface StandingsView { standings: StandingView[] }
 export interface PublicationView {

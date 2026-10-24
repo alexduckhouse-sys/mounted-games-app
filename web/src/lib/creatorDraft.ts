@@ -46,6 +46,14 @@ export interface SectionDraft {
   maxTeamsPerHeat: string;
   arena: string;
   sessions: SessionDraft[];
+  /** The races chosen for the section's final; null means "decide later". */
+  finalRaces?: string[] | null;
+  /** The saved finals session id, when editing a competition that already has one. */
+  finalSessionId?: number;
+  /** Heats have been made for the finals session. */
+  finalHasHeats?: boolean;
+  /** The finals session has started or been scored. */
+  finalScored?: boolean;
   /** Entries or teams exist: format and age group are fixed and the section can't be removed. */
   hasEntries?: boolean;
 }
@@ -106,6 +114,7 @@ export function defaultSection(format: Format = 2): SectionDraft {
   return {
     format, ageGroup: 'Seniors', priceGbp: '', maxParticipants: '', usesRaceFinals: false, finalistCount: '', runoffRaceName: '',
     minutesPerRace: String(DEFAULT_MINUTES), maxTeamsPerHeat: String(lanesFor(format)), arena: MAIN_ARENA, sessions: [{ races: null }],
+    finalRaces: null,
   };
 }
 
@@ -119,6 +128,7 @@ export function defaultDraft(today: Date = new Date()): CreatorDraft {
 }
 
 export const sectionName = (s: Pick<SectionDraft, 'format' | 'ageGroup'>) => sectionDisplayName(s.format, s.ageGroup);
+export const finalSessionName = (s: Pick<SectionDraft, 'format' | 'ageGroup'>) => `Finals · ${sectionName(s)}`;
 
 /** A new session's name: the age group's name, with "· Session 2" and so on when there is more than one. */
 export function newSessionName(section: SectionDraft, index: number): string {
@@ -250,6 +260,7 @@ function readSection(raw: unknown): SectionDraft {
   const format: Format = r.format === 1 || r.format === 3 ? r.format : 2;
   // Older drafts held a list of sessions with a race text each: keep how many there were, not what they held.
   const sessions = Array.isArray(r.sessions) && r.sessions.length > 0 ? r.sessions.slice(0, MAX_SESSIONS).map(readSession) : base.sessions;
+  const finalRaces = Array.isArray(r.finalRaces) && r.finalRaces.every((x) => typeof x === 'string') ? (r.finalRaces as string[]) : null;
   const newShape = typeof r.minutesPerRace === 'string';
   return {
     ...(typeof r.existingId === 'number' ? { existingId: r.existingId } : {}),
@@ -264,6 +275,10 @@ function readSection(raw: unknown): SectionDraft {
     maxTeamsPerHeat: newShape ? text(r.maxTeamsPerHeat, String(lanesFor(format))) : String(lanesFor(format)),
     arena: text(r.arena, MAIN_ARENA) || MAIN_ARENA,
     sessions,
+    finalRaces: finalRaces && finalRaces.length > 0 ? finalRaces : null,
+    ...(typeof r.finalSessionId === 'number' ? { finalSessionId: r.finalSessionId } : {}),
+    ...(r.finalHasHeats ? { finalHasHeats: true } : {}),
+    ...(r.finalScored ? { finalScored: true } : {}),
     ...(r.hasEntries ? { hasEntries: true } : {}),
   };
 }
