@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { ordinal, type TeamBlock, type TeamDetail } from '../../lib/toplist';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
+import { formatPoints } from '../../lib/formatPoints';
 
 const eyebrow = 'text-[10px] font-bold uppercase tracking-[0.08em]';
 
@@ -61,7 +62,7 @@ export function TeamSheet({ detail, sectionName, onClose }: { detail: TeamDetail
             <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-live-row))] px-3 py-2.5">
               <span className={`${eyebrow} text-[rgb(var(--mg-red))]`}>{detail.final.label}</span>
               <span className="mg-display text-[22px] font-bold leading-none text-[rgb(var(--mg-heading))]">
-                {detail.final.place != null ? ordinal(detail.final.place) : '–'} · {detail.final.points ?? 0} pts
+                {detail.final.place != null ? ordinal(detail.final.place) : '–'} · {formatPoints(detail.final.points ?? 0)} pts
               </span>
             </div>
           )}
@@ -81,7 +82,7 @@ function Block({ block }: { block: TeamBlock }) {
       <div className="flex items-baseline gap-2 border-b-[1.5px] pb-1" style={{ borderColor: `rgb(${accent})` }}>
         <h3 className="mg-display flex-1 text-[13px] font-bold uppercase leading-none tracking-[0.05em]" style={{ color: `rgb(${accent})` }}>{block.label}</h3>
         {block.note && <span className="text-[11px] font-medium text-[rgb(var(--mg-muted))]">{block.note}</span>}
-        <span className="mg-display text-lg font-bold leading-none text-[rgb(var(--mg-heading))]">{block.points ?? '–'}<span className="sr-only">{block.points == null ? ' no points' : ' points'}</span></span>
+        <span className="mg-display text-lg font-bold leading-none text-[rgb(var(--mg-heading))]">{block.points == null ? '–' : formatPoints(block.points)}<span className="sr-only">{block.points == null ? ' no points' : ' points'}</span></span>
       </div>
       {block.points == null
         ? <p className="text-xs font-medium text-[rgb(var(--mg-faint))]">Didn’t ride this session</p>
@@ -93,7 +94,7 @@ function Block({ block }: { block: TeamBlock }) {
                 <li key={race.id} className="flex min-h-10 items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 last:border-b-0">
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">{race.name}</span>
                   <span className="shrink-0 text-[13px] font-medium text-[rgb(var(--mg-body))]">{race.eliminated ? <><span aria-hidden="true" title={statusLabel(true, race.status) ?? undefined}>{statusLetter(true, race.status)}</span><span className="sr-only">{statusLabel(true, race.status)}</span></> : race.placing != null ? ordinal(race.placing) : '–'}</span>
-                  <span className="mg-display w-9 shrink-0 text-right text-lg font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{race.points}<span className="sr-only"> points</span></span>
+                  <span className="mg-display w-9 shrink-0 text-right text-lg font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(race.points)}<span className="sr-only"> points</span></span>
                 </li>
               ))}
             </ul>

@@ -3,6 +3,7 @@ import { Eye, Pencil, SkipForward } from 'lucide-react';
 import { api } from '../../api';
 import type { QueuedScoreCard } from '../../lib/scoreCard';
 import { NumberField } from '../../components/NumberField';
+import { formatPoints } from '../../lib/formatPoints';
 
 type Action = 'show' | 'skip' | 'edit';
 
@@ -65,7 +66,7 @@ function CardEditor({ queued, busy, onApply }: {
                 onChange={(event) => setHidden(event.target.checked ? hidden.filter((id) => id !== row.teamId) : [...hidden, row.teamId])} /></td>
               <td><input className="w-full rounded border px-1" aria-label={`Name shown for ${row.teamName}`} maxLength={60} value={names[row.teamId] ?? row.teamName}
                 onChange={(event) => setNames({ ...names, [row.teamId]: event.target.value })} /></td>
-              <td className="text-right font-bold">{row.total}</td>
+              <td className="text-right font-bold">{formatPoints(row.total)}</td>
             </tr>
           ))}
         </tbody>

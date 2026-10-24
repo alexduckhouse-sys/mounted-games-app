@@ -91,7 +91,7 @@ public class LaneRotationTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var saved = await response.ReadAsync<RaceScoreDto>();
-        Assert.Equal(new[] { 3, 2, 1, 0 }, saved.Results.OrderBy(r => r.IsSitOut).ThenBy(r => r.Place).Select(r => r.Points));
+        Assert.Equal(new[] { 3.0, 2.0, 1.0, 0.0 }, saved.Results.OrderBy(r => r.IsSitOut).ThenBy(r => r.Place).Select(r => r.Points));
         var sitter = saved.Results.Single(r => r.TeamId == teams[3]);
         Assert.True(sitter.IsSitOut);
         Assert.False(sitter.Eliminated);

@@ -374,7 +374,7 @@ public static class HistorySeeder
                 var heatGroups = Split(entrants, LanesPerHeat);
                 var heatsSession = NewSession(competition, section, $"{sd.Display} heats", arena, arenaFree[arena], ++sessionOrder, upcoming);
                 var heatBase = heatGroups.Max(g => g.Count);
-                var heatTotals = entrants.ToDictionary(e => e.Team, _ => 0);
+                var heatTotals = entrants.ToDictionary(e => e.Team, _ => 0.0);
                 BuildHeats(heatsSession, heatGroups.Select((g, i) => ($"Heat {i + 1}", g)).ToList(), raceTotal, heatBase, eventRng, upcoming, heatTotals,
                     ref raceCount, ref resultCount);
                 arenaFree[arena] = heatsSession.ScheduledStart!.Value.AddMinutes(heatGroups.Count * MinutesPerHeat + 10);
@@ -552,7 +552,7 @@ public static class HistorySeeder
 
     private static void BuildHeats(
         Session session, List<(string Label, List<Entrant> Entrants)> heats, int raceTotal, int baseSize, Random rng,
-        bool upcoming, Dictionary<Team, int>? totals, ref int raceCount, ref int resultCount)
+        bool upcoming, Dictionary<Team, double>? totals, ref int raceCount, ref int resultCount)
     {
         var start = session.ScheduledStart!.Value;
         for (var h = 0; h < heats.Count; h++)

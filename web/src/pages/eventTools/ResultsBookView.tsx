@@ -2,6 +2,7 @@ import { Download } from 'lucide-react';
 import { downloadCsv } from '../../lib/csv';
 import { resultsBookFileName, resultsBookToCsv } from '../../lib/resultsBookCsv';
 import type { PrintableEntries, ResultsBook, SpecialAward } from './resultsBookTypes';
+import { formatPoints } from '../../lib/formatPoints';
 
 function Awards({ awards }: { awards: SpecialAward[] }) {
   if (awards.length === 0) return null;
@@ -33,7 +34,7 @@ export function ResultsBookView({ data }: { data: ResultsBook }) {
           <thead><tr><th>Pos.</th><th>Team</th><th>Club</th>{final.raceNames.map((name, index) => <th key={index} className="event-print-cell">{name}</th>)}<th className="event-print-cell">Points</th></tr></thead>
           <tbody>{final.rows.map((row) => <tr key={row.teamId}>
             <td>{row.rank}</td><td>{row.teamName}</td><td>{row.clubName}</td>
-            {row.raceCells.map((cell, index) => <td key={index}>{cell}</td>)}<td><strong>{row.points}</strong></td>
+            {row.raceCells.map((cell, index) => <td key={index}>{cell}</td>)}<td><strong>{formatPoints(row.points)}</strong></td>
           </tr>)}</tbody>
         </table></div>
       </div>)}
@@ -60,7 +61,7 @@ function StandingsTable({ standings }: { standings: ResultsBook['sections'][numb
     <tbody>{standings.map((row) => <tr key={row.teamId}>
       <td>{row.rank}</td>
       <td>{row.teamName}{row.withdrawn ? <span className="event-print-note"> (withdrawn)</span> : null}</td>
-      <td>{row.clubName}</td><td>{row.finalLabel ?? ''}</td><td><strong>{row.totalPoints}</strong></td>
+      <td>{row.clubName}</td><td>{row.finalLabel ?? ''}</td><td><strong>{formatPoints(row.totalPoints)}</strong></td>
       {hasBonus && <td>{row.bonusPoints}</td>}<td>{row.racesRun}</td><td>{row.wins}</td><td>{row.eliminations}</td>
     </tr>)}</tbody>
   </table></div>;

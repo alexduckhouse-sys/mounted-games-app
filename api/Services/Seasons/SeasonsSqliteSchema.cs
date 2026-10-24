@@ -118,7 +118,7 @@ public static class SeasonsSqliteSchema
         "TeamName" TEXT NOT NULL,
         "ClubName" TEXT NOT NULL,
         "EventRank" INTEGER NOT NULL,
-        "EventPoints" INTEGER NOT NULL,
+        "EventPoints" REAL NOT NULL,
         "SeasonPoints" INTEGER NOT NULL,
         CONSTRAINT "FK_SeasonRoundResult_SeasonRoundPublication_SeasonRoundPublica~" FOREIGN KEY ("SeasonRoundPublicationId") REFERENCES "SeasonRoundPublication" ("Id") ON DELETE CASCADE,
         CONSTRAINT "FK_SeasonRoundResult_TeamProfile_TeamProfileId" FOREIGN KEY ("TeamProfileId") REFERENCES "TeamProfile" ("Id") ON DELETE RESTRICT

@@ -1,4 +1,5 @@
 import type { StatsBrowse, StatsHit, StatsProfile, StatsSubjectKind, StatsSummary } from '../types';
+import { formatPoints } from './formatPoints';
 
 /** The API's limits on a search or profile name (`StatsNames` in the API). */
 export const STATS_MIN_QUERY = 2;
@@ -52,7 +53,7 @@ export function finalLabel(tier: number | null | undefined): string | null {
 
 /** "3 of 6 points" for a quota line. */
 export function pointsOf(points: number, maxPoints: number): string {
-  return `${points} of ${maxPoints} ${maxPoints === 1 ? 'point' : 'points'}`;
+  return `${formatPoints(points)} of ${formatPoints(maxPoints)} ${maxPoints === 1 ? 'point' : 'points'}`;
 }
 
 export function plural(count: number, one: string, many = `${one}s`): string {

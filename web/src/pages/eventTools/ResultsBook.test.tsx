@@ -54,6 +54,22 @@ describe('results book print view', () => {
     expect(screen.queryByText(/private referee notes/)).not.toBeInTheDocument();
   });
 
+  it('shows half points as .5 and whole points without a decimal', async () => {
+    const base = book();
+    const section = base.sections[0];
+    get.mockResolvedValueOnce({ data: book({ sections: [{ ...section,
+      standings: [{ ...section.standings[0], totalPoints: 20.5, bonusPoints: 0 }, { ...section.standings[1], totalPoints: 10 }],
+      finals: [{ ...section.finals[0], rows: [{ ...section.finals[0].rows[0], points: 2.5 }] }],
+    }] }) });
+    renderView('results-book');
+
+    expect(await screen.findByRole('heading', { name: 'Under 12' })).toBeInTheDocument();
+    expect(screen.getByText('20.5')).toBeInTheDocument();
+    expect(screen.getByText('10')).toBeInTheDocument();
+    expect(screen.getByText('2.5')).toBeInTheDocument();
+    expect(screen.queryByText('20.50')).not.toBeInTheDocument();
+  });
+
   it('marks a provisional book and downloads the CSV', async () => {
     get.mockResolvedValueOnce({ data: book({ isProvisional: true }) });
     const download = vi.spyOn(csv, 'downloadCsv').mockImplementation(() => {});

@@ -14,7 +14,7 @@ public class FinalsTieOrder
     public Team? Team { get; set; }
 
     /// <summary>The team's total points when the order was set.</summary>
-    public int Points { get; set; }
+    public double Points { get; set; }
     /// <summary>1 for the team placed highest in its tie, 2 for the next, and so on.</summary>
     public int Position { get; set; }
     public DateTime SetAt { get; set; } = DateTime.UtcNow;

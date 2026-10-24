@@ -79,7 +79,7 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
         var heat = await r.ReadAsync<HeatDto>();
         var race = heat.Races.Single();
         Assert.True(race.IsComplete);
-        Assert.Equal(new[] { 4, 3, 2, 1 }, race.Results.Select(x => x.Points));
+        Assert.Equal(new[] { 4.0, 3.0, 2.0, 1.0 }, race.Results.Select(x => x.Points));
         Assert.Equal(new[] { 1, 2, 3, 4 }, race.Results.Select(x => x.Placing!.Value));
         Assert.Equal(a.TeamIds[2], race.Results[0].TeamId);
     }
@@ -95,7 +95,7 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
 
         var results = heat.Races.Single().Results;
         Assert.Equal(new[] { a.TeamIds[1], a.TeamIds[2], a.TeamIds[0] }, results.Select(x => x.TeamId));
-        Assert.Equal(new[] { 3, 2, 0 }, results.Select(x => x.Points));
+        Assert.Equal(new[] { 3.0, 2.0, 0.0 }, results.Select(x => x.Points));
         Assert.True(results[2].Eliminated);
         Assert.Null(results[2].Placing);
     }
@@ -110,7 +110,7 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
 
         var heat = await (await Submit(admin, races[0], new[] { P(a.TeamIds[4], 1), P(a.TeamIds[5], 2) })).ReadAsync<HeatDto>();
 
-        Assert.Equal(new[] { 4, 3 }, heat.Races.Single().Results.Select(x => x.Points));
+        Assert.Equal(new[] { 4.0, 3.0 }, heat.Races.Single().Results.Select(x => x.Points));
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
 
         var heat = await (await Submit(admin, races[0], new[] { P(a.TeamIds[0], 1), P(a.TeamIds[1], 2), P(a.TeamIds[2], 3, true) })).ReadAsync<HeatDto>();
 
-        Assert.Equal(new[] { 1, 1, 0 }, heat.Races.Single().Results.Select(x => x.Points));
+        Assert.Equal(new[] { 1.0, 1.0, 0.0 }, heat.Races.Single().Results.Select(x => x.Points));
     }
 
     [Fact]
