@@ -151,10 +151,10 @@ function ProfileBody({ profile }: { profile: StatsProfile }) {
         : <RefineNote>No finished competitions yet.</RefineNote>}
       {profile.seasons?.length ? <>
         <RefineSection title="Seasons" meta={profile.seasons.length} />
-        <RefineList label="Seasons">{profile.seasons.map((season) => <li key={season.seasonId} className="rf-row">
+        <RefineList label="Seasons">{profile.seasons.map((season) => <li key={`${season.seasonId}:${season.teamProfileId}`} className="rf-row">
           <span className="rf-grow">
-            <span className="rf-t1">{season.seasonName}</span>
-            <span className="rf-t2">{plural(season.eventsEntered, 'competition')} · {season.points} pts{season.rank != null ? ` · Best place ${ordinalPlace(season.rank)}` : ''}</span>
+            <Link to={`/seasons/${season.seasonId}`} className="rf-t1">{season.seasonName}</Link>
+            <span className="rf-t2">{season.teamName} · {plural(season.eventsEntered, 'competition')} · {formatPoints(season.points)} pts{season.rank != null ? ` · ${ordinalPlace(season.rank)}` : ''}</span>
           </span>
         </li>)}</RefineList>
       </> : null}

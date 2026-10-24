@@ -10,7 +10,7 @@ namespace MountedGames.Api.Services;
 /// </summary>
 public static class SignupTerms
 {
-    public const string WordingVersion = "2026-10-v1";
+    public const string WordingVersion = "2026-10-v2";
 
     /// <summary>
     /// What gets stored on the signup: the tick wording plus which terms were beside it. Organisers can edit their

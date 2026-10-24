@@ -320,17 +320,26 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             .ThenBy(c => c.ClubName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var seasons = entries
-            .GroupBy(e => e.StartDate.Year)
-            .OrderByDescending(g => g.Key)
-            .Select(g => new StatsSeasonStandingDto(
-                g.Key,
-                $"{g.Key} Season",
-                g.Key,
-                g.Where(e => e.Place.HasValue).Select(e => e.Place).Min(),
-                g.Sum(e => e.Points),
-                g.Select(e => e.CompetitionId).Distinct().Count()))
-            .ToList();
+        var eventTeamIds = entries.Select(e => e.TeamId).ToArray();
+        var seasonMemberships = await db.Set<SeasonRoundResult>().AsNoTracking()
+            .Where(r => eventTeamIds.Contains(r.EventTeamId)
+                && r.SeasonRoundPublication!.SeasonRound!.IsIncluded
+                && !db.Set<SeasonRoundPublication>().Any(newer =>
+                    newer.SeasonRoundId == r.SeasonRoundPublication.SeasonRoundId
+                    && newer.Version > r.SeasonRoundPublication.Version))
+            .Select(r => new { r.SeasonRoundPublication!.SeasonRound!.SeasonId, r.TeamProfileId })
+            .Distinct().ToListAsync(ct);
+        var seasons = new List<StatsSeasonStandingDto>();
+        foreach (var group in seasonMemberships.GroupBy(m => m.SeasonId))
+        {
+            var table = await Services.Seasons.SeasonStandingsCalculator.CalculateAsync(db, group.Key, ct);
+            if (table is null) continue;
+            var profileIds = group.Select(m => m.TeamProfileId).ToHashSet();
+            seasons.AddRange(table.Standings.Where(row => profileIds.Contains(row.TeamProfileId))
+                .Select(row => new StatsSeasonStandingDto(table.SeasonId, table.Title, table.Year,
+                    row.Rank, row.TotalPoints, row.Rounds.Count, row.TeamProfileId, row.TeamName)));
+        }
+        seasons = seasons.OrderByDescending(s => s.Year).ThenBy(s => s.SeasonName).ThenBy(s => s.Rank).ToList();
 
         return new StatsProfileDto(kind, name, key, true, allFormats, summary, games, best, worst, entries, partnerships, clubs, seasons);
     }

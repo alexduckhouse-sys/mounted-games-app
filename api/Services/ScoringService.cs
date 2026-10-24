@@ -571,7 +571,7 @@ public class ScoringService
                 var ord = PushNotifier.Ordinal(rank);
                 messages.Add((row.TeamId, new PushPayload(
                     Title: "Your heat's results are in",
-                    Body: $"{ord} in {heatLabel} — {row.Points} pts ({row.TeamName})",
+                    Body: $"{ord} in {heatLabel} — {PointValues.Format(row.Points)} pts ({row.TeamName})",
                     Tag: $"heat-results:{heat.Id}:{row.TeamId}",
                     Url: url)));
             }

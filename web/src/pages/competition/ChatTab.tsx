@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertTriangle, Lock, Megaphone, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -10,8 +10,12 @@ import { useDialogFocus } from '../../components/useDialogFocus';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { LiveVideo } from '../../components/stream/LiveVideo';
-import type { ChatMessage, CompetitionDetail, LiveStream } from '../../types';
+import type { ChatMessage, CompetitionDetail, LiveStream, StandingRow } from '../../types';
 import './chat.css';
+import { computeTimings } from '../../lib/time';
+import { timetableRows } from '../../lib/timetableRows';
+import { buildToplist } from '../../lib/toplist';
+import { formatPoints } from '../../lib/formatPoints';
 import { confirmDialog } from '../../components/ConfirmDialog';
 
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
@@ -234,7 +238,13 @@ function ChatTabSession() {
         <>
           <div className="live-col live-col-rail">
         <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
-        <StreamCompanionPanel competition={competition} />
+        <StreamCompanionPanel competition={competition} announcements={
+          <>
+            {messagesError && <p role="alert">{messagesError}</p>}
+            {messagesLoading ? <p role="status">Loading announcements…</p> : <AnnouncementList messages={latest} staff={canPost} canModerate={canModerate} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} />}
+            {canCompose && <a href="#chat-composer" className="mg-text-link">Write a message</a>}
+          </>
+        } />
       {banner && (
         <div className="live-banner" role="status">
           <Megaphone aria-hidden="true" />
@@ -266,7 +276,7 @@ function ChatTabSession() {
       </section>
 
       {canCompose && (
-        <div className="live-composer">
+        <div id="chat-composer" className="live-composer">
           {replyTo ? (
             <div className="live-composer-label"><Lock aria-hidden="true" /> Private reply to {replyTo.name}
               <button type="button" className="live-reply-cancel" onClick={() => setReplyTo(null)}>Cancel</button>
@@ -298,7 +308,13 @@ function ChatTabSession() {
         <>
           <div className="live-col live-col-main">
       <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
-      <StreamCompanionPanel competition={competition} />
+      <StreamCompanionPanel competition={competition} announcements={
+          <>
+            {messagesError && <p role="alert">{messagesError}</p>}
+            {messagesLoading ? <p role="status">Loading announcements…</p> : <AnnouncementList messages={latest} staff={canPost} canModerate={canModerate} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} />}
+            {canCompose && <a href="#chat-composer" className="mg-text-link">Write a message</a>}
+          </>
+        } />
           </div>
           <div className="live-col live-col-rail">
       {banner && (
@@ -330,7 +346,7 @@ function ChatTabSession() {
       </section>
 
       {canCompose && (
-        <div className="live-composer">
+        <div id="chat-composer" className="live-composer">
           {replyTo ? (
             <div className="live-composer-label"><Lock aria-hidden="true" /> Private reply to {replyTo.name}
               <button type="button" className="live-reply-cancel" onClick={() => setReplyTo(null)}>Cancel</button>
@@ -385,26 +401,12 @@ function AnnouncementList({ messages, staff, canModerate, onDelete, onBlock, onR
 
 type CompanionView = 'scores' | 'timetable' | 'toplist' | 'announcements';
 
-function StreamCompanionPanel({ competition }: { competition: CompetitionDetail }) {
+function StreamCompanionPanel({ competition, announcements }: { competition: CompetitionDetail; announcements: ReactNode }) {
   const [view, setView] = useState<CompanionView>('scores');
-  const raceSessions = competition.sessions.filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0);
-  const liveSession = raceSessions.find((s) => s.status === 1) ?? raceSessions[0];
-  const orderedHeats = liveSession ? [...liveSession.heats].sort((a, b) => a.orderIndex - b.orderIndex) : [];
-  const activeHeat = orderedHeats.find((h) => !(h.races.length > 0 && h.races.every((r) => r.isComplete))) ?? orderedHeats[0];
-
-  const standings = competition.teams
-    .filter((t) => !t.isHorsConcours && !t.isWithdrawn)
-    .map((t) => {
-      const points = raceSessions
-        .flatMap((s) => s.heats)
-        .flatMap((h) => h.races)
-        .filter((r) => r.isComplete)
-        .flatMap((r) => r.results)
-        .filter((res) => res.teamId === t.id)
-        .reduce((sum, res) => sum + res.points, 0);
-      return { id: t.id, name: t.displayName, section: t.sectionName, points };
-    })
-    .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+  const timetable = timetableRows(competition.sessions, computeTimings(competition.sessions), true);
+  const liveRow = timetable.find((row) => row.status === 'live' && (row.session.kind ?? (row.session.isBreak ? 1 : 0)) === 0 && row.heat);
+  const liveSession = liveRow?.session;
+  const activeHeat = liveRow?.heat;
 
   return (
     <section aria-label="Stream companion" className="flex flex-col gap-2">
@@ -434,7 +436,7 @@ function StreamCompanionPanel({ competition }: { competition: CompetitionDetail 
                   return (
                     <li key={entry.id} className="flex items-center justify-between py-1.5">
                       <span>Lane {entry.laneIndex} · <strong>{entry.teamName}</strong></span>
-                      <span className="font-bold tabular-nums">{pts} pts</span>
+                      <span className="font-bold tabular-nums">{formatPoints(pts)} pts</span>
                     </li>
                   );
                 })}
@@ -447,12 +449,12 @@ function StreamCompanionPanel({ competition }: { competition: CompetitionDetail 
       )}
       {view === 'timetable' && (
         <div role="tabpanel" aria-label="Timetable" className="mg-card p-3 text-sm">
-          {competition.sessions.length > 0 ? (
+          {timetable.length > 0 ? (
             <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-              {competition.sessions.map((s) => (
-                <li key={s.id} className="flex items-center justify-between py-1.5">
-                  <Link to={`/competitions/${competition.id}/session/${s.id}`} className="font-semibold">{s.name}</Link>
-                  <span className="text-xs text-[rgb(var(--mg-muted))]">{s.heats.length} {s.heats.length === 1 ? 'heat' : 'heats'}</span>
+              {timetable.map((row) => (
+                <li key={row.key} className="flex items-center justify-between gap-2 py-1.5">
+                  <Link to={`/competitions/${competition.id}/session/${row.session.id}`} className="font-semibold">{row.session.name}{row.heat && ` · ${row.heat.label || `Heat ${row.heatIndex + 1}`}`}</Link>
+                  <span className="text-xs text-[rgb(var(--mg-muted))]">{row.effective ? row.effective.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'Time to be confirmed'}</span>
                 </li>
               ))}
             </ul>
@@ -463,22 +465,46 @@ function StreamCompanionPanel({ competition }: { competition: CompetitionDetail 
       )}
       {view === 'toplist' && (
         <div role="tabpanel" aria-label="Toplist" className="mg-card p-3 text-sm">
-          {standings.length > 0 ? (
-            <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-              {standings.slice(0, 10).map((row, idx) => (
-                <li key={row.id} className="flex items-center justify-between py-1.5">
-                  <span>{idx + 1}. <strong>{row.name}</strong></span>
-                  <span className="font-bold tabular-nums">{row.points} pts</span>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="m-0 text-[rgb(var(--mg-muted))]">No standings yet.</p>
-          )}
+          <StreamToplist competition={competition} />
         </div>
       )}
+      {view === 'announcements' && <div role="tabpanel" aria-label="Announcements & chat">{announcements}</div>}
+
     </section>
   );
+}
+
+function StreamToplist({ competition }: { competition: CompetitionDetail }) {
+  const [chosenSection, setChosenSection] = useState<number | null>(null);
+  const section = competition.sections.find((item) => item.id === chosenSection) ?? competition.sections[0];
+  const sectionId = section?.id;
+  const [retry, setRetry] = useState(0);
+  const [result, setResult] = useState<{ sectionId: number; rows: StandingRow[]; error: boolean } | null>(null);
+  useEffect(() => {
+    if (sectionId == null) return;
+    const controller = new AbortController();
+    api.get<StandingRow[]>(`/competitions/${competition.id}/standings`, { params: { sectionId }, signal: controller.signal })
+      .then(({ data }) => { if (!controller.signal.aborted) setResult({ sectionId, rows: data, error: false }); })
+      .catch(() => { if (!controller.signal.aborted) setResult({ sectionId, rows: [], error: true }); });
+    return () => controller.abort();
+  }, [competition.id, competition.sessions, sectionId, retry]);
+  const current = result?.sectionId === sectionId ? result : null;
+  const list = buildToplist(current?.rows ?? [], competition.sessions, competition.teams, sectionId ?? -1, section?.finalistCount);
+  return <>
+    {section && <label className="flex items-center gap-2">Age group
+      <select aria-label="Toplist age group" value={section.id} onChange={(event) => setChosenSection(Number(event.target.value))}>
+        {competition.sections.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}
+      </select>
+    </label>}
+    {!section ? <p>No age groups yet.</p> : !current ? <p role="status">Loading standings…</p> : current.error ?
+      <div role="alert"><p>Couldn’t load standings.</p><button type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div> : list.rows.length === 0 ? <p>No standings yet.</p> :
+      <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+        {list.rows.map((row) => <li key={row.teamId} className="flex items-center justify-between py-1.5">
+          <span>{list.started ? `${row.position}. ` : ''}<strong>{row.teamName}</strong>{row.withdrawn && ' (withdrawn)'}</span>
+          <span className="font-bold tabular-nums">{formatPoints(row.points)} pts</span>
+        </li>)}
+      </ol>}
+  </>;
 }
 
 function AnnouncementRow({ message, staff, canModerate, onDelete, onBlock, onReply, reduceMotion }: {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
@@ -31,11 +31,11 @@ describe('RaceRulesButton', () => {
     await userEvent.click(button);
     const dialog = await screen.findByRole('dialog', { name: 'bending' });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
-    expect(await screen.findByText('Weave through the poles.')).toBeInTheDocument();
+    expect((await screen.findAllByText('Weave through the poles.')).length).toBeGreaterThan(0);
     expect(screen.getByRole('region', { name: 'Rules' })).toHaveTextContent('Go up the lane.');
     expect(screen.getByRole('region', { name: 'Equipment' })).toHaveTextContent('2 × Pole');
     expect(screen.getByRole('region', { name: 'Equipment' })).toHaveTextContent('Mug');
-    expect(screen.getByRole('region', { name: 'How to win & common eliminations' })).toHaveTextContent('Common eliminations');
+    expect(screen.getByRole('region', { name: 'How to win & common eliminations' })).toHaveTextContent('Go up the lane.');
     expect(button).toHaveAttribute('aria-expanded', 'true');
   });
 
@@ -48,7 +48,7 @@ describe('RaceRulesButton', () => {
     render(<RaceRulesButton raceName="Bending" />);
     const button = screen.getByRole('button', { name: 'Rules for Bending' });
     await userEvent.click(button);
-    await screen.findByText('Weave through the poles.');
+    await screen.findAllByText('Weave through the poles.');
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await waitFor(() => expect(button).toHaveFocus());
@@ -94,7 +94,7 @@ describe('RaceRulesButton', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Rules for Bending' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the rules');
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('Weave through the poles.')).toBeInTheDocument();
+    expect((await screen.findAllByText('Weave through the poles.')).length).toBeGreaterThan(0);
     expect(api.get).toHaveBeenCalledTimes(2);
   });
 
@@ -104,4 +104,20 @@ describe('RaceRulesButton', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Rules for Bending' }));
     expect(parent).not.toHaveBeenCalled();
   });
+});
+
+
+it('quotes the actual game rules without inventing generic dismount or elimination rules', async () => {
+  vi.mocked(api.get).mockResolvedValue({ data: [{ id: 3, name: 'Stepping Stones', isBuiltIn: true,
+    summary: 'Cross the stones on foot.',
+    rules: 'Riders dismount before the stones on the Centre Line. Knocking stones means returning to the start of the stones. The winning team finishes with all six stones standing.',
+  }] });
+  render(<RaceRulesButton raceName="Stepping Stones" />);
+  await userEvent.click(screen.getByRole('button', { name: 'Rules for Stepping Stones' }));
+  const highlights = await screen.findByRole('region', { name: 'How to win & common eliminations' });
+  expect(within(highlights).getAllByRole('listitem')).toHaveLength(3);
+  expect(highlights).toHaveTextContent('The winning team finishes with all six stones standing.');
+  expect(highlights).toHaveTextContent('Knocking stones means returning to the start of the stones.');
+  expect(highlights).not.toHaveTextContent('behind the start/finish');
+  expect(highlights).not.toHaveTextContent('Common eliminations:');
 });

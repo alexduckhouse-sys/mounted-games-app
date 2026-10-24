@@ -33,14 +33,14 @@ public class TimetableTimesTests
     }
 
     [Fact]
-    public void WithoutAHeatDuration_TheSessionsMinutesPerHeatAreUsedPerRace()
+    public void WithoutAHeatDuration_TheSessionsMinutesPerHeatCoverTheWholeHeat()
     {
         var session = NewSession(1, At(9), minutesPerHeat: 8, heats: [NewHeat(1, 1, races: 3), NewHeat(2, 2, races: 0)]);
 
         var times = TimetableTimes.Compute([session]);
 
-        Assert.Equal(24, times[1].DurationMinutes);
-        Assert.Equal(At(9, 24), times[2].Start);
+        Assert.Equal(8, times[1].DurationMinutes);
+        Assert.Equal(At(9, 8), times[2].Start);
         Assert.Equal(8, times[2].DurationMinutes);
     }
 

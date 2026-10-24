@@ -165,7 +165,8 @@ describe('CompetitionTeamPage', () => {
     expect(screen.getByRole('region', { name: 'Scores' })).toBeInTheDocument();
 
     // Declared riders & ponies with useInitialOnly respected
-    expect(await screen.findByText('Emma W.')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Emma W.' })).toHaveAttribute('href', expect.stringContaining('/stats/riders?name='));
+    expect(screen.getByRole('link', { name: 'Pippin' })).toHaveAttribute('href', expect.stringContaining('/stats/ponies?name='));
     expect(screen.getByText(/Pippin/)).toBeInTheDocument();
     expect(screen.getByText('Jack Brown')).toBeInTheDocument();
 

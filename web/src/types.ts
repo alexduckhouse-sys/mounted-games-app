@@ -975,7 +975,9 @@ export interface StatsClub {
 }
 
 export interface StatsSeasonStanding {
-  seasonId: number;
+  seasonId: string;
+  teamProfileId: string;
+  teamName: string;
   seasonName: string;
   year: number;
   rank?: number | null;

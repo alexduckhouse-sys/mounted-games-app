@@ -39,7 +39,7 @@ const detailed: StatsProfile = {
   ],
   partnerships: [{ riderName: 'Oliver S.', ponyName: 'Bramble', entries: 2, competitions: 2 }],
   clubs: [{ clubName: 'North', entries: 2, competitions: 2, firstDate: '2030-10-01', lastDate: '2031-04-12' }],
-  seasons: [{ seasonId: 2031, seasonName: '2031 Season', year: 2031, rank: 1, points: 3, eventsEntered: 1 }],
+  seasons: [{ seasonId: 'example-season', teamProfileId: 'example-team', teamName: 'Example Club A', seasonName: '2031 Season', year: 2031, rank: 1, points: 3, eventsEntered: 1 }],
 };
 
 function renderAt(path: string) {

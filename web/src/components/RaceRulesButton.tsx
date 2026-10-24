@@ -9,6 +9,15 @@ import './race-rules.css';
 
 type Result = { key: string; template: RaceTemplate | null } | { key: string; failed: true };
 
+/** Quote the stored race guidance; generic advice can contradict a game's rules. */
+function ruleHighlights(template: RaceTemplate): string[] {
+  const sentences = (template.rules ?? '').split(/(?<=[.!?])\s+|\n+/).map((text) => text.trim()).filter(Boolean);
+  const winning = sentences.find((text) => /\bwinning\b|\bwins?\b/i.test(text));
+  const corrections = sentences.filter((text) => /eliminat|knock|drop|miss|must|return|correct|penalt/i.test(text) && text !== winning);
+  const candidates = [template.summary?.trim(), winning, ...corrections, ...sentences];
+  return [...new Set(candidates.filter((text): text is string => !!text))].slice(0, 3);
+}
+
 /** An info button that opens a sheet with a race's rules and equipment. */
 export function RaceRulesButton({ raceName, className = '', label }: { raceName: string; className?: string; label?: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -57,6 +66,7 @@ export function RaceRulesButton({ raceName, className = '', label }: { raceName:
 
   const current = result?.key === key ? result : null;
   const template = current && 'template' in current ? current.template : null;
+  const highlights = template ? ruleHighlights(template) : [];
   const equipment = template ? equipmentFromDiagram(template.diagramJson) : [];
 
   return <>
@@ -81,13 +91,11 @@ export function RaceRulesButton({ raceName, className = '', label }: { raceName:
             {equipment.length > 0 && <section aria-label="Equipment"><h3>Equipment</h3>
               <ul>{equipment.map((item) => <li key={item.label}>{item.count > 1 ? `${item.count} × ` : ''}{item.label}</li>)}</ul>
             </section>}
-            {(template.summary || template.rules || equipment.length > 0) && (
+            {highlights.length > 0 && (
               <section aria-label="How to win & common eliminations">
                 <h3>How to win &amp; common eliminations</h3>
                 <ul>
-                  <li>First rider/team across the finish line with all lane equipment upright wins.</li>
-                  <li>Handovers and dismounts must happen behind the start/finish or changeover line.</li>
-                  <li>Common eliminations: knocked pole or equipment left down, missed changeover, or crossing outside the lane markers.</li>
+                  {highlights.map((text) => <li key={text}>{text}</li>)}
                 </ul>
               </section>
             )}

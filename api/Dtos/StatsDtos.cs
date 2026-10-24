@@ -52,7 +52,7 @@ public record StatsSummaryDto(
     int BFinals = 0, int CFinals = 0);
 
 public record StatsClubDto(string ClubName, int Entries, int Competitions, string? FirstDate, string? LastDate);
-public record StatsSeasonStandingDto(int SeasonId, string SeasonName, int Year, int? Rank, int Points, int EventsEntered);
+public record StatsSeasonStandingDto(Guid SeasonId, string SeasonName, int Year, int? Rank, long Points, int EventsEntered, Guid TeamProfileId, string TeamName);
 
 /// <summary>One game (race name) across every counted race. <c>NonFinishes</c> covers E, DNS, DNF and R.</summary>
 public record StatsGameDto(

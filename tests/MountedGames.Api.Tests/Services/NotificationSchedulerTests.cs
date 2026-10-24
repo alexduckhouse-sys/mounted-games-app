@@ -104,6 +104,35 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
         Assert.Equal(1, s.Push.Received);
     }
 
+    [Theory]
+    [InlineData(58, 1)] // Only the first heat is an hour away, not all three.
+    [InlineData(-2, 1)] // Session has begun; its third heat is still an hour away.
+    [InlineData(28, 1)] // The second heat is the one due an hour from now.
+    public async Task Tick_TimesEachHeatSeparately(double minutesAhead, int expected)
+    {
+        using var scenario = await ArrangeAsync();
+        await _f.InDbAsync(async db =>
+        {
+            var session = new Session { CompetitionId = scenario.Section.CompetitionId,
+                CompetitionSectionId = scenario.Section.Id, Name = "Example session", Kind = SessionKind.Race,
+                ScheduledStart = DateTime.UtcNow.AddMinutes(minutesAhead), MinutesPerHeat = 30 };
+            for (var index = 1; index <= 3; index++)
+            {
+                var heat = new Heat { Label = $"Heat {index}", OrderIndex = index };
+                heat.Entries.Add(new HeatEntry { TeamId = scenario.TeamId, LaneIndex = index });
+                heat.Races.Add(new Race { Name = "Example race one", OrderIndex = 1 });
+                heat.Races.Add(new Race { Name = "Example race two", OrderIndex = 2 });
+                session.Heats.Add(heat);
+            }
+            db.Sessions.Add(session);
+            await db.SaveChangesAsync();
+        });
+        var scheduler = NewScheduler();
+        await scheduler.TickAsync(CancellationToken.None);
+        await scheduler.TickAsync(CancellationToken.None);
+        Assert.Equal(expected, scenario.Push.Received);
+    }
+
     [Fact]
     public async Task Tick_SaysNothing_AboutARaceSessionThatOnlyHasAnEstimatedStart()
     {
@@ -228,6 +257,34 @@ public class NotificationSchedulerTests : IClassFixture<ApiFactory>
         await NewScheduler().TickAsync(CancellationToken.None);
 
         Assert.Equal(1, s.Push.Received);
+    }
+
+    [Fact]
+    public async Task TeamPushes_ReachOnlyTrainerAndAcceptedSupporters_WithoutDuplicates()
+    {
+        using var scenario = await ArrangeAsync();
+        using var acceptedPush = new FakePushService(_f.Http, HttpStatusCode.Created);
+        using var pendingPush = new FakePushService(_f.Http, HttpStatusCode.Created);
+        foreach (var (service, status) in new[] { (acceptedPush, TeamSupporterStatus.Accepted), (pendingPush, TeamSupporterStatus.Pending) })
+        {
+            var (client, auth) = await _f.SignupAsync();
+            await client.PostAsJsonAsync("/api/push/subscribe", FakePushService.Subscription(service.Endpoint));
+            await _f.InDbAsync(async db =>
+            {
+                db.TeamSupporters.Add(new TeamSupporter { TeamId = scenario.TeamId, UserId = auth.User.Id, Status = status });
+                await db.SaveChangesAsync();
+            });
+        }
+        using var scope = _f.Services.CreateScope();
+        var notifier = scope.ServiceProvider.GetRequiredService<PushNotifier>();
+        var payload = new PushPayload("Example reminder", "Example heat");
+        await notifier.NotifyTeamsAsync([scenario.TeamId, scenario.TeamId], payload);
+        Assert.Equal((1, 1, 0), (scenario.Push.Received, acceptedPush.Received, pendingPush.Received));
+        await notifier.NotifyPerTeamAsync([(scenario.TeamId, payload), (int.MaxValue, payload)]);
+        Assert.Equal((2, 2, 0), (scenario.Push.Received, acceptedPush.Received, pendingPush.Received));
+        await notifier.NotifyTeamsAsync([], payload);
+        await notifier.NotifyPerTeamAsync([]);
+        Assert.Equal((2, 2, 0), (scenario.Push.Received, acceptedPush.Received, pendingPush.Received));
     }
 
     // ---- hosted-service loop ----
