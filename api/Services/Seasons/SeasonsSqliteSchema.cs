@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
+using MountedGames.Api.Entities.Seasons;
 
 namespace MountedGames.Api.Services.Seasons;
 
@@ -60,6 +61,7 @@ public static class SeasonsSqliteSchema
         "CompetitionSectionId" INTEGER NOT NULL,
         "OrderIndex" INTEGER NOT NULL,
         "IsIncluded" INTEGER NOT NULL,
+        "PointsMultiplier" REAL NOT NULL DEFAULT 1.0,
         "CreatedAt" TEXT NOT NULL,
         CONSTRAINT "PK_SeasonRound" PRIMARY KEY ("Id"),
         CONSTRAINT "FK_SeasonRound_CompetitionSections_CompetitionSectionId" FOREIGN KEY ("CompetitionSectionId") REFERENCES "CompetitionSections" ("Id") ON DELETE RESTRICT,

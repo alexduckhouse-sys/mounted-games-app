@@ -38,6 +38,7 @@ function mount(canManage = false, path = '/seasons/example-season') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(api.get).mockResolvedValue({ data: [] });
   vi.mocked(useAuth).mockReturnValue({ user: { id: 'example-organiser' }, canOrganise: () => true, hasRole: () => false, canEdit: () => true } as unknown as ReturnType<typeof useAuth>);
 });
 
@@ -93,6 +94,17 @@ describe('SeasonSettingsForm', () => {
     expect(screen.getByLabelText('Season name')).toHaveValue('Renamed league');
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
   });
+  it('offers a retry when eligible competitions cannot be loaded', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ data: [
+      { id: 10, name: 'Fake eligible event', startDate: '2035-05-01T00:00:00Z' },
+    ] });
+    render(<SeasonSettingsForm create onSave={vi.fn()} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Competitions couldn’t be loaded');
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('checkbox', { name: /Fake eligible event/ })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith('/seasons/available-competitions', expect.anything());
+  });
   it('always offers Create and Cancel on the create form', async () => {
     const cancel = vi.fn();
     render(<SeasonSettingsForm create label="Create season" onSave={vi.fn()} onCancel={cancel} />);
@@ -103,17 +115,84 @@ describe('SeasonSettingsForm', () => {
 });
 
 describe('SeasonPage', () => {
-  it('shows standings first with shared places, a footnote and profile links, and no management controls', async () => {
+  it('shows standings first with shared places, per-round columns, dropped scores crossed out, a footnote and profile links, and no management controls', async () => {
     mount();
     expect(await screen.findByRole('heading', { name: 'Example Summer League' })).toBeInTheDocument();
     expect(screen.getByText('Season 2026')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Standings' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getAllByText('=1')).toHaveLength(2);
-    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Pos', 'Team', 'Rds', 'Pts']);
+    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Pos', 'Team', 'R1', 'Rds', 'Pts']);
+    const droppedScore = screen.getByText('8');
+    expect(droppedScore).toHaveClass('line-through', 'opacity-55');
     expect(screen.getByRole('link', { name: 'Example Blue' })).toHaveAttribute('href', '/team-profiles/team-a');
     expect(screen.getByText(/Best 1 of 1 round · = shared place · after R1, 1 Jun/)).toHaveTextContent('not an official ranking unless the league says so');
     expect(screen.getByLabelText('Age section')).toBeDisabled();
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
+  });
+  it('shows age-group division tabs when a season has rounds across multiple age groups and lets an admin manage without edit mode', async () => {
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'admin-1' }, canOrganise: () => true, hasRole: (r: string) => r === 'Admin', canEdit: () => false } as unknown as ReturnType<typeof useAuth>);
+    const multiSeason: SeasonView = {
+      ...season,
+      ageGroup: 'All age groups',
+      canManage: true,
+      rounds: [
+        { ...season.rounds[0], id: 'round-1', sectionName: 'Seniors', ageGroup: 'Seniors', orderIndex: 1 },
+        { ...season.rounds[0], id: 'round-2', sectionName: 'Under 12', ageGroup: 'Under 12', orderIndex: 2 },
+      ],
+    };
+    const multiStandings = {
+      standings: [
+        { rank: 1, teamProfileId: 'team-a', teamName: 'Example Blue', clubName: 'Example Club', totalPoints: 10, rounds: [{ roundId: 'round-1', eventRank: 1, seasonPoints: 10, counted: true }] },
+        { rank: 1, teamProfileId: 'team-u12', teamName: 'Example Juniors', clubName: 'Example Club', totalPoints: 10, rounds: [{ roundId: 'round-2', eventRank: 1, seasonPoints: 10, counted: true }] },
+      ],
+    };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.endsWith('/standings')) return { data: multiStandings };
+      return { data: multiSeason };
+    });
+    render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByRole('link', { name: 'Settings' })).toBeInTheDocument();
+    const u12Tab = screen.getByRole('tab', { name: 'Under 12' });
+    await userEvent.click(u12Tab);
+    expect(screen.getByRole('link', { name: 'Example Juniors' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Example Blue' })).not.toBeInTheDocument();
+  });
+  it('separates pairs and team standings in the same age group', async () => {
+    const mixed: SeasonView = { ...season, rounds: [
+      { ...season.rounds[0], format: 2, ageGroup: 'Seniors' },
+      { ...season.rounds[0], id: 'pairs', format: 1, ageGroup: 'Seniors', orderIndex: 2 },
+    ] };
+    vi.mocked(api.get).mockImplementation(async (url) => ({ data: url.endsWith('/standings') ? { standings: [
+      standings.standings[0],
+      { rank: 1, teamProfileId: 'fake-rider', teamName: 'Fake Rider', clubName: 'Fake Club', totalPoints: 10, rounds: [{ roundId: 'pairs', eventRank: 1, seasonPoints: 10, counted: true }] },
+    ] } : mixed }));
+    render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByRole('link', { name: 'Example Blue' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Fake Rider' })).not.toBeInTheDocument();
+    await chooseOption(screen.getByRole('combobox', { name: 'Format' }), 'Pairs');
+    expect(screen.getByRole('link', { name: 'Fake Rider' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Example Blue' })).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Rider' })).toBeInTheDocument();
+  });
+  it('lets an organiser select multiple competitions when creating a season', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        { id: 10, name: 'Spring Qualifier', startDate: '2026-04-10T00:00:00Z' },
+        { id: 20, name: 'Summer Nationals', startDate: '2026-07-15T00:00:00Z' },
+      ],
+    });
+    const save = vi.fn().mockResolvedValue(undefined);
+    render(<SeasonSettingsForm create label="Create season" onSave={save} onCancel={vi.fn()} />);
+    const comp1 = await screen.findByRole('checkbox', { name: /Spring Qualifier/ });
+    const comp2 = screen.getByRole('checkbox', { name: /Summer Nationals/ });
+    await userEvent.click(comp1);
+    await userEvent.click(comp2);
+    await userEvent.type(screen.getByLabelText('Season name'), '2026 National League');
+    await userEvent.click(screen.getByRole('button', { name: 'Create season' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      title: '2026 National League',
+      competitionIds: [10, 20],
+    }));
   });
   it('lists rounds with a status word and reveals published versions on request', async () => {
     mount();
