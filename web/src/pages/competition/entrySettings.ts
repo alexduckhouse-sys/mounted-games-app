@@ -23,4 +23,3 @@ export function useEntrySettings(competition: CompetitionWithCloseAt) {
   const closed = !!competition.signupsLocked || !!current?.entriesClosed || (!!entriesCloseAt && new Date(entriesCloseAt).getTime() <= now);
   return { entriesCloseAt, closed };
 }
-
