@@ -69,5 +69,6 @@ public static class TackCheckSqliteSchema
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_PassportChecks_TeamId_PonyKey" ON "PassportChecks" ("TeamId", "PonyKey");
             CREATE INDEX IF NOT EXISTS "IX_PassportChecks_CompetitionId" ON "PassportChecks" ("CompetitionId");
             """);
+        await DbInitializer.EnsureColumnAsync(db, "TackCheckMarks", "RiderScoresJson", "TEXT NULL");
     }
 }

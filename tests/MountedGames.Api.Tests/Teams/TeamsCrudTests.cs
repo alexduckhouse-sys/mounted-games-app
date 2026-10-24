@@ -138,6 +138,29 @@ public class TeamsCrudTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Create_AllowsFreeTextClubNameAndCustomTeamNameWithoutSuffix()
+    {
+        var (comp, section, _) = await ArrangeAsync();
+        var admin = await _f.AdminAsync();
+        var uniqueClub = $"FreeClub {Guid.NewGuid():N}"[..18];
+
+        var r = await admin.PostAsJsonAsync($"/api/competitions/{comp}/teams", new
+        {
+            competitionSectionId = section,
+            clubId = 0,
+            clubName = uniqueClub,
+            name = "Welsh Dragons",
+            suffix = "",
+        });
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var dto = await r.ReadAsync<TeamDto>();
+        Assert.Equal("Welsh Dragons", dto.DisplayName);
+        Assert.Equal(uniqueClub, dto.ClubName);
+        Assert.Equal("", dto.Suffix);
+    }
+
+    [Fact]
     public async Task Create_PrefersRequestBibAndHorsConcours()
     {
         var (comp, section, club) = await ArrangeAsync(clubBib: "Red");
@@ -251,6 +274,26 @@ public class TeamsCrudTests : IClassFixture<ApiFactory>
 
         Assert.Equal("Keep me", dto.DisplayName);
         Assert.Equal("A", dto.Suffix);
+    }
+
+    [Theory]
+    [InlineData("clubName")]
+    [InlineData("club")]
+    public async Task Create_RejectsClubNamesAboveTheDatabaseLimit(string field)
+    {
+        var (comp, section, _) = await ArrangeAsync();
+        var trainer = await _f.TrainerAsync();
+        var input = new Dictionary<string, object>
+        {
+            ["competitionSectionId"] = section,
+            [field] = new string('x', 151),
+            ["name"] = "Synthetic Team",
+        };
+        var response = await trainer.PostAsJsonAsync($"/api/competitions/{comp}/teams", input);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False(await _f.WithDbAsync(db => db.Clubs.AnyAsync(c => c.Name == new string('x', 151))));
+        input[field] = new string('x', 150);
+        Assert.Equal(HttpStatusCode.OK, (await trainer.PostAsJsonAsync($"/api/competitions/{comp}/teams", input)).StatusCode);
     }
 
     // ---- delete ----

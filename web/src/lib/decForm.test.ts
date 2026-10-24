@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DeclarationForm, RiderEntry, SavedRider } from '../types';
 import {
-  blankRider, buildSubmitBody, canSubmit, decDraftKey, dobText, emptySlots, firstEmpty, heightText, isReserveSlot, panelTitle,
+  blankRider, buildSubmitBody, canSubmit, decDraftKey, dobText, emptySlots, firstEmpty, heightText, isReserveSlot, normaliseSlotsForFormat, panelTitle,
   parseDob, parseDraft, parseHeight, riderFromSaved, riderReady, ridersAdded, ridersRequired, savedChoices, slotLabel, slotMeta,
   slotsFromForm, statusText, subtitleOf, teamIsFull, type DecRider, type Slot,
 } from './decForm';
@@ -32,13 +32,33 @@ describe('ridersRequired', () => {
 });
 
 describe('slots', () => {
-  it('has one more slot than riders, and the last is the reserve', () => {
+  it('has a reserve slot only for teams, and no reserve slot for pairs or individuals', () => {
     const slots = emptySlots(5);
     expect(slots).toHaveLength(6);
     expect(isReserveSlot(slots, 5)).toBe(true);
     expect(isReserveSlot(slots, 4)).toBe(false);
     expect(slotLabel(slots, 0)).toBe('Rider');
     expect(slotLabel(slots, 5)).toBe('Non-riding reserve (optional)');
+
+    const pairSlots = emptySlots(2);
+    expect(pairSlots).toHaveLength(2);
+    expect(isReserveSlot(pairSlots, 0)).toBe(false);
+    expect(isReserveSlot(pairSlots, 1)).toBe(false);
+
+    const indSlots = emptySlots(1);
+    expect(indSlots).toHaveLength(1);
+    expect(isReserveSlot(indSlots, 0)).toBe(false);
+  });
+
+  it('restores old pair and individual drafts without their obsolete reserve slot', () => {
+    const first = rider('Synthetic First');
+    const second = rider('Synthetic Second');
+    const oldReserve = rider('Synthetic Reserve');
+    expect(normaliseSlotsForFormat([first, second, oldReserve], 1)).toEqual([first, second]);
+    expect(normaliseSlotsForFormat([first, oldReserve], 3)).toEqual([first]);
+    expect(normaliseSlotsForFormat([first], 1)).toEqual([first, null]);
+    const teamDraft = [first, second, null, null, null, oldReserve];
+    expect(normaliseSlotsForFormat(teamDraft, 2)).toEqual(teamDraft);
   });
 
   it('finds the first empty slot, or none', () => {
@@ -47,9 +67,11 @@ describe('slots', () => {
     expect(firstEmpty(filled(5, true))).toBeNull();
   });
 
-  it('counts only the riders, and the team is full at five', () => {
+  it('counts only the riders, and a team is ready at four or five riders', () => {
     expect(ridersAdded(filled(3, true))).toBe(3);
-    expect(teamIsFull(filled(4, true))).toBe(false);
+    expect(teamIsFull(filled(3, true))).toBe(false);
+    expect(teamIsFull(filled(4, true))).toBe(true);
+    expect(teamIsFull(filled(4))).toBe(true);
     expect(teamIsFull(filled(5))).toBe(true);
   });
 
@@ -63,7 +85,8 @@ describe('slots', () => {
 
   it('describes a filled slot', () => {
     expect(slotMeta(rider('A'), false)).toBe('Pickle · 13.2 hh · born 05/04/2015');
-    expect(slotMeta(rider('A'), true)).toBe('Non-riding · born 05/04/2015');
+    expect(slotMeta(rider('A', { pony: '', height: '' }), true)).toBe('Non-riding · born 05/04/2015');
+    expect(slotMeta(rider('A'), true)).toBe('Pickle · 13.2 hh · born 05/04/2015');
   });
 });
 
@@ -167,8 +190,10 @@ describe('slotsFromForm', () => {
     expect(slots[7]).toBeNull();
   });
 
-  it('has an empty reserve when the form has none', () => {
-    expect(slotsFromForm(form([entry(1)]), 2)[2]).toBeNull();
+  it('has no reserve slot for pairs when the form has one rider', () => {
+    const pairSlots = slotsFromForm(form([entry(1)]), 2);
+    expect(pairSlots).toHaveLength(2);
+    expect(pairSlots[1]).toBeNull();
   });
 });
 
@@ -190,10 +215,12 @@ describe('savedChoices', () => {
 });
 
 describe('submitting', () => {
-  it('needs all the riders, the tick and a team name', () => {
+  it('allows four or five riders for a team, plus the tick and a team name', () => {
     expect(canSubmit(filled(5), true, 'Stockport C')).toBe(true);
     expect(canSubmit(filled(5, true), true, 'Stockport C')).toBe(true);
-    expect(canSubmit(filled(4, true), true, 'Stockport C')).toBe(false);
+    expect(canSubmit(filled(4), true, 'Stockport C')).toBe(true);
+    expect(canSubmit(filled(4, true), true, 'Stockport C')).toBe(true);
+    expect(canSubmit(filled(3, true), true, 'Stockport C')).toBe(false);
     expect(canSubmit(filled(5), false, 'Stockport C')).toBe(false);
     expect(canSubmit(filled(5), true, '  ')).toBe(false);
   });
@@ -201,12 +228,13 @@ describe('submitting', () => {
   it('says where the form has got to', () => {
     expect(statusText(filled(3), false, false)).toBe('3 of 5 riders added');
     expect(statusText(emptySlots(2), false, false)).toBe('0 of 2 riders added');
+    expect(statusText(filled(4), false, false)).toBe('Tick to agree, then submit');
     expect(statusText(filled(5), false, false)).toBe('Tick to agree, then submit');
     expect(statusText(filled(5), true, false)).toBe('Ready to submit');
     expect(statusText(filled(5), true, true)).toBe('Submitted');
   });
 
-  it('builds the request: reserve flagged, no pony on the reserve, order kept, terms ticked', () => {
+  it('builds the request: reserve flagged, optional pony on the reserve preserved if given, order kept, terms ticked', () => {
     const slots = filled(2, true);
     slots[1] = rider('  Oliver Smith ', { savedRiderId: 8, isCaptain: true, useInitialOnly: true, noFilming: true });
     const body = buildSubmitBody({ teamId: 7, teamName: ' Stockport C ', bibs: ' Yellow ', trainerName: ' Alex Morgan ', phone: ' 07700 900123 ', notes: '  ' }, slots);
@@ -220,6 +248,10 @@ describe('submitting', () => {
     });
     expect(body.riders[1]).toMatchObject({ fullName: 'Oliver Smith', savedRiderId: 8, isCaptain: true, useInitialOnly: true, noFilming: true, orderIndex: 1 });
     expect(body.riders[2]).toMatchObject({ fullName: 'Reserve One', isReserve: true, horseName: null, ponyHeightHands: null, orderIndex: 5 });
+
+    slots[5] = rider('Riding Reserve', { pony: 'Bramble', height: '14.0' });
+    const withRidingReserve = buildSubmitBody({ teamId: 7, teamName: 'Stockport C', bibs: 'Yellow', trainerName: 'Alex Morgan', phone: '07700 900123', notes: '' }, slots);
+    expect(withRidingReserve.riders[2]).toMatchObject({ fullName: 'Riding Reserve', isReserve: true, horseName: 'Bramble', ponyHeightHands: 14, orderIndex: 5 });
   });
 
   it('sends nulls for empty trainer, phone and pony text', () => {

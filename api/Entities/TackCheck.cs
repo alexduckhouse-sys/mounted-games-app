@@ -58,6 +58,7 @@ public class TackCheckMark
 
     public bool? Passed { get; set; }
     public int? Points { get; set; }
+    public string? RiderScoresJson { get; set; }
     public string? RecordedByUserId { get; set; }
     public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
 }

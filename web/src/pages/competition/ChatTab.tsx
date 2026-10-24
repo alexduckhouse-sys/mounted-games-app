@@ -68,6 +68,7 @@ function ChatTabSession() {
   const [messagesLoading, setMessagesLoading] = useState(true);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [body, setBody] = useState('');
+  const [subTab, setSubTab] = useState<'announcements' | 'messages'>('announcements');
   const [mode, setMode] = useState<ComposerMode>('announcement');
   const [sending, setSending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -121,17 +122,22 @@ function ChatTabSession() {
   const banners = messages.filter((message) => message.type === 2 && message.tag === BANNER_TAG);
   const banner = banners.at(-1) ?? null;
   const mineOrForMe = (message: ChatMessage) => !!user && (message.userId === user.id || message.recipientUserId === user.id);
-  const visibleMessages = messages.filter((message) => message.type !== 1 && message.tag !== BANNER_TAG && (canPost || !message.adminOnly || mineOrForMe(message)));
+  const visibleMessages = messages.filter((message) => message.type !== 1 && message.tag !== BANNER_TAG && (subTab === 'messages' ? message.adminOnly && (canPost || mineOrForMe(message)) : !message.adminOnly));
   const latest = visibleMessages.slice(desktop ? 0 : -3).reverse();
   const activeStreams = streams.filter((stream) => stream.status !== 2);
   const liveNow = competition.sessions.some((session) => session.status === 1) || activeStreams.length > 0;
   const effectiveMode = canModerate ? mode : 'announcement';
-  const canCompose = canModerate || (canMessageOrganisers && privateMessagingAvailable) || (isAdmin && replyTo !== null);
+  const canCompose = subTab === 'announcements' ? canModerate : (canMessageOrganisers && privateMessagingAvailable) || (isAdmin && replyTo !== null);
+  const channelTabs = <div role="tablist" aria-label="Chat channels" className="flex gap-2">
+    <button type="button" role="tab" className="mg-btn mg-btn-secondary !min-h-11 aria-selected:!bg-[rgb(var(--mg-tint))]" aria-selected={subTab === 'announcements'} onClick={() => { setSubTab('announcements'); setReplyTo(null); setBody(''); }}>Announcements</button>
+    <button type="button" role="tab" className="mg-btn mg-btn-secondary !min-h-11 aria-selected:!bg-[rgb(var(--mg-tint))]" aria-selected={subTab === 'messages'} onClick={() => { setSubTab('messages'); setBody(''); }}>Message Organisers</button>
+  </div>;
   const closeAnnouncements = useCallback(() => setAllOpen(false), []);
   const dismissActionError = useCallback(() => setActionError(null), []);
 
   function startReply(message: ChatMessage) {
     if (!message.userId) return;
+    setSubTab('messages');
     setReplyTo({ userId: message.userId, name: message.authorName });
     setAllOpen(false);
   }
@@ -257,7 +263,8 @@ function ChatTabSession() {
           <div className="live-col live-col-main">
       <section className="live-announcements" aria-labelledby="announcements-title">
         <div className="mg-section-head">
-          <h2 id="announcements-title">Announcements</h2>
+          {channelTabs}
+          <h2 id="announcements-title">{subTab === 'announcements' ? 'Announcements' : 'Message Organisers'}</h2>
           {!desktop && visibleMessages.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>All {visibleMessages.length}</button>}
         </div>
         {lastChatComp && lastChatComp.id !== competition.id && !dismissedCompWarning && canCompose && (
@@ -327,7 +334,8 @@ function ChatTabSession() {
 
       <section className="live-announcements" aria-labelledby="announcements-title">
         <div className="mg-section-head">
-          <h2 id="announcements-title">Announcements</h2>
+          {channelTabs}
+          <h2 id="announcements-title">{subTab === 'announcements' ? 'Announcements' : 'Message Organisers'}</h2>
           {!desktop && visibleMessages.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>All {visibleMessages.length}</button>}
         </div>
         {lastChatComp && lastChatComp.id !== competition.id && !dismissedCompWarning && canCompose && (

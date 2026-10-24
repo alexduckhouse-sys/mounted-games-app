@@ -241,7 +241,8 @@ public class ReviewSeedFreshTests
             var race = heat.Races.First();
             var form = new DeclarationForm { Team = team, SubmittedByUserId = user.Id, Riders = { new RiderEntry { FullName = "Rider One", IsCaptain = true }, new RiderEntry { FullName = "Rider Two", IsReserve = true } } };
             db.AddRange(form);
-            db.SectionSignups.Add(new SectionSignup { Section = section, FullName = "Entrant", AmountMinor = 1500, TeamId = team.Id });
+            var signup = new SectionSignup { Section = section, FullName = "Synthetic entrant", AmountMinor = 1500, TeamId = team.Id };
+            db.SectionSignups.Add(signup);
             db.ScorerLinks.Add(new ScorerLink { Competition = competition, Label = "Gate", ArenaName = "Demo main arena", TokenHash = Guid.NewGuid().ToString("N"), CreatedByUserId = user.Id, CreatedAt = Today, ExpiresAt = Today.AddDays(2) });
             db.Set<TeamStatusEvent>().Add(new TeamStatusEvent { CompetitionId = competition.Id, Team = team, Status = TeamEntryStatus.Withdrawn, Reason = "Lame horse" });
             db.ChatMessages.Add(new ChatMessage { Competition = competition, AuthorName = "Steward", Body = "Welcome" });
@@ -270,6 +271,10 @@ public class ReviewSeedFreshTests
             db.Add(tack);
             db.Add(new PassportCheck { Competition = competition, Team = team, PonyName = "Bramble", PonyKey = "bramble" });
             await db.SaveChangesAsync();
+            db.Add(new SignupMatchmaking { SignupId = signup.Id, LookingForPair = true });
+            db.Add(new SignupExtras { SignupId = signup.Id, StablesCount = 2 });
+            db.Add(new CompetitionEntrySettings { CompetitionId = competition.Id, EntriesCloseAt = Today });
+            db.Add(new CompetitionDeclarationLock { CompetitionId = competition.Id, DeclarationsCloseAt = Today });
             db.Set<RiderSwapEvent>().Add(new RiderSwapEvent { CompetitionId = competition.Id, DeclarationFormId = form.Id, TeamId = team.Id, OutRiderEntryId = 1, InRiderEntryId = 2, RequestId = Guid.NewGuid().ToString() });
             await db.SaveChangesAsync();
         }
@@ -286,6 +291,10 @@ public class ReviewSeedFreshTests
         Assert.Empty(await db.Teams.ToListAsync());
         Assert.Empty(await db.CompetitionSections.ToListAsync());
         Assert.Empty(await db.SectionSignups.ToListAsync());
+        Assert.Empty(await db.Set<SignupMatchmaking>().ToListAsync());
+        Assert.Empty(await db.Set<SignupExtras>().ToListAsync());
+        Assert.Empty(await db.Set<CompetitionEntrySettings>().ToListAsync());
+        Assert.Empty(await db.Set<CompetitionDeclarationLock>().ToListAsync());
         Assert.Empty(await db.DeclarationForms.ToListAsync());
         Assert.Empty(await db.RiderEntries.ToListAsync());
         Assert.Empty(await db.ScorerLinks.ToListAsync());

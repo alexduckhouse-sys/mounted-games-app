@@ -10,7 +10,7 @@ import type { SavedRider } from '../../../types';
 
 interface Props {
   title: string;
-  /** The reserve doesn't ride, so it has no pony. */
+  /** A reserve may have pony details, but they are optional. */
   reserve: boolean;
   editing: boolean;
   form: DecRider;
@@ -120,44 +120,40 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
               )}
             </Field>
           )}
-          {!reserve && (
-            <>
-              <Field label="Pony">
-                {({ id }) => (
-                  <div className="mg-field">
-                    <input id={id} value={form.pony} placeholder="Pony's name" autoComplete="off" onChange={(e) => onChange({ pony: e.target.value })} />
-                  </div>
-                )}
-              </Field>
-              {asked(config.ponyHeight) && (
-                <Field label={labelOf('Height (hh)', config.ponyHeight)} error={issues.invalid.height}>
-                  {({ id }) => (
-                    <div className="mg-field" data-invalid={heightBad}>
-                      <input id={id} value={form.height} placeholder="13.2" inputMode="decimal" autoComplete="off" aria-invalid={heightBad}
-                        onChange={(e) => onChange({ height: e.target.value })} />
-                    </div>
-                  )}
-                </Field>
+          <Field label={reserve ? "Pony (optional)" : "Pony"}>
+            {({ id }) => (
+              <div className="mg-field">
+                <input id={id} value={form.pony} placeholder="Pony's name" autoComplete="off" onChange={(e) => onChange({ pony: e.target.value })} />
+              </div>
+            )}
+          </Field>
+          {asked(config.ponyHeight) && (
+            <Field label={reserve ? 'Height (hh) (optional)' : labelOf('Height (hh)', config.ponyHeight)} error={issues.invalid.height}>
+              {({ id }) => (
+                <div className="mg-field" data-invalid={heightBad}>
+                  <input id={id} value={form.height} placeholder="13.2" inputMode="decimal" autoComplete="off" aria-invalid={heightBad}
+                    onChange={(e) => onChange({ height: e.target.value })} />
+                </div>
               )}
-              {asked(config.ponyPassport) && (
-                <Field label={labelOf('Pony passport or ID number', config.ponyPassport)}>
-                  {({ id }) => (
-                    <div className="mg-field">
-                      <input id={id} value={extra.ponyPassport} maxLength={60} autoComplete="off" onChange={(e) => setExtra({ ponyPassport: e.target.value })} />
-                    </div>
-                  )}
-                </Field>
+            </Field>
+          )}
+          {!reserve && asked(config.ponyPassport) && (
+            <Field label={labelOf('Pony passport or ID number', config.ponyPassport)}>
+              {({ id }) => (
+                <div className="mg-field">
+                  <input id={id} value={extra.ponyPassport} maxLength={60} autoComplete="off" onChange={(e) => setExtra({ ponyPassport: e.target.value })} />
+                </div>
               )}
-              {asked(config.ponyAge) && (
-                <Field label={labelOf('Pony’s age (years)', config.ponyAge)} error={issues.invalid.ponyAge}>
-                  {({ id }) => (
-                    <div className="mg-field" data-invalid={!!issues.invalid.ponyAge}>
-                      <NumberField id={id} value={extra.ponyAge} max={60} min={0} autoComplete="off" onChange={(e) => setExtra({ ponyAge: e.target.value })} />
-                    </div>
-                  )}
-                </Field>
+            </Field>
+          )}
+          {!reserve && asked(config.ponyAge) && (
+            <Field label={labelOf('Pony’s age (years)', config.ponyAge)} error={issues.invalid.ponyAge}>
+              {({ id }) => (
+                <div className="mg-field" data-invalid={!!issues.invalid.ponyAge}>
+                  <NumberField id={id} value={extra.ponyAge} max={60} min={0} autoComplete="off" onChange={(e) => setExtra({ ponyAge: e.target.value })} />
+                </div>
               )}
-            </>
+            </Field>
           )}
           {asked(config.weight) && (
             <Field label={labelOf('Rider’s weight', config.weight)} error={issues.invalid.weight}>
