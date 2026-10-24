@@ -115,7 +115,7 @@ describe('DetailsTab entries (seats and whole-team entry)', () => {
     const pairBox = screen.getByRole('checkbox', { name: /Looking for a Pair/i });
     await userEvent.click(pairBox);
     await userEvent.type(screen.getByPlaceholderText('Your full name'), 'Solo Pair Rider');
-    await userEvent.click(screen.getByRole('checkbox', { name: /parental consent/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
     await userEvent.click(screen.getByRole('button', { name: /Confirm/ }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({
       fullName: 'Solo Pair Rider', lookingForPair: true,
@@ -133,7 +133,7 @@ describe('DetailsTab entries (seats and whole-team entry)', () => {
     expect(screen.getByRole('checkbox', { name: 'Wait for a Guest Ride Spot (Free)' })).toBeChecked();
     expect(screen.queryByLabelText('Team code')).not.toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText('Your full name'), 'Synthetic Guest');
-    await userEvent.click(screen.getByRole('checkbox', { name: /parental consent/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'I agree' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({ waitingForGuestSpot: true, wholeTeam: false, teamCode: null })));
   });
