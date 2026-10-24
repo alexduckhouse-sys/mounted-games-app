@@ -33,6 +33,12 @@ describe('ToplistView positions', () => {
     expect(screen.getByText('−4')).toHaveAttribute('title', '4 behind leader');
   });
 
+  it('does not show a zero-point gap for a hidden run-off tie-breaker', () => {
+    render(<ToplistView list={list([24.01, 24])} section={null} />);
+    expect(screen.queryByText('−0')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/behind leader/)).not.toBeInTheDocument();
+  });
+
   it('uses the dash in the by-session table too', async () => {
     const sessions = [{ id: 1, label: 'S1', title: 'Session 1' }];
     const before = { ...list([0, 0]), bySession: { sessions, cells: new Map<number, number[]>() } };
