@@ -159,8 +159,8 @@ export const sectionNames = (draft: CreatorDraft) => draft.sections.map(sectionN
 export function sectionEstimate(section: SectionDraft, actualTeams = 0): { teams: TeamEstimate; sizes: number[]; minutesPerSession: number } {
   const teams = expectedTeams(section, actualTeams);
   const sizes = heatSizes(teams.count, heatSizeOf(section));
-  const races = section.sessions[0] ? raceCountFor(section, section.sessions[0]) : 0;
-  const minutesPerSession = section.usesRaceFinals ? 3 * races * minutesOf(section) : sizes.length * races * minutesOf(section);
+  const heatCount = section.sessions.length === 0 ? 0 : section.usesRaceFinals ? 3 : sizes.length;
+  const minutesPerSession = heatCount * minutesOf(section);
   return { teams, sizes, minutesPerSession };
 }
 

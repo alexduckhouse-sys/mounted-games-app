@@ -7,7 +7,7 @@ export const FORMAT_LABEL: Record<Format, string> = { 1: 'Pairs', 2: 'Teams', 3:
 export const AGE_GROUP_PRESETS = ['Under 10', 'Under 12', 'Under 14', 'Under 15', 'Under 17', 'Open', 'Juniors', 'Seniors', 'Novices'];
 
 export const MAIN_ARENA = 'Main arena';
-/** Minutes a race takes in each heat. A heat runs every race in the list, one after another. */
+/** Minutes a whole heat takes in the arena, including every race in its list. */
 export const DEFAULT_MINUTES = 10;
 export const lanesFor = (format: number) => (format === 1 ? 4 : 6);
 export const MAX_SESSIONS = 6;
@@ -205,7 +205,7 @@ export function validateStep(draft: CreatorDraft, step: StepId): Problems {
   } else if (step === 'structure') {
     draft.sections.forEach((s, i) => {
       const minutes = wholeNumber(s.minutesPerRace);
-      if (minutes === null || minutes < 1 || minutes > 180) found[`section.${i}.minutes`] = 'Minutes per race must be from 1 to 180.';
+      if (minutes === null || minutes < 1 || minutes > 180) found[`section.${i}.minutes`] = 'Minutes per heat must be from 1 to 180.';
       const heat = wholeNumber(s.maxTeamsPerHeat);
       if (heat === null || heat < 1 || heat > 20) found[`section.${i}.heat`] = 'Teams per heat must be from 1 to 20.';
       if (s.finalistCount.trim() && parseFinalistCount(s.finalistCount) === null) found[`section.${i}.finalists`] = 'Teams in the final must be from 1 to 50.';
