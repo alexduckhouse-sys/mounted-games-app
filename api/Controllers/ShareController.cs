@@ -6,6 +6,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities.Seasons;
 using MountedGames.Api.Security;
+using MountedGames.Api.Services.Seasons;
 
 namespace MountedGames.Api.Controllers;
 
@@ -44,7 +45,8 @@ public class ShareController(AppDbContext db) : ControllerBase
             .Select(p => new ShareTeamProfileDto(p.DisplayName, p.Club!.Name, p.EventTeams.Count))
             .FirstOrDefaultAsync(ct);
         if (card is null) return NotFound();
-        Response.Headers.CacheControl = CacheControl;
-        return card;
+        var initialOnly = await SeasonRiderPrivacy.InitialOnlyProfilesAsync(db, [id], ct);
+        Response.Headers.CacheControl = "no-store";
+        return card with { DisplayName = SeasonRiderPrivacy.Display(id, card.DisplayName, initialOnly) };
     }
 }

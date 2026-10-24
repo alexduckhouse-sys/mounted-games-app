@@ -24,14 +24,26 @@ export const AREA_JUNIORS = [
 export const AREA_PAIRS = [
   'Bending', '2 Mug', 'Old Sock', 'Tally Ho Farm Ball & Socket', 'PGUK Pyramid', 'Hollywood Bowl Bottle', 'Stepping Stones', 'EGUK 5 Flag',
 ];
+export const ZONE_INDIVIDUALS = [
+  'Bending', 'Hollywood Bowl Boule & Bucket', 'Bottle', 'Litter', 'Tally Ho Farm Ball & Socket', 'STRUK Pole',
+  'PGSports UK Shopping Spree', 'Stepping Stones', 'EGUK Mug Changes', '5 Flag',
+];
+export const AREA_INDIVIDUALS = [
+  'Bending', '2 Mug', 'Old Sock', 'Tally Ho Farm Ball & Socket', 'PGUK Pyramid', 'Hollywood Bowl Bottle', 'Stepping Stones', 'EGUK 5 Flag',
+];
+export const TEAM_ONLY_RACES = new Set(['Big Sack', '5 Mug', 'Spell EGUK', 'Spell EGUK (JV)']);
 
 export type RaceScope = 'Zone' | 'Area';
 export const SCOPE_LABEL: Record<RaceScope, string> = { Zone: 'Pony Club Zone', Area: 'Pony Club Area' };
 
-/** Pairs get the pairs list, juniors and novices the junior one, and everyone else the seniors list. */
+/** Pairs get the pairs list, individuals an individual-eligible list, juniors and novices the junior one, and everyone else the seniors list. */
 export function defaultRaceList(scope: RaceScope, format: number, ageGroup: string): string[] {
-  const junior = /junior|novice/i.test(ageGroup);
+  const junior = /\b(juniors?|novices?|(u|under\s*)(8|9|10|11|12))\b/i.test(ageGroup);
   if (format === 1) return [...(scope === 'Area' ? AREA_PAIRS : ZONE_PAIRS)];
+  if (format === 3) {
+    if (junior) return (scope === 'Area' ? AREA_JUNIORS : ZONE_JUNIORS).filter((r) => !TEAM_ONLY_RACES.has(r));
+    return [...(scope === 'Area' ? AREA_INDIVIDUALS : ZONE_INDIVIDUALS)];
+  }
   if (junior) return [...(scope === 'Area' ? AREA_JUNIORS : ZONE_JUNIORS)];
   return [...(scope === 'Area' ? AREA_SENIORS : ZONE_SENIORS)];
 }
