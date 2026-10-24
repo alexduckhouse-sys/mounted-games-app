@@ -25,6 +25,13 @@ BEGIN
         "PairRequestToSignupId" integer NULL, "PairRequestStatus" text NULL
     );
     ALTER TABLE "SignupMatchmaking" ADD COLUMN IF NOT EXISTS "DeclarationAccessGranted" integer NOT NULL DEFAULT 0;
+    CREATE TABLE IF NOT EXISTS "SignupTeamLinks" (
+        "SignupId" integer NOT NULL, "TeamId" integer NOT NULL,
+        CONSTRAINT "PK_SignupTeamLinks" PRIMARY KEY ("SignupId", "TeamId"),
+        CONSTRAINT "FK_SignupTeamLinks_SectionSignups_SignupId" FOREIGN KEY ("SignupId") REFERENCES "SectionSignups" ("Id") ON DELETE CASCADE,
+        CONSTRAINT "FK_SignupTeamLinks_Teams_TeamId" FOREIGN KEY ("TeamId") REFERENCES "Teams" ("Id") ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS "IX_SignupTeamLinks_TeamId" ON "SignupTeamLinks" ("TeamId");
     DO $adopt$
     DECLARE existing_key text;
     BEGIN

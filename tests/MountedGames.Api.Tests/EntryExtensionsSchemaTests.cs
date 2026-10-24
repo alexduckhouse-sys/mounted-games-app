@@ -152,6 +152,31 @@ public class EntryExtensionsSchemaTests
     }
 
     [Fact]
+    public async Task SignupTeamLinks_UpgradeIsIdempotentAndBothOwnersCascade()
+    {
+        using var factory = new ApiFactory();
+        var arena = await factory.CreateArenaAsync(2);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var team = await db.Teams.SingleAsync(t => t.Id == arena.TeamIds[0]);
+        var signup = new SectionSignup { CompetitionSectionId = team.CompetitionSectionId, FullName = "Synthetic multiple-team entry" };
+        db.Add(signup);
+        await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlRawAsync("DROP TABLE \"SignupTeamLinks\";");
+        await EntryExtensionsSqliteSchema.EnsureAsync(db);
+        db.AddRange(arena.TeamIds.Select(teamId => new SignupTeamLink { SignupId = signup.Id, TeamId = teamId }));
+        await db.SaveChangesAsync();
+        await EntryExtensionsSqliteSchema.EnsureAsync(db);
+        db.ChangeTracker.Clear();
+        Assert.Equal(2, await db.Set<SignupTeamLink>().CountAsync(x => x.SignupId == signup.Id));
+        Assert.Equal(1, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_index_list('SignupTeamLinks') WHERE name = 'IX_SignupTeamLinks_TeamId'").SingleAsync());
+        await db.Teams.Where(t => t.Id == team.Id).ExecuteDeleteAsync();
+        Assert.Single(await db.Set<SignupTeamLink>().Where(x => x.SignupId == signup.Id).ToListAsync());
+        await db.SectionSignups.Where(s => s.Id == signup.Id).ExecuteDeleteAsync();
+        Assert.Empty(await db.Set<SignupTeamLink>().Where(x => x.SignupId == signup.Id).ToListAsync());
+    }
+
+    [Fact]
     public async Task InvalidLegacyReferencesAbortUpgradeWithoutRemovingTheOriginalRows()
     {
         using var factory = new ApiFactory();

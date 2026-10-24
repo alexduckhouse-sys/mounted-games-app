@@ -2786,6 +2786,21 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("SignupMatchmaking", (string)null);
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.SignupTeamLink", b =>
+                {
+                    b.Property<int>("SignupId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("SignupId", "TeamId");
+
+                    b.HasIndex("TeamId");
+
+                    b.ToTable("SignupTeamLinks", (string)null);
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.SpecialAward", b =>
                 {
                     b.Property<int>("Id")
@@ -3928,6 +3943,21 @@ namespace MountedGames.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("FK_SignupMatchmaking_Signup");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.SignupTeamLink", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.SectionSignup", null)
+                        .WithMany()
+                        .HasForeignKey("SignupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.Team", null)
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.SpecialAward", b =>

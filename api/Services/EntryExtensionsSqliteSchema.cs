@@ -21,6 +21,13 @@ public static class EntryExtensionsSqliteSchema
             FOREIGN KEY ("PairRequestFromSignupId") REFERENCES "SectionSignups" ("Id") ON DELETE SET NULL,
             FOREIGN KEY ("PairRequestToSignupId") REFERENCES "SectionSignups" ("Id") ON DELETE SET NULL
             """, 3),
+        ("SignupTeamLinks", "\"SignupId\", \"TeamId\"", """
+            "SignupId" INTEGER NOT NULL,
+            "TeamId" INTEGER NOT NULL,
+            PRIMARY KEY ("SignupId", "TeamId"),
+            FOREIGN KEY ("SignupId") REFERENCES "SectionSignups" ("Id") ON DELETE CASCADE,
+            FOREIGN KEY ("TeamId") REFERENCES "Teams" ("Id") ON DELETE CASCADE
+            """, 2),
         ("SignupExtras", "\"SignupId\", \"StablesCount\", \"StablingClubOrTeam\", \"PaymentMethod\", \"IsWaitlist\", \"IsWithdrawn\", \"RefundPending\", \"TeamsCount\"", """
             "SignupId" INTEGER NOT NULL PRIMARY KEY,
             "StablesCount" INTEGER NOT NULL DEFAULT 0,
@@ -71,6 +78,7 @@ public static class EntryExtensionsSqliteSchema
             await db.Database.ExecuteSqlRawAsync(rebuildSql);
         }
         await db.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS "IX_SignupTeamLinks_TeamId" ON "SignupTeamLinks" ("TeamId");
             CREATE INDEX IF NOT EXISTS "IX_SignupMatchmaking_PairRequestFromSignupId" ON "SignupMatchmaking" ("PairRequestFromSignupId");
             CREATE INDEX IF NOT EXISTS "IX_SignupMatchmaking_PairRequestToSignupId" ON "SignupMatchmaking" ("PairRequestToSignupId");
             """);
