@@ -4,8 +4,9 @@ using MountedGames.Api.Entities;
 namespace MountedGames.Api.Services;
 
 /// <summary>
-/// The one rule for an age group's name: the age group first (a plural word such as "Juniors" made singular),
-/// then the format in the plural: "Junior Individuals", "Novice Pairs", "Open Teams".
+/// The one rule for an age group's name: for Pairs and Individuals, the age group first (a plural word such as
+/// "Juniors" made singular), then the format in the plural ("Junior Individuals", "Novice Pairs"); for Teams,
+/// just the age group ("Juniors", "Seniors", "Under 12", "Open"), or "Teams" when no age group is given.
 /// <c>web/src/lib/section.ts</c> (<c>sectionDisplayName</c>) mirrors this: change both together.
 /// </summary>
 public static partial class SectionNaming
@@ -24,12 +25,21 @@ public static partial class SectionNaming
         return PluralWord().IsMatch(text) ? text[..^1] : text;
     }
 
+    private static string TeamAgeGroup(string ageGroup)
+    {
+        var stripped = StripTeams().Replace((ageGroup ?? string.Empty).Trim(), string.Empty).Trim();
+        if (stripped.Length == 0 || stripped.Equals("Teams", StringComparison.OrdinalIgnoreCase) || stripped.Equals("Team", StringComparison.OrdinalIgnoreCase))
+            return "Teams";
+        return SingularTeamAge().IsMatch(stripped) ? $"{stripped}s" : stripped;
+    }
+
     public static string DisplayName(SectionFormat format, string ageGroup)
     {
         var plural = FormatPlural(format);
+        if (plural == "Teams") return TeamAgeGroup(ageGroup);
         var raw = (ageGroup ?? string.Empty).Trim();
         if (raw.Length == 0 || raw.Equals(plural, StringComparison.OrdinalIgnoreCase)) return plural;
-        // Someone who typed "Senior Teams" as the age group doesn't get "Senior Teams Teams".
+        // Someone who typed "Senior Pairs" as the age group doesn't get "Senior Pairs Pairs".
         if (raw.EndsWith(" " + plural, StringComparison.OrdinalIgnoreCase)) return raw;
         return $"{SingularAgeGroup(raw)} {plural}";
     }
@@ -50,4 +60,10 @@ public static partial class SectionNaming
     // A last word of four or more letters ending in a single "s": Juniors, Seniors, Novices.
     [GeneratedRegex(@"(?:^|\s)[A-Za-z]{2,}[^s\W]s$", RegexOptions.IgnoreCase)]
     private static partial Regex PluralWord();
+
+    [GeneratedRegex(@"^teams?\s+|\s+teams?$", RegexOptions.IgnoreCase)]
+    private static partial Regex StripTeams();
+
+    [GeneratedRegex(@"\b(Junior|Senior|Novice)$", RegexOptions.IgnoreCase)]
+    private static partial Regex SingularTeamAge();
 }

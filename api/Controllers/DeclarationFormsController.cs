@@ -224,7 +224,10 @@ public class DeclarationFormsController : ControllerBase
             else
                 return BadRequest(new { message = "Enter the trainer's phone number as a UK or Irish number, like 07123 456789." });
         }
-        if (config.Bib == FieldRequirement.Required && explicitConfig is not null && string.IsNullOrWhiteSpace(req.BibDescription))
+        var bibWithoutFlag = System.Text.RegularExpressions.Regex.Replace(req.BibDescription ?? string.Empty, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        var flagMatch = System.Text.RegularExpressions.Regex.Match(req.BibDescription ?? string.Empty, @"^(\[flag:[a-z0-9-]+\])", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var flagPrefix = flagMatch.Success ? flagMatch.Groups[1].Value : null;
+        if (config.Bib == FieldRequirement.Required && explicitConfig is not null && string.IsNullOrWhiteSpace(bibWithoutFlag))
             return BadRequest(new { message = "The bib or number is needed." });
 
         var submitter = userId is null ? null : await _users.FindByIdAsync(userId);
@@ -238,8 +241,14 @@ public class DeclarationFormsController : ControllerBase
         var teamName = req.TeamName?.Trim();
         if (!string.IsNullOrEmpty(teamName)) team.DisplayName = teamName;
 
-        if (req.BibDescription is not null && config.Bib != FieldRequirement.Off)
-            team.BibDescription = string.IsNullOrWhiteSpace(req.BibDescription) ? null : req.BibDescription.Trim();
+        if (req.BibDescription is not null)
+        {
+            var effectiveBib = config.Bib == FieldRequirement.Off
+                ? System.Text.RegularExpressions.Regex.Replace(team.BibDescription ?? string.Empty, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim()
+                : bibWithoutFlag;
+            var combined = string.Join(" ", new[] { flagPrefix, effectiveBib }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            team.BibDescription = string.IsNullOrWhiteSpace(combined) ? null : combined;
+        }
 
         // One declaration per team: submitting again updates it instead of adding a second form.
         var forms = await _db.DeclarationForms.Include(f => f.Riders)
@@ -277,11 +286,17 @@ public class DeclarationFormsController : ControllerBase
                 DateOfBirth = kept.DateOfBirth,
                 HorseName = r.HorseName,
                 PonyHeightHands = kept.PonyHeightHands,
-                BirthYear = kept.BirthYear, AgeGroup = kept.AgeGroup, WeightKg = kept.WeightKg,
-                PonyPassportNumber = kept.PonyPassportNumber, PonyAge = kept.PonyAge,
-                MembershipNumber = kept.MembershipNumber, EmergencyContactName = kept.EmergencyContactName,
-                EmergencyContactPhone = kept.EmergencyContactPhone, MedicalNotes = kept.MedicalNotes,
-                CustomValuesJson = kept.CustomValuesJson, FlagsJson = kept.FlagsJson,
+                BirthYear = kept.BirthYear,
+                AgeGroup = kept.AgeGroup,
+                WeightKg = kept.WeightKg,
+                PonyPassportNumber = kept.PonyPassportNumber,
+                PonyAge = kept.PonyAge,
+                MembershipNumber = kept.MembershipNumber,
+                EmergencyContactName = kept.EmergencyContactName,
+                EmergencyContactPhone = kept.EmergencyContactPhone,
+                MedicalNotes = kept.MedicalNotes,
+                CustomValuesJson = kept.CustomValuesJson,
+                FlagsJson = kept.FlagsJson,
                 BibColour = string.IsNullOrWhiteSpace(r.BibColour) ? null : r.BibColour.Trim(),
                 IsCaptain = r.IsCaptain,
                 IsReserve = r.IsReserve,

@@ -3,24 +3,32 @@ import { describe, expect, it } from 'vitest';
 import { PasswordChecklist } from './PasswordChecklist';
 
 describe('PasswordChecklist', () => {
-  it('shows a row per rule and says nothing aloud until there is a password', () => {
+  it('shows nothing until there is a password', () => {
     render(<PasswordChecklist password="" id="rules" />);
-    expect(screen.getAllByRole('listitem')).toHaveLength(4);
     expect(screen.getByRole('status')).toHaveTextContent('');
-    expect(document.getElementById('rules')).toBeTruthy();
+    expect(document.getElementById('rules')).toHaveTextContent('');
   });
 
-  it('marks met rows with a tick and spoken text, not just colour', () => {
-    render(<PasswordChecklist password="abcdefg1" id="rules" />);
-    const met = screen.getAllByRole('listitem').filter((li) => li.dataset.met === 'true');
-    expect(met.map((li) => li.textContent)).toEqual(['At least 8 characters (met)', 'A number (met)', 'A lowercase letter (met)']);
-    expect(screen.getByText('A special character (like ! ? # @ £)').parentElement?.textContent).toContain('(not met yet)');
-    expect(screen.getByRole('status')).toHaveTextContent('3 of 4 password requirements met.');
+  it('shows one unmet rule at a time in order of importance as the person types', () => {
+    const { rerender } = render(<PasswordChecklist password="abc" id="rules" />);
+    expect(screen.getByText('At least 8 characters')).toBeInTheDocument();
+    expect(screen.queryByText('A number')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Next requirement: At least 8 characters.');
+
+    rerender(<PasswordChecklist password="abcdefgh" id="rules" />);
+    expect(screen.getByText('A number')).toBeInTheDocument();
+    expect(screen.queryByText('At least 8 characters')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Next requirement: A number.');
+
+    rerender(<PasswordChecklist password="abcdefg1" id="rules" />);
+    expect(screen.getByText('A special character (like ! ? # @ £)')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Next requirement: A special character (like ! ? # @ £).');
     expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
   });
 
   it('says when everything is met', () => {
     render(<PasswordChecklist password="abcdefg1!" id="rules" />);
+    expect(screen.getByText('Password meets all requirements.')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('All password requirements met.');
   });
 });

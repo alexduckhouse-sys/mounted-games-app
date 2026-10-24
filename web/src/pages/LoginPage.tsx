@@ -15,6 +15,7 @@ export function LoginPage() {
   const [useKey, setUseKey] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [organiserTitle, setOrganiserTitle] = useState('');
   const [organiserEmail, setOrganiserEmail] = useState('');
   const [organiserKey, setOrganiserKey] = useState('');
@@ -99,8 +100,17 @@ export function LoginPage() {
             <Field label="Password" error={error}>
               {({ id, invalid, describedBy }) => (
                 <div className="mg-field" data-invalid={invalid}>
-                  <input id={id} type="password" value={password} autoComplete="current-password" aria-invalid={invalid} aria-describedby={describedBy}
+                  <input id={id} type={showPassword ? 'text' : 'password'} value={password} autoComplete="current-password" aria-invalid={invalid} aria-describedby={describedBy}
                     onChange={(e) => { setPassword(e.target.value); setError(null); }} />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]"
+                  >
+                    {showPassword ? <EyeOff aria-hidden="true" className="h-[18px] w-[18px]" /> : <Eye aria-hidden="true" className="h-[18px] w-[18px]" />}
+                  </button>
                 </div>
               )}
             </Field>

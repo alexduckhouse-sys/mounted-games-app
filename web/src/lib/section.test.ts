@@ -5,15 +5,21 @@ describe('sectionDisplayName', () => {
   it.each([
     [3, 'Juniors', 'Junior Individuals'],
     [1, 'Novices', 'Novice Pairs'],
-    [2, 'Open', 'Open Teams'],
-    [2, 'Seniors', 'Senior Teams'],
-    [2, 'Under 12', 'Under 12 Teams'],
-    [2, 'Mixed Beginners', 'Mixed Beginner Teams'],
-    [2, 'Senior Teams', 'Senior Teams'],
+    [2, 'Open', 'Open'],
+    [2, 'Seniors', 'Seniors'],
+    [2, 'Juniors', 'Juniors'],
+    [2, 'Under 12', 'Under 12'],
+    [2, 'Mixed Beginners', 'Mixed Beginners'],
+    [2, 'Senior Teams', 'Seniors'],
+    [2, 'Junior Teams', 'Juniors'],
+    [2, 'Novice Teams', 'Novices'],
+    [2, 'Teams', 'Teams'],
+    [2, '  ', 'Teams'],
     [1, 'Pairs', 'Pairs'],
+    [1, 'Senior Pairs', 'Senior Pairs'],
     [3, '  ', 'Individuals'],
-    [2, 'Class', 'Class Teams'],
-    [9, 'Open', 'Open Teams'],
+    [2, 'Class', 'Class'],
+    [9, 'Open', 'Open'],
   ])('format %j and %j make %j', (format, age, expected) => {
     expect(sectionDisplayName(format, age)).toBe(expected);
   });
@@ -27,13 +33,15 @@ describe('sectionDisplayName', () => {
 
 describe('displaySectionName', () => {
   it.each([
-    ['Teams Under 12', 'Under 12 Teams'],
-    ['TEAMS Seniors', 'Senior Teams'],
+    ['Teams Under 12', 'Under 12'],
+    ['TEAMS Seniors', 'Seniors'],
     ['Pairs Under 12', 'Under 12 Pairs'],
     ['Pairs Juniors', 'Junior Pairs'],
     ['Individual Juniors', 'Junior Individuals'],
-    ['Senior Teams', 'Senior Teams'],
-    ['Open Teams', 'Open Teams'],
+    ['Senior Teams', 'Seniors'],
+    ['Junior Teams', 'Juniors'],
+    ['Under 12 Teams', 'Under 12'],
+    ['Open Teams', 'Open'],
     ['Seniors', 'Seniors'],
     ['Teams', 'Teams'],
     ['  Under   12 ', 'Under 12'],

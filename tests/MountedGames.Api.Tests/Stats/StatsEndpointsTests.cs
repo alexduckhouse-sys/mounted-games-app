@@ -24,7 +24,7 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
     private readonly ApiFactory _f;
     public StatsEndpointsTests(ApiFactory f) => _f = f;
 
-    private sealed record RiderSpec(string Name, string? Pony, bool InitialsOnly = false, bool Reserve = false);
+    private sealed record RiderSpec(string Name, string? Pony, bool InitialsOnly = false, bool Reserve = false, decimal? PonyHeightHands = null);
     private sealed record TeamSpec(string Club, string Name, RiderSpec[] Riders, bool Hc = false, bool FormLocked = true);
     /// <summary>A place of null is a did-not-finish.</summary>
     private sealed record RaceSpec(string Name, (int Team, int? Place, int Points)[] Results, bool Complete = true, string? Note = null);
@@ -63,7 +63,7 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
                 var form = new DeclarationForm { TeamId = team.Id, IsLocked = spec.FormLocked, SubmittedAt = DateTime.UtcNow };
                 var order = 0;
                 foreach (var rider in spec.Riders)
-                    form.Riders.Add(new RiderEntry { FullName = rider.Name, HorseName = rider.Pony, UseInitialOnly = rider.InitialsOnly, IsReserve = rider.Reserve, OrderIndex = order++ });
+                    form.Riders.Add(new RiderEntry { FullName = rider.Name, HorseName = rider.Pony, PonyHeightHands = rider.PonyHeightHands, UseInitialOnly = rider.InitialsOnly, IsReserve = rider.Reserve, OrderIndex = order++ });
                 db.DeclarationForms.Add(form);
             }
             await db.SaveChangesAsync();
@@ -239,9 +239,9 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
 
         Assert.Equal(["Bending", "Flag Race"], profile.Games!.Select(g => g.Name));
         var bending = profile.Games![0];
-        Assert.Equal((1, 1, 100.0, 0, 3, 3, 100.0), (bending.Races, bending.Wins, bending.WinPercent, bending.NonFinishes, bending.Points, bending.MaxPoints, bending.PointQuotaPercent));
+        Assert.Equal((1, 1, 100.0, 0, 3, 3, 100.0, 3.0, 1.0), (bending.Races, bending.Wins, bending.WinPercent, bending.NonFinishes, bending.Points, bending.MaxPoints, bending.PointQuotaPercent, bending.AveragePoints, bending.AveragePlace));
         var flag = profile.Games[1];
-        Assert.Equal((1, 0, 0.0, 1, 0.0), (flag.Races, flag.Wins, flag.WinPercent, flag.NonFinishes, flag.PointQuotaPercent));
+        Assert.Equal((1, 0, 0.0, 1, 0.0, 0.0, (double?)null), (flag.Races, flag.Wins, flag.WinPercent, flag.NonFinishes, flag.PointQuotaPercent, flag.AveragePoints, flag.AveragePlace));
         Assert.Equal(["Bending"], profile.BestGames!);
         Assert.Equal(["Flag Race"], profile.WorstGames!);
 
@@ -419,6 +419,41 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         var (member, _) = await _f.SignupAsync("Member");
         var detailed = await (await member.GetAsync($"/api/stats/team-profiles/{profileId}")).ReadAsync<StatsProfileDto>();
         Assert.Equal(3, detailed.Games!.Count);
+    }
+
+    [Fact]
+    public async Task PoniesWithSameName_AreSeparatedAndOrderedByHeight()
+    {
+        var u = Guid.NewGuid().ToString("N")[..8];
+        var past = DateTime.UtcNow.Date.AddDays(-12);
+        await SeedEventAsync($"Heights{u}", past, SectionFormat.Individual,
+            [
+                new TeamSpec($"Club{u}", $"Big{u}", [new RiderSpec($"RiderA{u}", $"Star{u}", PonyHeightHands: 14.2m)]),
+                new TeamSpec($"Club{u}", $"Small{u}", [new RiderSpec($"RiderB{u}", $"Star{u}", PonyHeightHands: 12.2m)]),
+                new TeamSpec($"Club{u}", $"Unknown{u}", [new RiderSpec($"RiderC{u}", $"Star{u}")]),
+            ],
+            [new RaceSpec("Bending", [(0, 1, 2), (1, 2, 1), (2, 3, 0)])]);
+
+        var (member, _) = await _f.SignupAsync("Member");
+        var search = await (await member.GetAsync($"/api/stats/search?q=star{u}")).ReadAsync<StatsSearchDto>();
+        Assert.Equal([$"Star{u}", $"Star{u} (12.2hh)", $"Star{u} (14.2hh)"], search.Ponies.Select(p => p.Name));
+
+        var browse = await (await member.GetAsync($"/api/stats/browse?kind=1&q=star{u}")).ReadAsync<StatsBrowseDto>();
+        Assert.Equal([$"Star{u}", $"Star{u} (12.2hh)", $"Star{u} (14.2hh)"], browse.Items.Select(p => p.Name));
+
+        var legacy = await (await member.GetAsync(Url("ponies", $"Star{u}"))).ReadAsync<StatsProfileDto>();
+        Assert.Equal($"Star{u}", legacy.Name);
+        Assert.Equal(3, legacy.Summary.Races);
+
+        var small = await (await member.GetAsync(Url("ponies", search.Ponies[1].Key))).ReadAsync<StatsProfileDto>();
+        Assert.Equal($"Star{u} (12.2hh)", small.Name);
+        Assert.Equal((1, 0), (small.Summary.Races, small.Summary.Wins));
+        Assert.Equal((1.0, 2.0), (small.Games![0].AveragePoints, small.Games[0].AveragePlace));
+
+        var big = await (await member.GetAsync(Url("ponies", search.Ponies[2].Key))).ReadAsync<StatsProfileDto>();
+        Assert.Equal($"Star{u} (14.2hh)", big.Name);
+        Assert.Equal((1, 1), (big.Summary.Races, big.Summary.Wins));
+        Assert.Equal((2.0, 1.0), (big.Games![0].AveragePoints, big.Games[0].AveragePlace));
     }
 }
 

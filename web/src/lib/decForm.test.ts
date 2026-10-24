@@ -254,12 +254,15 @@ describe('submitting', () => {
     expect(withRidingReserve.riders[2]).toMatchObject({ fullName: 'Riding Reserve', isReserve: true, horseName: 'Bramble', ponyHeightHands: 14, orderIndex: 5 });
   });
 
-  it('sends nulls for empty trainer, phone and pony text', () => {
+  it('sends nulls for empty trainer, phone and pony text, and prepends a flag tag when chosen', () => {
     const slots = emptySlots(1);
     slots[0] = rider('Solo', { pony: '  ' });
     const body = buildSubmitBody({ teamId: 1, teamName: 'T', bibs: '', trainerName: '', phone: '', notes: 'Be kind' }, slots);
     expect(body).toMatchObject({ bibDescription: '', trainerName: null, trainerPhone: null, notes: 'Be kind' });
     expect(body.riders[0].horseName).toBeNull();
+
+    const withFlag = buildSubmitBody({ teamId: 1, teamName: 'T', bibs: 'Red bibs', flag: 'gb-eng', trainerName: '', phone: '', notes: '' }, slots);
+    expect(withFlag.bibDescription).toBe('[flag:gb-eng] Red bibs');
   });
 });
 

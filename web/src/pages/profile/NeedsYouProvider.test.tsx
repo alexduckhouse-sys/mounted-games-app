@@ -150,4 +150,17 @@ describe('NeedsYouProvider', () => {
     expect(screen.getByTestId('count')).toHaveTextContent('0');
     expect(await seen().review(request, 'approve')).toBe(false);
   });
+
+  it('removes a request when notified via mg:trainer-requests-changed', async () => {
+    mount(['Admin']);
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+    act(() => {
+      window.dispatchEvent(new CustomEvent('mg:trainer-requests-changed', { detail: {} }));
+    });
+    expect(screen.getByTestId('count')).toHaveTextContent('1');
+    act(() => {
+      window.dispatchEvent(new CustomEvent('mg:trainer-requests-changed', { detail: { userId: request.userId } }));
+    });
+    expect(screen.getByTestId('count')).toHaveTextContent('0');
+  });
 });

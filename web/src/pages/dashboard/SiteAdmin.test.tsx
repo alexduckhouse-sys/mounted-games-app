@@ -1,10 +1,12 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { AuthProvider } from '../../auth/AuthContext';
 import type { TrainerRequest } from '../../types';
+import { NeedsYouProvider } from '../profile/NeedsYouProvider';
+import { NeedsYouPanel } from './NeedsYouPanel';
 import { SiteAdmin } from './SiteAdmin';
 
 import { autoConfirm } from '../../test/confirm';
@@ -164,6 +166,36 @@ describe('admin trainer requests', () => {
     expect(api.get).not.toHaveBeenCalledWith(path);
     expect(screen.queryByRole('region', { name: 'Waiting for you' })).not.toBeInTheDocument();
   });
+
+  it('clears a resolved request from both NeedsYouPanel and TrainerRequestsSection when either side acts', async () => {
+    localStorage.setItem('mg.auth', JSON.stringify({
+      token: 'test-token', expiresAt: '2099-01-01T00:00:00Z',
+      user: { id: 'test-admin', fullName: 'Test Admin', email: 'admin@example.com', roles: ['Admin'] },
+    }));
+    render(
+      <AuthProvider>
+        <NeedsYouProvider>
+          <MemoryRouter>
+            <NeedsYouPanel />
+            <SiteAdmin />
+          </MemoryRouter>
+        </NeedsYouProvider>
+      </AuthProvider>,
+    );
+    expect(await screen.findAllByText(request.fullName)).toHaveLength(2);
+    const waitingRegion = screen.getByRole('region', { name: 'Waiting for you' });
+    await userEvent.click(within(waitingRegion).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(screen.queryAllByText(request.fullName)).toHaveLength(0));
+  });
+
+  it('removes a request from TrainerRequestsSection when NeedsYouProvider dispatches mg:trainer-requests-changed', async () => {
+    mount();
+    expect(await screen.findByText(request.fullName)).toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(new CustomEvent('mg:trainer-requests-changed', { detail: { userId: request.userId } }));
+    });
+    expect(await screen.findByText('No trainer requests.')).toBeInTheDocument();
+  });
 });
 
 describe('admin competitions', () => {
@@ -307,5 +339,34 @@ describe('admin competitions', () => {
     expect(screen.getByText(/No addresses blocked/)).toBeInTheDocument();
     expect(await screen.findByText('Wirral PC')).toBeInTheDocument();
     expect(screen.getByText('North')).toBeInTheDocument();
+  });
+
+  it('shows at most 4 competitions initially and expands or collapses the rest on click', async () => {
+    comps = [
+      summary(1, 'Hartpury Area Festival'),
+      summary(2, 'Northern Winter League R1'),
+      summary(3, 'Christmas Cracker'),
+      summary(4, 'Kelsall Hill Pairs'),
+      summary(5, 'Summer Championships'),
+      summary(6, 'Autumn Friendly'),
+    ];
+    mount();
+    const section = await screen.findByRole('region', { name: 'Competitions' });
+    expect(await within(section).findByText('Hartpury Area Festival')).toBeInTheDocument();
+    expect(within(section).getByText('Kelsall Hill Pairs')).toBeInTheDocument();
+    expect(within(section).queryByText('Summer Championships')).not.toBeInTheDocument();
+    expect(within(section).queryByText('Autumn Friendly')).not.toBeInTheDocument();
+
+    const toggle = within(section).getByRole('button', { name: 'Show 2 more competitions' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
+
+    expect(within(section).getByText('Summer Championships')).toBeInTheDocument();
+    expect(within(section).getByText('Autumn Friendly')).toBeInTheDocument();
+    const collapseBtn = within(section).getByRole('button', { name: 'Show fewer competitions' });
+    expect(collapseBtn).toHaveAttribute('aria-expanded', 'true');
+
+    await userEvent.click(collapseBtn);
+    expect(within(section).queryByText('Summer Championships')).not.toBeInTheDocument();
   });
 });

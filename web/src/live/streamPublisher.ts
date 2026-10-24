@@ -61,6 +61,8 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
   let arenaName = '';
   let angleName = '';
   let paused = false;
+  let pauseRevision = 0;
+  let muteRevision = 0;
   let caption: string | null = null;
   let facingMode = 'environment';
   let deviceId: string | undefined;
@@ -306,9 +308,30 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
         update({ hasAudio: true, audioMuted: false }); applyAudio(); recover();
         return;
       }
-      await patch({ audioMuted: muted }); update({ audioMuted: muted }); applyAudio();
+      const previous = snapshot.audioMuted;
+      const ticket = epoch, streamId = snapshot.streamId, peer = pc, revision = ++muteRevision;
+      update({ audioMuted: muted }); applyAudio();
+      try { await patch({ audioMuted: muted }); }
+      catch (error) {
+        // A stopped/replaced publisher or a newer control owns the state now.
+        if (alive && running && ticket === epoch && streamId === snapshot.streamId && peer === pc && revision === muteRevision) {
+          update({ audioMuted: previous }); applyAudio();
+        }
+        throw error;
+      }
     },
-    async pause(value: boolean) { await patch({ status: value ? 1 : 0 }); paused = value; applyAudio(); update({ state: value ? 'paused' : 'live' }); },
+    async pause(value: boolean) {
+      const previous = paused;
+      const ticket = epoch, streamId = snapshot.streamId, peer = pc, revision = ++pauseRevision;
+      paused = value; applyAudio(); update({ state: value ? 'paused' : 'live' });
+      try { await patch({ status: value ? 1 : 0 }); }
+      catch (error) {
+        if (alive && running && ticket === epoch && streamId === snapshot.streamId && peer === pc && revision === pauseRevision) {
+          paused = previous; applyAudio(); update({ state: previous ? 'paused' : 'live' });
+        }
+        throw error;
+      }
+    },
     async caption(value: string) { await patch({ caption: value }); caption = value || null; },
     viewers(count: number) { update({ viewerCount: count }); },
     stop,

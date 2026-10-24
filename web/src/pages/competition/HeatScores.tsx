@@ -8,6 +8,7 @@ import { displaySectionName } from '../../lib/section';
 import { timetableRows } from '../../lib/timetableRows';
 import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
+import { parseBibAndFlag } from '../../lib/bib';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { useFavourites } from '../../hooks/useFavourites';
 import { displayLaneFor, lanesOf, sitsOutOf, type LaneRules } from './laneRules';
@@ -105,7 +106,6 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
       .map((race) => ({ key: `race-${race.id}`, race, label: race.name }));
   }, [heat, heats, isRaceFinals]);
 
-  const races = useMemo(() => columns.map((column) => column.race), [columns]);
   const heatLabel = heat
     ? isRaceFinals
       ? (columns.length === 1 ? columns[0].label : session.name)
@@ -326,34 +326,38 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
                   </tr>
                 </thead>
                 <tbody>
-                  {grid.teams.map((team) => (
-                    <tr key={team.id} className={team.isFav ? 'heat-row-fav' : undefined} data-followed={team.isFav ? 'true' : undefined}>
-                      {finished && <td className="heat-rank-cell"><span className="sr-only">Position </span>{team.position}</td>}
-                      <th scope="row" className="heat-team" title={team.name}>
-                        <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="heat-team-link">
-                          <span className="heat-team-name">
-                            {team.isFav && <Star aria-hidden="true" className="mr-1 inline h-3 w-3 fill-[#C08308] text-[#C08308]" />}
-                            {team.name}
-                          </span>
-                          {team.laneLabel && <span className="heat-team-lane">{team.laneLabel}</span>}
-                        </Link>
-                      </th>
-                      {showCarriedForward && (
-                        <td className="heat-cell heat-cell-first heat-cf" title="Carried forward">{formatPoints(team.carriedForward)}</td>
-                      )}
-                      {columns.map((col, i) => {
-                        const cell = grid.cells.get(`${team.id}|${col.key}`);
-                        return <td key={col.key} className={`heat-cell ${i === 0 && !showCarriedForward ? 'heat-cell-first' : ''}`}>
-                          {cell == null ? <><span aria-hidden="true" className="heat-dash">–</span><span className="sr-only">Not raced yet</span></>
-                            : cell.sitOut ? <><span aria-hidden="true" className="heat-dash sitout">S</span><span className="sr-only">Sat out this race</span></>
-                            : !cell.scored && cell.stageBadge ? <span className="heat-stage-badge">{cell.stageBadge}</span>
-                            : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">{statusLetter(true, cell.status)}</span><span className="sr-only">{statusLabel(true, cell.status)}</span></>
-                            : formatPoints(cell.points)}
-                        </td>;
-                      })}
-                      <td className="heat-total">{formatPoints(team.total)}</td>
-                    </tr>
-                  ))}
+                  {grid.teams.map((team) => {
+                    const flag = parseBibAndFlag(competition.teams.find((item) => item.id === team.id)?.bibDescription).flag;
+                    return (
+                      <tr key={team.id} className={team.isFav ? 'heat-row-fav' : undefined} data-followed={team.isFav ? 'true' : undefined}>
+                        {finished && <td className="heat-rank-cell"><span className="sr-only">Position </span>{team.position}</td>}
+                        <th scope="row" className="heat-team" title={team.name}>
+                          <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="heat-team-link">
+                            <span className="heat-team-name">
+                              {team.isFav && <Star aria-hidden="true" className="mr-1 inline h-3 w-3 fill-[#C08308] text-[#C08308]" />}
+                              {flag && <img src={`/flags/${flag}.png`} alt="" className="mr-1 inline h-3.5 w-5 rounded-[2px] object-cover" />}
+                              {team.name}
+                            </span>
+                            {team.laneLabel && <span className="heat-team-lane">{team.laneLabel}</span>}
+                          </Link>
+                        </th>
+                        {showCarriedForward && (
+                          <td className="heat-cell heat-cell-first heat-cf" title="Carried forward">{formatPoints(team.carriedForward)}</td>
+                        )}
+                        {columns.map((col, i) => {
+                          const cell = grid.cells.get(`${team.id}|${col.key}`);
+                          return <td key={col.key} className={`heat-cell ${i === 0 && !showCarriedForward ? 'heat-cell-first' : ''}`}>
+                            {cell == null ? <><span aria-hidden="true" className="heat-dash">–</span><span className="sr-only">Not raced yet</span></>
+                              : cell.sitOut ? <><span aria-hidden="true" className="heat-dash sitout">S</span><span className="sr-only">Sat out this race</span></>
+                              : !cell.scored && cell.stageBadge ? <span className="heat-stage-badge">{cell.stageBadge}</span>
+                              : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">{statusLetter(true, cell.status)}</span><span className="sr-only">{statusLabel(true, cell.status)}</span></>
+                              : formatPoints(cell.points)}
+                          </td>;
+                        })}
+                        <td className="heat-total">{formatPoints(team.total)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -375,7 +379,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
         </div>
       ))}
 
-      {!embedded && heat && races.length > 0 && (
+      {!embedded && heat && columns.length > 0 && (
         <button
           type="button"
           className="mg-text-link self-center"
@@ -386,7 +390,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
         </button>
       )}
 
-      {!embedded && heat && races.length > 0 && showRules && (
+      {!embedded && heat && columns.length > 0 && showRules && (
         <section aria-label="Races in this heat" className="mg-card px-3">
           <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
             {columns.map(({ key, race, label }, i) => (

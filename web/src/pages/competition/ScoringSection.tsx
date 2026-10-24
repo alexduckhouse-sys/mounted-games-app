@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
-import { CloudOff, Flag, Printer, Trash2, Undo2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CloudOff, Printer, SlidersHorizontal, Trash2, Undo2 } from 'lucide-react';
 import { bibName, hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import { describePlacings, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
 import type { NextLanes } from '../../lib/nextRoundLanes';
-import type { PendingPlace } from '../../lib/raceScoring';
+import { manualPoints, type PendingPlace } from '../../lib/raceScoring';
 import { pointsForPlace } from '../../lib/queuedView';
 import { summariseRace } from '../../lib/raceSummary';
 import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
-import { EliminationSheet, HcConfirm, HeatGrid, LaneView, NextLanesCard, RaceRules, ScoreRow, SummaryCard } from './ScoringParts';
+import {
+  EliminationSheet, HcConfirm, HeatGrid, LaneView, NextLanesCard, RaceRules, ScoreOverrideSheet, ScoreRow, SummaryCard,
+  type ScoreOverrideValue,
+} from './ScoringParts';
 import { HeatPrintSheet } from './HeatPrintSheet';
 import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
 import './scoring.css';
@@ -41,6 +44,8 @@ interface ScoringProps {
   /** Teams marked hors concours, and how organisers change that. Without the handler there is no HC button. */
   hcTeamIds?: ReadonlySet<number>;
   onSetHc?: (teamId: number, hc: boolean) => Promise<void> | void;
+  /** Optional callback when a scorer overrides a team's points in the active race. */
+  onOverridePoints?: (teamId: number, points: number | undefined, reason?: string) => void;
   /** How teams level on points are ordered in the summary. */
   tieRule?: TieBreakRule;
   /** Private reasons already saved for the finished races, by team, for the summary. */
@@ -58,9 +63,11 @@ const NO_TEAMS: ReadonlySet<number> = new Set();
 export function ScoringSection({
   heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued,
   onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason,
-  onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
+  onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, onOverridePoints,
+  tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
 }: ScoringProps) {
   const [sheet, setSheet] = useState(false);
+  const [overrideSheet, setOverrideSheet] = useState(false);
   const [hcFor, setHcFor] = useState<{ teamId: number; name: string; isHc: boolean } | null>(null);
   const [hcBusy, setHcBusy] = useState(false);
   const [auditRaceId, setAuditRaceId] = useState<number | null>(null);
@@ -72,6 +79,11 @@ export function ScoringSection({
   const names = useMemo(() => Object.fromEntries(heat.entries.map((e) => [e.teamId, e.teamName])), [heat.entries]);
   const isQualifier = heat.raceRoundStage === 1;
   const pointsFor = (place: number, eliminated: boolean) => pointsForPlace(heat, sessionBase, place, eliminated);
+  const activeOverrides: Record<number, ScoreOverrideValue> = {};
+  for (const place of pending) {
+    const points = manualPoints(place.refereeNote);
+    if (points !== undefined) activeOverrides[place.teamId] = { points, reason: place.refereeNote?.replace(/\[pts:[^\]]*\]/gi, '').trim() };
+  }
 
   // The announcer card sits after the latest finished race that isn't the one open for scoring.
   const summaryIdx = races.reduce((last, r, i) => (r.isComplete && i !== activeIdx ? i : last), -1);
@@ -84,6 +96,12 @@ export function ScoringSection({
     else onSubmit();
   }
 
+  function handleReset() { onReset(); }
+
+  function saveOverride(teamId: number, value: ScoreOverrideValue | null) {
+    if (activeRace) onOverridePoints?.(teamId, value?.points, value?.reason);
+  }
+
   async function confirmHc() {
     if (!hcFor || !onSetHc) return;
     setHcBusy(true);
@@ -91,6 +109,18 @@ export function ScoringSection({
   }
 
   const rows = activeRace ? inLaneOrder(heat, laneIdx, laneRules) : [];
+  const racingRows = rows.filter((e) => !sitsOutOf(heat, e, laneIdx, laneRules));
+  const lanesByTeam = Object.fromEntries(rows.map((e) => [e.teamId, displayLaneFor(heat, e, laneIdx, laneRules)]));
+
+  let placedCount = 0;
+  let elimCount = 0;
+  for (const e of racingRows) {
+    const st = pendingByTeam.get(e.teamId);
+    const hasOv = activeOverrides[e.teamId] != null;
+    if (st?.eliminated && !hasOv) elimCount += 1;
+    else if ((st?.place && !st.eliminated) || hasOv) placedCount += 1;
+  }
+  const doneCount = placedCount + elimCount;
 
   return (
     <section className="space-y-3">
@@ -107,49 +137,142 @@ export function ScoringSection({
             const done = race.isComplete || Boolean(queuedHere);
             const card = isActive ? (
               <section key={race.id} className="sc-card sc-open sc-pad" aria-label={`Scoring ${race.name}`}>
-                <h3 className="sc-title flex items-center gap-1.5"><Flag className="h-4 w-4 shrink-0" aria-hidden="true" /> {i + 1}. {race.name}</h3>
+                <div className="sc-race-bar">
+                  <button
+                    type="button"
+                    className="sc-race-nav"
+                    aria-label="Previous race"
+                    disabled={i === 0}
+                    onClick={() => { if (i > 0) onSelectRace(races[i - 1].id); }}
+                  >
+                    <ChevronLeft className="h-6 w-6" aria-hidden="true" />
+                  </button>
+                  <div className="sc-race-bar-center">
+                    <span className={`sc-race-bar-status ${done ? 'sc-race-bar-status-done' : ''}`}>
+                      Race {i + 1} of {races.length} · {done ? 'Scored' : 'Scoring'}
+                    </span>
+                    <h3 className="sc-race-bar-name">{race.name}</h3>
+                  </div>
+                  <button
+                    type="button"
+                    className="sc-race-nav"
+                    aria-label="Next race"
+                    disabled={i === races.length - 1}
+                    onClick={() => { if (i < races.length - 1) onSelectRace(races[i + 1].id); }}
+                  >
+                    <ChevronRight className="h-6 w-6" aria-hidden="true" />
+                  </button>
+                </div>
+
                 {activeQueued && (
                   <p role="status" className="mg-notice mt-2">
                     <CloudOff className="mr-1 inline h-4 w-4" aria-hidden="true" />
                     Not sent yet: {describePlacings(activeQueued.places, activeQueued.teamNames)}. To change them, score the race again.
                   </p>
                 )}
-                <ul className="sc-rows mt-2">
-                  {rows.map((e) => (
-                    <ScoreRow
-                      key={e.id}
-                      entry={e}
-                      lane={displayLaneFor(heat, e, laneIdx, laneRules)}
-                      hatband={hatbandFor(laneHatbands, displayLaneFor(heat, e, laneIdx, laneRules))}
-                      state={pendingByTeam.get(e.teamId)}
-                      sitting={sitsOutOf(heat, e, laneIdx, laneRules)}
-                      hc={hcTeamIds.has(e.teamId)}
-                      canScore={canScore}
-                      canMarkHc={canScore && Boolean(onSetHc)}
-                      onTap={() => onClickTeam(e.teamId)}
-                      onSwipeEliminate={() => onToggleElim(e.teamId)}
-                      onToggleElim={() => onToggleElim(e.teamId)}
-                      onHc={() => setHcFor({ teamId: e.teamId, name: e.teamName, isHc: hcTeamIds.has(e.teamId) })}
-                    />
-                  ))}
+
+                <ul className="sc-rows">
+                  {rows.map((e) => {
+                    const lane = displayLaneFor(heat, e, laneIdx, laneRules);
+                    const sitting = sitsOutOf(heat, e, laneIdx, laneRules);
+                    const state = pendingByTeam.get(e.teamId);
+                    const isHc = hcTeamIds.has(e.teamId);
+                    const ov = activeOverrides[e.teamId];
+                    const priorTotal = races.reduce(
+                      (sum, r) => (r.id === race.id ? sum : sum + (r.results.find((x) => x.teamId === e.teamId)?.points ?? 0)),
+                      0,
+                    );
+                    const savedResult = activeRace.results.find((result) => result.teamId === e.teamId);
+                    // Scorer links cannot read private directives. Keep the actual saved score visible
+                    // while its placing is unchanged, including half-point awards.
+                    const unchangedScore = state?.refereeNote === undefined && savedResult
+                      && savedResult.eliminated === state?.eliminated
+                      && (savedResult.placing ?? 0) === (state?.place ?? 0)
+                      ? savedResult.points : undefined;
+                    const racePoints = sitting || isHc
+                      ? 0
+                      : ov != null
+                        ? ov.points
+                        : unchangedScore !== undefined
+                          ? unchangedScore
+                          : state?.eliminated
+                          ? 0
+                          : state?.place
+                            ? pointsFor(state.place, false)
+                            : 0;
+                    return (
+                      <ScoreRow
+                        key={e.id}
+                        entry={e}
+                        lane={lane}
+                        hatband={hatbandFor(laneHatbands, lane)}
+                        state={state}
+                        sitting={sitting}
+                        hc={isHc}
+                        canScore={canScore}
+                        canMarkHc={canScore && Boolean(onSetHc)}
+                        points={racePoints}
+                        heatTotal={priorTotal + racePoints}
+                        overridePoints={ov?.points}
+                        onTap={() => onClickTeam(e.teamId)}
+                        onSwipeEliminate={() => onToggleElim(e.teamId)}
+                        onToggleElim={() => onToggleElim(e.teamId)}
+                        onHc={() => setHcFor({ teamId: e.teamId, name: e.teamName, isHc })}
+                      />
+                    );
+                  })}
                 </ul>
+
                 {canScore && (
                   <p className="sc-hint">
-                    Swipe a team down to eliminate it.
+                    Tap in finishing order · Hold or swipe down to eliminate — Swipe a team down to eliminate it.
                     {isQualifier && <> The first {qualifiers} home go through; the rest score 1 point each.</>}
                   </p>
                 )}
+
                 {canScore && (race.results.length > 0 || activeQueued) && (
                   <label className="mt-3 flex flex-col gap-1 text-sm font-semibold">
                     Reason for correction
                     <textarea className="input min-h-20" maxLength={1000} value={correctionReason} onChange={(event) => onCorrectionReason(event.target.value)} placeholder="What changed, and why?" />
                   </label>
                 )}
+
                 {canScore && (
-                  <div className="sc-actions">
-                    <button type="button" className="mg-btn mg-btn-primary" onClick={complete}>Race complete</button>
-                    <button type="button" className="mg-btn mg-btn-secondary" disabled={!onUndo} onClick={onUndo}><Undo2 className="h-4 w-4" aria-hidden="true" /> {undoLabel}</button>
-                    <button type="button" className="mg-btn mg-btn-secondary" onClick={onReset}><Trash2 className="h-4 w-4" aria-hidden="true" /> Clear</button>
+                  <div className="sc-bottom">
+                    <div className="sc-toolbar">
+                      <div className="sc-progress">
+                        <span className="sc-prog-count">
+                          {doneCount} <span className="sc-prog-total">of {racingRows.length}</span>
+                        </span>
+                        {racingRows.length > 0 && (
+                          <div className="sc-seg-bar" aria-hidden="true">
+                            {racingRows.map((e, segIdx) => (
+                              <span
+                                key={e.id}
+                                className={`sc-seg ${segIdx < placedCount ? 'sc-seg-placed' : segIdx < doneCount ? 'sc-seg-elim' : ''}`}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="sc-tool-btn"
+                        aria-label="Score override"
+                        onClick={() => setOverrideSheet(true)}
+                      >
+                        <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
+                      </button>
+                      <button type="button" className="mg-btn mg-btn-secondary" disabled={!onUndo} onClick={onUndo}>
+                        <Undo2 className="h-4 w-4" aria-hidden="true" /> {undoLabel}
+                      </button>
+                      <button type="button" className="mg-btn mg-btn-secondary" onClick={handleReset}>
+                        <Trash2 className="h-4 w-4" aria-hidden="true" /> Clear
+                      </button>
+                    </div>
+                    <div className="sc-actions">
+                      <button type="button" className="mg-btn mg-btn-primary sc-submit-btn" onClick={complete}>Race complete</button>
+                    </div>
                   </div>
                 )}
               </section>
@@ -222,8 +345,21 @@ export function ScoringSection({
           onSave={(places) => { setSheet(false); onSubmit(places); }}
         />
       )}
+      {overrideSheet && activeRace && (
+        <ScoreOverrideSheet
+          raceName={activeRace.name}
+          entries={racingRows}
+          lanesByTeam={lanesByTeam}
+          pendingByTeam={pendingByTeam}
+          pointsFor={pointsFor}
+          overrides={activeOverrides}
+          hcTeamIds={hcTeamIds}
+          onSetHc={canScore ? onSetHc : undefined}
+          onSaveOverride={saveOverride}
+          onClose={() => setOverrideSheet(false)}
+        />
+      )}
       {hcFor && <HcConfirm teamName={hcFor.name} isHc={hcFor.isHc} busy={hcBusy} onConfirm={() => void confirmHc()} onCancel={() => setHcFor(null)} />}
     </section>
   );
 }
-

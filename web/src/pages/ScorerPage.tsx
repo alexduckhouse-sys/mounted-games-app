@@ -11,7 +11,7 @@ import { enqueue, placingsOf, type QueuedScore } from '../offline/scoreOutbox';
 import { nextRoundLanes } from '../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo';
-import { nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
+import { overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import type { Heat, ScorerSession, Session } from '../types';
@@ -302,6 +302,7 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
           onToggleElim={toggleElim}
           onReset={() => change([])}
           onSubmit={submit}
+              onOverridePoints={(teamId, points, reason) => change(overridePoints(shown, teamId, points, reason))}
           onUndo={canUndo ? undo : undefined}
           undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
           allowReasons

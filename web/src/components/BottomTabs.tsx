@@ -24,7 +24,7 @@ export function BottomTabs({ competitionId, me, entryOnly = false }: { competiti
     // Heats and age-group timetables are reached from the timetable, so they keep it highlighted.
     { to: base, label: 'Timetable', icon: Clock, active: section === '' || section === 'session' || section === 'scoring' },
     { to: `${base}/toplists`, label: 'Toplists', icon: Trophy, active: section === 'toplists' },
-    { to: `${base}/chat`, label: 'Live & stream', icon: MessageSquare, active: section === 'chat' },
+    { to: `${base}/chat`, label: 'Live stream', icon: MessageSquare, active: section === 'chat' },
     { to: `${base}/details`, label: 'Details', icon: Info, active: section === 'details' || section === 'sponsors' },
   ];
   return (

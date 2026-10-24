@@ -20,7 +20,7 @@ import { nextRoundLanes } from '../../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../../lib/scoreUndo';
 import {
-  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
+  overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
   writeScoringDraft, type PendingPlace,
 } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
@@ -365,6 +365,7 @@ export function SessionPage() {
               onToggleElim={toggleElim}
               onReset={resetPending}
               onSubmit={submit}
+              onOverridePoints={(teamId, points, reason) => changePending((current) => overridePoints(current, teamId, points, reason))}
               onUndo={canUndo ? undo : undefined}
               undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
               allowReasons

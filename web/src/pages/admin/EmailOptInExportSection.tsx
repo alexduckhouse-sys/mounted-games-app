@@ -67,15 +67,13 @@ export function EmailOptInExportSection() {
   }
 
   return (
-    <section className="card mb-4 space-y-2 p-5">
+    <section className="mg-card mb-4 space-y-2 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 font-semibold">Email opt-ins</h2>
+        <h2 className="mg-h2 flex items-center gap-2">Email opt-ins</h2>
         {status && (
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-              status.configured
-                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                : 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200'
+            className={`mg-tag inline-flex items-center gap-1.5 !rounded-full !px-2.5 !py-0.5 ${
+              status.configured ? 'mg-tag-ok' : 'mg-tag-late'
             }`}
           >
             {status.configured ? (
@@ -90,20 +88,20 @@ export function EmailOptInExportSection() {
         )}
       </div>
       {statusUnavailable && <p role="status" className="m-0 text-sm">Could not check email settings. Reload the page to try again.</p>}
-      <p className="m-0 text-sm text-slate-600 dark:text-slate-300">
+      <p className="m-0 text-sm text-[rgb(var(--mg-body))]">
         People who ticked the box to hear when new competitions open. The list only holds those who have not unsubscribed.
         It contains personal data: keep it in your mailing tool and delete the file afterwards.
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="btn-ghost" onClick={() => void download()} disabled={busy}>
+        <button type="button" className="mg-btn mg-btn-secondary !min-h-11 !px-3.5 text-sm" onClick={() => void download()} disabled={busy}>
           <Download className="h-4 w-4" aria-hidden="true" /> {busy ? 'Preparing…' : 'Download opt-in list (CSV)'}
         </button>
-        <button type="button" className="btn-ghost" onClick={() => void sendTest()} disabled={testBusy}>
+        <button type="button" className="mg-btn mg-btn-secondary !min-h-11 !px-3.5 text-sm" onClick={() => void sendTest()} disabled={testBusy}>
           <Send className="h-4 w-4" aria-hidden="true" /> {testBusy ? 'Sending…' : 'Send test email'}
         </button>
       </div>
-      {testNotice && <p className="m-0 text-sm font-medium text-emerald-700 dark:text-emerald-300">{testNotice}</p>}
-      {error && <p role="alert" className="m-0 text-sm font-semibold text-red-600">{error}</p>}
+      {testNotice && <p className="m-0 text-sm font-medium text-[rgb(var(--mg-ok))]">{testNotice}</p>}
+      {error && <p role="alert" className="m-0 text-sm font-semibold text-[rgb(var(--mg-elim))]">{error}</p>}
     </section>
   );
 }

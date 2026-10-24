@@ -30,6 +30,7 @@ interface HeaderProps {
   tabsLabel?: string;
   /** `nav` tabs link to routes (aria-current); `tablist` tabs filter in place (role="tab"). */
   tabsKind?: 'nav' | 'tablist';
+  children?: ReactNode;
 }
 
 /** Arrow, Home and End move between role="tab" buttons and select the one they land on. */
@@ -45,7 +46,7 @@ function moveTabFocus(event: ReactKeyboardEvent<HTMLElement>) {
   tabs[next].click();
 }
 
-export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, title, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav' }: HeaderProps) {
+export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, title, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
   return (
     <header className="rf-hd">
       <div className="rf-hd-top">
@@ -56,6 +57,7 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
       </div>
       <h1 className="rf-ttl">{title}{demo && <DemoChip />}</h1>
       {subtitle && <p className="rf-sub">{subtitle}</p>}
+      {children}
       {tabs && tabs.length > 0 && (
         <nav className="rf-tabs" aria-label={tabsLabel} role={tabsKind === 'tablist' ? 'tablist' : undefined} onKeyDown={tabsKind === 'tablist' ? moveTabFocus : undefined}>
           {tabs.map((tab) => tabsKind === 'tablist' ? (

@@ -10,9 +10,9 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { Session, StandingRow } from '../../types';
 import { buildToplist } from '../../lib/toplist';
-import { HeatScores } from './HeatScores';
-import { ToplistView } from './ToplistView';
+import { ToplistView, type ToplistViewTab } from './ToplistView';
 import { TackLeaderboard } from './TackLeaderboard';
+import { HeatScores } from './HeatScores';
 import { ToplistRowsSkeleton } from '../../components/Skeletons';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
@@ -91,6 +91,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const [subTab, setSubTab] = useState<SectionSubTab>('draw');
   const [showToplist, setShowToplist] = useState(toplistOnly);
   const [showFinals, setShowFinals] = useState(false);
+  const [chosenView, setChosenView] = useState<ToplistViewTab | null>(null);
 
   const [standingsResult, setStandingsResult] = useState<{ sectionId: number; rows: StandingRow[]; error: boolean; savedCopy: boolean } | null>(null);
   const [retry, setRetry] = useState(0);
@@ -146,17 +147,40 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     </>
   );
   const sectionLabel = `Toplist${sectionName ? `, ${sectionName}` : ''}`;
-  // The page version draws its own tab band edge to edge, so its notices sit in their own column above it.
+  const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
+  const rail = desktop && competition.sections.length > 1
+    ? <AgeGroupRail sections={competition.sections} teams={competition.teams} value={sectionId} onChange={chooseSection} /> : null;
+  const sectionHeats = useMemo(() => {
+    if (sectionId == null) return [];
+    const out: { session: typeof competition.sessions[number]; orderedHeats: typeof competition.sessions[number]['heats']; heat: typeof competition.sessions[number]['heats'][number] }[] = [];
+    const sessions = competition.sessions
+      .filter((s) => s.competitionSectionId === sectionId && (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
+      .slice()
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    for (const s of sessions) {
+      const orderedHeats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+      const seenRounds = new Set<number>();
+      for (const h of orderedHeats) {
+        if (h.raceRoundStage && h.raceRoundId != null) {
+          if (seenRounds.has(h.raceRoundId)) continue;
+          seenRounds.add(h.raceRoundId);
+        }
+        out.push({ session: s, orderedHeats, heat: h });
+      }
+    }
+    return out;
+  }, [competition, sectionId]);
+  // The page version draws its own tab band edge to edge on phones, so its notices sit in their own column above it.
   const toplist = toplistOnly ? (
     <section aria-label={sectionLabel} className="flex flex-col">
       <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
-      {standings.length > 0 && <ToplistView key={sectionId} list={list} section={section} standalone />}
+      {standings.length > 0 && <ToplistView list={list} section={section} standalone={!rail} competitionId={competition.id} teams={competition.teams} heats={sectionHeats} chosenView={chosenView} onChooseView={setChosenView} />}
       {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
     </section>
   ) : (
     <section aria-label={sectionLabel} className="flex flex-col gap-2.5">
       {notices}
-      {standings.length > 0 && <ToplistView key={sectionId} list={list} section={section} />}
+      {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} heats={sectionHeats} chosenView={chosenView} onChooseView={setChosenView} />}
       {sectionId != null && <TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} />}
     </section>
   );
@@ -177,9 +201,6 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     </AnimatePresence>
   );
 
-  const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
-  const rail = desktop && competition.sections.length > 1
-    ? <AgeGroupRail sections={competition.sections} teams={competition.teams} value={sectionId} onChange={chooseSection} /> : null;
   const ageGroups = !rail && competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} onChange={chooseSection} />;
   const sectionSessions = useMemo(
     () => competition.sessions
@@ -202,7 +223,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
         {finalsModal}
       </div>
     );
-    return rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups">{page}</PageGrid> : page;
+    return rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className="pt-3">{page}</PageGrid> : page;
   }
 
   const subTabs: [SectionSubTab, string][] = [
@@ -211,12 +232,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     ['toplist', 'Toplist'],
   ];
 
-  const board = (
-      <TimetableBoard
-        sectionId={sectionId}
-        title={sectionName || 'Age group'}
-        bandExtra={ageGroups}
-        lead={
+  const leadControls = (
           <div className="flex flex-col gap-3">
             <div className="mg-seg" role="group" aria-label="Section view">
               {subTabs.map(([id, label]) => (
@@ -275,13 +291,16 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
 
             {finalsButton}
           </div>
-        }
-      />
+  );
+  const board = subTab === 'draw' ? (
+    <TimetableBoard sectionId={sectionId} title={sectionName || 'Age group'} bandExtra={ageGroups} lead={leadControls} />
+  ) : (
+    <div className="mx-auto flex w-full flex-col gap-3">{ageGroups}{leadControls}</div>
   );
 
   return (
     <>
-      {rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups">{board}</PageGrid> : board}
+      {rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className="pt-3">{board}</PageGrid> : board}
       {finalsModal}
     </>
   );

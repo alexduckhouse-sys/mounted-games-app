@@ -191,6 +191,13 @@ public class AdaptiveDecFormTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(Forms, WithBib(" "))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await trainer.PostAsJsonAsync(Forms, WithBib("Red"))).StatusCode);
         Assert.Equal("Red", await _f.InDbAsync(db => db.Teams.Where(t => t.Id == s.TeamId).Select(t => t.BibDescription).SingleAsync()));
+        Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(Forms, WithBib("[flag:gb]"))).StatusCode);
+        await SetConfigAsync(s.CompetitionId, Basic());
+        Assert.Equal(HttpStatusCode.OK, (await trainer.PostAsJsonAsync(Forms, WithBib("[flag:gb]"))).StatusCode);
+        Assert.Equal("[flag:gb] Red", await _f.InDbAsync(db => db.Teams.Where(t => t.Id == s.TeamId).Select(t => t.BibDescription).SingleAsync()));
+        Assert.Equal(HttpStatusCode.OK, (await trainer.PostAsJsonAsync(Forms, WithBib(""))).StatusCode);
+        Assert.Equal("Red", await _f.InDbAsync(db => db.Teams.Where(t => t.Id == s.TeamId).Select(t => t.BibDescription).SingleAsync()));
+
     }
 
     [Fact]

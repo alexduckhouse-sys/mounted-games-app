@@ -46,9 +46,26 @@ function hashStr(s: string): number {
   return Math.abs(h);
 }
 
+const FLAG_TAG = /^\[flag:([a-z0-9-]+)\]\s*(.*)$/i;
+
+export function parseBibAndFlag(text: string | null | undefined): { bib: string; flag: string | null } {
+  const trimmed = text?.trim() ?? '';
+  if (!trimmed) return { bib: '', flag: null };
+  const match = FLAG_TAG.exec(trimmed);
+  if (!match) return { bib: trimmed, flag: null };
+  return { bib: match[2].trim(), flag: match[1].toLowerCase() };
+}
+
+export function formatBibWithFlag(bib: string, flag: string | null | undefined): string {
+  const cleanBib = parseBibAndFlag(bib).bib;
+  const cleanFlag = flag?.trim().toLowerCase() ?? '';
+  if (!cleanFlag) return cleanBib;
+  return cleanBib ? `[flag:${cleanFlag}] ${cleanBib}` : `[flag:${cleanFlag}]`;
+}
+
 export function bibAccent(text: string | null | undefined): string {
-  if (!text) return '#94a3b8';
-  const lower = text.trim().toLowerCase();
+  const lower = parseBibAndFlag(text).bib.toLowerCase();
+  if (!lower) return '#94a3b8';
   if (NAMED[lower]) return NAMED[lower];
   // try first word match (e.g. "Red with white spots" → red)
   for (const word of lower.split(/[\s,/]+/)) {
@@ -58,5 +75,5 @@ export function bibAccent(text: string | null | undefined): string {
 }
 
 export function bibLabel(text: string | null | undefined): string {
-  return text?.trim() || 'No bib set';
+  return parseBibAndFlag(text).bib || 'No bib set';
 }

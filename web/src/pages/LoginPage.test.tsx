@@ -99,14 +99,29 @@ describe('LoginPage', () => {
     expect(screen.getByText('Sign up page')).toBeInTheDocument();
   });
 
+  it('toggles showing and hiding the password', async () => {
+    mount();
+    const password = screen.getByLabelText('Password');
+    expect(password).toHaveAttribute('type', 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+    await userEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
   describe('organiser with a shared key', () => {
-    it('swaps to title, email and key fields and back', async () => {
+    it('swaps to title, email and key fields and back, and toggles showing the key', async () => {
       mount();
       await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
       expect(screen.getByRole('heading', { name: 'Organiser sign in' })).toBeInTheDocument();
       expect(screen.getByLabelText('Title or role')).toHaveAttribute('type', 'text');
       expect(screen.getByLabelText('Email')).toHaveAttribute('type', 'email');
-      expect(screen.getByLabelText('Organiser key')).toHaveAttribute('type', 'password');
+      const keyInput = screen.getByLabelText('Organiser key');
+      expect(keyInput).toHaveAttribute('type', 'password');
+      await userEvent.click(screen.getByRole('button', { name: 'Show key' }));
+      expect(keyInput).toHaveAttribute('type', 'text');
+      await userEvent.click(screen.getByRole('button', { name: 'Hide key' }));
+      expect(keyInput).toHaveAttribute('type', 'password');
       expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
       expect(screen.queryByText(/New here/)).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));

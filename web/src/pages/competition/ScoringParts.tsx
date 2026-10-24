@@ -1,7 +1,8 @@
 import { motion, type PanInfo } from 'framer-motion';
-import { useRef, useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
-import { teamBoxStyle } from '../../lib/teamColours';
+import { dotColour, teamBoxStyle } from '../../lib/teamColours';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { ELIM_REASONS, OTHER_REASON, noteFor, reasonKeyOf, statusFor } from '../../lib/elimReasons';
 import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
@@ -16,9 +17,15 @@ import './heat.css';
 import './scoring.css';
 import { formatPoints } from '../../lib/formatPoints';
 
-/** One team in the race being scored. A tap places it, a swipe down eliminates it; the Out and HC buttons are for everyone who can't swipe. */
+export interface ScoreOverrideValue {
+  points: number;
+  reason?: string;
+}
+
+/** One team in the race being scored. A tap places it, a hold or swipe down eliminates it; the Out and HC buttons are for everyone who can't swipe. */
 export function ScoreRow({
-  entry, lane, hatband, state, sitting, hc, canScore, canMarkHc, onTap, onSwipeEliminate, onToggleElim, onHc,
+  entry, lane, hatband, state, sitting, hc, canScore, canMarkHc, points = 0, heatTotal = 0, overridePoints,
+  onTap, onSwipeEliminate, onToggleElim, onHc,
 }: {
   entry: HeatEntry;
   lane: string;
@@ -28,31 +35,99 @@ export function ScoreRow({
   hc: boolean;
   canScore: boolean;
   canMarkHc: boolean;
+  points?: number;
+  heatTotal?: number;
+  overridePoints?: number;
   onTap: () => void;
   onSwipeEliminate: () => void;
   onToggleElim: () => void;
   onHc: () => void;
 }) {
   const eliminated = state?.eliminated ?? false;
+  const placed = Boolean(state?.place && !eliminated);
   const disabled = !canScore || sitting;
   const dragged = useRef(false);
+  const held = useRef(false);
+  const holdTimer = useRef<number | null>(null);
+  const [holding, setHolding] = useState(false);
+
+  function clearHold() {
+    if (holdTimer.current != null) {
+      window.clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+    setHolding(false);
+  }
+
+  useEffect(() => () => {
+    if (holdTimer.current != null) window.clearTimeout(holdTimer.current);
+  }, []);
+
+  function handlePointerDown() {
+    if (disabled) return;
+    clearHold();
+    setHolding(true);
+    holdTimer.current = window.setTimeout(() => {
+      holdTimer.current = null;
+      held.current = true;
+      setHolding(false);
+      onToggleElim();
+    }, 650);
+  }
+
   function handlePanEnd(_e: unknown, info: PanInfo) {
+    clearHold();
     if (Math.abs(info.offset.y) > 8) dragged.current = true;
     if (!disabled && info.offset.y > 50 && info.velocity.y > 0) onSwipeEliminate();
   }
+
   function handleClick() {
+    clearHold();
+    if (held.current) {
+      held.current = false;
+      return;
+    }
     if (dragged.current) {
       dragged.current = false;
       return;
     }
     if (!disabled) onTap();
   }
-  const badge = sitting ? <span className="sc-badge sc-badge-sit" aria-label="Sitting out">S</span>
-    : eliminated ? <span className="sc-badge sc-badge-out" aria-label={statusLabel(true, state?.status) ?? 'Eliminated'}>{statusLetter(true, state?.status) === 'E' ? 'OUT' : statusLetter(true, state?.status)}</span>
-    : state?.place ? <span className="sc-badge" aria-label={`Place ${state.place}`}>{state.place}</span>
-    : null;
+
+  const badge = sitting ? (
+    <span className="sc-badge sc-badge-sit" aria-label="Sitting out">S</span>
+  ) : eliminated ? (
+    <span className="sc-score-right">
+      <span className="sc-badge sc-badge-out" aria-label={statusLabel(true, state?.status) ?? 'Eliminated'}>
+        {statusLetter(true, state?.status) === 'E' ? 'OUT' : statusLetter(true, state?.status)}
+      </span>
+      <span className="sc-pts sc-pts-out">{formatPoints(points)} pts</span>
+    </span>
+  ) : state?.place ? (
+    <span className="sc-score-right">
+      <span className="sc-badge" aria-label={`Place ${state.place}`}>{ordinal(state.place)}</span>
+      <span className="sc-pts">
+        {hc ? 'No points' : overridePoints != null ? `${formatPoints(points)} pts · manual` : `+${formatPoints(points)} pts`}
+      </span>
+    </span>
+  ) : overridePoints != null ? (
+    <span className="sc-score-right">
+      <span className="sc-badge">{formatPoints(overridePoints)}</span>
+      <span className="sc-pts">{formatPoints(overridePoints)} pts · manual</span>
+    </span>
+  ) : null;
+
+  const rowStyle = {
+    ...teamBoxStyle(entry.bibColour),
+    ...(eliminated ? { borderColor: '#E8B4BA' } : entry.bibColour ? { borderColor: dotColour(entry.bibColour) } : {}),
+  };
+
   return (
-    <li className={`sc-row ${eliminated ? 'sc-row-out' : ''} ${sitting ? 'sc-row-sit' : ''}`} style={teamBoxStyle(entry.bibColour)}>
+    <li
+      className={`sc-row ${placed ? 'sc-row-placed' : ''} ${eliminated ? 'sc-row-out' : ''} ${sitting ? 'sc-row-sit' : ''}`}
+      style={rowStyle}
+    >
+      {holding && <span className="sc-hold" aria-hidden="true" />}
       <motion.button
         type="button"
         className="sc-main-btn"
@@ -62,14 +137,31 @@ export function ScoreRow({
         dragSnapToOrigin
         dragElastic={0.4}
         dragConstraints={{ top: 0, bottom: 80 }}
+        onPointerDown={handlePointerDown}
+        onPointerUp={clearHold}
+        onPointerLeave={clearHold}
+        onPointerCancel={clearHold}
         onPanEnd={handlePanEnd}
         onClick={handleClick}
+        onKeyDown={(e) => {
+          if (!disabled && (e.key === 'Delete' || e.key === 'Backspace')) {
+            e.preventDefault();
+            onToggleElim();
+          }
+        }}
       >
-        <span className="sc-lane" title={`Lane ${lane}`}>{lane}</span>
+        <span className="sc-bib-bar" aria-hidden="true" style={{ background: dotColour(entry.bibColour) }} />
+        <span className="sc-lane" title={`Lane ${lane}`}>{sitting ? lane : `L${lane}`}</span>
         <span className="sc-who">
-          <span className="sc-name">{entry.teamName} {hc && <span className="sc-tag sc-tag-hc">HC</span>}</span>
-          <BibSwatch colour={entry.bibColour} />
-          <HatbandSwatch colour={hatband} />
+          <span className="sc-name-row">
+            <span className="sc-name">{entry.teamName} {hc && <span className="sc-tag sc-tag-hc">HC</span>}</span>
+            {overridePoints != null && !hc && <span className="sc-tag sc-tag-manual">Manual</span>}
+          </span>
+          <span className="sc-meta-row">
+            <span className="sc-heat-total">Heat total {formatPoints(heatTotal)}</span>
+            <BibSwatch colour={entry.bibColour} />
+            <HatbandSwatch colour={hatband} />
+          </span>
         </span>
         {badge}
       </motion.button>
@@ -92,6 +184,180 @@ function Overlay({ label, onClose, children }: { label: string; onClose: () => v
     <div className="sc-overlay" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-label={label} className="sc-sheet" onClick={(e) => e.stopPropagation()}>{children}</div>
     </div>
+  );
+}
+
+/** Bottom sheet to override a team's score (Automatic, Set points, or Hors concours). */
+export function ScoreOverrideSheet({
+  raceName, entries, lanesByTeam, pendingByTeam, pointsFor, overrides, hcTeamIds, onSetHc, onSaveOverride, onClose,
+}: {
+  raceName: string;
+  entries: HeatEntry[];
+  lanesByTeam: Record<number, string>;
+  pendingByTeam: ReadonlyMap<number, PendingPlace>;
+  pointsFor: (place: number, eliminated: boolean) => number;
+  overrides: Readonly<Record<number, ScoreOverrideValue>>;
+  hcTeamIds: ReadonlySet<number>;
+  onSetHc?: (teamId: number, hc: boolean) => Promise<void> | void;
+  onSaveOverride: (teamId: number, value: ScoreOverrideValue | null) => void;
+  onClose: () => void;
+}) {
+  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
+  const [mode, setMode] = useState<'auto' | 'set' | 'hc'>('auto');
+  const [pts, setPts] = useState<number>(0);
+  const [reason, setReason] = useState<string>('');
+
+  const selectedEntry = entries.find((e) => e.teamId === selectedTeamId) ?? null;
+
+  function autoStatus(teamId: number): string {
+    const st = pendingByTeam.get(teamId);
+    if (st?.eliminated) return 'Eliminated · 0 pts';
+    if (st?.place) return `${ordinal(st.place)} · ${formatPoints(pointsFor(st.place, false))} pts`;
+    return 'Not placed yet';
+  }
+
+  function pickTeam(entry: HeatEntry) {
+    const isHc = hcTeamIds.has(entry.teamId);
+    const ov = overrides[entry.teamId];
+    const st = pendingByTeam.get(entry.teamId);
+    const defaultPts = ov ? ov.points : st?.place && !st.eliminated ? pointsFor(st.place, false) : 0;
+    setSelectedTeamId(entry.teamId);
+    setMode(isHc ? 'hc' : ov ? 'set' : 'auto');
+    setPts(defaultPts);
+    setReason(ov?.reason ?? '');
+  }
+
+  async function saveTeam() {
+    if (!selectedEntry) return;
+    const teamId = selectedEntry.teamId;
+    const wasHc = hcTeamIds.has(teamId);
+    if (mode === 'hc') {
+      onSaveOverride(teamId, null);
+      if (onSetHc && !wasHc) await onSetHc(teamId, true);
+    } else if (mode === 'set') {
+      if (onSetHc && wasHc) await onSetHc(teamId, false);
+      onSaveOverride(teamId, { points: pts, reason: reason.trim() || undefined });
+    } else {
+      if (onSetHc && wasHc) await onSetHc(teamId, false);
+      onSaveOverride(teamId, null);
+    }
+    setSelectedTeamId(null);
+  }
+
+  return (
+    <Overlay label="Score override" onClose={onClose}>
+      {!selectedEntry ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <h3 className="sc-title">Score override</h3>
+              <p className="sc-sub">{raceName} · pick a team</p>
+            </div>
+            <button type="button" className="sc-tool-btn" aria-label="Close" onClick={onClose}>
+              <X className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {entries.map((e) => {
+              const isHc = hcTeamIds.has(e.teamId);
+              const ov = overrides[e.teamId];
+              const statusText = isHc ? 'HC' : ov ? `${formatPoints(ov.points)} pts · manual` : autoStatus(e.teamId);
+              return (
+                <button key={e.id} type="button" className="sc-ov-team-btn" onClick={() => pickTeam(e)}>
+                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: dotColour(e.bibColour) }} aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate font-bold">{e.teamName}</span>
+                  <span className="text-sm font-semibold text-[rgb(var(--mg-muted))]">{statusText}</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-[rgb(var(--mg-muted))]" aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <button type="button" className="sc-tool-btn" aria-label="Back to teams" onClick={() => setSelectedTeamId(null)}>
+              <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <h3 className="sc-title">{selectedEntry.teamName}</h3>
+              <p className="sc-sub">Lane {lanesByTeam[selectedEntry.teamId] ?? selectedEntry.laneIndex} · {autoStatus(selectedEntry.teamId)}</p>
+            </div>
+          </div>
+
+          <div role="radiogroup" aria-label="How this team scores" className="flex flex-col gap-2">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === 'auto'}
+              className="sc-ov-radio"
+              onClick={() => setMode('auto')}
+            >
+              <span className="flex flex-col">
+                <span className="font-bold">Automatic</span>
+                <span className="sc-sub">Points from finishing place ({autoStatus(selectedEntry.teamId)})</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === 'set'}
+              className="sc-ov-radio"
+              onClick={() => setMode('set')}
+            >
+              <span className="flex flex-col">
+                <span className="font-bold">Set points</span>
+                <span className="sc-sub">Enter this race’s points by hand</span>
+              </span>
+            </button>
+            {onSetHc && (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={mode === 'hc'}
+                className="sc-ov-radio"
+                onClick={() => setMode('hc')}
+              >
+                <span className="flex flex-col">
+                  <span className="font-bold">Hors concours (HC)</span>
+                  <span className="sc-sub">Rides, but scores no points</span>
+                </span>
+              </button>
+            )}
+          </div>
+
+          {mode === 'set' && (
+            <div className="sc-ov-stepper">
+              <span className="font-semibold">Points this race</span>
+              <span className="flex items-center gap-2">
+                <button type="button" className="sc-ov-step-btn" aria-label="Half a point fewer" onClick={() => setPts((p) => Math.max(0, p - 0.5))}>−</button>
+                <span aria-live="polite" className="min-w-10 text-center font-[var(--mg-font-display)] text-2xl font-bold text-[rgb(var(--mg-heading))]">{formatPoints(pts)}</span>
+                <button type="button" className="sc-ov-step-btn" aria-label="Half a point more" onClick={() => setPts((p) => Math.min(30, p + 0.5))}>+</button>
+              </span>
+            </div>
+          )}
+
+          {mode !== 'auto' && (
+            <label className="flex flex-col gap-1 text-sm font-semibold">
+              Reason
+              <input
+                type="text"
+                className="input min-h-11"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. Judge’s decision"
+              />
+            </label>
+          )}
+
+          <div className="sc-actions">
+            <button type="button" className="mg-btn mg-btn-primary sc-submit-btn" onClick={() => void saveTeam()}>
+              {mode === 'auto' ? (overrides[selectedEntry.teamId] ? 'Remove override' : 'Done') : 'Save override'}
+            </button>
+          </div>
+        </div>
+      )}
+    </Overlay>
   );
 }
 
@@ -326,4 +592,3 @@ export function RaceRules({ races }: { races: Race[] }) {
     </>
   );
 }
-

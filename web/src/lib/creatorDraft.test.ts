@@ -13,15 +13,15 @@ describe('defaults and names', () => {
     expect(d.sections).toHaveLength(1);
     expect(d.sections[0]).toMatchObject({ format: 2, ageGroup: 'Seniors', minutesPerRace: '10', maxTeamsPerHeat: '6' });
     expect(d.startDate).toBe('2026-10-31');
-    expect(sectionName(d.sections[0])).toBe('Senior Teams');
+    expect(sectionName(d.sections[0])).toBe('Seniors');
   });
 
   it('names sessions after the section, numbering them when there are several', () => {
     const one = defaultSection();
-    expect(newSessionName(one, 0)).toBe('Senior Teams');
+    expect(newSessionName(one, 0)).toBe('Seniors');
     const two = resizeSessions(one, 2);
-    expect(newSessionName(two, 1)).toBe('Senior Teams · Session 2');
-    expect(finalSessionName(one)).toBe('Finals · Senior Teams');
+    expect(newSessionName(two, 1)).toBe('Seniors · Session 2');
+    expect(finalSessionName(one)).toBe('Finals · Seniors');
   });
 });
 

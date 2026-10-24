@@ -1,4 +1,5 @@
 import type { Heat, Session, StandingRow, Team } from '../types';
+import { lanesInUse, sitsOut } from './lanes.ts';
 
 export interface ToplistRow {
   teamId: number;
@@ -13,6 +14,10 @@ export interface ToplistRow {
   out: boolean;
   /** Points to pass the last finalist, for teams below the line that still have races to ride. */
   needed: number | null;
+  /** The bounded exact search could not prove a minimum; null must not imply elimination. */
+  neededUnavailable?: boolean;
+  /** Only a tie at the cut-off is possible under normal finishes. */
+  neededForRunoff?: boolean;
   racesLeft: number;
   /** Withdrawn or no-show: what they scored stays, they ride no more. */
   withdrawn: boolean;
@@ -34,8 +39,28 @@ export interface Toplist {
   bySession: { sessions: { id: number; label: string; title: string }[]; cells: Map<number, number[]> };
   /** Each final that has results, in running order ("A Final", "B Final"...). Empty until a final has been ridden. */
   finals: FinalGroup[];
+  /** Per-game results across all heats in this section, grouped by game name. */
+  byGame: GameStandingGroup[];
   /** What each team did, for the team sheet: qualifying standing, its final and its races per session. */
   detail: Map<number, TeamDetail>;
+}
+
+export interface GameStandingRow {
+  teamId: number;
+  teamName: string;
+  heatLabel: string;
+  placing: number | null;
+  eliminated: boolean;
+  isSitOut?: boolean;
+  status?: number;
+  points: number;
+  position: number;
+  joint: boolean;
+}
+
+export interface GameStandingGroup {
+  name: string;
+  rows: GameStandingRow[];
 }
 
 export interface FinalRow {
@@ -136,6 +161,9 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
     return { teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position, joint, runoff: false, out: false, needed: null, racesLeft: racesLeft.get(row.teamId) ?? 0, withdrawn: row.withdrawn === true, bonus: row.bonusPoints ?? 0 };
   });
 
+  const hcTeams = teams.filter((team) => team.isHorsConcours && team.competitionSectionId === sectionId);
+  const hcTeamIds = new Set(hcTeams.map((team) => team.id));
+
   // Until someone has scored, everyone is level and a cut-off line would mean nothing.
   const scored = rows.some((row) => row.points > 0);
   let cutAfter: number | null = null;
@@ -153,15 +181,10 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
     } else {
       cutAfter = places - 1;
     }
-    rows.forEach((row, index) => {
-      if (index <= cutAfter!) return;
-      row.out = true;
-      if (row.racesLeft > 0) row.needed = linePoints - row.points + 1;
-    });
+    assignPointsNeeded(rows, cutAfter, places, linePoints, heatSessions, hcTeamIds);
   }
 
-  const hc = teams
-    .filter((team) => team.isHorsConcours && team.competitionSectionId === sectionId)
+  const hc = hcTeams
     .map((team) => ({ teamId: team.id, teamName: team.displayName, points: (sessionPoints.get(team.id) ?? []).reduce((sum, value) => sum + value, 0), racesLeft: racesLeft.get(team.id) ?? 0 }))
     .sort((a, b) => b.points - a.points || a.teamName.localeCompare(b.teamName));
 
@@ -180,9 +203,186 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   const qualifying = qualifyingRanks(rows, sessionPoints);
   for (const group of finalGroups) for (const finalRow of group.rows) finalRow.qualifyingPosition = qualifying.get(finalRow.teamId)?.position ?? null;
   const detail = buildDetail(rows, finalGroups, heatSessions, qualifying);
+  const byGame = buildByGame(heatSessions, hcTeamIds);
   const started = scored || sessions.some((session) => session.competitionSectionId === sectionId && isRace(session)
     && session.heats.some((heat) => heat.races.some((race) => race.results.length > 0)));
-  return { rows, cutAfter, runoff, hc, sessionsDone, sessionsTotal: heatSessions.length, started, bySession: { sessions: columns, cells }, finals: finalGroups, detail };
+  return { rows, cutAfter, runoff, hc, sessionsDone, sessionsTotal: heatSessions.length, started, bySession: { sessions: columns, cells }, finals: finalGroups, byGame, detail };
+}
+
+/**
+ * Minimum under normal, slot-conserving finishes, not a forecast of eliminations or manual awards.
+ * Search every legal allocation, memoising failed race-boundary states. This is exponential in the
+ * remaining races/field size, so one shared work budget bounds the whole toplist, not each team.
+ * Exhausting it is an explicit unknown, never a proof of elimination or an approximate minimum.
+ */
+function assignPointsNeeded(
+  rows: ToplistRow[], cutAfter: number, places: number, linePoints: number,
+  heatSessions: Session[], hcTeamIds: Set<number>,
+) {
+  const withdrawnIds = new Set(rows.filter((row) => row.withdrawn).map((row) => row.teamId));
+  const rowIndex = new Map(rows.map((row, index) => [row.teamId, index]));
+  const races: { entrants: number[]; slots: number[] }[] = [];
+  for (const session of heatSessions) {
+    // The API counts HC and withdrawn entries in the session base too. Historic manual awards
+    // do not change the points available in an unscored race.
+    const base = Math.max(1, ...session.heats.map((heat) => lanesInUse(heat.entries.length, session.lanesPerHeat)));
+    for (const heat of session.heats) {
+      if (isFinal(session, heat) || heatDone(heat)) continue;
+      const entries = [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex || a.id - b.id);
+      const orderedRaces = [...heat.races].sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id);
+      orderedRaces.forEach((race, raceIndex) => {
+        if (race.isComplete) return;
+        const entrants = entries.filter((entry, drawnIndex) => !withdrawnIds.has(entry.teamId)
+          && !sitsOut(drawnIndex + 1, raceIndex, entries.length, session.lanesPerHeat, session.laneRotationMode)
+          && !race.results.some((result) => result.teamId === entry.teamId && result.isSitOut))
+          // HC still consumes a real finishing slot, but cannot displace a finalist.
+          .map((entry) => hcTeamIds.has(entry.teamId) ? -1 : rowIndex.get(entry.teamId) ?? -1);
+        if (entrants.length) races.push({ entrants, slots: entrants.map((_, index) => heat.raceRoundStage === 1 ? 1 : base - index) });
+      });
+    }
+  }
+
+  const maxGain = rows.map((_, index) => races.reduce((sum, race) => sum + (race.entrants.includes(index) ? race.slots[0] : 0), 0));
+  // Count slot visits, including failed partial assignments (not just completed permutations).
+  // The structural limit also bounds recursion depth and the suffix-bound tables.
+  let workLeft = 30_000;
+  const tooLarge = rows.length > 100 || races.reduce((sum, race) => sum + race.entrants.length + 1, 0) > 500;
+  type SearchResult = boolean | 'unavailable';
+
+  function feasible(candidate: number, gain: number, allowTie: boolean): SearchResult {
+    if (tooLarge || workLeft <= 0) return 'unavailable';
+    const target = rows[candidate].points + gain;
+    const points = rows.map((row) => row.points);
+    // Ride candidate races first to reject unattainable gains before branching on other heats.
+    const ordered = [...races].sort((a, b) => Number(b.entrants.includes(candidate)) - Number(a.entrants.includes(candidate)));
+    const minimum = Array.from({ length: ordered.length + 1 }, () => rows.map(() => 0));
+    const maximum = Array.from({ length: ordered.length + 1 }, () => 0);
+    for (let index = ordered.length - 1; index >= 0; index--) {
+      minimum[index] = [...minimum[index + 1]];
+      maximum[index] = maximum[index + 1];
+      const race = ordered[index];
+      for (const entrant of race.entrants) if (entrant >= 0) minimum[index][entrant] += race.slots[race.slots.length - 1];
+      if (race.entrants.includes(candidate)) maximum[index] += race.slots[0];
+    }
+    const failed = new Set<string>();
+    const threatens = (value: number) => allowTie ? value > target : value >= target;
+
+    function visit(index: number): SearchResult {
+      if (--workLeft < 0) return 'unavailable';
+      if (points[candidate] + minimum[index][candidate] > target || points[candidate] + maximum[index] < target) return false;
+      let threats = 0;
+      for (let rival = 0; rival < rows.length; rival++) {
+        if (rival !== candidate && threatens(points[rival] + minimum[index][rival])) threats++;
+      }
+      if (threats >= places) return false;
+      if (index === ordered.length) return true;
+      // Once a rival reaches the threshold its precise excess cannot affect qualification.
+      const key = `${index}:${points.map((value, rival) => rival === candidate ? value : Math.min(value, target + (allowTie ? 0.5 : 0))).join(',')}`;
+      if (failed.has(key)) return false;
+      const race = ordered[index];
+      const entrants = [...race.entrants].sort((a, b) => a === candidate ? -1 : b === candidate ? 1
+        : a < 0 ? 1 : b < 0 ? -1 : points[b] - points[a]);
+      const available = [...race.slots];
+
+      function assign(position: number): SearchResult {
+        if (--workLeft < 0) return 'unavailable';
+        // Unranked/HC entrants are last. They absorb all remaining slots in any order.
+        if (position === entrants.length || entrants[position] < 0) return visit(index + 1);
+        const entrant = entrants[position];
+        const choices = available.map((slot, slotIndex) => ({ slot, slotIndex }));
+        if (entrant === candidate) choices.sort((a, b) => a.slot - b.slot);
+        else choices.sort((a, b) => Number(threatens(points[entrant] + a.slot)) - Number(threatens(points[entrant] + b.slot)) || b.slot - a.slot);
+        let previous = -1;
+        for (const { slot, slotIndex } of choices) {
+          if (slot === previous) continue; // qualifier races have identical one-point slots
+          previous = slot;
+          if (entrant === candidate && (points[entrant] + slot + minimum[index + 1][candidate] > target
+            || points[entrant] + slot + maximum[index + 1] < target)) continue;
+          available.splice(slotIndex, 1);
+          points[entrant] += slot;
+          const result = assign(position + 1);
+          points[entrant] -= slot;
+          available.splice(slotIndex, 0, slot);
+          if (result !== false) return result;
+        }
+        return false;
+      }
+      const result = assign(0);
+      if (result === false) failed.add(key);
+      return result;
+    }
+    return visit(0);
+  }
+
+  rows.forEach((row, index) => {
+    if (index <= cutAfter) return;
+    row.out = true;
+    if (row.racesLeft <= 0 || row.withdrawn || row.points + maxGain[index] < linePoints) return;
+    // Future normal awards are integers; current totals can contain half points.
+    // Prefer the minimum for an outright place, retaining run-off only when no outright place exists.
+    for (const allowTie of [false, true]) {
+      const first = allowTie ? Math.max(0, Math.ceil(linePoints - row.points)) : Math.max(0, Math.floor(linePoints - row.points) + 1);
+      for (let gain = first; gain <= maxGain[index]; gain++) {
+        const result = feasible(index, gain, allowTie);
+        if (result === 'unavailable') { row.neededUnavailable = true; return; }
+        if (result) {
+          row.needed = gain;
+          if (allowTie) row.neededForRunoff = true;
+          return;
+        }
+      }
+    }
+  });
+}
+
+function buildByGame(heatSessions: Session[], hcTeamIds: Set<number>): GameStandingGroup[] {
+  const groups = new Map<string, { name: string; raw: Omit<GameStandingRow, 'position' | 'joint'>[] }>();
+  const multiSession = heatSessions.length > 1;
+  heatSessions.forEach((session, sIdx) => {
+    const heats = [...session.heats].filter((heat) => !isFinal(session, heat)).sort((a, b) => a.orderIndex - b.orderIndex);
+    heats.forEach((heat, hIdx) => {
+      const baseHeatLabel = heat.label?.trim() || `Heat ${hIdx + 1}`;
+      const heatLabel = multiSession ? `S${sIdx + 1} · ${baseHeatLabel}` : baseHeatLabel;
+      const races = [...heat.races].sort((a, b) => a.orderIndex - b.orderIndex);
+      for (const race of races) {
+        const displayName = race.name.trim();
+        if (!displayName || race.results.length === 0) continue;
+        const key = displayName.toLowerCase();
+        let group = groups.get(key);
+        if (!group) {
+          group = { name: displayName, raw: [] };
+          groups.set(key, group);
+        }
+        for (const result of race.results) {
+          if (hcTeamIds.has(result.teamId)) continue;
+          group.raw.push({
+            teamId: result.teamId,
+            teamName: result.teamName,
+            heatLabel,
+            placing: result.placing,
+            eliminated: result.eliminated,
+            isSitOut: result.isSitOut,
+            status: result.status,
+            points: result.points,
+          });
+        }
+      }
+    });
+  });
+  const out: GameStandingGroup[] = [];
+  for (const group of groups.values()) {
+    if (group.raw.length === 0) continue;
+    const sorted = [...group.raw].sort(
+      (a, b) => b.points - a.points || (a.placing ?? 999) - (b.placing ?? 999) || a.teamName.localeCompare(b.teamName),
+    );
+    const rows: GameStandingRow[] = sorted.map((item) => {
+      const position = sorted.findIndex((other) => other.points === item.points) + 1;
+      const joint = sorted.filter((other) => other.points === item.points).length > 1;
+      return { ...item, position, joint };
+    });
+    out.push({ name: group.name, rows });
+  }
+  return out;
 }
 
 const finalWording = /\bfinals?\b/i;
@@ -284,7 +484,8 @@ export function toplistNote(row: ToplistRow): string | null {
 function standingNote(row: ToplistRow): string | null {
   if (row.withdrawn) return 'Withdrawn';
   if (row.runoff) return `Joint ${ordinal(row.position)} · run-off`;
-  if (row.needed != null) return `${row.needed} needed to make the final`;
+  if (row.neededUnavailable) return 'Qualification calculation unavailable';
+  if (row.needed != null) return `${row.needed} needed ${row.neededForRunoff ? 'for a run-off' : 'to make the final'} (normal finishes)`;
   if (row.racesLeft > 0) return `${row.racesLeft} ${row.racesLeft === 1 ? 'race' : 'races'} left`;
   return null;
 }

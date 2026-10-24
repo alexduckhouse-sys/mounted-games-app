@@ -65,6 +65,7 @@ const ScorerPage = lazy(() => import('./pages/ScorerPage').then((module) => ({ d
 const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage').then((module) => ({ default: module.UnsubscribePage })));
 const ConfirmEmailPage = lazy(() => import('./pages/ConfirmEmailPage').then((module) => ({ default: module.ConfirmEmailPage })));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then((module) => ({ default: module.PrivacyPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({ default: module.AccountPage })));
 const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymentPage').then((module) => ({ default: module.TestEntryPaymentPage })));
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
@@ -158,6 +159,7 @@ export default function App() {
                 <ProtectedRoute roles={['Admin']}><RulesPage /></ProtectedRoute>
               } />
               <Route path="privacy" element={<PrivacyPage />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="unsubscribe" element={<UnsubscribePage />} />
               <Route path="confirm-email" element={<ConfirmEmailPage />} />
               <Route path="me/account"element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />

@@ -1,3 +1,4 @@
+using System.Globalization;
 using MountedGames.Api.Services.Seasons;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
@@ -30,7 +31,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
     private const int MaxBrowseRows = 20000;
     private const int MaxProfileRows = 5000;
 
-    private sealed record RiderRow(string FullName, bool UseInitialOnly, string? HorseName, bool IsReserve, int TeamId, int CompetitionId, SectionFormat Format);
+    private sealed record RiderRow(string FullName, bool UseInitialOnly, string? HorseName, decimal? PonyHeightHands, bool IsReserve, int TeamId, int CompetitionId, SectionFormat Format);
     private sealed record NameRow(string Name, int CompetitionId, int TeamId);
     private sealed record Membership(int TeamId, string? RiderName, string? PonyName, bool IsReserve);
     private sealed record TeamRow(int TeamId, string TeamName, string ClubName, bool IsHorsConcours, int CompetitionId,
@@ -65,7 +66,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             StatsNames.Tidy(query),
             Hits(StatsSubjectKind.Rider, riders.Where(Counts).Select(r => new NameRow(
                 RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames), r.CompetitionId, r.TeamId)), q, counted),
-            Hits(StatsSubjectKind.Pony, ponies.Where(Counts).Select(r => new NameRow(r.HorseName!, r.CompetitionId, r.TeamId)), q, counted),
+            Hits(StatsSubjectKind.Pony, ponies.Where(Counts).Select(r => new NameRow(PonyName(r.HorseName, r.PonyHeightHands)!, r.CompetitionId, r.TeamId)), q, counted),
             Hits(StatsSubjectKind.Team, teams, q, counted),
             Hits(StatsSubjectKind.Club, clubs, q, counted));
     }
@@ -73,7 +74,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
     private static List<StatsHitDto> Hits(StatsSubjectKind kind, IEnumerable<NameRow> rows, string q, HashSet<int> counted)
         => RankedHits(kind, rows, q, counted).Take(HitsPerKind).ToList();
 
-    /// <summary>Every subject matching <paramref name="q"/> (all of them when it is empty): exact name first, then most competitions, then name.</summary>
+    /// <summary>Every subject matching <paramref name="q"/> (all of them when it is empty): exact name first, then most competitions, then name (ponies with the same name ordered by height).</summary>
     private static IEnumerable<StatsHitDto> RankedHits(StatsSubjectKind kind, IEnumerable<NameRow> rows, string q, HashSet<int> counted)
         => rows.Where(r => counted.Contains(r.CompetitionId))
             .Select(r => (Name: StatsNames.Tidy(r.Name), Key: StatsNames.Normalise(r.Name), r.CompetitionId))
@@ -82,6 +83,8 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             .GroupBy(r => r.Key)
             .Select(g => new StatsHitDto(kind, g.First().Name, g.Key, g.Select(x => x.CompetitionId).Distinct().Count()))
             .OrderByDescending(h => h.Key == q).ThenByDescending(h => h.Competitions)
+            .ThenBy(h => BasePonyName(h.Name), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(h => PonyHeightSortKey(h.Name))
             .ThenBy(h => h.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(h => h.Key, StringComparer.Ordinal);
 
@@ -111,7 +114,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
                     var source = kind == StatsSubjectKind.Rider ? RidersNamed(tokens) : PoniesNamed(tokens);
                     var riderRows = await RiderRows(source.Where(r => ids.Contains(r.DeclarationForm!.Team!.CompetitionId)), MaxBrowseRows).ToListAsync(ct);
                     rows = riderRows.Where(Counts).Select(r => new NameRow(
-                        kind == StatsSubjectKind.Rider ? RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames) : r.HorseName!,
+                        kind == StatsSubjectKind.Rider ? RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames) : PonyName(r.HorseName, r.PonyHeightHands)!,
                         r.CompetitionId, r.TeamId)).ToList();
                     break;
                 default:
@@ -144,7 +147,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             .Where(x => StatsNames.Normalise(x.Shown) == key)
             .ToList();
         if (mine.Count == 0) return null;
-        var memberships = mine.Select(x => new Membership(x.Row.TeamId, x.Shown, PonyName(x.Row.HorseName), x.Row.IsReserve)).ToList();
+        var memberships = mine.Select(x => new Membership(x.Row.TeamId, x.Shown, PonyName(x.Row.HorseName, x.Row.PonyHeightHands), x.Row.IsReserve)).ToList();
         return await BuildAsync(StatsSubjectKind.Rider, mine[0].Shown, key, memberships, viewer, ct);
     }
 
@@ -153,11 +156,13 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         var key = StatsNames.Normalise(name);
         if (!StatsNames.IsValidQuery(key)) return null;
         var rows = await RiderRows(PoniesNamed(StatsNames.Tokens(key)), MaxProfileRows).ToListAsync(ct);
-        var mine = rows.Where(r => StatsNames.Normalise(r.HorseName) == key).ToList();
+        var legacyName = rows.Any(r => StatsNames.Normalise(r.HorseName) == key);
+        var mine = rows.Where(r => StatsNames.Normalise(legacyName ? r.HorseName : PonyName(r.HorseName, r.PonyHeightHands)) == key).ToList();
         if (mine.Count == 0) return null;
         var memberships = mine.Select(r => new Membership(r.TeamId,
-            StatsNames.Tidy(RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames)), StatsNames.Tidy(r.HorseName), r.IsReserve)).ToList();
-        return await BuildAsync(StatsSubjectKind.Pony, memberships[0].PonyName!, key, memberships, viewer, ct);
+            StatsNames.Tidy(RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames)), PonyName(r.HorseName, r.PonyHeightHands), r.IsReserve)).ToList();
+        var displayName = legacyName ? StatsNames.Tidy(mine[0].HorseName) : memberships[0].PonyName!;
+        return await BuildAsync(StatsSubjectKind.Pony, displayName, key, memberships, viewer, ct);
     }
 
     public async Task<StatsProfileDto?> TeamAsync(string? name, StatsViewer viewer, CancellationToken ct = default)
@@ -271,8 +276,11 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
                 var gameWins = g.Count(IsWin);
                 var gamePoints = g.Sum(r => r.Points);
                 var gameMax = g.Sum(MaxFor);
+                var avgPoints = Math.Round(gamePoints / g.Count(), 1, MidpointRounding.AwayFromZero);
+                var placedRaces = g.Where(r => !r.Eliminated && r.Placing is > 0).Select(r => r.Placing!.Value).ToList();
+                var avgPlace = placedRaces.Count == 0 ? (double?)null : Math.Round(placedRaces.Average(), 1, MidpointRounding.AwayFromZero);
                 return new StatsGameDto(StatsNames.Tidy(g.First().RaceName), g.Count(), gameWins, StatsNames.Percent(gameWins, g.Count()),
-                    g.Count(r => r.Eliminated), gamePoints, gameMax, StatsNames.Percent(gamePoints, gameMax));
+                    g.Count(r => r.Eliminated), gamePoints, gameMax, StatsNames.Percent(gamePoints, gameMax), avgPoints, avgPlace);
             })
             .OrderByDescending(g => g.PointQuotaPercent ?? -1).ThenByDescending(g => g.Races)
             .ThenBy(g => g.Name, StringComparer.OrdinalIgnoreCase)
@@ -363,10 +371,35 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         return list.Count == 0 ? null : string.Join(" / ", list);
     }
 
-    private static string? PonyName(string? horse)
+    private static string? PonyName(string? horse, decimal? heightHands = null)
     {
         var tidy = StatsNames.Tidy(horse);
-        return tidy.Length == 0 ? null : tidy;
+        if (tidy.Length == 0) return null;
+        return heightHands is > 0 ? FormattableString.Invariant($"{tidy} ({heightHands.Value:0.##}hh)") : tidy;
+    }
+
+    private static string BasePonyName(string name)
+    {
+        var open = name.LastIndexOf(" (", StringComparison.Ordinal);
+        return open > 0 && name.EndsWith("hh)", StringComparison.OrdinalIgnoreCase) && TryParseHeightToken(name[(open + 1)..], out _)
+            ? name[..open]
+            : name;
+    }
+
+    private static decimal PonyHeightSortKey(string name)
+    {
+        var open = name.LastIndexOf(" (", StringComparison.Ordinal);
+        return open > 0 && name.EndsWith("hh)", StringComparison.OrdinalIgnoreCase) && TryParseHeightToken(name[(open + 1)..], out var hh)
+            ? hh
+            : decimal.MaxValue;
+    }
+
+    private static bool TryParseHeightToken(string token, out decimal hands)
+    {
+        hands = 0m;
+        var trimmed = token.Trim('(', ')', ' ');
+        if (!trimmed.EndsWith("hh", StringComparison.OrdinalIgnoreCase)) return false;
+        return decimal.TryParse(trimmed[..^2], NumberStyles.Number, CultureInfo.InvariantCulture, out hands) && hands > 0m;
     }
 
     private async Task<List<StatsPartnershipDto>> TeamPartnershipsAsync(
@@ -375,12 +408,12 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         if (ids.Count == 0) return [];
         var riders = await PublicRiders()
             .Where(r => ids.Contains(r.DeclarationForm!.TeamId) && r.HorseName != null)
-            .Select(r => new { r.FullName, UseInitialOnly = r.UseInitialOnly || (r.SavedRider != null && r.SavedRider.UseInitialOnly), r.HorseName, r.DeclarationForm!.TeamId })
+            .Select(r => new { r.FullName, UseInitialOnly = r.UseInitialOnly || (r.SavedRider != null && r.SavedRider.UseInitialOnly), r.HorseName, r.PonyHeightHands, r.DeclarationForm!.TeamId })
             .ToListAsync(ct);
         return Partnerships(riders
-            .Where(r => PonyName(r.HorseName) is not null)
+            .Where(r => PonyName(r.HorseName, r.PonyHeightHands) is not null)
             .Select(r => (StatsNames.Tidy(RiderNames.Display(r.FullName, r.UseInitialOnly, viewer.SeesFullNames)),
-                PonyName(r.HorseName)!, teamById[r.TeamId].CompetitionId, r.TeamId)));
+                PonyName(r.HorseName, r.PonyHeightHands)!, teamById[r.TeamId].CompetitionId, r.TeamId)));
     }
 
     private static List<StatsPartnershipDto> Partnerships(IEnumerable<(string Rider, string Pony, int CompetitionId, int TeamId)> pairs)
@@ -415,7 +448,14 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
     private IQueryable<RiderEntry> PoniesNamed(IReadOnlyList<string> tokens)
     {
         var q = PublicRiders().Where(r => r.HorseName != null);
-        foreach (var token in tokens) { var word = token; q = q.Where(r => r.HorseName!.ToLower().Contains(word)); }
+        foreach (var token in tokens)
+        {
+            var word = token;
+            if (TryParseHeightToken(word, out var hh))
+                q = q.Where(r => r.PonyHeightHands == hh || r.HorseName!.ToLower().Contains(word));
+            else
+                q = q.Where(r => r.HorseName!.ToLower().Contains(word));
+        }
         return q;
     }
 
@@ -436,7 +476,7 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
     private static IQueryable<RiderRow> RiderRows(IQueryable<RiderEntry> q, int max) => q
         .OrderByDescending(r => r.DeclarationForm!.Team!.Competition!.StartDate).ThenByDescending(r => r.Id)
         .Take(max)
-        .Select(r => new RiderRow(r.FullName, r.UseInitialOnly || (r.SavedRider != null && r.SavedRider.UseInitialOnly), r.HorseName, r.IsReserve,
+        .Select(r => new RiderRow(r.FullName, r.UseInitialOnly || (r.SavedRider != null && r.SavedRider.UseInitialOnly), r.HorseName, r.PonyHeightHands, r.IsReserve,
             r.DeclarationForm!.TeamId, r.DeclarationForm.Team!.CompetitionId, r.DeclarationForm.Team.Section!.Format));
 
     /// <summary>

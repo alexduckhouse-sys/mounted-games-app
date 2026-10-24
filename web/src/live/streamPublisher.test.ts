@@ -86,6 +86,88 @@ describe('publisher negotiation and controls', () => {
   });
 });
 
+describe.each(['pause', 'mute'] as const)('%s optimistic controls', (control) => {
+  it('restores the previous setting and audio when the current request fails', async () => {
+    const { publisher: p, start, request } = setup(); await start();
+    const pending = deferred<unknown>(); request.mockReturnValueOnce(pending.promise);
+    const change = p[control](true);
+    const rejected = expect(change).rejects.toThrow('offline');
+    expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(false);
+    pending.reject(new Error('offline')); await rejected;
+    expect(p.getSnapshot().state).toBe('live');
+    expect(p.getSnapshot().audioMuted).toBe(false);
+    expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(true);
+    p.dispose();
+  });
+
+  it('does not resurrect a stopped camera when an older request fails, even if ending could not be confirmed', async () => {
+    const { publisher: p, start, request } = setup(); await start();
+    const media = p.getSnapshot().media!;
+    const pending = deferred<unknown>(); request.mockReturnValueOnce(pending.promise);
+    const change = p[control](true);
+    const rejected = expect(change).rejects.toThrow('offline');
+    request.mockRejectedValueOnce(new Error('end offline'));
+    await expect(p.stop()).rejects.toThrow('end offline');
+    const ended = p.getSnapshot();
+    pending.reject(new Error('offline')); await rejected;
+    expect(p.getSnapshot()).toEqual(ended);
+    expect(p.getSnapshot()).toMatchObject({ state: 'ended', streamId: null, media: null });
+    expect(media.getTracks().every((track) => track.readyState === 'ended')).toBe(true);
+    p.dispose();
+  });
+
+  it('does not undo a newer successful control', async () => {
+    const { publisher: p, start, request } = setup(); await start();
+    const pending = deferred<unknown>(); request.mockReturnValueOnce(pending.promise);
+    const change = p[control](true);
+    const rejected = expect(change).rejects.toThrow('offline');
+    await p[control](true);
+    pending.reject(new Error('offline')); await rejected;
+    expect(control === 'pause' ? p.getSnapshot().state : p.getSnapshot().audioMuted).toBe(control === 'pause' ? 'paused' : true);
+    expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(false);
+    p.dispose();
+  });
+
+  it('leaves reconnection in control when the old peer request fails', async () => {
+    const { publisher: p, start, request } = setup(); await start();
+    const pending = deferred<unknown>(); request.mockReturnValueOnce(pending.promise);
+    const change = p[control](true);
+    const rejected = expect(change).rejects.toThrow('offline');
+    FakePeer.connect = false;
+    FakePeer.instances[0].change('failed'); await flush();
+    expect(p.getSnapshot().state).toBe('reconnecting');
+    pending.reject(new Error('offline')); await rejected;
+    expect(p.getSnapshot().state).toBe('reconnecting');
+    FakePeer.instances[1].change('connected'); await flush();
+    expect(control === 'pause' ? p.getSnapshot().state : p.getSnapshot().audioMuted).toBe(control === 'pause' ? 'paused' : true);
+    expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(false);
+    p.dispose();
+  });
+
+  it('ignores failure after disposal', async () => {
+    const { publisher: p, start, request } = setup(); await start();
+    const pending = deferred<unknown>(); request.mockReturnValueOnce(pending.promise);
+    const change = p[control](true);
+    const rejected = expect(change).rejects.toThrow('offline');
+    p.dispose();
+    const ended = p.getSnapshot();
+    pending.reject(new Error('offline')); await rejected;
+    expect(p.getSnapshot()).toEqual(ended);
+  });
+
+  it('does not change a newly started broadcast after a previous request fails', async () => {
+    const { publisher: p, start, request } = setup(); await start();
+    const pending = deferred<unknown>(); request.mockReturnValueOnce(pending.promise);
+    const change = p[control](true);
+    const rejected = expect(change).rejects.toThrow('offline');
+    await p.stop(); await start();
+    const current = p.getSnapshot();
+    pending.reject(new Error('offline')); await rejected;
+    expect(p.getSnapshot()).toEqual(current);
+    p.dispose();
+  });
+});
+
 describe('publisher recovery', () => {
   it('retries connection timeout and immediate failure before ready', async () => {
     const { publisher: p, request } = setup(); FakePeer.connect = false;

@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { Dropdown } from '../../components/Dropdown';
 import { PageGrid } from '../../components/PageGrid';
 import { ResultsStatsNav } from '../../components/ResultsStatsNav';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
-import { Search } from 'lucide-react';
+import { ChevronDown, Search } from 'lucide-react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { StatsGamesView } from '../../components/stats/StatsGamesView';
@@ -39,8 +40,27 @@ function StatsBrowseView() {
   }
 
   const desktop = useIsDesktop();
+  const kindOptions = STATS_TABS.map((entry) => ({ value: String(entry.kind), label: entry.label }));
+  const kindSelect = (
+    <div className="mt-2.5 pl-3 pr-1">
+      <Dropdown
+        label="Browse by"
+        value={String(kind)}
+        options={kindOptions}
+        onChange={(value) => remember(Number(value) as StatsSubjectKind, text)}
+        buttonClassName="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg border border-[rgb(var(--mg-header-line))] bg-transparent text-left text-[rgb(var(--mg-header-ink))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+      >
+        <span className="mg-display flex min-w-0 flex-1 items-baseline gap-2 self-center px-3 text-base font-bold uppercase leading-none tracking-[0.04em]">
+          <span className="truncate">{tab.label}</span>
+        </span>
+        <span aria-hidden="true" className="flex w-11 shrink-0 items-center justify-center border-l border-[rgb(var(--mg-header-line))] bg-white/10">
+          <ChevronDown className="h-[18px] w-[18px]" />
+        </span>
+      </Dropdown>
+    </div>
+  );
   const searchForm = (
-    <form role="search" className={desktop ? '' : 'pt-3'} onSubmit={(event) => event.preventDefault()}>
+    <form role="search" className={desktop ? '' : 'pt-2.5'} onSubmit={(event) => event.preventDefault()}>
       <label className="rf-fld">
         <span>Search {tab.plural}</span>
         <span className="relative flex items-center">
@@ -52,7 +72,7 @@ function StatsBrowseView() {
     </form>
   );
   const results = (
-    <div role="tabpanel" aria-label={tab.label}>
+    <div>
       {text.trim().length === 1 && <RefineNote>Type at least two letters to narrow the list.</RefineNote>}
       {list.status === 'loading' && <p role="status" className="rf-note">Loading…</p>}
       {list.status === 'error' && <div role="alert" className="mg-notice mt-3">{list.message}</div>}
@@ -78,11 +98,11 @@ function StatsBrowseView() {
   );
 
   return <RefinePage wide>
+    <RefineHeader context="Across every competition" title="Rider and team stats" subtitle="Browse riders, ponies, teams and clubs, or search by name.">
+      {kindSelect}
+    </RefineHeader>
     <ResultsStatsNav />
-    <RefineHeader context="Across every competition" title="Rider and team stats" subtitle="Browse riders, ponies, teams and clubs, or search by name."
-      tabs={desktop ? undefined : STATS_TABS.map((entry) => ({ label: entry.label, active: entry.kind === kind, onSelect: () => remember(entry.kind, text) }))}
-      tabsKind="tablist" tabsLabel="Browse by" />
-    {desktop ? <div className="pt-4"><PageGrid variant="left" aside={rail} asideLabel="Filters">{results}</PageGrid></div> : <>{searchForm}{results}</>}
+    {desktop ? <div className="pt-2.5"><PageGrid variant="left" aside={rail} asideLabel="Filters">{results}</PageGrid></div> : <>{searchForm}{results}</>}
   </RefinePage>;
 }
 

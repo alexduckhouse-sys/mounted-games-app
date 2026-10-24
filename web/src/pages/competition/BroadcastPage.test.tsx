@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { api } from '../../api';
 import { BroadcastPage } from './BroadcastPage';
 import { ProducePage } from './ProducePage';
 import type { PublisherSnapshot } from '../../live/streamPublisher';
@@ -28,6 +29,7 @@ const publisher = vi.hoisted(() => ({
   subscribe: (listener: () => void) => { state.listener = listener; return () => {}; },
   capture: vi.fn(), devices: vi.fn(), switchCamera: vi.fn(), start: vi.fn(), stop: vi.fn(), dispose: vi.fn(), mute: vi.fn(), pause: vi.fn(), caption: vi.fn(), viewers: vi.fn(),
 }));
+vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../live/streamPublisher', () => ({ browserPublisherDependencies: () => ({}), createStreamPublisher: () => publisher }));
 vi.mock('./context', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./context')>()),
@@ -40,7 +42,9 @@ vi.mock('./context', async (importOriginal) => ({
     saveOverlay: state.saveOverlay,
   }),
 }));
-vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => state.organiser }) }));
+vi.mock('../../auth/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'u1', fullName: 'Alex Organiser', roles: ['Admin'] }, canOrganise: () => state.organiser }),
+}));
 vi.mock('../../pwa', () => ({ setBroadcasting: vi.fn() }));
 const update = (patch: Partial<PublisherSnapshot>) => { state.snapshot = { ...state.snapshot, ...patch }; state.listener(); };
 const show = () => render(<MemoryRouter initialEntries={['/competitions/1/broadcast']}><BroadcastPage /></MemoryRouter>);
@@ -49,6 +53,8 @@ beforeEach(() => {
   state.organiser = true; state.enabled = true; state.streams = [];
   state.overlay = { ...DEFAULT_OVERLAY };
   state.saveOverlay.mockClear();
+  vi.mocked(api.get).mockResolvedValue({ data: [] });
+  vi.mocked(api.post).mockReset().mockResolvedValue({ data: {} });
   state.snapshot = { state: 'idle', media: null, streamId: null, viewerCount: 0, signal: 'good', audioMuted: false, hasAudio: false, error: null };
   vi.stubGlobal('RTCPeerConnection', fakePeerConstructor);
   Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {} });
@@ -60,6 +66,7 @@ beforeEach(() => {
   publisher.pause.mockImplementation(async (paused: boolean) => update({ state: paused ? 'paused' : 'live' }));
   publisher.mute.mockImplementation(async (muted: boolean) => update({ audioMuted: muted }));
 });
+afterEach(() => { vi.useRealTimers(); });
 it('checks ownership, configuration and browser support before opening a camera', () => {
   state.organiser = false; const { rerender } = show(); expect(screen.getByText('Only the organiser can broadcast.')).toBeVisible();
   state.organiser = true; state.enabled = false; rerender(<MemoryRouter><BroadcastPage /></MemoryRouter>); expect(screen.getByText(/not set up/)).toBeVisible();
@@ -68,6 +75,8 @@ it('checks ownership, configuration and browser support before opening a camera'
 });
 it('captures from a tap, lists capture inputs, supports named arenas and angles and warns about public filming', async () => {
   show(); expect(publisher.capture).not.toHaveBeenCalled();
+  expect(screen.getByRole('link', { name: '‹ Live stream' })).toHaveAttribute('href', '/competitions/1/chat');
+  expect(screen.queryByRole('region', { name: 'Stream overlays' })).toBeNull();
   fireEvent.click(screen.getByRole('checkbox')); await settle();
   fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle(); expect(publisher.capture).toHaveBeenCalledWith(false);
   expect(optionLabels(screen.getByRole('combobox', { name: 'Camera' }))).toContain('USB capture'); expect(screen.getByText(/Check families know/)).toBeVisible();
@@ -112,21 +121,60 @@ it('offers to take over when the same arena and camera position is already live'
   fireEvent.click(screen.getByRole('button', { name: 'Take over and go live' })); await settle();
   expect(publisher.start).toHaveBeenCalledWith('Main Arena', 'Main camera', true);
 });
-it('toggles the live score strip and sends or clears banner messages inline', async () => {
+it('posts live banner announcements, clears banners, and switches overlays from the live camera screen', async () => {
   const { rerender } = show();
-  const stripToggle = screen.getByRole('button', { name: 'Show live score strip' });
-  expect(stripToggle).toHaveAttribute('aria-pressed', 'true');
-  fireEvent.click(stripToggle); await settle();
-  expect(state.overlay).toMatchObject({ stripMode: 2, scoreCardMode: 2 });
+  fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Go live' })); await settle();
 
+  fireEvent.click(screen.getByRole('button', { name: 'Announce' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Banner message' }), { target: { value: '  Lunch break until 1pm  ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Put on air' })); await settle();
-  expect(state.overlay).toMatchObject({ bannerText: 'Lunch break until 1pm', bannerStyle: 1 });
+  fireEvent.click(screen.getByRole('button', { name: 'Post' })); await settle();
+  expect(state.overlay).toMatchObject({ bannerText: 'Lunch break until 1pm', bannerStyle: 0 });
+  expect(api.post).toHaveBeenCalledWith('/competitions/1/chat/announcement', {
+    body: 'Lunch break until 1pm',
+    message: 'Lunch break until 1pm',
+    author: 'Alex Organiser',
+    tag: 'banner',
+  });
 
   rerender(<MemoryRouter initialEntries={['/competitions/1/broadcast']}><BroadcastPage /></MemoryRouter>);
-  expect(screen.getByText('On air: Lunch break until 1pm')).toBeVisible();
+  expect(screen.getByRole('status', { name: 'Lunch break until 1pm' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Clear banner' })); await settle();
   expect(state.overlay?.bannerText).toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Overlays' }));
+  expect(screen.getByRole('region', { name: 'Live overlays' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Toplist' })); await settle();
+  expect(state.overlay?.look).toMatchObject({ liveCard: 'toplist' });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Score strip' })); await settle();
+  expect(state.overlay?.scoreCardMode).toBe(2);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Lower third' })); await settle();
+  expect(state.overlay?.stripMode).toBe(2);
+});
+it('shows remaining free-plan stream time, allows +15m extension, and auto-stops when time expires', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-10-24T12:00:00Z'));
+  show();
+  fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Go live' })); await settle();
+
+  expect(screen.getByText('30:00 left')).toBeVisible();
+  act(() => { vi.advanceTimersByTime(15_000); });
+  expect(screen.getByText('29:45 left')).toBeVisible();
+
+  fireEvent.click(screen.getByRole('button', { name: '+15m' }));
+  expect(screen.getByText('44:45 left')).toBeVisible();
+  expect(screen.getByRole('button', { name: '+15m' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: '+15m' }));
+  expect(screen.getByText('44:45 left')).toBeVisible();
+
+  await act(async () => {
+    vi.advanceTimersByTime(44 * 60 * 1000 + 45 * 1000);
+    await flush();
+  });
+  expect(publisher.stop).toHaveBeenCalledTimes(1);
 });
 it('redirects ProducePage to BroadcastPage', () => {
   render(

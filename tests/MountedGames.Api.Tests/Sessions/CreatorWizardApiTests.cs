@@ -175,13 +175,13 @@ public class CreatorWizardApiTests : IClassFixture<ApiFactory>
         {
             var s = await db.CompetitionSections.FirstAsync(x => x.Id == a.SectionId);
             s.AgeGroup = "Seniors";
-            s.DisplayName = "Seniors";
+            s.DisplayName = "Senior Teams";
             await db.SaveChangesAsync();
         });
 
         var r = await admin.PutAsJsonAsync($"/api/competitions/{a.CompetitionId}/sections/{a.SectionId}", new UpdateSectionRequest(null));
 
-        Assert.Equal("Senior Teams", (await r.ReadAsync<CompetitionSectionDto>()).DisplayName);
+        Assert.Equal("Seniors", (await r.ReadAsync<CompetitionSectionDto>()).DisplayName);
     }
 
     [Fact]
@@ -256,14 +256,19 @@ public class SectionNamingTests
     [Theory]
     [InlineData(SectionFormat.Individual, "Juniors", "Junior Individuals")]
     [InlineData(SectionFormat.Pairs, "Novices", "Novice Pairs")]
-    [InlineData(SectionFormat.Teams, "Open", "Open Teams")]
-    [InlineData(SectionFormat.Teams, "Seniors", "Senior Teams")]
-    [InlineData(SectionFormat.Teams, "Under 12", "Under 12 Teams")]
-    [InlineData(SectionFormat.Teams, "Mixed Beginners", "Mixed Beginner Teams")]
-    [InlineData(SectionFormat.Teams, "Senior Teams", "Senior Teams")]
+    [InlineData(SectionFormat.Pairs, "Senior Pairs", "Senior Pairs")]
+    [InlineData(SectionFormat.Teams, "Open", "Open")]
+    [InlineData(SectionFormat.Teams, "Seniors", "Seniors")]
+    [InlineData(SectionFormat.Teams, "Juniors", "Juniors")]
+    [InlineData(SectionFormat.Teams, "Under 12", "Under 12")]
+    [InlineData(SectionFormat.Teams, "Mixed Beginners", "Mixed Beginners")]
+    [InlineData(SectionFormat.Teams, "Senior Teams", "Seniors")]
+    [InlineData(SectionFormat.Teams, "Junior Teams", "Juniors")]
+    [InlineData(SectionFormat.Teams, "Teams", "Teams")]
+    [InlineData(SectionFormat.Teams, "  ", "Teams")]
     [InlineData(SectionFormat.Pairs, "Pairs", "Pairs")]
     [InlineData(SectionFormat.Individual, "  ", "Individuals")]
-    [InlineData(SectionFormat.Teams, "Class", "Class Teams")]
+    [InlineData(SectionFormat.Teams, "Class", "Class")]
     public void DisplayName_PutsTheAgeGroupFirstAndTheFormatInThePlural(SectionFormat format, string age, string expected)
         => Assert.Equal(expected, SectionNaming.DisplayName(format, age));
 

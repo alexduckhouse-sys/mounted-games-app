@@ -2,29 +2,52 @@ import { Fragment, useContext, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { ChevronRight, Star, Trophy } from 'lucide-react';
 import { api } from '../../api';
-import type { CompetitionSection, DeclarationForm, Team } from '../../types';
-import { ordinal, toplistNote, type FinalGroup, type Toplist } from '../../lib/toplist';
+import type { CompetitionSection, DeclarationForm, Heat, Session, Team } from '../../types';
+import { ordinal, toplistNote, type FinalGroup, type GameStandingGroup, type Toplist } from '../../lib/toplist';
 import { useFavourites } from '../../hooks/useFavourites';
 import { CompetitionContext } from './context';
+import { parseBibAndFlag } from '../../lib/bib';
+import { statusLabel, statusLetter } from '../../lib/resultStatus';
+import { HeatScores } from './HeatScores';
 import { TeamSheet } from './TeamSheet';
 import { formatPoints } from '../../lib/formatPoints';
 import { publicRiderName } from '../../lib/riderNames';
 
 
-type View = 'finals' | 'totals' | 'sessions';
+export type ToplistViewTab = 'finals' | 'totals' | 'sessions' | 'games' | 'heats';
+type View = ToplistViewTab;
 
 const separatorLabel = 'flex items-center gap-2 border-b border-[rgb(var(--mg-rule-soft))] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-red))]';
 const dashes = <span aria-hidden="true" className="flex-1 border-t-2 border-dashed border-current" />;
 
 /**
  * The age group's toplist: finals once they have results, totals with the final cut-off and any run-off,
- * or points per session. Tapping a team opens its breakdown. `standalone` draws the view tabs as a full-width
+ * points per session, or per-game breakdown across heats. Tapping a team opens its breakdown. `standalone` draws the view tabs as a full-width
  * band under the page header (the toplist page); embedded in the timetable they stay in the column.
  */
-export function ToplistView({ list, section, standalone = false }: { list: Toplist; section: CompetitionSection | null; standalone?: boolean }) {
+export function ToplistView({
+  list,
+  section,
+  standalone = false,
+  competitionId: suppliedCompetitionId,
+  teams: suppliedTeams,
+  heats,
+  chosenView,
+  onChooseView,
+}: {
+  list: Toplist;
+  section: CompetitionSection | null;
+  standalone?: boolean;
+  competitionId?: number;
+  teams?: Team[];
+  heats?: { session: Session; orderedHeats: Heat[]; heat: Heat }[];
+  chosenView?: View | null;
+  onChooseView?: (view: View) => void;
+}) {
   const compCtx = useContext(CompetitionContext);
   const inRouter = useInRouterContext();
-  const competitionId = compCtx?.competition.id ?? section?.competitionId ?? null;
+  const teams = suppliedTeams ?? compCtx?.competition.teams ?? [];
+  const competitionId = suppliedCompetitionId ?? compCtx?.competition.id ?? section?.competitionId ?? null;
   const favHook = useFavourites() as {
     favourites?: { competitionId: number; teamId: number }[];
     isTeamFav?: (compId: number, teamId: number) => boolean;
@@ -39,7 +62,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
     const inner = (
       <>
         {fav && <Star aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 shrink-0 fill-[#C08308] text-[#C08308]" />}
-        {teamName}
+        {flagBadge(teamId)}{teamName}
       </>
     );
     if (asLink && inRouter && competitionId != null) {
@@ -70,14 +93,36 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
 
   const hasFinals = list.finals.length > 0;
   const hasSessions = list.bySession.sessions.length > 0;
+  const games = list.byGame ?? [];
+  const hasGames = games.length > 0;
+  const hasHeats = (heats?.length ?? 0) > 0;
   // null until the viewer picks one, so finals become the default the moment they have results.
-  const [chosen, setChosen] = useState<View | null>(null);
-  const [openTeam, setOpenTeam] = useState<number | null>(null);
-  const tabs: [View, string][] = [...(hasFinals ? [['finals', 'Finals'] as [View, string]] : []), ['totals', 'Totals'], ...(hasSessions ? [['sessions', 'By session'] as [View, string]] : [])];
+  const [internalChosen, setInternalChosen] = useState<View | null>(null);
+  const chosen = chosenView !== undefined ? chosenView : internalChosen;
+  const setChosen = onChooseView ?? setInternalChosen;
+  const [chosenGame, setChosenGame] = useState<string | null>(null);
+  const [openTeam, setOpenTeam] = useState<{ sectionId: number | null; teamId: number } | null>(null);
+  const currentSectionId = section?.id ?? null;
+  const activeOpenTeam = openTeam?.sectionId === currentSectionId ? openTeam.teamId : null;
+  const tabs: [View, string][] = [
+    ...(hasFinals ? ([['finals', 'Finals']] as [View, string][]) : []),
+    ['totals', 'Totals'],
+    ...(hasSessions ? ([['sessions', 'By session']] as [View, string][]) : []),
+    ...(hasGames ? ([['games', 'By game']] as [View, string][]) : []),
+    ...(hasHeats ? ([['heats', 'Heat tables']] as [View, string][]) : []),
+  ];
   const view: View = tabs.some(([id]) => id === chosen) ? chosen! : tabs[0][0];
   const places = section?.finalistCount ?? null;
-  const sheet = openTeam == null ? null : list.detail.get(openTeam) ?? null;
-  const open = (teamId: number) => list.detail.has(teamId) ? () => setOpenTeam(teamId) : undefined;
+  const sheet = activeOpenTeam == null ? null : list.detail.get(activeOpenTeam) ?? null;
+  const open = (teamId: number) => {
+    if (inRouter && competitionId != null) return undefined;
+    return list.detail.has(teamId) ? () => setOpenTeam({ sectionId: currentSectionId, teamId }) : undefined;
+  };
+  const flagFor = (teamId: number) => parseBibAndFlag(teams?.find((t) => t.id === teamId)?.bibDescription).flag;
+  const flagBadge = (teamId: number) => {
+    const flag = flagFor(teamId);
+    return flag ? <img src={`/flags/${flag}.png`} alt="" className="mr-1.5 inline-block h-3.5 w-5 shrink-0 rounded-[2px] object-cover align-middle" /> : null;
+  };
 
   const tabBar = tabs.length > 1 && (
     <div className={standalone ? 'mg-band py-2' : undefined}>
@@ -90,7 +135,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
   return (
     <>
       {tabBar}
-      <div className={`flex flex-col gap-3 ${standalone ? 'pt-3' : ''}`}>
+      <div className={`flex flex-col gap-3 ${tabs.length > 1 || standalone ? 'pt-3' : ''}`}>
         {view === 'finals' && (
           <FinalsList
             groups={list.finals}
@@ -99,7 +144,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
             renderTeamName={renderTeamName}
             renderTeamLink={renderTeamLink}
             competitionId={competitionId}
-            teams={compCtx?.competition.teams ?? []}
+            teams={teams}
           />
         )}
 
@@ -136,7 +181,7 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                       {openRow
                         ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1 text-left">{content}</button>
                         : <div className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1">{content}</div>}
-                      {(openRow || (inRouter && competitionId != null)) && renderTeamLink(row.teamId, row.teamName)}
+                      {openRow && renderTeamLink(row.teamId, row.teamName)}
                     </li>
                     {list.cutAfter === index && index < list.rows.length - 1 && (
                       <li role="separator" aria-label="Final cut-off" className={`${separatorLabel} !py-1.5 !text-[rgb(var(--mg-muted))]`}>
@@ -197,12 +242,30 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
                         </td>
                       ))}
                       <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(row.points)}</td>
-                      <td>{(openRow || (inRouter && competitionId != null)) && renderTeamLink(row.teamId, row.teamName)}</td>
+                      <td>{openRow && renderTeamLink(row.teamId, row.teamName)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </section>
+        )}
+
+        {view === 'games' && hasGames && (
+          <GamesList
+            groups={games}
+            chosen={chosenGame}
+            onChoose={setChosenGame}
+            onOpen={open}
+            renderTeamName={(id, name) => renderTeamName(id, name, isFav(id), true)}
+          />
+        )}
+
+        {view === 'heats' && heats && hasHeats && (
+          <section aria-label="Heat tables" className="flex flex-col gap-3">
+            {heats.map(({ session: s, orderedHeats, heat: h }) => (
+              <HeatScores key={h.id} session={s} heats={orderedHeats} activeHeatId={h.id} />
+            ))}
           </section>
         )}
 
@@ -227,8 +290,83 @@ export function ToplistView({ list, section, standalone = false }: { list: Topli
           </section>
         )}
       </div>
-      {sheet && <TeamSheet detail={sheet} sectionName={section?.displayName ?? null} onClose={() => setOpenTeam(null)} />}
+      {sheet && (
+        <TeamSheet
+          detail={sheet}
+          sectionName={section?.displayName ?? null}
+          competitionId={competitionId ?? undefined}
+          team={teams?.find((t) => t.id === sheet.teamId) ?? null}
+          onClose={() => setOpenTeam(null)}
+        />
+      )}
     </>
+  );
+}
+
+function GamesList({
+  groups,
+  chosen,
+  onChoose,
+  onOpen,
+  renderTeamName,
+}: {
+  groups: GameStandingGroup[];
+  chosen: string | null;
+  onChoose: (name: string) => void;
+  onOpen: (teamId: number) => (() => void) | undefined;
+  renderTeamName: (teamId: number, name: string) => React.ReactNode;
+}) {
+  const active = groups.find((g) => g.name === chosen) ?? groups[0];
+  return (
+    <div className="flex flex-col gap-2.5">
+      {groups.length > 1 && (
+        <div role="group" aria-label="Choose a game" className="mg-chips">
+          {groups.map((g) => (
+            <button key={g.name} type="button" className="mg-chip" aria-pressed={active.name === g.name} onClick={() => onChoose(g.name)}>
+              {g.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <section aria-label={`Points by game: ${active.name}`} className="mg-card overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-muted))]">
+              <th scope="col" className="w-9 py-1.5 pl-3 text-left font-bold">#</th>
+              <th scope="col" className="py-1.5 text-left font-bold">Team</th>
+              <th scope="col" className="py-1.5 px-2 text-left font-bold">Heat</th>
+              <th scope="col" className="w-12 py-1.5 text-center font-bold">Place</th>
+              <th scope="col" className="w-11 py-1.5 pr-3 text-right font-bold text-[rgb(var(--mg-heading))]">Pts</th>
+              <th scope="col" className="w-6"><span className="sr-only">Open</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {active.rows.map((row, idx) => {
+              const openRow = onOpen(row.teamId);
+              const placeLabel = row.isSitOut
+                ? <><span aria-hidden="true" className="text-[rgb(var(--mg-dash))]">S</span><span className="sr-only">Sat out</span></>
+                : row.eliminated
+                  ? <><span aria-hidden="true" className="text-[rgb(var(--mg-elim))]">{statusLetter(true, row.status)}</span><span className="sr-only">{statusLabel(true, row.status)}</span></>
+                  : row.placing != null ? ordinal(row.placing) : '–';
+              return (
+                <tr key={`${row.teamId}-${row.heatLabel}-${idx}`} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
+                  <td className="mg-display h-11 py-0 pl-3 text-base font-bold">{row.position}{row.joint ? '=' : ''}</td>
+                  <th scope="row" className="min-w-0 py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
+                    {openRow
+                      ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="block min-h-11 w-full text-left font-semibold">{renderTeamName(row.teamId, row.teamName)}</button>
+                      : <>{renderTeamName(row.teamId, row.teamName)}</>}
+                  </th>
+                  <td className="py-0 px-2 text-xs font-medium text-[rgb(var(--mg-muted))]">{row.heatLabel}</td>
+                  <td className="mg-display text-center text-sm font-semibold tabular-nums text-[rgb(var(--mg-body))]">{placeLabel}</td>
+                  <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(row.points)}</td>
+                  <td aria-hidden="true">{openRow && <ChevronRight className="mr-2 h-3 w-3 text-[rgb(var(--mg-dash))]" />}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+    </div>
   );
 }
 

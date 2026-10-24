@@ -35,14 +35,16 @@ function setCompetition(sessions: Session[], extra: Record<string, unknown> = {}
       sessions,
       ...extra,
     }),
+    streams: [],
     reload,
   };
 }
 
 function Probe() {
-  const { search } = useLocation();
+  const { pathname, search } = useLocation();
   const { header } = useCompactPageBarState();
   return <>
+    <output data-testid="path">{pathname}</output>
     <output data-testid="search">{search}</output>
     <output data-testid="header">{JSON.stringify({ title: header?.title, subtitle: header?.subtitle, label: header?.refreshLabel })}</output>
     <button type="button" onClick={header?.refresh}>probe refresh</button>
@@ -154,16 +156,16 @@ describe('the view tabs', () => {
     renderTab();
     await screen.findByRole('region', { name: 'Finals' });
     const tabs = screen.getByRole('group', { name: 'Toplist view' });
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Finals', 'Totals', 'By session']);
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Finals', 'Totals', 'By session', 'By game', 'Heat tables']);
     expect(within(tabs).getByRole('button', { name: 'Finals' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('offers only Totals and Sessions without finals, and opens on Totals', async () => {
+  it('offers Totals, By session, By game and Heat tables without finals, and opens on Totals', async () => {
     setCompetition([qualifier]);
     renderTab();
     await screen.findByRole('region', { name: 'Totals' });
     const tabs = screen.getByRole('group', { name: 'Toplist view' });
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Totals', 'By session']);
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Totals', 'By session', 'By game', 'Heat tables']);
     expect(screen.queryByRole('button', { name: 'Finals' })).toBeNull();
   });
 
@@ -174,7 +176,7 @@ describe('the view tabs', () => {
     expect(screen.queryByRole('button', { name: 'Finals' })).toBeNull();
   });
 
-  it('switches between finals, totals and the points by session', async () => {
+  it('switches between finals, totals, points by session and heat tables', async () => {
     const user = userEvent.setup();
     renderTab();
     await screen.findByRole('region', { name: 'Finals' });
@@ -185,18 +187,28 @@ describe('the view tabs', () => {
     await user.click(screen.getByRole('button', { name: 'By session' }));
     const table = screen.getByRole('region', { name: 'Points by session' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['#', 'Team', 'S1', 'F', 'Pts', 'Open']);
+    await user.click(screen.getByRole('button', { name: 'Heat tables' }));
+    expect(screen.getByRole('region', { name: 'Heat tables' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Finals' }));
     expect(screen.getByRole('region', { name: 'Finals' })).toBeVisible();
   });
 
-  it('starts the next age group on its own default view', async () => {
+  it('starts the next age group on its own default view when none was chosen, and keeps By session when chosen', async () => {
+    setCompetition([
+      qualifier,
+      finalSession(),
+      session(5, { competitionSectionId: 10, name: 'Under 14 heats', status: 2, heats: [heat(5, { sessionId: 5, label: 'Heat 1', entries: entries([8]), races: [scored(5, [8, 1, 3])] })] }),
+    ]);
     const user = userEvent.setup();
     renderTab();
     await screen.findByRole('region', { name: 'Finals' });
+    await user.click(screen.getByRole('button', { name: 'By session' }));
+    expect(screen.getByRole('region', { name: 'Points by session' })).toBeVisible();
     await user.click(screen.getByRole('combobox', { name: 'Age group' }));
     await user.click(screen.getByRole('option', { name: 'Under 14' }));
     await screen.findByText('Team 8');
-    expect(screen.getByRole('region', { name: 'Totals' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'By session' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'Points by session' })).toBeVisible();
   });
 });
 
@@ -227,71 +239,40 @@ describe('the finals list', () => {
   });
 });
 
-describe('the team sheet', () => {
-  it('opens with the qualifying and final points and the races, and Esc closes it and returns focus', async () => {
+describe('navigating to a team page from the toplist', () => {
+  it('navigates straight to the full team page from finals', async () => {
     const user = userEvent.setup();
     renderTab();
     const list = await screen.findByRole('list', { name: 'A Final' });
-    const opener = within(list).getByRole('button', { name: /Team 1/ });
-    opener.focus();
-    await user.keyboard('{Enter}');
-    const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveAccessibleName('Team 1');
-    expect(within(dialog).getByText('Under 12 · rode 1 session + A Final')).toBeVisible();
-    expect(within(dialog).getByText(/1st · 3 pts/)).toBeVisible();
-    expect(within(dialog).getByText(/2nd · 4 pts/)).toBeVisible();
-    expect(within(dialog).getByRole('region', { name: 'A Final' })).toHaveTextContent('not carried over');
-    expect(within(dialog).getByRole('region', { name: 'Session 1 · Heat 1' })).toHaveTextContent('Race 11st3 points');
-    expect(within(dialog).getByRole('button', { name: 'Close team breakdown' })).toHaveFocus();
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(opener).toHaveFocus();
+    await user.click(within(list).getByRole('link', { name: /Team 1/ }));
+    expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/1');
   });
 
-  it('closes from the close button and the backdrop, and keeps Tab inside', async () => {
-    const user = userEvent.setup();
-    renderTab();
-    const list = await screen.findByRole('list', { name: 'A Final' });
-    await user.click(within(list).getByRole('button', { name: /Team 2/ }));
-    const dialog = screen.getByRole('dialog');
-    await user.tab();
-    expect(within(dialog).getByRole('button', { name: 'Close team breakdown' })).toHaveFocus();
-    await user.tab({ shift: true });
-    expect(within(dialog).getByRole('button', { name: 'Close team breakdown' })).toHaveFocus();
-    await user.click(within(dialog).getByRole('button', { name: 'Close team breakdown' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
-    await user.click(within(list).getByRole('button', { name: /Team 2/ }));
-    await user.pointer({ target: screen.getByRole('dialog').parentElement!, keys: '[MouseLeft]' });
-    expect(screen.queryByRole('dialog')).toBeNull();
-  });
-
-  it('opens from the totals and the sessions table, and says when a team did not ride', async () => {
+  it('navigates straight to the full team page from totals and sessions tables', async () => {
     const other = session(4, { competitionSectionId: 9, orderIndex: 4, name: 'Under 12 heats 2', heats: [heat(4, { sessionId: 4, label: 'Heat 2', entries: entries([2]), races: [race(4, { name: 'Race 4' })] })] });
     setCompetition([qualifier, other]);
     const user = userEvent.setup();
     renderTab();
     await screen.findByRole('region', { name: 'Totals' });
-    await user.click(within(screen.getByRole('region', { name: 'Totals' })).getByRole('button', { name: /Team 1/ }));
-    const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('region', { name: 'Session 2' })).toHaveTextContent('Didn’t ride this session');
-    await user.keyboard('{Escape}');
+    await user.click(within(screen.getByRole('region', { name: 'Totals' })).getByRole('link', { name: /Team 1/ }));
+    expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/1');
     await user.click(screen.getByRole('button', { name: 'By session' }));
-    await user.click(within(screen.getByRole('region', { name: 'Points by session' })).getByRole('button', { name: 'Team 2' }));
-    expect(within(screen.getByRole('dialog')).getByRole('region', { name: 'Session 2 · Heat 2' })).toHaveTextContent('Not ridden yet');
+    await user.click(within(screen.getByRole('region', { name: 'Points by session' })).getByRole('link', { name: 'Team 2' }));
+    expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/2');
   });
 });
 
 describe('the totals list', () => {
   it('keeps the cut-off, run-off, per-row notes and hors concours teams', async () => {
     state.get.mockResolvedValue({ data: [standing(1, 10), standing(2, 6), standing(3, 6), standing(4, 2)], headers: {} });
-    setCompetition([session(1, { competitionSectionId: 9, heats: [heat(1, { entries: entries([4]), races: [race(1), race(2)] })] })], {
-      teams: [team(1), team(2), team(3), team(4), team(5, { competitionSectionId: 9, isHorsConcours: true, displayName: 'Guest' })],
+    setCompetition([session(1, { competitionSectionId: 9, heats: [heat(1, { entries: entries([4, 5, 6]), races: [race(1), race(2)] })] })], {
+      teams: [team(1), team(2), team(3), team(4), team(5, { competitionSectionId: 9, isHorsConcours: true, displayName: 'Guest' }), team(6, { competitionSectionId: 9, isHorsConcours: true })],
       sections: [{ id: 9, displayName: 'Under 12', finalistCount: 2, runoffRaceName: 'Sword' }] as never,
     });
     renderTab();
     const totals = await screen.findByRole('region', { name: 'Totals' });
     expect(within(totals).getAllByText('Joint 2nd · run-off')).toHaveLength(2);
-    expect(within(totals).getByText('5 needed to make the final')).toBeVisible();
+    expect(within(totals).getByText('5 needed to make the final (normal finishes)')).toBeVisible();
     expect(within(totals).getByRole('separator', { name: 'Final cut-off' })).toBeVisible();
     expect(within(totals).getByText('Hors concours')).toBeVisible();
     expect(within(totals).getByText('Guest')).toBeVisible();
@@ -333,11 +314,28 @@ describe('embedded in the timetable', () => {
     expect(screen.getByRole('region', { name: 'Draw and starting lanes' })).toBeVisible();
     await user.click(within(sectionTabs).getByRole('button', { name: 'Heat Scores' }));
     expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeVisible();
-    await user.click(within(sectionTabs).getByRole('button', { name: 'Draw / Heats' }));
+    await user.click(within(screen.getByRole('group', { name: 'Section view' })).getByRole('button', { name: 'Draw / Heats' }));
     await user.click(screen.getByRole('button', { name: /Show Under 12 toplist/ }));
     await screen.findByRole('region', { name: 'Finals' });
     await user.click(screen.getByRole('combobox', { name: 'Age group' }));
     await user.click(screen.getByRole('option', { name: 'Under 14' }));
     expect(screen.getByTestId('search')).toHaveTextContent('?section=10');
+  });
+
+  it('switches to heat scores without rendering the timetable underneath, and back again', async () => {
+    const user = userEvent.setup();
+    renderTab('/?section=9', { toplistOnly: false });
+    expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
+    const toggle = screen.getByRole('button', { name: 'Heat Scores' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(toggle);
+    expect(screen.queryByRole('heading', { level: 1, name: 'Under 12' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Heat Scores' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Draw / Heats' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
+    expect(screen.queryByRole('heading', { level: 1, name: /Heat 1 scores/ })).toBeNull();
   });
 });

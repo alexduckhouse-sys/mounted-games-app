@@ -24,13 +24,13 @@ test('no final places set means no cut-off line', () => {
 });
 
 test('the line sits under the last finalist and teams below it see what they need', () => {
-  const sessions = [session(1, [heat(1, [3], [race(1, false), race(2, false)])])];
-  const list = buildToplist([standing(1, 10), standing(2, 8), standing(3, 5)], sessions, [], 9, 2);
+  const sessions = [session(1, [heat(1, [3, 90, 91], [race(1, false), race(2, false)])])];
+  const list = buildToplist([standing(1, 10), standing(2, 8), standing(3, 5)], sessions, [team(90, { isHorsConcours: true }), team(91, { isHorsConcours: true })], 9, 2);
   assert.equal(list.cutAfter, 1);
   assert.equal(list.runoff, null);
   assert.equal(list.rows[2].out, true);
   assert.equal(list.rows[2].needed, 4);
-  assert.equal(toplistNote(list.rows[2]), '4 needed to make the final');
+  assert.equal(toplistNote(list.rows[2]), '4 needed to make the final (normal finishes)');
 });
 
 test('a tie across the line becomes a run-off and the line moves below the tied teams', () => {

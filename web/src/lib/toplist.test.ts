@@ -95,13 +95,13 @@ describe('buildToplist final cut-off', () => {
   });
 
   it('puts the line under the last finalist and tells teams below what they need', () => {
-    const sessions = [session(1, [heat(1, [3], [race(1), race(2)])])];
-    const list = buildToplist([standing(1, 10), standing(2, 8), standing(3, 5)], sessions, [], SECTION, 2);
+    const sessions = [session(1, [heat(1, [3, 90, 91], [race(1), race(2)])])];
+    const list = buildToplist([standing(1, 10), standing(2, 8), standing(3, 5)], sessions, [team(90, { isHorsConcours: true }), team(91, { isHorsConcours: true })], SECTION, 2);
     expect(list.cutAfter).toBe(1);
     expect(list.runoff).toBeNull();
     expect(list.rows.map((r) => r.out)).toEqual([false, false, true]);
     expect(list.rows[2]).toMatchObject({ needed: 4, racesLeft: 2 });
-    expect(toplistNote(list.rows[2])).toBe('4 needed to make the final');
+    expect(toplistNote(list.rows[2])).toBe('4 needed to make the final (normal finishes)');
   });
 
   it('does not say what a team below the line needs once it has no races left', () => {
@@ -123,6 +123,57 @@ describe('buildToplist final cut-off', () => {
     const list = buildToplist([standing(1, 12), standing(2, 9), standing(3, 9), standing(4, 4)], [], [], SECTION, 3);
     expect(list.runoff).toBeNull();
     expect(list.cutAfter).toBe(2);
+  });
+
+  it('calculates the true points needed using heat slot conservation and marks mathematically eliminated teams as null', () => {
+    // 4 teams in a single heat (slots 4, 3, 2, 1) with 1 race left and top 2 making the final:
+    // Team 1 has 12, Team 2 has 10 (cut-off), Team 3 has 8, Team 4 has 5.
+    // Naive gap for Team 3 would be 10 - 8 + 1 = 3 (reaching 11), but if Team 3 takes 3 pts,
+    // the remaining slots are {4, 2, 1} so Team 2 gets at least 1 pt (reaching 11).
+    // Thus Team 3 actually needs 4 pts (1st place, reaching 12 while Team 2 gets 1 pt -> 11).
+    // Team 4 (5 pts, maxGain 4 -> 9 < 10) is mathematically eliminated (needed: null).
+    const sessions = [session(1, [heat(1, [1, 2, 3, 4], [scored(1, [1, 4], [2, 3], [3, 2], [4, 1]), race(2)])], { lanesPerHeat: 4 })];
+    const list = buildToplist(
+      [standing(1, 12), standing(2, 10), standing(3, 8), standing(4, 5)],
+      sessions,
+      [],
+      SECTION,
+      2,
+    );
+    expect(list.rows.find((r) => r.teamId === 3)?.needed).toBe(4);
+    expect(list.rows.find((r) => r.teamId === 4)?.needed).toBeNull();
+  });
+
+  it('returns maxGain when winning every remaining race ties the cut-off for a run-off, or null if rivals still pull ahead', () => {
+    // 4-team heat, 1 race left (slots 4, 3, 2, 1), top 2 make the final.
+    // Team 1 = 20, Team 2 = 13, Team 3 = 10 (maxGain = 4 -> 14), Team 4 = 9 (maxGain = 4 -> 13, but Team 2 gets at least +1 -> 14).
+    const sessions = [session(1, [heat(1, [1, 2, 3, 4], [race(1)])], { lanesPerHeat: 4 })];
+    const list = buildToplist(
+      [standing(1, 20), standing(2, 13), standing(3, 10), standing(4, 9)],
+      sessions,
+      [],
+      SECTION,
+      2,
+    );
+    // Team 3 scoring 4 reaches 14, tying Team 2 (13 + 1 = 14) for a run-off.
+    expect(list.rows.find((r) => r.teamId === 3)?.needed).toBe(4);
+    // Team 4 scoring 4 only reaches 13 while Team 2 reaches at least 14, so Team 4 is eliminated.
+    expect(list.rows.find((r) => r.teamId === 4)?.needed).toBeNull();
+  });
+
+  it('handles qualifier round stage (1 point per finisher) and sit-out entries when computing points needed', () => {
+    const sitOutRace = race(1, { isComplete: false, results: [result(3, null, { isSitOut: true })] });
+    const qualifierHeat = heat(1, [1, 2, 3, 4], [sitOutRace, race(2)], { raceRoundStage: 1 });
+    const sessions = [session(1, [qualifierHeat])];
+    const list = buildToplist(
+      [standing(1, 5), standing(2, 3), standing(3, 2), standing(4, 2)],
+      sessions,
+      [],
+      SECTION,
+      2,
+    );
+    // Team 3 sits out race 1, so maxGain is 1 (from race 2); 2 + 1 = 3 ties Team 2 if Team 2 didn't score, but in stage 1 every active team gets 1 pt per race.
+    expect(list.rows.find((r) => r.teamId === 3)?.needed).toBeNull();
   });
 });
 
@@ -285,7 +336,7 @@ describe('buildToplist finals and team detail', () => {
 describe('toplistNote', () => {
   it('prefers the run-off, then what is needed, then races left', () => {
     expect(toplistNote(row({ runoff: true, position: 3, needed: 2, racesLeft: 4 }))).toBe('Joint 3rd · run-off');
-    expect(toplistNote(row({ needed: 2, racesLeft: 4 }))).toBe('2 needed to make the final');
+    expect(toplistNote(row({ needed: 2, racesLeft: 4 }))).toBe('2 needed to make the final (normal finishes)');
     expect(toplistNote(row({ racesLeft: 1 }))).toBe('1 race left');
     expect(toplistNote(row({ racesLeft: 4 }))).toBe('4 races left');
     expect(toplistNote(row({ withdrawn: true, racesLeft: 4 }))).toBe('Withdrawn');
@@ -296,7 +347,7 @@ describe('toplistNote', () => {
   });
 
   it('still says how many are needed when the figure is zero', () => {
-    expect(toplistNote(row({ needed: 0 }))).toBe('0 needed to make the final');
+    expect(toplistNote(row({ needed: 0 }))).toBe('0 needed to make the final (normal finishes)');
   });
 });
 
@@ -321,4 +372,195 @@ describe('buildToplist started', () => {
     const other = session(1, [heat(1, [1, 2], [scored(1, [1, 0])])], { competitionSectionId: SECTION + 1 });
     expect(buildToplist([standing(1, 0), standing(2, 0)], [other], [], SECTION, null).started).toBe(false);
   });
+});
+
+describe('buildToplist byGame', () => {
+  it('groups non-final race results across heats by game name, excluding HC teams and ranking with ties', () => {
+    const r1 = race(1, {
+      name: 'Bending',
+      orderIndex: 1,
+      isComplete: true,
+      results: [
+        result(1, 1, { points: 5, teamName: 'Alpha' }),
+        result(2, 2, { points: 4, teamName: 'Bravo' }),
+        result(99, 3, { points: 3, teamName: 'Guest HC' }),
+      ],
+    });
+    const r2 = race(2, {
+      name: 'bending',
+      orderIndex: 1,
+      isComplete: true,
+      results: [
+        result(3, 1, { points: 5, teamName: 'Charlie' }),
+        result(4, null, { points: 0, eliminated: true, teamName: 'Delta' }),
+      ],
+    });
+    const unscored = race(3, { name: 'Mug', orderIndex: 2, isComplete: false, results: [] });
+    const s1 = session(1, [
+      heat(1, [1, 2, 99], [r1, unscored], { label: 'Heat 1', orderIndex: 1 }),
+      heat(2, [3, 4], [r2], { orderIndex: 2 }),
+    ], { orderIndex: 1 });
+    const s2 = session(2, [
+      heat(3, [1], [race(4, { name: 'Flag', isComplete: true, results: [result(1, 1, { points: 5, teamName: 'Alpha' })] })], { label: 'Heat 1', orderIndex: 1 }),
+    ], { orderIndex: 2 });
+
+    const singleSessionList = buildToplist(
+      [standing(1, 5), standing(2, 4), standing(3, 5), standing(4, 0)],
+      [s1],
+      [team(99, { isHorsConcours: true })],
+      SECTION,
+      null,
+    );
+    expect(singleSessionList.byGame).toHaveLength(1);
+    expect(singleSessionList.byGame[0].name).toBe('Bending');
+    expect(singleSessionList.byGame[0].rows.map((r) => [r.teamName, r.heatLabel, r.position, r.joint, r.points])).toEqual([
+      ['Alpha', 'Heat 1', 1, true, 5],
+      ['Charlie', 'Heat 2', 1, true, 5],
+      ['Bravo', 'Heat 1', 3, false, 4],
+      ['Delta', 'Heat 2', 4, false, 0],
+    ]);
+
+    const multiSessionList = buildToplist(
+      [standing(1, 10)],
+      [s1, s2],
+      [team(99, { isHorsConcours: true })],
+      SECTION,
+      null,
+    );
+    expect(multiSessionList.byGame.map((g) => g.name)).toEqual(['Bending', 'Flag']);
+    expect(multiSessionList.byGame[1].rows[0].heatLabel).toBe('S2 · Heat 1');
+  });
+});
+
+/** Independent exhaustive oracle: all legal finishing orders, with no pruning or greedy choices. */
+function permutations(values: number[]): number[][] {
+  if (!values.length) return [[]];
+  return values.flatMap((value, index) => permutations(values.filter((_, i) => i !== index)).map((rest) => [value, ...rest]));
+}
+function normalFinishOracle(initial: number[], candidate: number, places: number, rounds: number) {
+  const orders = permutations(initial.map((_, index) => index + 1));
+  let outright = Infinity;
+  let runoff = Infinity;
+  function ride(points: number[], remaining: number) {
+    if (remaining) {
+      for (const order of orders) ride(points.map((value, index) => value + order[index]), remaining - 1);
+      return;
+    }
+    const gain = points[candidate] - initial[candidate];
+    const rivals = points.filter((_, index) => index !== candidate);
+    if (rivals.filter((value) => value >= points[candidate]).length < places) outright = Math.min(outright, gain);
+    if (rivals.filter((value) => value > points[candidate]).length < places) runoff = Math.min(runoff, gain);
+  }
+  ride(initial, rounds);
+  return Number.isFinite(outright) ? { needed: outright, runoff: false }
+    : Number.isFinite(runoff) ? { needed: runoff, runoff: true } : { needed: null, runoff: false };
+}
+
+describe('exact normal-finish qualification', () => {
+  it.each([
+    [[6, 5, 0, 0], 8],
+    [[6, 4, 1, 0], 6],
+    [[6, 4, 2, 0], 5],
+  ])('finds legal multi-race allocations for %j rather than distributing a gain greedily', (points, needed) => {
+    const list = buildToplist((points as number[]).map((value, i) => standing(i + 1, value)),
+      [session(1, [heat(1, [1, 2, 3, 4], [race(1), race(2)])])], [], SECTION, 2);
+    expect(list.rows.find((item) => item.teamId === 3)).toMatchObject({ needed });
+  });
+
+  it('agrees with exhaustive legal 4/3/2/1 finishes over two races, including half-point totals and ties', () => {
+    const sessions = [session(1, [heat(1, [1, 2, 3, 4], [race(1), race(2)])])];
+    for (const a of [0, 1, 3.5, 6]) for (const b of [0, 1, 3.5, 6]) {
+      for (const c of [0, 1, 3.5, 6]) for (const d of [0, 1, 3.5, 6]) {
+        const initial = [a, b, c, d];
+        const list = buildToplist(initial.map((value, i) => standing(i + 1, value)), sessions, [], SECTION, 2);
+        for (const item of list.rows.filter((item) => item.out)) {
+          const expected = normalFinishOracle(initial, item.teamId - 1, 2, 2);
+          expect({ initial, teamId: item.teamId, needed: item.needed, runoff: !!item.neededForRunoff, unknown: !!item.neededUnavailable })
+            .toEqual({ initial, teamId: item.teamId, needed: expected.needed, runoff: expected.runoff, unknown: false });
+        }
+      }
+    }
+  });
+
+  it('keeps HC finishing slots and the full session base while excluding HC from qualification', () => {
+    const list = buildToplist([standing(1, 6), standing(2, 4), standing(3, 1.5)],
+      [session(1, [heat(1, [1, 2, 3, 4], [race(1)])])], [team(4, { isHorsConcours: true })], SECTION, 2);
+    expect(list.rows.find((item) => item.teamId === 3)?.needed).toBe(4);
+  });
+
+  it('does not invent extra points for a lone entrant or derive a future base from manual awards', () => {
+    const lone = buildToplist([standing(1, 10), standing(2, 8), standing(3, 5)],
+      [session(1, [heat(1, [3], [race(1), race(2)])])], [], SECTION, 2);
+    expect(lone.rows[2]).toMatchObject({ needed: null });
+    expect(lone.rows[2].neededUnavailable).toBeUndefined();
+    const awarded = buildToplist([standing(1, 30), standing(2, 10), standing(3, 1)],
+      [session(1, [heat(1, [1, 2, 3], [scored(1, [1, 30]), race(2)])])], [], SECTION, 2);
+    expect(awarded.rows[2].needed).toBeNull();
+  });
+
+  it('uses the largest field in the session even when the candidate rides in a smaller heat', () => {
+    const list = buildToplist([standing(1, 10), standing(2, 8), standing(3, 5)],
+      [session(1, [heat(1, [1, 2, 4, 5], [scored(1, [1, 4])]), heat(2, [3], [race(2)])])], [], SECTION, 2);
+    expect(list.rows[2].needed).toBe(4);
+  });
+
+  it('uses the drawn rotation for future sit-outs, including unsorted races and entries', () => {
+    const list = buildToplist([standing(1, 10), standing(2, 8), standing(3, 5)],
+      [session(1, [heat(1, [1, 2, 3], [race(2), race(1)], { entries: [...entries([1, 2, 3])].reverse() })], { lanesPerHeat: 2 })], [], SECTION, 2);
+    // Team 3 sits out the first race and can score only 2 in the second, not the naive 4.
+    expect(list.rows[2]).toMatchObject({ needed: null });
+    expect(list.rows[2].neededUnavailable).toBeUndefined();
+  });
+
+  it('never gives withdrawn teams a future award or lets them consume a finishing slot', () => {
+    const list = buildToplist([standing(1, 8), { ...standing(2, 6), withdrawn: true }, standing(3, 3)],
+      [session(1, [heat(1, [1, 2, 3], [race(1)])])], [], SECTION, 2);
+    expect(list.rows[2]).toMatchObject({ needed: 3, neededForRunoff: true });
+    expect(toplistNote(list.rows[2])).toBe('3 needed for a run-off (normal finishes)');
+  });
+
+  it('finds the minimum run-off gain when no outright finish is possible', () => {
+    const list = buildToplist([standing(1, 12), standing(2, 9), standing(3, 8), standing(4, 7)],
+      [session(1, [heat(1, [3, 4], [race(1)], { raceRoundStage: 1 })])], [], SECTION, 2);
+    expect(list.rows[2]).toMatchObject({ needed: 1, neededForRunoff: true });
+  });
+
+  it('has an explicit unknown outcome when a normal-sized search exceeds its work budget', () => {
+    const ids = Array.from({ length: 24 }, (_, i) => i + 1);
+    const heats = Array.from({ length: 4 }, (_, i) => heat(i + 1, ids.slice(i * 6, i * 6 + 6),
+      Array.from({ length: 8 }, (_, j) => race(i * 8 + j + 1))));
+    const list = buildToplist(ids.map((id) => standing(id, 25 - id)), [session(1, heats)], [], SECTION, 6);
+    const unavailable = list.rows.filter((item) => item.neededUnavailable);
+    expect(unavailable.length).toBeGreaterThan(0);
+    expect(unavailable.every((item) => item.needed === null && !item.neededForRunoff)).toBe(true);
+    expect(toplistNote(unavailable[0])).toBe('Qualification calculation unavailable');
+  });
+
+  it('bounds recursion and table sizes for very large programmes without claiming elimination', () => {
+    const list = buildToplist([standing(1, 5), standing(2, 4), standing(3, 1)],
+      [session(1, [heat(1, [1, 2, 3], Array.from({ length: 200 }, (_, i) => race(i)))])], [], SECTION, 2);
+    expect(list.rows[2]).toMatchObject({ needed: null, neededUnavailable: true });
+  });
+});
+
+it('handles changed opponents across sessions, using complete allocations in each heat', () => {
+  const sessions = [
+    session(1, [heat(1, [1, 2], [race(1)]), heat(2, [3, 4], [race(2)])]),
+    session(2, [heat(3, [1, 3], [race(3)]), heat(4, [2, 4], [race(4)])]),
+  ];
+  const initial = [6, 4, 2.5, 0];
+  const fields = [[0, 1], [2, 3], [0, 2], [1, 3]];
+  let minimum = Infinity;
+  for (let outcome = 0; outcome < 16; outcome++) {
+    const final = [...initial];
+    fields.forEach(([a, b], raceIndex) => {
+      const aWins = (outcome & (1 << raceIndex)) !== 0;
+      final[a] += aWins ? 2 : 1;
+      final[b] += aWins ? 1 : 2;
+    });
+    if (final.filter((points, index) => index !== 2 && points >= final[2]).length < 2) minimum = Math.min(minimum, final[2] - initial[2]);
+  }
+  expect(minimum).toBe(4);
+  const list = buildToplist(initial.map((value, i) => standing(i + 1, value)), sessions, [], SECTION, 2);
+  expect(list.rows.find((item) => item.teamId === 3)).toMatchObject({ needed: minimum });
 });

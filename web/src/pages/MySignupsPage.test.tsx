@@ -56,7 +56,7 @@ describe('MySignupsPage', () => {
     expect(within(coming).getAllByRole('listitem')).toHaveLength(2);
     const first = within(coming).getAllByRole('listitem')[0];
     expect(first).toHaveTextContent('Event 1');
-    expect(first).toHaveTextContent('Open Teams · Stockport A');
+    expect(first).toHaveTextContent('Open · Stockport A');
     expect(first).toHaveTextContent('£18.00');
     expect(first).toHaveTextContent('Awaiting payment');
     expect(within(coming).getAllByRole('listitem')[1]).toHaveTextContent('Paid 12 Oct');

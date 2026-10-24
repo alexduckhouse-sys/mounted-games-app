@@ -1,5 +1,5 @@
 import { Suspense, useLayoutEffect, useRef, useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, Menu, RotateCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
@@ -34,18 +34,18 @@ function Shell({ width }: { width: PageWidth }) {
   const { meta } = useCompetitionMeta();
   const { config: compactBar, header: pageHeader } = useCompactPageBarState();
   const [menuOpen, setMenuOpen] = useState(false);
-  // The Lite mode chip opens the menu with its settings showing.
-  const [menuShowsSettings, setMenuShowsSettings] = useState(false);
-  const openMenu = () => { setMenuShowsSettings(false); setMenuOpen(true); };
-  const openLiteSettings = () => { setMenuShowsSettings(true); setMenuOpen(true); };
+  const navigate = useNavigate();
+  const openMenu = () => setMenuOpen(true);
+  const openLiteSettings = () => navigate('/settings#lite-mode');
   const location = useLocation();
   const { count: needsYou } = useNeedsYou();
   const onProfile = location.pathname === '/me' || location.pathname === '/me/';
   const choosingCompetition = ['/', '/events', '/competitions', '/competitions/past'].includes(location.pathname);
   const competitionId = competitionIdFromPath(location.pathname);
+  const filmingMode = /\/competitions\/\d+\/broadcast\/?$/.test(location.pathname);
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
   const globalTabs = hasGlobalTabs(location.pathname);
-  const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs || location.pathname === '/me/members';
+  const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs || location.pathname === '/me/members' || location.pathname === '/settings';
   // The tabs belong to a competition. The profile borrows the one being followed, if any.
   const tabsCompetitionId = competitionId ?? (onProfile ? current?.id ?? null : null);
   const shown = meta && meta.id === competitionId ? meta : null;
@@ -56,16 +56,20 @@ function Shell({ width }: { width: PageWidth }) {
   const barRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const bar = barRef.current;
-    if (!bar) return;
+    if (!bar) {
+      document.documentElement.style.setProperty('--mg-shell-h', '0px');
+      return;
+    }
     const publish = () => document.documentElement.style.setProperty('--mg-shell-h', `${bar.offsetHeight}px`);
     publish();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish);
     observer?.observe(bar);
     return () => observer?.disconnect();
-  }, []);
+  }, [filmingMode]);
 
   return (
     <div className="min-h-screen flex flex-col">
+      {!filmingMode && (
       <div ref={barRef} className="sticky top-0 z-30">
         <header className="mg-header">
           {compactBar ? (
@@ -80,7 +84,7 @@ function Shell({ width }: { width: PageWidth }) {
                   {compactBar.badge === 'live' ? 'On now' : compactBar.badge === 'finished' ? 'Finished' : 'Next'}
                 </span>
               } />
-              <LiteChip onOpen={openLiteSettings} short />
+              <LiteChip onOpen={openLiteSettings} />
               <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
             </div>
           ) : (
@@ -100,13 +104,13 @@ function Shell({ width }: { width: PageWidth }) {
                     <span className="truncate">{pageHeader.subtitle ?? title ?? 'Mounted Games'}</span>
                     <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
                   </span>
-                  <span className="sr-only">. Change competition</span>
+                  <span className="sr-only">. Events</span>
                 </Link>
               ) : title ? (
                 <Link to="/events" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
                   <span className="mg-display truncate text-lg font-bold leading-tight">{title}</span>
                   {subtitle && <span className="mg-header-sub truncate text-[13px] leading-tight">{subtitle}</span>}
-                  <span className="sr-only">. Change competition</span>
+                  <span className="sr-only">. Events</span>
                 </Link>
               ) : (
                 <span className="min-w-0 flex-1 truncate text-base font-semibold">Mounted Games</span>
@@ -121,8 +125,9 @@ function Shell({ width }: { width: PageWidth }) {
         </header>
         {competitionId != null && <TopBarTicker />}
       </div>
+      )}
       <main className={publicPage
-        ? `skin mx-auto w-full ${cap} flex-1 px-4 ${/\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : tabsCompetitionId != null || globalTabs ? 'pb-28' : 'pb-10'}`
+        ? `skin mx-auto w-full ${cap} flex-1 px-4 ${filmingMode || /\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : tabsCompetitionId != null || globalTabs ? 'pb-28' : 'pb-10'}`
         : `skin mx-auto w-full ${cap} flex-1 px-4 py-3 sm:py-5`}>
         {storageError && <p role="status" className={publicPage ? 'mg-notice mt-4' : 'mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900'}>{storageError}</p>}
         <TrainerAccountNotice />
@@ -130,9 +135,9 @@ function Shell({ width }: { width: PageWidth }) {
           <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
         </PageLoadBoundary>
       </main>
-      {globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
-      {tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} entryOnly={meta?.id === tabsCompetitionId && !!meta.entryPhase && !canOrganise({ id: meta.id, createdByUserId: meta.createdByUserId })} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
-      {menuOpen && <NavigationDrawer settingsOpen={menuShowsSettings} onClose={() => setMenuOpen(false)} />}
+      {!filmingMode && globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
+      {!filmingMode && tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} entryOnly={meta?.id === tabsCompetitionId && !!meta.entryPhase && !canOrganise({ id: meta.id, createdByUserId: meta.createdByUserId })} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
+      {menuOpen && <NavigationDrawer onClose={() => setMenuOpen(false)} />}
       {current && !choosingCompetition && rememberChoice === 'ask' && !menuOpen && <RememberCompetitionDialog />}
     </div>
   );

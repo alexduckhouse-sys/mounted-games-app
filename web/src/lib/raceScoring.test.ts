@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Heat } from '../types';
 import { heat, race, result } from '../test/factories';
 import {
-  nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey, setNote, setStatus, tapTeam, toggleEliminated, writeScoringDraft, type PendingPlace,
+  overridePoints, manualPoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey, setNote, setStatus, tapTeam, toggleEliminated, writeScoringDraft, type PendingPlace,
 } from './raceScoring';
 
 const places = (list: PendingPlace[]) => list.map((p) => (p.eliminated ? `${p.teamId}:out` : `${p.teamId}:${p.place}`));
@@ -273,4 +273,38 @@ describe('scoring drafts', () => {
     get.mockRestore();
     set.mockRestore();
   });
+});
+
+
+describe('manual score overrides', () => {
+  it('keeps half-point overrides and reasons through a saved draft and the submission payload', () => {
+    const next = overridePoints([], 3, 2.5, 'Synthetic correction');
+    writeScoringDraft(scoringDraftKey(91, 92), next);
+    const saved = readScoringDraft(scoringDraftKey(91, 92));
+    expect(saved).toEqual([{ teamId: 3, place: 1, eliminated: false, refereeNote: '[pts:2.5] Synthetic correction' }]);
+    expect(manualPoints(saved![0].refereeNote)).toBe(2.5);
+    expect(overridePoints(saved!, 3, undefined)[0].refereeNote).toBe('Synthetic correction');
+  });
+
+  it('updates a placed team without duplicating it and replaces a previous adjustment', () => {
+    const list = [{ teamId: 1, place: 1, eliminated: false, refereeNote: '[adj:-1] Synthetic reason' }];
+    expect(overridePoints(list, 1, 4)).toEqual([{ ...list[0], refereeNote: '[pts:4] Synthetic reason' }]);
+    expect(overridePoints([], 1, undefined)).toEqual([]);
+    expect(manualPoints('[pts:2.25]')).toBeUndefined();
+    expect(manualPoints('No directive')).toBeUndefined();
+  });
+});
+
+
+it('keeps finish order when a restored manual scorer is followed by another tap and undo', () => {
+  const original: PendingPlace[] = [{ teamId: 1, place: 0, eliminated: true }, { teamId: 2, place: 1, eliminated: false }];
+  const restored = overridePoints(original, 1, 2.5);
+  expect(places(tapTeam(tapTeam(restored, 3), 3))).toEqual(['2:1', '1:2']);
+});
+
+
+it('clears manual score directives when a scorer eliminates the team', () => {
+  const manual = overridePoints([], 1, 2.5, 'Synthetic reason');
+  expect(toggleEliminated(manual, 1)).toEqual([{ teamId: 1, place: 0, eliminated: true, refereeNote: 'Synthetic reason' }]);
+  expect(setStatus(manual, 1, 2)).toEqual([{ teamId: 1, place: 0, eliminated: true, status: 2, refereeNote: 'Synthetic reason' }]);
 });

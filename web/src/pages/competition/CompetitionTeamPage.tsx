@@ -1,46 +1,63 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { Calendar, ChevronRight, Shield, Star, Trophy, Users } from 'lucide-react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Ban, Calendar, ChevronRight, ClipboardList, Shield, Star } from 'lucide-react';
 import { api } from '../../api';
+import { useAuth } from '../../auth/AuthContext';
 import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { useFavourites } from '../../hooks/useFavourites';
+import { bibAccent, bibLabel, parseBibAndFlag } from '../../lib/bib';
 import { heightText } from '../../lib/decForm';
-import { arenaNames, arenaToShow, heatName, nextHeats } from '../../lib/following';
+import { formatPoints } from '../../lib/formatPoints';
+import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { displaySectionName } from '../../lib/section';
-import { formatTime } from '../../lib/time';
-import { sessionOrdinals } from '../../lib/timetableRows';
-import { buildToplist, ordinal } from '../../lib/toplist';
-import type { DeclarationForm, StandingRow } from '../../types';
-import type { TeamProfile, TeamProfileHistory } from '../seasons/teamProfileTypes';
+import { computeTimings, formatTime } from '../../lib/time';
+import { timetableRows, sessionOrdinals } from '../../lib/timetableRows';
+import { buildToplist, ordinal, toplistNote, type TeamBlock } from '../../lib/toplist';
+import type { DeclarationForm, Heat, Session, StandingRow } from '../../types';
 import { useCompetition } from './context';
 import { HeatScores } from './HeatScores';
-import { formatPoints } from '../../lib/formatPoints';
+import { arenaNames, arenaToShow, heatName, nextHeats } from '../../lib/following';
 import { publicRiderName } from '../../lib/riderNames';
 import { statsProfileHref } from '../../lib/stats';
 import { StatsSubjectKind } from '../../types';
+import type { TeamProfile, TeamProfileHistory } from '../seasons/teamProfileTypes';
+import { byDrawnLane } from './laneRules';
 
+const eyebrow = 'text-[10px] font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]';
+const isRaceSession = (session: Session) => (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
+const isHeatDone = (heat: Heat) => !!heat.finishedAt || (heat.races.length > 0 && heat.races.every((r) => r.isComplete));
 
 export function CompetitionTeamPage() {
-  const { teamId: teamIdParam } = useParams<{ teamId: string }>();
-  const teamId = Number(teamIdParam);
+  const { teamId } = useParams<{ teamId: string }>();
+  const id = Number(teamId);
+  const navigate = useNavigate();
+  const location = useLocation();
   const { competition } = useCompetition();
-  const favHook = useFavourites();
-  const isFav = useMemo(
-    () => (favHook.favourites ?? []).some((f) => f.competitionId === competition.id && f.teamId === teamId),
-    [favHook.favourites, competition.id, teamId],
-  );
+  const { user, token, hasRole, canOrganise } = useAuth();
+  const { favourites, toggle } = useFavourites();
 
-  const team = useMemo(
-    () => competition.teams.find((t) => t.id === teamId) ?? null,
-    [competition.teams, teamId],
-  );
-  const section = useMemo(
-    () => (team ? competition.sections.find((s) => s.id === team.competitionSectionId) ?? null : null),
-    [competition.sections, team],
-  );
+  const team = competition.teams.find((t) => t.id === id) ?? null;
+  const section = team ? competition.sections.find((s) => s.id === team.competitionSectionId) ?? null : null;
+  const sectionLabel = displaySectionName(section?.displayName ?? team?.sectionName);
+  const fallbackBackPath = team
+    ? `/competitions/${competition.id}/toplists?section=${team.competitionSectionId}`
+    : `/competitions/${competition.id}/teams`;
+
+
+  function goBack() {
+    if (location.key !== 'default') {
+      navigate(-1);
+    } else {
+      navigate(fallbackBackPath);
+    }
+  }
 
   const [standings, setStandings] = useState<StandingRow[]>([]);
-  const [declarations, setDeclarations] = useState<DeclarationForm[]>([]);
+  // A response is visible only for the exact resource and authentication that fetched it.
+  const declarationKey = JSON.stringify([competition.id, id, user?.id ?? null, token ?? null, user?.roles ?? [], canOrganise(competition)]);
+  const [declarationState, setDeclarationState] = useState<{ key: string; form: DeclarationForm | null } | null>(null);
+  const decLoaded = declarationState?.key === declarationKey;
+  const decForm = decLoaded ? declarationState.form : null;
   const [matchedProfile, setMatchedProfile] = useState<TeamProfile | null>(null);
   const [profileHistory, setProfileHistory] = useState<TeamProfileHistory | null>(null);
 
@@ -54,12 +71,21 @@ export function CompetitionTeamPage() {
   }, [competition.id, team]);
 
   useEffect(() => {
+    if (!team) return;
     let cancelled = false;
-    api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id } })
-      .then((r) => { if (!cancelled && Array.isArray(r.data)) setDeclarations(r.data); })
-      .catch(() => { if (!cancelled) setDeclarations([]); });
+    api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id, teamId: team.id } })
+      .then((r) => {
+        if (cancelled) return;
+        const list = Array.isArray(r.data) ? r.data : [];
+        setDeclarationState({ key: declarationKey, form: list.find((f) => f.teamId === team.id) ?? null });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDeclarationState({ key: declarationKey, form: null });
+        }
+      });
     return () => { cancelled = true; };
-  }, [competition.id]);
+  }, [competition.id, team, declarationKey]);
 
   useEffect(() => {
     if (!team) return;
@@ -81,19 +107,64 @@ export function CompetitionTeamPage() {
     return () => { cancelled = true; };
   }, [team]);
 
-  const toplist = useMemo(() => {
-    if (!team) return null;
-    return buildToplist(standings, competition.sessions, competition.teams, team.competitionSectionId, section?.finalistCount);
-  }, [standings, competition.sessions, competition.teams, team, section?.finalistCount]);
+  const list = useMemo(
+    () => (team ? buildToplist(standings, competition.sessions, competition.teams, team.competitionSectionId, section?.finalistCount) : null),
+    [standings, competition.sessions, competition.teams, team, section?.finalistCount],
+  );
 
-  const myRow = useMemo(
-    () => (toplist && team ? toplist.rows.find((r) => r.teamId === team.id) ?? null : null),
-    [toplist, team],
-  );
-  const myHc = useMemo(
-    () => (toplist && team ? toplist.hc.find((r) => r.teamId === team.id) ?? null : null),
-    [toplist, team],
-  );
+  const drawnHeats = useMemo(() => {
+    if (!team) return [];
+    const timings = computeTimings(competition.sessions);
+    const tRows = timetableRows(competition.sessions, timings, true);
+    const items: {
+      session: Session;
+      orderedHeats: Heat[];
+      heat: Heat;
+      heatLabel: string;
+      lane: number;
+      points: number;
+      done: boolean;
+      scoredAny: boolean;
+      timeText: string | null;
+    }[] = [];
+    const orderedSessions = [...competition.sessions].filter(isRaceSession).sort((a, b) => a.orderIndex - b.orderIndex);
+    for (const session of orderedSessions) {
+      const orderedHeats = [...session.heats].sort((a, b) => a.orderIndex - b.orderIndex);
+      orderedHeats.forEach((heat, idx) => {
+        const entry = heat.entries.find((e) => e.teamId === team.id);
+        const hasResult = heat.races.some((r) => r.results.some((res) => res.teamId === team.id));
+        if (!entry && !hasResult) return;
+        const drawnIdx = entry ? byDrawnLane(heat).findIndex((e) => e.id === entry.id) + 1 : 0;
+        const lane = drawnIdx > 0 ? drawnIdx : (entry?.laneIndex ?? 1);
+        let points = 0;
+        let scoredAny = false;
+        for (const race of heat.races) {
+          for (const res of race.results) {
+            if (res.teamId === team.id) {
+              points += res.points;
+              scoredAny = true;
+            }
+          }
+        }
+        const tRow = tRows.find((r) => r.heat?.id === heat.id);
+        const timeText = tRow?.effective
+          ? tRow.effective.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+          : null;
+        items.push({
+          session,
+          orderedHeats,
+          heat,
+          heatLabel: heat.label?.trim() || `Heat ${idx + 1}`,
+          lane,
+          points,
+          done: isHeatDone(heat),
+          scoredAny,
+          timeText,
+        });
+      });
+    }
+    return items;
+  }, [competition.sessions, team]);
 
   const nextMap = useMemo(
     () => (team ? nextHeats(competition, new Set([team.id])) : new Map()),
@@ -105,7 +176,7 @@ export function CompetitionTeamPage() {
 
   const teamHeats = useMemo(() => {
     if (!team) return [];
-    const items: { key: string; session: typeof competition.sessions[number]; heats: typeof competition.sessions[number]['heats']; activeHeatId: number }[] = [];
+    const items: { key: string; session: Session; heats: Heat[]; activeHeatId: number }[] = [];
     const orderedSessions = competition.sessions
       .filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
       .sort((a, b) => a.orderIndex - b.orderIndex);
@@ -127,14 +198,8 @@ export function CompetitionTeamPage() {
     return items;
   }, [competition.sessions, team]);
 
-  const declaration = useMemo(
-    () => (team ? declarations.find((d) => d.teamId === team.id) ?? null : null),
-    [declarations, team],
-  );
-
-  const sectionLabel = displaySectionName(team?.sectionName ?? section?.displayName);
   useCompactPageBar({
-    backTo: `/competitions/${competition.id}`,
+    backTo: fallbackBackPath,
     title: team?.displayName ?? 'Team',
     subtitle: [sectionLabel, competition.name].filter(Boolean).join(' · '),
     badge: nextState?.kind === 'heat' && nextState.row.status === 'live' ? 'live' : nextState?.kind === 'done' ? 'finished' : 'next',
@@ -142,66 +207,150 @@ export function CompetitionTeamPage() {
 
   if (!team) {
     return (
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-4 py-4">
-        <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">Team not found in this competition.</p>
-        <Link to={`/competitions/${competition.id}`} className="mg-btn mg-btn-secondary">Back to competition</Link>
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-3">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={goBack} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))] hover:underline">
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
+          </button>
+          <Link to={`/competitions/${competition.id}/teams`} className="text-sm font-semibold text-[rgb(var(--mg-muted))] hover:underline">
+            All teams
+          </Link>
+        </div>
+        <div className="mg-card p-4 text-sm text-[rgb(var(--mg-muted))]">Team not found in this competition.</div>
       </div>
     );
   }
 
-  const bibText = team.bibColour?.trim() || team.bibDescription?.trim() || declaration?.bibDescription?.trim() || null;
-  const rankText = myRow
-    ? toplist?.started
-      ? `${myRow.joint ? '=' : ''}${ordinal(myRow.position)}`
-      : '—'
-    : myHc
-      ? 'HC'
-      : '—';
-  const totalPoints = myRow ? myRow.points : myHc ? myHc.points : 0;
+  const isFollowed = favourites.some((item) => item.competitionId === competition.id && item.teamId === team.id);
+  const canDeclare = hasRole('Admin') || canOrganise(competition) || (
+    user != null && (team.trainerUserId === user.id || (hasRole('Manager') && user.clubId != null && user.clubId === team.clubId))
+  );
+
+  const rawBib = decForm?.bibDescription || team.bibDescription || team.bibColour || '';
+  const parsedBib = parseBibAndFlag(rawBib);
+  const detail = list?.detail.get(team.id) ?? null;
+  const toplistRow = list?.rows.find((r) => r.teamId === team.id) ?? null;
+  const qualifying = [...(list?.detail.values() ?? [])];
+  const leaderPoints = Math.max(0, ...qualifying.map((item) => item.qualifyingPoints));
+  const teamPoints = detail?.qualifyingPoints ?? 0;
+  const qualifyingJoint = detail != null && qualifying.filter((item) => item.qualifyingPoints === detail.qualifyingPoints).length > 1;
+  const gap = list?.started && toplistRow && leaderPoints > teamPoints ? leaderPoints - teamPoints : 0;
+  const orderedRiders = decForm ? [...decForm.riders].sort((a, b) => a.orderIndex - b.orderIndex) : [];
+  const trainerDisplay = decForm?.trainerName ?? decForm?.submittedByName ?? team.trainerName ?? null;
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-4">
-      <section aria-label="Team summary" className="mg-card flex flex-col gap-3 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-muted))]">
-              {[sectionLabel, team.clubName].filter(Boolean).join(' · ')}
-            </p>
-            <h1 className="mg-h1 mt-0.5 truncate">{team.displayName}</h1>
-            {bibText && (
-              <p className="mt-1 text-sm font-medium text-[rgb(var(--mg-body))]">
-                Bibs: <span className="font-semibold text-[rgb(var(--mg-ink))]">{bibText}</span>
-              </p>
-            )}
-          </div>
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={goBack} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))] hover:underline">
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
+          </button>
+          <Link to={`/competitions/${competition.id}/teams`} className="text-sm font-semibold text-[rgb(var(--mg-muted))] hover:underline">
+            All teams
+          </Link>
+        </div>
+        <div className="flex items-center gap-2">
+          {canDeclare && (
+            <Link to={`/competitions/${competition.id}/declarations?team=${team.id}`} className="mg-btn mg-btn-secondary !min-h-10 !px-3 !text-sm">
+              <ClipboardList aria-hidden="true" className="h-4 w-4" />
+              {decForm ? 'Edit dec form' : 'Submit dec form'}
+            </Link>
+          )}
           <button
             type="button"
-            aria-pressed={isFav}
-            aria-label={`${isFav ? 'Unfollow' : 'Follow'} ${team.displayName}`}
-            onClick={() => favHook.toggle({ competitionId: competition.id, teamId: team.id })}
-            className="mg-btn mg-btn-secondary shrink-0 !px-3"
+            className="mg-icon-btn !h-10 !w-10"
+            aria-pressed={isFollowed}
+            aria-label={`${isFollowed ? 'Unfollow' : 'Follow'} ${team.displayName}`}
+            onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
           >
-            <Star aria-hidden="true" className={`h-4 w-4 ${isFav ? 'fill-[#C08308] text-[#C08308]' : ''}`} />
-            <span>{isFav ? 'Following' : 'Follow'}</span>
+            <Star aria-hidden="true" className={`h-5 w-5 ${isFollowed ? 'fill-current' : ''}`} />
           </button>
         </div>
+      </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-2.5">
-          <div className="flex items-center gap-3">
-            <Trophy aria-hidden="true" className="h-5 w-5 text-[rgb(var(--mg-heading))]" />
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.04em] text-[rgb(var(--mg-muted))]">Current standing</div>
-              <div className="mg-display text-lg font-bold text-[rgb(var(--mg-heading))]">
-                {rankText} · {formatPoints(totalPoints)} pts
-              </div>
-            </div>
+      {/* Header card */}
+      <section aria-label="Team summary" className="mg-card flex flex-col gap-3 p-4">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[rgb(var(--mg-muted))]">
+          {sectionLabel && <span className="mg-tag">{sectionLabel}</span>}
+          {team.clubName && <span>{team.clubName}</span>}
+          {team.isHorsConcours && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+              <Ban aria-hidden="true" className="h-3 w-3" /> Hors Concours
+            </span>
+          )}
+          {team.isWithdrawn && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+              Withdrawn
+            </span>
+          )}
+        </div>
+
+        <h1 className="mg-h1 flex items-center gap-2.5">
+          {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-6 w-9 shrink-0 rounded-sm object-cover" />}
+          <span>{team.displayName}</span>
+        </h1>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-[rgb(var(--mg-body))]">
+          <span className="inline-flex items-center gap-2 font-medium">
+            <span
+              aria-hidden="true"
+              className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border border-black/15"
+              style={{ background: bibAccent(rawBib) }}
+            />
+            <span>Bibs: {bibLabel(rawBib)}</span>
+          </span>
+          {trainerDisplay && (
+            <span className="text-[rgb(var(--mg-muted))]">
+              Trainer: <strong className="font-semibold text-[rgb(var(--mg-ink))]">{trainerDisplay}</strong>
+            </span>
+          )}
+        </div>
+
+        {toplistRow && list?.started && <p className="text-sm text-[rgb(var(--mg-muted))]">
+          Current standing: <span className="font-semibold text-[rgb(var(--mg-heading))]">{toplistRow.joint ? '=' : ''}{ordinal(toplistRow.position)} · {formatPoints(toplistRow.points)} pts</span>
+        </p>}
+
+        {/* At-a-glance strip */}
+        <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-3">
+          <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-tint))] px-3 py-2.5">
+            <span className={eyebrow}>Qualifying</span>
+            <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
+              {team.isHorsConcours ? 'HC' : list?.started && detail?.qualifyingPosition != null ? `${qualifyingJoint ? '=' : ''}${ordinal(detail.qualifyingPosition)}` : '—'}
+              {' · '}
+              {formatPoints(teamPoints)} pts
+            </span>
+            {gap > 0 && <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">−{formatPoints(gap)} behind leader</span>}
           </div>
-          <Link
-            to={`/competitions/${competition.id}/toplists?section=${team.competitionSectionId}`}
-            className="text-xs font-semibold text-[rgb(var(--mg-heading))] hover:underline"
-          >
-            View toplist
-          </Link>
+
+          <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
+            <span className={eyebrow}>{detail?.final ? detail.final.label : 'Status'}</span>
+            <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
+              {detail?.final
+                ? `${detail.final.place != null ? ordinal(detail.final.place) : 'In final'} · ${formatPoints(detail.final.points ?? 0)} pts`
+                : (toplistRow ? toplistNote(toplistRow) : null) ?? (list?.started ? 'In contention' : 'Not started')}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
+            <span className={eyebrow}>Next on track</span>
+            {nextState?.kind === 'heat' ? (
+              <Link
+                to={`/competitions/${competition.id}/session/${nextState.row.session.id}?heat=${nextState.row.heat!.id}`}
+                className="group flex flex-col gap-0.5 text-[rgb(var(--mg-heading))] hover:underline"
+              >
+                <span className="mg-display text-lg font-bold leading-tight">
+                  {heatName(nextState.row)} · Lane {nextState.lane}
+                </span>
+                <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">
+                  {[nextState.row.session.name, nextState.row.session.arenaName?.trim(), formatTime(nextState.row.effective)].filter(Boolean).join(' · ')}
+                </span>
+              </Link>
+            ) : (
+              <span className="text-sm font-semibold text-[rgb(var(--mg-muted))]">
+                {drawnHeats.length > 0 ? 'All drawn heats completed' : 'No heats drawn yet'}
+              </span>
+            )}
+          </div>
         </div>
       </section>
 
@@ -246,65 +395,109 @@ export function CompetitionTeamPage() {
         )}
       </section>
 
-      <section aria-labelledby="team-heats-heading" className="flex flex-col gap-3">
-        <h2 id="team-heats-heading" className="mg-h2 px-1">Heats &amp; scores</h2>
-        {teamHeats.length === 0 ? (
-          <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">This team has not been placed into any heats yet.</p>
-        ) : (
-          teamHeats.map((item) => (
-            <HeatScores
-              key={item.key}
-              session={item.session}
-              heats={item.heats}
-              activeHeatId={item.activeHeatId}
-              embedded
-            />
-          ))
-        )}
-      </section>
-
-      <section aria-labelledby="team-riders-heading" className="mg-card flex flex-col gap-2.5 p-4">
-        <div className="flex items-center gap-2">
-          <Users aria-hidden="true" className="h-4 w-4 text-[rgb(var(--mg-heading))]" />
-          <h2 id="team-riders-heading" className="mg-h2">Declared riders &amp; ponies</h2>
+      {/* Declared Riders & Ponies */}
+      <section aria-label="Declared riders and ponies" className="mg-card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-[rgb(var(--mg-rule))] px-4 py-2.5">
+          <h2 className="mg-display text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+            Declared riders &amp; ponies
+          </h2>
+          {decForm && <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">{orderedRiders.length} declared</span>}
         </div>
-        {!declaration || declaration.riders.length === 0 ? (
-          <p className="text-sm text-[rgb(var(--mg-muted))]">No declaration submitted for this team yet.</p>
+        {!decLoaded ? (
+          <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">Loading declaration…</p>
+        ) : orderedRiders.length === 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm text-[rgb(var(--mg-muted))]">
+            <span>No declaration form submitted for this team yet.</span>
+            {canDeclare && (
+              <Link to={`/competitions/${competition.id}/declarations?team=${team.id}`} className="font-semibold text-[rgb(var(--mg-heading))] underline">
+                Submit declaration form
+              </Link>
+            )}
+          </div>
         ) : (
           <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-            {declaration.riders
-              .slice()
-              .sort((a, b) => a.orderIndex - b.orderIndex)
-              .map((rider) => (
-                <li key={rider.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                  <span className="min-w-0 flex-1 truncate font-semibold text-[rgb(var(--mg-ink))]">
-                    <Link to={statsProfileHref(StatsSubjectKind.Rider, publicRiderName(rider))}>{publicRiderName(rider)}</Link>
-                    {rider.isCaptain && (
-                      <span className="ml-1.5 rounded bg-[rgb(var(--mg-tint))] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[rgb(var(--mg-heading))]">
-                        Capt
-                      </span>
-                    )}
-                    {rider.isReserve && (
-                      <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-sky-800">
-                        <Shield aria-hidden="true" className="h-2.5 w-2.5" /> Reserve
-                      </span>
-                    )}
-                    {rider.isGuestRider && (
-                      <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-800">
-                        Guest
-                      </span>
-                    )}
+            {orderedRiders.map((rider, index) => (
+              <li key={rider.id} className="flex min-h-12 flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="mg-display w-5 shrink-0 text-sm font-bold text-[rgb(var(--mg-muted))]">
+                    {rider.isReserve ? 'R' : index + 1}
                   </span>
-                  <span className="shrink-0 text-xs font-medium text-[rgb(var(--mg-muted))]">
-                    {rider.horseName ? <Link to={statsProfileHref(StatsSubjectKind.Pony, rider.horseName)}>{rider.horseName}</Link> : '—'}
-                    {rider.ponyHeightHands != null ? ` · ${heightText(rider.ponyHeightHands)} hh` : ''}
-                  </span>
-                </li>
-              ))}
+                  <span className="truncate text-[15px] font-semibold text-[rgb(var(--mg-ink))]"><Link to={statsProfileHref(StatsSubjectKind.Rider, publicRiderName(rider))}>{publicRiderName(rider)}</Link></span>
+                  {rider.isCaptain && <span className="mg-badge mg-badge-outline !h-5">Captain</span>}
+                  {rider.isReserve && (
+                    <span className="mg-badge mg-badge-outline !h-5 inline-flex items-center gap-1">
+                      <Shield aria-hidden="true" className="h-3 w-3" /> Reserve
+                    </span>
+                  )}
+                  {rider.isGuestRider && <span className="mg-badge mg-badge-outline !h-5">Guest</span>}
+                </div>
+                <div className="text-sm font-medium text-[rgb(var(--mg-body))]">
+                  {rider.isReserve && !rider.horseName
+                    ? <span className="text-xs text-[rgb(var(--mg-muted))]">Non-riding reserve</span>
+                    : <>{rider.horseName ? <Link to={statsProfileHref(StatsSubjectKind.Pony, rider.horseName)}>{rider.horseName}</Link> : '—'}{rider.ponyHeightHands != null ? ` · ${heightText(rider.ponyHeightHands)} hh` : ''}</>}
+                </div>
+              </li>
+            ))}
           </ol>
         )}
       </section>
 
+      {/* Drawn Heats & Starting Lanes */}
+      {drawnHeats.length > 0 && (
+        <section aria-label="Drawn heats and starting lanes" className="mg-card overflow-hidden">
+          <div className="border-b border-[rgb(var(--mg-rule))] px-4 py-2.5">
+            <h2 className="mg-display text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+              Drawn heats &amp; starting lanes
+            </h2>
+          </div>
+          <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+            {drawnHeats.map(({ session, heat, heatLabel, lane, points, scoredAny, timeText }) => (
+              <li key={heat.id}>
+                <Link
+                  to={`/competitions/${competition.id}/session/${session.id}?heat=${heat.id}`}
+                  className="flex min-h-12 items-center gap-3 px-4 py-2.5 hover:bg-[rgb(var(--mg-subtle))]"
+                >
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate text-[15px] font-semibold text-[rgb(var(--mg-ink))]">
+                      {session.name} · {heatLabel}
+                    </span>
+                    <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">
+                      {[session.arenaName?.trim(), timeText].filter(Boolean).join(' · ') || 'Timetable'}
+                    </span>
+                  </div>
+                  <span className="mg-tag shrink-0">Lane {lane}</span>
+                  <span className="mg-display w-14 shrink-0 text-right text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">
+                    {scoredAny ? `${formatPoints(points)} pts` : '–'}
+                  </span>
+                  <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[rgb(var(--mg-dash))]" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Full Heat Tables */}
+      {drawnHeats.length > 0 && (
+        <section aria-label="Heat tables" className="flex flex-col gap-3">
+          <h2 className="mg-display px-1 text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+            Heat tables
+          </h2>
+          {teamHeats.map((item) => (
+            <HeatScores key={item.key} session={item.session} heats={item.heats} activeHeatId={item.activeHeatId} embedded />
+          ))}
+        </section>
+      )}
+
+      {/* Full Race-by-Race Breakdown */}
+      {detail && detail.blocks.length > 0 && (
+        <section aria-label="Race-by-race breakdown" className="mg-card flex flex-col gap-4 p-4">
+          <h2 className="mg-display text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+            Race-by-race breakdown
+          </h2>
+          {detail.blocks.map((block) => <BreakdownBlock key={block.key} block={block} />)}
+        </section>
+      )}
       {matchedProfile && (
         <section aria-labelledby="team-season-heading" className="mg-card flex flex-col gap-2.5 p-4">
           <div className="flex items-center justify-between gap-2">
@@ -334,4 +527,43 @@ export function CompetitionTeamPage() {
     </div>
   );
 }
+
+function BreakdownBlock({ block }: { block: TeamBlock }) {
+  const accent = block.kind === 'final' ? 'var(--mg-red)' : 'var(--mg-heading)';
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline gap-2 border-b-[1.5px] pb-1" style={{ borderColor: `rgb(${accent})` }}>
+        <h3 className="mg-display flex-1 text-[13px] font-bold uppercase leading-none tracking-[0.05em]" style={{ color: `rgb(${accent})` }}>
+          {block.label}
+        </h3>
+        {block.note && <span className="text-[11px] font-medium text-[rgb(var(--mg-muted))]">{block.note}</span>}
+        <span className="mg-display text-lg font-bold leading-none text-[rgb(var(--mg-heading))]">
+          {block.points == null ? '–' : formatPoints(block.points)}
+        </span>
+      </div>
+      {block.points == null ? (
+        <p className="text-xs font-medium text-[rgb(var(--mg-faint))]">Didn’t ride this session</p>
+      ) : block.races.length === 0 ? (
+        <p className="text-xs font-medium text-[rgb(var(--mg-faint))]">Not ridden yet</p>
+      ) : (
+        <ul className="overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))]">
+          {block.races.map((race) => (
+            <li key={race.id} className="flex min-h-10 items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 last:border-b-0">
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">{race.name}</span>
+              <span className="shrink-0 text-[13px] font-medium text-[rgb(var(--mg-body))]">
+                {race.eliminated
+                  ? <><span aria-hidden="true" title={statusLabel(true, race.status) ?? undefined}>{statusLetter(true, race.status)}</span><span className="sr-only">{statusLabel(true, race.status)}</span></>
+                  : race.placing != null ? ordinal(race.placing) : '–'}
+              </span>
+              <span className="mg-display w-9 shrink-0 text-right text-lg font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">
+                {formatPoints(race.points)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default CompetitionTeamPage;

@@ -7,12 +7,14 @@ import { api } from '../api';
 import { AuthProvider } from '../auth/AuthContext';
 import { CurrentCompetitionProvider, useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { AgeGroupsProvider } from '../components/AgeGroupsContext';
+import { CompactPageBarProvider } from '../components/CompactPageBarContext';
 import { CompetitionMetaProvider } from '../components/CompetitionMetaContext';
 import { NavExtrasProvider } from '../components/NavExtrasContext';
 import { NavigationDrawer } from '../components/NavigationDrawer';
 import { LiveVideo } from '../components/stream/LiveVideo';
 import { WeatherAt, WeatherNow } from '../components/WeatherChips';
 import { WeatherBadge } from '../components/WeatherBadge';
+import { SettingsPage } from '../pages/SettingsPage';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { getWeather } from '../weather/weather';
 import { session } from '../test/factories';
@@ -119,30 +121,43 @@ describe('live video in lite mode', () => {
   });
 });
 
-describe('navigation drawer', () => {
-  function drawer(setting: 'on' | 'off' | undefined, props: { settingsOpen?: boolean } = {}) {
+describe('navigation drawer and settings page', () => {
+  function drawer(setting: 'on' | 'off' | undefined) {
     const Lite = liteWrapper(setting);
     return render(
       <MemoryRouter>
         <Lite><AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider>
-          <NavigationDrawer onClose={vi.fn()} {...props} />
+          <NavigationDrawer onClose={vi.fn()} />
         </CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider></Lite>
       </MemoryRouter>,
     );
   }
 
-  it('keeps the Lite mode control inside Settings', async () => {
-    drawer(undefined);
+  function settingsPage(setting: 'on' | 'off' | undefined) {
+    const Lite = liteWrapper(setting);
+    return render(
+      <MemoryRouter initialEntries={['/settings#lite-mode']}>
+        <Lite><AuthProvider><ThemeProvider><CurrentCompetitionProvider><CompactPageBarProvider>
+          <SettingsPage />
+        </CompactPageBarProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider></Lite>
+      </MemoryRouter>,
+    );
+  }
+
+  it('links to Settings from the drawer and keeps the Lite mode control on the Settings page', async () => {
+    const { unmount } = drawer(undefined);
     expect(screen.queryByRole('group', { name: 'Lite mode' })).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+    unmount();
+
+    settingsPage(undefined);
     await userEvent.click(screen.getByRole('button', { name: 'On' }));
     expect(screen.getByRole('status')).toHaveTextContent('On because you chose it');
     expect(localStorage.getItem('mg.liteMode')).toBe('on');
   });
 
-  it('can open with Settings showing, as the header chip needs', () => {
-    drawer(undefined, { settingsOpen: true });
-    expect(screen.getByRole('region', { name: 'Settings' })).toBeInTheDocument();
+  it('shows the Lite mode section on the Settings page for the header chip anchor', () => {
+    settingsPage(undefined);
     expect(screen.getByRole('group', { name: 'Lite mode' })).toBeInTheDocument();
   });
 

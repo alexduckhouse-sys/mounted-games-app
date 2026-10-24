@@ -82,7 +82,8 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const selectedDay = pickedDay && days.includes(pickedDay) ? pickedDay : defaultTimetableDay(days, today);
   const dayRows = rows.filter((row) => rowDay(row) === selectedDay);
   const arenas = [...new Set(dayRows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
-  const selectedArena = arenas.includes(arena) ? arena : '';
+  const showArenaSelect = sectionId == null && arenas.length > 1;
+  const selectedArena = showArenaSelect && arenas.includes(arena) ? arena : '';
   const teamsInDay = dayTeams(dayRows);
   const selectedTeam = teamsInDay.some((t) => String(t.id) === teamFilter) ? teamFilter : '';
   const selectedTeamId = selectedTeam ? Number(selectedTeam) : null;
@@ -172,7 +173,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   return (
     <div className="timetable-board">
       {bandExtra}
-      {(days.length > 1 || arenas.length > 1 || teamsInDay.length > 1) && (
+      {(days.length > 1 || showArenaSelect || teamsInDay.length > 1) && (
         <div className="tt-strip">
           {days.length > 1 && (
             <div className="tt-days" role="group" aria-label="Choose day">
@@ -181,7 +182,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
               </button>)}
             </div>
           )}
-          {arenas.length > 1 && <ArenaSelect arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />}
+          {showArenaSelect && <ArenaSelect arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />}
           {teamsInDay.length > 1 && <TeamSelect teams={teamsInDay} selectedTeam={selectedTeam} onChoose={setTeamFilter} />}
         </div>
       )}
@@ -301,6 +302,11 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   const laneLabel = teamEntry != null ? `Lane ${teamEntry.laneIndex + 1}` : '';
   const sub = [label, laneLabel, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
   const moved = delayMinutes > 0 && !!row.scheduled;
+  const [lanesOpen, setLanesOpen] = useState(false);
+  const sortedEntries = useMemo(
+    () => (race && heat && heat.entries.length > 0 ? [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex) : []),
+    [race, heat],
+  );
   const orderedRaces = heat ? heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const runningRaceIndex = orderedRaces.findIndex((r) => !r.isComplete);
   const currentRaceNum = runningRaceIndex >= 0 ? runningRaceIndex + 1 : orderedRaces.length;
@@ -321,5 +327,36 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
     {race ? <ChevronRight className="tt-chevron" size={14} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
   </>;
   const className = `tt-row tt-${status}${hasFollowedTeam ? ' tt-followed' : ''}`;
+  if (sortedEntries.length > 0) {
+    return (
+      <div className="tt-item">
+        <div className="tt-row-wrap">
+          <Link className={className} data-followed={hasFollowedTeam ? 'true' : undefined} to={`/competitions/${competitionId}/session/${session.id}?heat=${heat!.id}`}>{content}</Link>
+          <button
+            type="button"
+            className="tt-lanes-btn"
+            aria-expanded={lanesOpen}
+            aria-label={`Lanes for ${name}`}
+            onClick={() => setLanesOpen((open) => !open)}
+          >
+            <span>Lanes</span>
+            <ChevronDown size={14} aria-hidden="true" className={lanesOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
+          </button>
+        </div>
+        {lanesOpen && (
+          <ol className="tt-lanes" aria-label={`Lanes for ${name}`}>
+            {sortedEntries.map((entry) => (
+              <li key={entry.id ?? `${entry.teamId}-${entry.laneIndex}`} className="tt-lane-item">
+                <span className="tt-lane-num">Lane {entry.laneIndex + 1}</span>
+                <Link to={`/competitions/${competitionId}/teams/${entry.teamId}`} className="tt-lane-team">
+                  {entry.teamName}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    );
+  }
   return race ? <Link className={className} data-followed={hasFollowedTeam ? 'true' : undefined} to={`/competitions/${competitionId}/session/${session.id}${heat ? `?heat=${heat.id}` : ''}`}>{content}</Link> : <div className={className} data-followed={hasFollowedTeam ? 'true' : undefined}>{content}</div>;
 }

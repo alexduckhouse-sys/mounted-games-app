@@ -140,7 +140,7 @@ describe('CompetitionEditor: validation one step at a time', () => {
   it('stops on the structure step for minutes that make no sense', async () => {
     seed('structure');
     mount();
-    const group = screen.getByRole('group', { name: 'Structure for Senior Teams' });
+    const group = screen.getByRole('group', { name: 'Structure for Seniors' });
     await userEvent.clear(within(group).getByLabelText(/Minutes per heat/));
     await userEvent.type(within(group).getByLabelText(/Minutes per heat/), '0');
     await userEvent.clear(within(group).getByLabelText('Teams through to the final'));
@@ -153,7 +153,7 @@ describe('CompetitionEditor: validation one step at a time', () => {
 });
 
 describe('CompetitionEditor: sections', () => {
-  it('starts with one Senior Teams section and adds and removes rows', async () => {
+  it('starts with one Seniors section and adds and removes rows', async () => {
     seed('sections');
     mount();
     const row = screen.getByRole('group', { name: 'Section 1' });
@@ -216,7 +216,7 @@ describe('CompetitionEditor: structure and timing', () => {
   it('shows the sessions, heat, heat, final and an estimate that follows the numbers', async () => {
     seed('structure', { sections: [{ ...defaultSection(), maxParticipants: '40', maxTeamsPerHeat: '4', minutesPerRace: '5' }] });
     mount();
-    const group = screen.getByRole('group', { name: 'Structure for Senior Teams' });
+    const group = screen.getByRole('group', { name: 'Structure for Seniors' });
     expect(group).toHaveTextContent('Estimate: about 10 teams, from the entry limit, 3 heats (4, 3, 3), about 15 min a session.');
     await userEvent.selectOptions(within(group).getByLabelText('Sessions'), '2');
     expect(stored().sections[0].sessions).toHaveLength(2);
@@ -231,7 +231,7 @@ describe('CompetitionEditor: structure and timing', () => {
   it('picks the run-off race from the library and sets finalists, minutes, heat size and arena', async () => {
     seed('structure');
     mount();
-    const group = screen.getByRole('group', { name: 'Structure for Senior Teams' });
+    const group = screen.getByRole('group', { name: 'Structure for Seniors' });
     await waitFor(() => expect(within(group).getByRole('option', { name: 'Speed Weave' })).toBeInTheDocument());
     await userEvent.selectOptions(within(group).getByLabelText('Run-off race'), 'Speed Weave');
     await userEvent.type(within(group).getByLabelText('Teams through to the final'), '6');
@@ -278,7 +278,7 @@ describe('CompetitionEditor: races', () => {
   it('can be skipped: sessions say they are left for later and nothing is required', async () => {
     seed('races');
     mount();
-    const group = screen.getByRole('group', { name: 'Races for Senior Teams' });
+    const group = screen.getByRole('group', { name: 'Races for Seniors' });
     expect(group).toHaveTextContent('Left for later (planning for about 10 races)');
     await next();
     expect(screen.getByRole('heading', { level: 2, name: 'Dec form' })).toBeInTheDocument();
@@ -290,12 +290,12 @@ describe('CompetitionEditor: races', () => {
   it('chooses a race list in a dialog and can put it back to later', async () => {
     seed('races');
     mount();
-    await userEvent.click(screen.getByRole('button', { name: 'Choose races for Senior Teams' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Races for Senior Teams' });
+    await userEvent.click(screen.getByRole('button', { name: 'Choose races for Seniors' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Races for Seniors' });
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(10);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Use Pony Club Area list' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save race list' }));
-    const group = screen.getByRole('group', { name: 'Races for Senior Teams' });
+    const group = screen.getByRole('group', { name: 'Races for Seniors' });
     expect(group).toHaveTextContent('8 races: Bending, 5 Mug…');
     expect(stored().sections[0].sessions[0].races).toHaveLength(8);
     await userEvent.click(within(group).getByText('Leave for later', { selector: 'button' }));
@@ -303,8 +303,8 @@ describe('CompetitionEditor: races', () => {
     await userEvent.click(within(group).getByText('Pony Club Zone list for all', { selector: 'button' }));
     expect(group).toHaveTextContent('10 races: Bending, Hollywood Bowl Boule & Bucket…');
     expect(stored().sections[0].finalRaces).toHaveLength(10);
-    await userEvent.click(screen.getByRole('button', { name: 'Choose races for Finals · Senior Teams' }));
-    const finalsDialog = await screen.findByRole('dialog', { name: 'Races for Finals · Senior Teams' });
+    await userEvent.click(screen.getByRole('button', { name: 'Choose races for Finals · Seniors' }));
+    const finalsDialog = await screen.findByRole('dialog', { name: 'Races for Finals · Seniors' });
     await userEvent.click(within(finalsDialog).getByRole('button', { name: 'Use Pony Club Area list' }));
     await userEvent.click(within(finalsDialog).getByRole('button', { name: 'Save race list' }));
     expect(stored().sections[0].finalRaces).toHaveLength(8);
@@ -313,8 +313,8 @@ describe('CompetitionEditor: races', () => {
   it('names every session when an age group has several', () => {
     seed('races', { sections: [{ ...defaultSection(), sessions: [{ races: null }, { races: ['Bending'] }] }] });
     mount();
-    expect(screen.getByText('Senior Teams · Session 1')).toBeInTheDocument();
-    expect(screen.getByText('Senior Teams · Session 2')).toBeInTheDocument();
+    expect(screen.getByText('Seniors · Session 1')).toBeInTheDocument();
+    expect(screen.getByText('Seniors · Session 2')).toBeInTheDocument();
     expect(screen.getByText(/1 race: Bending/)).toBeInTheDocument();
   });
 });
@@ -329,7 +329,7 @@ describe('CompetitionEditor: review and the provisional timetable', () => {
     expect(screen.getByRole('heading', { name: 'Timetable' }).parentElement).toHaveTextContent('Provisional');
     const rows = within(screen.getByRole('list', { name: 'Provisional timetable' })).getAllByRole('listitem');
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveTextContent('Senior Teams');
+    expect(rows[0]).toHaveTextContent('Seniors');
     expect(rows[0]).toHaveTextContent('1 heat of 6, 10 races');
     expect(rows[0]).toHaveTextContent('10 min');
     expect(screen.getByText(/Races aren’t chosen for 1 session/)).toBeInTheDocument();
@@ -354,7 +354,7 @@ describe('CompetitionEditor: review and the provisional timetable', () => {
     await userEvent.click(within(form).getByText('Add to timetable', { selector: 'button' }));
     const rows = within(screen.getByRole('list', { name: 'Provisional timetable' })).getAllByRole('listitem');
     expect(rows[0]).toHaveTextContent('Lunch (break)');
-    expect(rows[1]).toHaveTextContent('Senior Teams');
+    expect(rows[1]).toHaveTextContent('Seniors');
     expect(rows[1]).toHaveTextContent('09:45');
     expect(stored().breaks).toEqual([expect.objectContaining({ name: 'Lunch', minutes: '45', kind: 1 })]);
     await userEvent.click(screen.getByLabelText('Remove Lunch'));
@@ -400,9 +400,9 @@ describe('CompetitionEditor: creating', () => {
     expect(api.post).toHaveBeenCalledWith('/competitions/41/sections', {
       format: 3, ageGroup: 'Juniors', displayName: 'Junior Individuals', runoffRaceName: '2 Flag', usesRaceFinals: false, priceMinor: 1250, maxParticipants: 16, finalistCount: 6,
     });
-    expect(api.post).toHaveBeenCalledWith('/competitions/41/sections', expect.objectContaining({ ageGroup: 'Open', displayName: 'Open Teams', usesRaceFinals: true }));
+    expect(api.post).toHaveBeenCalledWith('/competitions/41/sections', expect.objectContaining({ ageGroup: 'Open', displayName: 'Open', usesRaceFinals: true }));
     const sessions = vi.mocked(api.post).mock.calls.filter(([url]) => url === '/competitions/41/sessions').map(([, body]) => body as Record<string, unknown>);
-    expect(sessions.map((s) => s.name)).toEqual(['Junior Individuals · Session 1', 'Junior Individuals · Session 2', 'Open Teams', 'Finals · Junior Individuals', 'Lunch']);
+    expect(sessions.map((s) => s.name)).toEqual(['Junior Individuals · Session 1', 'Junior Individuals · Session 2', 'Open', 'Finals · Junior Individuals', 'Lunch']);
     expect(sessions[0]).toMatchObject({
       competitionSectionId: 51, arenaName: 'Main arena', kind: 0, lanesPerHeat: 4, minutesPerHeat: 5, plannedRaces: ['Bending', 'Bottle'], scheduledStart: expect.any(String), durationMinutes: expect.any(Number),
     });
@@ -440,7 +440,7 @@ describe('CompetitionEditor: creating', () => {
     });
     mount();
     await userEvent.click(createButton());
-    const alert = await screen.findByText(/Adding Senior Teams failed: Section is not valid\./);
+    const alert = await screen.findByText(/Adding Seniors failed: Section is not valid\./);
     expect(alert).toHaveTextContent('The competition was created.');
     expect(within(alert).getByRole('link', { name: 'Open it to finish' })).toHaveAttribute('href', '/admin/competitions/41');
     expect(stored()).not.toBeNull();
@@ -653,7 +653,7 @@ describe('CompetitionEditor: editing', () => {
     mount('/admin/competitions/7');
     await screen.findByDisplayValue('Autumn Area');
     await userEvent.click(step('Structure & timing'));
-    const group = screen.getByRole('group', { name: 'Structure for Under 12 Teams' });
+    const group = screen.getByRole('group', { name: 'Structure for Under 12' });
     expect(group).toHaveTextContent('structure is fixed');
     expect(within(group).getByLabelText('Sessions')).toBeDisabled();
     expect(within(group).getByLabelText('Max teams per heat')).toBeDisabled();
@@ -661,7 +661,7 @@ describe('CompetitionEditor: editing', () => {
     expect(within(group).getByLabelText(/Minutes per heat/)).toBeEnabled();
     expect(group).toHaveTextContent('1 teams entered');
     await userEvent.click(step('Races'));
-    expect(screen.getByRole('group', { name: 'Races for Under 12 Teams' })).toHaveTextContent('Heats are made. Change the races on the On the day page.');
+    expect(screen.getByRole('group', { name: 'Races for Under 12' })).toHaveTextContent('Heats are made. Change the races on the On the day page.');
     expect(screen.getByRole('group', { name: 'Races for Open Pairs' })).toHaveTextContent('2 races: Bending, Bottle');
   });
 
@@ -709,16 +709,16 @@ describe('CompetitionEditor: editing', () => {
     await userEvent.click(screen.getByLabelText('Remove section 2'));
     await userEvent.click(screen.getByText('Add a section', { selector: 'button' }));
     await userEvent.click(step('Structure & timing'));
-    await userEvent.selectOptions(within(screen.getByRole('group', { name: 'Structure for Under 12 Teams' })).getByLabelText('Sessions'), '1');
+    await userEvent.selectOptions(within(screen.getByRole('group', { name: 'Structure for Under 12' })).getByLabelText('Sessions'), '1');
     await userEvent.click(step('Review'));
     await userEvent.click(screen.getByLabelText('Remove Lunch'));
     await userEvent.click(screen.getByText('Save changes', { selector: 'button' }));
     await waitFor(() => expect(screen.getByText('Competition page')).toBeInTheDocument());
     expect(api.delete).toHaveBeenCalledWith('/competitions/7/sections/22');
     expect(api.delete).toHaveBeenCalledWith('/competitions/7/sessions/33');
-    expect(api.post).toHaveBeenCalledWith('/competitions/7/sections', expect.objectContaining({ ageGroup: 'Under 10', displayName: 'Under 10 Teams' }));
+    expect(api.post).toHaveBeenCalledWith('/competitions/7/sections', expect.objectContaining({ ageGroup: 'Under 10', displayName: 'Under 10' }));
     const added = vi.mocked(api.post).mock.calls.find(([url]) => url === '/competitions/7/sessions')?.[1] as Record<string, unknown>;
-    expect(added).toMatchObject({ competitionSectionId: 51, name: 'Under 10 Teams', orderIndex: expect.any(Number) });
+    expect(added).toMatchObject({ competitionSectionId: 51, name: 'Under 10', orderIndex: expect.any(Number) });
     expect(added.orderIndex as number).toBeGreaterThan(3);
   });
 

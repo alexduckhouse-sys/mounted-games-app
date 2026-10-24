@@ -1,6 +1,7 @@
 import type { QueuedScore } from '../offline/scoreOutbox';
 import type { Heat, ResultRow } from '../types';
 import { lanesInUse } from './lanes';
+import { manualPoints } from './raceScoring';
 
 /** Points for a place, as the server scores it (see `ScoringService`): the heat's own rules, never changed here. */
 export function pointsForPlace(heat: Heat, sessionBase: number, place: number, eliminated: boolean): number {
@@ -30,7 +31,7 @@ export function withQueuedResults(heat: Heat, queued: readonly QueuedScore[], se
           teamName: q.teamNames[p.teamId] ?? `Team ${p.teamId}`,
           placing: p.eliminated || sitOut ? null : p.place,
           eliminated: p.eliminated,
-          points: sitOut ? 0 : pointsForPlace(heat, sessionBase, p.place, p.eliminated),
+          points: sitOut ? 0 : manualPoints(p.refereeNote) ?? pointsForPlace(heat, sessionBase, p.place, p.eliminated),
           ...(sitOut ? { isSitOut: true } : {}),
           ...(p.eliminated ? { status: p.status } : {}),
         };

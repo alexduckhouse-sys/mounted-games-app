@@ -1,4 +1,5 @@
 import type { DeclarationForm, RiderEntry, SavedRider, SectionFormat } from '../types';
+import { formatBibWithFlag } from './bib';
 import {
   asked, blankExtras, normalisePhone, PHONE_HELP, breach, extraIssues, extrasBody, extrasFromEntry, extrasReady, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers,
 } from './decFormConfig';
@@ -239,6 +240,7 @@ export interface DecFormFields {
   teamId: number;
   teamName: string;
   bibs: string;
+  flag?: string;
   trainerName: string;
   phone: string;
   notes: string;
@@ -265,10 +267,11 @@ export function buildSubmitBody(fields: DecFormFields, slots: readonly Slot[], c
       ...extrasBody(rider.extra, reserve, config),
     }];
   });
+  const rawBib = asked(config.bib) ? fields.bibs.trim() : '';
   return {
     teamId: fields.teamId,
     teamName: fields.teamName.trim(),
-    bibDescription: asked(config.bib) ? fields.bibs.trim() : '',
+    bibDescription: formatBibWithFlag(rawBib, fields.flag),
     trainerName: fields.trainerName.trim() || null,
     trainerPhone: asked(config.trainerPhone) ? fields.phone.trim() || null : null,
     notes: fields.notes.trim() || null,
@@ -296,7 +299,7 @@ export function parseDraft(raw: string | null, required: number): DecFormDraft |
     const text = (v: unknown) => (typeof v === 'string' ? v : '');
     const slots = value.slots.map((s): Slot => (s && typeof s === 'object' ? { ...blankRider(), ...s, extra: { ...blankExtras(), ...(s.extra ?? {}) } } : null));
     return {
-      teamId: value.teamId, teamName: text(value.teamName), bibs: text(value.bibs), trainerName: text(value.trainerName),
+      teamId: value.teamId, teamName: text(value.teamName), bibs: text(value.bibs), flag: text(value.flag), trainerName: text(value.trainerName),
       phone: text(value.phone), notes: text(value.notes), slots,
     };
   } catch {

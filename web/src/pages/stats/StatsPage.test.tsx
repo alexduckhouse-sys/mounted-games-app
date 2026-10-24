@@ -67,7 +67,7 @@ describe('StatsPage browse', () => {
     const link = await screen.findByRole('link', { name: /Oliver S\./ });
     expect(link).toHaveAttribute('href', '/stats/riders?name=oliver%20s.');
     expect(link).toHaveTextContent('2 competitions');
-    expect(screen.getByRole('tab', { name: 'Riders' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('combobox', { name: 'Browse by' })).toHaveTextContent('Riders');
     expect(screen.getByRole('list', { name: 'Riders' })).toBeInTheDocument();
     expect(screen.getByText(/Only finished competitions count/)).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/stats/browse', expect.objectContaining({ params: { kind: 0, q: undefined, page: 1 } }));
@@ -81,12 +81,14 @@ describe('StatsPage browse', () => {
     renderAt('/stats');
     expect(await screen.findByText('Rider One')).toBeInTheDocument();
     for (const [label, name, href] of [['Ponies', 'Pony One', '/stats/ponies?name=pony%20one'], ['Teams', 'Team One', '/stats/teams?name=team%20one'], ['Clubs', 'Club One', '/stats/clubs?name=club%20one']]) {
-      await userEvent.click(screen.getByRole('tab', { name: label }));
+      await userEvent.click(screen.getByRole('combobox', { name: 'Browse by' }));
+      await userEvent.click(screen.getByRole('option', { name: label }));
       expect(await screen.findByRole('link', { name: new RegExp(name) })).toHaveAttribute('href', href);
-      expect(screen.getByRole('tab', { name: label })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('combobox', { name: 'Browse by' })).toHaveTextContent(label);
     }
     expect(screen.getByRole('searchbox')).toHaveAttribute('placeholder', 'Name of a club');
-    await userEvent.click(screen.getByRole('tab', { name: 'Riders' }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Browse by' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Riders' }));
     expect(await screen.findByText('Rider One')).toBeInTheDocument();
   });
 
@@ -109,7 +111,7 @@ describe('StatsPage browse', () => {
     vi.mocked(api.get).mockResolvedValue(browse(1, []));
     renderAt('/stats?kind=ponies&q=zz');
     expect(screen.getByRole('searchbox')).toHaveValue('zz');
-    expect(screen.getByRole('tab', { name: 'Ponies' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('combobox', { name: 'Browse by' })).toHaveTextContent('Ponies');
     expect(await screen.findByText('No matches')).toBeInTheDocument();
     expect(screen.getByText(/No ponies in a finished competition match “zz”/)).toBeInTheDocument();
   });

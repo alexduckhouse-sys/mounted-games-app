@@ -31,7 +31,7 @@ async function fill(user: ReturnType<typeof userEvent.setup>, overrides: { club?
   await user.type(screen.getByLabelText('Your name'), 'Sam Lee');
   await user.type(screen.getByLabelText('Email'), 'sam@example.com');
   await user.type(screen.getByLabelText('Password'), 'Passw0rd!x');
-  await user.type(screen.getByLabelText('Club'), overrides.club ?? 'Stoc');
+  await user.type(screen.getByLabelText('Club / team name'), overrides.club ?? 'Stoc');
   if (overrides.pick !== false) await user.click(screen.getByRole('button', { name: overrides.pick ?? 'Stockport Pony Club' }));
   if (overrides.role !== false) await user.click(screen.getByRole('radio', { name: overrides.role ?? 'Trainer' }));
 }
@@ -42,10 +42,10 @@ beforeEach(() => {
 });
 
 describe('SignUpPage', () => {
-  it('asks for a name, email, password, club and role, and nothing else', () => {
+  it('asks for a name, email, password, club / team name and role, and nothing else', () => {
     mount();
     expect(screen.getByRole('heading', { name: 'Create an account' })).toBeInTheDocument();
-    for (const label of ['Your name', 'Email', 'Password', 'Club']) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    for (const label of ['Your name', 'Email', 'Password', 'Club / team name']) expect(screen.getByLabelText(label)).toBeInTheDocument();
     expect(screen.getAllByRole('radio').map((radio) => radio.textContent)).toEqual(['Rider or parent', 'Trainer', 'Team manager']);
     expect(screen.queryByLabelText(/Username/)).not.toBeInTheDocument();
     expect(screen.queryByText(/PBKDF2/i)).not.toBeInTheDocument();
@@ -56,7 +56,7 @@ describe('SignUpPage', () => {
   it('suggests matching clubs and offers to add the typed name', async () => {
     const user = userEvent.setup();
     mount();
-    await user.type(screen.getByLabelText('Club'), 'sto');
+    await user.type(screen.getByLabelText('Club / team name'), 'sto');
     const list = within(await screen.findByRole('group', { name: 'Club suggestions' }));
     expect(list.getAllByRole('button').map((b) => b.textContent)).toEqual(['Stockport Pony Club', 'Stoke Pony Club', 'Add "sto"']);
   });
@@ -64,7 +64,7 @@ describe('SignUpPage', () => {
   it('does not offer to add a club that already matches exactly', async () => {
     const user = userEvent.setup();
     mount();
-    await user.type(screen.getByLabelText('Club'), 'wirral pony club');
+    await user.type(screen.getByLabelText('Club / team name'), 'wirral pony club');
     const list = within(await screen.findByRole('group', { name: 'Club suggestions' }));
     expect(list.getAllByRole('button').map((b) => b.textContent)).toEqual(['Wirral Pony Club']);
   });
@@ -73,19 +73,19 @@ describe('SignUpPage', () => {
     const user = userEvent.setup();
     mount();
     expect(screen.queryByRole('group', { name: 'Club suggestions' })).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText('Club'), 'Stoc');
+    await user.type(screen.getByLabelText('Club / team name'), 'Stoc');
     await user.click(await screen.findByRole('button', { name: 'Stockport Pony Club' }));
-    expect(screen.getByLabelText('Club')).toHaveValue('Stockport Pony Club');
+    expect(screen.getByLabelText('Club / team name')).toHaveValue('Stockport Pony Club');
     expect(screen.queryByRole('group', { name: 'Club suggestions' })).not.toBeInTheDocument();
     // Typing again un-picks it.
-    await user.type(screen.getByLabelText('Club'), 'x');
+    await user.type(screen.getByLabelText('Club / team name'), 'x');
     expect(screen.getByRole('group', { name: 'Club suggestions' })).toBeInTheDocument();
   });
 
   it('tells you who approves once a club and role are chosen', async () => {
     const user = userEvent.setup();
     mount();
-    await user.type(screen.getByLabelText('Club'), 'Stoc');
+    await user.type(screen.getByLabelText('Club / team name'), 'Stoc');
     await user.click(await screen.findByRole('button', { name: 'Stockport Pony Club' }));
     expect(screen.queryByText(/Approved by/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Trainer' }));
@@ -199,7 +199,7 @@ describe('SignUpPage', () => {
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
     const user = userEvent.setup();
     mount();
-    await user.type(screen.getByLabelText('Club'), 'My club');
+    await user.type(screen.getByLabelText('Club / team name'), 'My club');
     expect(within(screen.getByRole('group', { name: 'Club suggestions' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Add "My club"']);
   });
 
@@ -207,42 +207,48 @@ describe('SignUpPage', () => {
     vi.mocked(api.get).mockResolvedValue({ data: '<html>' });
     const user = userEvent.setup();
     mount();
-    await user.type(screen.getByLabelText('Club'), 'St');
+    await user.type(screen.getByLabelText('Club / team name'), 'St');
     expect(within(screen.getByRole('group', { name: 'Club suggestions' })).getAllByRole('button')).toHaveLength(1);
   });
 
-  it('links to the privacy page', () => {
+  it('links to the privacy page and toggles showing and hiding the password', async () => {
     mount();
     expect(screen.getByRole('link', { name: 'How we use your information' })).toHaveAttribute('href', '/privacy');
+    const password = screen.getByLabelText('Password');
+    expect(password).toHaveAttribute('type', 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+    await userEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(password).toHaveAttribute('type', 'password');
   });
 
   describe('password checklist', () => {
-    const rowOf = (text: string) => screen.getByText(text).closest('li')!;
-
-    it('lists every rule from the start, with "special character" and never "non-alphanumeric"', () => {
+    it('shows one unmet rule at a time in order of importance as the person types, with "special character" and never "non-alphanumeric"', async () => {
+      const user = userEvent.setup();
       mount();
-      const rows = within(screen.getByRole('list', { name: 'Password requirements' })).getAllByRole('listitem');
-      expect(rows.map((r) => r.textContent)).toEqual([
-        'At least 8 characters (not met yet)', 'A number (not met yet)', 'A lowercase letter (not met yet)', 'A special character (like ! ? # @ £) (not met yet)',
-      ]);
+      const input = screen.getByLabelText('Password');
+      expect(screen.queryByText(/At least 8 characters/)).not.toBeInTheDocument();
+      await user.type(input, 'abc');
+      expect(screen.getByText('At least 8 characters')).toBeInTheDocument();
+      expect(screen.queryByText('A number')).not.toBeInTheDocument();
       expect(document.body.textContent).not.toMatch(/alphanumeric/i);
-      expect(screen.getByLabelText('Password')).toHaveAccessibleDescription(/Your password needs/);
+      expect(input).toHaveAccessibleDescription(/At least 8 characters/);
     });
 
-    it('ticks each rule as it is met while typing, and announces the count politely', async () => {
+    it('advances through each requirement one at a time while typing, and confirms when all are met', async () => {
       const user = userEvent.setup();
       mount();
       const input = screen.getByLabelText('Password');
       await user.type(input, 'abcdefgh');
-      expect(rowOf('At least 8 characters').dataset.met).toBe('true');
-      expect(rowOf('A lowercase letter').dataset.met).toBe('true');
-      expect(rowOf('A number').dataset.met).toBe('false');
-      expect(rowOf('A special character (like ! ? # @ £)').dataset.met).toBe('false');
-      expect(screen.getByText('2 of 4 password requirements met.')).toHaveAttribute('aria-live', 'polite');
-      await user.type(input, '1!');
+      expect(screen.getByText('A number')).toBeInTheDocument();
+      expect(screen.getByText('Next requirement: A number.')).toHaveAttribute('aria-live', 'polite');
+      await user.type(input, '1');
+      expect(screen.getByText('A special character (like ! ? # @ £)')).toBeInTheDocument();
+      await user.type(input, '!');
+      expect(screen.getByText('Password meets all requirements.')).toBeInTheDocument();
       expect(screen.getByText('All password requirements met.')).toBeInTheDocument();
       await user.clear(input);
-      expect(rowOf('A number').dataset.met).toBe('false');
+      expect(screen.queryByText('Password meets all requirements.')).not.toBeInTheDocument();
     });
 
     it('keeps Create account off until every rule is met', async () => {

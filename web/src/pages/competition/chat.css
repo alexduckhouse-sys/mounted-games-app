@@ -1,8 +1,8 @@
 .live-page {
   display: flex; min-height: calc(100dvh - var(--mg-shell-h, 104px) - 69px - env(safe-area-inset-bottom));
-  flex-direction: column; gap: 12px; padding-block: 8px calc(69px + 16px + env(safe-area-inset-bottom)); font-family: var(--mg-font);
+  flex-direction: column; gap: 8px; padding-block: 0 calc(69px + 16px + env(safe-area-inset-bottom)); font-family: var(--mg-font);
 }
-.live-page-band { display: flex; min-height: 50px; flex-shrink: 0; align-items: center; gap: 12px; }
+.live-page-band { display: flex; min-height: 38px; flex-shrink: 0; align-items: center; gap: 12px; padding-block: 4px; }
 .live-page-band h1 { min-width: 0; flex: 1; }
 .live-role-badge { display: inline-flex; height: 26px; align-items: center; padding: 0 10px; border-radius: 6px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 700 12px/1 var(--mg-font); text-transform: uppercase; }
 .live-stream-placeholder { display: flex; min-height: 82px; align-items: center; justify-content: center; gap: 10px; color: rgb(var(--mg-muted)); }
@@ -94,17 +94,19 @@
 @media (prefers-reduced-motion: reduce) { .live-overlay, .live-all-dialog, .staff-stream-dialog { animation: none; } }
 /* Phones keep one column: the two groups are transparent. */
 .live-col { display: contents; }
+.live-stream-head { display: none; }
 .live-compose-field textarea { min-height: 44px; padding: 12px 0; resize: none; }
 @media (min-width: 700px) and (max-width: 1023px) { .live-page { width: 100%; max-width: 560px; margin: 0 auto; } }
 
-/* Laptop: stream and pinned banner in a sticky third on one side, the composer and the whole feed on the other. */
+/* Laptop: stream and announcements aligned side-by-side at the top. */
 @media (min-width: 1024px) {
-  .live-page { display: grid; height: auto; min-height: 0; overflow: visible; grid-auto-flow: dense; grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr); align-content: start; align-items: start; column-gap: 24px; row-gap: 14px; padding-block: 16px 96px; }
-  .live-page-band, .live-action-error { grid-column: 1 / -1; }
+  .live-page { display: grid; height: auto; min-height: 0; overflow: visible; grid-auto-flow: dense; grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr); align-content: start; align-items: start; column-gap: 24px; row-gap: 10px; padding-block: 4px 96px; }
+  .live-page-band, .live-action-error, .live-banner { grid-column: 1 / -1; }
   .live-col { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
   .live-col-main { grid-column: 1; }
   .live-col-rail { grid-column: 2; position: sticky; top: calc(var(--mg-shell-h, 104px) + 16px); }
-  .live-page-staff .live-composer { order: -1; padding: 14px; }
+  .live-stream-head { display: flex; margin-bottom: -7px; }
+  .live-page-staff .live-composer { padding: 14px; }
   .live-compose-field textarea { min-height: 96px; resize: vertical; font-size: 17px; }
   .live-composer .mg-seg { align-self: flex-start; }
   .live-composer .mg-seg > button { min-height: 40px; padding: 0 18px; }

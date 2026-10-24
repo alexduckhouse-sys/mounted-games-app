@@ -10,8 +10,8 @@ main:has(.rf-hd) { padding-top: 0; }
 }
 
 /* Header band: navy band matching .mg-band-header / .tt-strip, with title in --mg-font-display. */
-.rf-hd { border-image: conic-gradient(rgb(var(--mg-header-bg)) 0 0) fill 0 // 0 100vmax; background: rgb(var(--mg-header-bg)); color: rgb(var(--mg-header-ink)); padding: 4px 8px 12px 4px; margin-inline: -16px; border-bottom: 1px solid rgb(var(--mg-header-line)); }
-.rf-hd-top { display: flex; align-items: center; min-height: 44px; }
+.rf-hd { border-image: conic-gradient(rgb(var(--mg-header-bg)) 0 0) fill 0 // 0 100vmax; background: rgb(var(--mg-header-bg)); color: rgb(var(--mg-header-ink)); padding: 2px 8px 12px 4px; margin-inline: -16px; border-bottom: 1px solid rgb(var(--mg-header-line)); }
+.rf-hd-top { display: flex; align-items: center; min-height: 24px; }
 .rf-ctx { flex: 1; min-width: 0; padding-left: 12px; font: 600 12px/1.2 var(--mg-font); letter-spacing: .05em; text-transform: uppercase; color: rgb(var(--mg-header-sub)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rf-ib { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 10px; background: transparent; color: inherit !important; padding: 0; cursor: pointer; text-decoration: none !important; transition: background-color var(--mg-dur-fast) var(--mg-ease-out); }
 .rf-ib:hover { background: rgb(255 255 255 / .08); }
@@ -28,7 +28,7 @@ main:has(.rf-hd) { padding-top: 0; }
 .rf-hd :focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
 
 /* Section headings and lists: matches .mg-sec-head / .tt-group-title and .mg-lines / .mg-card. */
-.rf-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 16px 0 6px; padding: 0 2px 4px; border-bottom: 1.5px solid rgb(var(--mg-heading)); font: 700 14px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
+.rf-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 0 6px; padding: 0 2px 4px; border-bottom: 1.5px solid rgb(var(--mg-heading)); font: 700 14px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
 .rf-sec > span { text-transform: none; letter-spacing: 0; font: 500 12px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
 :where(.rf-list) { padding: 0; list-style: none; }
 .rf-list { background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); box-shadow: var(--mg-shadow-sm); overflow: hidden; }
