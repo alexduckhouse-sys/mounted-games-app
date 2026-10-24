@@ -5,6 +5,7 @@ import { api } from '../api';
 import { signOutDestination } from '../auth/signOutDestination';
 import { useAuth } from '../auth/AuthContext';
 import { EmailConfirmBanner } from '../components/EmailConfirmBanner';
+import { usePageWidth } from '../components/pageWidthState';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useMyTeams } from '../hooks/useMyTeams';
 import { heatRowsForTeam, heatTime } from '../lib/myTeams';
@@ -34,6 +35,7 @@ interface SavedRiderRow {
  * what needs them, quick actions, today's events and the site admin sections, in a grid on a laptop.
  */
 export function ProfilePage() {
+  usePageWidth('wide');
   const { user, hasRole, logout } = useAuth();
   const { current } = useCurrentCompetition();
   const { teams } = useNeedsYou();
@@ -211,7 +213,7 @@ export function ProfilePage() {
         </>
       )}
 
-      {isAdmin && <SiteAdmin />}
+      {isAdmin && <SiteAdmin hideTrainerRequests />}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Heat, Session } from '../types';
 import { heat as baseHeat, race, result, session as baseSession, standing, team as baseTeam } from '../test/factories';
-import { buildToplist, ordinal, toplistNote, type ToplistRow } from './toplist';
+import { buildToplist, ordinal, sectionScoreVersion, toplistNote, type ToplistRow } from './toplist';
 
 const SECTION = 9;
 const entries = (teamIds: number[]): Heat['entries'] => teamIds.map((teamId, lane) => ({ id: teamId, teamId, teamName: `Team ${teamId}`, laneIndex: lane }));
@@ -100,8 +100,8 @@ describe('buildToplist final cut-off', () => {
     expect(list.cutAfter).toBe(1);
     expect(list.runoff).toBeNull();
     expect(list.rows.map((r) => r.out)).toEqual([false, false, true]);
-    expect(list.rows[2]).toMatchObject({ needed: 4, racesLeft: 2 });
-    expect(toplistNote(list.rows[2])).toBe('4 needed to make the final (normal finishes)');
+    expect(list.rows[2]).toMatchObject({ needed: 6, racesLeft: 2 });
+    expect(toplistNote(list.rows[2])).toBe('6 needed to make the final (normal finishes)');
   });
 
   it('does not say what a team below the line needs once it has no races left', () => {
@@ -482,10 +482,10 @@ describe('exact normal-finish qualification', () => {
     }
   });
 
-  it('keeps HC finishing slots and the full session base while excluding HC from qualification', () => {
+  it('keeps HC in the session base but skips their placing as the scoring API does', () => {
     const list = buildToplist([standing(1, 6), standing(2, 4), standing(3, 1.5)],
       [session(1, [heat(1, [1, 2, 3, 4], [race(1)])])], [team(4, { isHorsConcours: true })], SECTION, 2);
-    expect(list.rows.find((item) => item.teamId === 3)?.needed).toBe(4);
+    expect(list.rows.find((item) => item.teamId === 3)?.needed).toBeNull();
   });
 
   it('does not invent extra points for a lone entrant or derive a future base from manual awards', () => {
@@ -563,4 +563,50 @@ it('handles changed opponents across sessions, using complete allocations in eac
   expect(minimum).toBe(4);
   const list = buildToplist(initial.map((value, i) => standing(i + 1, value)), sessions, [], SECTION, 2);
   expect(list.rows.find((item) => item.teamId === 3)).toMatchObject({ needed: minimum });
+});
+
+describe('sectionScoreVersion', () => {
+  it('ignores clocks but invalidates for combined and other-section scores', () => {
+    expect(sectionScoreVersion([], null)).toBe('');
+    const s1 = session(1, [heat(1, [1, 2], [race(1, { startedAt: '2026-06-01T10:00:00Z' })])]);
+    const s1ClockStopped = session(1, [heat(1, [1, 2], [race(1, { startedAt: '2026-06-01T10:00:00Z', finishedAt: '2026-06-01T10:03:00Z' })], { startedAt: '2026-06-01T10:00:00Z' })], { startedAt: '2026-06-01T10:00:00Z' });
+    const otherSection = session(2, [heat(2, [8, 9], [scored(2, [8, 5], [9, 3])])], { competitionSectionId: SECTION + 1 });
+
+    const v0 = sectionScoreVersion([s1], SECTION);
+    expect(sectionScoreVersion([s1ClockStopped], SECTION)).toBe(v0);
+    expect(sectionScoreVersion([s1ClockStopped, otherSection], SECTION)).not.toBe(v0);
+
+    const s1Scored = session(1, [heat(1, [1, 2], [scored(1, [1, 5], [2, 3])])]);
+    expect(sectionScoreVersion([s1Scored], SECTION)).not.toBe(v0);
+  });
+});
+
+describe('projected qualifying cut-off and finals tie-breaking', () => {
+  it('projects the cut-off line using lanesPerHeat (default 6) before finals exist when finalistCount is null', () => {
+    const standings = Array.from({ length: 8 }, (_, i) => standing(i + 1, 10 - i));
+    const sessions = [session(1, [heat(1, [1, 2, 3, 4, 5, 6], [scored(1, [1, 6])])], { lanesPerHeat: 5 })];
+    const list = buildToplist(standings, sessions, [], SECTION, null);
+    expect(list.cutAfter).toBe(4);
+  });
+
+  it('breaks ties in buildFinalGroups using the overall standing rank before teamName localeCompare', () => {
+    // Team 1 ("Zebra") is ranked ahead of Team 2 ("Alpha") in overall standings.
+    const standings = [
+      { ...standing(1, 15), teamName: 'Zebra' },
+      { ...standing(2, 15), teamName: 'Alpha' },
+    ];
+    const finals = session(2, [
+      heat(2, [1, 2], [
+        race(2, {
+          isComplete: true,
+          results: [
+            result(1, 1, { teamName: 'Zebra', points: 5 }),
+            result(2, 1, { teamName: 'Alpha', points: 5 }),
+          ],
+        }),
+      ], { label: 'A Final', raceRoundStage: 2 }),
+    ]);
+    const list = buildToplist(standings, [finals], [], SECTION, null);
+    expect(list.finals[0].rows.map((r) => r.teamName)).toEqual(['Zebra', 'Alpha']);
+  });
 });

@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using MountedGames.Api.Auth;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using MountedGames.Api.Hubs;
@@ -118,6 +120,41 @@ public class LiveHubTests : IClassFixture<ApiFactory>
         await witnessGot;
 
         Assert.False(got);
+    }
+
+    [Fact]
+    public async Task RevokingAdminRoleStopsPrivateMessagesOnAnExistingConnection()
+    {
+        using var adminClient = await _f.AdminAsync();
+        var (_, member) = await _f.SignupAsync("Member");
+        var roleRoute = $"/api/admin/users/{member.User.Id}/roles";
+        (await adminClient.PostAsJsonAsync(roleRoute, new { role = Roles.Admin, grant = true })).EnsureSuccessStatusCode();
+        var auth = await _f.LoginAsync(member.User.Email, "Passw0rd!x");
+        await using var formerAdmin = await ConnectAsync(auth.Token);
+        await formerAdmin.InvokeAsync("JoinCompetition", 911);
+        var leaked = false;
+        formerAdmin.On<System.Text.Json.JsonElement>("chatMessage", _ => leaked = true);
+        (await adminClient.PostAsJsonAsync(roleRoute, new { role = Roles.Admin, grant = false })).EnsureSuccessStatusCode();
+
+        await Broadcaster.AdminOnlyChatMessage(911, null, new { text = "Fake private message" });
+        var marker = Next<System.Text.Json.JsonElement>(formerAdmin, "announcement");
+        await Broadcaster.Announcement(911, new { text = "after" });
+        await marker;
+        Assert.False(leaked);
+    }
+
+    [Fact]
+    public async Task GrantingAdminRoleEnablesPrivateMessagesOnAnExistingConnection()
+    {
+        using var adminClient = await _f.AdminAsync();
+        var (_, member) = await _f.SignupAsync("Member");
+        await using var promoted = await ConnectAsync(member.Token);
+        await promoted.InvokeAsync("JoinCompetition", 912);
+        (await adminClient.PostAsJsonAsync($"/api/admin/users/{member.User.Id}/roles",
+            new { role = Roles.Admin, grant = true })).EnsureSuccessStatusCode();
+        var received = Next<System.Text.Json.JsonElement>(promoted, "chatMessage");
+        await Broadcaster.AdminOnlyChatMessage(912, null, new { text = "Fake private message" });
+        Assert.Equal("Fake private message", (await received).GetProperty("text").GetString());
     }
 
     [Fact]

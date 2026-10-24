@@ -29,11 +29,16 @@ describe('publisher negotiation and controls', () => {
     expect(getUserMedia).not.toHaveBeenCalled();
     const changed = vi.fn(); const unsubscribe = p.subscribe(changed);
     await start();
-    expect(getUserMedia).toHaveBeenCalledWith({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: 'environment' }, audio: { echoCancellation: true, noiseSuppression: true } });
+    expect(getUserMedia).toHaveBeenCalledWith({ video: { width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30 }, facingMode: 'environment' }, audio: { echoCancellation: true, noiseSuppression: true } });
     expect(await p.devices()).toEqual([{ kind: 'videoinput', deviceId: 'usb' }]);
+    expect(await p.audioDevices()).toEqual([{ kind: 'audioinput' }]);
     const peer = FakePeer.instances[0];
     expect(peer.configuration).toEqual({ iceServers: [{ urls: 'stun:example.test' }], bundlePolicy: 'max-bundle' });
-    expect(peer.addTransceiver.mock.calls[0][1].sendEncodings).toEqual([{ rid: 'f', maxBitrate: 1500000 }, { rid: 'h', scaleResolutionDownBy: 2, maxBitrate: 500000 }, { rid: 'q', scaleResolutionDownBy: 4, maxBitrate: 150000 }]);
+    expect(peer.addTransceiver.mock.calls[0][1].sendEncodings).toEqual([
+      { rid: 'f', maxBitrate: 2000000, maxFramerate: 30 },
+      { rid: 'h', scaleResolutionDownBy: 1.5, maxBitrate: 850000, maxFramerate: 30 },
+      { rid: 'q', scaleResolutionDownBy: 2, maxBitrate: 350000, maxFramerate: 30 },
+    ]);
     expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', { sdpOffer: 'publisher offer', videoMid: '0', audioMid: '1', arenaName: 'Main Arena', angleName: 'Main camera', takeOver: false });
     expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams/1/ready', { attempt: 1 });
     expect(p.getSnapshot().state).toBe('live'); expect(d.wakeLock).toHaveBeenCalled();
@@ -87,16 +92,20 @@ describe('publisher negotiation and controls', () => {
 });
 
 describe.each(['pause', 'mute'] as const)('%s optimistic controls', (control) => {
-  it('restores the previous setting and audio when the current request fails', async () => {
+  it('restores pause on failure while keeping mute active for privacy when a PATCH fails', async () => {
     const { publisher: p, start, request } = setup(); await start();
     const pending = deferred<unknown>(); request.mockReturnValueOnce(pending.promise);
     const change = p[control](true);
     const rejected = expect(change).rejects.toThrow('offline');
     expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(false);
     pending.reject(new Error('offline')); await rejected;
-    expect(p.getSnapshot().state).toBe('live');
-    expect(p.getSnapshot().audioMuted).toBe(false);
-    expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(true);
+    if (control === 'pause') {
+      expect(p.getSnapshot().state).toBe('live');
+      expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(true);
+    } else {
+      expect(p.getSnapshot().audioMuted).toBe(true);
+      expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(false);
+    }
     p.dispose();
   });
 
@@ -219,7 +228,7 @@ describe('publisher recovery', () => {
     const normal = request.getMockImplementation()!;
     request.mockImplementation(async (method, path) => { if (path.endsWith('heartbeat')) throw statusError(409); return normal(method, path); });
     await vi.advanceTimersByTimeAsync(15000);
-    expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams/1/heartbeat');
+    expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams/1/heartbeat', expect.objectContaining({ audioMuted: false, qualityPreset: '720p' }));
     expect(request).toHaveBeenLastCalledWith('PATCH', '/competitions/1/streams/1', expect.any(Object));
     expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: false })); p.dispose();
   });
@@ -414,4 +423,125 @@ describe('publisher camera switching and early controls', () => {
     expect(p.getSnapshot().media!.getVideoTracks()).toHaveLength(1);
     p.dispose();
   });
+  it('supports switching audio input, wind filter toggle, hardware zoom, quality presets, and 720p capture fallback', async () => {
+    const { publisher: p, start, getUserMedia } = setup();
+    let firstTry = true;
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+      if (firstTry && constraints.video && typeof constraints.video === 'object' && (constraints.video.width as { ideal?: number })?.ideal === 3840) {
+        firstTry = false;
+        throw new Error('OverconstrainedError');
+      }
+      const vTrack = Object.assign(new FakeTrack(), {
+        getSettings: () => ({ height: 2160 }),
+        getCapabilities: () => ({ zoom: { max: 4 } }),
+        applyConstraints: vi.fn(async () => {}),
+      });
+      return asMedia(new FakeMediaStream([
+        ...(constraints.video ? [vTrack] : []),
+        ...(constraints.audio ? [new FakeTrack('audio')] : []),
+      ]));
+    });
+    await start();
+    expect(p.getSnapshot().captureResolution).toBe('4K');
+    expect(p.getSnapshot().maxZoom).toBe(4);
+    await p.setZoom(2.5);
+    expect(p.getSnapshot().zoom).toBe(2.5);
+    p.setWindFilter(false);
+    expect(p.getSnapshot().windFilter).toBe(false);
+    p.setWindFilter(true);
+    expect(p.getSnapshot().windFilter).toBe(true);
+    const sender = FakePeer.instances[0].transceivers[0].sender as unknown as {
+      getParameters: () => { encodings: Array<{ rid: string; maxBitrate?: number; scaleResolutionDownBy?: number; maxFramerate?: number }> };
+      setParameters: ReturnType<typeof vi.fn>;
+    };
+    const encodingsState = [{ rid: 'f' }, { rid: 'h' }, { rid: 'q' }];
+    sender.getParameters = () => ({ encodings: encodingsState });
+    sender.setParameters = vi.fn(async () => {});
+    await p.setQualityPreset('360p');
+    expect(p.getSnapshot().qualityPreset).toBe('360p');
+    expect(sender.setParameters).toHaveBeenCalled();
+    await p.setQualityPreset('1080p');
+    expect(p.getSnapshot().qualityPreset).toBe('1080p');
+    await p.setQualityPreset('720p');
+    expect(p.getSnapshot().qualityPreset).toBe('720p');
+    await p.switchAudio('ext-mic');
+    expect(getUserMedia).toHaveBeenLastCalledWith({ video: false, audio: { echoCancellation: true, noiseSuppression: true, deviceId: { exact: 'ext-mic' } } });
+    p.dispose();
+  });
+});
+
+
+it('releases a new microphone when stop wins the pending sender replacement', async () => {
+  const { publisher: p, start, getUserMedia } = setup(); await start();
+  const replacement = deferred<void>();
+  FakePeer.instances[0].transceivers[1].sender.replaceTrack.mockReturnValueOnce(replacement.promise);
+  const changing = p.switchAudio('synthetic-mic'); await flush();
+  const acquired = await getUserMedia.mock.results.at(-1)!.value;
+  await p.stop(); replacement.resolve(); await changing;
+  expect(acquired.getAudioTracks()[0].readyState).toBe('ended');
+  expect(p.getSnapshot()).toMatchObject({ state: 'ended', media: null });
+  p.dispose();
+});
+
+it('does not acquire a microphone before a preview exists and frees an empty replacement capture', async () => {
+  const { publisher: p, getUserMedia, start } = setup();
+  await p.switchAudio('synthetic'); expect(getUserMedia).not.toHaveBeenCalled(); await start();
+  const extraVideo = new FakeTrack(); getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([extraVideo])));
+  await p.switchAudio('empty-input'); expect(extraVideo.stop).toHaveBeenCalled();
+  expect(p.getSnapshot().media!.getAudioTracks()).toHaveLength(1); p.dispose();
+});
+it('drops a microphone capture that arrives after stop', async () => {
+  const { publisher: p, getUserMedia, start } = setup(); await start();
+  const pending = deferred<MediaStream>(); getUserMedia.mockReturnValueOnce(pending.promise);
+  const switching = p.switchAudio('slow'); await p.stop(); const track = new FakeTrack('audio');
+  pending.resolve(asMedia(new FakeMediaStream([track]))); await switching;
+  expect(track.stop).toHaveBeenCalled(); expect(p.getSnapshot().media).toBeNull(); p.dispose();
+});
+it('keeps the previous microphone when replacing the audio sender fails', async () => {
+  const { publisher: p, getUserMedia, start } = setup(); await start();
+  const previous = p.getSnapshot().media!.getAudioTracks()[0];
+  FakePeer.instances[0].transceivers[1].sender.replaceTrack.mockRejectedValueOnce(new Error('Input disconnected'));
+  await expect(p.switchAudio('unavailable')).rejects.toThrow('Input disconnected');
+  const acquired = await getUserMedia.mock.results.at(-1)!.value;
+  expect(acquired.getAudioTracks()[0].readyState).toBe('ended'); expect(p.getSnapshot().media!.getAudioTracks()[0]).toBe(previous); p.dispose();
+});
+it.each([[1440, '1440p'], [1080, '1080p']] as const)('reports native capture height %s without changing capture resolution', async (height, expected) => {
+  const { publisher: p, getUserMedia } = setup();
+  const track = Object.assign(new FakeTrack(), { getSettings: () => ({ height }) });
+  Object.defineProperty(track, 'contentHint', { set: () => { throw new Error('Read-only browser hint'); } });
+  getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([track]))); await p.capture(false);
+  expect(p.getSnapshot().captureResolution).toBe(expected); expect(track.readyState).toBe('live'); p.dispose();
+});
+it('captures a silent fallback when the preferred native video constraints fail', async () => {
+  const { publisher: p, getUserMedia } = setup(); getUserMedia.mockRejectedValueOnce(new Error('Unsupported native size'));
+  await p.capture(false); expect(getUserMedia).toHaveBeenLastCalledWith(expect.objectContaining({ audio: false }));
+  expect(p.getSnapshot().hasAudio).toBe(false); p.dispose();
+});
+it('does not resurrect publication after stop while ICE discovery is pending', async () => {
+  const { publisher: p, request } = setup(); await p.capture();
+  const pending = deferred<unknown>(); request.mockReturnValueOnce(pending.promise);
+  const starting = p.start('Synthetic', 'Main'); await flush(); await p.stop(); pending.resolve({ iceServers: [] }); await starting;
+  expect(FakePeer.instances).toHaveLength(0); expect(p.getSnapshot().state).toBe('ended'); p.dispose();
+});
+it.each(['ready', 'settings'] as const)('keeps an ended stream ended after late %s confirmation', async (phase) => {
+  const { publisher: p, request } = setup(); await p.capture(); const pending = deferred<unknown>();
+  const normal = request.getMockImplementation()!;
+  request.mockImplementation((method, path) => (phase === 'ready' ? path.endsWith('/ready') : method === 'PATCH') ? pending.promise : normal(method, path));
+  const starting = p.start('Synthetic', 'Main'); await flush(); await p.stop(); pending.resolve({}); await starting;
+  expect(p.getSnapshot()).toMatchObject({ state: 'ended', media: null, streamId: null }); p.dispose();
+});
+it('drops statistics that finish after the publisher has stopped', async () => {
+  const { publisher: p, start } = setup(); await start(); const pending = deferred<Awaited<ReturnType<FakePeer['getStats']>>>();
+  FakePeer.instances[0].getStats.mockReturnValueOnce(pending.promise); await vi.advanceTimersByTimeAsync(3000);
+  await p.stop(); const stopped = p.getSnapshot(); pending.resolve(new Map()); await flush(); expect(p.getSnapshot()).toEqual(stopped); p.dispose();
+});
+it('reads actual FPS and tolerates outbound reports with absent packet counters', async () => {
+  const { publisher: p, start } = setup(); await start();
+  FakePeer.instances[0].getStats.mockResolvedValueOnce(new Map([['out', { type: 'outbound-rtp', kind: 'video', framesPerSecond: 23.8 }]]));
+  await vi.advanceTimersByTimeAsync(3000); expect(p.getSnapshot()).toMatchObject({ fps: 24, bitrateKbps: 0 }); p.dispose();
+});
+it('restores the paused state when resuming is refused', async () => {
+  const { publisher: p, start, request } = setup(); await start(); await p.pause(true);
+  request.mockRejectedValueOnce(new Error('Connection lost')); await expect(p.pause(false)).rejects.toThrow('Connection lost');
+  expect(p.getSnapshot().state).toBe('paused'); expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(false); p.dispose();
 });

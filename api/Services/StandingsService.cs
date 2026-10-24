@@ -15,8 +15,9 @@ public sealed class StandingsService(AppDbContext db)
     public async Task<List<StandingRow>> RowsAsync(int competitionId, int? sectionId = null, CancellationToken ct = default)
     {
         var teamsQ = db.Teams
+            .AsNoTracking()
             .Include(t => t.Club)
-            .Include(t => t.Results).ThenInclude(r => r.Race)
+            .Include(t => t.Results)
             .Where(t => t.CompetitionId == competitionId && !t.IsHorsConcours);
         if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
 

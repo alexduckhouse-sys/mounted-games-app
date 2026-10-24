@@ -419,4 +419,23 @@ public class TieBreakerUnitTests
         Assert.Equal(TieSettlement.Open, breaker.Settle([a, b, c], a, b));
         Assert.Single(breaker.OrderLevel([a]));
     }
+
+    [Fact]
+    public void Countback_ScopesToFinalHeatResultsFirst_BeforeFallingBackToQualifiers()
+    {
+        var breaker = new TieBreaker(
+            new Dictionary<int, TieBreakRule> { [1] = TieBreakRule.Countback },
+            new Dictionary<int, FinalsTieOrder>(),
+            new Dictionary<int, (int, int, int)> { [10] = (1, 1, 1), [11] = (1, 2, 1), [20] = (2, 1, 1) },
+            new HashSet<int> { 20 });
+
+        // Team 1 won two qualifier races (10, 11) and came 2nd in the A Final race (20).
+        // Team 2 came 2nd in both qualifier races (10, 11) and won the A Final race (20).
+        // Both total 10 points. Because both raced in the A Final, Team 2's A Final win ranks it above Team 1.
+        var team1 = breaker.Facts(1, 1, [R(10, 1, 4), R(11, 1, 4), R(20, 2, 2)], total: 10);
+        var team2 = breaker.Facts(2, 1, [R(10, 2, 3), R(11, 2, 3), R(20, 1, 4)], total: 10);
+
+        var ranked = breaker.Rank([team1, team2]);
+        Assert.Equal(new[] { 2, 1 }, ranked.Select(f => f.TeamId));
+    }
 }

@@ -76,8 +76,8 @@ public class TimetableTimesTests
         var times = TimetableTimes.Compute([session]);
 
         Assert.Equal(At(9, 7), times[1].Start);
-        // The cascade after a started, unpinned heat continues from the session's cursor, as the timetable does.
-        Assert.Equal(At(9, 30), times[2].Start);
+        // The next heat follows the real start, matching the public timetable.
+        Assert.Equal(At(9, 37), times[2].Start);
     }
 
     [Fact]
@@ -118,5 +118,36 @@ public class TimetableTimesTests
 
         var nothing = TimetableTimes.Compute([NewSession(1, null, heats: [NewHeat(9, 1, 10)])]);
         Assert.Null(nothing[9].Start);
+    }
+    [Fact]
+    public void ManualShift_ReplacesInheritedDelay_AndKeepsArenasIndependent()
+    {
+        var first = NewSession(1, At(9), started: At(9, 10), heats: [NewHeat(1, 1, 30)]);
+        first.ArenaName = "Arena A";
+        var shifted = NewSession(2, At(10, 15), heats: [NewHeat(2, 1, 30), NewHeat(3, 2, 30, pinned: At(11, 15))]);
+        shifted.ArenaName = "Arena A";
+        shifted.Notes = "[shift:+15]";
+        var other = NewSession(3, At(10), heats: [NewHeat(4, 1, 30)]);
+        other.ArenaName = "Arena B";
+        var times = TimetableTimes.Compute([first, shifted, other]);
+        Assert.Equal(At(10, 15), times[2].Start);
+        Assert.Equal(At(11, 15), times[3].Start);
+        Assert.Equal(At(10), times[4].Start);
+    }
+
+    [Fact]
+    public void NegativeShift_StillWaitsForPreviousHeat_AndGlobalBreakWaitsForBothArenas()
+    {
+        var first = NewSession(1, At(9), heats: [NewHeat(1, 1, 60)]);
+        first.ArenaName = "Arena A";
+        var shifted = NewSession(2, At(9, 45), heats: [NewHeat(2, 1, 30)]);
+        shifted.ArenaName = "Arena A";
+        shifted.Notes = "[shift:-15]";
+        var other = NewSession(3, At(9), heats: [NewHeat(3, 1, 120)]);
+        other.ArenaName = "Arena B";
+        var global = NewSession(4, At(10), kind: SessionKind.Break, duration: 15, heats: [NewHeat(4, 1, 15)]);
+        var times = TimetableTimes.Compute([first, shifted, other, global]);
+        Assert.Equal(At(10), times[2].Start);
+        Assert.Equal(At(11), times[4].Start);
     }
 }

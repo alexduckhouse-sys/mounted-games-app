@@ -124,11 +124,11 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1.5 text-[15px] text-[rgb(var(--mg-body))]">
         <p>
-          Every dec form asks for the rider’s name, the pony’s name and the trainer’s name. Switch on anything else you need below.
-          {saved.isStandard && ' You haven’t changed anything yet, so trainers see the standard form: age, pony height, bibs and a phone number.'}
+          Rider, pony and trainer names are always included.
+          {saved.isStandard && ' Until saved, trainers see the standard form.'}
         </p>
         <p className="text-sm text-[rgb(var(--mg-muted))]">
-          Weight, age, medical notes, emergency contacts and the trainer’s phone number are only seen by you, the other organisers and the trainer who sent the form. They never show on public pages.
+          Personal details are only seen by organisers and the trainer, and never show on public pages.
         </p>
       </div>
 
@@ -180,7 +180,7 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
       <fieldset className="flex flex-col gap-3 border-0 p-0">
         <legend className="mg-display mb-1 text-[17px] font-bold uppercase tracking-[0.03em] text-[rgb(var(--mg-heading))]">Your own questions</legend>
         <p className="text-sm text-[rgb(var(--mg-muted))]">
-          Add a question of your own, as text or a number. A number can have a limit. If an answer goes over it, the form is still accepted, but you’ll see a flag and the trainer gets a warning as they fill it in.
+          Add custom text or number questions. Numbers outside a limit are flagged for organisers.
         </p>
         {draft.customFields.map((field, index) => (
           <CustomFieldCard key={field.id} field={field} index={index} readOnly={readOnly}

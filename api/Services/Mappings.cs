@@ -20,6 +20,26 @@ public static class Mappings
         c.Sessions?.Count ?? 0,
         c.Sessions?.Count(s => s.Heats.Count > 0) ?? 0);
 
+    public static CompetitionDetail ToDto(
+        this Competition c,
+        IReadOnlyList<CompetitionSectionDto> sections,
+        IReadOnlyList<TeamDto> teams,
+        IReadOnlyList<SessionDto> sessions,
+        bool isDemo = false,
+        PayoutsToDto? payoutsTo = null,
+        bool includePaymentDetails = true) => new(
+        c.Id, c.Name, c.Location, c.Description,
+        c.Latitude, c.Longitude,
+        c.What3Words, c.AppleMapsUrl,
+        c.StartDate, c.EndDate,
+        c.IsActive, c.IsArchived,
+        sections, teams, sessions,
+        c.StreamUrl, c.OrganiserName,
+        includePaymentDetails ? c.PaymentDestination : null,
+        c.SignupsLocked, c.Icon, c.CreatedByUserId,
+        IsDemo: isDemo, TermsText: c.TermsText,
+        PayoutsTo: payoutsTo, LaneHatbands: PlannedRaceList.Read(c.LaneHatbands));
+
     /// <param name="activeSignups">Paid and pending entries: the ones that count towards <c>MaxParticipants</c>.</param>
     public static CompetitionSectionDto ToDto(this CompetitionSection s, int activeSignups = 0) =>
         new(s.Id, s.CompetitionId, s.Format, s.AgeGroup, s.DisplayName,
@@ -138,7 +158,8 @@ public static class Mappings
         r.IsCaptain, r.IsReserve, r.OrderIndex, r.UseInitialOnly, r.NoFilming, r.IsGuestRider, r.PonyHeightHands,
         r.BirthYear, r.AgeGroup, r.WeightKg, r.PonyPassportNumber, r.PonyAge, r.MembershipNumber,
         r.EmergencyContactName, r.EmergencyContactPhone, r.MedicalNotes,
-        DecFormRules.ReadCustomValues(r.CustomValuesJson), DecFormRules.ReadFlags(r.FlagsJson));
+        DecFormRules.ReadCustomValues(r.CustomValuesJson), DecFormRules.ReadFlags(r.FlagsJson),
+        r.PonyOwnerFullName);
 
     /// <summary>
     /// The rider as a public viewer sees them: the surname shortened when the rider asked for that, and the
@@ -149,7 +170,7 @@ public static class Mappings
         FullName = RiderNames.Display(r.FullName, r.UseInitialOnly, viewerSeesFullNames: false),
         DateOfBirth = null, SavedRiderId = null, NoFilming = false,
         // Every adaptive dec form field is personal data about a child: none of it goes on a public page.
-        BirthYear = null, AgeGroup = null, WeightKg = null, PonyPassportNumber = null, PonyAge = null,
+        BirthYear = null, AgeGroup = null, WeightKg = null, PonyPassportNumber = null, PonyOwnerFullName = null, PonyAge = null,
         MembershipNumber = null, EmergencyContactName = null, EmergencyContactPhone = null, MedicalNotes = null,
         CustomValues = null, Flags = null,
     };
@@ -172,7 +193,7 @@ public static class Mappings
         includePrivate ? d.TrainerPhone : null);
 
     public static SavedRiderDto ToDto(this SavedRider r) =>
-        new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes, r.UseInitialOnly, r.NoFilming, r.PonyHeightHands);
+        new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes, r.UseInitialOnly, r.NoFilming, r.PonyHeightHands, r.PonyPassportNumber, r.PonyOwnerFullName);
 
     public static ChatMessageDto ToDto(this ChatMessage m) => new(
         m.Id, m.CompetitionId, m.UserId, m.AuthorName, m.Body, m.Type, m.Tag, m.CreatedAt, m.AdminOnly, m.RecipientUserId);

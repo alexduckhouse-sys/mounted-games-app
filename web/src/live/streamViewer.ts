@@ -1,7 +1,12 @@
-import type { IceServer } from '../types';
+import type { IceServer, StreamQualityRid } from '../types';
 import { streamClock, type StreamClock, type StreamInvoke } from './streamRuntime';
 
-export interface ViewerSnapshot { media: MediaStream | null; state: 'connecting' | 'playing' | 'reconnecting' | 'error'; message: string | null }
+export interface ViewerSnapshot {
+  media: MediaStream | null;
+  state: 'connecting' | 'playing' | 'reconnecting' | 'error';
+  message: string | null;
+  preferredRid?: StreamQualityRid;
+}
 export interface ViewerDependencies extends StreamClock {
   invoke: StreamInvoke;
   PeerConnection: typeof RTCPeerConnection;
@@ -36,7 +41,7 @@ export function createStreamViewer(competitionId: number, streamId: number, d: V
   const owner = {};
   const lease = group.get(key) ?? { owner, tail: Promise.resolve() };
   lease.owner = owner; group.set(key, lease);
-  let snapshot: ViewerSnapshot = { media: null, state: 'connecting', message: null };
+  let snapshot: ViewerSnapshot = { media: null, state: 'connecting', message: null, preferredRid: 'f' };
   const listeners = new Set<() => void>();
   const update = (patch: Partial<ViewerSnapshot>) => { snapshot = { ...snapshot, ...patch }; listeners.forEach((fn) => fn()); };
   let disposed = false;
@@ -44,6 +49,7 @@ export function createStreamViewer(competitionId: number, streamId: number, d: V
   let generation = 0;
   let ready = -1;
   let failures = 0;
+  let preferredRid: StreamQualityRid = 'f';
   let pc: RTCPeerConnection | undefined;
   let cancelRetry: (() => void) | undefined;
   let cancelStats: (() => void) | undefined;
@@ -90,7 +96,9 @@ export function createStreamViewer(competitionId: number, streamId: number, d: V
     try {
       await previous;
       if (!current()) return;
-      const result = await d.invoke<{ watchId: string; sdpOffer: string; generation: number; iceServers: IceServer[] }>('WatchStream', competitionId, streamId);
+      const result = preferredRid === 'f'
+        ? await d.invoke<{ watchId: string; sdpOffer: string; generation: number; iceServers: IceServer[] }>('WatchStream', competitionId, streamId)
+        : await d.invoke<{ watchId: string; sdpOffer: string; generation: number; iceServers: IceServer[] }>('WatchStreamTier', competitionId, streamId, preferredRid);
       if (!current()) return;
       generation = Math.max(generation, result.generation);
       const peer = new d.PeerConnection({ iceServers: result.iceServers, bundlePolicy: 'max-bundle' });
@@ -139,6 +147,12 @@ export function createStreamViewer(competitionId: number, streamId: number, d: V
       if (nextReady !== ready || nextGeneration > generation) {
         ready = nextReady; generation = nextGeneration; refresh();
       }
+    },
+    setQuality(rid: StreamQualityRid) {
+      if (preferredRid === rid) return;
+      preferredRid = rid;
+      update({ preferredRid: rid });
+      if (ready >= 0) refresh();
     },
     dispose() {
       disposed = true; epoch++;

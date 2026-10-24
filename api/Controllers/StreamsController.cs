@@ -59,11 +59,19 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
         using var lease = await locks.AcquireAsync(competitionId, ct);
         var arena = request.ArenaName.Trim();
         var angle = request.AngleName.Trim();
+        var scorerLink = ScorerLinkAccessAttribute.TryGetCurrent(HttpContext);
+        if (scorerLink is not null && !MatchesArena(scorerLink, arena))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "This link can only stream its assigned arena." });
+        }
         var active = db.LiveStreams.Where(s => s.CompetitionId == competitionId && s.Status != LiveStreamStatus.Ended);
         var arenaKey = arena.ToLower();
         var angleKey = angle.ToLower();
         var duplicate = await active.Where(s => s.ArenaName.ToLower() == arenaKey && s.AngleName.ToLower() == angleKey)
             .OrderByDescending(s => s.Id).FirstOrDefaultAsync(ct);
+        if (duplicate is not null && request.TakeOver && scorerLink is not null
+            && duplicate.StartedByUserId != $"scorer-link:{scorerLink.Id}")
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "This link cannot take over another publisher's stream." });
         if (duplicate is not null && !request.TakeOver) return ConflictProblem("This arena and angle are already broadcasting.");
         if (await active.CountAsync(ct) >= _options.MaxLivePerCompetition) return ConflictProblem("This competition has reached its stream limit.");
         SfuSession session;
@@ -190,18 +198,72 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
         return dto;
     }
 
+    private static readonly HashSet<string> AllowedCommands = new(StringComparer.Ordinal)
+    {
+        "setZoom", "mute", "pause", "flipCamera", "windFilter", "saveReplay", "setQualityPreset", "selectAngle"
+    };
+
     [HttpPost("{streamId:int}/heartbeat")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<IActionResult> Heartbeat(int competitionId, int streamId, CancellationToken ct)
     {
         if (!_options.Enabled) return Disabled();
+        StreamTelemetryRequest? telemetry = null;
+        if (Request.ContentType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            try { telemetry = await Request.ReadFromJsonAsync<StreamTelemetryRequest>(cancellationToken: ct); }
+            catch (JsonException) { return BadRequest(); }
+        }
         using var lease = await locks.AcquireAsync(competitionId, ct);
         var stream = await FindAsync(competitionId, streamId, ct);
         if (stream is null) return NotFound();
         if (stream.Status == LiveStreamStatus.Ended) return ConflictProblem("This stream has ended.");
         stream.LastHeartbeatAt = Now;
+        var muteChanged = false;
+        if (telemetry?.AudioMuted is { } muted && stream.AudioMuted != muted)
+        {
+            stream.AudioMuted = muted;
+            muteChanged = true;
+        }
         await db.SaveChangesAsync(ct);
+        if (muteChanged)
+        {
+            var dto = stream.ToDto(await viewers.TotalAsync(streamId));
+            await live.StreamUpdated(competitionId, dto);
+        }
+        if (telemetry is not null)
+        {
+            await live.StreamTelemetry(competitionId, new StreamTelemetryDto(
+                stream.Id, stream.ArenaName,
+                telemetry.BatteryLevel, telemetry.BatteryCharging,
+                telemetry.Zoom, telemetry.MaxZoom,
+                telemetry.Fps, telemetry.BitrateKbps,
+                telemetry.Signal, telemetry.AudioMuted ?? stream.AudioMuted,
+                telemetry.WindFilter, telemetry.QualityPreset, telemetry.CaptureResolution,
+                Now));
+        }
+        return NoContent();
+    }
+
+    [HttpPost("{streamId:int}/command")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<IActionResult> Command(int competitionId, int streamId, StreamCommandRequest request, CancellationToken ct)
+    {
+        if (!_options.Enabled) return Disabled();
+        if (!AllowedCommands.Contains(request.Command))
+            ModelState.AddModelError(nameof(request.Command), "Unsupported stream command.");
+        if (request.Command == "selectAngle" && request.Value is not null
+            && (!int.TryParse(request.Value, out var selectedId) || selectedId != streamId))
+            ModelState.AddModelError(nameof(request.Value), "The selected angle must be this stream.");
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+        var stream = await FindAsync(competitionId, streamId, ct, requirePublisher: false);
+        if (stream is null) return NotFound();
+        if (stream.Status == LiveStreamStatus.Ended) return ConflictProblem("This stream has ended.");
+        await live.StreamCommand(competitionId, new StreamCommandDto(
+            stream.Id, stream.ArenaName, request.Command,
+            request.Command == "selectAngle" ? stream.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) : request.Value, Now));
         return NoContent();
     }
 
@@ -218,8 +280,19 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
         return NoContent();
     }
 
-    private Task<LiveStream?> FindAsync(int competitionId, int streamId, CancellationToken ct) =>
-        db.LiveStreams.SingleOrDefaultAsync(s => s.CompetitionId == competitionId && s.Id == streamId, ct);
+    private async Task<LiveStream?> FindAsync(int competitionId, int streamId, CancellationToken ct, bool requirePublisher = true)
+    {
+        var stream = await db.LiveStreams.SingleOrDefaultAsync(s => s.CompetitionId == competitionId && s.Id == streamId, ct);
+        if (stream is not null && ScorerLinkAccessAttribute.TryGetCurrent(HttpContext) is { } link
+            && (!MatchesArena(link, stream.ArenaName)
+                || (requirePublisher && stream.StartedByUserId != $"scorer-link:{link.Id}")))
+            return null;
+        return stream;
+    }
+
+    private static bool MatchesArena(ScorerLink link, string arena) =>
+        string.Equals(link.ArenaName.Trim(), "All arenas", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(link.ArenaName.Trim(), arena.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private ObjectResult Disabled() => Problem(statusCode: 503, title: "Streaming is not configured.");
     private ObjectResult Upstream() => Problem(statusCode: 502, title: "The streaming service is unavailable.");

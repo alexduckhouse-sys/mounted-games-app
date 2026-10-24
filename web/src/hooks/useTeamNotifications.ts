@@ -4,6 +4,7 @@ import type { CompetitionDetail, Session, Team } from '../types';
 import { SessionKind } from '../types';
 import { computeTimings } from '../lib/time';
 import { subscribeForPush, unsubscribeFromPush } from '../lib/push';
+import { formatNotifyLeadReminder, getNotifyMinutesBefore } from '../lib/userPrefs';
 
 const ENABLED_KEY = 'mg.notify.enabled';
 const FIRED_PREFIX = 'mg.notify.fired:';
@@ -96,7 +97,7 @@ export function useTeamNotifications(teams: Team[]) {
         if (!comp) continue;
         const timings = computeTimings(comp.sessions);
         for (const sess of comp.sessions) {
-          maybeFire(team, sess, comp.name, timings.get(sess.id), now);
+          maybeFire(team, sess, comp.name, comp.laneHatbands, timings.get(sess.id), now);
         }
       }
     }
@@ -130,6 +131,7 @@ function maybeFire(
   team: Team,
   sess: Session,
   compName: string,
+  laneHatbands: string[] | null | undefined,
   timing: { scheduled: Date | null; effective: Date | null; shifted: boolean } | undefined,
   now: number,
 ): void {
@@ -138,23 +140,53 @@ function maybeFire(
   if (sess.status === 2) return; // already finished
   if (kind !== SessionKind.Race && kind !== SessionKind.Briefing) return;
 
-  const scheduled = timing?.scheduled?.getTime() ?? null;
-  if (scheduled == null) return;
-
-  const minsAhead = (scheduled - now) / 60_000;
-
   // Prefix the title so supporters see "Supporting X" rather than implying
   // they are the trainer.
   const teamLabel = team.relationship === 'supporter'
     ? `Supporting ${team.displayName}`
     : team.displayName;
 
-  // 1-hour-before-session — fire once in the [60, 55] minute window.
-  if (kind === SessionKind.Race && minsAhead <= 60 && minsAhead > 55) {
+  // Finals lane + time + hatband/silk notification as soon as a team is drawn into a Final heat.
+  const isFinalSession = /\bfinal/i.test(sess.name);
+  if (kind === SessionKind.Race) {
+    for (const heat of sess.heats ?? []) {
+      const isFinalHeat = isFinalSession || /\bfinal/i.test(heat.label ?? '') || heat.raceRoundStage === 2;
+      if (!isFinalHeat) continue;
+      const entry = heat.entries?.find((e) => e.teamId === team.id);
+      if (!entry) continue;
+      const hatband = laneHatbands?.[entry.laneIndex - 1]?.trim();
+      const laneDetail = hatband
+        ? `Lane ${entry.laneIndex} (${hatband} hatband/silk)`
+        : `Lane ${entry.laneIndex}`;
+      const timeWhen = timing?.effective ?? timing?.scheduled;
+      const timeDetail = timeWhen ? ` at ${fmt(timeWhen)}` : '';
+      const finalLabel = heat.label?.trim() || sess.name;
+      fireOnce(
+        `final-draw:${heat.id}:${team.id}:${entry.laneIndex}`,
+        `${teamLabel} — ${finalLabel}`,
+        `${finalLabel}${timeDetail} · ${laneDetail} (${compName}).`,
+      );
+    }
+  }
+
+  const scheduled = timing?.scheduled?.getTime() ?? null;
+  if (scheduled == null) return;
+
+  const minsAhead = (scheduled - now) / 60_000;
+
+  // Lead-time-before-session — fire once in the [leadMins, leadMins - 5] minute window.
+  const leadMins = getNotifyMinutesBefore();
+  if (kind === SessionKind.Race && minsAhead <= leadMins && minsAhead > leadMins - 5) {
+    const { tag, title } = formatNotifyLeadReminder(leadMins, sess.id, team.id, teamLabel);
+    const teamEntry = sess.heats?.flatMap((h) => h.entries ?? []).find((e) => e.teamId === team.id);
+    const hatband = teamEntry ? laneHatbands?.[teamEntry.laneIndex - 1]?.trim() : undefined;
+    const laneSuffix = teamEntry
+      ? ` · Lane ${teamEntry.laneIndex}${hatband ? ` (${hatband} hatband/silk)` : ''}`
+      : '';
     fireOnce(
-      `1h:${sess.id}:${team.id}`,
-      `${teamLabel} — 1 hour to go`,
-      `${sess.name} starts at ${fmt(timing!.scheduled!)} (${compName}).`,
+      tag,
+      title,
+      `${sess.name} starts at ${fmt(timing!.scheduled!)}${laneSuffix} (${compName}).`,
     );
   }
 

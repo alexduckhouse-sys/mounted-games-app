@@ -65,8 +65,7 @@ export function EmbedCard(props: Props) {
       <RefineSection title="Embed on your website" />
       <div className="rf-list flex flex-col gap-3 p-3">
         <p className="m-0 text-[15px]">
-          Embed {props.kind === 'season' ? 'this season’s table' : 'live results'} on your club’s website.
-          It updates automatically and only shows team names, places, points and times.
+          Live {props.kind === 'season' ? 'season table' : 'results'} widget for your website.
         </p>
 
         {props.kind === 'competition' && (

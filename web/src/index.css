@@ -21,18 +21,54 @@
   --brand-800: 24 42 82;
   --brand-900: 18 32 63;
 }
-/* Meadow green, kept for the existing themes. */
-[data-theme="light"], [data-theme="dark"], [data-theme="ocean"], [data-theme="sunset"] {
+/* Meadow green for the light theme; Ocean, Sunset and Dark align with their --mg-button / --mg-heading tokens. */
+[data-theme="light"] {
   --brand-50: 241 247 244;
   --brand-100: 220 235 226;
   --brand-200: 185 215 198;
   --brand-300: 143 189 165;
   --brand-400: 94 156 128;
   --brand-500: 63 125 98;
-  --brand-600: 47 99 77;
-  --brand-700: 38 79 62;
-  --brand-800: 31 64 50;
+  --brand-600: 38 79 62;
+  --brand-700: 31 64 50;
+  --brand-800: 25 53 41;
   --brand-900: 23 48 36;
+}
+[data-theme="ocean"] {
+  --brand-50: 240 249 255;
+  --brand-100: 224 242 254;
+  --brand-200: 186 230 253;
+  --brand-300: 125 211 252;
+  --brand-400: 56 189 248;
+  --brand-500: 14 165 233;
+  --brand-600: 3 105 161;
+  --brand-700: 7 89 133;
+  --brand-800: 12 74 110;
+  --brand-900: 8 47 73;
+}
+[data-theme="sunset"] {
+  --brand-50: 255 247 237;
+  --brand-100: 255 237 213;
+  --brand-200: 254 215 170;
+  --brand-300: 253 186 116;
+  --brand-400: 251 146 60;
+  --brand-500: 234 88 12;
+  --brand-600: 194 65 12;
+  --brand-700: 154 52 18;
+  --brand-800: 124 45 18;
+  --brand-900: 67 20 7;
+}
+[data-theme="dark"] {
+  --brand-50: 30 41 59;
+  --brand-100: 35 52 80;
+  --brand-200: 51 74 112;
+  --brand-300: 71 104 156;
+  --brand-400: 96 135 194;
+  --brand-500: 68 110 170;
+  --brand-600: 47 84 135;
+  --brand-700: 37 67 108;
+  --brand-800: 27 49 82;
+  --brand-900: 17 28 46;
 }
 
 html, body, #root {

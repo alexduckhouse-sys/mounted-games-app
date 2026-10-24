@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { blankRider, riderReady, type DecRider } from '../../../lib/decForm';
 import { BASIC_CONFIG, type DecFormConfig } from '../../../lib/decFormConfig';
 import { RiderPanel } from './RiderPanel';
+import { api } from '../../../api';
 
 function Harness({ config, reserve = false, start = {} }: { config: DecFormConfig; reserve?: boolean; start?: Partial<DecRider> }) {
   const [form, setForm] = useState<DecRider>({ ...blankRider(), fullName: 'Ella', pony: 'Pickle', ...start });
@@ -18,6 +19,16 @@ function Harness({ config, reserve = false, start = {} }: { config: DecFormConfi
 const config = (patch: Partial<DecFormConfig> = {}): DecFormConfig => ({ ...BASIC_CONFIG, ...patch });
 
 describe('RiderPanel on a set-up dec form', () => {
+  it('hides the previous pony certification immediately when the lookup changes', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: { found: true, certified: true, status: 'Certified', officialNotes: 'Test pony inspection' } });
+    render(<Harness config={config()} start={{ ponyOwnerFullName: 'Test Owner' }} />);
+    expect(await screen.findByText(/Test pony inspection/)).toBeInTheDocument();
+    get.mockReturnValue(new Promise(() => {}));
+    fireEvent.change(screen.getByLabelText('Pony'), { target: { value: 'Different test pony' } });
+    expect(screen.queryByText(/Test pony inspection/)).not.toBeInTheDocument();
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+  });
+
   it('asks only for a name and a pony on the basic form', () => {
     render(<Harness config={BASIC_CONFIG} />);
     expect(screen.getByLabelText('Rider')).toBeInTheDocument();

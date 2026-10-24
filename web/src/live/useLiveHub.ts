@@ -2,13 +2,15 @@ import { HttpTransportType, HubConnection, HubConnectionBuilder, LogLevel } from
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { recoverConnection } from './recoverConnection';
 import { useAuth } from '../auth/AuthContext';
-import type { LiveStream } from '../types';
+import type { LiveStream, StreamCommand, StreamTelemetry } from '../types';
 import type { StreamInvoke } from './streamRuntime';
 import { readToken } from '../api';
 
 export interface LiveHandlers {
   onStreamUpdated?: (stream: LiveStream) => void;
   onStreamViewers?: (payload: { streamId: number; count: number }) => void;
+  onStreamTelemetry?: (telemetry: StreamTelemetry) => void;
+  onStreamCommand?: (command: StreamCommand) => void;
   onOverlayUpdated?: (overlay: unknown) => void;
   onScoreCardControl?: (control: unknown) => void;
   onSponsorControl?: (control: unknown) => void;
@@ -59,6 +61,8 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
     // Events from a connection that has been replaced (new competition or auth session) are dropped.
     const forward = <A extends unknown[]>(deliver: (...args: A) => void) => (...args: A) => { if (active) deliver(...args); };
     conn.on('streamUpdated', forward((s) => handlersRef.current.onStreamUpdated?.(s as LiveStream)));
+    conn.on('streamTelemetry', forward((t) => handlersRef.current.onStreamTelemetry?.(t as StreamTelemetry)));
+    conn.on('streamCommand', forward((c) => handlersRef.current.onStreamCommand?.(c as StreamCommand)));
     conn.on('overlayUpdated', forward((o) => handlersRef.current.onOverlayUpdated?.(o)));
     conn.on('scoreCardControl', forward((c) => handlersRef.current.onScoreCardControl?.(c)));
     conn.on('sponsorControl', forward((c) => handlersRef.current.onSponsorControl?.(c)));

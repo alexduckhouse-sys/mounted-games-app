@@ -748,6 +748,45 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task ScopedLinks_CameraOnlyCannotScore_AndScoreAndStreamCanBothScoreAndControlStreams()
+    {
+        var w = await WorldAsync();
+        var url = LinksUrl(w.Arena.CompetitionId);
+
+        // Invalid scope (99) is rejected with 400
+        var invalidResp = await w.Owner.PostAsJsonAsync(url, new { label = "Bad", arenaName = "Main", scope = 99 });
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResp.StatusCode);
+
+        // Scope 1 = Camera only
+        var camCreated = await (await w.Owner.PostAsJsonAsync(url, new { label = "Tripod Cam", arenaName = "Main", scope = 1 })).ReadAsync<CreatedScorerLinkDto>();
+        Assert.Equal(1, camCreated.Link.Scope);
+        var camClient = Scorer(camCreated.Token);
+        var camSession = await camClient.GetFromJsonAsync<ScorerSessionDto>("/api/scorer/session", TestClients.Json);
+        Assert.Equal(1, camSession!.Scope);
+
+        // Camera-only link cannot read or submit race scores (403 Forbidden)
+        var race = w.MainRaces[0];
+        Assert.Equal(HttpStatusCode.Forbidden, (await camClient.GetAsync(Score(race))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await camClient.PutAsJsonAsync(Score(race), Put(w, 0, "cam-try"))).StatusCode);
+        var places = w.Arena.TeamIds.Select((t, i) => new FinishingPlaceDto(t, i + 1, false)).ToList();
+        Assert.Equal(HttpStatusCode.Forbidden, (await camClient.PostAsJsonAsync($"/api/scorer/races/{race}/results", new SubmitRaceResultsRequest(places, []))).StatusCode);
+
+        // Camera-only link CAN reach competition overlays for its competition
+        Assert.Equal(HttpStatusCode.OK, (await camClient.GetAsync($"/api/competitions/{w.Arena.CompetitionId}/overlays")).StatusCode);
+
+        // Scope 2 = ScoreAndStream
+        var bothCreated = await (await w.Owner.PostAsJsonAsync(url, new { label = "Judge + Stream", arenaName = "Main", scope = 2 })).ReadAsync<CreatedScorerLinkDto>();
+        Assert.Equal(2, bothCreated.Link.Scope);
+        var bothClient = Scorer(bothCreated.Token);
+        var bothSession = await bothClient.GetFromJsonAsync<ScorerSessionDto>("/api/scorer/session", TestClients.Json);
+        Assert.Equal(2, bothSession!.Scope);
+
+        // ScoreAndStream link can both score races and update overlays
+        Assert.Equal(HttpStatusCode.OK, (await bothClient.PutAsJsonAsync(Score(race), Put(w, 0, "both-save"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await bothClient.GetAsync($"/api/competitions/{w.Arena.CompetitionId}/overlays")).StatusCode);
+    }
+
+    [Fact]
     public async Task ScorerResponses_AreNeverCachedBySharedCaches()
     {
         var w = await WorldAsync();

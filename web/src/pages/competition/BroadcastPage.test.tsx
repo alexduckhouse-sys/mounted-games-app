@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
   listener: () => {},
   streams: [] as unknown[],
   overlay: undefined as StreamOverlay | undefined,
+  lastStreamCommand: null as unknown,
   saveOverlay: vi.fn(async (change: (o: StreamOverlay) => StreamOverlay) => {
     if (state.overlay) state.overlay = change(state.overlay);
     return 'saved' as const;
@@ -27,7 +28,9 @@ const state = vi.hoisted(() => ({
 const publisher = vi.hoisted(() => ({
   getSnapshot: () => state.snapshot,
   subscribe: (listener: () => void) => { state.listener = listener; return () => {}; },
-  capture: vi.fn(), devices: vi.fn(), switchCamera: vi.fn(), start: vi.fn(), stop: vi.fn(), dispose: vi.fn(), mute: vi.fn(), pause: vi.fn(), caption: vi.fn(), viewers: vi.fn(),
+  capture: vi.fn(), devices: vi.fn(), audioDevices: vi.fn(async (): Promise<MediaDeviceInfo[]> => []), switchCamera: vi.fn(), switchAudio: vi.fn(),
+  setWindFilter: vi.fn(), setZoom: vi.fn(), setQualityPreset: vi.fn(),
+  start: vi.fn(), stop: vi.fn(), dispose: vi.fn(), mute: vi.fn(), pause: vi.fn(), caption: vi.fn(), viewers: vi.fn(),
 }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../live/streamPublisher', () => ({ browserPublisherDependencies: () => ({}), createStreamPublisher: () => publisher }));
@@ -39,6 +42,7 @@ vi.mock('./context', async (importOriginal) => ({
     streams: state.streams,
     streamMessages: [],
     overlay: state.overlay,
+    lastStreamCommand: state.lastStreamCommand,
     saveOverlay: state.saveOverlay,
   }),
 }));
@@ -186,4 +190,64 @@ it('redirects ProducePage to BroadcastPage', () => {
     </MemoryRouter>,
   );
   expect(screen.getByRole('heading', { name: 'Go live' })).toBeVisible();
+});
+it('supports microphone selection, wind filter, quality presets, camera zoom, tripod screen dimming, multi-camera director cut, and remote commands', async () => {
+  publisher.audioDevices.mockResolvedValue([{ deviceId: 'rodelink', label: 'Rode Wireless GO' } as MediaDeviceInfo]);
+  state.streams = [
+    { id: 1, competitionId: 1, arenaName: 'Main Arena', angleName: 'Main camera', status: 0, viewerCount: 5 },
+    { id: 2, competitionId: 1, arenaName: 'Main Arena', angleName: 'Finish line', status: 0, viewerCount: 3 },
+  ];
+  state.lastStreamCommand = null;
+  const { rerender } = show();
+  fireEvent.click(screen.getByRole('button', { name: 'Allow camera' }));
+  await settle();
+
+  // Microphone selection, Wind filter & Quality preset before going live
+  chooseOption(screen.getByRole('combobox', { name: 'Microphone' }), 'rodelink');
+  await settle();
+  expect(publisher.switchAudio).toHaveBeenCalledWith('rodelink');
+
+  fireEvent.click(screen.getByRole('button', { name: /Outdoor wind filter/i }));
+  expect(publisher.setWindFilter).toHaveBeenCalledWith(true);
+
+  fireEvent.click(screen.getByRole('button', { name: '720p' }));
+  expect(publisher.setQualityPreset).toHaveBeenCalledWith('720p');
+
+  // Start stream (occupied because Main Arena · Main camera is in state.streams)
+  fireEvent.click(screen.getByRole('button', { name: 'Take over and go live' }));
+  await settle();
+
+  // Camera zoom pills
+  fireEvent.click(screen.getByRole('button', { name: 'Camera zoom 2x' }));
+  expect(publisher.setZoom).toHaveBeenCalledWith(2);
+
+  // Director multi-camera cut
+  fireEvent.click(screen.getByRole('button', { name: 'Cut to Finish line' }));
+  await settle();
+  expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/2/command', {
+    command: 'selectAngle',
+    value: '2',
+  });
+
+  expect(screen.queryByRole('button', { name: '+1h' })).toBeNull();
+
+  // Tripod Lock & Dim screen saver
+  fireEvent.click(screen.getByRole('button', { name: 'Lock and dim screen' }));
+  expect(screen.getByRole('dialog', { name: 'Screen dimmed for tripod battery saving' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: /unlock screen/i }));
+  expect(screen.queryByRole('dialog', { name: 'Screen dimmed for tripod battery saving' })).toBeNull();
+
+  state.lastStreamCommand = { streamId: 99, arenaName: 'Main Arena', command: 'flipCamera', issuedAt: '2026-10-24T12:04:00Z' };
+  const flips = publisher.switchCamera.mock.calls.length;
+  rerender(<MemoryRouter initialEntries={['/competitions/1/broadcast']}><BroadcastPage /></MemoryRouter>);
+  expect(publisher.switchCamera).toHaveBeenCalledTimes(flips);
+
+  // Remote commands from ScorerPage
+  state.lastStreamCommand = { streamId: 1, arenaName: 'Main Arena', command: 'setZoom', value: '3', issuedAt: '2026-10-24T12:05:00Z' };
+  rerender(<MemoryRouter initialEntries={['/competitions/1/broadcast']}><BroadcastPage /></MemoryRouter>);
+  expect(publisher.setZoom).toHaveBeenLastCalledWith(3);
+
+  state.lastStreamCommand = { streamId: 1, arenaName: 'Main Arena', command: 'setQualityPreset', value: '360p', issuedAt: '2026-10-24T12:06:00Z' };
+  rerender(<MemoryRouter initialEntries={['/competitions/1/broadcast']}><BroadcastPage /></MemoryRouter>);
+  expect(publisher.setQualityPreset).toHaveBeenLastCalledWith('360p');
 });

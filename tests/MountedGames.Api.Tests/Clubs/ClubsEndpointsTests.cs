@@ -12,6 +12,25 @@ public class ClubsEndpointsTests : IClassFixture<ApiFactory>
     public ClubsEndpointsTests(ApiFactory f) => _f = f;
 
     [Fact]
+    public async Task AdminCanUpdateAndDeleteUnusedClub_ButCannotDeleteLinkedProfiles()
+    {
+        var admin = await _f.AdminAsync();
+        var id = await _f.SeedClubAsync();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PutAsJsonAsync($"/api/clubs/{id}", new { name = "Test" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await (await _f.TrainerAsync()).DeleteAsync($"/api/clubs/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync($"/api/clubs/{id}", new { name = new string('x', 151) })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync($"/api/clubs/{id}", new { name = $"Test renamed {Guid.NewGuid()}" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"/api/clubs/{id}")).StatusCode);
+        var linkedId = await _f.SeedClubAsync();
+        var ownerId = await _f.TrainerIdAsync();
+        await _f.WithDbAsync(async db => {
+            db.Set<Api.Entities.Seasons.TeamProfile>().Add(new() { ClubId = linkedId, DisplayName = "Test profile", OwnerUserId = ownerId });
+            await db.SaveChangesAsync();
+        });
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.DeleteAsync($"/api/clubs/{linkedId}")).StatusCode);
+    }
+
+    [Fact]
     public async Task List_ReturnsSeededClubsAlphabetically()
     {
         var clubs = await (await _f.CreateClient().GetAsync("/api/clubs")).ReadAsync<List<ClubDto>>();

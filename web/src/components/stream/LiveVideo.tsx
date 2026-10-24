@@ -1,33 +1,65 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Video } from 'lucide-react';
-import type { ChatMessage, LiveStream, Session } from '../../types';
+import type { ChatMessage, LiveStream, Session, StreamCommand } from '../../types';
 import { streamHeatLabel, streamLink } from '../../lib/streams';
 import { SPECTATOR_NOTICE } from '../../lib/termsTick';
 import { browserViewerDependencies, createStreamViewer, type ViewerSnapshot } from '../../live/streamViewer';
 import type { StreamInvoke } from '../../live/streamRuntime';
 import { useLiteMode } from '../../lite/LiteModeContext';
+import { CompetitionContext } from '../../pages/competition/context';
 import { StreamChips } from './StreamChips';
 import { StreamPlayer } from './StreamPlayer';
 
-export function LiveVideo({ competitionId, streams, sessions, invoke, ready, messages, canBroadcast, fallback, competitionName, publicLayout = false, showPlaceholder = false }: {
+export function LiveVideo({ competitionId, streams, sessions, invoke, ready, messages, canBroadcast, fallback, competitionName, publicLayout = false, showPlaceholder = false, lastCommand }: {
   competitionId: number; streams: LiveStream[]; sessions: Session[]; invoke: StreamInvoke; ready: number;
   messages: { message: ChatMessage; receivedAt: number }[]; canBroadcast: boolean; fallback?: string | null; competitionName: string;
-  publicLayout?: boolean; showPlaceholder?: boolean;
+  publicLayout?: boolean; showPlaceholder?: boolean; lastCommand?: StreamCommand | null;
 }) {
   const { lite } = useLiteMode();
+  const ctx = useContext(CompetitionContext);
+  const effectiveCommand = lastCommand !== undefined ? lastCommand : ctx?.lastStreamCommand;
   const [selectedId, select] = useState<number | null>(null);
+  const [pinnedAngle, setPinnedAngle] = useState(false);
   // Once a viewer taps to watch, the other angles in this arena start without another tap.
   const [tapped, setTapped] = useState(false);
   const active = streams.filter((stream) => stream.status !== 2);
-  const selected = active.find((stream) => stream.id === selectedId) ?? active[0];
+  const baseSelected = active.find((stream) => stream.id === selectedId) ?? active[0];
+  const directorTarget = !pinnedAngle && effectiveCommand?.command === 'selectAngle'
+    ? active.find((s) => s.id === Number(effectiveCommand.value || effectiveCommand.streamId))
+    : undefined;
+  const selected = directorTarget && baseSelected && directorTarget.arenaName.trim().toLowerCase() === baseSelected.arenaName.trim().toLowerCase()
+    ? directorTarget
+    : baseSelected;
   const label = selected ? selected.caption || streamHeatLabel(sessions, selected.arenaName) : null;
+
+  const handleManualSelect = (id: number) => {
+    const next = active.find((s) => s.id === id);
+    if (next && selected && next.arenaName.trim().toLowerCase() === selected.arenaName.trim().toLowerCase()) {
+      setPinnedAngle(true);
+    } else {
+      setPinnedAngle(false);
+    }
+    select(id);
+  };
+
   return <section className={`flex min-h-0 flex-col ${publicLayout ? '' : 'gap-3'}`}>
     {!publicLayout && (selected || canBroadcast) && <div className="flex items-center gap-3"><h2 className="mg-h2 flex-1">Live video</h2>
       {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary !bg-[rgb(var(--mg-red))] !text-white"><Video aria-hidden="true" className="h-4 w-4" />Go live</Link>}
     </div>}
     {selected ? <>
-      <div className={publicLayout && active.length > 1 ? 'pb-2' : ''}><StreamChips streams={active} selected={selected} onSelect={select} /></div>
+      <div className={`flex flex-wrap items-center gap-2 ${publicLayout && active.length > 1 ? 'pb-2' : ''}`}>
+        <StreamChips streams={active} selected={selected} onSelect={handleManualSelect} />
+        {pinnedAngle && active.filter((s) => s.arenaName.trim().toLowerCase() === selected.arenaName.trim().toLowerCase()).length > 1 && (
+          <button
+            type="button"
+            className="mg-stream-chip text-xs"
+            onClick={() => setPinnedAngle(false)}
+          >
+            Auto-follow director
+          </button>
+        )}
+      </div>
       {typeof RTCPeerConnection === 'undefined' ? <p role="status" className="mg-card p-4">Live video is not supported in this browser.</p>
         : lite && !tapped ? <TapToWatch stream={selected} captionBar={publicLayout} onTap={() => setTapped(true)} />
         : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} />}
@@ -58,7 +90,7 @@ function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, labe
     return () => { unsubscribe(); next.dispose(); };
   }, [stream.competitionId, stream.id, invoke]);
   useEffect(() => { viewer.current!.sync(ready, stream.generation); }, [ready, stream.generation, stream.competitionId, stream.id, invoke]);
-  return <StreamPlayer media={snapshot.media} stream={stream} label={label} reconnecting={snapshot.state === 'reconnecting'} message={snapshot.message || (snapshot.state === 'connecting' ? 'Connecting…' : null)} announcement={announcement} captionBar={captionBar} />;
+  return <StreamPlayer media={snapshot.media} stream={stream} label={label} reconnecting={snapshot.state === 'reconnecting'} message={snapshot.message || (snapshot.state === 'connecting' ? 'Connecting…' : null)} announcement={announcement} captionBar={captionBar} quality={snapshot.preferredRid ?? 'f'} onQuality={(rid) => viewer.current?.setQuality(rid)} />;
 }
 export function CompStreamCard({ streamUrl, compName, publicLayout = false }: { streamUrl: string; compName: string; publicLayout?: boolean }) {
   const [loaded, setLoaded] = useState(false);

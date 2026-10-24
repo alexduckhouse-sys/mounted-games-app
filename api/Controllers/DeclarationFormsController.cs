@@ -165,7 +165,7 @@ public class DeclarationFormsController : ControllerBase
     [Authorize]
     public async Task<ActionResult<DeclarationFormDto>> Submit(SubmitDeclarationFormRequest req)
     {
-        var team = await _db.Teams.Include(t => t.Club).Include(t => t.Competition)
+        var team = await _db.Teams.Include(t => t.Club).Include(t => t.Competition).Include(t => t.Section)
             .FirstOrDefaultAsync(t => t.Id == req.TeamId);
         var isTeamStaffRole = User.IsInRole(Roles.Admin) || User.IsInRole(Roles.Trainer) || User.IsInRole(Roles.Manager);
         if (team is null) return isTeamStaffRole ? BadRequest(new { message = "Team not found." }) : Forbid();
@@ -193,8 +193,8 @@ public class DeclarationFormsController : ControllerBase
         var built = new List<RiderEntry>();
         foreach (var r in req.Riders)
         {
-            var entry = new RiderEntry { PonyHeightHands = r.PonyHeightHands, DateOfBirth = r.DateOfBirth, HorseName = r.HorseName };
-            if (DecFormRules.Apply(config, explicitConfig is null, r, r.IsReserve, entry, year) is { } problem)
+            var entry = new RiderEntry { FullName = r.FullName?.Trim() ?? string.Empty, PonyHeightHands = r.PonyHeightHands, DateOfBirth = r.DateOfBirth, HorseName = r.HorseName };
+            if (DecFormRules.Apply(config, explicitConfig is null, r, r.IsReserve, entry, year, team.Section?.AgeGroup, team.Competition?.StartDate.Year) is { } problem)
                 return BadRequest(new { message = problem });
             built.Add(entry);
         }
@@ -290,6 +290,7 @@ public class DeclarationFormsController : ControllerBase
                 AgeGroup = kept.AgeGroup,
                 WeightKg = kept.WeightKg,
                 PonyPassportNumber = kept.PonyPassportNumber,
+                PonyOwnerFullName = kept.PonyOwnerFullName,
                 PonyAge = kept.PonyAge,
                 MembershipNumber = kept.MembershipNumber,
                 EmergencyContactName = kept.EmergencyContactName,
@@ -302,8 +303,8 @@ public class DeclarationFormsController : ControllerBase
                 IsReserve = r.IsReserve,
                 IsGuestRider = r.IsGuestRider,
                 OrderIndex = r.OrderIndex == 0 ? order : r.OrderIndex,
-                UseInitialOnly = r.UseInitialOnly,
-                NoFilming = r.NoFilming
+                UseInitialOnly = kept.UseInitialOnly,
+                NoFilming = kept.NoFilming
             });
             order++;
         }
@@ -326,6 +327,21 @@ public class DeclarationFormsController : ControllerBase
                         && !string.IsNullOrWhiteSpace(linked.HorseName)
                         && !string.IsNullOrWhiteSpace(horseName)
                         && !string.Equals(linked.HorseName.Trim(), horseName, StringComparison.OrdinalIgnoreCase);
+                    if (linked is not null && !changedHorse)
+                    {
+                        var savedPassport = kept.PonyPassportNumber;
+                        var savedOwner = kept.PonyOwnerFullName;
+                        if (savedPassport is not null && linked.PonyPassportNumber != savedPassport)
+                        {
+                            linked.PonyPassportNumber = savedPassport;
+                            linked.UpdatedAt = DateTime.UtcNow;
+                        }
+                        if (savedOwner is not null && linked.PonyOwnerFullName != savedOwner)
+                        {
+                            linked.PonyOwnerFullName = savedOwner;
+                            linked.UpdatedAt = DateTime.UtcNow;
+                        }
+                    }
                     if (!changedHorse) continue;
                 }
 
@@ -338,6 +354,9 @@ public class DeclarationFormsController : ControllerBase
                             StringComparison.OrdinalIgnoreCase)
                         || (r.SavedRiderId is null && string.IsNullOrWhiteSpace(s.HorseName))));
 
+                var rosterPassport = kept.PonyPassportNumber;
+                var rosterOwner = kept.PonyOwnerFullName;
+
                 if (existing is null)
                 {
                     var added = new SavedRider
@@ -348,8 +367,10 @@ public class DeclarationFormsController : ControllerBase
                         DateOfBirth = rosterDob,
                         HorseName = horseName,
                         PonyHeightHands = kept.PonyHeightHands,
-                        UseInitialOnly = r.UseInitialOnly,
-                        NoFilming = r.NoFilming
+                        PonyPassportNumber = rosterPassport,
+                        PonyOwnerFullName = rosterOwner,
+                        UseInitialOnly = kept.UseInitialOnly,
+                        NoFilming = kept.NoFilming
                     };
                     _db.SavedRiders.Add(added);
                     clubRiders.Add(added);
@@ -360,8 +381,10 @@ public class DeclarationFormsController : ControllerBase
                     existing.DateOfBirth ??= rosterDob;
                     existing.HorseName ??= horseName;
                     existing.PonyHeightHands ??= kept.PonyHeightHands;
-                    existing.UseInitialOnly = r.UseInitialOnly;
-                    existing.NoFilming = r.NoFilming;
+                    existing.PonyPassportNumber = rosterPassport ?? existing.PonyPassportNumber;
+                    existing.PonyOwnerFullName = rosterOwner ?? existing.PonyOwnerFullName;
+                    existing.UseInitialOnly = kept.UseInitialOnly;
+                    existing.NoFilming = kept.NoFilming;
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
                 // Link a first saved entry, while retaining an explicitly selected rider's identity.

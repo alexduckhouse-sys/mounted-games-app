@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ClipboardList, Plus, Trophy, History, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { usePageWidth } from '../components/pageWidthState';
 import type { CompetitionSummary, DeclarationForm } from '../types';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 
@@ -11,6 +12,7 @@ type View = 'current' | 'all';
 const NO_FORMS: DeclarationForm[] = [];
 
 export function DeclarationsIndexPage() {
+  usePageWidth('wide');
   const { current } = useCurrentCompetition();
   const { user } = useAuth();
   const [view, setView] = useState<View>(current ? 'current' : 'all');

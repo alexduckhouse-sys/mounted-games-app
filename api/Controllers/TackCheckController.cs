@@ -90,6 +90,16 @@ public sealed class TackCheckController(AppDbContext db) : ControllerBase
             .SetCheckedAsync(competitionId, teamId, request, userId, name, ct));
     }
 
+    [HttpGet("/api/event-tools/certified-horses/lookup")]
+    [Authorize]
+    public Task<CertifiedHorseLookupDto> LookupCertifiedHorse(
+        [FromQuery] string? passportCode = null,
+        [FromQuery] string? ponyName = null,
+        [FromQuery] string? ownerFullName = null,
+        [FromQuery] int? competitionId = null,
+        CancellationToken ct = default)
+        => new PassportCheckService(db).LookupCertifiedHorseAsync(passportCode, ponyName, ownerFullName, competitionId, User, ct);
+
     private async Task<ActionResult<T>> Run<T>(string title, Func<Task<T>> work)
     {
         try { return await work(); }

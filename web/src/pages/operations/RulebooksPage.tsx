@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
 import { RaceRulesLibrary } from '../admin/RulesPage';
+import { RulebooksPage as RaceByRaceRulebooksPage } from '../RulebooksPage';
 import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineStatus } from '../refine/Refine';
 import type { Rulebook, RulebookSummary } from './types';
 import { apiMessage } from './types';
@@ -23,6 +25,10 @@ const readCompetitionContext = useCompetition;
 
 export function RulebooksPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  if (searchParams.get('race')?.trim()) {
+    return <RaceByRaceRulebooksPage />;
+  }
   return <GlobalRulebooks key={user?.id ?? ''} />;
 }
 
@@ -64,7 +70,7 @@ function GlobalRulebooks() {
   };
 
   return (
-    <RefinePage>
+    <RefinePage wide>
       {tab === 'rulebooks' ? (
         <RulebooksPanel renderHeader={({ draft, busy, onAdd, onClose }) => headerFor(draft, busy, onAdd, onClose)} />
       ) : (

@@ -119,7 +119,7 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
             <label className="rf-fld">Format<SelectField value={draft.format} onChange={(e) => patch({ format: Number(e.target.value) as SectionFormat })}>{([2, 1, 3] as SectionFormat[]).map((format) => <option key={format} value={format}>{SectionFormatLabel[format]}</option>)}</SelectField></label>
           </div>
           <label className="rf-fld">Age group<input maxLength={50} value={draft.ageGroup} onChange={(e) => patch({ ageGroup: e.target.value })} placeholder="All age groups (or e.g. Seniors)" /></label>
-          <p className="rf-note sv-flush">A season can include sections across all age groups and formats.</p>
+          <p className="rf-note sv-flush">Covers all age groups and formats.</p>
         </fieldset>
       </RefineDisclosure>
       {create && <RefineDisclosure title="Competitions" sub={selectedCompetitionIds.length ? `${selectedCompetitionIds.length} selected` : 'Optional. You can add rounds later'} defaultOpen>
@@ -155,7 +155,7 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
             <button type="button" className="rf-btn rf-btn-text" disabled={draft.points.length >= 100} onClick={() => patch({ points: [...draft.points, draft.points[draft.points.length - 1] ?? '0'] })}>Add place</button>
             <button type="button" className="rf-btn rf-btn-text" disabled={draft.points.length <= 1} onClick={() => patch({ points: draft.points.slice(0, -1) })}>Remove last place</button>
           </div>
-          <p className="rf-note sv-flush">First place first. Places after the last one listed score 0, the same as did not finish or eliminated.</p>
+          <p className="rf-note sv-flush">Unlisted lower places score 0.</p>
         </fieldset>
       </RefineDisclosure>
       <RefineDisclosure title="Results that count" sub={bestSummary}>
@@ -165,11 +165,11 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
         </fieldset>
       </RefineDisclosure>
       <RefineDisclosure title="Ties" sub="Most round wins (1st places), then share the place">
-        <p className="rf-note sv-body">When season points are tied, the rider or team with more round wins comes first. If they have the same number of wins, they share the place.</p>
+        <p className="rf-note sv-body">Ties break on round wins, then share the place.</p>
       </RefineDisclosure>
     </RefineList>
-    <RefineNote>Pairs results follow saved riders across rounds. Riders entered without a saved record appear separately for each event.</RefineNote>
-    <RefineNote>Saving doesn’t change published rounds. Preview and publish a new version of each affected round to apply new points.</RefineNote>
+    <RefineNote>Pairs points follow saved riders across rounds.</RefineNote>
+    <RefineNote>Republish rounds to apply changed points.</RefineNote>
     {(create || dirty) && <RefineFoot>
       <span className="rf-grow rf-t2" role="status">{create ? '' : `${changes} unsaved ${changes === 1 ? 'change' : 'changes'}`}</span>
       <button type="button" className="rf-btn rf-btn-text" disabled={busy} onClick={() => { if (create) onCancel?.(); else { setDraft(saved); setError(''); } }}>{create ? 'Cancel' : 'Discard'}</button>

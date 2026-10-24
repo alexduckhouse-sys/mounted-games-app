@@ -16,6 +16,25 @@ public class ScorerLinkSchemaTests : IClassFixture<ApiFactory>
     public ScorerLinkSchemaTests(ApiFactory f) => _f = f;
 
     [Fact]
+    public async Task ExistingLinksKeepTheirIdentityAndDefaultToScoreOnlyWhenScopeIsAdded()
+    {
+        var arena = await _f.CreateArenaAsync(2);
+        using var scope = _f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var link = new ScorerLink { CompetitionId = arena.CompetitionId, Label = "Test existing link", ArenaName = "Main",
+            TokenHash = ScorerLinkTokens.Hash(Guid.NewGuid().ToString()), CreatedByUserId = "test", ExpiresAt = DateTime.UtcNow.AddDays(1) };
+        db.Add(link);
+        await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE ScorerLinks DROP COLUMN Scope");
+        await DbInitializer.SeedAsync(_f.Services);
+        await DbInitializer.SeedAsync(_f.Services);
+        db.ChangeTracker.Clear();
+        var kept = await db.ScorerLinks.SingleAsync(x => x.Id == link.Id);
+        Assert.Equal(link.TokenHash, kept.TokenHash);
+        Assert.Equal(ScorerLink.ScopeScore, kept.Scope);
+    }
+
+    [Fact]
     public async Task ExistingSqliteDatabaseGainsScorerLinksAndTheActorLabel_WithoutLosingScores()
     {
         var arena = await _f.CreateArenaAsync(2);

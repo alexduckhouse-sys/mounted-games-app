@@ -28,6 +28,8 @@ const MembersPage = lazy(() => import('./pages/MembersPage').then((module) => ({
 const PayoutsPage = lazy(() => import('./pages/PayoutsPage').then((module) => ({ default: module.PayoutsPage })));
 const CompetitionsPage = lazy(() => import('./pages/CompetitionsPage').then((module) => ({ default: module.CompetitionsPage })));
 const ScoringTab = lazy(() => import('./pages/competition/ScoringTab').then((module) => ({ default: module.ScoringTab })));
+const TvKioskPage = lazy(() => import('./pages/competition/TvKioskPage').then((module) => ({ default: module.TvKioskPage })));
+const CommentaryDeskPage = lazy(() => import('./pages/competition/CommentaryDeskPage').then((module) => ({ default: module.CommentaryDeskPage })));
 const SessionPage = lazy(() => import('./pages/competition/SessionPage').then((module) => ({ default: module.SessionPage })));
 const TeamsTab = lazy(() => import('./pages/competition/TeamsTab').then((module) => ({ default: module.TeamsTab })));
 const CompetitionTeamPage = lazy(() => import('./pages/competition/CompetitionTeamPage').then((module) => ({ default: module.CompetitionTeamPage })));
@@ -60,7 +62,7 @@ const SeasonPage = lazy(() => import('./pages/seasons/SeasonPage').then((module)
 const TeamProfilePage = lazy(() => import('./pages/seasons/TeamProfilePage'));
 const StatsPage = lazy(() => import('./pages/stats/StatsPage').then((module) => ({ default: module.StatsPage })));
 const EventToolsPage = lazy(() => import('./pages/eventTools/EventToolsPage'));
-const PrintEventPage = lazy(() => import('./pages/eventTools/PrintEventPage'));
+const PrintEventPage = lazy(() => import('./pages/operations/PrintEventPage'));
 const ScorerPage = lazy(() => import('./pages/ScorerPage').then((module) => ({ default: module.ScorerPage })));
 const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage').then((module) => ({ default: module.UnsubscribePage })));
 const ConfirmEmailPage = lazy(() => import('./pages/ConfirmEmailPage').then((module) => ({ default: module.ConfirmEmailPage })));
@@ -106,6 +108,8 @@ export default function App() {
                 <Route path="enter/:sectionId" element={<SectionEntryPage />} />
                 <Route path="scoring" element={<AfterDrawOnly><ScoringTab /></AfterDrawOnly>} />
                 <Route path="toplists" element={<AfterDrawOnly><ScoringTab key="toplists" toplistOnly /></AfterDrawOnly>} />
+                <Route path="tv" element={<TvKioskPage />} />
+                <Route path="commentary" element={<CommentaryDeskPage />} />
                 <Route path="session/:sessionId" element={<AfterDrawOnly><SessionPage /></AfterDrawOnly>} />
                 <Route path="arena" element={<ArenaPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />

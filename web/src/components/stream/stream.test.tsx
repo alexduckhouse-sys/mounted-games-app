@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { StreamChips } from './StreamChips';
@@ -7,6 +7,8 @@ import { StreamPlayer } from './StreamPlayer';
 import { CompStreamCard, LiveVideo } from './LiveVideo';
 import { chat, session } from '../../test/factories';
 import { asMedia, FakeMediaStream, FakePeer, fakePeerConstructor, fakeStreamConstructor, flush, liveStream, resetMedia } from '../../test/streamFakes';
+import * as replayBuffers from '../../live/replayBuffer';
+import { deferred } from '../../test/streamFakes';
 import type { StreamInvoke } from '../../live/streamRuntime';
 
 const play = vi.fn(async () => {});
@@ -176,4 +178,206 @@ it('wires the viewer, changes cameras, passes announcements and uses captions or
   rerender(<MemoryRouter><LiveVideo {...p} ready={2} streams={list.map((s) => ({ ...s, generation: 2 }))} /></MemoryRouter>); await settle();
   FakePeer.instances.at(-1)!.getStats.mockResolvedValue(new Map()); await tick(10000); expect(screen.getByText('Reconnecting…')).toBeVisible();
   unmount(); expect(p.invoke).toHaveBeenCalledWith('StopWatching', 2);
+});
+
+it('supports viewer quality switching, picture-in-picture, and instant -15s replay on StreamPlayer', async () => {
+  const onQuality = vi.fn();
+  const requestPip = vi.fn(async () => {});
+  const exitPip = vi.fn(async () => {});
+  Object.defineProperty(HTMLVideoElement.prototype, 'requestPictureInPicture', { configurable: true, value: requestPip });
+  Object.defineProperty(document, 'exitPictureInPicture', { configurable: true, value: exitPip });
+  Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: null });
+  const media = asMedia(new FakeMediaStream());
+  render(<StreamPlayer media={media} stream={liveStream()} label="Heat 1" quality="f" onQuality={onQuality} />);
+  await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Quality 540p' }));
+  expect(onQuality).toHaveBeenCalledWith('h');
+  fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
+  expect(requestPip).toHaveBeenCalled();
+  Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: document.querySelector('video') });
+  fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
+  expect(exitPip).toHaveBeenCalled();
+  Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: null });
+  fireEvent.click(screen.getByRole('button', { name: 'Instant 15 second replay' }));
+});
+
+it('automatically cuts to a new camera angle on selectAngle command unless the viewer manually pinned an angle', async () => {
+  vi.stubGlobal('RTCPeerConnection', fakePeerConstructor); vi.stubGlobal('MediaStream', fakeStreamConstructor);
+  const p = props();
+  const list = [
+    liveStream({ id: 1, arenaName: 'Main Arena', angleName: 'Main camera' }),
+    liveStream({ id: 2, arenaName: 'Main Arena', angleName: 'Finish line' }),
+    liveStream({ id: 3, arenaName: 'Second Arena', angleName: 'Wide' }),
+  ];
+  const { rerender } = render(<MemoryRouter><LiveVideo {...p} streams={list} lastCommand={null} /></MemoryRouter>);
+  await settle();
+  expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 1);
+
+  // Director cuts to Finish line (id: 2)
+  rerender(<MemoryRouter><LiveVideo {...p} streams={list} lastCommand={{ streamId: 1, arenaName: 'Main Arena', command: 'selectAngle', value: '2', issuedAt: '2026-10-24T12:00:00Z' }} /></MemoryRouter>);
+  await settle();
+  expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
+
+  // Viewer manually pins Main camera (id: 1)
+  vi.mocked(p.invoke).mockClear();
+  fireEvent.click(screen.getByRole('button', { name: 'Main camera' }));
+  await settle();
+  expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 1);
+  expect(screen.getByRole('button', { name: 'Auto-follow director' })).toBeVisible();
+
+  // Director cut is ignored while pinned
+  vi.mocked(p.invoke).mockClear();
+  rerender(<MemoryRouter><LiveVideo {...p} streams={list} lastCommand={{ streamId: 1, arenaName: 'Main Arena', command: 'selectAngle', value: '2', issuedAt: '2026-10-24T12:01:00Z' }} /></MemoryRouter>);
+  await settle();
+  expect(p.invoke).not.toHaveBeenCalledWith('WatchStream', 1, 2);
+
+  // Viewer re-enables Auto-follow director or switches arena
+  vi.mocked(p.invoke).mockClear();
+  fireEvent.click(screen.getByRole('button', { name: 'Auto-follow director' }));
+  await settle();
+  expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
+
+  vi.mocked(p.invoke).mockClear();
+  fireEvent.click(screen.getByRole('button', { name: 'Second Arena' }));
+  await settle();
+  expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 3);
+});
+
+
+function replayFixture(id: string): replayBuffers.SavedReplayClip {
+  return { id, competitionId: 1, streamId: 1, arenaName: 'Main Arena', label: `Example replay ${id}`,
+    createdAt: '2026-01-01T12:00:00Z', durationSeconds: 15, mimeType: 'video/webm', blob: new Blob(['example']), url: `blob:example-${id}` };
+}
+function replayBufferFixture(clips: replayBuffers.SavedReplayClip[] = []) {
+  const buffer = { supported: true, recording: true, start: vi.fn(() => true), stop: vi.fn(), dispose: vi.fn(),
+    saveClip: vi.fn<replayBuffers.ReplayBufferHandle['saveClip']>().mockResolvedValue(clips[0] ?? null),
+    markRaceBookmark: vi.fn().mockResolvedValue(null), chunkCount: vi.fn(() => 1) };
+  vi.spyOn(replayBuffers, 'createReplayBuffer').mockReturnValue(buffer);
+  const listeners = new Set<() => void>();
+  vi.spyOn(replayBuffers, 'subscribeSavedReplays').mockImplementation((listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; });
+  vi.spyOn(replayBuffers, 'getSavedReplays').mockImplementation(() => [...clips]);
+  vi.spyOn(replayBuffers, 'loadPersistedReplays').mockResolvedValue(clips);
+  vi.spyOn(replayBuffers, 'removeSavedReplay').mockImplementation((id) => { const index = clips.findIndex(c => c.id === id); if (index >= 0) clips.splice(index, 1); listeners.forEach(listener => listener()); });
+  return buffer;
+}
+
+it('opens instant and saved replays, switches clips, offers a download and closes or deletes the last clip', async () => {
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  const clips = [replayFixture('one'), replayFixture('two')];
+  const buffer = replayBufferFixture(clips);
+  const { unmount } = render(<StreamPlayer media={asMedia(new FakeMediaStream())} stream={liveStream()} label="Example heat" />);
+  await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Instant 15 second replay' })); await settle();
+  expect(buffer.saveClip).toHaveBeenCalledWith('Example heat', expect.objectContaining({ durationSeconds: 15, signal: expect.any(AbortSignal) }));
+  const dialog = screen.getByRole('dialog', { name: 'Replay inspector' });
+  expect(within(dialog).getByRole('link', { name: 'Download replay' })).toHaveAttribute('href', clips[0].url);
+  expect(within(dialog).getByRole('link', { name: 'Download replay' })).toHaveAttribute('download', 'Example_replay_one_Main_Arena.webm');
+  fireEvent.click(within(screen.getByRole('region', { name: 'Saved clips' })).getByText('Example replay two'));
+  expect(screen.getByLabelText('Example replay two video')).toHaveAttribute('src', 'blob:example-two');
+  fireEvent.click(screen.getByRole('button', { name: 'Delete replay Example replay two' }));
+  expect(screen.getByLabelText('Example replay one video')).toHaveAttribute('src', 'blob:example-one');
+  fireEvent.click(screen.getByRole('button', { name: 'Close replay' }));
+  expect(screen.queryByRole('dialog', { name: 'Replay inspector' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /Saved replays/ }));
+  expect(screen.getByRole('dialog', { name: 'Replay inspector' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove line review' }));
+  expect(screen.queryByRole('dialog', { name: 'Replay inspector' })).toBeNull();
+  expect(replayBuffers.removeSavedReplay).toHaveBeenLastCalledWith('one');
+  unmount(); expect(buffer.dispose).toHaveBeenCalledOnce();
+});
+
+it('uses the arena fallback label, reports replay failures and disposes recordings when media changes', async () => {
+  const buffer = replayBufferFixture();
+  buffer.saveClip.mockRejectedValueOnce(new Error('Example storage failure'));
+  const media = asMedia(new FakeMediaStream());
+  const { rerender, unmount } = render(<StreamPlayer media={media} stream={liveStream()} label={null} captionBar />);
+  await settle();
+  expect(screen.getByText('Main Arena · Main camera')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Instant 15 second replay' })); await settle();
+  expect(buffer.saveClip).toHaveBeenCalledWith('Main Arena -15s', expect.objectContaining({ durationSeconds: 15 }));
+  expect(screen.getByText('Example storage failure')).toBeVisible();
+  rerender(<StreamPlayer media={null} stream={liveStream()} label={null} />);
+  expect(buffer.dispose).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('button', { name: 'Instant 15 second replay' })).toBeNull();
+  rerender(<StreamPlayer media={media} stream={liveStream({ id: 2 })} label={null} />);
+  expect(replayBuffers.createReplayBuffer).toHaveBeenLastCalledWith(expect.objectContaining({ streamId: 2 }));
+  unmount(); expect(buffer.dispose).toHaveBeenCalledTimes(2);
+});
+
+it('aborts replay preparation on unmount and ignores a late clip', async () => {
+  const buffer = replayBufferFixture(); const pending = deferred<replayBuffers.SavedReplayClip | null>();
+  buffer.saveClip.mockReturnValueOnce(pending.promise);
+  const { unmount } = render(<StreamPlayer media={asMedia(new FakeMediaStream())} stream={liveStream()} label="Example heat" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Instant 15 second replay' })); await settle();
+  const options = buffer.saveClip.mock.calls[0][1] as replayBuffers.SaveClipOptions;
+  unmount(); expect(options.signal?.aborted).toBe(true);
+  pending.resolve(replayFixture('late')); await settle();
+  expect(screen.queryByRole('dialog')).toBeNull(); expect(buffer.dispose).toHaveBeenCalledOnce();
+});
+
+it('falls back to Safari picture-in-picture and tolerates missing APIs and refusals', async () => {
+  Object.defineProperty(HTMLVideoElement.prototype, 'requestPictureInPicture', { configurable: true, value: undefined });
+  Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: null });
+  const safariPip = vi.fn();
+  Object.defineProperty(HTMLVideoElement.prototype, 'webkitSetPresentationMode', { configurable: true, value: safariPip });
+  render(<StreamPlayer media={asMedia(new FakeMediaStream())} stream={liveStream()} label={null} />); await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
+  expect(safariPip).toHaveBeenCalledWith('picture-in-picture');
+  safariPip.mockImplementationOnce(() => { throw new Error('not allowed'); });
+  fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
+  Object.defineProperty(HTMLVideoElement.prototype, 'webkitSetPresentationMode', { configurable: true, value: undefined });
+  fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
+  const request = vi.fn().mockRejectedValue(new Error('not allowed'));
+  Object.defineProperty(HTMLVideoElement.prototype, 'requestPictureInPicture', { configurable: true, value: request });
+  fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' })); await settle();
+  expect(request).toHaveBeenCalledOnce();
+  Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: document.querySelector('video') });
+  Object.defineProperty(document, 'exitPictureInPicture', { configurable: true, value: vi.fn().mockRejectedValue(new Error('closed')) });
+  fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' })); await settle();
+  Object.defineProperty(document, 'exitPictureInPicture', { configurable: true, value: undefined });
+  fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
+});
+
+it('handles rejected sound gestures and ignores stale autoplay and fullscreen promises', async () => {
+  const pendingPlay = deferred<void>(); play.mockReturnValueOnce(pendingPlay.promise);
+  const media = asMedia(new FakeMediaStream());
+  const { rerender, unmount } = render(<StreamPlayer media={media} stream={liveStream()} label={null} />);
+  rerender(<StreamPlayer media={null} stream={liveStream()} label={null} />);
+  pendingPlay.reject(new Error('old media')); await settle();
+  expect(screen.queryByRole('button', { name: 'Play' })).toBeNull();
+  play.mockRejectedValueOnce(new Error('sound blocked'));
+  fireEvent.click(screen.getByRole('button', { name: 'Tap for sound' })); await settle();
+  expect(screen.getByRole('button', { name: 'Play' })).toBeVisible();
+  const fullscreen = deferred<void>(); requestFullscreen.mockReturnValueOnce(fullscreen.promise);
+  fireEvent.click(screen.getByRole('button', { name: 'Open full screen' }));
+  fireEvent.keyDown(document, { key: 'Escape' });
+  fullscreen.resolve(); await settle();
+  expect(lock).not.toHaveBeenCalled();
+  unmount();
+});
+
+it('unmutes an already-playing video without restarting it and safely ignores closing an inline player', async () => {
+  render(<StreamPlayer media={asMedia(new FakeMediaStream())} stream={liveStream()} label={null} />); await settle();
+  const video = document.querySelector('video')!;
+  vi.spyOn(video, 'paused', 'get').mockReturnValue(false); play.mockClear();
+  fireEvent.click(screen.getByRole('button', { name: 'Tap for sound' }));
+  expect(video.muted).toBe(false); expect(play).not.toHaveBeenCalled();
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(history.back).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Open full screen' })); await settle();
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: document.body });
+  exitFullscreen.mockRejectedValueOnce(new Error('browser already exited'));
+  fireEvent.click(screen.getByRole('button', { name: 'Close full screen' })); await settle();
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it('uses director stream ID without a value in the public multi-camera layout and keeps external fallback usable', async () => {
+  vi.stubGlobal('RTCPeerConnection', fakePeerConstructor); vi.stubGlobal('MediaStream', fakeStreamConstructor);
+  const p = props(); const streams = [liveStream(), liveStream({ id: 2, angleName: 'Finish line' })];
+  const { rerender } = render(<MemoryRouter><LiveVideo {...p} publicLayout streams={streams}
+    lastCommand={{ streamId: 2, arenaName: 'Main Arena', command: 'selectAngle', value: null, issuedAt: '2026-01-01T12:00:00Z' }} /></MemoryRouter>);
+  await settle(); expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
+  expect(screen.getByRole('button', { name: 'Finish line' })).toHaveAttribute('aria-pressed', 'true');
+  rerender(<MemoryRouter><LiveVideo {...p} publicLayout streams={[]} fallback="https://example.test/live" /></MemoryRouter>);
+  expect(screen.getByRole('link', { name: 'Open stream' })).toHaveAttribute('href', 'https://example.test/live');
 });

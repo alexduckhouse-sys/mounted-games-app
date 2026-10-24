@@ -18,7 +18,7 @@ public static class CompetitionStaff
     public static IServiceCollection AddAuthorizationWithCompetitionStaff(this IServiceCollection services)
     {
         services.AddAuthorization(options =>
-            options.AddPolicy(Policy, policy => policy.RequireAuthenticatedUser().AddRequirements(new Requirement())));
+            options.AddPolicy(Policy, policy => policy.AddRequirements(new Requirement())));
         return services.AddScoped<IAuthorizationHandler, Handler>();
     }
 
@@ -29,10 +29,20 @@ public static class CompetitionStaff
         protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, Requirement requirement)
         {
             var user = context.User;
-            var uid = user.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (user.IsInRole(Roles.Admin) || user.IsInRole(Roles.Trainer)
-                || (!string.IsNullOrEmpty(uid) && await db.CompetitionCollaborators.AnyAsync(c => c.UserId == uid)))
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var uid = user.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (user.IsInRole(Roles.Admin) || user.IsInRole(Roles.Trainer)
+                    || (!string.IsNullOrEmpty(uid) && await db.CompetitionCollaborators.AnyAsync(c => c.UserId == uid)))
+                {
+                    context.Succeed(requirement);
+                    return;
+                }
+            }
+            if (context.Resource is HttpContext http && await ScorerLinkAccessAttribute.TryAuthenticateStreamLinkAsync(http) is not null)
+            {
                 context.Succeed(requirement);
+            }
         }
     }
 }

@@ -39,7 +39,7 @@ export const scorerApi = axios.create({ baseURL: import.meta.env.VITE_API_BASE ?
 
 scorerApi.interceptors.request.use((config) => {
   const token = readScorerToken();
-  if (token) config.headers.set('X-Scorer-Token', token);
+  if (token && !config.headers.has('X-Scorer-Token')) config.headers.set('X-Scorer-Token', token);
   if (config.method?.toLowerCase() === 'get' && !config.timeout) config.timeout = 15_000;
   return config;
 });
@@ -54,6 +54,7 @@ export function parseScorerSession(data: unknown): ScorerSession | null {
     competitionId: s.competitionId,
     competitionName: typeof s.competitionName === 'string' ? s.competitionName : '',
     arenaName: s.arenaName,
+    ...(s.scope === 0 || s.scope === 1 || s.scope === 2 ? { scope: s.scope } : {}),
     expiresAt: typeof s.expiresAt === 'string' ? s.expiresAt : '',
     sessions: s.sessions.filter((x) => !!x && Array.isArray(x.heats)),
   };

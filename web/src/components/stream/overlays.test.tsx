@@ -8,6 +8,14 @@ import { competition } from '../../test/factories';
 import { liveStream } from '../../test/streamFakes';
 import { StreamOverlays } from './StreamOverlays';
 
+vi.mock('framer-motion', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('framer-motion')>();
+  return {
+    ...actual,
+    useReducedMotion: vi.fn(() => true),
+  };
+});
+
 function show(overlay: Partial<StreamOverlay>, extra: { label?: string | null; arena?: string; scoreCards?: QueuedScoreCard[] } = {}) {
   const value: CompetitionCtx = {
     competition: competition(), reload: vi.fn(), streams: [], streamingEnabled: true, invoke: vi.fn(), ready: 1, streamMessages: [],

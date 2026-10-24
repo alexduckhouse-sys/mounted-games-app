@@ -66,6 +66,24 @@ describe('ScoreAuditPanel', () => {
     expect(await screen.findByText('Correction saved.')).toBeInTheDocument();
   });
 
+  it('preserves and edits half-point manual overrides when saving a correction', async () => {
+    const user = userEvent.setup();
+    render(<ScoreAuditPanel raceId={9} />);
+    await screen.findByRole('button', { name: 'Save correction' });
+    await user.click(screen.getByText('Correct placings'));
+
+    const pointsInput = screen.getByLabelText('Points for team 4');
+    await user.clear(pointsInput);
+    await user.type(pointsInput, '2.5');
+    await user.type(screen.getByRole('textbox', { name: 'Correction reason' }), 'Split dead heat');
+    await user.click(screen.getByRole('button', { name: 'Save correction' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/races/9/score', expect.objectContaining({
+      places: [{ teamId: 4, place: 1, eliminated: false, points: 2.5 }],
+      expectedRevision: 1,
+      reason: 'Split dead heat',
+    })));
+  });
+
   it('lists score history as rows with no sign-off or reopen controls', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => Promise.resolve({ data: url.endsWith('/history')
       ? [{ revision: 2, kind: 2, before: score.results, after: score.results, actorUserId: 'u1', reason: 'Referee protest upheld', createdAt: '2030-01-01T10:00:00Z' }]

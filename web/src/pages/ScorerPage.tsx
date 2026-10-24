@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CloudOff, Link2Off, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, CloudOff, Eye, Film, Link2Off, Lock, Mic, MicOff, Pause, Play, QrCode, RefreshCw, Square, Video } from 'lucide-react';
+import { QrPermissionScannerModal } from '../components/QrPermissionScannerModal';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
+import { ScoreClashBanner, type ScoreClashItem } from './competition/ScoringParts';
 import { ScoringSection, type PendingPlace } from './competition/ScoringSection';
 import {
   clearScorerToken, parseScorerSession, readSavedScorerSession, readSavedScorerSessionAt, readScorerToken, scorerApi, scorerFailure,
@@ -14,7 +16,13 @@ import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo
 import { overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
-import type { Heat, ScorerSession, Session } from '../types';
+import { browserPublisherDependencies, createStreamPublisher, type PublisherSnapshot } from '../live/streamPublisher';
+import { createReplayBuffer, getSavedReplays, type ReplayBufferHandle, type SavedReplayClip } from '../live/replayBuffer';
+import { ReplayInspector, SavedReplaysButton } from '../components/stream/ReplayInspector';
+import { useLiveHub } from '../live/useLiveHub';
+import { useReplayPreparation } from '../live/useReplayPreparation';
+import { ReplayPreparation } from '../components/stream/ReplayPreparation';
+import type { Heat, LiveStream, LiveStreamsResponse, ScorerSession, Session, StreamQualityPreset } from '../types';
 
 /** Takes the token from the address (`/score#t=…`), keeps it on this phone and tidies the address bar. */
 function captureToken(): string | null {
@@ -53,13 +61,14 @@ function withHeat(session: ScorerSession, sessionId: number, heat: Heat): Scorer
  * heat scoring screen and the phone's score outbox, so scores queue offline and send when there's signal.
  */
 export function ScorerPage() {
-  const [token] = useState(captureToken);
+  const [token, setToken] = useState(captureToken);
   const [session, setSession] = useState<ScorerSession | null>(() => token ? readSavedScorerSession() : null);
   const [failure, setFailure] = useState<ScorerLoadFailure | null>(token ? null : 'missing');
   const [fromSavedCopy, setFromSavedCopy] = useState(false);
   /** When the timetable on screen last came from the server (null when unknown). */
   const [sessionAt, setSessionAt] = useState<string | null>(() => token ? readSavedScorerSessionAt() : null);
   const [loading, setLoading] = useState(!!token);
+  const [qrOpen, setQrOpen] = useState(false);
   const outbox = useScoreOutbox();
 
   const load = useCallback(() => {
@@ -141,19 +150,452 @@ export function ScorerPage() {
         <div role="alert" className="mg-card space-y-2 p-4">
           <p className="flex items-center gap-2 font-semibold"><Link2Off className="h-5 w-5 shrink-0" /> {MESSAGES[failure].title}</p>
           <p>{MESSAGES[failure].body}</p>
-          {failure === 'other' && <button type="button" className="btn-primary min-h-11" onClick={() => void load()}>Try again</button>}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {failure === 'other' && <button type="button" className="btn-primary min-h-11" onClick={() => void load()}>Try again</button>}
+            {(failure === 'missing' || failure === 'invalid' || failure === 'withdrawn') && (
+              <button
+                type="button"
+                className="btn-primary min-h-11 flex items-center gap-2"
+                onClick={() => setQrOpen(true)}
+              >
+                <QrCode className="h-4 w-4" aria-hidden="true" />
+                Scan permission QR code
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      {session && failure !== 'invalid' && failure !== 'missing' && (
-        <>
-          <ScoreOutboxPanel competitionId={session.competitionId} />
-          {raceSessions.length === 0
-            ? <p className="mg-card p-4">Nothing is timetabled for this arena yet. It will appear here once the organiser adds it.</p>
-            : <ArenaScoring key={session.competitionId} sessions={raceSessions} outbox={outbox} />}
-        </>
+      {session && token && failure !== 'invalid' && failure !== 'missing' && failure !== 'withdrawn' && (
+        session.scope === 1 ? (
+          <TripodCameraBroadcaster session={session} />
+        ) : (
+          <>
+            {session.scope === 2 && <RemoteStreamControlBar session={session} />}
+            <ScoreOutboxPanel competitionId={session.competitionId} />
+            {raceSessions.length === 0
+              ? <p className="mg-card p-4">Nothing is timetabled for this arena yet. It will appear here once the organiser adds it.</p>
+              : <ArenaScoring key={session.competitionId} sessions={raceSessions} outbox={outbox} />}
+          </>
+        )
       )}
+
+      <QrPermissionScannerModal
+        open={qrOpen}
+        onClose={() => setQrOpen(false)}
+        onScorerVerified={(verifiedToken, verifiedSession) => {
+          setToken(verifiedToken);
+          setSession(verifiedSession);
+          setFailure(null);
+          setFromSavedCopy(false);
+          setSessionAt(new Date().toISOString());
+          setLoading(false);
+        }}
+        onNavigate={(to) => {
+          if (!to.startsWith('/score')) {
+            window.location.assign(to);
+          }
+        }}
+      />
     </main>
+  );
+}
+
+function RemoteStreamControlBar({ session }: { session: ScorerSession }) {
+  const [streams, setStreams] = useState<LiveStream[]>([]);
+  const [selectedStreamId, setSelectedStreamId] = useState<number | null>(null);
+  const [zoom, setZoom] = useState<number>(1);
+  const [quality, setQuality] = useState<StreamQualityPreset>('1080p');
+  const [muted, setMuted] = useState<boolean>(false);
+  const [paused, setPaused] = useState<boolean>(false);
+  const [statusNote, setStatusNote] = useState<string>('');
+  const [inspectingClip, setInspectingClip] = useState<SavedReplayClip | null>(null);
+
+  const loadStreams = useCallback(() => {
+    return scorerApi.get<LiveStreamsResponse>(`/competitions/${session.competitionId}/streams`)
+      .then(({ data }) => {
+        const active = (data?.streams ?? []).filter(
+          (s) => s.status !== 2 && s.arenaName.trim().toLowerCase() === session.arenaName.trim().toLowerCase(),
+        );
+        setStreams(active);
+        const current = active.find((s) => s.id === selectedStreamId) ?? active[0] ?? null;
+        if (current) {
+          setMuted(current.audioMuted);
+          setPaused(current.status === 1);
+        }
+      })
+      .catch(() => {
+        // Offline or stream list unavailable
+      });
+  }, [session.competitionId, session.arenaName, selectedStreamId]);
+
+  useEffect(() => {
+    void loadStreams();
+  }, [loadStreams]);
+
+  const activeStream = streams.find((s) => s.id === selectedStreamId) ?? streams[0] ?? null;
+
+  async function sendCommand(command: string, value?: string, targetStreamId?: number) {
+    const id = targetStreamId ?? activeStream?.id;
+    if (!id) return;
+    try {
+      await scorerApi.post(`/competitions/${session.competitionId}/streams/${id}/command`, {
+        command,
+        value: value ?? null,
+      });
+      setStatusNote(`Sent: ${command}`);
+    } catch {
+      setStatusNote('Could not reach camera');
+    }
+  }
+
+  return (
+    <section aria-label="Remote camera control" className="mg-card space-y-2.5 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+          <Video className="h-4 w-4 text-red-600" aria-hidden="true" />
+          <span>Stream &amp; Camera Control</span>
+          {activeStream ? (
+            <span className="mg-badge mg-badge-live text-xs">
+              LIVE · {activeStream.angleName} ({activeStream.viewerCount} watching)
+            </span>
+          ) : (
+            <span className="mg-meta">No active camera in {session.arenaName}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <SavedReplaysButton
+            competitionId={session.competitionId}
+            arenaName={session.arenaName}
+            onSelectClip={(c) => setInspectingClip(c)}
+          />
+          <button
+            type="button"
+            className="btn-ghost min-h-9 px-2.5 text-xs"
+            aria-label="Refresh camera status"
+            onClick={() => void loadStreams()}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {streams.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label="Director camera cut">
+          <span className="font-semibold text-[rgb(var(--mg-muted))]">Director cut:</span>
+          {streams.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              aria-label={`Cut to ${s.angleName}`}
+              aria-pressed={activeStream?.id === s.id}
+              className={`min-h-9 rounded-full px-3 font-semibold ${activeStream?.id === s.id ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+              onClick={() => {
+                setSelectedStreamId(s.id);
+                setMuted(s.audioMuted);
+                setPaused(s.status === 1);
+                void sendCommand('selectAngle', String(s.id), s.id);
+              }}
+            >
+              {s.angleName}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeStream && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <button
+            type="button"
+            aria-label={muted ? 'Unmute camera mic' : 'Mute camera mic'}
+            aria-pressed={muted}
+            className={`min-h-9 flex items-center gap-1 rounded-lg px-2.5 font-semibold ${muted ? 'bg-red-100 text-red-900' : 'bg-slate-100 text-slate-800'}`}
+            onClick={() => {
+              const next = !muted;
+              setMuted(next);
+              void sendCommand('mute', String(next));
+            }}
+          >
+            {muted ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+            <span>{muted ? 'Mic muted' : 'Mic on'}</span>
+          </button>
+
+          {([1, 2, 3] as const).map((z) => (
+            <button
+              key={z}
+              type="button"
+              aria-label={`Remote zoom ${z}x`}
+              aria-pressed={zoom === z}
+              className={`min-h-9 rounded-lg px-2.5 font-bold ${zoom === z ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+              onClick={() => {
+                setZoom(z);
+                void sendCommand('setZoom', String(z));
+              }}
+            >
+              {z}x
+            </button>
+          ))}
+
+          {(['360p', '720p', '1080p'] as const).map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              aria-label={`Stream quality ${preset}`}
+              aria-pressed={quality === preset}
+              className={`min-h-9 rounded-lg px-2.5 font-semibold ${quality === preset ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+              onClick={() => {
+                setQuality(preset);
+                void sendCommand('setQualityPreset', preset);
+              }}
+            >
+              {preset}
+            </button>
+          ))}
+
+          <button
+            type="button"
+            aria-label={paused ? 'Resume stream' : 'Pause stream (Back soon)'}
+            aria-pressed={paused}
+            className={`min-h-9 flex items-center gap-1 rounded-lg px-2.5 font-semibold ${paused ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-800'}`}
+            onClick={() => {
+              const next = !paused;
+              setPaused(next);
+              void sendCommand('pause', String(next));
+            }}
+          >
+            {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+            <span>{paused ? 'Resume' : 'Back soon'}</span>
+          </button>
+
+          <button
+            type="button"
+            aria-label="Save 15s camera replay"
+            className="min-h-9 flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 font-semibold text-slate-800"
+            onClick={() => void sendCommand('saveReplay', '15')}
+          >
+            <Film className="h-3.5 w-3.5" />
+            <span>Save 15s replay</span>
+          </button>
+        </div>
+      )}
+
+      {statusNote && <p role="status" className="text-xs text-[rgb(var(--mg-muted))]">{statusNote}</p>}
+
+      {inspectingClip && (
+        <ReplayInspector
+          clip={inspectingClip}
+          clips={getSavedReplays(session.competitionId)}
+          onSelectClip={(c) => setInspectingClip(c)}
+          onClose={() => setInspectingClip(null)}
+        />
+      )}
+    </section>
+  );
+}
+
+function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
+  const replayBuffer = useRef<ReplayBufferHandle | null>(null);
+  const replayPreparation = useReplayPreparation();
+  const [commandError, setCommandError] = useState('');
+  const [replayStatus, setReplayStatus] = useState<{ retainedSeconds: number; warning?: string }>({ retainedSeconds: 0 });
+  const [inspectingClip, setInspectingClip] = useState<SavedReplayClip | null>(null);
+  const publisher = useRef<ReturnType<typeof createStreamPublisher> | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [snapshot, setSnapshot] = useState<PublisherSnapshot>({
+    state: 'idle', media: null, streamId: null, viewerCount: 0, signal: 'good', audioMuted: false, hasAudio: false, error: null,
+  });
+  const [angle, setAngle] = useState('Main camera');
+  const [quality, setQuality] = useState<StreamQualityPreset>('1080p');
+  const [dimmed, setDimmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (typeof RTCPeerConnection === 'undefined' || !navigator.mediaDevices) return;
+    const baseDeps = browserPublisherDependencies();
+    const next = createStreamPublisher(session.competitionId, {
+      ...baseDeps,
+      request: <T = void>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown) =>
+        scorerApi.request<T>({ method, url: path, data: body }).then((r) => r.data),
+    });
+    publisher.current = next;
+    const unsubscribe = next.subscribe(() => setSnapshot(next.getSnapshot()));
+    return () => { unsubscribe(); publisher.current = null; next.dispose(); };
+  }, [session.competitionId]);
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    videoRef.current.muted = true;
+    videoRef.current.playsInline = true;
+    videoRef.current.autoplay = true;
+    videoRef.current.srcObject = snapshot.media;
+    if (snapshot.media) void videoRef.current.play().catch(() => {});
+  }, [snapshot.media]);
+
+  const live = ['starting', 'live', 'paused', 'reconnecting'].includes(snapshot.state);
+  useEffect(() => {
+    if (!snapshot.media) return;
+    const handle = createReplayBuffer({ competitionId: session.competitionId, streamId: snapshot.streamId ?? undefined,
+      arenaName: session.arenaName, onStatus: setReplayStatus });
+    replayBuffer.current = handle; handle.start(snapshot.media);
+    return () => { handle.dispose(); if (replayBuffer.current === handle) replayBuffer.current = null; };
+  }, [snapshot.media, snapshot.streamId, session.competitionId, session.arenaName]);
+  useLiveHub(session.competitionId, {
+    onStreamCommand: (message) => {
+      const current = publisher.current;
+      const state = current?.getSnapshot();
+      if (!current || !state || state.streamId !== message.streamId || !['live', 'paused', 'reconnecting'].includes(state.state)) return;
+      const { command, value } = message;
+      setCommandError('');
+      void (async () => {
+        if (command === 'mute') await current.mute(value === 'true');
+        else if (command === 'pause') await current.pause(value === 'true');
+        else if (command === 'flipCamera') await current.switchCamera();
+        else if (command === 'windFilter') await current.setWindFilter(value === 'true');
+        else if (command === 'setZoom') await current.setZoom(Number(value) || 1);
+        else if (command === 'setQualityPreset' && (value === '360p' || value === '720p' || value === '1080p')) {
+          await current.setQualityPreset(value); if (publisher.current === current) setQuality(value);
+        } else if (command === 'saveReplay') {
+          const buffer = replayBuffer.current;
+          if (buffer) await replayPreparation.prepare((options) => buffer.saveClip('Camera replay', { ...options, durationSeconds: Number(value) || 15 }), setInspectingClip);
+        }
+      })().catch(() => { if (publisher.current === current) setCommandError('The camera command failed. Try again.'); });
+    },
+  });
+
+  return (
+    <section aria-label="Tripod camera broadcaster" className="mg-card space-y-3 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h2 className="font-bold">Tripod camera · {session.arenaName}</h2>
+          <p className="mg-meta">Stream-only link (scoring is disabled on this phone)</p>
+        </div>
+        {live && (
+          <span className="mg-badge mg-badge-live flex items-center gap-1">
+            LIVE <Eye className="h-3.5 w-3.5" /> {snapshot.viewerCount}
+          </span>
+        )}
+      </div>
+
+      {snapshot.error && <p role="alert" className="mg-notice">{snapshot.error}</p>}
+      {commandError && <p role="alert">{commandError}</p>}
+      <ReplayPreparation {...replayPreparation} />
+      {snapshot.media && <p className="mg-meta">Replay history: {Math.floor(replayStatus.retainedSeconds / 60)}m {Math.floor(replayStatus.retainedSeconds % 60)}s (up to 30m)</p>}
+      {replayStatus.warning && <p role="status">{replayStatus.warning}</p>}
+      <SavedReplaysButton competitionId={session.competitionId} arenaName={session.arenaName} onSelectClip={setInspectingClip} />
+      {inspectingClip && <ReplayInspector clip={inspectingClip} clips={getSavedReplays(session.competitionId)} onClose={() => setInspectingClip(null)} onSelectClip={setInspectingClip} />}
+
+      {!snapshot.media ? (
+        <button
+          type="button"
+          className="btn-primary min-h-11 flex items-center gap-2"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try { await publisher.current?.capture(true); } finally { setBusy(false); }
+          }}
+        >
+          <Camera className="h-4 w-4" /> Allow camera
+        </button>
+      ) : (
+        <div className="space-y-3">
+          <div className="relative aspect-video overflow-hidden rounded-xl bg-black">
+            <video ref={videoRef} muted autoPlay playsInline className="h-full w-full object-cover" aria-label="Tripod camera preview" />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold">Camera angle:</span>
+            {['Main camera', 'Finish line', 'Start line', 'Wide'].map((name) => (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={angle === name}
+                disabled={live}
+                className={`min-h-9 rounded-full px-3 font-semibold ${angle === name ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+                onClick={() => setAngle(name)}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold">Quality:</span>
+            {(['360p', '720p', '1080p'] as const).map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                aria-pressed={quality === preset}
+                className={`min-h-9 rounded-full px-3 font-semibold ${quality === preset ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+                onClick={() => {
+                  setQuality(preset);
+                  void publisher.current?.setQualityPreset?.(preset);
+                }}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {!live ? (
+              <button
+                type="button"
+                className="btn-primary min-h-11"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try { await publisher.current?.start(session.arenaName, angle, true); } finally { setBusy(false); }
+                }}
+              >
+                Go live
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="btn-ghost min-h-11 flex items-center gap-1.5"
+                  aria-label="Lock and dim tripod screen"
+                  onClick={() => setDimmed(true)}
+                >
+                  <Lock className="h-4 w-4" /> Lock &amp; dim screen
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost min-h-11 flex items-center gap-1.5 text-red-700"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try { await publisher.current?.stop(); } finally { setBusy(false); }
+                  }}
+                >
+                  <Square className="h-4 w-4" /> End stream
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {dimmed && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Tripod screen dimmed"
+          className="fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/35 select-none"
+          onDoubleClick={() => setDimmed(false)}
+        >
+          <Lock className="h-8 w-8" />
+          <p className="text-sm font-semibold">LIVE · {session.arenaName} · {angle}</p>
+          <button
+            type="button"
+            className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50"
+            onClick={() => setDimmed(false)}
+          >
+            Double-tap or tap here to unlock screen
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -260,9 +702,62 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
     setPending(restore.length > 0 ? restore : null);
   }
 
+  const teamNamesById: Record<number, string> = {};
+  for (const h of heats) {
+    for (const e of h.entries) teamNamesById[e.teamId] = e.teamName;
+  }
+  for (const q of outbox) {
+    if (q.teamNames) Object.assign(teamNamesById, q.teamNames);
+  }
+
+  const clashes: ScoreClashItem[] = outbox
+    .filter((q) => q.state === 'conflict' && q.sessionId === session.id)
+    .map((q) => {
+      const serverRace = heats.flatMap((h) => h.races).find((r) => r.id === q.raceId);
+      return {
+        raceId: q.raceId,
+        raceName: serverRace?.name ?? q.label,
+        raceOrder: serverRace?.orderIndex,
+        sessionId: q.sessionId,
+        existingPlaces: (serverRace?.results ?? []).map((r) => ({
+          teamId: r.teamId,
+          place: r.placing ?? 0,
+          eliminated: r.eliminated,
+          points: r.points,
+          status: r.status,
+        })),
+        incomingPlaces: q.places.map((p) => ({
+          teamId: p.teamId,
+          place: p.place,
+          eliminated: p.eliminated,
+          points: p.points,
+          status: p.status,
+        })),
+      };
+    });
+
+  function resolveClash(clash: ScoreClashItem, useIncoming: boolean) {
+    if (!useIncoming) {
+      updateOutbox((list) => list.filter((q) => q.raceId !== clash.raceId));
+      return;
+    }
+    const existingItem = outbox.find((q) => q.raceId === clash.raceId);
+    if (!existingItem) return;
+    updateOutbox((list) =>
+      enqueue(list, {
+        ...existingItem,
+        saveId: crypto.randomUUID(),
+        expected: clash.existingPlaces.map((p) => ({ teamId: p.teamId, place: p.place, eliminated: p.eliminated })),
+        reason: 'Score clash resolved',
+        state: 'waiting',
+      }),
+    );
+  }
+
   return (
     <div className="space-y-3">
       {saveError && <p role="alert" className="mg-notice">{saveError}</p>}
+      <ScoreClashBanner clashes={clashes} teamNamesById={teamNamesById} onResolve={resolveClash} />
       {sessions.length > 1 && (
         <label className="flex flex-col gap-1 text-sm font-semibold">Session
           <select className="input min-h-11" value={session.id} onChange={(event) => choose({ session: Number(event.target.value) })}>

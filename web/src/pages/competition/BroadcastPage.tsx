@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { Camera, Eye, Handshake, Layers, Megaphone, Mic, MicOff, Pause, Play, RefreshCw, SkipForward, Square, Wifi } from 'lucide-react';
+import { Camera, Eye, Film, Handshake, Layers, Lock, Megaphone, Mic, MicOff, Pause, Play, RefreshCw, SkipForward, Square, Wifi, Wind } from 'lucide-react';
 import { api } from '../../api';
 import { sponsorsFor } from '../../lib/sponsors';
 import { SponsorOverlay } from '../../components/stream/SponsorOverlay';
@@ -10,6 +10,10 @@ import { DEFAULT_OVERLAY } from '../../lib/overlays';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { browserPublisherDependencies, createStreamPublisher, type PublisherSnapshot } from '../../live/streamPublisher';
+import { useReplayPreparation } from '../../live/useReplayPreparation';
+import { ReplayPreparation } from '../../components/stream/ReplayPreparation';
+import { createReplayBuffer, getSavedReplays, type ReplayBufferHandle, type SavedReplayClip } from '../../live/replayBuffer';
+import { ReplayInspector, SavedReplaysButton } from '../../components/stream/ReplayInspector';
 import { streamHeatLabel } from '../../lib/streams';
 import { setBroadcasting } from '../../pwa';
 import { LiveDataCardOverlay, ProducerBanner, type LiveOverlayCardMode } from '../../components/stream/OverlayExtras';
@@ -17,11 +21,14 @@ import { OverlayLayer, StreamNotice } from '../../components/stream/StreamOverla
 import { FilmingBanner } from '../../components/FilmingBanner';
 import { SelectField } from '../../components/SelectField';
 import { usePageWidth } from '../../components/pageWidthState';
+import type { StreamQualityPreset } from '../../types';
 
 const DEFAULT_STREAM_LIMIT_SECONDS = 30 * 60;
 const EXTEND_STREAM_SECONDS = 15 * 60;
 const MAX_STREAM_LIMIT_SECONDS = 45 * 60;
 const LOW_TIME_THRESHOLD_SECONDS = 5 * 60;
+const QUALITY_PRESETS: StreamQualityPreset[] = ['360p', '720p', '1080p'];
+const CAMERA_ZOOMS = [1, 2, 3] as const;
 
 const DATA_CARD_OPTIONS: { mode: LiveOverlayCardMode; label: string }[] = [
   { mode: 'none', label: 'Off' },
@@ -42,20 +49,31 @@ export function BroadcastPage() {
 }
 
 function BroadcastStudio() {
-  const { competition, streams, streamMessages, overlay, saveOverlay } = useCompetition();
+  const { competition, streams, streamMessages, overlay, saveOverlay, scoreCards, lastStreamCommand } = useCompetition();
   const { user } = useAuth();
   const navigate = useNavigate();
   const publisher = useRef<ReturnType<typeof createStreamPublisher> | null>(null);
+  const replayBuffer = useRef<ReplayBufferHandle | null>(null);
+  const replayPreparation = useReplayPreparation();
+  const prepareReplay = replayPreparation.prepare;
+  const [replayStatus, setReplayStatus] = useState<{ retainedSeconds: number; warning?: string }>({ retainedSeconds: 0 });
+  const lastScoredCard = useRef<string | null>(scoreCards?.at(-1)?.key ?? null);
   const [snapshot, setSnapshot] = useState<PublisherSnapshot>({ state: 'idle', media: null, streamId: null, viewerCount: 0, signal: 'good', audioMuted: false, hasAudio: false, error: null });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   const arenas = [...new Set(competition.sessions.map((session) => session.arenaName?.trim()).filter((name): name is string => !!name))];
   const [arena, setArena] = useState(arenas[0] ?? '');
   const [angle, setAngle] = useState('Main camera');
   const [otherArena, setOtherArena] = useState(arenas.length === 0);
   const [otherAngle, setOtherAngle] = useState(false);
   const [sound, setSound] = useState(true);
+  const [windFilter, setWindFilter] = useState(false);
+  const [qualityPreset, setQualityPreset] = useState<StreamQualityPreset>('1080p');
+  const [cameraZoom, setCameraZoom] = useState<number>(1);
+  const [screenDimmed, setScreenDimmed] = useState(false);
+  const [inspectingClip, setInspectingClip] = useState<SavedReplayClip | null>(null);
   const [caption, setCaption] = useState('');
   const [editingCaption, setEditingCaption] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -79,6 +97,7 @@ function BroadcastStudio() {
   const label = caption || streamHeatLabel(competition.sessions, arena) || `${arena} · ${angle}`;
   const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
   const occupied = !live && streams.some((stream) => stream.status !== 2 && same(stream.arenaName, arena) && same(stream.angleName, angle));
+  const arenaStreams = streams.filter((stream) => stream.status !== 2 && same(stream.arenaName, arena));
 
   useEffect(() => {
     const next = createStreamPublisher(competition.id, browserPublisherDependencies());
@@ -86,6 +105,68 @@ function BroadcastStudio() {
     const unsubscribe = next.subscribe(() => setSnapshot(next.getSnapshot()));
     return () => { unsubscribe(); next.dispose(); setBroadcasting(false); };
   }, [competition.id]);
+
+  // Attach 30-minute rolling replay buffer while live
+  useEffect(() => {
+    if (!live || !snapshot.media) {
+      replayBuffer.current?.dispose();
+      replayBuffer.current = null;
+      return;
+    }
+    const handle = createReplayBuffer({
+      competitionId: competition.id,
+      arenaName: arena || 'Arena',
+      windowSeconds: 1800,
+      resolutionLabel: snapshot.captureResolution ?? 'HD',
+      onStatus: setReplayStatus,
+    });
+    handle.start(snapshot.media);
+    replayBuffer.current = handle;
+    return () => {
+      handle.dispose();
+      if (replayBuffer.current === handle) replayBuffer.current = null;
+    };
+  }, [live, snapshot.media, competition.id, arena, snapshot.captureResolution]);
+
+  // Remember card identity: the shared card queue is bounded, so its length eventually stops changing.
+  useEffect(() => {
+    const latest = scoreCards?.at(-1);
+    if (!latest || latest.key === lastScoredCard.current) return;
+    lastScoredCard.current = latest.key;
+    if (same(latest.arenaName, arena)) {
+      const buffer = replayBuffer.current;
+      if (buffer) void prepareReplay((options) => buffer.saveClip(`${latest.heading} · ${latest.card.raceName}`, { ...options, durationSeconds: 45 }), () => {});
+    }
+  }, [scoreCards, arena, prepareReplay]);
+
+  // Execute remote camera/stream commands issued from ScorerPage or another controller
+  useEffect(() => {
+    if (!lastStreamCommand || !live) return;
+    const matchesStream = snapshot.streamId === lastStreamCommand.streamId;
+    if (!matchesStream) return;
+    const { command, value } = lastStreamCommand;
+    if (command === 'setZoom') {
+      const z = Number(value) || 1;
+      void publisher.current?.setZoom?.(z);
+    } else if (command === 'mute') {
+      void publisher.current?.mute(value === 'true');
+    } else if (command === 'pause') {
+      void publisher.current?.pause(value === 'true');
+    } else if (command === 'flipCamera') {
+      void publisher.current?.switchCamera();
+    } else if (command === 'windFilter') {
+      const enabled = value === 'true';
+      void publisher.current?.setWindFilter?.(enabled);
+    } else if (command === 'setQualityPreset') {
+      if (value === '360p' || value === '720p' || value === '1080p') {
+        void publisher.current?.setQualityPreset?.(value);
+      }
+    } else if (command === 'saveReplay') {
+      const secs = Number(value) || 15;
+      const buffer = replayBuffer.current;
+      if (buffer) void prepareReplay((options) => buffer.saveClip(`${arena || 'Arena'} · ${secs}s Replay`, { ...options, durationSeconds: secs }), () => {});
+    }
+  }, [lastStreamCommand, live, snapshot.streamId, arena, prepareReplay]);
 
   useEffect(() => {
     if (!video.current) return;
@@ -188,13 +269,31 @@ function BroadcastStudio() {
     });
   }
 
+  async function cutToAngle(targetStreamId: number) {
+    if (busy) return;
+    await run(async () => {
+      await api.post(`/competitions/${competition.id}/streams/${targetStreamId}/command`, {
+        command: 'selectAngle',
+        value: String(targetStreamId),
+      });
+    });
+  }
+
+  function handleSaveReplay() {
+    const buffer = replayBuffer.current;
+    if (buffer) void prepareReplay((options) => buffer.saveClip(`${arena || 'Arena'} · ${angle}`, { ...options, durationSeconds: 15 }), setInspectingClip);
+  }
+
   const preview = <video ref={video} muted autoPlay playsInline className="h-full w-full object-cover" aria-label="Camera preview" />;
   if (live) return createPortal(<div className="mg-font fixed inset-0 z-[100] bg-[rgb(var(--mg-header-deep))] text-white">
     {preview}
     <OverlayLayer>
+      <ReplayPreparation {...replayPreparation} />
       <div className="pointer-events-none absolute left-4 right-20 top-4 flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="mg-badge mg-badge-live">LIVE {time}</span>
+          <span className="mg-stream-glass px-2 py-1 text-xs">Replay history: {Math.floor(replayStatus.retainedSeconds / 60)}m {Math.floor(replayStatus.retainedSeconds % 60)}s (up to 30m)</span>
+          {replayStatus.warning && <span role="status" className="mg-stream-glass px-2 py-1 text-xs">{replayStatus.warning}</span>}
           <span className={`mg-stream-glass flex items-center gap-1.5 px-2 py-1 ${remaining <= LOW_TIME_THRESHOLD_SECONDS ? 'border border-amber-400 text-amber-200' : ''}`}>
             <span>{remainingLabel}</span>
             <button
@@ -210,7 +309,35 @@ function BroadcastStudio() {
           <span className="mg-stream-glass flex items-center gap-1 px-2 py-1"><Eye className="h-4 w-4" />{snapshot.viewerCount}</span>
           <span className={`mg-stream-glass flex items-center gap-1 border px-2 py-1 ${snapshot.signal === 'poor' ? 'border-[rgb(var(--mg-red))]' : snapshot.signal === 'fair' ? 'border-amber-400' : 'border-transparent'}`}><Wifi className="h-4 w-4" />{snapshot.signal === 'good' ? 'Good' : snapshot.signal === 'fair' ? 'Fair' : 'Weak signal'}</span>
           <span className="mg-stream-glass px-2 py-1">{arena} · {angle}</span>
+          {CAMERA_ZOOMS.map((z) => (
+            <button
+              key={z}
+              type="button"
+              aria-label={`Camera zoom ${z}x`}
+              aria-pressed={cameraZoom === z}
+              className={`pointer-events-auto rounded-full px-2 py-0.5 text-xs font-bold ${cameraZoom === z ? 'bg-amber-400 text-black' : 'mg-stream-glass text-white'}`}
+              onClick={() => { setCameraZoom(z); void publisher.current?.setZoom?.(z); }}
+            >
+              {z}x
+            </button>
+          ))}
         </div>
+        {arenaStreams.length > 1 && (
+          <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label="Director camera cut">
+            <span className="mg-stream-glass px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">Cut to</span>
+            {arenaStreams.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                aria-label={`Cut to ${s.angleName}`}
+                className={`rounded-full px-2.5 py-0.5 font-semibold ${s.id === snapshot.streamId ? 'bg-amber-400 text-black' : 'mg-stream-glass text-white hover:bg-white/20'}`}
+                onClick={() => void cutToAngle(s.id)}
+              >
+                {s.angleName}
+              </button>
+            ))}
+          </div>
+        )}
         <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
       </div>
       <ProducerBanner arenaName={arena} overlay={currentOverlay} />
@@ -220,6 +347,15 @@ function BroadcastStudio() {
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={flip}><RefreshCw />Flip</button>
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={() => run(() => publisher.current!.mute(!snapshot.audioMuted))}>{snapshot.audioMuted ? <MicOff /> : <Mic />}{snapshot.audioMuted ? 'Sound off' : 'Sound on'}</button>
         <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy || !canControl} onClick={() => run(() => publisher.current!.pause(snapshot.state !== 'paused'))}>{snapshot.state === 'paused' ? <Play /> : <Pause />}{snapshot.state === 'paused' ? 'Resume' : 'Back soon'}</button>
+        <button
+          type="button"
+          className="mg-stream-control flex-col !rounded-xl p-2"
+          disabled={busy || !canControl}
+          aria-label="Save 15s replay"
+          onClick={handleSaveReplay}
+        >
+          <Film />Replay
+        </button>
         <button
           type="button"
           aria-pressed={showAnnounce}
@@ -237,6 +373,14 @@ function BroadcastStudio() {
           onClick={() => { setShowOverlays((v) => !v); setShowAnnounce(false); }}
         >
           <Layers />Overlays
+        </button>
+        <button
+          type="button"
+          className="mg-stream-control flex-col !rounded-xl p-2"
+          aria-label="Lock and dim screen"
+          onClick={() => setScreenDimmed(true)}
+        >
+          <Lock />Dim
         </button>
         <button className="mg-stream-control flex-col !rounded-xl !bg-[rgb(var(--mg-red))] p-2" onClick={() => setConfirmEnd(true)}><Square />End</button>
       </div>
@@ -310,6 +454,7 @@ function BroadcastStudio() {
       <div className="pointer-events-auto absolute bottom-4 left-4 right-24 flex flex-wrap items-center gap-2">
         {editingCaption ? <form className="mg-stream-glass flex flex-1 gap-2 p-2" onSubmit={(event) => { event.preventDefault(); void run(async () => { await publisher.current!.caption(caption); setEditingCaption(false); }); }}><input aria-label="Viewers see" className="min-w-0 flex-1 bg-transparent p-2 text-white" maxLength={80} value={caption} placeholder="Leave blank for the timetable" onChange={(event) => setCaption(event.target.value)} /><button disabled={busy}>Save</button></form>
           : <button className="mg-stream-glass px-3 py-2 text-left text-sm" onClick={() => setEditingCaption(true)}><span className="mr-2 text-xs uppercase text-[rgb(var(--mg-header-sub))]">Viewers see</span>{label}</button>}
+        <SavedReplaysButton competitionId={competition.id} arenaName={arena} onSelectClip={(c) => setInspectingClip(c)} />
         {currentOverlay.bannerText && !showAnnounce && (
           <button type="button" className="mg-stream-glass px-3 py-2 text-xs font-semibold text-amber-300" disabled={busy} onClick={() => void clearBanner()}>
             Clear banner
@@ -320,24 +465,97 @@ function BroadcastStudio() {
       {(snapshot.state === 'starting' || snapshot.state === 'reconnecting') && <p role="status" className="mg-stream-glass absolute left-4 top-1/2 p-3">{snapshot.state === 'starting' ? 'Starting stream…' : 'Reconnecting…'}</p>}
       {error && <p role="alert" className="mg-stream-glass absolute left-4 right-24 top-20 p-3">{error}</p>}
       {confirmEnd && <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-[rgb(var(--mg-header-deep)/0.8)]"><div role="alertdialog" aria-modal="true" aria-labelledby="end-stream-title" className="mg-stream-glass mx-4 max-w-sm space-y-3 border border-[rgb(var(--mg-header-line))] p-5"><h2 id="end-stream-title" className="text-2xl font-bold">End the stream?</h2><p>Viewers will see that it has finished.</p><div className="flex gap-3"><button autoFocus className="mg-stream-control !rounded-xl px-3" onClick={() => setConfirmEnd(false)}>Keep going</button><button disabled={ending} className="mg-stream-control !rounded-xl !bg-[rgb(var(--mg-red))] px-3" onClick={end}>End stream</button></div></div></div>}
+      {screenDimmed && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Screen dimmed for tripod battery saving"
+          className="pointer-events-auto fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/35 select-none"
+          onDoubleClick={() => setScreenDimmed(false)}
+        >
+          <Lock className="h-8 w-8" />
+          <p className="text-sm font-semibold">LIVE {time} · {arena} · {angle}</p>
+          <button
+            type="button"
+            className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50 hover:text-white"
+            onClick={() => setScreenDimmed(false)}
+          >
+            Double-tap or tap here to unlock screen
+          </button>
+        </div>
+      )}
+      {inspectingClip && (
+        <ReplayInspector
+          clip={inspectingClip}
+          clips={getSavedReplays(competition.id)}
+          onSelectClip={(c) => setInspectingClip(c)}
+          onClose={() => setInspectingClip(null)}
+        />
+      )}
     </OverlayLayer>
   </div>, document.body);
   const soundField = (
     <label className="mg-card flex items-center justify-between p-3"><span>Sound</span><input type="checkbox" checked={sound} disabled={busy} onChange={(event) => { const next = event.target.checked; void run(async () => { if (snapshot.media) await publisher.current!.capture(next); setSound(next); }); }} /></label>
   );
-  return <div className={`mx-auto flex w-full flex-col gap-4 pb-6 ${snapshot.media ? '' : 'max-w-xl'}`}>
+  return <div className={`mx-auto flex w-full flex-col gap-4 pb-6 pt-3 ${snapshot.media ? '' : 'max-w-xl'}`}>
     <Link className="mg-text-link" to={`/competitions/${competition.id}/chat`}>‹ Live stream</Link><h1 className="mg-h1">Go live</h1>
     {error || snapshot.error ? <p role="alert" className="mg-notice">{error || snapshot.error}</p> : null}
     <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
     {!snapshot.media && soundField}
-    {!snapshot.media ? <button disabled={busy} className="mg-btn mg-btn-primary min-h-12" onClick={() => run(async () => { await publisher.current!.capture(sound); setDevices(await publisher.current!.devices()); })}><Camera />Allow camera</button> : <>
+    {!snapshot.media ? <button disabled={busy} className="mg-btn mg-btn-primary min-h-12" onClick={() => run(async () => { await publisher.current!.capture(sound); setDevices(await publisher.current!.devices()); setMics(await (publisher.current!.audioDevices?.() ?? Promise.resolve([]))); })}><Camera />Allow camera</button> : <>
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(340px,2fr)] lg:items-start lg:gap-6">
         <div className="relative aspect-video overflow-hidden rounded-2xl bg-[rgb(var(--mg-header-deep))] lg:sticky lg:top-[calc(var(--mg-shell-h,104px)+16px)]">{preview}<span className="mg-font mg-stream-glass absolute left-3 top-3 px-2 py-1">Preview</span><button className="mg-stream-control absolute bottom-3 right-3" aria-label="Flip camera" disabled={busy} onClick={flip}><RefreshCw /></button></div>
         <div className="flex flex-col gap-4">
           {soundField}
+          {sound && (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="mg-stream-chip flex items-center gap-1.5"
+                aria-pressed={windFilter}
+                disabled={busy}
+                onClick={() => {
+                  const next = !windFilter;
+                  setWindFilter(next);
+                  void publisher.current?.setWindFilter?.(next);
+                }}
+              >
+                <Wind className="h-4 w-4" />
+                <span>Outdoor wind filter (120 Hz)</span>
+              </button>
+            </div>
+          )}
           <fieldset><legend className="mb-2 font-semibold">Arena</legend><div className="flex flex-wrap gap-2">{arenas.map((name) => <button className="mg-stream-chip" aria-pressed={!otherArena && name === arena} key={name} onClick={() => { setArena(name); setOtherArena(false); }}>{name}</button>)}<button className="mg-stream-chip" aria-pressed={otherArena} onClick={() => { setOtherArena(true); setArena(''); }}>Other…</button></div>{otherArena && <input aria-label="Arena name" className="input mt-2" maxLength={80} value={arena} onChange={(event) => setArena(event.target.value)} />}</fieldset>
           <fieldset><legend className="mb-2 font-semibold">Camera position</legend><div className="flex flex-wrap gap-2">{['Main camera', 'Finish line', 'Start line', 'Wide'].map((name) => <button key={name} className="mg-stream-chip" aria-pressed={!otherAngle && name === angle} onClick={() => { setAngle(name); setOtherAngle(false); }}>{name}</button>)}<button className="mg-stream-chip" aria-pressed={otherAngle} onClick={() => { setOtherAngle(true); setAngle(''); }}>Other…</button></div>{otherAngle && <input aria-label="Camera position" className="input mt-2" maxLength={60} value={angle} onChange={(event) => setAngle(event.target.value)} />}</fieldset>
+          <fieldset>
+            <legend className="mb-2 font-semibold">Live stream quality (4G data saver)</legend>
+            <div className="flex flex-wrap gap-2">
+              {QUALITY_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className="mg-stream-chip"
+                  aria-pressed={qualityPreset === preset}
+                  onClick={() => {
+                    setQualityPreset(preset);
+                    void publisher.current?.setQualityPreset?.(preset);
+                  }}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </fieldset>
           <label className="flex flex-col gap-2 font-semibold">Camera<SelectField className="input" disabled={busy} defaultValue="" onChange={(event) => run(() => publisher.current!.switchCamera(event.target.value))}><option value="" disabled>Choose camera</option>{devices.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Camera ${index + 1}`}</option>)}</SelectField></label>
+          {sound && mics.length > 0 && (
+            <label className="flex flex-col gap-2 font-semibold">
+              Microphone
+              <SelectField className="input" disabled={busy} defaultValue="" onChange={(event) => run(() => publisher.current!.switchAudio?.(event.target.value) ?? Promise.resolve())}>
+                <option value="" disabled>Choose microphone</option>
+                {mics.map((mic, index) => <option key={mic.deviceId} value={mic.deviceId}>{mic.label || `Microphone ${index + 1}`}</option>)}
+              </SelectField>
+            </label>
+          )}
           {occupied && <p role="status" className="mg-notice">Someone is already streaming {arena} · {angle}. Going live takes over from them.</p>}
           <p className="mg-notice">Anyone can watch. Check families know the event is being filmed. Keep this screen on: locking the phone pauses the stream.</p>
           <button disabled={busy || !arena.trim() || !angle.trim()} className="mg-btn mg-btn-primary !min-h-[52px] !bg-[rgb(var(--mg-red))] !text-white" onClick={() => run(async () => { const t = Date.now(); setStartedAt(t); setNow(t); setLimitSeconds(DEFAULT_STREAM_LIMIT_SECONDS); await publisher.current!.start(arena, angle, occupied); })}><VideoIcon />{occupied ? 'Take over and go live' : 'Go live'}</button>

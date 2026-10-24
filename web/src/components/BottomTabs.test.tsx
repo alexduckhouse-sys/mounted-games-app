@@ -1,14 +1,21 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { CurrentCompetitionProvider } from '../competition/CurrentCompetitionContext';
+import { applyBottomBarPreset, setBottomTabs } from '../lib/userPrefs';
 import { BottomTabs } from './BottomTabs';
+import { GlobalTabs } from './GlobalTabs';
 
-const current = (path: string) => {
-  render(<MemoryRouter initialEntries={[path]}><BottomTabs competitionId={12} /></MemoryRouter>);
+const current = (path: string, canOrganise?: boolean) => {
+  render(<MemoryRouter initialEntries={[path]}><BottomTabs competitionId={12} canOrganise={canOrganise} /></MemoryRouter>);
   return screen.getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'page').map((link) => link.textContent);
 };
 
 describe('BottomTabs', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it('links to the four places inside the competition without a Following tab', () => {
     render(<MemoryRouter initialEntries={['/competitions/12']}><BottomTabs competitionId={12} /></MemoryRouter>);
     expect(screen.getByRole('navigation', { name: 'Competition' })).toBeInTheDocument();
@@ -107,6 +114,73 @@ describe('BottomTabs', () => {
 
     it('is not highlighted on a competition page', () => {
       expect(withMe('/competitions/12/toplists').at(-1)).not.toHaveAttribute('aria-current');
+    });
+  });
+
+  describe('customisable tabs and role presets', () => {
+    it('renders the Trainer preset tabs and applies compact styling when 6+ items are shown', () => {
+      act(() => {
+        applyBottomBarPreset('trainer');
+      });
+      render(
+        <MemoryRouter initialEntries={['/competitions/12/declarations']}>
+          <BottomTabs competitionId={12} me={{ initials: 'TR', count: 0 }} />
+        </MemoryRouter>,
+      );
+      expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
+        'Timetable',
+        'Dec forms',
+        'Teams',
+        'Toplists',
+        'Live stream',
+        'TRMe',
+      ]);
+      expect(screen.getByRole('link', { name: 'Dec forms' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.getByRole('link', { name: 'Dec forms' })).toHaveClass('mg-tab-compact');
+    });
+
+    it.each([
+      ['/competitions/12/following', 'Following'],
+      ['/competitions/12/arena', 'Arena'],
+      ['/competitions/12/teams', 'Teams'],
+      ['/competitions/12/shop', 'Shop'],
+      ['/competitions/12/operations', 'Operations'],
+    ])('highlights %s on %s when configured', (path, tab) => {
+      act(() => {
+        setBottomTabs(['following', 'arena', 'teams', 'shop', 'operations']);
+      });
+      expect(current(path, true)).toEqual([tab]);
+    });
+
+    it('hides GlobalTabs on /me when a competition is currently selected', () => {
+      document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 12, name: 'Test' }))}; Path=/`;
+      const { container } = render(
+        <MemoryRouter initialEntries={['/me']}>
+          <CurrentCompetitionProvider>
+            <GlobalTabs />
+          </CurrentCompetitionProvider>
+        </MemoryRouter>,
+      );
+      expect(container).toBeEmptyDOMElement();
+      document.cookie = 'mg.competition=; Max-Age=0; Path=/';
+    });
+
+    it('hides the Operations tab when the user cannot organise the competition', () => {
+      act(() => {
+        applyBottomBarPreset('organiser');
+      });
+      render(<MemoryRouter initialEntries={['/competitions/12']}><BottomTabs competitionId={12} canOrganise={false} /></MemoryRouter>);
+      expect(screen.queryByRole('link', { name: 'Operations' })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Dec forms' })).toBeInTheDocument();
+    });
+
+    it('falls back to default tabs if hiding operations leaves fewer than 2 tabs', () => {
+      act(() => {
+        setBottomTabs(['timetable', 'operations']);
+      });
+      render(<MemoryRouter initialEntries={['/competitions/12']}><BottomTabs competitionId={12} canOrganise={false} /></MemoryRouter>);
+      expect(screen.queryByRole('link', { name: 'Operations' })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Details' })).toBeInTheDocument();
     });
   });
 });

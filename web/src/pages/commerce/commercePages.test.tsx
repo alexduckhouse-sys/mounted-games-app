@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -448,6 +448,21 @@ describe('ownership and demo states', () => {
     expect(screen.getByRole('button', { name: 'Manual' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Demo' })).toBeEnabled();
     expect(screen.queryByText(/edit mode/i)).not.toBeInTheDocument();
+  });
+
+  it('excludes demo and declined orders from paid reconciliation totals', async () => {
+    const sales = [
+      { ...orderOf(), orderId: 1, sellerTotalMinor: 2500, status: 2 },
+      { ...orderOf(), orderId: 2, sellerTotalMinor: 9000, status: 2, isTestOrder: true },
+      { ...orderOf(), orderId: 3, sellerTotalMinor: 2500, status: 3 },
+    ];
+    get.mockImplementation(async (url) => ({ data: url === '/commerce/sales/mine' ? sales : [] }) as never);
+    render(<MemoryRouter><CommerceOrdersPage /></MemoryRouter>);
+    await userEvent.click(screen.getByRole('tab', { name: 'Sales' }));
+    const summary = await screen.findByRole('region', { name: 'Treasurer Reconciliation Summary' });
+    expect(within(summary).getAllByText('£25.00')).toHaveLength(2);
+    expect(within(summary).queryByText('£115.00')).not.toBeInTheDocument();
+    expect(summary).toHaveTextContent('Demo orders are excluded');
   });
 
   it('labels demo purchases, opens the receipt and keeps sales separate', async () => {

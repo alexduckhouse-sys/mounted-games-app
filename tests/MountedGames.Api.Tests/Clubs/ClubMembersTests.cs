@@ -146,7 +146,8 @@ public class ClubMembersTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, (await SetRoleAsync(await _f.AdminAsync(), clubId, boss.User.Id, "Trainer")).StatusCode);
 
-        Assert.Equal(HttpStatusCode.NotFound, (await staleManager.GetAsync(Members(clubId))).StatusCode);
+        // Revoked roles are removed from old JWTs before the controller's role gate runs.
+        Assert.Equal(HttpStatusCode.Forbidden, (await staleManager.GetAsync(Members(clubId))).StatusCode);
     }
 
     // ---- changing a role ----

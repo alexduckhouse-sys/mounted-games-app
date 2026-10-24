@@ -111,4 +111,7 @@ it('displays current race and next race with setup diagram, short description an
   expect(within(nextSection).getByRole('img', { name: 'Arena setup diagram' })).toBeInTheDocument();
   expect(within(nextSection).getByText('2 × Pole')).toBeInTheDocument();
   expect(within(nextSection).getByText('2 × Mug')).toBeInTheDocument();
+  const changeover = within(nextSection).getByLabelText('Ring crew changeover');
+  expect(changeover).toHaveTextContent('Remove 5th pole (P5) · 4 poles stay out');
+  expect(changeover).toHaveTextContent('+2 Mug · Poles P1–P5');
 });

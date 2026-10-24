@@ -101,3 +101,102 @@ it('serialises replacement instances and never lets stale cleanup stop their wat
   old.dispose(); expect(invoke).toHaveBeenCalledTimes(3);
   next.dispose(); expect(invoke).toHaveBeenLastCalledWith('StopWatching', 1);
 });
+
+it('switches simulcast quality tiers via WatchStreamTier and ignores unchanged quality', async () => {
+  const { viewer, invoke, start } = setup();
+  invoke.mockImplementation(async (method: string) => (method === 'WatchStream' || method === 'WatchStreamTier' ? offer : undefined));
+  viewer.setQuality('f');
+  await start();
+  viewer.setQuality('h');
+  await flush();
+  expect(viewer.getSnapshot().preferredRid).toBe('h');
+  expect(invoke).toHaveBeenCalledWith('WatchStreamTier', 3, 7, 'h');
+  viewer.setQuality('q');
+  await flush();
+  expect(viewer.getSnapshot().preferredRid).toBe('q');
+  expect(invoke).toHaveBeenCalledWith('WatchStreamTier', 3, 7, 'q');
+  viewer.dispose();
+});
+
+it.each(['remote description', 'local description', 'answer'] as const)('stops a disposed negotiation after %s without continuing the handshake', async (stage) => {
+  const pending = deferred<void>();
+  class DelayedPeer extends FakePeer {
+    constructor(configuration: RTCConfiguration) {
+      super(configuration);
+      if (stage === 'remote description') this.setRemoteDescription.mockImplementationOnce(() => pending.promise);
+      if (stage === 'local description') this.setLocalDescription.mockImplementationOnce(() => pending.promise);
+    }
+  }
+  const invoke = vi.fn(async (method: string): Promise<unknown> => {
+    if (method === 'WatchStream') return offer;
+    if (method === 'AnswerStream' && stage === 'answer') return pending.promise;
+  });
+  const viewer = createStreamViewer(3, 7, { ...streamClock, invoke: invoke as StreamInvoke, PeerConnection: DelayedPeer as unknown as typeof RTCPeerConnection, MediaStream: fakeStreamConstructor });
+  viewer.sync(1, 1); await flush();
+  const peer = FakePeer.instances[0];
+  viewer.dispose(); pending.resolve(); await flush();
+  expect(peer.close).toHaveBeenCalledOnce();
+  expect(invoke).toHaveBeenLastCalledWith('StopWatching', 7);
+  if (stage !== 'answer') expect(invoke.mock.calls.some(([method]) => method === 'AnswerStream')).toBe(false);
+  if (stage === 'remote description') expect(peer.createAnswer).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(peer.getStats).not.toHaveBeenCalled();
+});
+
+it('skips a replaced viewer waiting for the shared watch lease and ignores its later refresh', async () => {
+  const pending = deferred<unknown>();
+  const invoke = vi.fn(async (method: string): Promise<unknown> => method === 'WatchStream' ? offer : undefined);
+  invoke.mockReturnValueOnce(pending.promise);
+  const deps = { ...streamClock, invoke: invoke as StreamInvoke, PeerConnection: fakePeerConstructor, MediaStream: fakeStreamConstructor };
+  const first = createStreamViewer(3, 7, deps); first.sync(1, 1); await flush();
+  const replaced = createStreamViewer(3, 7, deps); replaced.sync(1, 1); await flush();
+  const latest = createStreamViewer(3, 7, deps); latest.sync(1, 1); await flush();
+  pending.resolve(offer); await flush();
+  expect(invoke.mock.calls.filter(([method]) => method === 'WatchStream')).toHaveLength(2);
+  expect(FakePeer.instances).toHaveLength(1);
+  replaced.sync(2, 2); await flush();
+  expect(FakePeer.instances).toHaveLength(1);
+  first.dispose(); replaced.dispose(); latest.dispose();
+});
+
+it('chooses a low bandwidth tier before connecting and ignores audio or missing video frame counts', async () => {
+  const { viewer, invoke } = setup();
+  invoke.mockImplementation(async (method: string) => method.startsWith('WatchStream') ? offer : undefined);
+  viewer.setQuality('q');
+  expect(invoke).not.toHaveBeenCalled();
+  viewer.sync(1, 1); await flush();
+  expect(invoke).toHaveBeenCalledWith('WatchStreamTier', 3, 7, 'q');
+  const peer = FakePeer.instances[0];
+  peer.getStats.mockResolvedValue(new Map([
+    ['audio', { type: 'inbound-rtp', kind: 'audio', framesDecoded: 400 }],
+    ['video', { type: 'inbound-rtp', kind: 'video' }],
+  ]));
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(viewer.getSnapshot().state).toBe('reconnecting');
+  viewer.dispose();
+});
+
+it('does not reschedule stats after a closed peer rejects its pending sample and tolerates failed cleanup', async () => {
+  const { viewer, invoke, start } = setup(); await start();
+  const pending = deferred<Awaited<ReturnType<FakePeer['getStats']>>>();
+  const peer = FakePeer.instances[0]; peer.getStats.mockReturnValueOnce(pending.promise);
+  await vi.advanceTimersByTimeAsync(2000);
+  invoke.mockRejectedValue(new Error('disconnected during cleanup'));
+  viewer.dispose(); pending.reject(new Error('peer closed')); await flush();
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(peer.getStats).toHaveBeenCalledOnce();
+  expect(invoke).toHaveBeenLastCalledWith('StopWatching', 7);
+});
+
+it('cleans up a lower-tier watch allocated after disposal even when StopWatching fails', async () => {
+  const { viewer, invoke } = setup(); const pending = deferred<unknown>();
+  invoke.mockImplementation(async (method: string) => {
+    if (method === 'WatchStreamTier') return pending.promise;
+    if (method === 'StopWatching') throw new Error('hub disconnected');
+  });
+  viewer.setQuality('h'); viewer.sync(1, 1); await flush();
+  expect(invoke).toHaveBeenCalledWith('WatchStreamTier', 3, 7, 'h');
+  viewer.dispose(); pending.resolve(offer); await flush();
+  expect(FakePeer.instances).toHaveLength(0);
+  expect(invoke).toHaveBeenLastCalledWith('StopWatching', 7);
+});

@@ -8,6 +8,7 @@ import { RaceDiagram } from '../../components/RaceDiagram';
 import { DiagramEditor } from '../../components/DiagramEditor';
 import { FieldDrop, PartHead } from './LaptopParts';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { usePageWidth } from '../../components/pageWidthState';
 import { RulebooksPanel } from '../operations/RulebooksPage';
 
 type DraftForm = {
@@ -32,10 +33,11 @@ function Labelled({ label, children, className = '' }: { label: string; children
  * and for an admin turns the row into the editor. The Rulebooks tab opens the global rulebooks.
  */
 export function RulesPage() {
+  usePageWidth('wide');
   const [tab, setTab] = useState<'races' | 'rulebooks'>('races');
 
   return (
-    <div className="skin mx-auto flex w-full max-w-[880px] flex-col gap-7 pb-16 pt-6 sm:pt-10">
+    <div className="skin mx-auto flex w-full max-w-5xl flex-col gap-7 pb-16 pt-6 sm:pt-10">
       <div className="flex flex-wrap items-end gap-4">
         <h1 className="mg-display flex-1 text-[44px] font-bold leading-none text-[rgb(var(--mg-heading))]">
           {tab === 'races' ? 'Race rules' : 'Rulebooks'}

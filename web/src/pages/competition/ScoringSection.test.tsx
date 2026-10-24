@@ -92,7 +92,8 @@ describe('the race stack', () => {
 
   it('says the swipe hint once, not in every row, and has no tap-to-place text', () => {
     render(<Harness />);
-    expect(screen.getAllByText(/Swipe a team down to eliminate it/)).toHaveLength(1);
+    expect(screen.getAllByText(/Hold or swipe down to eliminate/)).toHaveLength(1);
+    expect(screen.queryByText(/Swipe a team down to eliminate it/)).toBeNull();
     expect(screen.queryByText(/swipe ↓ elim/i)).toBeNull();
     expect(screen.queryByText(/Tap a team to assign/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /^More/ })).toBeNull();
@@ -355,10 +356,34 @@ describe('race switcher bar, press-and-hold, and score override sheet', () => {
     await user.click(screen.getByRole('button', { name: 'Score override' }));
     const sheetAgain = screen.getByRole('dialog', { name: 'Score override' });
     await user.click(within(sheetAgain).getByRole('button', { name: /Bravo/ }));
-    await user.click(within(sheetAgain).getByRole('radio', { name: /Automatic/ }));
-    await user.click(within(sheetAgain).getByRole('button', { name: 'Remove override' }));
+    await user.click(within(sheetAgain).getByRole('button', { name: /Split dead heat/ }));
+    await user.click(within(sheetAgain).getByRole('button', { name: 'Save override' }));
     await user.click(within(sheetAgain).getByRole('button', { name: 'Close' }));
+    expect(bravoRow).toHaveTextContent('2.5 pts · manual');
+
+    await user.click(screen.getByRole('button', { name: 'Score override' }));
+    const sheetClear = screen.getByRole('dialog', { name: 'Score override' });
+    await user.click(within(sheetClear).getByRole('button', { name: /Bravo/ }));
+    await user.click(within(sheetClear).getByRole('radio', { name: /Automatic/ }));
+    await user.click(within(sheetClear).getByRole('button', { name: 'Remove override' }));
+    await user.click(within(sheetClear).getByRole('button', { name: 'Close' }));
     expect(bravoRow).not.toHaveTextContent('Manual');
+  });
+
+  it('triggers light haptic feedback on tap unless disabled in preferences', async () => {
+    const user = userEvent.setup();
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true, writable: true });
+    localStorage.removeItem('mg.prefs.scorerHaptics');
+    render(<Harness />);
+    await user.click(screen.getByRole('button', { name: /^Bravo, lane/ }));
+    expect(vibrate).toHaveBeenCalledWith(15);
+
+    vibrate.mockClear();
+    localStorage.setItem('mg.prefs.scorerHaptics', '0');
+    await user.click(screen.getByRole('button', { name: /^Alpha, lane/ }));
+    expect(vibrate).not.toHaveBeenCalled();
+    localStorage.removeItem('mg.prefs.scorerHaptics');
   });
 });
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Dropdown } from '../../components/Dropdown';
 import { PageGrid } from '../../components/PageGrid';
+import { usePageWidth } from '../../components/pageWidthState';
 import { ResultsStatsNav } from '../../components/ResultsStatsNav';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { ChevronDown, Search } from 'lucide-react';
@@ -25,6 +26,7 @@ export function StatsPage() {
 }
 
 function StatsBrowseView() {
+  usePageWidth('wide');
   const [params, setParams] = useSearchParams();
   const kind = statsKindFromPath(params.get('kind') ?? undefined) ?? StatsSubjectKind.Rider;
   const [text, setText] = useState(() => params.get('q') ?? '');
@@ -99,7 +101,7 @@ function StatsBrowseView() {
 
   return <RefinePage wide>
     <RefineHeader context="Across every competition" title="Rider and team stats" subtitle="Browse riders, ponies, teams and clubs, or search by name.">
-      {kindSelect}
+      {!desktop && kindSelect}
     </RefineHeader>
     <ResultsStatsNav />
     {desktop ? <div className="pt-2.5"><PageGrid variant="left" aside={rail} asideLabel="Filters">{results}</PageGrid></div> : <>{searchForm}{results}</>}

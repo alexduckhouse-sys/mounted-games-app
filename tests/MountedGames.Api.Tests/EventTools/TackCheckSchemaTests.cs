@@ -27,6 +27,30 @@ public class TackCheckSchemaTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task VaccineUpgradeKeepsExistingPassportChecksAndAddsNullableFieldsIdempotently()
+    {
+        using var scope = _f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var team = await db.Teams.FirstAsync();
+        var check = new PassportCheck { CompetitionId = team.CompetitionId, TeamId = team.Id, PonyName = "Test schema pony", PonyKey = "test-schema-pony" };
+        db.Add(check);
+        await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlRawAsync("DROP TABLE CertifiedHorses");
+        foreach (var column in new[] { "FluValidUntil", "InspectorRole", "LastFluVaccineDate", "LastTetanusDate", "OfficialNotes", "OwnerFullName", "PassportCode", "TetanusValidUntil" })
+            await db.Database.ExecuteSqlRawAsync($"ALTER TABLE PassportChecks DROP COLUMN {column}");
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE RiderEntries DROP COLUMN PonyOwnerFullName; ALTER TABLE SavedRiders DROP COLUMN PonyOwnerFullName; ALTER TABLE SavedRiders DROP COLUMN PonyPassportNumber;");
+        await DbInitializer.SeedAsync(_f.Services);
+        await DbInitializer.SeedAsync(_f.Services);
+        db.ChangeTracker.Clear();
+        var kept = await db.Set<PassportCheck>().SingleAsync(x => x.Id == check.Id);
+        Assert.Equal("Test schema pony", kept.PonyName);
+        Assert.Null(kept.LastFluVaccineDate);
+        Assert.Contains("PonyOwnerFullName", await NamesAsync(db, "SELECT name FROM pragma_table_info('RiderEntries')"));
+        Assert.Contains("PonyPassportNumber", await NamesAsync(db, "SELECT name FROM pragma_table_info('SavedRiders')"));
+        Assert.Contains("PassportCode", await NamesAsync(db, "SELECT name FROM pragma_table_info('CertifiedHorses')"));
+    }
+
+    [Fact]
     public async Task ExistingSqliteDatabaseGainsTheTackAndPassportSchema_AndKeepsItsCompetitions()
     {
         using var scope = _f.Services.CreateScope();

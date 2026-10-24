@@ -114,7 +114,7 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
       {loadError && <p role="alert" className="mg-notice ops-alert">{loadError} <button type="button" className="rf-btn rf-btn-text" onClick={() => void load()}>Try again</button></p>}
       {form === null && <RefineNote>This team hasn’t submitted a declaration yet, so there is nobody to swap.</RefineNote>}
       {form && reserves.length === 0 && (
-        <RefineNote>The declaration lists no reserve to bring in. You can record a Referee-approved emergency rider or pony replacement below.</RefineNote>
+        <RefineNote>The declaration lists no reserve. Record an emergency rider or pony replacement below.</RefineNote>
       )}
       {form && (
         <form className="ops-form" onSubmit={(event) => void submit(event)}>
@@ -132,27 +132,27 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
               ))}
               <label className="rf-row ops-check">
                 <input type="radio" name="swap-in" checked={inId === 0} onChange={() => setInId(0)} />
-                <span className="rf-grow">Emergency replacement (Referee approved)</span>
+                <span className="rf-grow">Emergency replacement (rider or pony)</span>
               </label>
             </fieldset>
           )}
           {isEmergency && (
             <div className="flex flex-col gap-2">
               <label className="rf-fld">Replacement rider name
-                <input placeholder="Leave blank if same rider on a replacement pony" value={replacementRider} onChange={(event) => setReplacementRider(event.target.value)} />
+                <input placeholder="Leave blank for pony-only swap" value={replacementRider} onChange={(event) => setReplacementRider(event.target.value)} />
               </label>
               <label className="rf-fld">Replacement pony name
-                <input placeholder="Replacement pony (optional)" value={replacementPony} onChange={(event) => setReplacementPony(event.target.value)} />
+                <input placeholder="Replacement pony" value={replacementPony} onChange={(event) => setReplacementPony(event.target.value)} />
               </label>
             </div>
           )}
           <label className="rf-fld">Reason{form.isLocked || isEmergency ? '' : ' (optional)'}
-            <textarea className="ops-note-input" placeholder={isEmergency ? 'e.g. Approved by Referee — pony lame in warm-up' : undefined} value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
+            <textarea className="ops-note-input" placeholder={isEmergency ? 'e.g. Referee approved — lame pony' : undefined} value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
           </label>
           {form.isLocked && (
             <label className="rf-row ops-check">
               <input type="checkbox" checked={override} onChange={(event) => setOverride(event.target.checked)} />
-              <span className="rf-grow">Override the lock<span className="rf-t2">This declaration is locked. Changing it is recorded with your name and reason.</span></span>
+              <span className="rf-grow">Override the lock<span className="rf-t2">Locked declaration.</span></span>
             </label>
           )}
           {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}

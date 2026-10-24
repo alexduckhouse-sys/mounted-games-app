@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, MapPin, Star, Users } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
+import { api } from '../../api';
 import { Dropdown } from '../../components/Dropdown';
 import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
@@ -55,7 +56,23 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const [showFinished, setShowFinished] = useState(false);
   const [openDone, setOpenDone] = useState<ReadonlySet<string>>(new Set());
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
-  const [teamFilter, setTeamFilter] = useState('');
+  const [sectionFilter, setSectionFilter] = useState('');
+  const [shifting, setShifting] = useState(false);
+
+  async function shiftTimes(deltaMinutes: number) {
+    setShifting(true);
+    try {
+      await api.post(`/competitions/${competition.id}/sessions/shift-times`, {
+        deltaMinutes,
+        arenaName: selectedArena || undefined,
+      });
+      reload();
+    } catch {
+      // Ignore shift errors
+    } finally {
+      setShifting(false);
+    }
+  }
   function chooseArena(name: string) {
     setArena(name);
     try { if (name) localStorage.setItem(arenaKey, name); else localStorage.removeItem(arenaKey); } catch { /* storage blocked */ }
@@ -84,12 +101,35 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const arenas = [...new Set(dayRows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
   const showArenaSelect = sectionId == null && arenas.length > 1;
   const selectedArena = showArenaSelect && arenas.includes(arena) ? arena : '';
-  const teamsInDay = dayTeams(dayRows);
-  const selectedTeam = teamsInDay.some((t) => String(t.id) === teamFilter) ? teamFilter : '';
-  const selectedTeamId = selectedTeam ? Number(selectedTeam) : null;
+  const sections = useMemo(
+    () => (competition.sections ?? []).map((s) => ({
+      id: s.id,
+      label: displaySectionName(s.displayName || s.ageGroup),
+    })),
+    [competition.sections],
+  );
+  const showSectionSelect = sectionId == null && sections.length > 1;
+  const selectedSection = showSectionSelect && sections.some((s) => String(s.id) === sectionFilter) ? sectionFilter : '';
+  const selectedSectionId = selectedSection ? Number(selectedSection) : null;
+  const teamSectionById = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const t of competition.teams ?? []) {
+      map.set(t.id, t.competitionSectionId);
+    }
+    return map;
+  }, [competition.teams]);
   const visibleRows = dayRows
     .filter((row) => !selectedArena || row.session.arenaName?.trim() === selectedArena || !row.session.arenaName?.trim())
-    .filter((row) => selectedTeamId == null || row.heat?.entries.some((e) => e.teamId === selectedTeamId));
+    .filter((row) => {
+      if (selectedSectionId == null) return true;
+      if (row.session.competitionSectionId != null) {
+        return row.session.competitionSectionId === selectedSectionId;
+      }
+      if (row.heat) {
+        return row.heat.entries.some((e) => teamSectionById.get(e.teamId) === selectedSectionId);
+      }
+      return row.session.heats.some((h) => h.entries.some((e) => teamSectionById.get(e.teamId) === selectedSectionId));
+    });
 
   const sessionGroups = (() => {
     const bySession = new Map<number, { key: string; session: TimetableRow['session']; race: boolean; rows: TimetableRow[] }>();
@@ -121,7 +161,11 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       }));
   })();
   const finalGroups = finalsByAgeGroup(visibleRows).map((group) => ({ ...group, noun: ['final', 'finals'] as const }));
-  const groups = [...sessionGroups, ...finalGroups];
+  const groups = [...sessionGroups, ...finalGroups].sort((a, b) => {
+    const aStart = (a.rows[0]?.effective ?? a.rows[0]?.scheduled)?.getTime() ?? Infinity;
+    const bStart = (b.rows[0]?.effective ?? b.rows[0]?.scheduled)?.getTime() ?? Infinity;
+    return aStart - bStart || (a.rows[0]?.session.orderIndex ?? 0) - (b.rows[0]?.session.orderIndex ?? 0) || (a.rows[0]?.session.id ?? 0) - (b.rows[0]?.session.id ?? 0);
+  });
   const activeGroups = groups.filter((group) => !isGroupFinished(group.rows));
   const finishedGroups = groups.filter((group) => isGroupFinished(group.rows));
   const updated = updatedAt ? updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
@@ -161,9 +205,8 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
             key={row.key}
             row={row}
             competitionId={competition.id}
-            showArena={arenas.length > 1 && !selectedArena && !sharedArena}
+            showArena={arenas.length > 1 && !selectedArena && (!sharedArena || !group.title)}
             hasFollowedTeam={Boolean(row.heat?.entries.some((e) => isTeamFav(e.teamId)))}
-            selectedTeamId={selectedTeamId}
           />
         ))}
       </div>
@@ -173,7 +216,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   return (
     <div className="timetable-board">
       {bandExtra}
-      {(days.length > 1 || showArenaSelect || teamsInDay.length > 1) && (
+      {(days.length > 1 || showArenaSelect || showSectionSelect) && (
         <div className="tt-strip">
           {days.length > 1 && (
             <div className="tt-days" role="group" aria-label="Choose day">
@@ -183,7 +226,25 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
             </div>
           )}
           {showArenaSelect && <ArenaSelect arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />}
-          {teamsInDay.length > 1 && <TeamSelect teams={teamsInDay} selectedTeam={selectedTeam} onChoose={setTeamFilter} />}
+          {showSectionSelect && <SectionSelect sections={sections} selectedSection={selectedSection} onChoose={setSectionFilter} />}
+        </div>
+      )}
+      {showQualifiers && (
+        <div className="flex flex-wrap items-center gap-1.5 px-1 text-xs" role="group" aria-label="Delay timetable">
+          <span className="font-semibold text-[rgb(var(--mg-muted))]">
+            Shift {selectedArena || 'all arenas'}:
+          </span>
+          {([15, 30, -15] as const).map((delta) => (
+            <button
+              key={delta}
+              type="button"
+              disabled={shifting}
+              onClick={() => void shiftTimes(delta)}
+              className="rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-2 py-1 text-xs font-semibold hover:bg-[rgb(var(--mg-tint))]"
+            >
+              {delta > 0 ? `+${delta}m` : `${delta}m`}
+            </button>
+          ))}
         </div>
       )}
       <div className="tt-body">
@@ -243,31 +304,18 @@ function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
   );
 }
 
-/** Distinct teams entered in any heat on this day, ordered by name. */
-function dayTeams(rows: TimetableRow[]): { id: number; name: string }[] {
-  const byId = new Map<number, string>();
-  for (const row of rows) {
-    for (const entry of row.heat?.entries ?? []) {
-      if (entry.teamName && !byId.has(entry.teamId)) byId.set(entry.teamId, entry.teamName);
-    }
-  }
-  return [...byId.entries()]
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/** Filter the day's timetable down to a single team's heats. */
-function TeamSelect({ teams, selectedTeam, onChoose }: {
-  teams: { id: number; name: string }[];
-  selectedTeam: string;
+/** Filter the day's timetable down to a single age group (section). */
+function SectionSelect({ sections, selectedSection, onChoose }: {
+  sections: { id: number; label: string }[];
+  selectedSection: string;
   onChoose: (id: string) => void;
 }) {
-  const current = teams.find((t) => String(t.id) === selectedTeam);
-  const options = [{ value: '', label: 'All teams' }, ...teams.map((t) => ({ value: String(t.id), label: t.name }))];
+  const current = sections.find((s) => String(s.id) === selectedSection);
+  const options = [{ value: '', label: 'All age groups' }, ...sections.map((s) => ({ value: String(s.id), label: s.label }))];
   return (
-    <Dropdown label="Team" value={selectedTeam} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
+    <Dropdown label="Age group" value={selectedSection} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
       <Users aria-hidden="true" className="tt-arena-pin" size={14} />
-      <span className="tt-arena-text">{current?.name ?? 'All teams'}</span>
+      <span className="tt-arena-text">{current?.label ?? 'All age groups'}</span>
       <ChevronDown aria-hidden="true" className="tt-arena-chevron" size={14} />
     </Dropdown>
   );
@@ -286,27 +334,24 @@ function finalsByAgeGroup(rows: TimetableRow[]) {
 }
 
 /** One timetable line: time, name with a small sub-line, "+N · planned time" when late, status colour dot. */
-function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false, selectedTeamId }: {
+function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false }: {
   row: TimetableRow;
   competitionId: number;
   showArena: boolean;
   hasFollowedTeam?: boolean;
-  selectedTeamId: number | null;
 }) {
   const { session, heat, status, delayMinutes } = row;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
   const name = race ? heatName : session.name;
   const label = race ? (heat ? '' : 'Provisional') : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
-  const teamEntry = selectedTeamId != null ? heat?.entries.find((e) => e.teamId === selectedTeamId) : undefined;
-  const laneLabel = teamEntry != null ? `Lane ${teamEntry.laneIndex + 1}` : '';
-  const sub = [label, laneLabel, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
-  const moved = delayMinutes > 0 && !!row.scheduled;
-  const [lanesOpen, setLanesOpen] = useState(false);
-  const sortedEntries = useMemo(
-    () => (race && heat && heat.entries.length > 0 ? [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex) : []),
-    [race, heat],
-  );
+  const sub = [label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
+  const rawDrift = row.scheduled && row.effective
+    ? Math.round((row.effective.getTime() - row.scheduled.getTime()) / 60_000)
+    : 0;
+  const shiftMinutes = Math.abs(rawDrift) >= 5 ? rawDrift : 0;
+  const moved = shiftMinutes !== 0 && !!row.scheduled;
+  const shiftCardText = shiftMinutes > 0 ? `+${shiftMinutes}m` : `${shiftMinutes}m`;
   const orderedRaces = heat ? heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const runningRaceIndex = orderedRaces.findIndex((r) => !r.isComplete);
   const currentRaceNum = runningRaceIndex >= 0 ? runningRaceIndex + 1 : orderedRaces.length;
@@ -319,44 +364,20 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
         {name}
       </strong>
       {sub && <span className="tt-sub">{sub}</span>}
-      {status === 'late' && moved && <span className="tt-planned" aria-hidden="true">+{delayMinutes} · <s>{formatTime(row.scheduled)}</s></span>}
+      {status !== 'live' && status !== 'finished' && moved && (
+        <span className="tt-planned" aria-hidden="true">{shiftMinutes > 0 ? `+${shiftMinutes}` : shiftMinutes} · <s>{formatTime(row.scheduled)}</s></span>
+      )}
       {status === 'live' && <span className="tt-onnow" aria-hidden="true">{onNowText}</span>}
+      {moved && status !== 'finished' && (
+        <span className={`tt-shift-card ${shiftMinutes > 0 ? 'tt-shift-late' : 'tt-shift-early'}`} aria-label={`Time shifted ${shiftCardText}`}>
+          {shiftCardText}
+        </span>
+      )}
     </span>
     <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
     <span className="sr-only">{statusLabel(status, delayMinutes)}</span>
     {race ? <ChevronRight className="tt-chevron" size={14} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
   </>;
   const className = `tt-row tt-${status}${hasFollowedTeam ? ' tt-followed' : ''}`;
-  if (sortedEntries.length > 0) {
-    return (
-      <div className="tt-item">
-        <div className="tt-row-wrap">
-          <Link className={className} data-followed={hasFollowedTeam ? 'true' : undefined} to={`/competitions/${competitionId}/session/${session.id}?heat=${heat!.id}`}>{content}</Link>
-          <button
-            type="button"
-            className="tt-lanes-btn"
-            aria-expanded={lanesOpen}
-            aria-label={`Lanes for ${name}`}
-            onClick={() => setLanesOpen((open) => !open)}
-          >
-            <span>Lanes</span>
-            <ChevronDown size={14} aria-hidden="true" className={lanesOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
-          </button>
-        </div>
-        {lanesOpen && (
-          <ol className="tt-lanes" aria-label={`Lanes for ${name}`}>
-            {sortedEntries.map((entry) => (
-              <li key={entry.id ?? `${entry.teamId}-${entry.laneIndex}`} className="tt-lane-item">
-                <span className="tt-lane-num">Lane {entry.laneIndex + 1}</span>
-                <Link to={`/competitions/${competitionId}/teams/${entry.teamId}`} className="tt-lane-team">
-                  {entry.teamName}
-                </Link>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-    );
-  }
   return race ? <Link className={className} data-followed={hasFollowedTeam ? 'true' : undefined} to={`/competitions/${competitionId}/session/${session.id}${heat ? `?heat=${heat.id}` : ''}`}>{content}</Link> : <div className={className} data-followed={hasFollowedTeam ? 'true' : undefined}>{content}</div>;
 }

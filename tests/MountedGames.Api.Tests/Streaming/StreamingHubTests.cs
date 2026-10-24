@@ -301,4 +301,20 @@ public class StreamingHubTests : IClassFixture<StreamingApiFactory>
             await ErrorAsync("WATCH_EXPIRED", () => _f.Viewers.AnswerAsync("end-one", one.WatchId, "fake-answer"));
         }
     }
+
+    [Fact]
+    public async Task WatchStreamTier_SelectsRequestedSimulcastLayer()
+    {
+        var (admin, competition, attempt) = await LiveAsync(_f);
+        using (admin)
+        {
+            await using var hub = await _f.ConnectAsync();
+            var watchHalf = await hub.InvokeAsync<WatchStreamResponse>("WatchStreamTier", competition, attempt.StreamId, "h");
+            Assert.False(string.IsNullOrEmpty(watchHalf.WatchId));
+            await hub.InvokeAsync("AnswerStream", watchHalf.WatchId, "fake-answer");
+
+            var watchQuarter = await hub.InvokeAsync<WatchStreamResponse>("WatchStreamTier", competition, attempt.StreamId, "q");
+            Assert.False(string.IsNullOrEmpty(watchQuarter.WatchId));
+        }
+    }
 }

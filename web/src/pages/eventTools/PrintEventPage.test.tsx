@@ -109,4 +109,54 @@ describe('PrintEventPage', () => {
       ['2', 'South B', 'South', '', '', ''],
     ]);
   });
+
+  it('renders the printable spectator gate QR poster (with emergency what3words and no offline claim) and staff QR sheet', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/competitions/12/scorer-links')) {
+        return {
+          data: [
+            {
+              id: 77,
+              label: 'Main Ring Tripod',
+              arenaName: 'Arena 1',
+              scope: 1,
+              createdAt: '2031-05-01T09:00:00Z',
+              expiresAt: '2099-05-05T09:00:00Z',
+              revokedAt: null,
+            },
+          ],
+        };
+      }
+      return {
+        data: {
+          id: 12,
+          name: 'Spring event',
+          location: 'Field Lane, OX1 2AB',
+          what3Words: 'apple.table.chair',
+          latitude: 51.75202,
+          longitude: -1.25772,
+          startDate: '2031-05-04T09:00:00Z',
+          endDate: null,
+          sections: [],
+          sessions: [],
+          teams: [],
+        },
+      };
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/event-tools/12/print/posters']}>
+        <Routes>
+          <Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Scan for Live Timetable, Scores & Stream')).toBeInTheDocument();
+    expect(screen.getByText('///apple.table.chair')).toBeInTheDocument();
+    expect(screen.getByText('Main Ring Tripod')).toBeInTheDocument();
+    expect(screen.getByText('Tripod Camera')).toBeInTheDocument();
+    expect(screen.queryByText(/offline/i)).not.toBeInTheDocument();
+  });
 });

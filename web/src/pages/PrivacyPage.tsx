@@ -94,9 +94,7 @@ export function PrivacyPage() {
         <h2 className="mg-h2">Children</h2>
         <p className="mg-lede">
           Many riders are under 18. Trainers and parents enter their details on a declaration, and only organisers of that
-          competition, the trainer and administrators see dates of birth, weight, medical notes and emergency contacts. A rider can be shown on public pages with their
-          surname as an initial only (Oliver S.), and can ask not to be filmed or photographed close up: tick either box
-          on the declaration or entry form. If you want a young rider's details removed, ask us at the address below.
+          competition, the trainer and administrators see dates of birth, weight, medical notes and emergency contacts. Arena streams are wide-angle views of the arena — there is no close-up filming of individual riders. Anyone who prefers only a surname initial shown on public pages can simply enter their first name and surname initial (for example, Oliver S.) on their entry or declaration form. If you want a young rider's details removed, ask us at the address below.
         </p>
       </section>
 

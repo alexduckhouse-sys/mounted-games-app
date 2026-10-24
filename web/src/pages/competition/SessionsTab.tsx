@@ -10,18 +10,45 @@ import { TimetableBoard } from './TimetableBoard';
 export function SessionsTab() {
   const { canManage } = useAuth();
   const { competition } = useCompetition();
-  const ordered = useMemo(() => competition.sessions.slice().sort((a, b) => a.orderIndex - b.orderIndex), [competition.sessions]);
-  const footer = <>
-    <Link className="mg-btn mg-btn-secondary" to="following"><Star className="h-4 w-4" />Follow teams</Link>
-    {ordered.length > 0 && (
-      <button type="button" className="mg-btn mg-btn-secondary" onClick={() => exportTimetableCsv(competition.name, ordered, computeTimings(competition.sessions))}>
-        <Download aria-hidden="true" className="h-[18px] w-[18px]" />Download timetable
-      </button>
-    )}
-    <Link className="mg-text-link self-center" to="arena">Arena setup</Link>
-    {canManage(competition) && (
-      <Link className="mg-text-link self-center" to={`/admin/competitions/${competition.id}/format`}>Manage timetable</Link>
-    )}
-  </>;
+  const ordered = useMemo(
+    () =>
+      competition.sessions
+        .slice()
+        .sort((a, b) => {
+          const aTime = a.scheduledStart ? new Date(a.scheduledStart).getTime() : Infinity;
+          const bTime = b.scheduledStart ? new Date(b.scheduledStart).getTime() : Infinity;
+          return aTime - bTime || a.orderIndex - b.orderIndex;
+        }),
+    [competition.sessions],
+  );
+  const footer = (
+    <nav aria-label="Timetable tools" className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 pt-1 text-xs text-[rgb(var(--mg-muted))]">
+      <Link className="mg-text-link inline-flex items-center gap-1 text-xs" to="following">
+        <Star aria-hidden="true" className="h-3.5 w-3.5" />
+        Follow teams
+      </Link>
+      {ordered.length > 0 && (
+        <>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            className="mg-text-link inline-flex items-center gap-1 text-xs"
+            onClick={() => exportTimetableCsv(competition.name, ordered, computeTimings(competition.sessions))}
+          >
+            <Download aria-hidden="true" className="h-3.5 w-3.5" />
+            Download timetable
+          </button>
+        </>
+      )}
+      <span aria-hidden="true">·</span>
+      <Link className="mg-text-link text-xs" to="arena">Arena setup</Link>
+      {canManage(competition) && (
+        <>
+          <span aria-hidden="true">·</span>
+          <Link className="mg-text-link text-xs" to={`/admin/competitions/${competition.id}/format`}>Manage timetable</Link>
+        </>
+      )}
+    </nav>
+  );
   return <TimetableBoard footer={footer} />;
 }

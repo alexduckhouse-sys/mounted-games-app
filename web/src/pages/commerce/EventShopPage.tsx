@@ -243,6 +243,9 @@ function EventShopContent() {
       {listings == null && !error && <p role="status" className="mg-meta px-1">Loading the shop…</p>}
       {listings && listings.length === 0 && <p className="mg-card p-4">There’s nothing in the event shop yet.</p>}
       {desktop ? <PageGrid asideLabel="Your basket" aside={basketRail}>{products}</PageGrid> : products}
+      <p className="m-0 px-1 text-xs text-[rgb(var(--mg-muted))]">
+        MG App connects buyers with independent sellers; your purchase contract is directly with the seller listed on each item.
+      </p>
       {!desktop && basketLines.length > 0 && (
         <div role="region" aria-label="Basket summary" className="mg-basket-bar">
           <span className="flex flex-1 flex-col gap-0.5"><span className="text-xs text-[rgb(var(--mg-header-sub))]">{itemsText(basketCount)}</span><strong className="mg-display text-[22px] font-bold leading-none">{pounds(estimatedTotal)}</strong></span>

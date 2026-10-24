@@ -12,6 +12,8 @@ public class SavedRider
     public string? HorseName { get; set; }
     /// <summary>The pony's height in hands, written as a decimal: 13.2 means 13 hands 2 inches.</summary>
     public decimal? PonyHeightHands { get; set; }
+    public string? PonyPassportNumber { get; set; }
+    public string? PonyOwnerFullName { get; set; }
     public string? Notes { get; set; }
 
     /// <summary>Show only the surname's initial on public pages ("Oliver S.").</summary>

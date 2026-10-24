@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { AlertTriangle, ArrowDown, ArrowUp, Clock, Eye, MapPin, Megaphone } from 'lucide-react';
-import type { CompetitionDetail, Heat, LiveStream, Session, StandingRow, StreamOverlay } from '../../types';
+import { BibSwatch as BaseBibSwatch } from '../BibSwatch';
+import type { CompetitionDetail, Heat, HeatEntry, LiveStream, Session, StandingRow, StreamOverlay, Team } from '../../types';
 import { bannerShowsIn, parseLook, type OverlayLook, type OverlayPlace } from '../../lib/overlays';
 import type { QueuedScoreCard } from '../../lib/scoreCard';
 import { statusLetter } from '../../lib/resultStatus';
@@ -11,6 +13,34 @@ import { api } from '../../api';
 import { buildToplist } from '../../lib/toplist';
 import { computeTimings } from '../../lib/time';
 import { timetableRows } from '../../lib/timetableRows';
+
+interface BibColourHolder {
+  bibColour?: string | null;
+  bibColor?: string | null;
+}
+
+/** A broadcast bib swatch accepting colour/color and optional size, rendering nothing when no bib color exists. */
+export function BibSwatch({
+  colour,
+  color,
+  size,
+  label,
+  className = '',
+}: {
+  colour?: string | null;
+  color?: string | null;
+  size?: number;
+  label?: string;
+  className?: string;
+}) {
+  const resolved = colour ?? color;
+  if (!resolved) return null;
+  return (
+    <span style={size ? { fontSize: `${size}px` } : undefined} className="inline-flex items-center">
+      <BaseBibSwatch colour={resolved} label={label} className={className} />
+    </span>
+  );
+}
 
 export type LiveOverlayCardMode = 'none' | 'toplist' | 'heat' | 'lanes' | 'next';
 
@@ -62,6 +92,7 @@ export function OverlayChips({ stream, look, live }: { stream: LiveStream; look:
 
 /** The producer's banner, in the chosen style and position, on streams from the arenas it's meant for. */
 export function ProducerBanner({ stream, arenaName, overlay, look }: { stream?: LiveStream; arenaName?: string; overlay: StreamOverlay; look?: OverlayLook }) {
+  const reduced = useReducedMotion();
   const resolvedLook = look ?? parseLook(overlay.look);
   const targetArena = arenaName ?? stream?.arenaName ?? '';
   if (!resolvedLook.elements.banner.show || !bannerShowsIn(overlay, targetArena)) return null;
@@ -69,16 +100,46 @@ export function ProducerBanner({ stream, arenaName, overlay, look }: { stream?: 
   if (DATA_CARD_MODES.has(text)) return null;
   const edge = resolvedLook.elements.banner.place === 'top' ? 'top-12' : 'bottom-12';
   if (overlay.bannerStyle === 2) {
-    return <div role="status" className="absolute inset-x-3 top-1/3 flex justify-center">
-      <div className="mg-ov-alert mg-stream-fade"><AlertTriangle aria-hidden="true" /><strong>{text}</strong></div>
-    </div>;
+    return (
+      <motion.div
+        role="status"
+        aria-live="polite"
+        initial={reduced ? false : { y: 10 }}
+        animate={{ y: 0 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+        className="absolute inset-x-3 top-1/3 flex justify-center"
+      >
+        <div className="mg-ov-alert mg-stream-fade"><AlertTriangle aria-hidden="true" /><strong>{text}</strong></div>
+      </motion.div>
+    );
   }
   if (overlay.bannerStyle === 1) {
-    return <div role="status" className={`mg-ov-lower mg-stream-fade absolute inset-x-0 ${edge}`}><Megaphone aria-hidden="true" /><span>{text}</span></div>;
+    return (
+      <motion.div
+        role="status"
+        aria-live="polite"
+        initial={reduced ? false : { y: 10 }}
+        animate={{ y: 0 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+        className={`mg-ov-lower mg-stream-fade absolute inset-x-0 ${edge}`}
+      >
+        <Megaphone aria-hidden="true" /><span>{text}</span>
+      </motion.div>
+    );
   }
-  return <div role="status" className={`mg-ov-ticker absolute inset-x-0 ${edge}`} aria-label={text}>
-    <span aria-hidden="true">{text}</span>
-  </div>;
+  return (
+    <motion.div
+      role="status"
+      aria-live="polite"
+      initial={reduced ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+      className={`mg-ov-ticker absolute inset-x-0 ${edge}`}
+      aria-label={text}
+    >
+      <span aria-hidden="true">{text}</span>
+    </motion.div>
+  );
 }
 
 /** The latest card for this stream's arena, while it's due on screen: from the delay until the delay plus its length. */
@@ -103,30 +164,63 @@ function useDueCard(cards: QueuedScoreCard[], arenaName: string, delayMs: number
 }
 
 /** The whole heat table after the race just scored, with what it added and who moved. */
-export function ScoreCardOverlay({ stream, overlay, look, cards }: { stream: LiveStream; overlay: StreamOverlay; look: OverlayLook; cards: QueuedScoreCard[] }) {
+export function ScoreCardOverlay({
+  stream,
+  overlay,
+  look,
+  cards,
+  teams,
+}: {
+  stream: LiveStream;
+  overlay: StreamOverlay;
+  look: OverlayLook;
+  cards: QueuedScoreCard[];
+  teams?: Team[];
+}) {
+  const reduced = useReducedMotion();
   const due = useDueCard(cards, stream.arenaName, overlay.scoreCardDelaySeconds * 1000, overlay.scoreCardSeconds * 1000);
+  const optionalCompetition = useOptionalCompetition();
+  const allTeams = teams ?? optionalCompetition?.teams;
   if (!due || overlay.scoreCardMode === 2 || !look.elements.scoreCard.show) return null;
   const { card } = due;
   const where = look.elements.scoreCard.place === 'bottom' ? 'mg-ov-card-bottom' : 'mg-ov-card-right';
   return (
-    <section className={`mg-ov-card mg-stream-fade ${where}`} aria-label={`Results: ${due.heading}`}>
+    <motion.section
+      initial={reduced ? false : { x: 18, scale: 0.96 }}
+      animate={{ x: 0, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+      className={`mg-ov-card mg-stream-fade ${where}`}
+      aria-label={`Results: ${due.heading}`}
+    >
       <header>
         <strong>{due.heading}</strong>
         <span>after {card.raceName} (race {card.raceNumber} of {card.raceCount})</span>
       </header>
       <ol>
-        {card.rows.filter((row) => !due.hiddenTeamIds?.includes(row.teamId)).map((row) => (
-          <li key={row.teamId}>
-            <span className="mg-ov-card-place">{row.place}</span>
-            <span className="mg-ov-card-team">{due.names?.[row.teamId] ?? row.teamName}</span>
-            {row.change === 'up' && <ArrowUp className="mg-ov-card-up" aria-label="moved up" />}
-            {row.change === 'down' && <ArrowDown className="mg-ov-card-down" aria-label="moved down" />}
-            <span className={`mg-ov-card-added ${row.eliminated ? 'is-out' : ''}`}>{row.eliminated ? statusLetter(true, row.status) : row.sitOut ? 'S' : `+${row.added}`}</span>
-            <span className="mg-ov-card-total">{formatPoints(row.total)}</span>
-          </li>
-        ))}
+        {card.rows.filter((row) => !due.hiddenTeamIds?.includes(row.teamId)).map((row, idx) => {
+          const team = allTeams?.find((t) => t.id === row.teamId || t.displayName === row.teamName);
+          const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor ?? (row as BibColourHolder).bibColour ?? (row as BibColourHolder).bibColor;
+          return (
+            <motion.li
+              key={row.teamId}
+              initial={reduced ? false : { x: 10 }}
+              animate={{ x: 0 }}
+              transition={{ delay: reduced ? 0 : idx * 0.04 }}
+            >
+              <span className="mg-ov-card-place">{row.place}</span>
+              <span className="mg-ov-card-team">
+                {due.names?.[row.teamId] ?? row.teamName}
+                {bibColor && <BibSwatch color={bibColor} size={10} />}
+              </span>
+              {row.change === 'up' && <ArrowUp className="mg-ov-card-up" aria-label="moved up" />}
+              {row.change === 'down' && <ArrowDown className="mg-ov-card-down" aria-label="moved down" />}
+              <span className={`mg-ov-card-added ${row.eliminated ? 'is-out' : ''}`}>{row.eliminated ? statusLetter(true, row.status) : row.sitOut ? 'S' : `+${row.added}`}</span>
+              <span className="mg-ov-card-total">{formatPoints(row.total)}</span>
+            </motion.li>
+          );
+        })}
       </ol>
-    </section>
+    </motion.section>
   );
 }
 
@@ -138,7 +232,8 @@ function useOptionalCompetition(): CompetitionDetail | null {
   }
 }
 
-function activeArenaHeat(competition: CompetitionDetail, arenaName: string, mode: 'current' | 'next'): { session: Session; heat: Heat } | null {
+// eslint-disable-next-line react-refresh/only-export-components
+export function activeArenaHeat(competition: CompetitionDetail, arenaName: string, mode: 'current' | 'next'): { session: Session; heat: Heat } | null {
   const arena = arenaName.trim().toLowerCase();
   const sessions = competition.sessions.filter((session) =>
     (session.kind ?? (session.isBreak ? 1 : 0)) === 0 && (session.arenaName ?? '').trim().toLowerCase() === arena);
@@ -150,7 +245,45 @@ function activeArenaHeat(competition: CompetitionDetail, arenaName: string, mode
   return row?.heat ? { session: row.session, heat: row.heat } : null;
 }
 
+export function ToplistBody({
+  competition,
+  rows,
+  started,
+}: {
+  competition: CompetitionDetail;
+  rows: Array<{ teamId: number; teamName: string; position: number; points: number }>;
+  started: boolean;
+}) {
+  const reduced = useReducedMotion();
+  return (
+    <ol>
+      {rows.slice(0, 8).map((row, idx) => {
+        const team = competition.teams.find((t) => t.id === row.teamId || t.displayName === row.teamName);
+        const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor;
+        return (
+          <motion.li
+            key={row.teamId}
+            initial={reduced ? false : { opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: reduced ? 0 : idx * 0.04 }}
+          >
+            <span className="mg-ov-card-place">{started ? row.position : '—'}</span>
+            <span className="mg-ov-card-team">
+              {row.teamName}
+              {bibColor && <BibSwatch color={bibColor} size={10} />}
+            </span>
+            <span />
+            <span />
+            <span className="mg-ov-card-total">{formatPoints(row.points)}</span>
+          </motion.li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function LiveToplistCard({ competition, sectionId }: { competition: CompetitionDetail; sectionId: number }) {
+  const reduced = useReducedMotion();
   const { ready } = useCompetition();
   const [result, setResult] = useState<{ rows: StandingRow[]; failed: boolean } | null>(null);
   useEffect(() => {
@@ -175,23 +308,135 @@ function LiveToplistCard({ competition, sectionId }: { competition: CompetitionD
     : result.failed ? (list.rows.length > 0 ? 'Last received standings' : 'Standings unavailable')
       : list.started ? 'Current standings' : 'Before Race 1';
   return (
-    <section className="mg-ov-card mg-stream-fade mg-ov-card-right" aria-label={`Live toplist: ${displaySectionName(section.displayName)}`}>
+    <motion.section
+      initial={reduced ? false : { x: 18, scale: 0.96 }}
+      animate={{ x: 0, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+      className="mg-ov-card mg-stream-fade mg-ov-card-right"
+      aria-label={`Live toplist: ${displaySectionName(section.displayName)}`}
+    >
       <header>
         <strong>{displaySectionName(section.displayName)} · Toplist</strong>
         <span>{subtitle}</span>
       </header>
-      <ol>
-        {list.rows.slice(0, 8).map((row) => (
-          <li key={row.teamId}>
-            <span className="mg-ov-card-place">{list.started ? row.position : '—'}</span>
-            <span className="mg-ov-card-team">{row.teamName}</span>
+      <ToplistBody competition={competition} rows={list.rows} started={list.started} />
+    </motion.section>
+  );
+}
+
+export function LanesBody({
+  entries,
+  competition,
+}: {
+  entries: HeatEntry[];
+  competition: CompetitionDetail;
+}) {
+  const reduced = useReducedMotion();
+  return (
+    <ol>
+      {entries.map((entry, idx) => {
+        const team = competition.teams.find((t) => t.id === entry.teamId || t.displayName === entry.teamName);
+        const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor ?? entry.bibColour;
+        return (
+          <motion.li
+            key={entry.id}
+            initial={reduced ? false : { opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: reduced ? 0 : idx * 0.04 }}
+          >
+            <span className="mg-ov-card-place">L{entry.laneIndex}</span>
+            <span className="mg-ov-card-team">
+              {entry.teamName}
+              {bibColor && <BibSwatch color={bibColor} size={10} />}
+            </span>
             <span />
+            <span className="mg-ov-card-added">Lane {entry.laneIndex}</span>
             <span />
-            <span className="mg-ov-card-total">{formatPoints(row.points)}</span>
-          </li>
-        ))}
-      </ol>
-    </section>
+          </motion.li>
+        );
+      })}
+    </ol>
+  );
+}
+
+export function NextBody({
+  entries,
+  competition,
+}: {
+  entries: HeatEntry[];
+  competition: CompetitionDetail;
+}) {
+  const reduced = useReducedMotion();
+  return (
+    <ol>
+      {entries.map((entry, idx) => {
+        const team = competition.teams.find((t) => t.id === entry.teamId || t.displayName === entry.teamName);
+        const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor ?? entry.bibColour;
+        return (
+          <motion.li
+            key={entry.id}
+            initial={reduced ? false : { opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: reduced ? 0 : idx * 0.04 }}
+          >
+            <span className="mg-ov-card-place">L{entry.laneIndex}</span>
+            <span className="mg-ov-card-team">
+              {entry.teamName}
+              {bibColor && <BibSwatch color={bibColor} size={10} />}
+            </span>
+            <span />
+            <span className="mg-ov-card-added">Lane {entry.laneIndex}</span>
+            <span />
+          </motion.li>
+        );
+      })}
+    </ol>
+  );
+}
+
+export interface HeatRowData {
+  teamId: number;
+  teamName: string;
+  lane: number;
+  pts: number;
+  last: number | null;
+  elim: boolean;
+}
+
+export function HeatBody({
+  rows,
+  scored,
+  competition,
+}: {
+  rows: HeatRowData[];
+  scored: boolean;
+  competition: CompetitionDetail;
+}) {
+  const reduced = useReducedMotion();
+  return (
+    <ol>
+      {rows.map((row, idx) => {
+        const team = competition.teams.find((t) => t.id === row.teamId || t.displayName === row.teamName);
+        const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor;
+        return (
+          <motion.li
+            key={row.teamId}
+            initial={reduced ? false : { opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: reduced ? 0 : idx * 0.04 }}
+          >
+            <span className="mg-ov-card-place">{scored ? idx + 1 : `L${row.lane}`}</span>
+            <span className="mg-ov-card-team">
+              {row.teamName}
+              {bibColor && <BibSwatch color={bibColor} size={10} />}
+            </span>
+            <span />
+            {row.last != null ? <span className={`mg-ov-card-added ${row.elim ? 'is-out' : ''}`}>{row.elim ? 'E' : `+${row.last}`}</span> : <span />}
+            <span className="mg-ov-card-total">{formatPoints(row.pts)}</span>
+          </motion.li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -200,6 +445,7 @@ function LiveToplistCard({ competition, sectionId }: { competition: CompetitionD
  * Stored inside `overlay.look` (or `overlay.bannerText`) so all viewers and the broadcaster see it immediately.
  */
 export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string; overlay: StreamOverlay }) {
+  const reduced = useReducedMotion();
   const competition = useOptionalCompetition();
   if (!competition) return null;
   const { mode, sectionId } = readLiveOverlayCard(overlay);
@@ -222,29 +468,29 @@ export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string;
   if (mode === 'lanes' || mode === 'next') {
     const entries = [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex);
     return (
-      <section className="mg-ov-card mg-stream-fade mg-ov-card-right" aria-label={`${mode === 'next' ? 'Up next' : 'Starting lanes'}: ${heading}`}>
+      <motion.section
+        initial={reduced ? false : { opacity: 0, x: 18, scale: 0.96 }}
+        animate={{ opacity: 1, x: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+        className="mg-ov-card mg-stream-fade mg-ov-card-right"
+        aria-label={`${mode === 'next' ? 'Up next' : 'Starting lanes'}: ${heading}`}
+      >
         <header>
           <strong>{heading}</strong>
           <span>{mode === 'next' ? 'Up next in collecting ring' : 'Starting lanes'}</span>
         </header>
-        <ol>
-          {entries.map((entry) => (
-            <li key={entry.id}>
-              <span className="mg-ov-card-place">L{entry.laneIndex}</span>
-              <span className="mg-ov-card-team">{entry.teamName}</span>
-              <span />
-              <span className="mg-ov-card-added">Lane {entry.laneIndex}</span>
-              <span />
-            </li>
-          ))}
-        </ol>
-      </section>
+        {mode === 'next' ? (
+          <NextBody entries={entries} competition={competition} />
+        ) : (
+          <LanesBody entries={entries} competition={competition} />
+        )}
+      </motion.section>
     );
   }
 
   const scoredRaces = heat.races.filter((r) => r.results.length > 0);
   const lastRace = scoredRaces.at(-1);
-  const rows = heat.entries
+  const rows: HeatRowData[] = heat.entries
     .map((e) => {
       let pts = 0;
       for (const race of scoredRaces) {
@@ -257,22 +503,18 @@ export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string;
     })
     .sort((a, b) => b.pts - a.pts || a.lane - b.lane);
   return (
-    <section className="mg-ov-card mg-stream-fade mg-ov-card-right" aria-label={`Heat table: ${heading}`}>
+    <motion.section
+      initial={reduced ? false : { x: 18, scale: 0.96 }}
+      animate={{ x: 0, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+      className="mg-ov-card mg-stream-fade mg-ov-card-right"
+      aria-label={`Heat table: ${heading}`}
+    >
       <header>
         <strong>{heading}</strong>
         <span>{scoredRaces.length > 0 ? `After race ${scoredRaces.length} of ${heat.races.length}` : `${heat.races.length} races`}</span>
       </header>
-      <ol>
-        {rows.map((row, idx) => (
-          <li key={row.teamId}>
-            <span className="mg-ov-card-place">{scoredRaces.length > 0 ? idx + 1 : `L${row.lane}`}</span>
-            <span className="mg-ov-card-team">{row.teamName}</span>
-            <span />
-            {row.last != null ? <span className={`mg-ov-card-added ${row.elim ? 'is-out' : ''}`}>{row.elim ? 'E' : `+${row.last}`}</span> : <span />}
-            <span className="mg-ov-card-total">{formatPoints(row.pts)}</span>
-          </li>
-        ))}
-      </ol>
-    </section>
+      <HeatBody rows={rows} scored={scoredRaces.length > 0} competition={competition} />
+    </motion.section>
   );
 }

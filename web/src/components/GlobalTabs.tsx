@@ -1,6 +1,9 @@
 import { Link, useLocation } from 'react-router-dom';
-import { globalTabsPath, GLOBAL_EVENTS, GLOBAL_ME } from '../lib/routes';
 import { CalendarDays, Star, UserRound } from 'lucide-react';
+import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
+import { globalTabsPath, GLOBAL_EVENTS, GLOBAL_ME } from '../lib/routes';
+
+const readCurrentCompetition = useCurrentCompetition;
 
 /**
  * The tab bar for pages outside a competition: Events, Following and Me.
@@ -10,6 +13,15 @@ import { CalendarDays, Star, UserRound } from 'lucide-react';
 export function GlobalTabs({ meCount = 0 }: { meCount?: number }) {
   const { pathname } = useLocation();
   const path = globalTabsPath(pathname);
+  let hasCurrentCompetition = false;
+  try {
+    const { current } = readCurrentCompetition();
+    hasCurrentCompetition = current != null;
+  } catch {
+    // Rendered outside CurrentCompetitionProvider in standalone unit tests
+  }
+  if (path === '/me' && hasCurrentCompetition) return null;
+
   const tabs = [
     { to: '/events', label: 'Events', icon: CalendarDays, active: GLOBAL_EVENTS.includes(path) },
     { to: '/following', label: 'Following', icon: Star, active: path === '/following' },

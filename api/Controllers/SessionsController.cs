@@ -358,7 +358,9 @@ public class SessionsController : ControllerBase
     [HttpPut("{id:int}/heat-assignments")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
-    public async Task<ActionResult<SessionDto>> UpdateHeatAssignments(int competitionId, int id, UpdateHeatAssignmentsRequest req)
+    public async Task<ActionResult<SessionDto>> UpdateHeatAssignments(
+        int competitionId, int id, UpdateHeatAssignmentsRequest req,
+        [FromQuery] bool preserveCompletedScores = false)
     {
         var s = await _db.Sessions
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
@@ -399,12 +401,23 @@ public class SessionsController : ControllerBase
 
         // A signed-off race is final; the scoring endpoint refuses to touch it, so this must too.
         var changedRaceIds = changed.SelectMany(c => c.Heat.Races).Select(r => r.Id).ToList();
-        if (changedRaceIds.Count > 0)
+        if (changed.Count > 0)
         {
-            var signedOff = (await _db.Set<RaceScoreState>()
-                .Where(x => changedRaceIds.Contains(x.RaceId) && x.IsSignedOff)
-                .Select(x => x.RaceId)
-                .ToListAsync()).ToHashSet();
+            var scoreStates = await _db.Set<RaceScoreState>().AsNoTracking()
+                .Where(x => changedRaceIds.Contains(x.RaceId) && (x.IsSignedOff || x.Revision > 0))
+                .Select(x => new { x.RaceId, x.IsSignedOff })
+                .ToListAsync();
+            var signedOff = scoreStates.Where(x => x.IsSignedOff).Select(x => x.RaceId).ToHashSet();
+            if (preserveCompletedScores)
+            {
+                var recordedRaceIds = scoreStates.Select(x => x.RaceId).ToHashSet();
+                var protectedHeats = changed
+                    .Where(c => HeatProtection.IsProtected(c.Heat, s, recordedRaceIds))
+                    .Select(c => string.IsNullOrWhiteSpace(c.Heat.Label) ? $"Heat {c.Heat.OrderIndex}" : c.Heat.Label!.Trim())
+                    .ToList();
+                if (protectedHeats.Count > 0)
+                    return Conflict(new { message = $"{string.Join(", ", protectedHeats)} already has race activity. Its teams and lanes can't be changed while preserving scores. Nothing was saved." });
+            }
             var locked = changed
                 .Where(c => c.Heat.Races.Any(r => signedOff.Contains(r.Id)))
                 .Select(c => string.IsNullOrWhiteSpace(c.Heat.Label) ? $"Heat {c.Heat.OrderIndex}" : c.Heat.Label!.Trim())
@@ -418,13 +431,17 @@ public class SessionsController : ControllerBase
             _db.HeatEntries.RemoveRange(heat.Entries);
             foreach (var race in heat.Races)
             {
+                if (preserveCompletedScores && race.IsComplete)
+                    continue;
                 _db.Results.RemoveRange(race.Results);
                 race.IsComplete = false;
                 race.StartedAt = null;
                 race.FinishedAt = null;
             }
-            heat.StartedAt = null;
-            heat.FinishedAt = null;
+            if (!preserveCompletedScores || !heat.Races.Any(r => r.IsComplete))
+                heat.StartedAt = null;
+            if (!preserveCompletedScores || heat.Races.Any(r => !r.IsComplete))
+                heat.FinishedAt = null;
             var lane = 1;
             foreach (var tid in teamIds)
             {
@@ -995,6 +1012,132 @@ public class SessionsController : ControllerBase
         return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
     }
 
+    /// <summary>Updates the uncompleted races across all heats in a session, preserving any already-completed races in place.</summary>
+    [HttpPut("{id:int}/races")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> UpdateSessionRaces(
+        int competitionId, int id, UpdateSessionRacesRequest req)
+    {
+        var s = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+
+        var names = (req.RaceNames ?? Array.Empty<string>())
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => r.Trim())
+            .ToList();
+        if (names.Count == 0)
+            return BadRequest(new { message = "At least one race name is required." });
+        if (names.Any(name => name.Length > 150))
+            return BadRequest(new { message = "Race names must be 150 characters or fewer." });
+
+        var raceIds = s.Heats.SelectMany(h => h.Races).Select(r => r.Id).ToList();
+        var recordedIds = (await _db.Set<RaceScoreState>()
+            .Where(state => raceIds.Contains(state.RaceId) && (state.Revision > 0 || state.IsSignedOff))
+            .Select(state => state.RaceId).ToListAsync()).ToHashSet();
+        var programmes = s.Heats.Select(heat => new
+        {
+            Heat = heat,
+            Races = heat.Races.OrderBy(r => r.OrderIndex).ThenBy(r => r.Id).ToList(),
+        }).ToList();
+        // The request is the full programme. Validate every heat before changing anything: a
+        // different completion order must never shift recorded races or erase another heat's game.
+        foreach (var programme in programmes)
+        {
+            for (var index = 0; index < programme.Races.Count; index++)
+            {
+                var race = programme.Races[index];
+                var protectedRace = race.IsComplete || race.StartedAt.HasValue || race.Results.Count > 0 || recordedIds.Contains(race.Id);
+                if (protectedRace && (index >= names.Count || !string.Equals(race.Name, names[index], StringComparison.OrdinalIgnoreCase)))
+                    return Conflict(new { message = "The race programmes differ at a recorded or started race. Keep those races in their original positions; nothing was saved." });
+            }
+        }
+
+        var hasUncompleted = false;
+        foreach (var programme in programmes)
+        {
+            for (var index = 0; index < programme.Races.Count; index++)
+            {
+                var race = programme.Races[index];
+                if (index >= names.Count) { _db.Races.Remove(race); continue; }
+                // Preserve IDs and order even for an unchanged future game (offline scorers refer to them).
+                if (!race.IsComplete && !race.StartedAt.HasValue && !recordedIds.Contains(race.Id)) race.Name = names[index];
+            }
+            var order = programme.Races.Select(r => r.OrderIndex).DefaultIfEmpty(0).Max();
+            for (var index = programme.Races.Count; index < names.Count; index++)
+                _db.Races.Add(new Race { HeatId = programme.Heat.Id, Name = names[index], OrderIndex = ++order });
+            var heatHasUncompleted = names.Count > programme.Races.Count || programme.Races.Take(names.Count).Any(r => !r.IsComplete);
+            if (heatHasUncompleted) programme.Heat.FinishedAt = null;
+            hasUncompleted |= heatHasUncompleted;
+        }
+        s.PlannedRaces = PlannedRaceList.Write(names);
+        if (s.Status == SessionStatus.Finished && hasUncompleted)
+        {
+            s.Status = SessionStatus.InArena;
+            s.FinishedAt = null;
+        }
+
+        await _db.SaveChangesAsync();
+        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+        var dto = reloaded.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    /// <summary>Shifts ScheduledStart on all uncompleted sessions (and their uncompleted heats) by DeltaMinutes.</summary>
+    [HttpPost("shift-times")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<IEnumerable<SessionDto>>> ShiftSessionTimes(
+        int competitionId, ShiftSessionTimesRequest req)
+    {
+        if (req.DeltaMinutes is 0 or < -720 or > 720)
+            return BadRequest(new { message = "Shift must be between -720 and 720 minutes (non-zero)." });
+
+        var sessions = await SessionsWithDetail()
+            .Where(s => s.CompetitionId == competitionId)
+            .OrderBy(s => s.OrderIndex)
+            .ToListAsync();
+
+        var delta = TimeSpan.FromMinutes(req.DeltaMinutes);
+        var targetSessions = sessions.Where(s =>
+            s.Status != SessionStatus.Finished
+            && (string.IsNullOrWhiteSpace(req.ArenaName)
+                || string.Equals(s.ArenaName?.Trim(), req.ArenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        foreach (var s in targetSessions)
+        {
+            if (s.ScheduledStart.HasValue)
+            {
+                s.ScheduledStart = s.ScheduledStart.Value.Add(delta);
+                s.Notes = ApplyShiftNote(s.Notes, req.DeltaMinutes);
+            }
+            foreach (var h in s.Heats.Where(h => !h.FinishedAt.HasValue && h.ScheduledStart.HasValue))
+                h.ScheduledStart = h.ScheduledStart!.Value.Add(delta);
+        }
+
+        await _db.SaveChangesAsync();
+        foreach (var s in targetSessions)
+            await _live.SessionUpdated(competitionId, s.ToDto());
+
+        return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+    }
+
+    private static string? ApplyShiftNote(string? notes, int deltaMinutes)
+    {
+        var raw = notes ?? string.Empty;
+        var match = System.Text.RegularExpressions.Regex.Match(raw, @"\[shift:([+-]?\d+)\]");
+        var current = match.Success && int.TryParse(match.Groups[1].Value, out var parsed) ? parsed : 0;
+        var total = current + deltaMinutes;
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(raw, @"\s*\[shift:[+-]?\d+\]\s*", " ").Trim();
+        if (total == 0)
+            return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+        var tag = $"[shift:{(total > 0 ? "+" : "")}{total}]";
+        return string.IsNullOrWhiteSpace(cleaned) ? tag : $"{cleaned} {tag}";
+    }
+
     private static CombinedHeatScoringMode ParseScoringMode(string? raw)
         => string.Equals(raw?.Trim(), "Combined", StringComparison.OrdinalIgnoreCase) || raw?.Trim() == "1"
             ? CombinedHeatScoringMode.Combined
@@ -1006,3 +1149,5 @@ public record SetUnderReviewRequest(bool UnderReview, string? Note = null);
 public record CombineHeatRequest(int? SourceSessionId = null, IReadOnlyList<int>? TeamIds = null, string? ScoringMode = "BySection", int? TargetHeatId = null, bool RemoveSourceSession = false);
 public record SetCombinedScoringRequest(string ScoringMode);
 public record HoldCompetitionRequest(string? ResumeTime = null, int? DelayMinutes = null, string? ArenaName = null, bool PostAnnouncement = true);
+public record UpdateSessionRacesRequest(IReadOnlyList<string> RaceNames);
+public record ShiftSessionTimesRequest(int DeltaMinutes, string? ArenaName = null);
