@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
 import { dotColour, teamBoxStyle } from '../../lib/teamColours';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
+import { RaceSelect } from '../../components/RacePicker';
 import { ELIM_REASONS, OTHER_REASON, noteFor, reasonKeyOf, statusFor } from '../../lib/elimReasons';
 import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import type { NextLanes } from '../../lib/nextRoundLanes';
@@ -25,7 +26,7 @@ export interface ScoreOverrideValue {
 
 export type RefereeCard = 'yellow' | 'red' | null;
 
-/** Whether disciplinary cards (Yellow / Red) are enabled for this competition. Defaults to false unless enabled by an admin. */
+/** Whether disciplinary cards (Yellow / Red) are shown for this competition on this device. Defaults to false. */
 export function isCardsEnabled(competitionId?: number | null): boolean {
   if (!competitionId) return false;
   try {
@@ -168,11 +169,11 @@ export function playAlertChime(): void {
   }
 }
 
-/** One team in the race being scored. A tap places it, a hold or swipe down eliminates it; the Out and HC buttons are for everyone who can't swipe. */
+/** One team in the race being scored. A tap places it (or restores an eliminated team); a press-and-hold or swipe down eliminates it. */
 export function ScoreRow({
-  entry, lane, hatband, state, sitting, hc, canScore, canMarkHc, points = 0, heatTotal = 0, overridePoints,
+  entry, lane, hatband, state, sitting, hc, canScore, points = 0, heatTotal = 0, overridePoints,
   card,
-  onTap, onSwipeEliminate, onToggleElim, onHc,
+  onTap, onSwipeEliminate, onToggleElim,
 }: {
   entry: HeatEntry;
   lane: string;
@@ -181,7 +182,7 @@ export function ScoreRow({
   sitting: boolean;
   hc: boolean;
   canScore: boolean;
-  canMarkHc: boolean;
+  canMarkHc?: boolean;
   points?: number;
   heatTotal?: number;
   overridePoints?: number;
@@ -189,7 +190,7 @@ export function ScoreRow({
   onTap: () => void;
   onSwipeEliminate: () => void;
   onToggleElim: () => void;
-  onHc: () => void;
+  onHc?: () => void;
 }) {
   const eliminated = state?.eliminated ?? false;
   const placed = Boolean(state?.place && !eliminated);
@@ -214,6 +215,8 @@ export function ScoreRow({
   function handlePointerDown() {
     if (disabled) return;
     clearHold();
+    held.current = false;
+    dragged.current = false;
     setHolding(true);
     holdTimer.current = window.setTimeout(() => {
       holdTimer.current = null;
@@ -226,7 +229,7 @@ export function ScoreRow({
   function handlePanEnd(_e: unknown, info: PanInfo) {
     clearHold();
     if (Math.abs(info.offset.y) > 8) dragged.current = true;
-    if (!disabled && info.offset.y > 50 && info.velocity.y > 0) onSwipeEliminate();
+    if (!disabled && !held.current && info.offset.y > 50 && info.velocity.y > 0) onSwipeEliminate();
   }
 
   function handleClick() {
@@ -275,8 +278,8 @@ export function ScoreRow({
   ) : null;
 
   const rowStyle = {
-    ...teamBoxStyle(entry.bibColour),
-    ...(eliminated ? { borderColor: '#E8B4BA' } : entry.bibColour ? { borderColor: dotColour(entry.bibColour) } : {}),
+    ...(hatband ? teamBoxStyle(hatband) : {}),
+    ...(eliminated ? { borderColor: '#E8B4BA' } : {}),
   };
 
   return (
@@ -298,6 +301,7 @@ export function ScoreRow({
         onPointerUp={clearHold}
         onPointerLeave={clearHold}
         onPointerCancel={clearHold}
+        onPanStart={clearHold}
         onPanEnd={handlePanEnd}
         onClick={handleClick}
         onKeyDown={(e) => {
@@ -326,16 +330,6 @@ export function ScoreRow({
         </span>
         {badge}
       </motion.button>
-      {canScore && !sitting && (
-        <button type="button" className="sc-mini" aria-pressed={eliminated} aria-label={eliminated ? `Bring ${entry.teamName} back in` : `Eliminate ${entry.teamName}`} onClick={onToggleElim}>
-          {eliminated ? 'Back in' : 'Out'}
-        </button>
-      )}
-      {canMarkHc && (
-        <button type="button" className="sc-mini" aria-pressed={hc} aria-label={hc ? `Bring ${entry.teamName} back into scoring` : `Mark ${entry.teamName} hors concours`} onClick={onHc}>
-          HC
-        </button>
-      )}
     </li>
   );
 }
@@ -348,10 +342,11 @@ function Overlay({ label, onClose, children }: { label: string; onClose: () => v
   );
 }
 
-/** Bottom sheet to override a team's score (Automatic, Set points, or Hors concours). */
+/** Bottom sheet to override a team's score (Automatic, Set points, or Hors concours) and run mid-session race controls. */
 export function ScoreOverrideSheet({
   raceName, entries, lanesByTeam, pendingByTeam, pointsFor, overrides, hcTeamIds, onSetHc, onSaveOverride, onClose,
   isRaceComplete, onClearRaceScore, competitionId,
+  onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner,
 }: {
   raceName: string;
   entries: HeatEntry[];
@@ -366,6 +361,11 @@ export function ScoreOverrideSheet({
   isRaceComplete?: boolean;
   onClearRaceScore?: () => Promise<void> | void;
   competitionId?: number;
+  onAddRace?: (raceName: string) => Promise<void> | void;
+  onRenameRace?: (newName: string) => Promise<void> | void;
+  onRerunRace?: () => Promise<void> | void;
+  runoffTeams?: Array<{ id: number; name: string }>;
+  onPickRunoffWinner?: (teamId: number) => Promise<void> | void;
 }) {
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
   const [mode, setMode] = useState<'auto' | 'set' | 'hc'>('auto');
@@ -373,8 +373,16 @@ export function ScoreOverrideSheet({
   const [reason, setReason] = useState<string>('');
   const [card, setCard] = useState<RefereeCard>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmHc, setConfirmHc] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const mounted = useRef(true);
+  const currentEntries = useRef(entries);
+  useEffect(() => { currentEntries.current = entries; }, [entries]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [clearing, setClearing] = useState(false);
-  const [cardsEnabled, setCardsEnabledState] = useCardsEnabled(competitionId);
+  const [cardsEnabled] = useCardsEnabled(competitionId);
+  const [runoffTeamId, setRunoffTeamId] = useState<number | null>(runoffTeams?.[0]?.id ?? null);
 
   const selectedEntry = entries.find((e) => e.teamId === selectedTeamId) ?? null;
 
@@ -402,30 +410,39 @@ export function ScoreOverrideSheet({
     setReason(parsed.cleanNote);
   }
 
-  async function saveTeam() {
-    if (!selectedEntry) return;
-    const teamId = selectedEntry.teamId;
-    const wasHc = hcTeamIds.has(teamId);
-    if (cardsEnabled) {
-      setStoredCard(competitionId, teamId, card);
+  function saveTeam() {
+    if (!selectedEntry || saving) return;
+    if (onSetHc && (mode === 'hc') !== hcTeamIds.has(selectedEntry.teamId)) {
+      setConfirmHc(true);
+      return;
     }
-    const finalReason = cardsEnabled ? formatRefereeCardNote(card, reason) : reason.trim();
+    void applyTeam();
+  }
 
-    if (mode === 'hc') {
-      onSaveOverride(teamId, null);
-      if (onSetHc && !wasHc) await onSetHc(teamId, true);
-    } else if (mode === 'set') {
-      if (onSetHc && wasHc) await onSetHc(teamId, false);
-      onSaveOverride(teamId, { points: pts, reason: finalReason || undefined });
-    } else {
-      if (onSetHc && wasHc) await onSetHc(teamId, false);
-      onSaveOverride(teamId, null);
+  async function applyTeam() {
+    if (!selectedEntry || saving) return;
+    const teamId = selectedEntry.teamId;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      if (onSetHc && (mode === 'hc') !== hcTeamIds.has(teamId)) await onSetHc(teamId, mode === 'hc');
+      if (!mounted.current || !currentEntries.current.some((entry) => entry.teamId === teamId)) return;
+      if (cardsEnabled) setStoredCard(competitionId, teamId, card);
+      const finalReason = cardsEnabled ? formatRefereeCardNote(card, reason) : reason.trim();
+      onSaveOverride(teamId, mode === 'set' ? { points: pts, reason: finalReason || undefined } : null);
+      setSelectedTeamId(null);
+      setConfirmHc(false);
+    } catch {
+      if (mounted.current) setSaveError('Couldn’t save this change. Please try again.');
+    } finally {
+      if (mounted.current) setSaving(false);
     }
-    setSelectedTeamId(null);
   }
 
   return (
-    <Overlay label="Score override" onClose={onClose}>
+    <Overlay label="Score override" onClose={saving ? () => {} : onClose}>
+      {saveError && <p role="alert">{saveError}</p>}
+      {confirmHc && selectedEntry && <HcConfirm teamName={selectedEntry.teamName} isHc={hcTeamIds.has(selectedEntry.teamId)} busy={saving} onConfirm={() => void applyTeam()} onCancel={() => { if (!saving) setConfirmHc(false); }} />}
       {!selectedEntry ? (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -437,17 +454,6 @@ export function ScoreOverrideSheet({
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
-          {competitionId != null && (
-            <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-[rgb(var(--mg-line))] bg-[rgb(var(--mg-subtle))] px-3 py-2 text-xs font-semibold">
-              <span>Use yellow &amp; red cards in this competition</span>
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-[rgb(var(--mg-heading))]"
-                checked={cardsEnabled}
-                onChange={(e) => setCardsEnabledState(e.target.checked)}
-              />
-            </label>
-          )}
           <div className="flex flex-col gap-1.5">
             {entries.map((e) => {
               const isHc = hcTeamIds.has(e.teamId);
@@ -509,6 +515,69 @@ export function ScoreOverrideSheet({
                       onClick={() => setConfirmClear(false)}
                     >
                       Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {(onRenameRace || onAddRace || onRerunRace || (onPickRunoffWinner && runoffTeams && runoffTeams.length > 0)) && (
+            <div className="space-y-3 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">Race controls</span>
+              {onRenameRace && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-[rgb(var(--mg-heading))]">Change this race ({raceName})</span>
+                  <RaceSelect
+                    label="New race name"
+                    submitLabel="Change race"
+                    placeholder="Search replacement race…"
+                    autoReset
+                    onSelect={(nextName) => { void onRenameRace(nextName); }}
+                  />
+                </div>
+              )}
+              {onAddRace && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-[rgb(var(--mg-heading))]">Add a race to this session</span>
+                  <RaceSelect
+                    label="Race to add"
+                    submitLabel="Add race"
+                    placeholder="Search race to add…"
+                    autoReset
+                    onSelect={(nextName) => { void onAddRace(nextName); }}
+                  />
+                </div>
+              )}
+              {onRerunRace && (
+                <button
+                  type="button"
+                  className="mg-btn mg-btn-secondary !min-h-10 w-full !text-xs"
+                  onClick={() => { void onRerunRace(); }}
+                >
+                  Re-run stopped race ({raceName} · Re-run)
+                </button>
+              )}
+              {onPickRunoffWinner && runoffTeams && runoffTeams.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-[rgb(var(--mg-heading))]">Record run-off winner</span>
+                  <div className="flex gap-2">
+                    <select
+                      aria-label="Run-off winning team"
+                      className="mg-field !min-h-10 flex-1 px-2 text-sm"
+                      value={runoffTeamId ?? ''}
+                      onChange={(e) => setRunoffTeamId(e.target.value ? Number(e.target.value) : null)}
+                    >
+                      {runoffTeams.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="mg-btn mg-btn-secondary !min-h-10 !px-3 !text-xs"
+                      disabled={!runoffTeamId}
+                      onClick={() => { if (runoffTeamId) void onPickRunoffWinner(runoffTeamId); }}
+                    >
+                      Save winner
                     </button>
                   </div>
                 </div>

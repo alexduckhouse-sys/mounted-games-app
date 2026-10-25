@@ -123,6 +123,14 @@ describe('validateStep', () => {
 });
 
 describe('readDraft', () => {
+  it('restores an explicit card preference while leaving legacy drafts unset', () => {
+    for (const cardsEnabled of [true, false]) {
+      expect(readDraft({ ...draft(), cardsEnabled })?.cardsEnabled).toBe(cardsEnabled);
+    }
+    expect(readDraft(draft())?.cardsEnabled).toBeUndefined();
+    expect(readDraft({ ...draft(), cardsEnabled: 'true' })?.cardsEnabled).toBeUndefined();
+  });
+
   it('refuses anything that is not a draft', () => {
     for (const value of [null, 'x', 4, {}, { name: 'a' }, { name: 1, sections: [] }]) expect(readDraft(value)).toBeNull();
   });

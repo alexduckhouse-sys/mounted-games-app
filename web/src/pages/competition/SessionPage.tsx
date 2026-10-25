@@ -5,31 +5,79 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle, ChevronLeft, Coffee, Wand2, X, Clock, ClipboardList, Users, CheckCircle2,
+  Mic, Monitor, QrCode as QrCodeIcon, Table2, Trophy,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import type { DeclarationForm, Heat, Session } from '../../types';
+import type { CompetitionDetail, DeclarationForm, Heat, Session, StandingRow } from '../../types';
 import type { QueuedScore } from '../../offline/scoreOutbox';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
 import { ScoringSection } from './ScoringSection';
-import { ScoreClashBanner, TeamCardBadge, getStoredCards, playAlertChime, setStoredCard, useCardsEnabled, type ScoreClashItem } from './ScoringParts';
+import { HeatGrid, ScoreClashBanner, TeamCardBadge, getStoredCards, playAlertChime, setStoredCard, useCardsEnabled, type ScoreClashItem } from './ScoringParts';
+import { RaceListPicker, RaceSelect } from '../../components/RacePicker';
 import { bibAccent } from '../../lib/bib';
 import { enqueue, placingsOf } from '../../offline/scoreOutbox';
 import { nextRoundLanes } from '../../lib/nextRoundLanes';
-import { sessionPointsBase, withQueuedResults } from '../../lib/queuedView';
+import { pointsForPlace, sessionPointsBase, withQueuedResults } from '../../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../../lib/scoreUndo';
 import {
   overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
   writeScoringDraft, type PendingPlace,
 } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
-import { LANE_ROTATION_LABELS, LaneRotationMode, type LaneRotationModeValue } from '../../lib/lanes';
-import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
+import { laneLabel, LANE_ROTATION_LABELS, LaneRotationMode, type LaneRotationModeValue } from '../../lib/lanes';
+import { displayLaneFor, lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
 import { useRaceNotes } from './useRaceNotes';
 import { formatPoints } from '../../lib/formatPoints';
 import { ScorerLinksCard } from './ScorerLinksCard';
+import { QrAccessModal } from '../../components/QrAccessModal';
+import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
+import { ordinal } from '../../lib/toplist';
+import { publicRiderName } from '../../lib/riderNames';
+import { statusLetter } from '../../lib/resultStatus';
+
+// Official totals include bonuses, HC exclusions and organiser tie decisions.
+function useCommentatorStandings(competition: CompetitionDetail, sectionId: number): StandingRow[] {
+  const [saved, setSaved] = useState<{ key: string; rows: StandingRow[] } | null>(null);
+  const key = `${competition.id}:${sectionId}`;
+  useEffect(() => {
+    let active = true;
+    api.get<StandingRow[]>(`/competitions/${competition.id}/standings`, { params: { sectionId } })
+      .then(({ data }) => {
+        if (!Array.isArray(data) || !data.every((row) => row && Number.isFinite(row.teamId) && Number.isFinite(row.totalPoints) && typeof row.teamName === 'string'))
+          throw new Error('Invalid standings');
+        if (active) setSaved({ key, rows: data });
+      })
+      .catch(() => { if (active) setSaved({ key, rows: [] }); });
+    return () => { active = false; };
+  }, [competition.id, competition.sessions, sectionId, key]);
+  return saved?.key === key ? saved.rows : [];
+}
+
+type CommentatorChoice = 'yes' | 'no' | null;
+
+function readCommentatorChoice(competitionId: number, fromUrl: boolean): CommentatorChoice {
+  if (fromUrl) {
+    try { localStorage.setItem(`mg.commentatorScoring.${competitionId}`, 'yes'); } catch { /* ignore */ }
+    return 'yes';
+  }
+  try {
+    const val = localStorage.getItem(`mg.commentatorScoring.${competitionId}`);
+    if (val === 'yes' || val === 'no') return val;
+  } catch { /* ignore */ }
+  return null;
+}
+
+interface PostRaceRecapState {
+  raceId: number;
+  raceName: string;
+  summaryText: string;
+  heat: Heat;
+  heats: Heat[];
+  session: Session;
+}
 
 function formatTime(d: Date | null): string {
   if (!d) return '—';
@@ -88,18 +136,46 @@ export function SessionPage() {
   const outbox = useScoreOutbox();
   const [showTransition, setShowTransition] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [commentatorPreference, setCommentatorPreference] = useState(() => ({
+    competitionId: competition.id, choice: readCommentatorChoice(competition.id, searchParams.get('commentator') === '1'),
+  }));
+  const commentatorChoice = commentatorPreference.competitionId === competition.id
+    ? commentatorPreference.choice : readCommentatorChoice(competition.id, searchParams.get('commentator') === '1');
+  const [postRaceRecap, setPostRaceRecap] = useState<PostRaceRecapState | null>(null);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
-  const [decForms, setDecForms] = useState<DeclarationForm[]>([]);
+  const [decFormsResult, setDecFormsResult] = useState<{ competitionId: number; forms: DeclarationForm[] } | null>(null);
+  const decForms = useMemo(() => decFormsResult?.competitionId === competition.id ? decFormsResult.forms : [], [decFormsResult, competition.id]);
+  const mayManage = canManage(competition);
   const [callingTeamId, setCallingTeamId] = useState<number | null>(null);
   const [ringCallNotice, setRingCallNotice] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const commentatorMode = commentatorChoice === 'yes';
+  function saveCommentatorChoice(next: 'yes' | 'no') {
+    setCommentatorPreference({ competitionId: competition.id, choice: next });
+    try { localStorage.setItem(`mg.commentatorScoring.${competition.id}`, next); } catch { /* ignore */ }
+  }
 
   async function handleCallMissingTeam(entry: { teamId: number; teamName: string; laneIndex: number }) {
     if (!activeHeat || !session) return;
+    const currentEntry = activeHeat.entries.find((candidate) => candidate.teamId === entry.teamId);
+    if (!currentEntry) return;
+    const drawnLane = activeHeat.entries.map(({ id, laneIndex }) => ({ id, laneIndex })).sort((a, b) => a.laneIndex - b.laneIndex || a.id - b.id)
+      .findIndex((candidate) => candidate.id === currentEntry.id) + 1;
+    const raceIndex = Math.max(0, activeHeat.races.map(({ id, orderIndex }) => ({ id, orderIndex })).sort((a, b) => a.orderIndex - b.orderIndex).findIndex((race) => race.id === activeRaceId));
+    const lane = laneLabel(drawnLane, raceIndex, activeHeat.entries.length, session.lanesPerHeat, session.laneRotationMode ?? LaneRotationMode.MoveUp);
+    if (lane === 'S') return;
     setCallingTeamId(entry.teamId);
     const heatIndex = orderedHeats.findIndex((h) => h.id === activeHeat.id);
     const heatLabel = activeHeat.label ?? `Heat ${heatIndex + 1}`;
     const arena = session.arenaName?.trim() || 'Main Arena';
-    const body = `🔔 Ring call (${arena}): ${entry.teamName} (Lane ${entry.laneIndex}) needed at the collecting ring now for ${heatLabel}.`;
+    const body = `🔔 Ring call (${arena}): ${entry.teamName} (Lane ${lane}) needed at the collecting ring now for ${heatLabel}.`;
     try {
       await api.post(`/competitions/${competition.id}/chat`, { body, type: 1 });
       playAlertChime();
@@ -113,11 +189,14 @@ export function SessionPage() {
   }
 
   useEffect(() => {
-    if (!session) return;
-    api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: session.competitionId } })
-      .then((r) => setDecForms(r.data))
-      .catch(() => setDecForms([]));
-  }, [session]);
+    if (!mayManage) return;
+    let cancelled = false;
+    api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id } })
+      .then(({ data }) => Array.isArray(data) ? data.filter((form) => form && typeof form.teamId === 'number' && Array.isArray(form.riders)) : [])
+      .catch(() => [])
+      .then((forms) => { if (!cancelled) setDecFormsResult({ competitionId: competition.id, forms }); });
+    return () => { cancelled = true; };
+  }, [competition.id, mayManage]);
 
   const decFormByTeamId = useMemo(() => {
     const m = new Map<number, DeclarationForm>();
@@ -132,18 +211,18 @@ export function SessionPage() {
 
   const orderedRaces = useMemo(
     () => (activeHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
-    [activeHeat]
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization -- ring-call callbacks only read the immutable heat snapshot
+    [activeHeat?.races]
   );
 
   const preferredRaceRef = useRef<number | null>(null);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the race selection when the heat's races change
     if (!activeHeat) { setActiveRaceId(null); return; }
-    // Don't loop back to race 1 when all are complete — leave activeRaceId null so the
-    // UI shows "Select a race" and the admin can re-score by clicking a race tab.
+    // Keep the last completed race open when the heat finishes so corrections stay accessible.
     const preferred = preferredRaceRef.current;
     preferredRaceRef.current = null;
-    const nextRace = orderedRaces.find((r) => r.id === preferred) ?? orderedRaces.find((r) => !r.isComplete) ?? null;
+    const nextRace = orderedRaces.find((r) => r.id === preferred) ?? orderedRaces.find((r) => !r.isComplete) ?? orderedRaces[orderedRaces.length - 1] ?? null;
     setActiveRaceId(nextRace?.id ?? null);
   }, [activeHeat, orderedRaces]);
 
@@ -276,6 +355,13 @@ export function SessionPage() {
 
   function resetPending() { changePending(() => []); }
 
+  function clearRaceDraft(raceId: number, heatId: number) {
+    const key = draftKeyFor(heatId, raceId);
+    setPendingState((current) => current.key === key ? { key, places: [], edited: true } : current);
+    setUndoStack((current) => current.filter((entry) => entry.raceId !== raceId));
+    setCorrectionReasons((current) => { const next = { ...current }; delete next[raceId]; return next; });
+  }
+
   // Marks a team hors concours, or brings it back. The event reloads so standings and the summary follow at once.
   async function setHc(teamId: number, hc: boolean) {
     try {
@@ -284,6 +370,7 @@ export function SessionPage() {
       reload();
     } catch {
       setSaveError('Couldn’t change hors concours. Try again.');
+      throw new Error('Couldn’t change hors concours. Try again.');
     }
   }
 
@@ -311,12 +398,40 @@ export function SessionPage() {
       state: 'waiting',
     };
     const queuedBefore = outbox.find((q) => q.raceId === activeRace.id) ?? null;
+    const nextOutbox = enqueue(outbox, item);
     const stored = updateOutbox((list) => enqueue(list, item));
     if (!stored) { setSaveError(OUTBOX_STORAGE_ERROR); return; }
     setSaveError(null);
     setUndoStack((stack) => pushUndo(dropDrafts(stack, activeRace.id), { kind: 'save', raceId: activeRace.id, sent: item, queuedBefore, draft: places }));
     if (scoringDraftKey) writeScoringDraft(scoringDraftKey, []);
     setPending([]);
+
+    if (commentatorMode) {
+      const updatedHeats = orderedHeats.map((h) => withQueuedResults(h, nextOutbox, sessionBase));
+      const updatedHeat = updatedHeats.find((h) => h.id === activeHeat.id) ?? activeHeat;
+      const scoredRace = updatedHeat.races.find((r) => r.id === activeRace.id);
+      const summaryParts = (scoredRace?.results ?? [])
+        .slice()
+        .sort((a, b) => {
+          if (a.isSitOut !== b.isSitOut) return a.isSitOut ? 1 : -1;
+          if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
+          return (a.placing ?? 999) - (b.placing ?? 999) || b.points - a.points;
+        })
+        .map((res) => {
+          if (res.isSitOut) return `Sat out ${res.teamName}`;
+          if (res.eliminated) return `${statusLetter(true, res.status) ?? 'E'} ${res.teamName}`;
+          return `${res.placing != null ? ordinal(res.placing) : ''} ${res.teamName} (+${formatPoints(res.points)} pts)`.trim();
+        });
+      setPostRaceRecap({
+        raceId: activeRace.id,
+        raceName: activeRace.name,
+        summaryText: summaryParts.join(', ') || 'Results recorded',
+        heat: updatedHeat,
+        heats: updatedHeats,
+        session: { ...session, heats: updatedHeats },
+      });
+    }
+
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
     const next = nextRaceToScore(orderedHeats, session.raceOrderAlternating === true, { heatId: activeHeat.id, raceId: activeRace.id }, queuedIds);
     if (next) {
@@ -447,6 +562,76 @@ export function SessionPage() {
 
       {canManage(competition) ? (
         <>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                aria-pressed={commentatorMode}
+                onClick={() => saveCommentatorChoice(commentatorMode ? 'no' : 'yes')}
+                className={`mg-btn !min-h-9 !px-3 text-xs font-bold ${
+                  commentatorMode ? 'mg-btn-primary' : 'mg-btn-secondary'
+                }`}
+              >
+                <Mic className="h-3.5 w-3.5" aria-hidden="true" />
+                {commentatorMode ? 'Commentator facts: ON' : 'Commentator facts: OFF'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowQrModal(true)}
+                className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
+              >
+                <QrCodeIcon className="h-3.5 w-3.5" aria-hidden="true" /> QR Access
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                to={`/competitions/${competition.id}/commentary${session.competitionSectionId != null ? `?section=${session.competitionSectionId}` : ''}`}
+                className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
+              >
+                <Mic className="h-3.5 w-3.5" aria-hidden="true" /> PA Desk
+              </Link>
+              <Link
+                to={`/competitions/${competition.id}/tv${session.competitionSectionId != null ? `?section=${session.competitionSectionId}` : ''}`}
+                className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
+              >
+                <Monitor className="h-3.5 w-3.5" aria-hidden="true" /> TV Kiosk
+              </Link>
+            </div>
+          </div>
+
+          {commentatorChoice === null && (
+            <section
+              aria-label="Commentator scoring prompt"
+              className="mg-card flex flex-wrap items-center justify-between gap-3 border-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] p-3.5"
+            >
+              <div className="min-w-0 flex-1">
+                <h2 className="m-0 flex items-center gap-1.5 text-sm font-bold text-[rgb(var(--mg-heading))]">
+                  <Mic className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  Do you want to see commentator facts while scoring?
+                </h2>
+                <p className="mt-1 mb-0 text-xs text-[rgb(var(--mg-muted))]">
+                  Shows team riders, ponies and live storylines while you score, plus the updated heat table and toplist after each race.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => saveCommentatorChoice('yes')}
+                  className="mg-btn mg-btn-primary !min-h-9 !px-3 text-xs font-bold"
+                >
+                  Yes, show commentator facts
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveCommentatorChoice('no')}
+                  className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
+                >
+                  No, just score
+                </button>
+              </div>
+            </section>
+          )}
+
           <HeatTabs
             session={session}
             heats={orderedHeats}
@@ -469,31 +654,35 @@ export function SessionPage() {
             </div>
           )}
 
-          {canOrganise(competition) && activeHeat && activeHeat.entries.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-              <div className="flex items-center gap-1.5 font-bold">
-                <span aria-hidden="true">🔔</span>
-                <span>Call missing team to ring:</span>
+          {canOrganise(competition) &&
+            activeHeat &&
+            activeHeat.entries.length > 0 &&
+            !activeHeat.startedAt &&
+            !activeHeat.races.some((r) => r.isComplete) && (() => {
+              const scheduledStart = heatStartTime(session, activeHeat, Math.max(0, orderedHeats.findIndex((h) => h.id === activeHeat.id)));
+              return scheduledStart != null && nowMs > scheduledStart.getTime();
+            })() && (
+              <div className="mg-card flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
+                <span className="font-semibold text-[rgb(var(--mg-muted))]">Late to ring — call missing team:</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {activeHeat.entries
+                    .slice()
+                    .sort((a, b) => a.laneIndex - b.laneIndex)
+                    .map((entry) => (
+                      <button
+                        key={entry.teamId}
+                        type="button"
+                        disabled={callingTeamId === entry.teamId}
+                        onClick={() => void handleCallMissingTeam(entry)}
+                        className="mg-btn mg-btn-secondary !min-h-8 !px-2.5 text-xs font-semibold"
+                        title={`Call ${entry.teamName} (Lane ${entry.laneIndex}) to ring`}
+                      >
+                        {callingTeamId === entry.teamId ? 'Calling…' : `Call ${entry.teamName} (L${entry.laneIndex})`}
+                      </button>
+                    ))}
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {activeHeat.entries
-                  .slice()
-                  .sort((a, b) => a.laneIndex - b.laneIndex)
-                  .map((entry) => (
-                    <button
-                      key={entry.teamId}
-                      type="button"
-                      disabled={callingTeamId === entry.teamId}
-                      onClick={() => void handleCallMissingTeam(entry)}
-                      className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-white px-2.5 py-1 text-xs font-semibold text-amber-950 shadow-2xs hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:bg-stone-900 dark:text-amber-100 dark:hover:bg-amber-950"
-                      title={`Call ${entry.teamName} (Lane ${entry.laneIndex}) to ring`}
-                    >
-                      {callingTeamId === entry.teamId ? 'Calling…' : `Call ${entry.teamName} (L${entry.laneIndex})`}
-                    </button>
-                  ))}
-              </div>
-            </div>
-          )}
+            )}
 
           {ringCallNotice && (
             <div role="status" className="flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
@@ -504,8 +693,21 @@ export function SessionPage() {
             </div>
           )}
 
+          {commentatorMode && viewHeat && (
+            <CommentatorFactsPanel
+              competition={competition}
+              session={session}
+              activeRaceIndex={Math.max(0, viewRaces.findIndex((r) => r.id === activeRaceId))}
+              viewHeat={viewHeat}
+              decFormByTeamId={decFormByTeamId}
+              callingTeamId={callingTeamId}
+              onCallMissingTeam={canOrganise(competition) ? handleCallMissingTeam : undefined}
+            />
+          )}
+
           {viewHeat ? (
             <ScoringSection
+              key={`${viewHeat.id}:${activeRaceId}`}
               heat={viewHeat}
               races={viewRaces}
               activeRace={viewRaces.find((r) => r.id === activeRaceId) ?? null}
@@ -515,6 +717,7 @@ export function SessionPage() {
               qualifiers={qualifiersOf(session)}
               pending={pending}
               canScore
+              allowAudit
               queued={outbox}
               onClickTeam={clickTeam}
               onToggleElim={toggleElim}
@@ -545,6 +748,38 @@ export function SessionPage() {
               correctionReason={activeRace ? correctionReasons[activeRace.id] ?? '' : ''}
               onCorrectionReason={(reason) => { if (activeRace) setCorrectionReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
               competitionId={competition.id}
+              onAddRace={canOrganise(competition) ? async (raceName) => {
+                const programme = viewRaces.map((r) => r.name);
+                try {
+                  await api.put(`/competitions/${competition.id}/sessions/${session.id}/races`, {
+                    raceNames: [...programme, raceName],
+                  });
+                  reload();
+                } catch {
+                  setSaveError('Couldn’t add race. Try again.');
+                }
+              } : undefined}
+              onRenameRace={canOrganise(competition) && activeRace ? async (newName) => {
+                try {
+                  await api.put(`/competitions/${competition.id}/sessions/${session.id}/races/${activeRace.id}`, {
+                    newName,
+                    applyToAllHeats: true,
+                  });
+                  reload();
+                } catch {
+                  setSaveError('Couldn’t change race. Try again.');
+                }
+              } : undefined}
+              onRerunRace={canOrganise(competition) && activeRace ? async () => {
+                try {
+                  await api.delete(`/sessions/races/${activeRace.id}/results`);
+                  if (activeHeat) { writeScoringDraft(draftKeyFor(activeHeat.id, activeRace.id), []); clearRaceDraft(activeRace.id, activeHeat.id); }
+                  updateOutbox((list) => list.filter((q) => q.raceId !== activeRace.id));
+                  reload();
+                } catch {
+                  setSaveError('Couldn’t clear race for re-run. Try again.');
+                }
+              } : undefined}
             />
           ) : (
             <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>
@@ -568,6 +803,7 @@ export function SessionPage() {
                 raceNotes={{ ...savedNotes, ...summaryNotes }}
                 onChanged={reload}
                 onError={setSaveError}
+                onRaceCleared={clearRaceDraft}
               />
             )}
             <div className="mt-4 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
@@ -584,6 +820,8 @@ export function SessionPage() {
           <HeatEndOverlay
             finishedHeat={heatEndOverlay.finishedHeat}
             nextHeat={heatEndOverlay.nextHeat}
+            sessionBase={sessionBase}
+            hcTeamIds={hcTeamIds}
             decFormByTeamId={decFormByTeamId}
             onAdvance={() => {
               const { nextHeat } = heatEndOverlay;
@@ -615,6 +853,311 @@ export function SessionPage() {
           />
         )}
       </AnimatePresence>
+
+      {mayManage && postRaceRecap?.session.competitionId === competition.id && postRaceRecap.session.id === session.id && (
+        <PostRaceCommentatorModal
+          competition={competition}
+          recap={postRaceRecap}
+          onClose={() => setPostRaceRecap(null)}
+        />
+      )}
+
+      <QrAccessModal
+        open={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        competitionId={competition.id}
+        competitionName={competition.name}
+        sectionId={session.competitionSectionId}
+        canWrite={canManage(competition)}
+      />
+    </div>
+  );
+}
+
+function CommentatorFactsPanel({
+  competition,
+  session,
+  activeRaceIndex,
+  viewHeat,
+  decFormByTeamId,
+  callingTeamId,
+  onCallMissingTeam,
+}: {
+  competition: CompetitionDetail;
+  session: Session;
+  activeRaceIndex: number;
+  viewHeat: Heat;
+  decFormByTeamId: Map<number, DeclarationForm>;
+  callingTeamId?: number | null;
+  onCallMissingTeam?: (entry: { teamId: number; teamName: string; laneIndex: number }) => Promise<void>;
+}) {
+  const sectionId = session.competitionSectionId ?? competition.sections[0]?.id ?? -1;
+  const section = competition.sections.find((s) => s.id === sectionId) ?? null;
+  const cutoffPlaces = section?.finalistCount ?? 6;
+
+  const standings = useCommentatorStandings(competition, sectionId);
+
+  const toplist = useMemo(() => ({
+    rows: standings.map((row, index) => ({ teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position: index + 1 })),
+    started: standings.some((row) => row.racesRun > 0),
+  }), [standings]);
+
+  const rowByTeamId = useMemo(() => {
+    const map = new Map<number, { rankLabel: string; points: number; gapLabel: string }>();
+    const leaderPoints = toplist.rows[0]?.points ?? 0;
+    const cutoffPoints = toplist.rows[Math.min(cutoffPlaces - 1, Math.max(0, toplist.rows.length - 1))]?.points ?? 0;
+    toplist.rows.forEach((row, idx) => {
+      const gapToFirst = Math.max(0, leaderPoints - row.points);
+      const gapToCut = idx < cutoffPlaces ? 0 : Math.max(0, cutoffPoints - row.points);
+      const gapLabel = idx === 0
+        ? 'Leader'
+        : idx < cutoffPlaces
+          ? `−${formatPoints(gapToFirst)} to 1st · Top ${cutoffPlaces}`
+          : `−${formatPoints(gapToCut)} to Top ${cutoffPlaces}`;
+      map.set(row.teamId, {
+        rankLabel: toplist.started ? ordinal(row.position) : '—',
+        points: row.points,
+        gapLabel,
+      });
+    });
+    return map;
+  }, [toplist, cutoffPlaces]);
+
+  const heatPointsByTeamId = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const r of viewHeat.races) {
+      for (const res of r.results) {
+        map.set(res.teamId, (map.get(res.teamId) ?? 0) + res.points);
+      }
+    }
+    return map;
+  }, [viewHeat.races]);
+
+  const entries = viewHeat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
+
+  return (
+    <section aria-label="Live commentator facts" className="mg-card space-y-3 p-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
+        <div className="flex items-center gap-2">
+          <Mic className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
+          <h2 className="mg-display m-0 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+            Live Commentator Facts · {viewHeat.label || 'Current Heat'}
+          </h2>
+        </div>
+        <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">
+          Official standings; queued scores are not included yet.
+        </span>
+      </div>
+
+      {entries.length > 0 && (
+        <ul className="m-0 grid grid-cols-1 gap-2 list-none p-0 sm:grid-cols-2">
+          {entries.map((entry) => {
+            const st = rowByTeamId.get(entry.teamId);
+            const heatPts = heatPointsByTeamId.get(entry.teamId) ?? 0;
+            const dec = decFormByTeamId.get(entry.teamId);
+            const riders = (dec?.riders ?? []).filter((r) => !r.isReserve).slice().sort((a, b) => a.orderIndex - b.orderIndex);
+            return (
+              <li
+                key={entry.id}
+                className="flex flex-col gap-1 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-2 text-xs"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-[rgb(var(--mg-ink))]">
+                    Lane {displayLaneFor(viewHeat, entry, activeRaceIndex, lanesOf(session))}: {entry.teamName}
+                  </span>
+                  <span className="font-bold text-[rgb(var(--mg-heading))]">
+                    Rank {st?.rankLabel ?? '—'} · {st ? formatPoints(st.points) : '—'} pts (Heat: {formatPoints(heatPts)})
+                  </span>
+                </div>
+                {st?.gapLabel && (
+                  <span className="text-[11px] font-semibold text-[rgb(var(--mg-muted))]">{st.gapLabel}</span>
+                )}
+                {riders.length > 0 && (
+                  <span className="text-[11px] text-[rgb(var(--mg-body))]">
+                    {riders.map((r) => `${publicRiderName(r)}${r.horseName ? ` (${r.horseName})` : ''}`).join(', ')}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {onCallMissingTeam && entries.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[rgb(var(--mg-rule-soft))] pt-2 text-xs">
+          <span className="font-semibold text-[rgb(var(--mg-muted))]">Call missing team to ring:</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {entries.map((entry) => (
+              <button
+                key={entry.teamId}
+                type="button"
+                disabled={callingTeamId === entry.teamId || displayLaneFor(viewHeat, entry, activeRaceIndex, lanesOf(session)) === 'S'}
+                onClick={() => void onCallMissingTeam(entry)}
+                className="mg-btn mg-btn-secondary !min-h-8 !px-2.5 text-xs font-semibold"
+                title={`Call ${entry.teamName} (Lane ${displayLaneFor(viewHeat, entry, activeRaceIndex, lanesOf(session))}) to ring`}
+              >
+                {callingTeamId === entry.teamId ? 'Calling…' : `Call ${entry.teamName} (L${displayLaneFor(viewHeat, entry, activeRaceIndex, lanesOf(session))})`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <StreamControlStrip
+        competitionId={competition.id}
+        arenaName={session.arenaName}
+        sectionId={session.competitionSectionId}
+        activeHeatId={viewHeat.id}
+        compact
+      />
+    </section>
+  );
+}
+
+function PostRaceCommentatorModal({
+  competition,
+  recap,
+  onClose,
+}: {
+  competition: CompetitionDetail;
+  recap: PostRaceRecapState;
+  onClose: () => void;
+}) {
+  const sectionId = recap.session.competitionSectionId ?? competition.sections[0]?.id ?? -1;
+  const section = competition.sections.find((s) => s.id === sectionId) ?? null;
+  const cutoffPlaces = section?.finalistCount ?? 6;
+
+  const standings = useCommentatorStandings(competition, sectionId);
+
+  const toplist = useMemo(() => ({
+    rows: standings.map((row, index) => ({ teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position: index + 1 })),
+    started: standings.some((row) => row.racesRun > 0),
+  }), [standings]);
+
+  const heatTotals = useMemo(() => {
+    const entries = recap.heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
+    return entries
+      .map((entry) => {
+        const pts = recap.heat.races.reduce(
+          (sum, r) => sum + (r.results.find((res) => res.teamId === entry.teamId)?.points ?? 0),
+          0,
+        );
+        return { teamId: entry.teamId, teamName: entry.teamName, laneIndex: entry.laneIndex, points: pts };
+      })
+      .sort((a, b) => b.points - a.points || a.laneIndex - b.laneIndex);
+  }, [recap.heat]);
+
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Post-race commentator summary"
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="mg-card flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden bg-[rgb(var(--mg-surface))] shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 1. Race Result Banner */}
+        <div className="flex items-start justify-between gap-3 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3.5">
+          <div>
+            <span className="block text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-ok))]">
+              Post-Race Commentator Summary
+            </span>
+            <h2 className="mg-display m-0 text-lg font-bold text-[rgb(var(--mg-heading))]">
+              Race complete: {recap.raceName} — {recap.summaryText}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close post-race summary"
+            className="mg-btn mg-btn-secondary !min-h-9 !px-2.5"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* Body: Heat Table + Section Toplist */}
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          {/* 2. Updated Heat Table */}
+          <section aria-label="Updated heat table" className="space-y-2">
+            <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+              <Table2 className="h-4 w-4" aria-hidden="true" /> Updated Heat Table · {recap.heat.label || 'Heat'}
+            </h3>
+            <ul className="m-0 flex flex-wrap gap-2 list-none p-0 text-xs">
+              {heatTotals.map((row, idx) => (
+                <li
+                  key={row.teamId}
+                  className="rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-2.5 py-1 font-semibold"
+                >
+                  {ordinal(idx + 1)} {row.teamName}: {formatPoints(row.points)} pts
+                </li>
+              ))}
+            </ul>
+            <HeatScores
+              session={recap.session}
+              heats={recap.heats}
+              activeHeatId={recap.heat.id}
+              embedded
+            />
+          </section>
+
+          {/* 3. Official Section Toplist */}
+          <section aria-label="Updated section toplist" className="space-y-2">
+            <p className="text-xs">Queued scores are not included in the official standings yet.</p>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+                <Trophy className="h-4 w-4" aria-hidden="true" /> Official Section Toplist
+              </h3>
+              <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">
+                Top {cutoffPlaces} Finals cut-off
+              </span>
+            </div>
+
+            {toplist.rows.length === 0 ? (
+              <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">Official standings are unavailable. Try refreshing when you have a connection.</p>
+            ) : (
+              <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] list-none p-0">
+                {toplist.rows.map((row, idx) => (
+                  <li key={row.teamId} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="mg-display w-9 font-bold text-[rgb(var(--mg-heading))]">
+                        {ordinal(row.position)}
+                      </span>
+                      <span className="font-bold text-[rgb(var(--mg-ink))]">{row.teamName}</span>
+                      {idx === cutoffPlaces - 1 && (
+                        <span className="rounded bg-[rgb(var(--mg-tint))] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[rgb(var(--mg-heading))]">
+                          Top {cutoffPlaces} Cut-Off
+                        </span>
+                      )}
+                    </div>
+                    <span className="mg-display text-sm font-bold tabular-nums text-[rgb(var(--mg-heading))]">
+                      {formatPoints(row.points)} pts
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+
+
+        </div>
+
+        {/* 4. 1-Tap Stream Overlay Buttons + Next race button */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-4 py-3">
+          <StreamControlStrip competitionId={competition.id} sectionId={sectionId} activeHeatId={recap.heat.id} compact />
+          <button
+            type="button"
+            onClick={onClose}
+            className="mg-btn mg-btn-primary !min-h-10 !px-4 text-sm font-bold"
+          >
+            Next race →
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -675,7 +1218,7 @@ function QualifiersControl({ session, onChanged }: { session: Session; onChanged
 
 /** Run-off +0.01 tie-breaker, per-race manual score override, team point adjustment, 1-tap HC, Under Review flag, and mid-session race controls for organisers. */
 function ScoreAdjustmentsPanel({
-  session, heat, activeRaceId, hcTeamIds, raceNotes, onChanged, onError,
+  session, heat, activeRaceId, hcTeamIds, raceNotes, onChanged, onError, onRaceCleared,
 }: {
   session: Session;
   heat: Heat;
@@ -684,6 +1227,7 @@ function ScoreAdjustmentsPanel({
   raceNotes: Record<number, string>;
   onChanged: () => void;
   onError: (msg: string | null) => void;
+  onRaceCleared: (raceId: number, heatId: number) => void;
 }) {
   const entries = heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
   const races = heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
@@ -702,7 +1246,7 @@ function ScoreAdjustmentsPanel({
   const [adjustReason, setAdjustReason] = useState<string>('');
 
   const [hcTargetTeamId, setHcTargetTeamId] = useState<number>(defaultTeamId);
-  const [cardsEnabled, toggleCardsEnabled] = useCardsEnabled(session.competitionId);
+  const [cardsEnabled] = useCardsEnabled(session.competitionId);
   const [cardTeamId, setCardTeamId] = useState<number>(defaultTeamId);
   const [cardsTick, setCardsTick] = useState(0);
   const storedCards = useMemo(() => {
@@ -856,6 +1400,7 @@ function ScoreAdjustmentsPanel({
     try {
       await api.delete(`/sessions/races/${targetRace.id}/results`);
       writeScoringDraft(draftKeyFor(heat.id, targetRace.id), []);
+      onRaceCleared(targetRace.id, heat.id);
       updateOutbox((list) => list.filter((q) => q.raceId !== targetRace.id));
       onError(null);
       onChanged();
@@ -920,17 +1465,9 @@ function ScoreAdjustmentsPanel({
 
   return (
     <div className="mt-3 space-y-3 border-t border-slate-200 dark:border-slate-700 pt-3 text-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] px-3 py-2">
-        <label className="flex cursor-pointer items-center gap-2 font-semibold">
-          <input
-            type="checkbox"
-            aria-label="Use yellow & red cards in this competition"
-            checked={cardsEnabled}
-            onChange={(e) => toggleCardsEnabled(e.target.checked)}
-          />
-          <span>Use yellow &amp; red cards in this competition</span>
-        </label>
-        {cardsEnabled && entries.length > 0 && (
+      {cardsEnabled && entries.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] px-3 py-2">
+          <span className="font-semibold">Disciplinary card</span>
           <div className="flex flex-wrap items-center gap-1.5">
             <select
               aria-label="Disciplinary card team"
@@ -960,8 +1497,8 @@ function ScoreAdjustmentsPanel({
             })}
             {storedCards[cardTeamId] && <TeamCardBadge card={storedCards[cardTeamId]} />}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {entries.length > 0 && (
         <div className="flex flex-wrap items-end gap-2">
@@ -1137,17 +1674,15 @@ function ScoreAdjustmentsPanel({
 
       {targetRace && (
         <div className="flex flex-wrap items-end gap-2 border-t border-slate-200 dark:border-slate-700 pt-2">
-          <label className="flex flex-col gap-1">
-            <span className="font-semibold">New race name ({targetRace.name})</span>
-            <input
-              aria-label="New race name"
-              type="text"
-              placeholder={targetRace.name}
-              className="input !min-h-0 !py-1 text-xs"
+          <div className="min-w-[220px] flex-1">
+            <RaceSelect
+              label={`New race name (${targetRace.name})`}
+              ariaLabel="New race name"
               value={raceNameDraft}
-              onChange={(e) => setRaceNameDraft(e.target.value)}
+              onChange={setRaceNameDraft}
+              placeholder={targetRace.name}
             />
-          </label>
+          </div>
           <label className="flex items-center gap-1.5 py-1.5">
             <input
               type="checkbox"
@@ -1170,16 +1705,12 @@ function ScoreAdjustmentsPanel({
       )}
 
       <div className="space-y-1.5 border-t border-slate-200 dark:border-slate-700 pt-2">
-        <label className="flex flex-col gap-1">
-          <span className="font-semibold">Remaining uncompleted races (one per line)</span>
-          <textarea
-            aria-label="Remaining uncompleted races"
-            rows={3}
-            className="input text-xs font-mono"
-            value={remainingRacesDraft ?? uncompletedRacesText}
-            onChange={(e) => setRemainingRacesDraft(e.target.value)}
-          />
-        </label>
+        <RaceListPicker
+          label="Remaining uncompleted races"
+          ariaLabel="Remaining uncompleted races"
+          races={(remainingRacesDraft ?? uncompletedRacesText).split('\n').map((s) => s.trim()).filter(Boolean)}
+          onChange={(next) => setRemainingRacesDraft(next.join('\n'))}
+        />
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -1214,33 +1745,43 @@ function HeatTabs({ session, heats, activeHeatId, onSelect }: {
   activeHeatId: number | null;
   onSelect: (id: number) => void;
 }) {
+  if (heats.length === 0) return null;
+  const activeIdx = Math.max(0, heats.findIndex((h) => h.id === activeHeatId));
+  const activeHeat = heats[activeIdx] ?? heats[0];
+  const start = heatStartTime(session, activeHeat, activeIdx);
+  const racesDone = activeHeat.races.filter((r) => r.isComplete).length;
+
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-      {heats.map((heat, i) => {
-        const complete = heatIsComplete(heat);
-        const start = heatStartTime(session, heat, i);
-        const racesDone = heat.races.filter((r) => r.isComplete).length;
-        const isActive = heat.id === activeHeatId;
-        return (
-          <button
-            key={heat.id}
-            type="button"
-            onClick={() => onSelect(heat.id)}
-            className={`mg-chip flex-col !items-start !h-auto px-3 py-2 whitespace-nowrap font-semibold text-xs transition min-w-[120px] ${
-              isActive
-                ? 'mg-chip-active'
-                : complete
-                  ? '!border-[rgb(var(--mg-ok)/0.45)] !bg-[rgb(var(--mg-ok)/0.1)] !text-[rgb(var(--mg-ok))]'
-                  : ''
-            }`}
-          >
-            <span className="block leading-tight">{heat.label ?? `Heat ${i + 1}`}</span>
-            <span className="block text-[10px] opacity-80 leading-tight font-normal">
-              <Clock className="inline w-2.5 h-2.5 -mt-px mr-0.5" />{formatTime(start)} · {racesDone}/{heat.races.length}
-            </span>
-          </button>
-        );
-      })}
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2 text-xs text-[rgb(var(--mg-muted))]">
+        <span className="font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-ink))]">
+          {activeHeat.label ?? `Heat ${activeIdx + 1}`}
+        </span>
+        <span>·</span>
+        <span className="inline-flex items-center gap-1">
+          <Clock className="h-3 w-3" aria-hidden="true" />
+          {formatTime(start)}
+        </span>
+        <span>·</span>
+        <span>{racesDone}/{activeHeat.races.length} races</span>
+      </div>
+      {heats.length > 1 && (
+        <div className="mg-seg" role="group" aria-label="Heats">
+          {heats.map((heat, i) => {
+            const isActive = heat.id === activeHeatId;
+            return (
+              <button
+                key={heat.id}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => onSelect(heat.id)}
+              >
+                {heat.label ?? `Heat ${i + 1}`}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1423,15 +1964,14 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
             </div>
           </div>
 
-          <label className="block">
-            <span className="text-xs font-semibold">Race names (one per line)</span>
-            <textarea
-              rows={5}
-              className="input mt-1 text-sm font-mono"
-              value={races}
-              onChange={(e) => setRaces(e.target.value)}
+          <div className="block">
+            <RaceListPicker
+              label="Race names"
+              ariaLabel="Race names"
+              races={races.split('\n').map((r) => r.trim()).filter(Boolean)}
+              onChange={(next) => setRaces(next.join('\n'))}
             />
-          </label>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
@@ -1481,10 +2021,12 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
  * next heat's teams with dec form summaries; "Continue" advances activeHeatId.
  */
 function HeatEndOverlay({
-  finishedHeat, nextHeat, decFormByTeamId, onAdvance, onClose,
+  finishedHeat, nextHeat, sessionBase, hcTeamIds, decFormByTeamId, onAdvance, onClose,
 }: {
   finishedHeat: Heat;
   nextHeat: Heat | null;
+  sessionBase: number;
+  hcTeamIds: ReadonlySet<number>;
   decFormByTeamId: Map<number, DeclarationForm>;
   onAdvance: () => void;
   onClose: () => void;
@@ -1510,6 +2052,19 @@ function HeatEndOverlay({
           <button onClick={onClose} className="btn-ghost !py-1 !px-1.5">
             <X className="w-4 h-4" />
           </button>
+        </div>
+
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+          <HeatGrid
+            heat={finishedHeat}
+            races={finishedHeat.races ?? []}
+            activeRaceId={null}
+            activeIndex={-1}
+            rules={{ lanesPerHeat: null, mode: LaneRotationMode.MoveUp }}
+            pending={[]}
+            pointsFor={(p, e) => pointsForPlace(finishedHeat, sessionBase, p, e)}
+            hcTeamIds={hcTeamIds}
+          />
         </div>
 
         {nextHeat ? (

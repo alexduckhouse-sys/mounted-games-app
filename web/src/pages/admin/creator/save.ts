@@ -1,4 +1,5 @@
 import { api } from '../../../api';
+import { setCardsEnabled } from '../../competition/ScoringParts';
 import {
   finalSessionName, hatbandsFor, heatSizeOf, minutesOf, parseFinalistCount, parseMaxParticipants, priceGbpToMinor, sectionLocked, sectionName, type CreatorDraft, type SectionDraft,
 } from '../../../lib/creatorDraft';
@@ -68,6 +69,9 @@ export async function saveCreator(draft: CreatorDraft, opts: {
     await step('Saving details…', () => api.put(`/competitions/${editingId}`, { ...basicsPayload(draft), isActive: true, isArchived: false }));
   }
   const id = competitionId as number;
+  if (draft.cardsEnabled !== undefined) {
+    setCardsEnabled(id, draft.cardsEnabled);
+  }
   const base = `/competitions/${id}`;
 
   // Age groups taken out of the draft.

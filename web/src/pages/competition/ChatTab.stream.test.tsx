@@ -5,7 +5,7 @@ import { ChatTab } from './ChatTab';
 import { api } from '../../api';
 import type { CompetitionDetail, LiveStream } from '../../types';
 import { chat, competition, session } from '../../test/factories';
-import { flush } from '../../test/streamFakes';
+import { deferred, flush } from '../../test/streamFakes';
 
 const context = vi.hoisted(() => ({ detail: null as CompetitionDetail | null, streams: [] as LiveStream[], enabled: false, organiser: true, roles: [] as string[], streamUrl: 'https://youtu.be/old' as string | null, messages: [] as unknown[], reload: vi.fn() }));
 import { autoConfirm } from '../../test/confirm';
@@ -99,37 +99,113 @@ it('only shows the top Live badge on the public page when an active stream is ru
   expect(screen.getByText('Live')).toHaveClass('mg-badge-live');
 });
 
-it('keeps trainer posts private through the existing chat endpoint', async () => {
+it('links non-admin trainers to the dedicated Message organisers page instead of showing a channel tab on Live stream', async () => {
   context.roles = ['Trainer'];
+  context.organiser = false;
+  context.detail = competition({ staffChatEnabled: true });
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  fireEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
-  fireEvent.change(screen.getByPlaceholderText('Message the organisers…'), { target: { value: 'Can we move our briefing?' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Send' })); await act(flush);
-  expect(api.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'Can we move our briefing?' });
-  expect(screen.queryByRole('button', { name: 'Pin as banner' })).toBeNull();
+  expect(screen.queryByRole('tab', { name: 'Message Organisers' })).toBeNull();
+  expect(screen.getByRole('link', { name: /Message organisers/i })).toHaveAttribute('href', '/competitions/1/contact');
 });
 
-it('replaces the existing banner when an admin pins another one', async () => {
- 
-  context.messages = [chat(8, { body: 'Old banner', tag: 'banner' })];
-  vi.mocked(api.post).mockResolvedValueOnce({ data: chat(9, { body: 'New banner', tag: 'banner' }) });
+it('shows announcements at the top first, pins any announcement after the fact, and lets a more recent announcement replace the pin', async () => {
+  context.messages = [
+    chat(8, { body: 'Morning briefing at 9am', createdAt: '2026-06-01T09:00:00Z' }),
+    chat(9, { body: 'Lunch break now', createdAt: '2026-06-01T12:00:00Z' }),
+  ];
+  vi.mocked(api.post).mockResolvedValueOnce({
+    data: chat(10, { body: 'Morning briefing at 9am', tag: 'banner', type: 2, createdAt: '2026-06-01T12:05:00Z' }),
+  });
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  fireEvent.click(screen.getByRole('button', { name: 'Pin as banner' }));
-  fireEvent.change(screen.getByPlaceholderText('Banner text, replaces the pinned one'), { target: { value: 'New banner' } });
+
+  // Latest announcement appears in the top banner first
+  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Lunch break now');
+
+  // Pinning the older announcement after the fact replaces the top banner
+  fireEvent.click(screen.getByRole('button', { name: 'Pin as banner: Morning briefing at 9am' })); await act(flush);
+  expect(api.post).toHaveBeenCalledWith('/competitions/1/chat/announcement', { body: 'Morning briefing at 9am', tag: 'banner' });
+  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Morning briefing at 9am');
+
+  // Posting a more recent announcement replaces the pinned banner at the top
+  vi.mocked(api.post).mockResolvedValueOnce({
+    data: chat(11, { body: 'Finals starting in Arena 1', tag: 'general', type: 2, createdAt: '2026-06-01T14:00:00Z' }),
+  });
+  fireEvent.change(screen.getByPlaceholderText('Write an announcement…'), { target: { value: 'Finals starting in Arena 1' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send' })); await act(flush);
-  expect(api.delete).toHaveBeenCalledWith('/competitions/1/chat/8');
-  expect(api.post).toHaveBeenCalledWith('/competitions/1/chat/announcement', { body: 'New banner', tag: 'banner' });
-  expect(screen.getByText('New banner')).toBeVisible();
-  expect(screen.queryByText('Old banner')).toBeNull();
-  expect(context.reload).toHaveBeenCalledOnce();
+  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Finals starting in Arena 1');
+});
+
+it('keeps the existing banner when its replacement fails and serialises duplicate pin clicks', async () => {
+  context.messages = [chat(7, { body: 'Example replacement' }), chat(8, { body: 'Existing banner', tag: 'banner' })];
+  const pending = deferred<never>();
+  vi.mocked(api.post).mockReturnValueOnce(pending.promise);
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  const pin = screen.getByRole('button', { name: 'Pin as banner: Example replacement' });
+  fireEvent.click(pin); fireEvent.click(pin);
+  expect(api.post).toHaveBeenCalledTimes(1);
+  expect(api.delete).not.toHaveBeenCalled();
+  await act(async () => { pending.reject(new Error('Synthetic offline failure')); await flush(); });
+  expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t pin');
+  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Existing banner');
+  expect(api.delete).not.toHaveBeenCalled();
+});
+
+it('retains the saved replacement and reports a failure to delete the old banner', async () => {
+  context.messages = [chat(7, { body: 'Example replacement' }), chat(8, { body: 'Existing banner', tag: 'banner' })];
+  vi.mocked(api.post).mockResolvedValueOnce({ data: chat(9, { body: 'Example replacement', tag: 'banner' }) });
+  vi.mocked(api.delete).mockRejectedValueOnce(new Error('Synthetic offline failure'));
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  fireEvent.click(screen.getByRole('button', { name: 'Pin as banner: Example replacement' })); await act(flush);
+  expect(vi.mocked(api.post).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.delete).mock.invocationCallOrder[0]);
+  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Example replacement');
+  expect(screen.getByRole('alert')).toHaveTextContent('old banner could not be cleared');
+});
+
+it('orders out-of-order messages and uses IDs to break equal timestamp ties', async () => {
+  const createdAt = '2026-06-01T12:00:00Z';
+  context.messages = [
+    chat(12, { body: 'New announcement', createdAt }),
+    chat(11, { body: 'Earlier pin', tag: 'banner', createdAt }),
+    chat(10, { body: 'Old announcement', createdAt: '2026-06-01T11:00:00Z' }),
+  ];
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('New announcement');
+  expect(screen.getByRole('button', { name: 'Pin as banner: New announcement' })).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(screen.getByRole('button', { name: 'Hide on this device' }));
+  expect(screen.queryByRole('status', { name: 'Top announcement' })).toBeNull();
+  expect(screen.getByText('New announcement')).toBeVisible();
+  expect(api.delete).not.toHaveBeenCalled();
+});
+
+it('never promotes a private message tagged as a banner into the public announcement area', async () => {
+  context.roles = [];
+  context.messages = [chat(1, { body: 'Public example' }), chat(2, { body: 'Private example', adminOnly: true, tag: 'banner' })];
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  expect(screen.queryByText('Private example')).toBeNull();
+  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Public example');
+});
+
+it('marks only the selected announcement as pinned when two announcements have the same text', async () => {
+  context.messages = [chat(1, { body: 'Repeated example' }), chat(2, { body: 'Repeated example' })];
+  vi.mocked(api.post).mockResolvedValueOnce({ data: chat(3, { body: 'Repeated example', tag: 'banner' }) });
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  fireEvent.click(screen.getAllByRole('button', { name: 'Pin as banner: Repeated example' })[1]); await act(flush);
+  expect(screen.getAllByRole('button', { name: 'Unpin: Repeated example' })).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: 'Pin as banner: Repeated example' })).toHaveLength(1);
+});
+
+it('offers camera controls to competition collaborators without granting global chat moderation', async () => {
+  context.roles = ['Member']; context.organiser = true; context.enabled = true;
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  expect(screen.getByRole('link', { name: 'Go live from this device' })).toHaveAttribute('href', '/competitions/1/broadcast');
+  expect(screen.queryByRole('textbox', { name: 'Announcement' })).toBeNull();
 });
 
 it('shows send and unpin failures without leaving rejected action promises', async () => {
-  context.roles = ['Trainer'];
+  context.roles = ['Admin'];
   vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
   const { unmount } = render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  fireEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
-  fireEvent.change(screen.getByPlaceholderText('Message the organisers…'), { target: { value: 'Is the briefing moving?' } });
+  fireEvent.change(screen.getByPlaceholderText('Write an announcement…'), { target: { value: 'Is the briefing moving?' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t send that post');
   unmount();
@@ -184,7 +260,7 @@ it('shows a failed announcement load separately and retries it', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the announcements');
   expect(screen.queryByText('Nothing posted yet.')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-  expect(await screen.findByText('Racing resumes at two')).toBeVisible();
+  expect((await screen.findAllByText('Racing resumes at two'))[0]).toBeVisible();
 });
 
 it('traps focus in the announcement sheet and restores the All button', async () => {

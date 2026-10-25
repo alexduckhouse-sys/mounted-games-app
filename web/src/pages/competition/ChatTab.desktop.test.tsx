@@ -61,7 +61,7 @@ describe('ChatTab on a laptop', () => {
     mount();
 
     expect(await screen.findByText('Note 1')).toBeInTheDocument();
-    expect(screen.getByText('Note 5')).toBeInTheDocument();
+    expect(screen.getAllByText('Note 5').length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: /^All / })).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByRole('textbox', { name: 'Announcement' }), 'Lunch at one{Enter}');

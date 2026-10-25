@@ -95,6 +95,8 @@ export interface CreatorDraft {
   breaks: BreakDraft[];
   /** Hatband colour per lane, index 0 being lane 1. Lanes the person hasn't set take the default order. */
   laneHatbands: string[];
+  /** Whether yellow & red disciplinary cards are enabled for this competition. */
+  cardsEnabled?: boolean;
 }
 
 export const HATBAND_COLOURS = ['Red', 'White', 'Blue', 'Yellow', 'Green', 'Black', 'Orange', 'Pink'];
@@ -314,5 +316,6 @@ export function readDraft(raw: unknown, today: Date = new Date()): CreatorDraft 
     sections,
     breaks: Array.isArray(r.breaks) ? r.breaks.map(readBreak) : [],
     laneHatbands: Array.isArray(r.laneHatbands) ? r.laneHatbands.filter((x): x is string => typeof x === 'string') : [],
+    ...(typeof r.cardsEnabled === 'boolean' ? { cardsEnabled: r.cardsEnabled } : {}),
   };
 }

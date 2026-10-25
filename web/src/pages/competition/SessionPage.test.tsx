@@ -1,11 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
-import { competition, heat, race, result, session, team } from '../../test/factories';
+import { competition, heat, race, result, session, standing, team } from '../../test/factories';
 import type { HeatEntry } from '../../types';
-import type { CompetitionDetail, DeclarationForm } from '../../types';
+import type { CompetitionDetail, DeclarationForm, StandingRow } from '../../types';
 import { CompetitionContext } from './context';
 import { SessionPage } from './SessionPage';
 import { formatPoints } from '../../lib/formatPoints';
@@ -23,10 +23,12 @@ const form = (teamId: number): DeclarationForm => ({
   submittedAt: '2026-06-01T09:00:00Z', isLocked: false, riders: [],
 });
 
+const saveOverlay = vi.fn().mockResolvedValue('saved');
 const emptyScorerLinks = { arenas: ['Main arena', 'All arenas'], defaultExpiresAt: '2026-11-02T00:00:00Z', links: [] };
 
-function mount(data: CompetitionDetail, forms: DeclarationForm[] = [], reload = vi.fn()) {
+function mount(data: CompetitionDetail, forms: DeclarationForm[] = [], reload = vi.fn(), officialRows: StandingRow[] = [standing(1, 12, { teamName: 'Oak A', bonusPoints: 10 }), standing(2, 1, { teamName: 'Beech B' })]) {
   vi.mocked(api.get).mockImplementation((url: string) => {
+    if (url.endsWith('/standings')) return Promise.resolve({ data: officialRows });
     if (url === '/declaration-forms') return Promise.resolve({ data: forms });
     if (String(url).endsWith('/scorer-links')) return Promise.resolve({ data: emptyScorerLinks });
     return Promise.resolve({ data: [] });
@@ -34,7 +36,7 @@ function mount(data: CompetitionDetail, forms: DeclarationForm[] = [], reload = 
   return render(
     <MemoryRouter initialEntries={['/competitions/1/session/1']}>
       <CompetitionContext.Provider value={{
-        competition: data, reload, streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [],
+        competition: data, reload, saveOverlay, streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [],
       }}>
         <Routes><Route path="/competitions/:id/session/:sessionId" element={<SessionPage />} /></Routes>
       </CompetitionContext.Provider>
@@ -69,7 +71,7 @@ const outbox = () => JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]'
 const teams = [team(1, { displayName: 'Oak A' }), team(2, { displayName: 'Beech B' }), team(3, { displayName: 'Ash C' })];
 
 describe('SessionPage', () => {
-  beforeEach(() => { auth.manage = true; vi.mocked(api.get).mockResolvedValue({ data: [] }); });
+  beforeEach(() => { saveOverlay.mockResolvedValue('saved'); auth.manage = true; vi.mocked(api.get).mockResolvedValue({ data: [] }); });
   afterEach(() => { vi.useRealTimers(); });
 
   describe('who may score', () => {
@@ -179,21 +181,21 @@ describe('SessionPage', () => {
       mount(scoringData(3));
       await opened('Bending');
       expect(badge('Rider 2')).toBeNull();
-      await userEvent.click(screen.getByRole('button', { name: /^2\. Flag/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Next race' }));
       await waitFor(() => expect(badge('Rider 2')).toHaveTextContent('1'));
     });
 
     it('prefers the draft to the saved results of a finished race', async () => {
       keepDraft(1, [{ teamId: 3, place: 1, eliminated: false }]);
       mount(withFinishedRace());
-      await userEvent.click(screen.getByRole('button', { name: /^1\. Bending/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Previous race' }));
       await waitFor(() => expect(badge('Rider 3')).toHaveTextContent('1'));
       expect(badge('Rider 1')).toBeNull();
     });
 
     it('shows the saved results of a finished race when there is no draft, without keeping them as a draft', async () => {
       mount(withFinishedRace());
-      await userEvent.click(screen.getByRole('button', { name: /^1\. Bending/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Previous race' }));
       await waitFor(() => expect(badge('Rider 3')).toHaveTextContent('2'));
       expect(badge('Rider 1')).toHaveTextContent('1');
       expect(localStorage.getItem(draftKey(1))).toBeNull();
@@ -298,7 +300,7 @@ describe('SessionPage', () => {
       mount(scoringData(3));
       await opened('Bending');
       await tapRider('Rider 1', 1);
-      await userEvent.click(screen.getByRole('button', { name: 'Eliminate Rider 3' }));
+      fireEvent.keyDown(screen.getByRole('button', { name: /^Rider 3, lane/ }), { key: 'Delete' });
       await completeRace();
       const sheet = screen.getByRole('dialog', { name: 'Why were teams eliminated?' });
       expect(within(sheet).getByText('Rider 3')).toBeInTheDocument();
@@ -314,7 +316,7 @@ describe('SessionPage', () => {
       mount(scoringData(3));
       await opened('Bending');
       await tapRider('Rider 1', 1);
-      await userEvent.click(screen.getByRole('button', { name: 'Eliminate Rider 2' }));
+      fireEvent.keyDown(screen.getByRole('button', { name: /^Rider 2, lane/ }), { key: 'Delete' });
       await completeRace();
       await userEvent.click(screen.getByRole('button', { name: 'Save without reasons' }));
       expect(outbox()[0].places).toEqual([{ teamId: 1, place: 1, eliminated: false }, { teamId: 2, place: 0, eliminated: true }]);
@@ -343,7 +345,6 @@ describe('SessionPage', () => {
           </CompetitionContext.Provider>
         </MemoryRouter>,
       );
-      await userEvent.click(await screen.findByRole('button', { name: /^1\. Bending/ }));
       await opened('Bending');
       await userEvent.type(screen.getByLabelText('Reason for correction'), 'Judge changed it');
       await waitFor(() => expect(within(row('Rider 2')).getByLabelText('Did not finish')).toBeInTheDocument());
@@ -401,7 +402,7 @@ describe('SessionPage', () => {
       // The race already has results, so the new save is a correction that replaces them.
       const earlier = race(1, { name: 'Bending', isComplete: true, results: [result(1, 1, { points: 2 }), result(2, 2, { points: 1 })] });
       mount(competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { entries: entries(2), races: [earlier, race(2, { name: 'Flag' })] })] })] }));
-      await userEvent.click(await screen.findByRole('button', { name: /^1\. Bending/ }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Previous race' }));
       await userEvent.type(await screen.findByLabelText('Reason for correction'), 'Wrong order');
       await userEvent.click(screen.getByRole('button', { name: /Clear/ }));
       await tapRider('Rider 2', 1);
@@ -419,25 +420,31 @@ describe('SessionPage', () => {
   });
 
   describe('hors concours', () => {
-    it('asks first, then marks the team through the same call Teams uses', async () => {
+    it('marks a team hors concours from the Score override sheet', async () => {
       vi.mocked(api.put).mockResolvedValue({ data: {} });
       const reload = vi.fn();
       mount(scoringData(3), [], reload);
       await opened('Bending');
-      await userEvent.click(screen.getByRole('button', { name: 'Mark Rider 2 hors concours' }));
-      expect(api.put).not.toHaveBeenCalled();
-      expect(screen.getByRole('dialog')).toHaveTextContent('Competes but doesn’t score; removed from standings and finals seeding.');
+      await userEvent.click(screen.getByRole('button', { name: 'Score override' }));
+      const sheet = screen.getByRole('dialog', { name: /Score override/ });
+      await userEvent.click(within(sheet).getByRole('button', { name: /Rider 2/ }));
+      await userEvent.click(within(sheet).getByRole('radio', { name: /Hors concours/i }));
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Save override' }));
       await userEvent.click(screen.getByRole('button', { name: 'Make HC' }));
       expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/2', { isHorsConcours: true });
       await waitFor(() => expect(reload).toHaveBeenCalled());
     });
 
-    it('tags a team that is already HC, and can bring it back', async () => {
+    it('tags a team that is already HC, and can bring it back from Score override', async () => {
       vi.mocked(api.put).mockResolvedValue({ data: {} });
       mount(competition({ teams: [team(1, { displayName: 'Oak A', isHorsConcours: true })], sessions: scoringData(2).sessions }));
       await opened('Bending');
       expect(within(row('Rider 1')).getByText('HC', { selector: 'span' })).toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: 'Bring Rider 1 back into scoring' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Score override' }));
+      const sheet = screen.getByRole('dialog', { name: /Score override/ });
+      await userEvent.click(within(sheet).getByRole('button', { name: /Rider 1/ }));
+      await userEvent.click(within(sheet).getByRole('radio', { name: /Automatic/i }));
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
       await userEvent.click(screen.getByRole('button', { name: 'Bring back' }));
       expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/1', { isHorsConcours: false });
     });
@@ -446,7 +453,11 @@ describe('SessionPage', () => {
       vi.mocked(api.put).mockRejectedValue(new Error('no'));
       mount(scoringData(3));
       await opened('Bending');
-      await userEvent.click(screen.getByRole('button', { name: 'Mark Rider 2 hors concours' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Score override' }));
+      const sheet = screen.getByRole('dialog', { name: /Score override/ });
+      await userEvent.click(within(sheet).getByRole('button', { name: /Rider 2/ }));
+      await userEvent.click(within(sheet).getByRole('radio', { name: /Hors concours/i }));
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Save override' }));
       await userEvent.click(screen.getByRole('button', { name: 'Make HC' }));
       expect(await screen.findByText('Couldn’t change hors concours. Try again.')).toBeInTheDocument();
     });
@@ -461,16 +472,14 @@ describe('SessionPage', () => {
       expect(within(details).getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
       expect(within(details).getByRole('region', { name: 'Scorer links' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Race rules' })).toBeNull();
-      await userEvent.click(screen.getByRole('button', { name: 'Race rules and arena setup' }));
-      expect(screen.getByRole('region', { name: 'Race rules' })).toBeInTheDocument();
     });
 
-    it('stacks the races: the current one open, the rest as lines, with the announcer card after the finished one', async () => {
+    it('shows only the active race with the top race switcher and the announcer summary for the previous finished race', async () => {
       const finished = race(1, { name: 'Bending', isComplete: true, results: [result(2, 1, { points: 3 }), result(1, 2, { points: 2 }), result(3, 3, { points: 1 })] });
       mount(competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { entries: entries(3), races: [finished, race(2, { name: 'Flag' }), race(3, { name: 'Mug' })] })] })] }));
       await opened('Flag');
-      expect(screen.getByRole('button', { name: /^1\. Bending.*1st Rider 2/ })).toBeInTheDocument();
-      expect(screen.getByRole('region', { name: 'Mug, coming up' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Previous race' })).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Next race' })).not.toBeDisabled();
       expect(screen.getByRole('region', { name: 'Announcer summary for Bending' })).toHaveTextContent('1st Rider 2, 3 points');
     });
 
@@ -482,7 +491,9 @@ describe('SessionPage', () => {
       await completeRace();
       await opened('Flag');
       expect(screen.getByRole('region', { name: 'Announcer summary for Bending' })).toHaveTextContent('1st Rider 2, 2 points');
-      expect(screen.getByRole('button', { name: /^1\. Bending.*Not sent/ })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Previous race' }));
+      await opened('Bending');
+      expect(screen.getByText(/Not sent yet:/)).toBeInTheDocument();
     });
 
     it('shows the lanes of the final provisionally once both qualifiers are in, and not again once the final is filled', async () => {
@@ -553,7 +564,10 @@ describe('SessionPage', () => {
       expect(await screen.findByText(/Teams \(3 selected\)/)).toBeInTheDocument();
       expect(screen.getByText('2 dec forms in')).toBeInTheDocument();
       expect(screen.getByLabelText(/Show teams without dec forms/)).toBeChecked();
-      expect(screen.getByLabelText(/Race names/)).toHaveValue('Sword\nBank\nHi-Lo');
+      const racePicker = screen.getByRole('list', { name: 'Race names' });
+      expect(within(racePicker).getByText('Sword')).toBeInTheDocument();
+      expect(within(racePicker).getByText('Bank')).toBeInTheDocument();
+      expect(within(racePicker).getByText('Hi-Lo')).toBeInTheDocument();
     });
 
     it('selects every team when none has a dec form', async () => {
@@ -699,7 +713,7 @@ describe('SessionPage', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Re-run stopped race' }));
       await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sessions/races/1/results'));
 
-      await userEvent.type(screen.getByLabelText('New race name'), 'Sword');
+      await userEvent.selectOptions(screen.getByLabelText('New race name'), 'Sword');
       await userEvent.click(screen.getByRole('button', { name: 'Change race' }));
       await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races/1', {
         newName: 'Sword',
@@ -720,11 +734,111 @@ describe('SessionPage', () => {
     vi.mocked(api.put).mockResolvedValue({ data: {} });
     mount(data);
     await screen.findByText('Organiser tools');
-    expect(screen.getByRole('textbox', { name: 'Remaining uncompleted races' })).toHaveValue('Flag');
+    expect(screen.getByRole('list', { name: 'Remaining uncompleted races' })).toHaveTextContent('Flag');
     await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
     expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', { raceNames: ['Bending', 'Flag'] });
     vi.mocked(api.put).mockRejectedValueOnce({ response: { data: { message: 'Protected game cannot move.' } } });
     await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
     expect(await screen.findByText('Protected game cannot move.')).toBeVisible();
   });
+
+  describe('Commentator facts, post-race summary modal, and QR Access', () => {
+    it('prompts whether to show commentator facts, toggles them on, shows live facts, and opens the post-race toplist & heat table modal after completing a race', async () => {
+      const forms: DeclarationForm[] = [
+        {
+          ...form(1),
+          riders: [{ id: 101, fullName: 'Alice Rider', horseName: 'Starlight', isCaptain: true, isReserve: false, orderIndex: 1 }],
+        },
+      ];
+      mount(scoringData(2), forms);
+      await opened('Bending');
+
+      const prompt = screen.getByRole('region', { name: 'Commentator scoring prompt' });
+      expect(within(prompt).getByText('Do you want to see commentator facts while scoring?')).toBeInTheDocument();
+
+      await userEvent.click(within(prompt).getByRole('button', { name: 'Yes, show commentator facts' }));
+      expect(localStorage.getItem('mg.commentatorScoring.1')).toBe('yes');
+      expect(screen.queryByRole('region', { name: 'Commentator scoring prompt' })).toBeNull();
+      expect(screen.getByRole('button', { name: /Commentator facts: ON/ })).toHaveAttribute('aria-pressed', 'true');
+
+      const factsPanel = screen.getByRole('region', { name: 'Live commentator facts' });
+      expect(within(factsPanel).getByText(/Lane 1: Rider 1/)).toBeInTheDocument();
+      expect(within(factsPanel).getByText(/Starlight/)).toBeInTheDocument();
+      await waitFor(() => expect(factsPanel).toHaveTextContent('12 pts')); // Official tack bonus is preserved.
+      expect(within(factsPanel).getByRole('button', { name: /Show Toplist on Stream/ })).toBeInTheDocument();
+
+      // Complete a race while Commentator Mode is ON:
+      await tapRider('Rider 1', 1);
+      await tapRider('Rider 2', 2);
+      await completeRace();
+
+      const recapModal = await screen.findByRole('dialog', { name: 'Post-race commentator summary' });
+      expect(within(recapModal).getByText(/Race complete: Bending/)).toBeInTheDocument();
+      expect(within(recapModal).getByRole('region', { name: 'Updated heat table' })).toHaveTextContent('1st Rider 1: 2 pts');
+      expect(within(recapModal).getByRole('region', { name: 'Updated section toplist' })).toHaveTextContent('Oak A');
+
+      await userEvent.click(within(recapModal).getByRole('button', { name: /Show Toplist on Stream/ }));
+      expect(await within(recapModal).findByRole('status')).toHaveTextContent('Showing: Show Toplist');
+      expect(saveOverlay).toHaveBeenCalled();
+
+      await userEvent.click(within(recapModal).getByRole('button', { name: 'Next race →' }));
+      expect(screen.queryByRole('dialog', { name: 'Post-race commentator summary' })).toBeNull();
+      await opened('Flag');
+    });
+
+    it('opens the QR Code Access Hub from the session header', async () => {
+      mount(scoringData(2));
+      await opened('Bending');
+      await userEvent.click(screen.getByRole('button', { name: /QR Access/ }));
+      const modal = await screen.findByRole('dialog', { name: 'QR Code Access Hub' });
+      expect(modal).toBeInTheDocument();
+      await userEvent.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
+      expect(screen.queryByRole('dialog', { name: 'QR Code Access Hub' })).toBeNull();
+    });
+  });
+});
+
+
+it('adds a race from the score override sheet without dropping protected games', async () => {
+  const data = scoringData(2);
+  data.sessions[0].heats[0].races[0] = race(1, { name: 'Bending', isComplete: true, results: [result(1, 1), result(2, 2)] });
+  vi.mocked(api.put).mockResolvedValue({ data: {} });
+  mount(data);
+  await opened('Flag');
+  await userEvent.click(screen.getByRole('button', { name: 'Score override' }));
+  const sheet = screen.getByRole('dialog', { name: 'Score override' });
+  await userEvent.selectOptions(within(sheet).getByRole('combobox', { name: 'Race to add' }), 'Sword');
+  await userEvent.click(within(sheet).getByRole('button', { name: 'Add race' }));
+  await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', {
+    raceNames: ['Bending', 'Flag', 'Sword'],
+  }));
+});
+
+
+it('keeps official tie order in commentator facts and announces the current rotated lanes', async () => {
+  mount(scoringData(2), [], vi.fn(), [standing(2, 10, { racesRun: 2 }), standing(1, 10, { racesRun: 2 })]);
+  await opened('Bending');
+  await userEvent.click(screen.getByRole('button', { name: 'Yes, show commentator facts' }));
+  const facts = screen.getByRole('region', { name: 'Live commentator facts' });
+  await waitFor(() => expect(within(facts).getByText('Lane 1: Rider 1').closest('li')).toHaveTextContent('Rank 2nd'));
+  await userEvent.click(screen.getByRole('button', { name: 'Next race' }));
+  await opened('Flag');
+  const lane = screen.getByRole('button', { name: /^Rider 1, lane/ }).getAttribute('aria-label')!.split('lane ')[1];
+  expect(within(facts).getByText(`Lane ${lane}: Rider 1`)).toBeVisible();
+  vi.mocked(api.post).mockResolvedValue({ data: {} });
+  await userEvent.click(within(facts).getByRole('button', { name: `Call Rider 1 (L${lane})` }));
+  expect(api.post).toHaveBeenCalledWith('/competitions/1/chat', expect.objectContaining({ body: expect.stringContaining(`Rider 1 (Lane ${lane})`) }));
+});
+
+it('clears the in-memory draft and undo action when a race is rerun', async () => {
+  vi.mocked(api.delete).mockResolvedValue({ data: {} });
+  mount(scoringData(2));
+  await opened('Bending');
+  await tapRider('Rider 1', 1);
+  await userEvent.click(screen.getByRole('button', { name: 'Score override' }));
+  const sheet = screen.getByRole('dialog', { name: 'Score override' });
+  await userEvent.click(within(sheet).getByRole('button', { name: /Re-run stopped race/ }));
+  await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sessions/races/1/results'));
+  expect(screen.queryByLabelText('Place 1')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
 });
