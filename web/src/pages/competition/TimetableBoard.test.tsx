@@ -47,21 +47,25 @@ it('shows a late row with its delay and the planned time struck through', () => 
   const { container } = renderBoard();
   const late = container.querySelector('.tt-late')!;
   expect(late).toHaveTextContent('Heat 2');
-  expect(late.querySelector('.tt-planned')).toHaveTextContent(/^\+6 · 11:00/);
+  expect(late.querySelector('.tt-planned')).toHaveTextContent(/^\+6m · 11:00/);
   expect(late.querySelector('.tt-planned s')).toHaveTextContent(/11:00/);
+  expect(late.querySelector('.tt-time')).toHaveClass('tt-time-late');
+  expect(late.querySelector('.tt-shift-card')).toBeNull();
   // Screen readers get the planned time, the new time and the status in words.
   expect(late).toHaveTextContent(/Planned 11:00.*, now 11:06/);
   expect(late).toHaveTextContent('+6 min');
   expect(screen.getAllByText('Main Arena · 6 min late').length).toBeGreaterThan(0);
 });
 
-it('marks the running heat "ON NOW" without a planned-time note', () => {
+it('marks the running heat "ON NOW" without a planned-time note or late summary on the live session', () => {
   const { container } = renderBoard();
   const live = container.querySelector('.tt-live')!;
   expect(live).toHaveTextContent('Heat 1');
   expect(within(live as HTMLElement).getByText('ON NOW')).toBeInTheDocument();
   expect(live.querySelector('.tt-planned')).toBeNull();
-  expect(screen.getByText('Main Arena · 6 min late')).toBeVisible();
+  expect(live.querySelector('.tt-time')).not.toHaveClass('tt-time-late');
+  expect(screen.getByText('Main Arena · 1 heat')).toBeVisible();
+  expect(screen.queryByText('Main Arena · 6 min late')).toBeNull();
 });
 
 it('uses the count in the group summary when nothing is late', () => {
@@ -199,10 +203,17 @@ it('defaults the header title to Timetable and leaves the time out until loaded'
   expect(JSON.parse(screen.getByTestId('header').textContent!)).toMatchObject({ title: 'Timetable', subtitle: 'Spring Games' });
 });
 
-it('still renders the bandExtra, lead and footer slots', () => {
+it('renders the bandExtra and lead slots, places Status colours above Show full timetable, and reveals footer inside Show full timetable', () => {
   renderBoard(<TimetableBoard bandExtra={<p>age chips</p>} lead={<p>toplist lead</p>} footer={<p>page footer</p>} />);
   expect(screen.getByText('age chips')).toBeVisible();
   expect(screen.getByText('toplist lead')).toBeVisible();
+  expect(screen.queryByText('page footer')).toBeNull();
+
+  const legend = screen.getByRole('list', { name: 'Status colours' });
+  const toggle = screen.getByRole('button', { name: 'Show full timetable' });
+  expect(toggle.compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+
+  fireEvent.click(toggle);
   expect(screen.getByText('page footer')).toBeVisible();
 });
 
@@ -339,8 +350,10 @@ it('hides the arena selector when viewing a specific section', () => {
   expect(screen.queryByRole('combobox', { name: 'Arena' })).toBeNull();
 });
 
-it('links heat rows directly to the heat without a lanes dropdown and shows + / - shift cards on every moved heat', () => {
+it('links heat rows directly to the heat without a lanes dropdown and shows a single shift note and coloured time on moved upcoming sessions', () => {
+  const tomorrow = dayKey(new Date(Date.now() + 86_400_000));
   setCompetition({
+    endDate: tomorrow,
     sessions: [
       session(1, {
         status: 1,
@@ -366,12 +379,26 @@ it('links heat rows directly to the heat without a lanes dropdown and shows + / 
       }),
       session(2, {
         status: 0,
+        orderIndex: 2,
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T11:00:00`,
+        heats: [
+          heat(21, {
+            sessionId: 2,
+            orderIndex: 0,
+            label: 'Upcoming Late Heat',
+          }),
+        ],
+      }),
+      session(3, {
+        status: 0,
+        orderIndex: 3,
         arenaName: 'Arena Two',
         scheduledStart: `${day}T10:45:00`,
         notes: '[shift:-15]',
         heats: [
-          heat(21, {
-            sessionId: 2,
+          heat(31, {
+            sessionId: 3,
             orderIndex: 0,
             label: 'Early Heat 3',
           }),
@@ -379,9 +406,30 @@ it('links heat rows directly to the heat without a lanes dropdown and shows + / 
       }),
     ],
   });
-  renderBoard();
+  const { container } = renderBoard();
   expect(screen.queryByRole('button', { name: /Lanes for/i })).toBeNull();
   expect(screen.getByRole('link', { name: /Heat 1/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=11');
-  expect(screen.getAllByLabelText('Time shifted +15m')).toHaveLength(2);
-  expect(screen.getByLabelText('Time shifted -15m')).toHaveTextContent('-15m');
+  expect(container.querySelector('.tt-strip')).toHaveClass('tt-strip-stacked');
+  expect(container.querySelectorAll('.tt-shift-card')).toHaveLength(0);
+
+  // Live session rows do not show how late they are running.
+  const liveRow = screen.getByRole('link', { name: /Heat 1/ });
+  const sameSessionRow = screen.getByRole('link', { name: /Heat 2/ });
+  expect(liveRow.querySelector('.tt-planned')).toBeNull();
+  expect(sameSessionRow.querySelector('.tt-planned')).toBeNull();
+
+  // Subsequent session in the same arena shows how late it is running and colours the time.
+  const upcomingLateRow = screen.getByRole('link', { name: /Upcoming Late Heat/ });
+  expect(upcomingLateRow.querySelector('.tt-planned')).toHaveTextContent(/^\+15m · 10:00|^\+15m · 11:00/);
+  expect(upcomingLateRow.querySelector('.tt-time')).toHaveClass('tt-time-late');
+
+  // Early-shifted session shows negative shift and colours the time green.
+  const earlyRow = screen.getByRole('link', { name: /Early Heat 3/ });
+  expect(earlyRow.querySelector('.tt-planned')).toHaveTextContent(/^-15m · 11:00/);
+  expect(earlyRow.querySelector('.tt-time')).toHaveClass('tt-time-early');
+
+  // Switching to Day 2 in a 2-day, 2-arena competition keeps the Arena selector available.
+  const [, day2Btn] = within(screen.getByRole('group', { name: 'Choose day' })).getAllByRole('button');
+  fireEvent.click(day2Btn);
+  expect(screen.getByRole('combobox', { name: 'Arena' })).toBeInTheDocument();
 });

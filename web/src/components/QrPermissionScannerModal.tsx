@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Camera, KeyRound, QrCode, ShieldAlert, Upload, X } from 'lucide-react';
 import {
   parseScorerSession,
@@ -100,6 +101,7 @@ function QrPermissionScannerDialog({
   onNavigate?: (to: string) => void;
   onScorerVerified?: (token: string, session: ScorerSession) => void;
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [manualValue, setManualValue] = useState('');
   const [verifying, setVerifying] = useState(false);
@@ -115,6 +117,12 @@ function QrPermissionScannerDialog({
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    return () => { dialog?.close(); };
   }, []);
 
   const navigateTo = useCallback((to: string) => {
@@ -238,12 +246,13 @@ function QrPermissionScannerDialog({
     }
   }
 
-  return (
-    <div
-      role="dialog"
+  return createPortal(
+    <dialog
+      ref={dialogRef}
       aria-modal="true"
       aria-label="Scan permission QR code"
-      className="mg-font fixed inset-0 z-[110] flex items-center justify-center bg-[rgb(var(--mg-overlay)/0.65)] p-4"
+      className="mg-font fixed inset-0 z-[110] m-0 flex h-dvh max-h-none w-screen max-w-none items-center justify-center border-0 bg-[rgb(var(--mg-overlay)/0.65)] p-4 backdrop-blur-xs"
+      onCancel={(event) => { event.preventDefault(); onClose(); }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
@@ -340,6 +349,7 @@ function QrPermissionScannerDialog({
           </button>
         </form>
       </div>
-    </div>
+    </dialog>,
+    document.body,
   );
 }

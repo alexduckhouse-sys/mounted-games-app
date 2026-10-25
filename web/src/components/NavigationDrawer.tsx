@@ -89,7 +89,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
             </Link>
           )}
 
-          {showWeather && !lite && <div className="flex min-h-12 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2"><CloudSun className="h-5 w-5 shrink-0 text-[rgb(var(--mg-muted))]" /><span className="font-medium">Weather</span><span className="ml-auto"><WeatherBadge /></span></div>}
+          {(current != null || showWeather) && !lite && <Link to={current ? `${base}/weather` : '/events'} onClick={onClose} className="flex min-h-12 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2 !no-underline hover:bg-[rgb(var(--mg-tint))]"><CloudSun className="h-5 w-5 shrink-0 text-[rgb(var(--mg-muted))]" /><span className="font-medium text-[rgb(var(--mg-ink))]">Weather</span>{showWeather && <span className="ml-auto"><WeatherBadge /></span>}</Link>}
 
           {current && ageGroups.competitionId === current.id && ageGroups.groups.length > 0 && (
             <nav aria-label="Age groups" className="flex flex-col gap-2.5">

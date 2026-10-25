@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -127,11 +127,36 @@ describe('SettingsPage', () => {
     expect(screen.queryByRole('switch', { name: /Remember this competition/ })).not.toBeInTheDocument();
   });
 
-  it('links to the privacy page', async () => {
+  it('links to the privacy, terms, refunds, cookies, and safeguarding policies', async () => {
     mount();
     const privacy = screen.getByRole('link', { name: 'Privacy' });
     expect(privacy).toHaveAttribute('href', '/privacy');
+    expect(screen.getByRole('link', { name: 'Terms of service' })).toHaveAttribute('href', '/privacy#terms');
+    expect(screen.getByRole('link', { name: 'Refunds & cancellations' })).toHaveAttribute('href', '/privacy#refunds');
+    expect(screen.getByRole('link', { name: 'Cookies & offline storage' })).toHaveAttribute('href', '/privacy#cookies');
+    expect(screen.getByRole('link', { name: 'Safeguarding & equine welfare' })).toHaveAttribute('href', '/privacy#safeguarding');
     await userEvent.click(privacy);
     expect(screen.getByTestId('probe')).toHaveTextContent('/privacy|ask|');
+  });
+
+  it('does not show role presets, explains Lite mode, and allows custom heat reminder timings with notification explanation', async () => {
+    mount();
+    expect(screen.queryByRole('group', { name: 'Bottom bar role presets' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Saves battery and mobile data on busy showgrounds/)).toBeInTheDocument();
+    expect(screen.getByText(/This timing applies to in-app reminders/)).toBeInTheDocument();
+
+    const customInput = screen.getByRole('spinbutton', { name: 'Custom heat reminder minutes' });
+    expect(customInput).toHaveValue(60);
+    await userEvent.clear(customInput);
+    await userEvent.type(customInput, '45');
+    expect(localStorage.getItem('mg.prefs.notifyLeadMins')).toBe('45');
+    for (const value of ['0', '241', '1.5']) {
+      fireEvent.change(customInput, { target: { value } });
+      expect(localStorage.getItem('mg.prefs.notifyLeadMins')).toBe('45');
+    }
+    fireEvent.blur(customInput);
+    expect(customInput).toHaveValue(45);
+    fireEvent.change(customInput, { target: { value: '1e2' } });
+    expect(localStorage.getItem('mg.prefs.notifyLeadMins')).toBe('100');
   });
 });

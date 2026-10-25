@@ -50,6 +50,7 @@ const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').t
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
 const RulesPage = lazy(() => import('./pages/admin/RulesPage').then((module) => ({ default: module.RulesPage })));
 const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
+const WeatherPage = lazy(() => import('./pages/competition/WeatherPage').then((module) => ({ default: module.WeatherPage })));
 const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').then((module) => ({ default: module.OperationsPage })));
 const RulebooksPage = lazy(() => import('./pages/operations/RulebooksPage').then((module) => ({ default: module.RulebooksPage })));
 const ShopPage = lazy(() => import('./pages/ShopPage').then((module) => ({ default: module.ShopPage })));
@@ -112,6 +113,7 @@ export default function App() {
                 <Route path="commentary" element={<CommentaryDeskPage />} />
                 <Route path="session/:sessionId" element={<AfterDrawOnly><SessionPage /></AfterDrawOnly>} />
                 <Route path="arena" element={<ArenaPage />} />
+                <Route path="weather" element={<WeatherPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="teams" element={<TeamsTab />} />
                 <Route path="teams/:teamId" element={<CompetitionTeamPage />} />
@@ -163,6 +165,10 @@ export default function App() {
                 <ProtectedRoute roles={['Admin']}><RulesPage /></ProtectedRoute>
               } />
               <Route path="privacy" element={<PrivacyPage />} />
+              <Route path="terms" element={<PrivacyPage />} />
+              <Route path="refunds" element={<PrivacyPage />} />
+              <Route path="cookies" element={<PrivacyPage />} />
+              <Route path="safeguarding" element={<PrivacyPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="unsubscribe" element={<UnsubscribePage />} />
               <Route path="confirm-email" element={<ConfirmEmailPage />} />

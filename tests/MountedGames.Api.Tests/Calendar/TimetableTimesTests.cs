@@ -150,4 +150,103 @@ public class TimetableTimesTests
         Assert.Equal(At(10), times[2].Start);
         Assert.Equal(At(11), times[4].Start);
     }
+    [Fact]
+    public void FirstRaceCheckpoint_UsesTwoMinuteAllowance_AndCascadesToLaterSessions()
+    {
+        var first = NewHeat(1, 1, 30, started: At(9, 10), races: 2);
+        first.Races = [new Race { OrderIndex = 2 }, new Race { OrderIndex = 1, FinishedAt = At(9, 10) }];
+        var session = NewSession(1, At(9), started: At(9, 10), heats: [first, NewHeat(2, 2, 30)]);
+        var next = NewSession(2, At(10), heats: [NewHeat(3, 1, 30)]);
+        var times = TimetableTimes.Compute([session, next]);
+        Assert.Equal(At(9, 8), times[1].Start);
+        Assert.Equal(At(9, 38), times[2].Start);
+        Assert.Equal(At(10, 8), times[3].Start);
+    }
+
+    [Fact]
+    public void ASecondHeatCheckpoint_CascadesEvenWhenTheSessionStartedOnTime()
+    {
+        var first = NewHeat(1, 1, 30);
+        first.Races.First().StartedAt = At(9, 4);
+        var second = NewHeat(2, 2, 30, started: At(9, 40));
+        second.Races.First().StartedAt = At(9, 40);
+        var session = NewSession(1, At(9), started: At(9), heats: [first, second]);
+        var next = NewSession(2, At(10), heats: [NewHeat(3, 1, 30)]);
+        var times = TimetableTimes.Compute([session, next]);
+        Assert.Equal(At(9), times[1].Start);
+        Assert.Equal(At(9, 38), times[2].Start);
+        Assert.Equal(At(10, 8), times[3].Start);
+    }
+
+    [Theory]
+    [InlineData(9, false, 0)]
+    [InlineData(10, false, 0)]
+    [InlineData(14, true, 7)]
+    public void HalfwayCheckpoint_OnlyAddsDelayBeyondFiveMinutes(int stampMinute, bool finished, int delay)
+    {
+        var first = NewHeat(1, 1, 20, races: 4);
+        first.Races = Enumerable.Range(1, 4).Select(i => new Race { OrderIndex = i }).ToList();
+        first.Races.First().FinishedAt = At(9, 2);
+        if (finished) first.Races.ElementAt(1).FinishedAt = At(9, stampMinute);
+        else first.Races.ElementAt(1).StartedAt = At(9, stampMinute);
+        var session = NewSession(1, At(9), heats: [first]);
+        var next = NewSession(2, At(10), heats: [NewHeat(2, 1, 30)]);
+        var times = TimetableTimes.Compute([session, next]);
+        Assert.Equal(At(10, delay), times[2].Start);
+    }
+
+    [Fact]
+    public void UnstampedSession_CanStillAcquireFirstRaceDelay()
+    {
+        var first = NewHeat(1, 1, 30);
+        first.Races.First().FinishedAt = At(9, 9);
+        var session = NewSession(1, At(9), heats: [first]);
+        var next = NewSession(2, At(10), heats: [NewHeat(2, 1, 30)]);
+        Assert.Equal(At(10, 7), TimetableTimes.Compute([session, next])[2].Start);
+    }
+
+    [Fact]
+    public void FinishedSingleRaceWithoutStart_DoesNotReplaceKnownSessionStart()
+    {
+        var first = NewHeat(1, 1, 30);
+        first.FinishedAt = At(9, 20);
+        first.Races.First().FinishedAt = At(9, 20);
+        var session = NewSession(1, At(9), started: At(9), heats: [first]);
+        var next = NewSession(2, At(10), heats: [NewHeat(2, 1, 30)]);
+        Assert.Equal(At(10), TimetableTimes.Compute([session, next])[2].Start);
+    }
+
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(1, 8)]
+    [InlineData(2, 8)]
+    [InlineData(3, 8)]
+    [InlineData(4, 8)]
+    [InlineData(5, 8)]
+    [InlineData(6, 8)]
+    public void CheckpointsDoNotCompound_AndShortRaceListsStayInBounds(int count, int expectedDelay)
+    {
+        var first = NewHeat(1, 1, 30, races: count);
+        var half = count / 2 - 1;
+        first.Races = Enumerable.Range(0, count).Select(i => new Race
+        {
+            OrderIndex = i + 1,
+            FinishedAt = i == 0 ? At(9, 10) : i == half ? At(9).AddMinutes((double)half / count * 30 + 10) : null,
+        }).ToList();
+        var session = NewSession(1, At(9), started: At(9, 10), heats: [first]);
+        var next = NewSession(2, At(10), heats: [NewHeat(2, 1, 30)]);
+        Assert.Equal(At(10, expectedDelay), TimetableTimes.Compute([session, next])[2].Start);
+        Assert.Equal(At(10, expectedDelay), TimetableTimes.Compute([session, next])[2].Start);
+    }
+
+    [Fact]
+    public void FirstRaceCheckpoint_AtExactlyFiveMinutesAddsNoDelay()
+    {
+        var first = NewHeat(1, 1, 30);
+        first.Races.First().FinishedAt = At(9, 5);
+        var session = NewSession(1, At(9), heats: [first]);
+        var next = NewSession(2, At(10), heats: [NewHeat(2, 1, 30)]);
+        Assert.Equal(At(10), TimetableTimes.Compute([session, next])[2].Start);
+    }
+
 }

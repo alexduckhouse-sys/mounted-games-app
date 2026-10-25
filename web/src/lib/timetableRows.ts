@@ -90,9 +90,9 @@ export function isGroupFinished(rows: { status: TimetableStatus }[]): boolean {
   return rows.length > 0 && rows.every((row) => row.status === 'finished');
 }
 
-/** The longest delay, in minutes, among a group's unfinished rows (0 when nothing is running late). */
+/** The longest delay, in minutes, among a group's unfinished, non-live rows (0 when nothing is running late). */
 export function groupMaxDelay(rows: { status: TimetableStatus; delayMinutes: number }[]): number {
-  return Math.max(0, ...rows.filter((row) => row.status !== 'finished').map((row) => row.delayMinutes));
+  return Math.max(0, ...rows.filter((row) => row.status !== 'finished' && row.status !== 'live').map((row) => row.delayMinutes));
 }
 
 /** "Seniors Session 1": the age group (without "Teams") plus its session number. */

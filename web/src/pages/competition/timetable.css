@@ -3,20 +3,21 @@
 
 /* Day and arena choices: one navy strip under the app header, full width and sticky below it. */
 .tt-strip {
-  position: sticky; top: var(--mg-shell-h, 0px); z-index: 20; display: flex; align-items: center; gap: 8px; padding: 10px 0;
+  position: sticky; top: var(--mg-shell-h, 0px); z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0;
   border-image: conic-gradient(rgb(var(--mg-header)) 0 0) fill 0 // 0 100vmax; color: #fff;
 }
 /* Under the age-group band the two navy bars read as one: no second gap between the dropdowns. */
 .mg-band-header + .tt-strip { padding-top: 0; }
 .tt-strip :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .tt-days { display: flex; flex: none; gap: 2px; padding: 3px; border-radius: 8px; background: rgb(255 255 255 / .1); }
-.tt-day { min-height: 30px; padding: 0 12px; border-radius: 6px; color: #fff; font: 600 13px/1 var(--mg-font); }
+.tt-strip-stacked .tt-days { width: 100%; }
+.tt-day { flex: 1; display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 0 12px; border-radius: 6px; color: #fff; font: 600 13px/1 var(--mg-font); text-align: center; }
 .tt-day[aria-pressed="true"] { background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); }
 .tt-arena {
   display: flex; width: 100%; min-width: 0; align-items: center; gap: 6px; min-height: 36px; padding: 0 30px 0 10px; text-align: left;
   border: 1px solid rgb(var(--mg-header-line)); border-radius: 8px; color: #fff; font: 600 13px/1 var(--mg-font);
 }
-.tt-arena-wrap { flex: 1; min-width: 0; }
+.tt-arena-wrap { flex: 1 1 140px; min-width: 0; }
 .tt-arena { position: relative; }
 .tt-arena:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .tt-arena-pin { flex: none; color: rgb(var(--mg-header-sub)); }
@@ -57,17 +58,14 @@ button.tt-group-title:focus-visible, .tt-collapsed:focus-visible, a.tt-row:focus
 a.tt-row:hover { background: rgb(var(--mg-subtle)); }
 a.tt-row:focus-visible { outline-offset: -2px; }
 .tt-time { font: 700 23px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
+.tt-time-late { color: rgb(var(--mg-late-time)); }
+.tt-time-early { color: #2E8B4F; }
 .tt-event { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding: 5px 0; overflow-wrap: anywhere; }
 .tt-event strong { font-size: 16px; font-weight: 600; line-height: 1.25; }
 .tt-sub { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-muted)); }
 .tt-planned { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-late-time)); }
+.tt-planned-early { color: #2E8B4F; }
 .tt-onnow { color: rgb(var(--mg-red)); font: 700 10px/1 var(--mg-font); letter-spacing: .06em; }
-.tt-shift-card {
-  display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 5px;
-  font: 700 11px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; letter-spacing: .02em;
-}
-.tt-shift-late { background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); border: 1px solid rgb(var(--mg-late-time) / .35); }
-.tt-shift-early { background: rgb(var(--mg-done-bg)); color: #166534; border: 1px solid #16a34a40; }
 .tt-provisional-note { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 500 14px/1.35 var(--mg-font); }
 .tt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .tt-live .tt-dot { animation: tt-pulse 1.6s ease-in-out infinite; }

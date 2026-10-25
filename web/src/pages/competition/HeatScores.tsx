@@ -164,8 +164,8 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
   }, [competition.sessions, heat?.id, isFinalHeat, session.competitionSectionId]);
 
   const showCarriedForward = useMemo(
-    () => isFinalHeat && (carriedForwardByTeam.size > 0 || /^[A-Z]\s+Finals?$/i.test(heat?.label?.trim() ?? '') || competition.sessions.some((s) => s.id !== session.id && (s.kind ?? (s.isBreak ? 1 : 0)) === 0)),
-    [carriedForwardByTeam.size, competition.sessions, heat?.label, isFinalHeat, session.id],
+    () => isFinalHeat && [...carriedForwardByTeam.values()].some((pts) => pts > 0),
+    [carriedForwardByTeam, isFinalHeat],
   );
 
   const grid = useMemo(() => {
@@ -314,7 +314,8 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
     return { teams: ranked, cells, anyScored };
   }, [heat, heats, isRaceFinals, columns, finished, runningIndex, laneRules, competition.id, favHook, showCarriedForward, carriedForwardByTeam, cardsTick, cardsEnabled]);
 
-  const minWidth = 12 + (finished ? 18 : 0) + 116 + (showCarriedForward ? 28 : 0) + columns.length * 23 + 44;
+  const manyRaces = columns.length >= 6;
+  const minWidth = manyRaces ? undefined : 12 + (finished ? 18 : 0) + 100 + (showCarriedForward ? 26 : 0) + columns.length * 22 + 40;
 
   return (
     <div className={`mx-auto flex w-full max-w-xl flex-col gap-4 ${embedded ? '' : 'pt-3'}`}>
@@ -332,7 +333,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
         <section aria-label="Scores" className="mg-card overflow-hidden">
           {grid.teams.length === 0 ? <p className="p-4 text-[rgb(var(--mg-muted))]">No teams in this heat yet.</p> : (
             <div className="overflow-x-auto">
-              <table className="heat-grid" style={{ minWidth }}>
+              <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`} style={{ minWidth }}>
                 <thead>
                   <tr>
                     {finished && <th scope="col" className="heat-rank">#</th>}
@@ -369,7 +370,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
                         {finished && <td className="heat-rank-cell"><span className="sr-only">Position </span>{team.position}</td>}
                         <th scope="row" className="heat-team" title={team.name}>
                           <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="heat-team-link">
-                            <span className="heat-team-name">
+                            <span className={`heat-team-name${team.name.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
                               {team.isFav && <Star aria-hidden="true" className="mr-1 inline h-3 w-3 fill-[#C08308] text-[#C08308]" />}
                               {flag && <img src={`/flags/${flag}.png`} alt="" className="mr-1 inline h-3.5 w-5 rounded-[2px] object-cover" />}
                               {team.name}

@@ -6,12 +6,15 @@ import {
   ChevronRight,
   Clock,
   CloudSun,
+  Cookie,
+  FileText,
+  HeartHandshake,
   LayoutGrid,
   Pin,
   PinOff,
+  ReceiptText,
   RotateCcw,
   ShieldCheck,
-  Sparkles,
   Type,
   Vibrate,
   type LucideIcon,
@@ -20,7 +23,6 @@ import { useCurrentCompetition } from '../competition/CurrentCompetitionContext'
 import { usePageHeader } from '../components/CompactPageBarContext';
 import {
   ALL_BOTTOM_TAB_OPTIONS,
-  BOTTOM_BAR_PRESETS,
   DEFAULT_BOTTOM_TABS,
   MAX_BOTTOM_TABS,
   MIN_BOTTOM_TABS,
@@ -52,17 +54,16 @@ export function SettingsPage() {
 
   const {
     bottomTabs,
-    activePreset,
     notifyLeadMins,
     textSize,
     scorerHaptics,
     setBottomTabs,
     resetBottomTabs,
-    applyBottomBarPreset,
     setNotifyMinutesBefore,
     setTextSize,
     setScorerHaptics,
   } = useUserPrefs();
+  const [customMinsText, setCustomMinsText] = useState<string | null>(null);
 
   useEffect(() => {
     if (location.hash === '#lite-mode') {
@@ -141,7 +142,7 @@ export function SettingsPage() {
                 Bottom bar shortcuts
               </h2>
               <p className="mt-0.5 text-xs text-[rgb(var(--mg-muted))]">
-                Pick a role preset or choose {MIN_BOTTOM_TABS} to {MAX_BOTTOM_TABS} tabs for competition day ({bottomTabs.length} of {MAX_BOTTOM_TABS} selected).
+                Choose {MIN_BOTTOM_TABS} to {MAX_BOTTOM_TABS} tabs for competition day ({bottomTabs.length} of {MAX_BOTTOM_TABS} selected).
               </p>
             </div>
           </div>
@@ -155,34 +156,6 @@ export function SettingsPage() {
               Reset to default
             </button>
           )}
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-[rgb(var(--mg-muted))]">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-            Role presets
-          </div>
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Bottom bar role presets">
-            {BOTTOM_BAR_PRESETS.map((preset) => {
-              const active = activePreset === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => applyBottomBarPreset(preset.id)}
-                  title={preset.description}
-                  className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition-colors ${
-                    active
-                      ? 'border-[rgb(var(--mg-button))] bg-[rgb(var(--mg-button))] text-white'
-                      : 'border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         <ul className="divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden rounded-[10px] border border-[rgb(var(--mg-line))] bg-[rgb(var(--mg-surface))]">
@@ -266,21 +239,49 @@ export function SettingsPage() {
             ))}
           </div>
         </div>
-        <div className="flex min-h-12 w-full items-center gap-3 rounded-[10px] px-3 text-base font-medium text-[rgb(var(--mg-ink))]">
-          <Clock aria-hidden="true" className={iconClass(false)} />
-          <span className="flex-1">Heat reminder timing</span>
-          <div role="group" aria-label="Heat reminder timing" className="mg-toggle">
-            {([15, 30, 60] as const).map((mins: NotifyLeadMins) => (
-              <button
-                key={mins}
-                type="button"
-                aria-pressed={notifyLeadMins === mins}
-                onClick={() => setNotifyMinutesBefore(mins)}
-              >
-                {mins}m
-              </button>
-            ))}
+        <div className="flex flex-col gap-1">
+          <div className="flex min-h-12 w-full flex-wrap items-center gap-2 rounded-[10px] px-3 py-1 text-base font-medium text-[rgb(var(--mg-ink))]">
+            <Clock aria-hidden="true" className={iconClass(false)} />
+            <span className="flex-1">Heat reminder timing</span>
+            <div className="flex items-center gap-2">
+              <div role="group" aria-label="Heat reminder timing" className="mg-toggle">
+                {([15, 30, 60] as const).map((mins: NotifyLeadMins) => (
+                  <button
+                    key={mins}
+                    type="button"
+                    aria-pressed={notifyLeadMins === mins}
+                    onClick={() => {
+                      setCustomMinsText(null);
+                      setNotifyMinutesBefore(mins);
+                    }}
+                  >
+                    {mins}m
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-1 text-xs font-semibold text-[rgb(var(--mg-muted))]">
+                <input
+                  type="number"
+                  min={1}
+                  max={240}
+                  aria-label="Custom heat reminder minutes"
+                  value={customMinsText ?? String(notifyLeadMins)}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setCustomMinsText(raw);
+                    const v = Number(raw);
+                    if (Number.isInteger(v) && v >= 1 && v <= 240) setNotifyMinutesBefore(v);
+                  }}
+                  onBlur={() => setCustomMinsText(null)}
+                  className="w-16 rounded-lg border border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-2 py-1 text-center text-sm font-semibold text-[rgb(var(--mg-ink))]"
+                />
+                <span>min</span>
+              </label>
+            </div>
           </div>
+          <p className="px-3 pb-1 text-xs leading-snug text-[rgb(var(--mg-muted))]">
+            This timing applies to in-app reminders while the app is open. If push notifications are enabled, background heat reminders are sent about an hour before the heat.
+          </p>
         </div>
         {current && (
           <SettingSwitch
@@ -298,10 +299,33 @@ export function SettingsPage() {
         )}
       </section>
 
-      <section className="mg-card p-3">
+      <section aria-label="Policies and legal" className="mg-card flex flex-col gap-1 p-3">
+        <h2 className="px-2 py-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">
+          Policies &amp; legal
+        </h2>
         <Link to="/privacy" className={itemClass(false)}>
           <ShieldCheck aria-hidden="true" className={iconClass(false)} />
           <span className="flex-1">Privacy</span>
+          <ChevronRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))]" />
+        </Link>
+        <Link to="/privacy#terms" className={itemClass(false)}>
+          <FileText aria-hidden="true" className={iconClass(false)} />
+          <span className="flex-1">Terms of service</span>
+          <ChevronRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))]" />
+        </Link>
+        <Link to="/privacy#refunds" className={itemClass(false)}>
+          <ReceiptText aria-hidden="true" className={iconClass(false)} />
+          <span className="flex-1">Refunds &amp; cancellations</span>
+          <ChevronRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))]" />
+        </Link>
+        <Link to="/privacy#cookies" className={itemClass(false)}>
+          <Cookie aria-hidden="true" className={iconClass(false)} />
+          <span className="flex-1">Cookies &amp; offline storage</span>
+          <ChevronRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))]" />
+        </Link>
+        <Link to="/privacy#safeguarding" className={itemClass(false)}>
+          <HeartHandshake aria-hidden="true" className={iconClass(false)} />
+          <span className="flex-1">Safeguarding &amp; equine welfare</span>
           <ChevronRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))]" />
         </Link>
       </section>

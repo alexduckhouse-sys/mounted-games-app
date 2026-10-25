@@ -31,10 +31,24 @@ describe('competitionPhase', () => {
     expect(competitionPhase(competition({ sections: [section], sessions: [session(1, { status: 1 })] }))).toBe('running');
   });
 
-  it('switches to complete once finals have completed', () => {
-    const qual = session(1, { status: 2, heats: [heat(1, { races: [race(1, { isComplete: true })] })] });
-    const finalSession = session(2, { name: 'Under 12 Finals', status: 2, heats: [heat(2, { label: 'A Final', raceRoundStage: 2, races: [race(2, { isComplete: true })] })] });
+  it('switches to complete once finals have completed by status, finishedAt, or all races complete', () => {
+    const qual = session(1, { status: 0, heats: [heat(1, { finishedAt: '2026-06-01T10:00:00Z', races: [race(1, { isComplete: true })] })] });
+    const finalSession = session(2, {
+      name: 'Under 12 Finals',
+      status: 0,
+      heats: [
+        heat(2, { label: null, races: [race(2, { isComplete: true })] }),
+        heat(3, { label: 'B Final', races: [race(3, { isComplete: true })] }),
+      ],
+    });
     expect(competitionPhase(competition({ sections: [section], sessions: [qual, finalSession] }))).toBe('complete');
+
+    const incompleteFinal = session(3, {
+      name: 'Finals',
+      status: 0,
+      heats: [heat(4, { label: 'A Final', races: [race(4, { isComplete: false })] })],
+    });
+    expect(competitionPhase(competition({ sections: [section], sessions: [qual, incompleteFinal] }))).toBe('running');
   });
 
   it('waits for unfinished qualifiers even when the final has a finish time', () => {
@@ -67,6 +81,17 @@ describe('competitionPhase', () => {
 
   it('is never the entry phase for an archived competition', () => {
     expect(competitionPhase(competition({ sections: [section], isArchived: true }))).toBe('running');
+  });
+});
+
+describe('entryFeeText', () => {
+  it('formats free, single-price, and range-price section fees', () => {
+    expect(entryFeeText([])).toBeNull();
+    expect(entryFeeText([{ ...section, priceMinor: 0 }])).toBe('Free');
+    expect(entryFeeText([{ ...section, priceMinor: undefined as unknown as number }])).toBe('Free');
+    expect(entryFeeText([{ ...section, priceMinor: 1500 }])).toBe('£15.00');
+    expect(entryFeeText([{ ...section, priceMinor: 0 }, { ...section, id: 6, priceMinor: 1500 }])).toBe('From free to £15.00');
+    expect(entryFeeText([{ ...section, priceMinor: 1000 }, { ...section, id: 6, priceMinor: 2500 }])).toBe('From £10.00 to £25.00');
   });
 });
 

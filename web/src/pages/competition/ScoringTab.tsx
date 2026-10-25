@@ -2,14 +2,14 @@ import { Dropdown } from '../../components/Dropdown';
 import { displaySectionName } from '../../lib/section';
 import { TimetableBoard } from './TimetableBoard';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronRight, Trophy, Sparkles, X, AlertTriangle, Share2, Check, Monitor, Mic } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trophy, Sparkles, X, AlertTriangle } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { CompetitionDetail, StandingRow } from '../../types';
-import { buildToplist, ordinal, sectionScoreVersion, type Toplist } from '../../lib/toplist';
+import { buildToplist, sectionScoreVersion } from '../../lib/toplist';
 import { FAVOURITES_KEY } from '../../lib/favourites';
 import { ToplistView, type ToplistViewTab } from './ToplistView';
 import { TackLeaderboard } from './TackLeaderboard';
@@ -85,26 +85,6 @@ function ToplistHeader({ subtitle, onRefresh }: { subtitle: string; onRefresh: (
   return null;
 }
 
-function buildPodiumCardText(competitionName: string, sectionName: string, list: Toplist): string {
-  const header = `🏆 ${competitionName}${sectionName ? ` — ${sectionName}` : ''}`;
-  const lines: string[] = [header];
-  if (list.finals.length > 0 && list.finals[0].rows.length > 0) {
-    lines.push(`${list.finals[0].label}:`);
-    for (const row of list.finals[0].rows) {
-      const pos = row.place != null ? ordinal(row.place) : '–';
-      const pts = row.points != null ? `${formatPoints(row.points)} pts` : '';
-      lines.push(`${pos} ${row.teamName}${pts ? ` — ${pts}` : ''}`);
-    }
-    lines.push('');
-    lines.push('Qualifying Standings:');
-  }
-  for (const row of list.rows) {
-    const pos = list.started ? `${ordinal(row.position)}${row.joint ? '=' : ''}` : '–';
-    lines.push(`${pos} ${row.teamName} — ${formatPoints(row.points)} pts`);
-  }
-  return lines.join('\n');
-}
-
 /** The age group menu, in the header band. */
 function AgeGroupSelect({ sections, value, teamCount, seamless = false, onChange }: { sections: { id: number; displayName: string }[]; value: number | null; teamCount: number; seamless?: boolean; onChange: (id: number) => void }) {
   const current = sections.find((s) => s.id === value);
@@ -163,7 +143,6 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const [subTab, setSubTab] = useState<SectionSubTab>('draw');
   const [showToplist, setShowToplist] = useState(toplistOnly);
   const [showFinals, setShowFinals] = useState(false);
-  const [podiumCopied, setPodiumCopied] = useState(false);
   const [chosenView, setChosenView] = useState<ToplistViewTab | null>(readPreferredToplistView);
   const chooseView = (view: ToplistViewTab) => {
     setChosenView(view);
@@ -267,64 +246,15 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     return out;
   }, [competition, sectionId]);
   // The page version draws its own tab band edge to edge on phones, so its notices sit in their own column above it.
-  async function sharePodium() {
-    const text = buildPodiumCardText(competition.name, sectionName, list);
-    const title = `${competition.name}${sectionName ? ` · ${sectionName}` : ''} Standings`;
-    if (typeof navigator.share === 'function') {
-      try {
-        await navigator.share({ title, text });
-        setPodiumCopied(true);
-        setTimeout(() => setPodiumCopied(false), 2000);
-        return;
-      } catch (err) {
-        if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      setPodiumCopied(true);
-      setTimeout(() => setPodiumCopied(false), 2000);
-    } catch { /* clipboard unavailable */ }
-  }
-
-  const showcaseLinks = (
-    <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-      {standings.length > 0 && (
-        <button
-          type="button"
-          onClick={() => void sharePodium()}
-          className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
-        >
-          {podiumCopied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Share2 className="h-3.5 w-3.5" aria-hidden="true" />}
-          {podiumCopied ? 'Podium copied' : 'Share Podium'}
-        </button>
-      )}
-      <Link
-        to={`/competitions/${competition.id}/tv${sectionId != null ? `?section=${sectionId}` : ''}`}
-        className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
-      >
-        <Monitor className="h-3.5 w-3.5" aria-hidden="true" /> TV Kiosk
-      </Link>
-      <Link
-        to={`/competitions/${competition.id}/commentary${sectionId != null ? `?section=${sectionId}` : ''}`}
-        className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
-      >
-        <Mic className="h-3.5 w-3.5" aria-hidden="true" /> PA Desk
-      </Link>
-    </div>
-  );
-
   const toplist = toplistOnly ? (
     <section aria-label={sectionLabel} className="flex flex-col">
       <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
-      {showcaseLinks}
       {standings.length > 0 && <ToplistView list={list} section={section} standalone={!rail} competitionId={competition.id} teams={competition.teams} heats={sectionHeats} chosenView={chosenView} onChooseView={chooseView} />}
       {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
     </section>
   ) : (
     <section aria-label={sectionLabel} className="flex flex-col gap-2.5">
       {notices}
-      {showcaseLinks}
       {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} heats={sectionHeats} chosenView={chosenView} onChooseView={chooseView} />}
       {sectionId != null && <TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} />}
     </section>
@@ -394,8 +324,6 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
                 </button>
               ))}
             </div>
-
-            {subTab !== 'toplist' && !showToplist && showcaseLinks}
 
             {subTab === 'draw' && (
               <>

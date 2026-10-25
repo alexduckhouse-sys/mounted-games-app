@@ -303,6 +303,101 @@ describe('computeTimings', () => {
       expect(timings.get(1)!.heats).toEqual([]);
     });
   });
+
+  describe('first race and halfway race auto-delay', () => {
+    it('adds time taken minus 2 minutes when the first race goes in more than 5 minutes late', () => {
+      const timings = computeTimings([
+        session(1, {
+          orderIndex: 1,
+          scheduledStart: at(0),
+          startedAt: at(10),
+          heats: [heat(1, { races: [race(2, { orderIndex: 2 }), race(1, { orderIndex: 1, finishedAt: at(10) })] }), heat(2)],
+        }),
+        session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(3)] }),
+      ]);
+      // 10m taken minus 2m race allowance = 8m delay cascaded to later heats and sessions.
+      expect(timeOf(timings.get(1)!.effective)).toBe(ms(8));
+      expect(timeOf(timings.get(1)!.heats[0].effective)).toBe(ms(8));
+      expect(timeOf(timings.get(1)!.heats[1].effective)).toBe(ms(38));
+      expect(timeOf(timings.get(2)!.effective)).toBe(ms(68));
+      expect(timings.get(2)!.shifted).toBe(true);
+    });
+
+    it('cascades first-race delay even when session startedAt was recorded on time or on a second heat', () => {
+      const timings = computeTimings([
+        session(1, {
+          orderIndex: 1,
+          scheduledStart: at(0),
+          startedAt: at(0),
+          heats: [
+            heat(1, { races: [race(1, { startedAt: at(4) })] }),
+            heat(2, { startedAt: at(40), races: [race(2, { startedAt: at(40) })] }),
+          ],
+        }),
+        session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(3)] }),
+      ]);
+      // Heat 1 race 1 was only 4m after start (<= 5m, ignored).
+      // Heat 2 was scheduled at 30m; race 2 started at 40m (10m taken - 2m = 8m delay).
+      expect(timeOf(timings.get(1)!.heats[1].effective)).toBe(ms(38));
+      expect(timeOf(timings.get(2)!.effective)).toBe(ms(68));
+
+      const unstartedSession = computeTimings([
+        session(1, {
+          orderIndex: 1,
+          scheduledStart: at(0),
+          heats: [heat(1, { races: [race(1, { finishedAt: at(9) })] })],
+        }),
+        session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(2)] }),
+      ]);
+      expect(timeOf(unstartedSession.get(2)!.effective)).toBe(ms(67));
+    });
+
+    it('adds time taken minus 2 minutes when the halfway race goes in more than 5 minutes late', () => {
+      const timings = computeTimings([
+        session(1, {
+          orderIndex: 1,
+          scheduledStart: at(0),
+          heats: [
+            heat(1, {
+              durationMinutes: 20,
+              races: [
+                race(1, { orderIndex: 1, finishedAt: at(2) }),
+                race(2, { orderIndex: 2, finishedAt: at(14) }),
+                race(3, { orderIndex: 3, startedAt: at(15) }),
+                race(4, { orderIndex: 4 }),
+              ],
+            }),
+          ],
+        }),
+        session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(2)] }),
+      ]);
+      // 4 races over 20m -> race 2 (index 1) is expected at 5m; finishing at 14m is 9m late -> 9 - 2 = 7m delay.
+      expect(timeOf(timings.get(2)!.effective)).toBe(ms(67));
+      expect(timings.get(2)!.shifted).toBe(true);
+    });
+
+    it('ignores a halfway race that is within 5 minutes of its expected time', () => {
+      const timings = computeTimings([
+        session(1, {
+          orderIndex: 1,
+          scheduledStart: at(0),
+          heats: [
+            heat(1, {
+              durationMinutes: 20,
+              races: [
+                race(1, { orderIndex: 1 }),
+                race(2, { orderIndex: 2, startedAt: at(9) }),
+                race(3, { orderIndex: 3 }),
+                race(4, { orderIndex: 4 }),
+              ],
+            }),
+          ],
+        }),
+        session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(2)] }),
+      ]);
+      expect(timeOf(timings.get(2)!.effective)).toBe(ms(60));
+    });
+  });
 });
 
 
@@ -325,5 +420,31 @@ describe('manual shifts mirror calendar timing', () => {
       session(2, { scheduledStart: at(45), notes: '[shift:-15]', heats: [heat(2)] }),
     ]);
     expect(timeOf(timings.get(2)!.heats[0].effective)).toBe(ms(60));
+  });
+});
+
+
+describe('race checkpoint boundaries and parity', () => {
+  it.each([0, 1, 2, 3])('does not double count the first race as halfway for %i races', count => {
+    const races = Array.from({ length: count }, (_, i) => race(i + 1, { orderIndex: i + 1, finishedAt: i === 0 ? at(10) : null }));
+    const sessions = [session(1, { orderIndex: 1, scheduledStart: at(0), startedAt: at(10), heats: [heat(1, { races })] }),
+      session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(2)] })];
+    expect(timeOf(computeTimings(sessions).get(2)!.effective)).toBe(ms(count === 0 ? 70 : 68));
+  });
+
+  it.each([4, 5, 6])('uses completed race floor(N/2) as the checkpoint for %i races without compounding', count => {
+    const half = Math.floor(count / 2) - 1;
+    const races = Array.from({ length: count }, (_, i) => race(i + 1, { orderIndex: i + 1,
+      finishedAt: i === 0 ? at(10) : i === half ? at((half / count) * 30 + 10) : null }));
+    const sessions = [session(1, { orderIndex: 1, scheduledStart: at(0), startedAt: at(10), heats: [heat(1, { durationMinutes: 30, races })] }),
+      session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(2)] })];
+    expect(timeOf(computeTimings(sessions).get(2)!.effective)).toBe(ms(68));
+    expect(timeOf(computeTimings(sessions).get(2)!.effective)).toBe(ms(68));
+  });
+
+  it('does not add first-race delay at exactly five minutes', () => {
+    const timings = computeTimings([session(1, { scheduledStart: at(0), heats: [heat(1, { races: [race(1, { finishedAt: at(5) })] })] }),
+      session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(2)] })]);
+    expect(timeOf(timings.get(2)!.effective)).toBe(ms(60));
   });
 });

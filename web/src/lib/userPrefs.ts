@@ -20,7 +20,7 @@ export type BottomBarPresetId =
   | 'organiser';
 
 export type ToplistViewPref = 'standings' | 'results' | 'sessions';
-export type NotifyLeadMins = 15 | 30 | 60;
+export type NotifyLeadMins = number;
 export type TextSizePref = 'normal' | 'large';
 
 export interface BottomTabOption {
@@ -219,14 +219,14 @@ export function setDefaultAgeGroup(ageGroup: string | null): void {
 export function getNotifyMinutesBefore(): NotifyLeadMins {
   const raw = readStorage(STORAGE_KEYS.notifyLeadMins);
   const parsed = Number(raw);
-  if (parsed === 15 || parsed === 30 || parsed === 60) {
-    return parsed;
+  if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 240) {
+    return Math.round(parsed);
   }
   return 60;
 }
 
 export function setNotifyMinutesBefore(mins: NotifyLeadMins): void {
-  const valid: NotifyLeadMins = mins === 15 || mins === 30 || mins === 60 ? mins : 60;
+  const valid: NotifyLeadMins = Number.isFinite(mins) && mins >= 1 && mins <= 240 ? Math.round(mins) : 60;
   writeStorage(STORAGE_KEYS.notifyLeadMins, String(valid));
   notifyPrefsChanged();
 }

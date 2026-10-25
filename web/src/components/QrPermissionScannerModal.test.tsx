@@ -22,6 +22,18 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 describe('permission QR verification', () => {
+  it('opens above the app in a full-screen modal and dismisses on Escape', () => {
+    const view = mount();
+    const dialog = screen.getByRole('dialog', { name: 'Scan permission QR code' });
+    expect(dialog.tagName).toBe('DIALOG');
+    expect(dialog.parentElement).toBe(document.body);
+    expect(dialog).toHaveAttribute('open');
+    expect(dialog).toHaveClass('w-screen', 'h-dvh');
+    fireEvent(dialog, new Event('cancel', { bubbles: true, cancelable: true }));
+    expect(close).toHaveBeenCalledOnce();
+    view.unmount();
+    expect(document.body).not.toContainElement(dialog);
+  });
   it('does not request the camera while closed', () => {
     const getUserMedia = vi.fn(); camera(getUserMedia); mount(false);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); expect(getUserMedia).not.toHaveBeenCalled();

@@ -136,13 +136,47 @@ export function computeTimings(sessions: Session[]): Map<number, SessionTiming> 
       } else if (heatCursor) {
         hEffective = new Date(heatCursor);
       }
+      const orderedRaces = h.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+      const isSingleRaceFinishedHeat = orderedRaces.length === 1 && !!h.finishedAt && !orderedRaces[0]?.startedAt && !!s.startedAt && new Date(s.startedAt).getTime() < new Date(h.finishedAt).getTime();
+      const r0Stamp = isSingleRaceFinishedHeat ? null : (orderedRaces[0]?.startedAt ?? orderedRaces[0]?.finishedAt);
+      if (hScheduled && r0Stamp) {
+        const r0Time = new Date(r0Stamp);
+        const firstRaceTakenMs = r0Time.getTime() - hScheduled.getTime();
+        if (firstRaceTakenMs > 5 * 60_000) {
+          const firstRaceDelayMs = firstRaceTakenMs - 2 * 60_000;
+          const autoStamped = Boolean(
+            (s.startedAt && Math.abs(new Date(s.startedAt).getTime() - r0Time.getTime()) <= 5_000)
+            || (h.startedAt && Math.abs(new Date(h.startedAt).getTime() - r0Time.getTime()) <= 5_000),
+          );
+          if (autoStamped) {
+            lane.offsetMs = firstRaceDelayMs;
+            hEffective = new Date(hScheduled.getTime() + firstRaceDelayMs);
+            if (h === heats[0]) effective = hEffective;
+          } else {
+            lane.offsetMs = Math.max(lane.offsetMs, firstRaceDelayMs);
+          }
+        }
+      }
+      const halfIdx = Math.floor(orderedRaces.length / 2) - 1;
+      const rHalfStamp = halfIdx >= 1 ? (orderedRaces[halfIdx].finishedAt ?? orderedRaces[halfIdx].startedAt) : null;
+      if (hScheduled && rHalfStamp) {
+        const expectedHalfStartMs = hScheduled.getTime() + (halfIdx / orderedRaces.length) * dur * 60_000;
+        const halfTakenMs = new Date(rHalfStamp).getTime() - expectedHalfStartMs;
+        if (halfTakenMs > 5 * 60_000) {
+          lane.offsetMs = Math.max(lane.offsetMs, halfTakenMs - 2 * 60_000);
+        }
+      }
+
       // Only flag a shift once the delta is at least 5 minutes — smaller
       // drifts round away to the same 5-min slot anyway and just look noisy.
       const hShifted = !!(hScheduled && hEffective
         && Math.abs(hEffective.getTime() - hScheduled.getTime()) >= 5 * 60_000);
       heatTimings.push({ heatId: h.id, scheduled: hScheduled, effective: hEffective, shifted: hShifted });
       // The next heat follows when this one actually runs, so a late or early start carries on.
-      heatCursor = hEffective ? new Date(hEffective.getTime() + dur * 60_000) : null;
+      const nextStartMs = hEffective
+        ? (hScheduled ? Math.max(hEffective.getTime(), hScheduled.getTime() + lane.offsetMs) : hEffective.getTime())
+        : null;
+      heatCursor = nextStartMs != null ? new Date(nextStartMs + dur * 60_000) : null;
       const advanceFromScheduled = pinned ?? scheduledCursor;
       scheduledCursor = advanceFromScheduled ? new Date(advanceFromScheduled.getTime() + dur * 60_000) : null;
     }
