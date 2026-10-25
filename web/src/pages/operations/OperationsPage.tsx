@@ -323,7 +323,7 @@ function Preparations({ readiness, groups, competitionId, refreshFailed, checked
     { key: 'entries', title: 'Entries and dec forms', todo: unpaid + missing + short > 0, to: `${base}/entries` },
     { key: 'timetable', title: 'Timetable and draw', todo: clashes.length + equipmentDetails > 0, to: `${base}/timetable-and-draw` },
     { key: 'equipment', title: 'Equipment', todo: equipmentToCheck > 0, to: `${base}/equipment` },
-    { key: 'sponsors', title: 'Sponsors and sharing', todo: false, to: `${base}/sponsors` },
+    { key: 'sponsors', title: 'Sponsors and sharing', todo: false, to: `${base}/sponsors-and-sharing` },
   ];
   const open = (target: { to?: string; view?: View }, children: ReactNode) => target.to
     ? <Link to={target.to} className="rf-row">{children}</Link>

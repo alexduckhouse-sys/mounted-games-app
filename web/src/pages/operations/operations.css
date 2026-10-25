@@ -186,3 +186,12 @@
 /* Equipment */
 .ops-equip .ops-check { min-height: 52px; }
 .ops-struck { color: rgb(var(--mg-muted)); text-decoration: line-through; }
+
+/* Sponsors and sharing */
+.ops-spons .rf-row { min-height: 52px; }
+.ops-spons .rf-row .mg-sponsor-logo { width: 36px; height: 36px; border-radius: 8px; object-fit: contain; flex: none; }
+.ops-addbar-gap { margin-top: 12px; }
+.ops-back { display: none; align-items: center; gap: 4px; min-height: 44px; padding: 0; border: 0; background: transparent; color: rgb(var(--mg-heading)); font: 700 15px/1 var(--mg-font); cursor: pointer; }
+@media (min-width: 1024px) { .ops-back { display: inline-flex; } }
+.ops-dates { padding: 4px 16px 14px; margin: 0; }
+.ops-remove { margin-top: 28px; }

@@ -127,7 +127,7 @@ describe('OperationsPage', () => {
 
     expect(screen.getByRole('link', { name: 'Event details' })).toHaveAttribute('href', '/competitions/7/event-details');
     expect(screen.getByRole('link', { name: 'Sections and races' })).toHaveAttribute('href', '/competitions/7/sections');
-    expect(screen.getByRole('link', { name: 'Sponsors and sharing' })).toHaveAttribute('href', '/competitions/7/sponsors');
+    expect(screen.getByRole('link', { name: 'Sponsors and sharing' })).toHaveAttribute('href', '/competitions/7/sponsors-and-sharing');
     expect(screen.getByRole('link', { name: /Entries and dec forms/ })).toContainElement(screen.getAllByRole('img', { name: 'Has jobs to sort' })[0]);
     expect(screen.getByRole('link', { name: 'Event details' }).querySelector('[role="img"]')).toBeNull();
     expect(screen.getByRole('link', { name: /^Equipment(?! to check)/ })).toHaveAttribute('href', '/competitions/7/equipment');
