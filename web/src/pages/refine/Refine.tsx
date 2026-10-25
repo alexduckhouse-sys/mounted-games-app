@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -47,6 +47,23 @@ function moveTabFocus(event: ReactKeyboardEvent<HTMLElement>) {
 }
 
 export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, title, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
+  const tabsRef = useRef<HTMLElement>(null);
+  const [moreTabs, setMoreTabs] = useState(false);
+  const activeTab = tabs?.findIndex((tab) => tab.active) ?? -1;
+  // A long tab strip scrolls sideways on a phone: keep the open tab in view and fade the edge while more tabs are hidden.
+  useEffect(() => {
+    const nav = tabsRef.current;
+    if (!nav) return;
+    const active = nav.children[activeTab] as HTMLElement | undefined;
+    if (active && (active.offsetLeft < nav.scrollLeft || active.offsetLeft + active.offsetWidth > nav.scrollLeft + nav.clientWidth)) {
+      nav.scrollTo?.({ left: Math.max(0, active.offsetLeft - 24) });
+    }
+    const update = () => setMoreTabs(nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 4);
+    update();
+    nav.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => { nav.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
+  }, [activeTab]);
   return (
     <header className="rf-hd">
       <div className="rf-hd-top">
@@ -59,7 +76,7 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
       {subtitle && <p className="rf-sub">{subtitle}</p>}
       {children}
       {tabs && tabs.length > 0 && (
-        <nav className="rf-tabs" aria-label={tabsLabel} role={tabsKind === 'tablist' ? 'tablist' : undefined} onKeyDown={tabsKind === 'tablist' ? moveTabFocus : undefined}>
+        <nav ref={tabsRef} className={`rf-tabs ${moreTabs ? 'rf-tabs-more' : ''}`} aria-label={tabsLabel} role={tabsKind === 'tablist' ? 'tablist' : undefined} onKeyDown={tabsKind === 'tablist' ? moveTabFocus : undefined}>
           {tabs.map((tab) => tabsKind === 'tablist' ? (
             <button key={tab.label} type="button" role="tab" aria-selected={tab.active} tabIndex={tab.active ? 0 : -1} className="rf-tab" onClick={tab.onSelect}>{tab.label}</button>
           ) : tab.to ? (
