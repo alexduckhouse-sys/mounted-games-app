@@ -77,6 +77,9 @@ public sealed class TieBreaker
         return new TieBreaker(rules, orders, races.ToDictionary(r => r.Id, r => (r.Session, r.Race, r.Heat)), finalRaceIds);
     }
 
+    /// <summary>True when the race belongs to a lettered final heat ("A Final").</summary>
+    public bool IsFinalRace(int raceId) => _finalRaceIds.Contains(raceId);
+
     public TieBreakRule RuleFor(int? sectionId)
         => sectionId is { } id && _rules.TryGetValue(id, out var rule) ? rule : TieBreakRule.Countback;
 

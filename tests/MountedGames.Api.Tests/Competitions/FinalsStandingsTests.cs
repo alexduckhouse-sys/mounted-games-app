@@ -33,7 +33,7 @@ public class FinalsStandingsTests : IClassFixture<ApiFactory>
             var club = new Club { Name = $"Tiers Club {Guid.NewGuid():N}" };
             db.AddRange(competition, club);
             await db.SaveChangesAsync();
-            var section = new CompetitionSection { CompetitionId = competition.Id, Format = SectionFormat.Teams, AgeGroup = "Under 12", DisplayName = "Under 12" };
+            var section = new CompetitionSection { CompetitionId = competition.Id, Format = SectionFormat.Teams, AgeGroup = "Under 12", DisplayName = "Under 12", CarryPointsIntoFinal = true };
             db.Add(section);
             await db.SaveChangesAsync();
             var teams = Enumerable.Range(0, 5).Select(i => new Team

@@ -119,19 +119,28 @@ public record RaceTemplateDto(
 public record UpsertRaceTemplateRequest(
     string Name, string? Summary, string? Rules, string? Category, string? DiagramJson);
 
+/// <param name="HasFinal">Standard format only: the section ends with a finals session. Heat, heat, final has no separate final.</param>
+/// <param name="CarryPointsIntoFinal">Standard format only: earlier points add to a finalist's final score in the standings.</param>
+/// <param name="DoublePointsInFinal">Standard format only: final race points count double.</param>
 public record CompetitionSectionDto(
     int Id, int CompetitionId, SectionFormat Format, string AgeGroup, string DisplayName,
     string? RunoffRaceName, bool UsesRaceFinals, int PriceMinor,
     int? MaxParticipants = null, int? FinalistCount = null,
-    int ActiveSignupsCount = 0, TieBreakRule TieBreakRule = TieBreakRule.Countback);
+    int ActiveSignupsCount = 0, TieBreakRule TieBreakRule = TieBreakRule.Countback,
+    bool HasFinal = true, bool CarryPointsIntoFinal = false, bool DoublePointsInFinal = false);
 public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string? DisplayName,
     string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0,
     int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null,
-    [EnumDataType(typeof(TieBreakRule))] TieBreakRule TieBreakRule = TieBreakRule.Countback);
+    [EnumDataType(typeof(TieBreakRule))] TieBreakRule TieBreakRule = TieBreakRule.Countback,
+    bool HasFinal = true, bool CarryPointsIntoFinal = false, bool DoublePointsInFinal = false);
 /// <param name="TieBreakRule">Omitted leaves the rule as it is.</param>
+/// <param name="HasFinal">Omitted leaves it as it is. Can't be turned off once the section has a final.</param>
+/// <param name="CarryPointsIntoFinal">Omitted leaves it as it is. Can be changed at any time: it only changes how standings add up.</param>
+/// <param name="DoublePointsInFinal">Omitted leaves it as it is. Can't be changed once a final race has been scored.</param>
 public record UpdateSectionRequest(string? RunoffRaceName, bool? UsesRaceFinals = null, int? PriceMinor = null,
     int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null,
-    [EnumDataType(typeof(TieBreakRule))] TieBreakRule? TieBreakRule = null);
+    [EnumDataType(typeof(TieBreakRule))] TieBreakRule? TieBreakRule = null,
+    bool? HasFinal = null, bool? CarryPointsIntoFinal = null, bool? DoublePointsInFinal = null);
 
 /// <summary>Teams level on points, best first: every active team in the age group on that total.</summary>
 public record SetTieOrderRequest(IReadOnlyList<int> TeamIds);
@@ -368,11 +377,18 @@ public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated, ResultSt
 /// 0 for a team in the A Final, 1 for the B Final, and so on; null when it isn't in a lettered
 /// final (including every team in a section that has none). Rows are ordered by tier first.
 /// </param>
+/// <param name="TotalPoints">
+/// What the row is ranked on: all the team's points, except for a finalist in a section that scores its final on its
+/// own, where it is the final's points alone.
+/// </param>
+/// <param name="FinalPoints">Points scored in the team's final(s); null when the team is in no lettered final.</param>
+/// <param name="EarlierPoints">Points scored before the final; null when the team is in no lettered final.</param>
 public record StandingRow(
     int TeamId, string TeamName, string ClubName, string? BibColour,
     double TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null,
     bool Withdrawn = false, int BonusPoints = 0, string? RefereeCard = null,
-    string? Flag = null, string? BibDescription = null);
+    string? Flag = null, string? BibDescription = null,
+    double? FinalPoints = null, double? EarlierPoints = null);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,

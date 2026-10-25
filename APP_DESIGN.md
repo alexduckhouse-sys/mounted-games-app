@@ -101,6 +101,7 @@ Submitting scores moves the scorer to the next race only after the outbox has sa
   - Endpoints: `POST /sessions/:sid/generate-race-finals` (called by wizard), `POST /sessions/:sid/heats/:hid/populate-race-final` (called by timetable button).
   - Each heat runs **one** race in this format. The "Mins / heat" in the wizard should reflect a single race's duration when race-finals is on.
 - **Finals** heats are labelled `A Final`, `B Final`, `C Final`, … (top group first). Teams flagged HC are excluded from seeding.
+- **Final options** (standard format, per section): `HasFinal`, `CarryPointsIntoFinal` and `DoublePointsInFinal`. Whether a finalist's earlier points count, whether final points double, and whether there is a final at all. Rules and edge cases are in `docs/decisions.md` (25 Oct).
 - **Two ways to create finals**:
   - *Create + populate* (existing): pick TopN, races, lanes — server seeds heats with current top teams.
   - *Scaffold only* (new): tick "Scaffold only" in the modal. Creates the finals session with empty A/B/C Final heats and races/timing pre-set. Later, an admin clicks **Populate from standings** on the timetable to fill them. Endpoint: `POST /competitions/:id/sessions/:sid/populate-finals`.

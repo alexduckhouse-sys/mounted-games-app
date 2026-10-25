@@ -171,6 +171,12 @@ export interface CompetitionSection {
   /** How many teams go through to the final, set by the organiser; null when not set. */
   finalistCount?: number | null;
   usesRaceFinals?: boolean;
+  /** Standard format only (heat, heat, final ignores these three). The section ends with a finals session; missing means yes. */
+  hasFinal?: boolean;
+  /** A finalist's earlier points add to its final score in the standings; off means the final is scored on its own. Missing means off. */
+  carryPointsIntoFinal?: boolean;
+  /** Final race points count double. Fixed once a final race has been scored. Missing means off. */
+  doublePointsInFinal?: boolean;
   priceMinor?: number;
   /** Cap on active signups (null/undefined = unlimited). */
   maxParticipants?: number | null;
@@ -494,6 +500,10 @@ export interface StandingRow {
   withdrawn?: boolean;
   /** Tack check bonus points, already included in `totalPoints`. */
   bonusPoints?: number;
+  /** Points scored in the team's final; null when it is in no lettered final. */
+  finalPoints?: number | null;
+  /** Points scored before the final; null when it is in no lettered final. When the section doesn't carry points, `totalPoints` is `finalPoints` alone. */
+  earlierPoints?: number | null;
 }
 
 /** Matches `TackCheckMode`: 0 pass or fail only, 1 a separate Tack & Turnout table, 2 bonus points in the standings. */

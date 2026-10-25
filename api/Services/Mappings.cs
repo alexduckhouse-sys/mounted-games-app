@@ -44,7 +44,8 @@ public static class Mappings
     /// <param name="activeSignups">Paid and pending entries: the ones that count towards <c>MaxParticipants</c>.</param>
     public static CompetitionSectionDto ToDto(this CompetitionSection s, int activeSignups = 0) =>
         new(s.Id, s.CompetitionId, s.Format, s.AgeGroup, s.DisplayName,
-            s.RunoffRaceName, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants, s.FinalistCount, activeSignups, s.TieBreakRule);
+            s.RunoffRaceName, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants, s.FinalistCount, activeSignups, s.TieBreakRule,
+            s.HasFinal, s.CarryPointsIntoFinal, s.DoublePointsInFinal);
 
     public static SectionSignupDto ToDto(this SectionSignup s) => new(
         s.Id, s.CompetitionSectionId,

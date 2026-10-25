@@ -45,15 +45,23 @@ public sealed class SeasonPublicationService(AppDbContext db)
             throw new SeasonPublicationException("Every team in every completed race must have a recorded result.", 409);
 
         var tiers = FinalsTiers.From(sessions);
+        // A section that scores its final on its own ranks its finalists on the final alone, as the standings do.
+        var finalRaceIds = sessions.SelectMany(x => x.Heats).Where(SectionScoring.IsFinalHeat)
+            .SelectMany(x => x.Races).Select(x => x.Id).ToHashSet();
         var totals = races.SelectMany(x => x.Results)
             .Where(x => x.Team is { IsHorsConcours: false })
             .GroupBy(x => x.TeamId)
-            .Select(x => new
+            .Select(x =>
             {
-                TeamId = x.Key,
-                Team = x.First().Team!,
-                Points = x.Sum(y => y.Points),
-                Tier = tiers.SortKey(x.Key),
+                var finalPoints = x.Where(y => finalRaceIds.Contains(y.RaceId)).Sum(y => y.Points);
+                return new
+                {
+                    TeamId = x.Key,
+                    Team = x.First().Team!,
+                    Points = SectionScoring.Total(round.CompetitionSection, tiers.TierOf(x.Key) is not null,
+                        x.Sum(y => y.Points) - finalPoints, finalPoints, 0),
+                    Tier = tiers.SortKey(x.Key),
+                };
             })
             .OrderBy(x => x.Tier)
             .ThenByDescending(x => x.Points)

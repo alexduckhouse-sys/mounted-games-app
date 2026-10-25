@@ -1053,6 +1053,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<bool>("CarryPointsIntoFinal")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("CompetitionId")
                         .HasColumnType("integer");
 
@@ -1064,11 +1067,17 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<bool>("DoublePointsInFinal")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("FinalistCount")
                         .HasColumnType("integer");
 
                     b.Property<int>("Format")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("HasFinal")
+                        .HasColumnType("boolean");
 
                     b.Property<int?>("MaxParticipants")
                         .HasColumnType("integer");

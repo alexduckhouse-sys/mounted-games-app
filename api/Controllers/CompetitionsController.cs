@@ -435,6 +435,8 @@ public class CompetitionsController : ControllerBase
         var display = string.IsNullOrWhiteSpace(req.AgeGroup)
             ? (string.IsNullOrWhiteSpace(req.DisplayName) ? SectionNaming.FormatPlural(req.Format) : req.DisplayName!)
             : SectionNaming.DisplayName(req.Format, req.AgeGroup);
+        if (req.UsesRaceFinals && !req.HasFinal || req.UsesRaceFinals && (req.CarryPointsIntoFinal || req.DoublePointsInFinal))
+            return BadRequest(new { message = FinalOptionsRaceFinalsMessage });
         var section = new CompetitionSection
         {
             CompetitionId = id,
@@ -449,6 +451,9 @@ public class CompetitionsController : ControllerBase
                 : null,
             FinalistCount = req.FinalistCount,
             TieBreakRule = req.TieBreakRule,
+            HasFinal = req.HasFinal,
+            CarryPointsIntoFinal = req.CarryPointsIntoFinal,
+            DoublePointsInFinal = req.DoublePointsInFinal,
         };
         _db.CompetitionSections.Add(section);
         await _db.SaveChangesAsync();
@@ -476,11 +481,16 @@ public class CompetitionsController : ControllerBase
     {
         var section = await _db.CompetitionSections.FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == id);
         if (section is null) return NotFound();
+        var finalOptionsError = await FinalOptionsErrorAsync(section, req);
+        if (finalOptionsError is not null) return finalOptionsError;
         section.RunoffRaceName = string.IsNullOrWhiteSpace(req.RunoffRaceName) ? null : req.RunoffRaceName.Trim();
         // Saving brings an older name in line with the naming rule.
         section.DisplayName = SectionNaming.Of(section) is { Length: > 0 } named ? named : section.DisplayName;
         if (req.UsesRaceFinals.HasValue) section.UsesRaceFinals = req.UsesRaceFinals.Value;
         if (req.TieBreakRule.HasValue) section.TieBreakRule = req.TieBreakRule.Value;
+        if (req.HasFinal.HasValue) section.HasFinal = req.HasFinal.Value;
+        if (req.CarryPointsIntoFinal.HasValue) section.CarryPointsIntoFinal = req.CarryPointsIntoFinal.Value;
+        if (req.DoublePointsInFinal.HasValue) section.DoublePointsInFinal = req.DoublePointsInFinal.Value;
         if (req.PriceMinor.HasValue) section.PriceMinor = Math.Max(0, req.PriceMinor.Value);
         if (req.MaxParticipants.HasValue)
             section.MaxParticipants = req.MaxParticipants.Value > 0 ? req.MaxParticipants.Value : null;
@@ -489,6 +499,46 @@ public class CompetitionsController : ControllerBase
         section.FinalistCount = req.FinalistCount;
         await _db.SaveChangesAsync();
         return section.ToDto((await ActiveSignupCountsAsync(id)).GetValueOrDefault(section.Id));
+    }
+
+    private const string FinalOptionsRaceFinalsMessage =
+        "Heat, heat, final has no separate final, so it can't have a final of its own, carry points or double them.";
+
+    /// <summary>
+    /// Why a section's final switches can't change as asked, or null. The switches belong to the standard format. A final
+    /// that exists stays (turning it off would orphan its heats), and the double-points setting is fixed once a final race
+    /// has been scored, because saved points are not recalculated.
+    /// </summary>
+    private async Task<ActionResult?> FinalOptionsErrorAsync(CompetitionSection section, UpdateSectionRequest req)
+    {
+        var raceFinals = req.UsesRaceFinals ?? section.UsesRaceFinals;
+        if (raceFinals && (req.HasFinal == false || req.CarryPointsIntoFinal == true || req.DoublePointsInFinal == true))
+            return BadRequest(new { message = FinalOptionsRaceFinalsMessage });
+        if (raceFinals) return null;
+
+        // Lettered final heats of this section, and which of them have scored races (read the labels with FinalsTiers, so
+        // "A Final Part 1" counts and "Grand Final" doesn't).
+        var heats = (await _db.Heats.AsNoTracking()
+                .Where(h => h.Session!.CompetitionSectionId == section.Id && h.RaceRoundStage == RaceRoundStage.None
+                    && h.Label != null && h.Label.Contains(" Final"))
+                .Select(h => new { h.Label, Scored = h.Races.Any(r => r.Results.Any()) })
+                .ToListAsync())
+            .Where(h => FinalsTiers.ParseLabel(h.Label) is not null).ToList();
+        if (req.HasFinal == false && section.HasFinal && heats.Count > 0)
+            return Conflict(new { message = "This age group already has a final. Remove its finals session before turning the final off." });
+        if (req.DoublePointsInFinal.HasValue && req.DoublePointsInFinal != section.DoublePointsInFinal && heats.Any(h => h.Scored))
+            return Conflict(new { message = "Final races have already been scored, so double points can't be changed. Points are not recalculated." });
+        return null;
+    }
+
+    /// <summary>409 when finals are requested for an age group set up with no final.</summary>
+    private async Task<ActionResult?> NoFinalErrorAsync(int competitionId, int? sectionId)
+    {
+        if (sectionId is not { } sid) return null;
+        var section = await _db.CompetitionSections.AsNoTracking().FirstOrDefaultAsync(s => s.Id == sid && s.CompetitionId == competitionId);
+        return section is not null && !SectionScoring.AllowsFinal(section)
+            ? Conflict(new { message = $"{section.DisplayName} is set up with no final." })
+            : null;
     }
 
     [HttpDelete("{id:int}/sections/{sectionId:int}")]
@@ -622,18 +672,19 @@ public class CompetitionsController : ControllerBase
     [HttpPut("{id:int}/finals/tie-order")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]
-    public async Task<IActionResult> SetTieOrder(int id, SetTieOrderRequest req)
+    public async Task<IActionResult> SetTieOrder(int id, SetTieOrderRequest req, [FromServices] StandingsService standings)
     {
         var teamIds = req.TeamIds ?? [];
         if (teamIds.Count < 2 || teamIds.Distinct().Count() != teamIds.Count)
             return BadRequest(new { message = "List at least two different teams, best first." });
-        // Totals as the standings count them, tack check bonus included.
-        var bonus = await Services.TackCheck.TackCheckBonus.ForCompetitionAsync(_db, id, HttpContext.RequestAborted);
+        // Totals as the standings count them: tack check bonus included, and a finalist whose section scores its final
+        // on its own is level on its final's points.
+        var rows = (await standings.RowsAsync(id, ct: HttpContext.RequestAborted)).ToDictionary(r => r.TeamId);
         var teams = (await _db.Teams.AsNoTracking()
             .Where(t => t.CompetitionId == id && teamIds.Contains(t.Id))
-            .Select(t => new { t.Id, t.CompetitionSectionId, t.IsHorsConcours, t.EntryStatus, Points = t.Results.Sum(r => r.Points) })
+            .Select(t => new { t.Id, t.CompetitionSectionId, t.IsHorsConcours, t.EntryStatus })
             .ToListAsync())
-            .Select(t => new { t.Id, t.CompetitionSectionId, t.IsHorsConcours, t.EntryStatus, Total = t.Points + bonus.GetValueOrDefault(t.Id) })
+            .Select(t => new { t.Id, t.CompetitionSectionId, t.IsHorsConcours, t.EntryStatus, Total = rows.TryGetValue(t.Id, out var row) ? row.TotalPoints : 0 })
             .ToList();
         if (teams.Count != teamIds.Count) return BadRequest(new { message = "Every team must be in this competition." });
         if (teams.Any(t => t.IsHorsConcours || t.EntryStatus != TeamEntryStatus.Active))
@@ -648,10 +699,9 @@ public class CompetitionsController : ControllerBase
         var levelIds = (await _db.Teams.AsNoTracking()
             .Where(t => t.CompetitionId == id && t.CompetitionSectionId == sectionId
                 && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active)
-            .Select(t => new { t.Id, Points = t.Results.Sum(r => r.Points) })
-            .ToListAsync())
-            .Where(t => t.Points + bonus.GetValueOrDefault(t.Id) == total)
             .Select(t => t.Id)
+            .ToListAsync())
+            .Where(teamId => rows.TryGetValue(teamId, out var row) && row.TotalPoints == total)
             .ToList();
         if (!levelIds.ToHashSet().SetEquals(teamIds))
             return Conflict(new { message = $"Order every team on {PointValues.Format(total)} points in this age group together.", teamIds = levelIds });
@@ -687,6 +737,7 @@ public class CompetitionsController : ControllerBase
         if (req.TopN < 1) return BadRequest("topN must be >= 1.");
         if (req.CompetitionSectionId.HasValue && !await SectionInCompetitionAsync(id, req.CompetitionSectionId.Value))
             return BadRequest("Section not found in this competition.");
+        if (await NoFinalErrorAsync(id, req.CompetitionSectionId) is { } noFinal) return noFinal;
 
         var (_, ranked, _) = await RankForFinalsAsync(id, req.CompetitionSectionId);
         var top = ranked.Take(req.TopN).Select(x => x.TeamId).ToList();
@@ -825,6 +876,7 @@ public class CompetitionsController : ControllerBase
         if (req.LanesPerHeat < 1) return BadRequest(new { message = "lanesPerHeat must be >= 1." });
         if (req.CompetitionSectionId.HasValue && !await SectionInCompetitionAsync(id, req.CompetitionSectionId.Value))
             return BadRequest(new { message = "Section not found in this competition." });
+        if (await NoFinalErrorAsync(id, req.CompetitionSectionId) is { } noFinal) return noFinal;
 
         var maxOrder = await _db.Sessions.Where(s => s.CompetitionId == id).Select(s => (int?)s.OrderIndex).MaxAsync() ?? 0;
         var sectionLabel = req.CompetitionSectionId.HasValue
@@ -889,6 +941,7 @@ public class CompetitionsController : ControllerBase
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.CompetitionId == id);
         if (session is null) return NotFound();
+        if (await NoFinalErrorAsync(id, session.CompetitionSectionId) is { } noFinal) return noFinal;
         var heats = session.Heats
             .OrderBy(h => FinalsTiers.ParseLabel(h.Label) ?? int.MaxValue)
             .ThenBy(h => h.OrderIndex)
