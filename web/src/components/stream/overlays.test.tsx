@@ -145,6 +145,8 @@ describe('score card on the video', () => {
     const shown = screen.getByRole('region', { name: 'Results: Seniors Session 1 · Heat 2' });
     expect(shown).toHaveTextContent('after Bottle Race (race 3 of 5)');
     expect(shown).toHaveClass('mg-ov-card-right');
+    expect(shown).toHaveClass('mg-ov-card-center');
+    expect(screen.queryByLabelText('Now racing')).toBeNull();
     const rows = within(shown).getAllByRole('listitem');
     expect(rows.map((row) => row.textContent)).toEqual(['1Pony Club Seniors A+615', '2England SeniorsE14', '3Wales Seniors+49']);
     expect(within(rows[0]).getByLabelText('moved up')).toBeInTheDocument();
@@ -152,6 +154,7 @@ describe('score card on the video', () => {
 
     tick(10_000);
     expect(screen.queryByRole('region')).toBeNull();
+    expect(screen.getByLabelText('Now racing')).toBeInTheDocument();
   });
 
   it('shows the newest card for this arena, or a card with no arena anywhere', () => {

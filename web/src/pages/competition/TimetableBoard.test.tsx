@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { api } from '../../api';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { FAVOURITES_KEY } from '../../lib/favourites';
 import { competition, heat, race, session } from '../../test/factories';
@@ -432,4 +433,115 @@ it('links heat rows directly to the heat without a lanes dropdown and shows a si
   const [, day2Btn] = within(screen.getByRole('group', { name: 'Choose day' })).getAllByRole('button');
   fireEvent.click(day2Btn);
   expect(screen.getByRole('combobox', { name: 'Arena' })).toBeInTheDocument();
+});
+
+it('formats delays of an hour or more as hours and minutes, and lets organisers pause, resume, apply custom delays, and see pace', async () => {
+  const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
+  auth.organise = true;
+  const completedRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true }));
+  setCompetition({
+    sessions: [
+      session(1, {
+        status: 2,
+        orderIndex: 1,
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T09:00:00`,
+        startedAt: `${day}T09:00:00`,
+        heats: [
+          heat(11, {
+            sessionId: 1,
+            orderIndex: 0,
+            label: 'Finished Heat 1',
+            durationMinutes: 30,
+            startedAt: `${day}T09:00:00`,
+            finishedAt: `${day}T09:20:00`,
+            races: completedRaces,
+          }),
+        ],
+      }),
+      session(2, {
+        status: 0,
+        orderIndex: 2,
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T11:34:00`,
+        notes: '[shift:+94]',
+        heats: [
+          heat(21, {
+            sessionId: 2,
+            orderIndex: 0,
+            label: 'Very Late Heat',
+          }),
+        ],
+      }),
+    ],
+  });
+
+  const { unmount } = renderBoard();
+  const lateRow = screen.getByRole('link', { name: /Very Late Heat/ });
+  expect(lateRow.querySelector('.tt-planned')).toHaveTextContent('+1h 34m · 10:00');
+  expect(lateRow).toHaveTextContent('+1h 34m');
+  expect(screen.getByText('Main Arena · 1h 34m late')).toBeInTheDocument();
+  expect(screen.getByText('Pace: ~4.0m/race')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/pause', { arenaName: undefined }));
+
+  const input = screen.getByRole('spinbutton', { name: 'Custom delay minutes' });
+  fireEvent.change(input, { target: { value: '95' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: 95, arenaName: undefined }));
+  unmount();
+
+  // When a session has a [paused:...] tag, the button switches to Continue and posts to /resume.
+  setCompetition({
+    sessions: [
+      session(2, {
+        status: 0,
+        orderIndex: 2,
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T10:00:00`,
+        notes: '[paused:1700000000000]',
+        heats: [heat(21, { sessionId: 2, orderIndex: 0, label: 'Paused Heat' })],
+      }),
+    ],
+  });
+  renderBoard();
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/resume', { arenaName: undefined }));
+  postSpy.mockRestore();
+});
+
+
+it('updates the paused timetable as time passes without requiring a competition reload', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(`${day}T09:00:00`));
+  setCompetition({ sessions: [session(1, {
+    scheduledStart: `${day}T10:00:00`, notes: `[paused:${Date.now()}]`,
+    heats: [heat(11, { label: 'Paused heat' })],
+  })] });
+  const view = renderBoard();
+  expect(screen.getByRole('link', { name: /Paused heat/ })).toHaveTextContent('10:00');
+  act(() => vi.advanceTimersByTime(6 * 60_000));
+  expect(screen.getByRole('link', { name: /Paused heat/ })).toHaveTextContent('10:06');
+  expect(reload).not.toHaveBeenCalled();
+  view.unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it('reports pause and shift failures and keeps the entered custom delay for retry', async () => {
+  auth.organise = true;
+  const post = vi.spyOn(api, 'post').mockRejectedValue(new Error('offline'));
+  renderBoard();
+  fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('could not be paused');
+  const input = screen.getByRole('spinbutton', { name: 'Custom delay minutes' });
+  fireEvent.change(input, { target: { value: '12' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('could not be shifted'));
+  expect(input).toHaveValue(12);
+  fireEvent.change(input, { target: { value: '1.5' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  expect(screen.getByRole('alert')).toHaveTextContent('whole number');
+  expect(post).toHaveBeenCalledTimes(2);
+  post.mockRestore();
 });

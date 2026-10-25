@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { connectionReason, liteStatusText, readSetting, resolveLite, writeSetting, type ConnectionLike } from './liteMode';
+import { connectionReason, isLiteModeActive, isNetworkSaveData, liteStatusText, readSetting, resolveLite, writeSetting, type ConnectionLike } from './liteMode';
 import { installConnection, removeConnection } from '../test/lite';
 
-afterEach(removeConnection);
+afterEach(() => {
+  removeConnection();
+  delete document.documentElement.dataset.lite;
+});
 
 const reading = (init: Partial<ConnectionLike>) => Object.assign(new EventTarget(), init) as ConnectionLike;
 
@@ -31,9 +34,37 @@ describe('connectionReason', () => {
     expect(connectionReason(reading({ effectiveType: '3g' }))).toBeNull();
   });
 
-  it('leaves 4g and empty readings alone', () => {
+  it('leaves 4g and empty readings alone unless throughput is under 0.5 Mbps or RTT exceeds 1200 ms', () => {
     expect(connectionReason(reading({ effectiveType: '4g', rtt: 900, saveData: false }))).toBeNull();
+    expect(connectionReason(reading({ effectiveType: '4g', downlink: 0.35 }))).toBe('slow-connection');
+    expect(connectionReason(reading({ effectiveType: '4g', downlink: 0 }))).toBeNull();
+    expect(connectionReason(reading({ effectiveType: '4g', rtt: 1300 }))).toBe('slow-connection');
     expect(connectionReason(reading({}))).toBeNull();
+  });
+});
+
+describe('isNetworkSaveData and isLiteModeActive', () => {
+  it('detects when the browser requested Data Saver', () => {
+    removeConnection();
+    expect(isNetworkSaveData()).toBe(false);
+    installConnection({ saveData: true });
+    expect(isNetworkSaveData()).toBe(true);
+    expect(isNetworkSaveData(reading({ saveData: false }))).toBe(false);
+  });
+
+  it('checks the DOM dataset attribute as well as the saved setting and connection', () => {
+    removeConnection();
+    expect(isLiteModeActive()).toBe(false);
+    document.documentElement.dataset.lite = 'true';
+    expect(isLiteModeActive()).toBe(true);
+    delete document.documentElement.dataset.lite;
+    writeSetting('on');
+    expect(isLiteModeActive()).toBe(true);
+    writeSetting('off');
+    installConnection({ effectiveType: '2g' });
+    expect(isLiteModeActive()).toBe(false);
+    writeSetting('auto');
+    expect(isLiteModeActive()).toBe(true);
   });
 });
 

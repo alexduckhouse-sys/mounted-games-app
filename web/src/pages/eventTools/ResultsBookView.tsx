@@ -31,9 +31,9 @@ export function ResultsBookView({ data }: { data: ResultsBook }) {
       {section.finals.map((final) => <div key={`${final.sessionName}:${final.label}`} className="event-print-block">
         <h3>{final.label} <span>{final.sessionName}</span></h3>
         <div className="event-print-table-wrap"><table>
-          <thead><tr><th>Pos.</th><th>Team</th><th>Club</th>{final.raceNames.map((name, index) => <th key={index} className="event-print-cell">{name}</th>)}<th className="event-print-cell">Points</th></tr></thead>
+          <thead><tr><th>Pos.</th><th>Team</th>{final.raceNames.map((name, index) => <th key={index} className="event-print-cell">{name}</th>)}<th className="event-print-cell">Points</th></tr></thead>
           <tbody>{final.rows.map((row) => <tr key={row.teamId}>
-            <td>{row.rank}</td><td>{row.teamName}</td><td>{row.clubName}</td>
+            <td>{row.rank}</td><td>{row.teamName}</td>
             {row.raceCells.map((cell, index) => <td key={index}>{cell}</td>)}<td><strong>{formatPoints(row.points)}</strong></td>
           </tr>)}</tbody>
         </table></div>
@@ -57,11 +57,11 @@ export function ResultsBookView({ data }: { data: ResultsBook }) {
 function StandingsTable({ standings }: { standings: ResultsBook['sections'][number]['standings'] }) {
   const hasBonus = standings.some((row) => row.bonusPoints > 0);
   return <div className="event-print-table-wrap"><table>
-    <thead><tr><th>Pos.</th><th>Team</th><th>Club</th><th>Final</th><th>Points</th>{hasBonus && <th>Bonus</th>}<th>Races</th><th>Wins</th><th>Elim.</th></tr></thead>
+    <thead><tr><th>Pos.</th><th>Team</th><th>Final</th><th>Points</th>{hasBonus && <th>Bonus</th>}<th>Races</th><th>Wins</th><th>Elim.</th></tr></thead>
     <tbody>{standings.map((row) => <tr key={row.teamId}>
       <td>{row.rank}</td>
       <td>{row.teamName}{row.withdrawn ? <span className="event-print-note"> (withdrawn)</span> : null}</td>
-      <td>{row.clubName}</td><td>{row.finalLabel ?? ''}</td><td><strong>{formatPoints(row.totalPoints)}</strong></td>
+      <td>{row.finalLabel ?? ''}</td><td><strong>{formatPoints(row.totalPoints)}</strong></td>
       {hasBonus && <td>{row.bonusPoints}</td>}<td>{row.racesRun}</td><td>{row.wins}</td><td>{row.eliminations}</td>
     </tr>)}</tbody>
   </table></div>;
@@ -73,7 +73,7 @@ export function EntriesView({ data }: { data: PrintableEntries }) {
   return <>{data.sections.map((section) => <section key={section.sectionId} className="event-print-section">
     <h2>{section.sectionName}</h2>
     {section.teams.length === 0 ? <p className="event-print-empty">No teams entered yet.</p> : section.teams.map((team) => <div key={team.teamId} className="event-print-block">
-      <h3>{team.teamName} <span>{[team.clubName, team.bib].filter(Boolean).join(' · ')}{team.isHorsConcours ? ' · HC' : ''}{team.withdrawn ? ' · withdrawn' : ''}</span></h3>
+      <h3>{team.teamName} <span>{[team.bib, team.isHorsConcours ? 'HC' : null, team.withdrawn ? 'withdrawn' : null].filter(Boolean).join(' · ')}</span></h3>
       {team.riders.length === 0 ? <p className="event-print-note">No riders declared yet.</p> : <div className="event-print-table-wrap"><table>
         <thead><tr><th>Rider</th><th>Pony</th><th>Role</th></tr></thead>
         <tbody>{team.riders.map((rider, index) => <tr key={index}>

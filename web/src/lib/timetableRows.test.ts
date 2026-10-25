@@ -41,6 +41,8 @@ describe('statusLabel', () => {
   it.each<[TimetableStatus, number, string]>([
     ['live', 0, 'On now'],
     ['late', 8, '+8 min'],
+    ['late', 60, '+1h'],
+    ['late', 94, '+1h 34m'],
     ['on-time', 0, 'On time'],
     ['finished', 12, 'Finished'],
   ])('says %s (%i) as %j', (status, delay, label) => {

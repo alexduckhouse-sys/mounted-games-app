@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Maximize, PictureInPicture2, Play, RotateCcw, VolumeX, X } from 'lucide-react';
+import { Headphones, Maximize, PictureInPicture2, Play, Radio, RotateCcw, VolumeX, X } from 'lucide-react';
 import type { ChatMessage, LiveStream, StreamQualityRid } from '../../types';
 import { useReplayPreparation } from '../../live/useReplayPreparation';
 import { ReplayPreparation } from './ReplayPreparation';
 import { createReplayBuffer, getSavedReplays, removeSavedReplay, type SavedReplayClip } from '../../live/replayBuffer';
+import { syncVideoLiveEdge } from '../../live/streamViewer';
 import { ReplayInspector, SavedReplaysButton } from './ReplayInspector';
 import { StreamOverlays } from './StreamOverlays';
 
@@ -14,10 +15,11 @@ const QUALITY_TIERS: { rid: StreamQualityRid; label: string; title: string }[] =
   { rid: 'q', label: '360p', title: 'Low signal saver (360p)' },
 ];
 
-export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement, captionBar = false, quality = 'f', onQuality }: {
+export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement, captionBar = false, quality = 'f', onQuality, audioOnly, onAudioOnly, onSyncLive }: {
   media: MediaStream | null; stream: LiveStream; label: string | null; reconnecting?: boolean; message?: string | null;
   announcement?: { message: ChatMessage; receivedAt: number }; captionBar?: boolean;
   quality?: StreamQualityRid; onQuality?: (rid: StreamQualityRid) => void;
+  audioOnly?: boolean; onAudioOnly?: (audioOnly: boolean) => void; onSyncLive?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -28,8 +30,29 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
   const [muted, setMuted] = useState(true);
   const [needsPlay, setNeedsPlay] = useState(false);
   const replayPreparation = useReplayPreparation();
+  const [localAudioOnly, setLocalAudioOnly] = useState(false);
   const [activeReplay, setActiveReplay] = useState<SavedReplayClip | null>(null);
+  const isAudioOnly = audioOnly ?? localAudioOnly;
   const soundOff = muted || stream.status === 1 || stream.audioMuted;
+  useEffect(() => {
+    if (!media) return;
+    const timer = setInterval(() => {
+      syncVideoLiveEdge(videoRef.current);
+    }, 2000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [media]);
+  function toggleAudioOnly() {
+    const next = !isAudioOnly;
+    setLocalAudioOnly(next);
+    media?.getVideoTracks().forEach((track) => { track.enabled = !next; });
+    onAudioOnly?.(next);
+  }
+  function handleSyncLive() {
+    syncVideoLiveEdge(videoRef.current, true);
+    onSyncLive?.();
+  }
   useEffect(() => {
     if (!media) {
       replayBufferRef.current?.dispose();
@@ -124,7 +147,14 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     openRef.current = true; setFull(true);
   }
   const player = <div ref={containerRef} className={`mg-font overflow-hidden bg-[rgb(var(--mg-header-deep))] text-white ${full ? 'fixed inset-0 z-[100]' : `relative aspect-video ${captionBar ? '' : 'rounded-xl'}`}`} role={full ? 'dialog' : undefined} aria-modal={full || undefined} aria-label={full ? 'Live video' : undefined}>
-    <video ref={videoRef} muted={soundOff} playsInline autoPlay className="h-full w-full object-contain" onClick={open} aria-label={`${stream.arenaName}, ${stream.angleName}`} />
+    <video ref={videoRef} muted={soundOff} playsInline autoPlay className={`h-full w-full object-contain ${isAudioOnly ? 'opacity-0' : ''}`} onClick={open} aria-label={`${stream.arenaName}, ${stream.angleName}`} />
+    {isAudioOnly && (
+      <div role="status" className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-[rgb(var(--mg-header-deep)/0.92)] text-center">
+        <Headphones className="h-7 w-7 text-amber-300" aria-hidden="true" />
+        <p className="text-sm font-bold">Audio only</p>
+        <p className="text-xs text-white/75">Video hidden. Audio continues.</p>
+      </div>
+    )}
     <StreamOverlays stream={stream} label={label} reconnecting={reconnecting} muted={muted} onSound={unmute} announcement={announcement} hideCaption={captionBar && !full}>
       <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5">
         {onQuality && (
@@ -143,6 +173,29 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
               </button>
             ))}
           </div>
+        )}
+        {media && (
+          <button
+            type="button"
+            aria-label="Audio only"
+            aria-pressed={isAudioOnly}
+            className={`mg-stream-control !min-h-8 !rounded-full px-2.5 text-xs font-bold ${isAudioOnly ? '!bg-amber-400 !text-black' : ''}`}
+            onClick={toggleAudioOnly}
+          >
+            <Headphones className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Audio only</span>
+          </button>
+        )}
+        {media && (
+          <button
+            type="button"
+            aria-label="Sync live"
+            className="mg-stream-control !min-h-8 !rounded-full px-2.5 text-xs font-bold"
+            onClick={handleSyncLive}
+          >
+            <Radio className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Sync live</span>
+          </button>
         )}
         {media && (
           <button

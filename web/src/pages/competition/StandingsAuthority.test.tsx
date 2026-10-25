@@ -9,6 +9,9 @@ import { CommentaryDeskPage } from './CommentaryDeskPage';
 const state = vi.hoisted(() => ({ value: null as unknown, get: vi.fn() }));
 vi.mock('./context', () => ({ useCompetition: () => state.value }));
 vi.mock('../../api', () => ({ api: { get: state.get } }));
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => false }) }));
+vi.mock('../../components/stream/StreamControlStrip', () => ({ StreamControlStrip: () => <div>Staff stream controls</div> }));
+vi.mock('../../components/QrAccessModal', () => ({ QrAccessModal: () => null }));
 vi.mock('../../live/useLiveHub', () => ({ useLiveHub: () => ({ connected: true }) }));
 vi.mock('../../components/CompactPageBarContext', () => ({ usePageHeader: () => {} }));
 vi.mock('../../components/pageWidthState', () => ({ usePageWidth: () => {} }));
@@ -31,6 +34,8 @@ describe.each([
 ] as const)('%s official standings', (label, Page, region) => {
   it('keeps official totals and labels them as saved when a live refresh fails', async () => {
     const view = render(<MemoryRouter><Page /></MemoryRouter>);
+    expect(screen.queryByText('Staff stream controls')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Stream Controls' })).toBeNull();
     if (label === 'TV') await userEvent.click(screen.getByRole('button', { name: 'Live Section Standings' }));
     const rows = await screen.findByRole('region', { name: region });
     await waitFor(() => expect(rows).toHaveTextContent('8.5'));

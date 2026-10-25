@@ -43,6 +43,8 @@ export interface SavedReplaysDrawerProps {
   onClose: () => void;
   onSelectClip: (clip: SavedReplayClip) => void;
   onDeleteClip?: (clipId: string) => void;
+  onCaptureBufferClip?: (durationSeconds: number) => void;
+  bufferedSeconds?: number;
 }
 
 export interface SavedReplaysButtonProps {
@@ -1074,6 +1076,8 @@ export function SavedReplaysDrawer({
   onClose,
   onSelectClip,
   onDeleteClip,
+  onCaptureBufferClip,
+  bufferedSeconds,
 }: SavedReplaysDrawerProps) {
   const [clips, setClips] = useState<SavedReplayClip[]>(() => getSavedReplays(competitionId));
 
@@ -1091,11 +1095,11 @@ export function SavedReplaysDrawer({
       role="dialog"
       aria-modal="true"
       aria-label="Saved replays"
-      className="fixed inset-0 z-[110] flex justify-end bg-black/60 backdrop-blur-sm mg-font"
+      className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm mg-font"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-[rgb(var(--mg-header-deep))] text-white p-4 flex flex-col gap-4 overflow-y-auto"
+        className="w-[min(94vw,42rem)] max-h-[86vh] rounded-2xl border border-[rgb(var(--mg-header-line))] bg-[rgb(var(--mg-header-deep)/0.96)] text-white p-5 shadow-2xl flex flex-col gap-4 overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[rgb(var(--mg-header-line))] pb-3">
@@ -1112,6 +1116,33 @@ export function SavedReplaysDrawer({
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
+
+        {onCaptureBufferClip && (
+          <div className="rounded-xl border border-white/15 bg-black/40 p-3 flex flex-col gap-2">
+            <div className="flex items-center justify-between text-xs text-[rgb(var(--mg-header-sub))]">
+              <span className="font-semibold text-white">30-minute rolling buffer</span>
+              <span>{bufferedSeconds !== undefined ? `${bufferedSeconds}s buffered` : 'Ready'}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { secs: 15, label: 'Save last 15s' },
+                { secs: 30, label: 'Save last 30s' },
+                { secs: 60, label: 'Save last 1m' },
+                { secs: 300, label: 'Save last 5m' },
+                { secs: 1800, label: 'Save full buffer (30m)' },
+              ].map(({ secs, label }) => (
+                <button
+                  key={secs}
+                  type="button"
+                  className="mg-stream-control !min-h-9 px-3 text-xs font-semibold"
+                  onClick={() => onCaptureBufferClip(secs)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {clips.length === 0 ? (
           <p className="text-sm text-[rgb(var(--mg-header-sub))] py-8 text-center">

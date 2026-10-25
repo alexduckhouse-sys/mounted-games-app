@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { PasswordChecklist } from '../components/PasswordChecklist';
+import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import { AuthFrame } from './auth/AuthFrame';
 import { Field } from './auth/Field';
 
@@ -12,18 +14,21 @@ export function LoginPage() {
   const { login, loginWithAdminKey, loading } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
+  const rulesId = useId();
   const [useKey, setUseKey] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [organiserTitle, setOrganiserTitle] = useState('');
   const [organiserEmail, setOrganiserEmail] = useState('');
+  const [organiserPassword, setOrganiserPassword] = useState('');
+  const [showOrganiserPassword, setShowOrganiserPassword] = useState(false);
   const [organiserKey, setOrganiserKey] = useState('');
   const [showOrganiserKey, setShowOrganiserKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const ready = useKey
-    ? organiserTitle.trim().length > 0 && organiserEmail.trim().includes('@') && organiserKey.trim().length > 0
+    ? organiserTitle.trim().length > 0 && organiserEmail.trim().includes('@') && passwordMeetsRules(organiserPassword) && organiserKey.trim().length > 0
     : email.trim().length > 0 && password.length > 0;
 
   async function submit(e: FormEvent) {
@@ -31,20 +36,29 @@ export function LoginPage() {
     if (!ready || loading) return;
     setError(null);
     try {
-      if (useKey) await loginWithAdminKey(organiserKey.trim(), organiserTitle.trim(), organiserEmail.trim());
+      if (useKey) await loginWithAdminKey(organiserKey.trim(), organiserTitle.trim(), organiserEmail.trim(), organiserPassword);
       else await login(email.trim(), password);
       nav((loc.state as NavState | null)?.from ?? '/', { replace: true });
     } catch (err: unknown) {
-      const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
+      const res = (err as { response?: { status?: number; data?: { message?: string; errors?: unknown; errorCodes?: unknown } } })?.response;
       const status = res?.status;
-      if (useKey) setError(status === 400 ? (res?.data?.message || 'Check your email address and key.') : 'That key did not work.');
-      else setError(status === 401 || status === 400 ? 'Email or password is wrong.' : 'Could not sign in. Try again.');
+      if (status === 429) {
+        setError(res?.data?.message || 'Too many attempts. Wait a minute and try again.');
+      } else if (useKey) {
+        const pwErrors = friendlyPasswordErrors(res?.data);
+        if (status === 400) setError(pwErrors[0] || res?.data?.message || 'Check your details and key.');
+        else if (status === 401) setError(res?.data?.message && res.data.message !== 'Invalid admin key.' ? res.data.message : 'That key or password did not work.');
+        else setError('That key or password did not work.');
+      } else {
+        setError(status === 401 || status === 400 ? 'Email or password is wrong.' : 'Could not sign in. Try again.');
+      }
     }
   }
 
   function swap() {
     setUseKey((v) => !v);
     setShowOrganiserKey(false);
+    setShowOrganiserPassword(false);
     setError(null);
   }
 
@@ -71,6 +85,30 @@ export function LoginPage() {
                 </div>
               )}
             </Field>
+            <div className="flex flex-col gap-1.5">
+              <Field label="Password">
+                {({ id }) => (
+                  <div className="mg-field">
+                    <input id={id} type={showOrganiserPassword ? 'text' : 'password'} value={organiserPassword}
+                      autoComplete="new-password" aria-describedby={rulesId}
+                      onChange={(e) => { setOrganiserPassword(e.target.value); setError(null); }} />
+                    <button
+                      type="button"
+                      onClick={() => setShowOrganiserPassword((v) => !v)}
+                      aria-label={showOrganiserPassword ? 'Hide password' : 'Show password'}
+                      aria-pressed={showOrganiserPassword}
+                      className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]"
+                    >
+                      {showOrganiserPassword ? <EyeOff aria-hidden="true" className="h-[18px] w-[18px]" /> : <Eye aria-hidden="true" className="h-[18px] w-[18px]" />}
+                    </button>
+                  </div>
+                )}
+              </Field>
+              <PasswordChecklist password={organiserPassword} id={rulesId} />
+              <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">
+                Sets your account password the first time so you can sign in normally next time.
+              </p>
+            </div>
             <Field label="Organiser key" error={error}>
               {({ id, invalid, describedBy }) => (
                 <div className="mg-field" data-invalid={invalid}>

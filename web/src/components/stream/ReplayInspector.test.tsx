@@ -416,6 +416,37 @@ describe('ReplayInspector component', () => {
     fireEvent.click(drawerDownloadLink);
     // Should NOT have called onSelectClip or onClose again
     expect(onSelectClip).toHaveBeenCalledTimes(1);
+
+    // Quick-capture 30m rolling buffer buttons inside centred SavedReplaysDrawer
+    const onCaptureBufferClip = vi.fn();
+    rerender(
+      <SavedReplaysDrawer
+        open={true}
+        competitionId={42}
+        onClose={onClose}
+        onSelectClip={onSelectClip}
+        onDeleteClip={onDeleteClip}
+        onCaptureBufferClip={onCaptureBufferClip}
+        bufferedSeconds={120}
+      />
+    );
+    expect(screen.getByText('120s buffered')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save last 15s' }));
+    expect(onCaptureBufferClip).toHaveBeenCalledWith(15);
+    fireEvent.click(screen.getByRole('button', { name: 'Save full buffer (30m)' }));
+    expect(onCaptureBufferClip).toHaveBeenCalledWith(1800);
+
+    // Without bufferedSeconds prop, shows 'Ready'
+    rerender(
+      <SavedReplaysDrawer
+        open={true}
+        competitionId={42}
+        onClose={onClose}
+        onSelectClip={onSelectClip}
+        onCaptureBufferClip={onCaptureBufferClip}
+      />
+    );
+    expect(screen.getByText('Ready')).toBeInTheDocument();
   });
 
   it('renders SavedReplaysButton filtered by arenaName and triggers onSelectClip', () => {

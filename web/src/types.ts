@@ -885,7 +885,7 @@ export interface ScorerSession {
 }
 
 export type StreamQualityRid = 'f' | 'h' | 'q';
-export type StreamQualityPreset = '360p' | '720p' | '1080p';
+export type StreamQualityPreset = 'auto' | '360p' | '480p' | '720p' | '1080p';
 
 export interface StreamTelemetry {
   streamId: number;

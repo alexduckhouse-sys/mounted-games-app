@@ -451,15 +451,22 @@ describe('publisher camera switching and early controls', () => {
     p.setWindFilter(true);
     expect(p.getSnapshot().windFilter).toBe(true);
     const sender = FakePeer.instances[0].transceivers[0].sender as unknown as {
-      getParameters: () => { encodings: Array<{ rid: string; maxBitrate?: number; scaleResolutionDownBy?: number; maxFramerate?: number }> };
+      getParameters: () => { degradationPreference?: string; encodings: Array<{ rid?: string; maxBitrate?: number; scaleResolutionDownBy?: number; maxFramerate?: number }> };
       setParameters: ReturnType<typeof vi.fn>;
     };
-    const encodingsState = [{ rid: 'f' }, { rid: 'h' }, { rid: 'q' }];
-    sender.getParameters = () => ({ encodings: encodingsState });
+    const encodingsState: Array<{ rid?: string; maxBitrate?: number; scaleResolutionDownBy?: number; maxFramerate?: number }> = [{ rid: 'f' }, { rid: 'h' }, { rid: 'q' }, {}];
+    const paramsObj = { encodings: encodingsState, degradationPreference: undefined as string | undefined };
+    sender.getParameters = () => paramsObj;
     sender.setParameters = vi.fn(async () => {});
+    expect((p.getSnapshot().media!.getVideoTracks()[0] as unknown as { contentHint?: string }).contentHint).toBe('motion');
     await p.setQualityPreset('360p');
     expect(p.getSnapshot().qualityPreset).toBe('360p');
+    expect(paramsObj.degradationPreference).toBe('maintain-framerate');
     expect(sender.setParameters).toHaveBeenCalled();
+    await p.setQualityPreset('480p');
+    expect(p.getSnapshot().qualityPreset).toBe('480p');
+    await p.setQualityPreset('auto');
+    expect(p.getSnapshot().qualityPreset).toBe('auto');
     await p.setQualityPreset('1080p');
     expect(p.getSnapshot().qualityPreset).toBe('1080p');
     await p.setQualityPreset('720p');
@@ -487,6 +494,22 @@ describe('publisher camera switching and early controls', () => {
     // Audio replaceTrack failure releases track
     FakePeer.instances[0].transceivers[1].sender.replaceTrack.mockRejectedValueOnce(new Error('mic error'));
     await expect(p.switchAudio('bad-mic')).rejects.toThrow('mic error');
+
+    // Candidate-pair RTT monitoring, ICE failed recovery, and manual reconnect()
+    FakePeer.instances[0].getStats.mockResolvedValueOnce(new Map<string, { type: string; [key: string]: unknown }>([
+      ['video', { type: 'outbound-rtp', kind: 'video', packetsSent: 500, bytesSent: 2_000_000, framesPerSecond: 29.8, qualityLimitationReason: 'none' }],
+      ['pair', { type: 'candidate-pair', state: 'succeeded', currentRoundTripTime: 0.45 }],
+    ]));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(p.getSnapshot().rttMs).toBe(450);
+    expect(p.getSnapshot().signal).toBe('fair');
+
+    FakePeer.instances[0].ice('failed');
+    await flush();
+    expect(FakePeer.instances).toHaveLength(2);
+    p.reconnect();
+    await flush();
+    expect(FakePeer.instances).toHaveLength(3);
     p.dispose();
   });
 });

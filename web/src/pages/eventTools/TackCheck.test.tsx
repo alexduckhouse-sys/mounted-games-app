@@ -226,7 +226,7 @@ describe('tack check print view', () => {
 
     expect(await screen.findByRole('heading', { name: 'Under 12' })).toBeInTheDocument();
     expect(screen.getAllByRole('columnheader', { name: 'Tack bonus' })).toHaveLength(1);
-    expect(screen.getByRole('row', { name: /Team 1/ })).toHaveTextContent('Team 1Oak94');
+    expect(screen.getByRole('row', { name: /Team 1/ })).toHaveTextContent('Team 194');
   });
 
   it('says so when there are no age groups', async () => {

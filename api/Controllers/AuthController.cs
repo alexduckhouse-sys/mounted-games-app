@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
@@ -20,6 +21,8 @@ namespace MountedGames.Api.Controllers;
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
+    public const string CreatedIpClaimType = "created_ip";
+
     private readonly UserManager<AppUser> _users;
     private readonly SignInManager<AppUser> _signIn;
     private readonly TokenService _tokens;
@@ -62,7 +65,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     [HttpPost("admin-key")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> AdminKey([FromServices] IConfiguration config, AdminKeyRequest req)
+    public async Task<ActionResult<AuthResponse>> AdminKey([FromServices] IConfiguration config, AdminKeyRequest req, [FromServices] AccountEmailService accountEmail)
     {
         var expected = config["Admin:Key"];
         if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrEmpty(req.Key) || !CryptographicOperations.FixedTimeEquals(
@@ -85,6 +88,72 @@ public class AuthController : ControllerBase
             emailOverride = normEmail;
         }
 
+        if (emailOverride is not null)
+        {
+            if (string.Equals(emailOverride, "admin@mg.local", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "Choose your own email address." });
+            if (string.IsNullOrEmpty(req.Password))
+                return BadRequest(new { message = "Password is required to protect your account." });
+
+            var existing = await _users.FindByEmailAsync(emailOverride);
+            if (existing is not null)
+            {
+                // A shared organiser key does not prove ownership of an existing passwordless identity.
+                if (await _users.IsLockedOutAsync(existing) || !await _users.HasPasswordAsync(existing))
+                    return Unauthorized(new { message = "This account cannot use organiser-key sign-in. Use your account recovery process or a different address." });
+                var check = await _signIn.CheckPasswordSignInAsync(existing, req.Password, lockoutOnFailure: true);
+                if (!check.Succeeded)
+                    return Unauthorized(new { message = "That email already has an account — enter its password to sign in." });
+                return await _db.Database.CreateExecutionStrategy().ExecuteAsync<ActionResult<AuthResponse>>(async () =>
+                {
+                    _db.ChangeTracker.Clear();
+                    existing = await _users.FindByIdAsync(existing.Id);
+                    if (existing is null) return Unauthorized(new { message = "This account is no longer available." });
+                    await using (var accountTransaction = await _db.Database.BeginTransactionAsync(HttpContext.RequestAborted))
+                    {
+                        if (!await _users.IsInRoleAsync(existing, Roles.Admin))
+                        {
+                            var granted = await _users.AddToRoleAsync(existing, Roles.Admin);
+                            if (!granted.Succeeded) return PasswordProblems(granted);
+                        }
+                        existing.FullName = titleOverride ?? existing.FullName;
+                        var updated = await _users.UpdateAsync(existing);
+                        if (!updated.Succeeded) return PasswordProblems(updated);
+                        await accountTransaction.CommitAsync(HttpContext.RequestAborted);
+                    }
+                    var (existingToken, existingExpires, existingRoles) = await _tokens.CreateTokenAsync(existing);
+                    var existingClub = existing.ClubId.HasValue ? await _db.Clubs.FindAsync(existing.ClubId.Value) : null;
+                    return new AuthResponse(existingToken, existingExpires,
+                        new UserProfile(existing.Id, existing.Email!, existing.FullName, existing.ClubId, existingClub?.Name, existingRoles.ToList(), existing.EmailConfirmed));
+                });
+            }
+
+            var createdAccount = await CreateAccountAsync(config, async (ipHash, accountId) =>
+            {
+                var adminUser = new AppUser
+                {
+                    Id = accountId,
+                    UserName = emailOverride,
+                    Email = emailOverride,
+                    FullName = titleOverride ?? emailOverride.Split('@')[0],
+                    EmailConfirmed = false
+                };
+                var created = await _users.CreateAsync(adminUser, req.Password);
+                if (!created.Succeeded)
+                    return PasswordProblems(created);
+                var grantedRole = await _users.AddToRoleAsync(adminUser, Roles.Admin);
+                if (!grantedRole.Succeeded) return PasswordProblems(grantedRole);
+                var recordedIp = await _users.AddClaimAsync(adminUser, new Claim(CreatedIpClaimType, ipHash));
+                if (!recordedIp.Succeeded) return PasswordProblems(recordedIp);
+                var (adminToken, adminExpires, adminRoles) = await _tokens.CreateTokenAsync(adminUser);
+                return new AuthResponse(adminToken, adminExpires,
+                    new UserProfile(adminUser.Id, adminUser.Email!, adminUser.FullName, null, null, adminRoles.ToList(), adminUser.EmailConfirmed));
+            });
+            if (createdAccount.Value is { } createdProfile)
+                await accountEmail.SendConfirmationAsync((await _users.FindByIdAsync(createdProfile.User.Id))!);
+            return createdAccount;
+        }
+
         var user = await _users.FindByEmailAsync("admin@mg.local");
         if (user is null) return StatusCode(500, new { message = "Shared admin account missing — re-seed the database." });
 
@@ -99,7 +168,8 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<AuthResponse>> SignupTrainer(
         SignupTrainerRequest req,
         [FromServices] IEmailDomainChecker domains,
-        [FromServices] AccountEmailService accountEmail)
+        [FromServices] AccountEmailService accountEmail,
+        [FromServices] IConfiguration config)
     {
         var raw = (req.Username ?? string.Empty).Trim();
         if (raw.Length == 0)
@@ -145,39 +215,83 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Pony Club or team name is required." });
         if (clubName.Length > 100)
             return BadRequest(new { message = "Pony Club or team name must be 100 characters or fewer." });
-        var club = await _db.Clubs.FirstOrDefaultAsync(c => c.Name.ToLower() == clubName.ToLower());
-        // A new club is saved together with the account, so a failed signup leaves nothing behind.
-        club ??= new Club { Name = clubName, Region = "Custom" };
 
-        var user = new AppUser
+        var createdAccount = await CreateAccountAsync(config, async (ipHash, accountId) =>
         {
-            UserName = email,
-            Email = email,
-            FullName = fullName,
-            Club = club.Id == 0 ? club : null,
-            ClubId = club.Id == 0 ? null : club.Id,
-            // A made-up username address can't receive mail, so only a real one is left to confirm.
-            EmailConfirmed = !realEmail
-        };
-        var result = await _users.CreateAsync(user, req.Password);
-        if (!result.Succeeded)
-            return PasswordProblems(result);
+            var club = await _db.Clubs.FirstOrDefaultAsync(c => c.Name.ToLower() == clubName.ToLower());
+            // A new club is saved together with the account, so a failed signup leaves nothing behind.
+            club ??= new Club { Name = clubName, Region = "Custom" };
 
-        // Organising access needs approval: trainers by an admin or their club's manager, managers by an admin.
-        var assignedRoles = role == Roles.Trainer ? new[] { Roles.Member, Roles.TrainerRequest }
-            : role == Roles.Manager ? new[] { Roles.Member, Roles.ManagerRequest }
-            : new[] { role };
-        var assigned = await _users.AddToRolesAsync(user, assignedRoles);
-        if (!assigned.Succeeded)
-            return BadRequest(new { errors = assigned.Errors.Select(e => e.Description) });
+            var user = new AppUser
+            {
+                Id = accountId,
+                UserName = email,
+                Email = email,
+                FullName = fullName,
+                Club = club.Id == 0 ? club : null,
+                ClubId = club.Id == 0 ? null : club.Id,
+                // A made-up username address can't receive mail, so only a real one is left to confirm.
+                EmailConfirmed = !realEmail
+            };
+            var result = await _users.CreateAsync(user, req.Password);
+            if (!result.Succeeded)
+                return PasswordProblems(result);
 
-        // Inline and best effort: the sender never throws, and a failed send never undoes the account.
-        // Sign-in isn't blocked while unconfirmed; the app shows a banner with a resend button.
-        if (realEmail) await accountEmail.SendConfirmationAsync(user);
+            var recordedIp = await _users.AddClaimAsync(user, new Claim(CreatedIpClaimType, ipHash));
+            if (!recordedIp.Succeeded) return PasswordProblems(recordedIp);
 
-        var (token, expiresAt, rolesOut) = await _tokens.CreateTokenAsync(user);
-        return new AuthResponse(token, expiresAt,
-            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club.Name, rolesOut.ToList(), user.EmailConfirmed));
+            // Organising access needs approval: trainers by an admin or their club's manager, managers by an admin.
+            var assignedRoles = role == Roles.Trainer ? new[] { Roles.Member, Roles.TrainerRequest }
+                : role == Roles.Manager ? new[] { Roles.Member, Roles.ManagerRequest }
+                : new[] { role };
+            var assigned = await _users.AddToRolesAsync(user, assignedRoles);
+            if (!assigned.Succeeded)
+                return BadRequest(new { errors = assigned.Errors.Select(e => e.Description) });
+
+            var (token, expiresAt, rolesOut) = await _tokens.CreateTokenAsync(user);
+            return new AuthResponse(token, expiresAt,
+                new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club.Name, rolesOut.ToList(), user.EmailConfirmed));
+        });
+        // Send once, after the retryable database transaction has committed.
+        if (realEmail && createdAccount.Value is { } createdProfile)
+            await accountEmail.SendConfirmationAsync((await _users.FindByIdAsync(createdProfile.User.Id))!);
+        return createdAccount;
+    }
+
+    private Task<ActionResult<AuthResponse>> CreateAccountAsync(IConfiguration config, Func<string, string, Task<ActionResult<AuthResponse>>> create)
+    {
+        var accountId = Guid.NewGuid().ToString();
+        AuthResponse? preparedResponse = null;
+        return _db.Database.CreateExecutionStrategy().ExecuteAsync<ActionResult<AuthResponse>>(async () =>
+        {
+            _db.ChangeTracker.Clear();
+            // A lost commit acknowledgement must not turn a successful creation into a duplicate/limit error.
+            // Only this operation can have created this random id, and its roles/claim share the transaction.
+            if (preparedResponse is not null && await _db.Users.AsNoTracking().AnyAsync(u => u.Id == accountId, HttpContext.RequestAborted))
+                return preparedResponse;
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var key = !string.IsNullOrWhiteSpace(config["Privacy:IpHashKey"]) ? Encoding.UTF8.GetBytes(config["Privacy:IpHashKey"]!)
+                : HMACSHA256.HashData(Encoding.UTF8.GetBytes(config["Jwt:Key"] ?? "dev-only-secret-please-change-me-256-bit-min!!"), "mg-ip-retention-v1"u8);
+            var ipHash = IpRetention.Hash(ip, key);
+            await using var transaction = await _db.Database.BeginTransactionAsync(HttpContext.RequestAborted);
+            // SQLite begins an immediate write transaction. PostgreSQL serialises this network's
+            // creations across instances before the count, then releases the lock with the transaction.
+            if (_db.Database.IsNpgsql())
+            {
+                var lockKey = BinaryPrimitives.ReadInt64BigEndian(SHA256.HashData(Encoding.UTF8.GetBytes(ipHash)));
+                await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockKey})", HttpContext.RequestAborted);
+            }
+            var maxAccountsPerIp = config.GetValue("RateLimits:AccountsPerIp", 5);
+            var createdFromIp = await _db.UserClaims.CountAsync(
+                c => c.ClaimType == CreatedIpClaimType && c.ClaimValue == ipHash,
+                HttpContext.RequestAborted);
+            if (createdFromIp >= maxAccountsPerIp)
+                return StatusCode(StatusCodes.Status429TooManyRequests, new { message = $"This network already has the maximum of {maxAccountsPerIp} registered accounts." });
+            var result = await create(ipHash, accountId);
+            preparedResponse = result.Value;
+            if (preparedResponse is not null) await transaction.CommitAsync(HttpContext.RequestAborted);
+            return result;
+        });
     }
 
     private BadRequestObjectResult EmailRejected(EmailProblem problem)

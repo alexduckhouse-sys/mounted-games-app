@@ -396,3 +396,25 @@ describe('personalisation, instant optimistic standings and section score finger
     await waitFor(() => expect(rowNames(screen.getByRole('region', { name: 'Totals' }))[0]).toContain('Team 3'));
   });
 });
+
+
+it('defaults to a populated age group when an earlier section is empty', async () => {
+  setCompetition([qualifier], {
+    sections: [{ id: 8, displayName: 'Empty section' }, { id: 9, displayName: 'Under 12' }],
+  });
+  renderTab('/');
+  await waitFor(() => expect(state.get).toHaveBeenCalledWith('/competitions/1/standings', { params: { sectionId: 9 } }));
+});
+
+it('links organiser screen actions to the selected age group and hides them from spectators', async () => {
+  state.manage = true;
+  const view = renderTab('/?section=10', { toplistOnly: false });
+  await waitFor(() => expect(state.get).toHaveBeenCalled());
+  expect(screen.getByRole('link', { name: 'PA Commentator' })).toHaveAttribute('href', '/competitions/1/commentary?section=10');
+  expect(screen.getByRole('link', { name: 'TV Kiosk' })).toHaveAttribute('href', '/competitions/1/tv?section=10');
+  expect(screen.getByRole('button', { name: 'QR Access' })).toBeVisible();
+  view.unmount();
+  state.manage = false;
+  renderTab('/?section=10', { toplistOnly: false });
+  expect(screen.queryByRole('region', { name: 'Organiser quick actions' })).toBeNull();
+});

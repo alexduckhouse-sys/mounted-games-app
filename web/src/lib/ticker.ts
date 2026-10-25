@@ -1,6 +1,6 @@
 import type { ChatMessage, Session } from '../types';
 import { displaySectionName } from './section.ts';
-import { computeTimings } from './time.ts';
+import { computeTimings, formatDelayDuration } from './time.ts';
 import { sessionOrdinals, sessionTitle, timetableRows, type TimetableRow } from './timetableRows.ts';
 
 /** What a ticker line is about; the top bar gives each kind its own colour and icon. */
@@ -143,7 +143,7 @@ export function tickerItems(sessions: Session[], announcements: ChatMessage[], n
     let behind = Math.max(0, ...rows.filter((row) => row.status !== 'finished').map((row) => row.delayMinutes));
     const overdue = nextRace?.effective ? Math.round((t - nextRace.effective.getTime()) / MINUTE) : 0;
     if (overdue <= OVERDUE_LIMIT_MINUTES) behind = Math.max(behind, overdue);
-    if (behind >= LATE_AFTER_MINUTES) items.push({ key: 'late', kind: 'late', text: `Running ${behind} min behind` });
+    if (behind >= LATE_AFTER_MINUTES) items.push({ key: 'late', kind: 'late', text: `Running ${formatDelayDuration(behind)} behind` });
     else if (liveRaces.length > 0) items.push({ key: 'ontime', kind: 'ontime', text: 'On time' });
   }
 

@@ -6,14 +6,52 @@ export interface ViewerSnapshot {
   state: 'connecting' | 'playing' | 'reconnecting' | 'error';
   message: string | null;
   preferredRid?: StreamQualityRid;
+  audioOnly?: boolean;
 }
 export interface ViewerDependencies extends StreamClock {
   invoke: StreamInvoke;
   PeerConnection: typeof RTCPeerConnection;
   MediaStream: typeof MediaStream;
+  wakeLock?: () => Promise<{ release: () => Promise<void> }>;
 }
 export function browserViewerDependencies(invoke: StreamInvoke): ViewerDependencies {
-  return { ...streamClock, invoke, PeerConnection: RTCPeerConnection, MediaStream };
+  return {
+    ...streamClock,
+    invoke,
+    PeerConnection: RTCPeerConnection,
+    MediaStream,
+    wakeLock: () => navigator.wakeLock.request('screen'),
+  };
+}
+export function configureLowLatencyReceiver(
+  receiver?: { jitterBufferTarget?: number | null; playoutDelayHint?: number } | null,
+) {
+  if (!receiver) return;
+  try {
+    if ('jitterBufferTarget' in receiver) receiver.jitterBufferTarget = 150;
+    if ('playoutDelayHint' in receiver) receiver.playoutDelayHint = 0.15;
+  } catch { /* Optional browser hint. */ }
+}
+export function syncVideoLiveEdge(
+  video: Pick<HTMLVideoElement, 'buffered' | 'currentTime' | 'playbackRate' | 'paused'> | null | undefined,
+  forceJump = false,
+): 'jumped' | 'catching-up' | 'in-sync' | 'idle' {
+  if (!video || video.paused || !video.buffered || video.buffered.length === 0) return 'idle';
+  const liveEdge = video.buffered.end(video.buffered.length - 1);
+  const lag = liveEdge - video.currentTime;
+  if (forceJump || lag > 3.5) {
+    video.currentTime = Math.max(0, liveEdge - 0.3);
+    video.playbackRate = 1.0;
+    return 'jumped';
+  }
+  if (lag >= 1.5) {
+    video.playbackRate = 1.06;
+    return 'catching-up';
+  }
+  if (lag <= 0.6 && video.playbackRate !== 1.0) {
+    video.playbackRate = 1.0;
+  }
+  return 'in-sync';
 }
 export const streamErrors = {
   STREAM_NOT_FOUND: 'This stream has finished.',
@@ -41,7 +79,7 @@ export function createStreamViewer(competitionId: number, streamId: number, d: V
   const owner = {};
   const lease = group.get(key) ?? { owner, tail: Promise.resolve() };
   lease.owner = owner; group.set(key, lease);
-  let snapshot: ViewerSnapshot = { media: null, state: 'connecting', message: null, preferredRid: 'f' };
+  let snapshot: ViewerSnapshot = { media: null, state: 'connecting', message: null, preferredRid: 'f', audioOnly: false };
   const listeners = new Set<() => void>();
   const update = (patch: Partial<ViewerSnapshot>) => { snapshot = { ...snapshot, ...patch }; listeners.forEach((fn) => fn()); };
   let disposed = false;
@@ -50,14 +88,28 @@ export function createStreamViewer(competitionId: number, streamId: number, d: V
   let ready = -1;
   let failures = 0;
   let preferredRid: StreamQualityRid = 'f';
+  let audioOnly = false;
+  let attachedVideo: HTMLVideoElement | null = null;
+  let wake: { release: () => Promise<void> } | undefined;
   let pc: RTCPeerConnection | undefined;
   let cancelRetry: (() => void) | undefined;
   let cancelStats: (() => void) | undefined;
   // Serialise WatchStream calls: an older call must not replace a newer server-side session.
   let watching = false;
   let pending = false;
+  async function acquireWake(peer: RTCPeerConnection) {
+    if (!d.wakeLock) return;
+    try {
+      const next = await d.wakeLock();
+      if (disposed || pc !== peer) { await next.release(); return; }
+      const previous = wake;
+      wake = next;
+      if (previous) void previous.release().catch(() => {});
+    } catch { /* Optional browser wake lock. */ }
+  }
   function close() {
     cancelStats?.(); cancelStats = undefined;
+    if (wake) { void wake.release().catch(() => {}); wake = undefined; }
     if (pc) { pc.ontrack = null; pc.oniceconnectionstatechange = null; pc.close(); pc = undefined; }
   }
   function retry() {
@@ -66,14 +118,26 @@ export function createStreamViewer(competitionId: number, streamId: number, d: V
   }
   function monitor(peer: RTCPeerConnection) {
     let lastFrames = 0;
+    let monitoringAudio = audioOnly;
     let lastProgress = d.now();
     async function sample() {
       try {
+        syncVideoLiveEdge(attachedVideo);
         const stats = await peer.getStats();
         if (disposed || peer !== pc) return;
         let frames = 0;
-        stats.forEach((report) => { if (report.type === 'inbound-rtp' && report.kind === 'video') frames += report.framesDecoded ?? 0; });
-        if (frames > lastFrames) { lastFrames = frames; lastProgress = d.now(); failures = 0; update({ state: 'playing', message: null }); }
+        stats.forEach((report) => {
+          if (report.type === 'inbound-rtp' && report.kind === (audioOnly ? 'audio' : 'video')) {
+            frames += audioOnly ? report.packetsReceived ?? 0 : report.framesDecoded ?? 0;
+          }
+        });
+        if (monitoringAudio !== audioOnly) { monitoringAudio = audioOnly; lastFrames = 0; lastProgress = d.now(); }
+        if (frames > lastFrames) {
+          lastFrames = frames;
+          lastProgress = d.now();
+          failures = 0;
+          update({ state: 'playing', message: null });
+        }
         const stalled = d.now() - lastProgress;
         if (stalled >= 20_000) { refresh(); return; }
         if (stalled >= 10_000) update({ state: 'reconnecting' });
@@ -106,6 +170,12 @@ export function createStreamViewer(competitionId: number, streamId: number, d: V
       const media = new d.MediaStream();
       peer.ontrack = (event) => {
         if (!current()) return;
+        configureLowLatencyReceiver((event as RTCTrackEvent & {
+          receiver?: { jitterBufferTarget?: number | null; playoutDelayHint?: number };
+        }).receiver);
+        if (audioOnly && event.track.kind === 'video') {
+          event.track.enabled = false;
+        }
         media.addTrack(event.track);
         update({ media });
       };
@@ -117,6 +187,7 @@ export function createStreamViewer(competitionId: number, streamId: number, d: V
       await d.invoke('AnswerStream', result.watchId, peer.localDescription!.sdp);
       if (!current()) return;
       monitor(peer);
+      void acquireWake(peer);
     } catch (error) {
       if (!current()) return;
       close();
@@ -153,6 +224,20 @@ export function createStreamViewer(competitionId: number, streamId: number, d: V
       preferredRid = rid;
       update({ preferredRid: rid });
       if (ready >= 0) refresh();
+    },
+    setAudioOnly(enabled: boolean) {
+      audioOnly = enabled;
+      snapshot.media?.getVideoTracks().forEach((track) => { track.enabled = !enabled; });
+      update({ audioOnly: enabled });
+    },
+    attachVideo(video: HTMLVideoElement | null) {
+      attachedVideo = video;
+    },
+    syncLive() {
+      syncVideoLiveEdge(attachedVideo, true);
+      if (snapshot.state === 'reconnecting' || snapshot.state === 'error' || !snapshot.media) {
+        refresh();
+      }
     },
     dispose() {
       disposed = true; epoch++;

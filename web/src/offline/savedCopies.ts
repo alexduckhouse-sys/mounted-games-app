@@ -1,3 +1,5 @@
+import { isLiteModeActive } from '../lite/liteMode';
+
 /**
  * The last copy of each public page's data, kept in localStorage so a page opens straight away from what this
  * phone last saw, then refreshes from the server. Only public data goes here (see cachePolicy.ts); cookies
@@ -26,12 +28,26 @@ function writeIndex(keys: string[]) {
   localStorage.setItem(INDEX_KEY, JSON.stringify(keys));
 }
 
+/** Account-only payment details must never survive in a shared public copy. */
+function publicCopyData<T>(key: string, data: T): T {
+  if (!/^competition\.\d+$/.test(key) || data == null || typeof data !== 'object' || !('paymentDestination' in data)) return data;
+  const copy = { ...data } as Record<string, unknown>;
+  delete copy.paymentDestination;
+  return copy as T;
+}
+
 export function readSavedCopy<T>(key: string): SavedCopy<T> | null {
   try {
     const raw = localStorage.getItem(PREFIX + key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<SavedCopy<T>>;
     if (typeof parsed.savedAt !== 'string' || Number.isNaN(Date.parse(parsed.savedAt)) || parsed.data == null) return null;
+    const data = publicCopyData(key, parsed.data);
+    if (data !== parsed.data) {
+      parsed.data = data;
+      // Rewrite old copies too, so signing out cannot expose a previous account's details.
+      localStorage.setItem(PREFIX + key, JSON.stringify(parsed));
+    }
     return parsed as SavedCopy<T>;
   } catch {
     return null;
@@ -42,7 +58,7 @@ export function readSavedCopy<T>(key: string): SavedCopy<T> | null {
 export function writeSavedCopy<T>(key: string, data: T, savedAt = new Date()): void {
   let value: string;
   try {
-    value = JSON.stringify({ savedAt: savedAt.toISOString(), data } satisfies SavedCopy<T>);
+    value = JSON.stringify({ savedAt: savedAt.toISOString(), data: publicCopyData(key, data) } satisfies SavedCopy<T>);
   } catch {
     return;
   }
@@ -86,6 +102,8 @@ export const savedCopyKeys = {
 export const SAVED_COPY_NOTICE_AFTER_MS = 30 * 60_000;
 /** Competition pages and scoring during an event change every few minutes, so a copy goes stale sooner. */
 export const LIVE_SAVED_COPY_NOTICE_AFTER_MS = 10 * 60_000;
+/** Freshness window (2 minutes) in Lite Mode where a recently saved copy avoids redundant background fetches. */
+export const LITE_FRESH_COPY_WINDOW_MS = 2 * 60_000;
 
 type SavedAtLike = Date | string | number | null | undefined;
 
@@ -93,6 +111,20 @@ function savedAtMs(savedAt: SavedAtLike): number | null {
   if (savedAt == null || savedAt === '') return null;
   const ms = savedAt instanceof Date ? savedAt.getTime() : typeof savedAt === 'number' ? savedAt : Date.parse(savedAt);
   return Number.isNaN(ms) ? null : ms;
+}
+
+/** True when Lite Mode is on and the saved copy was written within `windowMs` of `now`. */
+export function isFreshSavedCopy(
+  savedAt: SavedAtLike,
+  lite = isLiteModeActive(),
+  now: Date = new Date(),
+  windowMs = LITE_FRESH_COPY_WINDOW_MS,
+): boolean {
+  if (!lite) return false;
+  const ms = savedAtMs(savedAt);
+  if (ms == null) return false;
+  const age = now.getTime() - ms;
+  return age >= 0 && age <= windowMs;
 }
 
 /** True when a dated copy is older than `thresholdMs`. An undated copy is never "noticeably old" on its own. */

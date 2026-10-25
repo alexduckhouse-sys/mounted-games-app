@@ -375,6 +375,8 @@ export async function loadPersistedReplays(
   finally { db.close(); }
 }
 
+export const hydrateSavedReplays = loadPersistedReplays;
+
 export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHandle {
   const now = options.now ?? Date.now;
   const store = new ReplaySegmentStore((options.windowSeconds ?? 1800) * 1000, options.memoryLimitBytes, options.diskLimitBytes);

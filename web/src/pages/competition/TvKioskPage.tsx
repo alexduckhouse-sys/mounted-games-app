@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Mic, Monitor, Pause, Play, Radio, Trophy } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Maximize2, Mic, Monitor, Pause, Play, QrCode as QrCodeIcon, Radio, SlidersHorizontal, Trophy } from 'lucide-react';
 import { api } from '../../api';
+import { useAuth } from '../../auth/AuthContext';
 import { BibSwatch } from '../../components/BibSwatch';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { QrAccessModal } from '../../components/QrAccessModal';
 import { SponsorBadge } from '../../components/SponsorBadge';
 import { SponsorStrip } from '../../components/SponsorStrip';
+import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
 import { usePageWidth } from '../../components/pageWidthState';
 import { formatPoints } from '../../lib/formatPoints';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
@@ -14,11 +17,13 @@ import { buildToplist, ordinal, sectionScoreVersion } from '../../lib/toplist';
 import { useLiveHub } from '../../live/useLiveHub';
 import type { Heat, Race, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
+import { HeatScores } from './HeatScores';
 
-type TvSlide = 'lanes' | 'latest' | 'standings';
+type TvSlide = 'lanes' | 'heat' | 'latest' | 'standings';
 
 const SLIDES: { id: TvSlide; label: string }[] = [
   { id: 'lanes', label: 'In the Ring & Next Heat' },
+  { id: 'heat', label: 'Current Heat Table' },
   { id: 'latest', label: 'Latest Race Result' },
   { id: 'standings', label: 'Live Section Standings' },
 ];
@@ -38,15 +43,34 @@ function pickInitialSectionId(sessions: Session[], sectionIds: number[], request
 export function TvKioskPage() {
   usePageWidth('full');
   const { competition, reload, sponsors = [] } = useCompetition();
+  const { canOrganise } = useAuth();
+  const canControlStreams = canOrganise(competition);
   const [searchParams, setSearchParams] = useSearchParams();
   const sectionIds = useMemo(() => competition.sections.map((s) => s.id), [competition.sections]);
   const requestedSection = Number(searchParams.get('section'));
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(() =>
     pickInitialSectionId(competition.sessions, sectionIds, requestedSection),
   );
-  const sectionId = selectedSectionId != null && sectionIds.includes(selectedSectionId)
-    ? selectedSectionId
-    : pickInitialSectionId(competition.sessions, sectionIds, requestedSection);
+  const [autoFollowLive, setAutoFollowLive] = useState(() => !sectionIds.includes(requestedSection));
+  const [showStreamControls, setShowStreamControls] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+
+  const liveSectionId = useMemo(() => {
+    const live = competition.sessions.find(
+      (s) => s.status === 1 && s.competitionSectionId != null && sectionIds.includes(s.competitionSectionId),
+    );
+    return live?.competitionSectionId ?? null;
+  }, [competition.sessions, sectionIds]);
+
+  const sectionId = useMemo(() => {
+    if (autoFollowLive && liveSectionId != null && !sectionIds.includes(requestedSection)) {
+      return liveSectionId;
+    }
+    if (selectedSectionId != null && sectionIds.includes(selectedSectionId)) {
+      return selectedSectionId;
+    }
+    return pickInitialSectionId(competition.sessions, sectionIds, requestedSection);
+  }, [autoFollowLive, liveSectionId, requestedSection, selectedSectionId, sectionIds, competition.sessions]);
 
   const [slide, setSlide] = useState<TvSlide>('lanes');
   const [playing, setPlaying] = useState(true);
@@ -114,6 +138,7 @@ export function TvKioskPage() {
   }, [playing]);
 
   const chooseSection = (nextId: number) => {
+    setAutoFollowLive(false);
     setSelectedSectionId(nextId);
     setSearchParams({ section: String(nextId) }, { replace: true });
   };
@@ -163,7 +188,6 @@ export function TvKioskPage() {
           rankLabel: toplist.started ? `${ordinal(row.position)}${row.joint ? '=' : ''}` : '—',
           bibColour: team?.bibColour ?? st?.bibColour ?? null,
           teamName: row.teamName,
-          clubName: team?.clubName ?? st?.clubName ?? '',
           heatPoints,
           finalsPoints,
           totalPoints: row.points,
@@ -179,7 +203,6 @@ export function TvKioskPage() {
       rankLabel: ordinal(index + 1),
       bibColour: t.bibColour ?? null,
       teamName: t.displayName,
-      clubName: t.clubName,
       heatPoints: 0,
       finalsPoints: 0,
       totalPoints: 0,
@@ -259,21 +282,41 @@ export function TvKioskPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             {competition.sections.length > 1 && (
-              <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-                <span>Section</span>
-                <select
-                  aria-label="Section filter"
-                  value={sectionId ?? ''}
-                  onChange={(e) => chooseSection(Number(e.target.value))}
-                  className="min-h-10 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-2.5 py-1.5 text-sm font-semibold text-[rgb(var(--mg-ink))]"
+              <>
+                <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
+                  <span>Section</span>
+                  <select
+                    aria-label="Section filter"
+                    value={sectionId ?? ''}
+                    onChange={(e) => chooseSection(Number(e.target.value))}
+                    className="min-h-10 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-2.5 py-1.5 text-sm font-semibold text-[rgb(var(--mg-ink))]"
+                  >
+                    {competition.sections.map((sec) => (
+                      <option key={sec.id} value={sec.id}>
+                        {displaySectionName(sec.displayName)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <button
+                  type="button"
+                  aria-pressed={autoFollowLive}
+                  onClick={() => {
+                    const next = !autoFollowLive;
+                    setAutoFollowLive(next);
+                    if (next) {
+                      if (liveSectionId != null) setSelectedSectionId(liveSectionId);
+                      setSearchParams({}, { replace: true });
+                    }
+                  }}
+                  className={`mg-btn !min-h-10 !px-3 text-xs font-bold ${
+                    autoFollowLive ? 'mg-btn-primary' : 'mg-btn-secondary'
+                  }`}
                 >
-                  {competition.sections.map((sec) => (
-                    <option key={sec.id} value={sec.id}>
-                      {displaySectionName(sec.displayName)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  Auto-follow live section
+                </button>
+              </>
             )}
 
             <button
@@ -303,6 +346,41 @@ export function TvKioskPage() {
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </button>
 
+            {canControlStreams && (<button
+              type="button"
+              aria-pressed={showStreamControls}
+              onClick={() => setShowStreamControls((v) => !v)}
+              className={`mg-btn !min-h-10 !px-3 text-xs font-bold ${
+                showStreamControls ? 'mg-btn-primary' : 'mg-btn-secondary'
+              }`}
+            >
+              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> Stream Controls
+            </button>)}
+
+            <button
+              type="button"
+              onClick={() => setShowQrModal(true)}
+              className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
+            >
+              <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> QR Access
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof document !== 'undefined') {
+                  if (document.fullscreenElement && document.exitFullscreen) {
+                    void document.exitFullscreen().catch(() => {});
+                  } else {
+                    void document.documentElement.requestFullscreen?.()?.catch(() => {});
+                  }
+                }
+              }}
+              className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
+            >
+              <Maximize2 className="h-4 w-4" aria-hidden="true" /> Full screen
+            </button>
+
             <Link
               to={`/competitions/${competition.id}/commentary${sectionId != null ? `?section=${sectionId}` : ''}`}
               className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
@@ -317,6 +395,16 @@ export function TvKioskPage() {
             </Link>
           </div>
         </div>
+
+        {canControlStreams && showStreamControls && (
+          <StreamControlStrip
+            competitionId={competition.id}
+            arenaName={currentHeatItem?.session.arenaName}
+            sectionId={sectionId}
+            activeHeatId={currentHeatItem?.heat.id}
+            compact
+          />
+        )}
 
         {/* Slide selector pills + Top Sponsor Logos */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -367,6 +455,21 @@ export function TvKioskPage() {
           </section>
         )}
 
+        {slide === 'heat' && (
+          <section aria-label="Current Heat Table" className="mg-card overflow-hidden p-4">
+            {currentHeatItem ? (
+              <HeatScores
+                session={currentHeatItem.session}
+                heats={currentHeatItem.session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex)}
+                activeHeatId={currentHeatItem.heat.id}
+                embedded
+              />
+            ) : (
+              <p className="p-4 text-base text-[rgb(var(--mg-muted))]">No active heat in this section yet.</p>
+            )}
+          </section>
+        )}
+
         {slide === 'latest' && (
           <section aria-label="Latest Race Result" className="mg-card overflow-hidden">
             <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
@@ -392,7 +495,6 @@ export function TvKioskPage() {
                       <th scope="col" className="py-2.5 pl-4 pr-2">Place</th>
                       <th scope="col" className="py-2.5 px-2">Bib</th>
                       <th scope="col" className="py-2.5 px-2">Team</th>
-                      <th scope="col" className="py-2.5 px-2">Club</th>
                       <th scope="col" className="py-2.5 px-2 text-right">Race Pts</th>
                       <th scope="col" className="py-2.5 pl-2 pr-4 text-right">Total Pts</th>
                     </tr>
@@ -424,7 +526,6 @@ export function TvKioskPage() {
                               <BibSwatch colour={team?.bibColour ?? st?.bibColour} />
                             </td>
                             <td className="py-3 px-2 font-bold text-[rgb(var(--mg-ink))]">{res.teamName}</td>
-                            <td className="py-3 px-2 text-sm text-[rgb(var(--mg-body))]">{team?.clubName ?? st?.clubName ?? '—'}</td>
                             <td className="mg-display py-3 px-2 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
                               +{formatPoints(res.points)}
                             </td>
@@ -465,7 +566,6 @@ export function TvKioskPage() {
                       <th scope="col" className="py-2.5 pl-4 pr-2">Rank</th>
                       <th scope="col" className="py-2.5 px-2">Bib</th>
                       <th scope="col" className="py-2.5 px-2">Team</th>
-                      <th scope="col" className="py-2.5 px-2">Club</th>
                       <th scope="col" className="py-2.5 px-2 text-right">Heat Pts</th>
                       <th scope="col" className="py-2.5 px-2 text-right">Finals Pts</th>
                       <th scope="col" className="py-2.5 pl-2 pr-4 text-right">Total Pts</th>
@@ -481,7 +581,6 @@ export function TvKioskPage() {
                           <BibSwatch colour={row.bibColour} />
                         </td>
                         <td className="py-3 px-2 font-bold text-[rgb(var(--mg-ink))]">{row.teamName}</td>
-                        <td className="py-3 px-2 text-sm text-[rgb(var(--mg-body))]">{row.clubName || '—'}</td>
                         <td className="mg-display py-3 px-2 text-right text-lg font-semibold tabular-nums text-[rgb(var(--mg-body))]">
                           {formatPoints(row.heatPoints)}
                         </td>
@@ -505,6 +604,15 @@ export function TvKioskPage() {
       <footer className="border-t border-[rgb(var(--mg-rule-soft))] pt-3">
         <SponsorStrip placement="Results" />
       </footer>
+
+      <QrAccessModal
+        open={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        competitionId={competition.id}
+        competitionName={competition.name}
+        sectionId={sectionId}
+        canWrite={canControlStreams}
+      />
     </div>
   );
 }
@@ -569,9 +677,6 @@ function HeatLaneCard({
                   <BibSwatch colour={entry.bibColour ?? team?.bibColour ?? st?.bibColour} />
                   <div className="min-w-0">
                     <span className="block truncate text-lg font-bold text-[rgb(var(--mg-ink))]">{entry.teamName}</span>
-                    {team?.clubName && (
-                      <span className="block truncate text-xs font-medium text-[rgb(var(--mg-muted))]">{team.clubName}</span>
-                    )}
                   </div>
                 </div>
                 <div className="shrink-0 text-right">

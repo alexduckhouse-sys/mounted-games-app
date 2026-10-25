@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { browserViewerDependencies, createStreamViewer, streamErrorCode, streamErrors } from './streamViewer';
+import { browserViewerDependencies, configureLowLatencyReceiver, createStreamViewer, streamErrorCode, streamErrors, syncVideoLiveEdge } from './streamViewer';
 import { streamClock, type StreamInvoke } from './streamRuntime';
 import { deferred, FakeMediaStream, FakePeer, fakePeerConstructor, fakeStreamConstructor, FakeTrack, flush, resetMedia } from '../test/streamFakes';
 
@@ -85,7 +85,12 @@ it('tolerates getStats failures and exports browser bindings', async () => {
   const { viewer, start, invoke } = setup(); await start(); FakePeer.instances[0].getStats.mockRejectedValueOnce(new Error('stats'));
   await vi.advanceTimersByTimeAsync(4000); expect(viewer.getSnapshot().state).toBe('playing'); viewer.dispose();
   vi.stubGlobal('RTCPeerConnection', fakePeerConstructor); vi.stubGlobal('MediaStream', FakeMediaStream);
-  expect(browserViewerDependencies(invoke as StreamInvoke)).toEqual(expect.objectContaining({ invoke, PeerConnection: fakePeerConstructor, MediaStream: FakeMediaStream }));
+  const requestWake = vi.fn(async () => ({ release: vi.fn(async () => {}) }));
+  Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: requestWake } });
+  const deps = browserViewerDependencies(invoke as StreamInvoke);
+  expect(deps).toEqual(expect.objectContaining({ invoke, PeerConnection: fakePeerConstructor, MediaStream: FakeMediaStream }));
+  await deps.wakeLock?.();
+  expect(requestWake).toHaveBeenCalledWith('screen');
 });
 
 it('serialises replacement instances and never lets stale cleanup stop their watch', async () => {
@@ -115,6 +120,33 @@ it('switches simulcast quality tiers via WatchStreamTier and ignores unchanged q
   await flush();
   expect(viewer.getSnapshot().preferredRid).toBe('q');
   expect(invoke).toHaveBeenCalledWith('WatchStreamTier', 3, 7, 'q');
+  viewer.dispose();
+});
+
+it('releases a wake lock arriving after its peer was replaced', async () => {
+  const pending = deferred<{ release: () => Promise<void> }>();
+  const staleRelease = vi.fn(async () => {});
+  const currentRelease = vi.fn(async () => {});
+  const invoke = vi.fn(async (method: string): Promise<unknown> => method === 'WatchStream' ? offer : undefined);
+  const viewer = createStreamViewer(3, 7, {
+    ...streamClock, invoke: invoke as StreamInvoke, PeerConnection: fakePeerConstructor, MediaStream: fakeStreamConstructor,
+    wakeLock: vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue({ release: currentRelease }),
+  });
+  viewer.sync(1, 1); await flush();
+  viewer.sync(2, 1); await flush();
+  pending.resolve({ release: staleRelease }); await flush();
+  expect(staleRelease).toHaveBeenCalledOnce();
+  expect(currentRelease).not.toHaveBeenCalled();
+  viewer.dispose(); expect(currentRelease).toHaveBeenCalledOnce();
+});
+
+it('detects a stalled audio-only stream instead of reporting it as playing forever', async () => {
+  const { viewer, start } = setup(); viewer.setAudioOnly(true); await start();
+  FakePeer.instances[0].getStats.mockResolvedValue(new Map());
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(viewer.getSnapshot().state).toBe('reconnecting');
+  await vi.advanceTimersByTimeAsync(10_000); await flush();
+  expect(FakePeer.instances).toHaveLength(2);
   viewer.dispose();
 });
 
@@ -199,4 +231,74 @@ it('cleans up a lower-tier watch allocated after disposal even when StopWatching
   viewer.dispose(); pending.resolve(offer); await flush();
   expect(FakePeer.instances).toHaveLength(0);
   expect(invoke).toHaveBeenLastCalledWith('StopWatching', 7);
+});
+
+it('configures low-latency receiver hints, catches up live edge, supports audio-only mode, syncLive, and wake locks', async () => {
+  const releaseWake = vi.fn(async () => {});
+  const invoke = vi.fn(async (method: string): Promise<unknown> => method === 'WatchStream' ? offer : undefined);
+  const viewer = createStreamViewer(3, 7, {
+    ...streamClock,
+    invoke: invoke as StreamInvoke,
+    PeerConnection: fakePeerConstructor,
+    MediaStream: fakeStreamConstructor,
+    wakeLock: vi.fn(async () => ({ release: releaseWake })),
+  });
+  viewer.setAudioOnly(true);
+  viewer.sync(1, 1);
+  await flush();
+  const peer = FakePeer.instances[0];
+  const receiver = { jitterBufferTarget: 0, playoutDelayHint: 0 };
+  const vTrack = new FakeTrack('video');
+  peer.ontrack?.({ track: vTrack, receiver } as unknown as { track: FakeTrack });
+  expect(receiver.jitterBufferTarget).toBe(150);
+  expect(receiver.playoutDelayHint).toBe(0.15);
+  expect(vTrack.enabled).toBe(false);
+
+  viewer.setAudioOnly(false);
+  expect(vTrack.enabled).toBe(true);
+  expect(viewer.getSnapshot().audioOnly).toBe(false);
+
+  // Audio-only mode keeps state playing even when video frames do not increment
+  viewer.setAudioOnly(true);
+  peer.getStats.mockImplementation(async () => new Map([['audio', { type: 'inbound-rtp', kind: 'audio', packetsReceived: Date.now() }]]));
+  await vi.advanceTimersByTimeAsync(12_000);
+  expect(viewer.getSnapshot().state).toBe('playing');
+
+  // Live-edge catch-up helper & periodic monitor check
+  expect(syncVideoLiveEdge(null)).toBe('idle');
+  const fakeVideo = {
+    paused: false,
+    currentTime: 5,
+    playbackRate: 1.0,
+    buffered: { length: 1, start: () => 0, end: () => 10 } as unknown as TimeRanges,
+  };
+  viewer.attachVideo(fakeVideo as unknown as HTMLVideoElement);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(fakeVideo.currentTime).toBeCloseTo(9.7, 2);
+  expect(fakeVideo.playbackRate).toBe(1.0);
+
+  // Drift between 1.5s and 3.5s -> 1.06x catch-up, then <= 0.6s -> 1.0x
+  fakeVideo.currentTime = 7.8; // lag = 2.2s
+  expect(syncVideoLiveEdge(fakeVideo)).toBe('catching-up');
+  expect(fakeVideo.playbackRate).toBe(1.06);
+  fakeVideo.currentTime = 9.5; // lag = 0.5s
+  expect(syncVideoLiveEdge(fakeVideo)).toBe('in-sync');
+  expect(fakeVideo.playbackRate).toBe(1.0);
+
+  // Manual syncLive jumps to live edge and reconnects if in error/reconnecting
+  fakeVideo.currentTime = 8.0;
+  viewer.syncLive();
+  expect(fakeVideo.currentTime).toBeCloseTo(9.7, 2);
+
+  viewer.setAudioOnly(false);
+  peer.getStats.mockResolvedValue(new Map());
+  await vi.advanceTimersByTimeAsync(12_000);
+  expect(viewer.getSnapshot().state).toBe('reconnecting');
+  viewer.syncLive();
+  await flush();
+  expect(FakePeer.instances).toHaveLength(2);
+  expect(releaseWake).toHaveBeenCalled();
+
+  configureLowLatencyReceiver(null);
+  viewer.dispose();
 });

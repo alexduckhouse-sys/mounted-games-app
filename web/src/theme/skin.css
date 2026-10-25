@@ -413,6 +413,7 @@ a.mg-line:active, button.mg-line:active { background: rgb(var(--mg-tint) / .65);
 .mg-ov-card { position: absolute; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--ov-bg, #0F1E3D) 94%, transparent); max-height: calc(100% - 64px); overflow: hidden; font-size: .85em; }
 .mg-ov-card-right { right: 10px; top: 48px; width: min(46%, 22rem); }
 .mg-ov-card-bottom { left: 10px; right: 10px; bottom: 48px; }
+.mg-ov-card-center { inset: 12px; margin: auto; width: min(92%, 44rem); max-height: 84%; padding: 16px 20px; border-radius: 16px; background: color-mix(in srgb, var(--ov-bg, #0F1E3D) 96%, transparent); backdrop-filter: blur(8px); box-shadow: 0 20px 50px rgb(0 0 0 / .6); z-index: 20; justify-content: center; overflow-y: auto; font-size: 1em; }
 .mg-ov-card header { display: flex; flex-direction: column; gap: 1px; }
 .mg-ov-card header span { font-size: .8em; opacity: .8; }
 .mg-ov-card ol { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
@@ -477,9 +478,33 @@ a.mg-sponsor:focus-visible { outline: 3px solid rgb(var(--mg-heading)); outline-
 .mg-tap-video b { font: 700 20px/1 var(--mg-font-display); }
 .mg-tap-video small { font: 400 13px/1.3 var(--mg-font); color: rgb(var(--mg-header-sub)); }
 .mg-tap-image:focus-visible, .mg-tap-video:focus-visible, .mg-lite-chip:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
-/* Lite mode also stills CSS animations and transitions; motion in React is switched off separately. */
-[data-lite="true"] *, [data-lite="true"] *::before, [data-lite="true"] *::after {
+/* Lite mode also stills CSS animations, backdrop blurs and drop shadows; motion in React is switched off separately. */
+html[data-lite="true"] { --mg-shadow-sm: none; }
+html[data-lite="true"] *, html[data-lite="true"] *::before, html[data-lite="true"] *::after {
   animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+html[data-lite="true"] .mg-badge-live::before,
+html[data-lite="true"] .mg-skel,
+html[data-lite="true"] .mg-conn-spin,
+html[data-lite="true"] .mg-strip-flash,
+html[data-lite="true"] .mg-strip-panel,
+html[data-lite="true"] .mg-dropdown-menu,
+html[data-lite="true"] .mg-stream-fade,
+html[data-lite="true"] .animate-pulse,
+html[data-lite="true"] .animate-ping {
+  animation: none !important; background-image: none;
+}
+html[data-lite="true"] .mg-ov-ticker span {
+  animation: none !important; padding-left: 12px;
+}
+html[data-lite="true"] .mg-strip-panel,
+html[data-lite="true"] .mg-conn-pill,
+html[data-lite="true"] .mg-dropdown-menu,
+html[data-lite="true"] .mg-sell-btn,
+html[data-lite="true"] .mg-confirm,
+html[data-lite="true"] .mg-seg > button[aria-pressed="true"] {
+  box-shadow: none !important;
 }
 
 /* Fields that failed validation: a red border and the message under them (no banner). */

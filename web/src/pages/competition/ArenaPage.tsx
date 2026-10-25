@@ -121,7 +121,7 @@ export function ArenaPage() {
   usePageHeader({
     title: 'Arena setup',
     subtitle: competition.name,
-    backTo: `/competitions/${competition.id}/timetable`,
+    backTo: `/competitions/${competition.id}`,
     backLabel: 'Timetable',
   });
   const [templates, setTemplates] = useState<RaceTemplate[]>([]);

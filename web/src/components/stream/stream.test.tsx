@@ -172,6 +172,8 @@ it('wires the viewer, changes cameras, passes announcements and uses captions or
   const { rerender, unmount } = render(<MemoryRouter><LiveVideo {...p} streams={list} messages={[{ message: chat(1), receivedAt: Date.now() }]} /></MemoryRouter>); await settle();
   expect(screen.getByText('The final')).toBeVisible();
   act(() => FakePeer.instances[0].track()); await tick(2000); expect(screen.queryByText('Connecting…')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Audio only' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sync live' }));
   fireEvent.click(screen.getByRole('button', { name: 'Finish line' })); await settle();
   expect(p.invoke).toHaveBeenCalledWith('StopWatching', 1); expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
   expect(screen.getByText('Live from')).toBeVisible();
@@ -180,18 +182,26 @@ it('wires the viewer, changes cameras, passes announcements and uses captions or
   unmount(); expect(p.invoke).toHaveBeenCalledWith('StopWatching', 2);
 });
 
-it('supports viewer quality switching, picture-in-picture, and instant -15s replay on StreamPlayer', async () => {
+it('supports viewer quality switching, audio-only mode, sync live, picture-in-picture, and instant -15s replay on StreamPlayer', async () => {
   const onQuality = vi.fn();
+  const onAudioOnly = vi.fn();
+  const onSyncLive = vi.fn();
   const requestPip = vi.fn(async () => {});
   const exitPip = vi.fn(async () => {});
   Object.defineProperty(HTMLVideoElement.prototype, 'requestPictureInPicture', { configurable: true, value: requestPip });
   Object.defineProperty(document, 'exitPictureInPicture', { configurable: true, value: exitPip });
   Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: null });
   const media = asMedia(new FakeMediaStream());
-  render(<StreamPlayer media={media} stream={liveStream()} label="Heat 1" quality="f" onQuality={onQuality} />);
+  const { unmount } = render(<StreamPlayer media={media} stream={liveStream()} label="Heat 1" quality="f" onQuality={onQuality} onAudioOnly={onAudioOnly} onSyncLive={onSyncLive} />);
   await settle();
+  await tick(2000);
   fireEvent.click(screen.getByRole('button', { name: 'Quality 540p' }));
   expect(onQuality).toHaveBeenCalledWith('h');
+  fireEvent.click(screen.getByRole('button', { name: 'Audio only' }));
+  expect(onAudioOnly).toHaveBeenCalledWith(true);
+  expect(screen.getByText(/Video hidden. Audio continues./)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Sync live' }));
+  expect(onSyncLive).toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
   expect(requestPip).toHaveBeenCalled();
   Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: document.querySelector('video') });
@@ -199,6 +209,7 @@ it('supports viewer quality switching, picture-in-picture, and instant -15s repl
   expect(exitPip).toHaveBeenCalled();
   Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: null });
   fireEvent.click(screen.getByRole('button', { name: 'Instant 15 second replay' }));
+  unmount();
 });
 
 it('automatically cuts to a new camera angle on selectAngle command unless the viewer manually pinned an angle', async () => {

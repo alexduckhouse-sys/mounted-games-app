@@ -1,20 +1,22 @@
-# Next steps (24 October 2026)
+# Next steps (25 October 2026)
 
 The cross-chat to-do list, confirmed product specifications, code-verified bugs, and roadmap. Update or delete items as they land.
 
 **This file, `BUGS.md` and `COMPLETED_NEXT_STEPS.md` live in git on main.** Edit them on your feature branch (or a small docs PR), not in an uncommitted copy in another worktree. Move finished items to `COMPLETED_NEXT_STEPS.md` once their PR is merged.
 
-## Start here: after the 23 October walkthrough
+## Start here: after the 23–25 October walkthroughs
 
 On 23 October the user walked through creating a competition on production and reported findings live. Chat c5406079 turned them into PRs #105–#124, all merged with CI green; every migration ran on Neon first, each after a backup branch. Streaming is switched on (new Cloudflare SFU app; TURN not set up).
 
-**24 October consolidation & polish pass:**
+**24–25 October consolidation, live streaming, rules & timetable pass:**
 - Consolidated `/event-tools/:id` into `/competitions/:id/operations` tabs (Readiness, Equipment, Draw, Entries, Scorers & team, Tack check, Passport check, Import teams, Print sheets, Results book, Duplicate event) while keeping `/event-tools/:id/print/*` printable routes.
-- Consolidated `/competitions/:id/produce` into `/competitions/:id/broadcast` (Camera & stream + Overlays & banners tabs).
-- Consolidated `/stats` and `/competitions/past` with a shared `ResultsStatsNav` switcher; added `Arena setup & race diagrams` to `DetailsTab` and `SessionsTab`.
-- Surfaced **Scorer QR codes & links** (`ScorerLinksCard`) across `OperationsPage` (`Scorers & team` tab), `FormatPage` (`On the day`), `SessionPage` (`Organiser tools`), `DetailsTab` (`#scorer-links` shortcut), and `SiteAdmin`, with support for `"Main arena"` (when sessions are unnamed) and `"All arenas"` links.
-- Kept both the **Event shop** (`/competitions/:id/shop`) and the **Tack & kit classifieds** (`/shop`) reachable via a switcher on `EventShopPage` and a `Tack & kit shop` link in `NavigationDrawer`.
-- Hid `"Pay to …"` bank details from signed-out visitors on `DetailsTab` and `SectionEntryPage`, and updated `/privacy` to disclose stored sort code and account holder name on club payouts.
+- Added `/competitions/:id/produce` as a remote control desk for `/competitions/:id/broadcast`, with two-phone QR producer handoff, 30-minute IndexedDB circular replay buffer (`replayBuffer.ts`) with Follow-Cam (`ReplayInspector.tsx`), quality presets (`Auto HD`, `720p`, `480p Saver`), low-latency catch-up and audio-only/Lite Mode support.
+- Consolidated `/stats` and `/competitions/past` with a shared `ResultsStatsNav` switcher; added `Arena setup & race diagrams` to `DetailsTab` and `SessionsTab`, and added 4 governing body rulebooks (**EGUK**, **Pony Club**, **MGA**, **STRUK**) fetched per race via `GET /api/race-templates/by-name/{name}` (`RaceRulesSheet.tsx`).
+- Surfaced **Scorer QR codes & links** (`ScorerLinksCard`) with optional session/heat scoping (`20261024203315_AddScorerLinkScope`) and added an in-browser QR permission scanner modal (`QrPermissionScannerModal.tsx`) in `NavigationDrawer.tsx`.
+- Added equine flu vaccination certification & passport verification (`20261024200003_AddEquineVaccineCertification`), legal/policy tabs (`/privacy`, `/terms`, `/refunds`, `/cookies`, `/safeguarding`), dedicated `/competitions/:id/weather` page (`WeatherPage.tsx`), and `/competitions/:id/teams/:teamId` (`CompetitionTeamPage.tsx`) with race-by-race stats.
+- Added automatic first-race and halfway-race `(timeTaken - 2m)` delay maths, learned pace prediction, and organiser **Pause / Continue** + custom-minute shift controls on `TimetableBoard.tsx` and `TimetableTimes.cs` (`.ics` calendar sync).
+- Updated organiser-key sign-in (`POST /api/auth/admin-key`) to require a password when signing in with an email (creating/verifying a password-protected `Admin` account so the organiser can sign in normally on subsequent visits and nobody can impersonate their email) and enforced `RateLimits:AccountsPerIp` (default 5 retained accounts per IP) and `RateLimits:AuthPerMinute` (default 5/min per IP).
+- Pinned `PayoutClubId` on competition creation (`DecFormConfig.PayoutClubId`) and updated `ClubAccess.IsClubManagerAsync` to verify the `Manager` role against the database.
 
 **Decisions taken in the walkthrough** (don't relitigate):
 - Admin **edit mode is removed** entirely; destructive actions use the red full-screen `ConfirmDialog`, never `window.confirm`.
@@ -48,9 +50,10 @@ On 23 October the user walked through creating a competition on production and r
 
 **5. Security follow-ups** from the review of #113, #114 and #116 (all low):
 - [x] Payouts: allow clearing the responsible person's date of birth. (Privacy page updated on 24 Oct to mention the stored sort code and account holder name.)
-- [ ] Payouts: pin the paying club on the competition before real money moves (it follows the creator's current club today).
+- [x] Payouts: pin the paying club on the competition before real money moves (`DecFormConfig.PayoutClubId` pinned at competition creation).
 - [x] Show "Pay to …" on the entry page only to signed-in users.
-- [ ] `IsClubManagerAsync` trusts the Manager role in the token; re-check it against the database, as `ClubPayoutsController.ScopeAsync` does.
+- [x] `IsClubManagerAsync` trusts the Manager role in the token; re-check it against the database, as `ClubPayoutsController.ScopeAsync` does.
+- [x] Require a password when claiming an email via `POST /api/auth/admin-key` and enforce per-IP account creation cap (`RateLimits:AccountsPerIp`, default 5) and sign-in rate limit (`RateLimits:AuthPerMinute`, default 5).
 
 **6. Optional:** a TURN key for streaming on weak 4G (`Streaming__Cloudflare__TurnKeyId` is set, its `TurnKeyApiToken` isn't), a tutorial mode for scoring, and the remaining browser alert in `useTeamNotifications`.
 

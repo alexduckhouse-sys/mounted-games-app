@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, MapPin, Star, Users } from 'lucide-react';
 import { useCompetition } from './context';
@@ -9,7 +9,7 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { useFavourites } from '../../hooks/useFavourites';
-import { computeTimings, formatTime } from '../../lib/time';
+import { computeTimings, formatDelayDuration, formatShiftDelta, formatTime, parsePausedAtMs, predictMinutesPerRace } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { groupMaxDelay, isGroupFinished, sessionOrdinals, statusLabel, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
@@ -40,7 +40,14 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
     typeof favHook.isTeamFav === 'function'
       ? favHook.isTeamFav(competition.id, teamId)
       : (favHook.favourites ?? []).some((f) => f.competitionId === competition.id && f.teamId === teamId);
-  const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const hasPausedSessions = competition.sessions.some((s) => s.status !== 2 && parsePausedAtMs(s.notes) != null);
+  useEffect(() => {
+    if (!hasPausedSessions) return;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [hasPausedSessions]);
+  const timings = useMemo(() => computeTimings(competition.sessions, { nowMs }), [competition.sessions, nowMs]);
   const showQualifiers = canOrganise(competition);
   // A race session with no heats yet is the provisional timetable (an estimate from the creator): organisers see it,
   // the public sees sessions once heats exist.
@@ -58,20 +65,50 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
   const [sectionFilter, setSectionFilter] = useState('');
   const [shifting, setShifting] = useState(false);
+  const [customDelay, setCustomDelay] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const pace = useMemo(() => predictMinutesPerRace(competition.sessions ?? []), [competition.sessions]);
 
   async function shiftTimes(deltaMinutes: number) {
     setShifting(true);
+    setActionError(null);
     try {
       await api.post(`/competitions/${competition.id}/sessions/shift-times`, {
         deltaMinutes,
         arenaName: selectedArena || undefined,
       });
       reload();
+      return true;
     } catch {
-      // Ignore shift errors
+      setActionError('The timetable could not be shifted. Please try again.');
+      return false;
     } finally {
       setShifting(false);
     }
+  }
+  async function togglePause(currentlyPaused: boolean) {
+    setShifting(true);
+    setActionError(null);
+    try {
+      await api.post(`/competitions/${competition.id}/sessions/${currentlyPaused ? 'resume' : 'pause'}`, {
+        arenaName: selectedArena || undefined,
+      });
+      reload();
+    } catch {
+      setActionError(currentlyPaused
+        ? 'The timetable could not be resumed. Please try again.'
+        : 'The timetable could not be paused. Please try again.');
+    } finally {
+      setShifting(false);
+    }
+  }
+  async function applyCustomDelay() {
+    const parsed = Number(customDelay);
+    if (!Number.isInteger(parsed) || parsed === 0 || parsed < -720 || parsed > 720) {
+      setActionError('Enter a whole number from -720 to 720, excluding zero.');
+      return;
+    }
+    if (await shiftTimes(parsed)) setCustomDelay('');
   }
   function chooseArena(name: string) {
     setArena(name);
@@ -101,6 +138,11 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const arenas = [...new Set(rows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
   const showArenaSelect = sectionId == null && arenas.length > 1;
   const selectedArena = showArenaSelect && arenas.includes(arena) ? arena : '';
+  const isPaused = (competition.sessions ?? []).some(
+    (s) => s.status !== 2
+      && (!selectedArena || s.arenaName?.trim() === selectedArena)
+      && parsePausedAtMs(s.notes) != null,
+  );
   const sections = useMemo(
     () => (competition.sections ?? []).map((s) => ({
       id: s.id,
@@ -191,7 +233,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
     const sessionLive = group.rows.some((row) => row.status === 'live' || row.session.status === 1);
     const maxLate = sessionLive ? 0 : groupMaxDelay(group.rows);
     const count = `${group.rows.length} ${group.rows.length === 1 ? group.noun[0] : group.noun[1]}`;
-    const summary = maxLate > 0 ? [sharedArena, `${maxLate} min late`] : [sharedArena, count];
+    const summary = maxLate > 0 ? [sharedArena, `${formatDelayDuration(maxLate)} late`] : [sharedArena, count];
     const titleRow = group.title && <>
       <h2>{group.title}</h2>
       <span className={maxLate > 0 ? 'tt-summary-late' : undefined}>{summary.filter(Boolean).join(' · ')}</span>
@@ -246,8 +288,42 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
               {delta > 0 ? `+${delta}m` : `${delta}m`}
             </button>
           ))}
+          <button
+            type="button"
+            disabled={shifting}
+            onClick={() => void togglePause(isPaused)}
+            className={isPaused
+              ? 'rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-500/25 dark:text-amber-300'
+              : 'rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-2 py-1 text-xs font-semibold hover:bg-[rgb(var(--mg-tint))]'}
+          >
+            {isPaused ? 'Continue' : 'Pause'}
+          </button>
+          <input
+            type="number"
+            min={-720}
+            max={720}
+            value={customDelay}
+            onChange={(e) => setCustomDelay(e.target.value)}
+            placeholder="±min"
+            aria-label="Custom delay minutes"
+            className="w-16 rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-2 py-1 text-xs"
+          />
+          <button
+            type="button"
+            disabled={shifting || !customDelay.trim()}
+            onClick={() => void applyCustomDelay()}
+            className="rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-2 py-1 text-xs font-semibold hover:bg-[rgb(var(--mg-tint))] disabled:opacity-50"
+          >
+            Apply
+          </button>
+          {pace.avgMinutesPerRace != null && (pace.sampleHeats >= 2 || pace.sampleRaces >= 5) && (
+            <span className="ml-auto rounded-full bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-medium text-[rgb(var(--mg-muted))]">
+              Pace: ~{pace.avgMinutesPerRace.toFixed(1)}m/race
+            </span>
+          )}
         </div>
       )}
+      {actionError && <p role="alert" className="px-4 py-2 text-sm text-red-700">{actionError}</p>}
       <div className="tt-body">
         {lead}
         {visibleRows.some(isProvisionalRow) && (
@@ -357,7 +433,7 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   const shiftMinutes = Math.abs(rawDrift) >= 5 ? rawDrift : 0;
   const moved = shiftMinutes !== 0 && !!row.scheduled;
   const showShift = moved && status !== 'live' && status !== 'finished' && session.status !== 1;
-  const shiftText = shiftMinutes > 0 ? `+${shiftMinutes}m` : `${shiftMinutes}m`;
+  const shiftText = formatShiftDelta(shiftMinutes);
   const orderedRaces = heat ? heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const runningRaceIndex = orderedRaces.findIndex((r) => !r.isComplete);
   const currentRaceNum = runningRaceIndex >= 0 ? runningRaceIndex + 1 : orderedRaces.length;

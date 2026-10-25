@@ -4,10 +4,11 @@ React 19 + TypeScript + Vite PWA, used mostly on phones in fields with one bar o
 
 ## Where things live (beyond the root layout)
 
-- `src/lite/`: lite mode (Auto/On/Off, stored as `mg.liteMode`). `useLiteMode()` gates images (`components/LazyImage.tsx`), weather, the live video player and animation. Use `LazyImage` for any remote picture.
+- `src/lite/` and `src/theme/lite.ts`: lite mode (stored as `mg.lite`, with automatic detection for `navigator.connection.saveData` / `2g`). `useLiteMode()` / `isLite()` gates images (`components/LazyImage.tsx`), weather, the live video player, CSS blur/pulse animations and SignalR event batching. Use `LazyImage` for any remote picture.
 - `src/offline/`: public-API cache policy, saved copies, the score outbox. `src/weather/`: weather request cache.
-- `src/live/`: SignalR hook, `recoverConnection` (backoff and rejoin) and the Cloudflare stream publisher, viewer and runtime. `src/components/stream/`: the stream UI.
-- `src/pages/{commerce,operations,seasons,eventTools}/`: feature pages, with feature types kept next to them (`*Types.ts`).
+- `src/live/`: SignalR hook, `recoverConnection` (backoff and rejoin), `replayBuffer.ts` (30-minute IndexedDB circular replay buffer with clip export), and the Cloudflare stream publisher, viewer and runtime. `src/components/stream/` (including `ReplayInspector.tsx`): the stream and Follow-Cam replay UI.
+- `src/pages/competition/`: event tabs and screens including `TimetableTab.tsx`, `TimetableBoard.tsx`, `WeatherPage.tsx` (`/competitions/:id/weather`), `ScoringTab.tsx`, `ToplistView.tsx`, `CompetitionTeamPage.tsx` (`/competitions/:id/teams/:teamId`), `ChatTab.tsx`, `BroadcastPage.tsx`, `ArenaTab.tsx`, `SessionPage.tsx`.
+- `src/pages/{commerce,operations,seasons,eventTools}/`: feature pages, with feature types kept next to them (`*Types.ts`). Legal & policy tabs (`/privacy`, `/terms`, `/refunds`, `/cookies`, `/safeguarding`) live in `src/pages/PrivacyPage.tsx`, linked from `src/pages/SettingsPage.tsx` (`/settings`).
 - `src/test/`: Vitest setup, `factories.ts`, `streamFakes.ts`. `tests/*.test.mjs`: the node test suite.
 - `middleware.ts` (Vercel routing middleware: `/api/*` visitor IP, plus link-preview pages for crawlers on `/`, `/competitions/*` and `/team-profiles/*`) and `vercel.json` (rewrites, headers, build command).
 
@@ -47,7 +48,7 @@ Lint must be clean: CI runs it. Vitest coverage has a **97% gate** (lines, state
 
 ## Sharing
 
-- **QR codes:** `components/QrCode.tsx` draws inline SVG from `lib/qr.ts` (`uqr`, MIT, no dependencies); no QR data leaves the browser. Always black on white with a quiet zone, whatever the theme.
+- **QR codes:** `components/QrCode.tsx` draws inline SVG from `lib/qr.ts` (`uqr`, MIT, no dependencies); no QR data leaves the browser. Always black on white with a quiet zone, whatever the theme. Staff can scan permission QR codes directly in the browser via `components/QrPermissionScannerModal.tsx` (opened from `NavigationDrawer.tsx`), which validates the `"mg-scorer-v1"` scope key before navigating to `/score`.
 - **Venue poster:** `pages/eventTools/PosterPage.tsx`, reached as `/event-tools/:id/print/poster`; public event data only, shown to `canOrganise(competition)`. Styles live in `printEvent.css` (A4 and phone).
 - **Calendar:** the Details tab links straight to `/api/competitions/:id/calendar.ics?site=<origin>` (the service worker never handles `/api`). A team's feed link is made on My Teams (`pages/TeamSharing.tsx`), shown once, and opens as `webcal://`. A team QR carries `/teams?join=KEY`, which fills the join box; `ProtectedRoute` keeps the query string through sign-in.
 

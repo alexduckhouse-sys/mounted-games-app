@@ -1,6 +1,7 @@
 import type { IceServer, LiveStream, PublishRequest, PublishResponse, StreamQualityPreset, UpdateStreamRequest } from '../types';
 import { responseStatus, responseTitle, streamClock, streamRequest, type StreamClock } from './streamRuntime';
 
+export type { StreamQualityPreset } from '../types';
 export type PublisherState = 'idle' | 'starting' | 'live' | 'paused' | 'reconnecting' | 'ended' | 'error';
 export interface PublisherSnapshot {
   state: PublisherState;
@@ -17,6 +18,7 @@ export interface PublisherSnapshot {
   audioLevel?: number;
   fps?: number;
   bitrateKbps?: number;
+  rttMs?: number;
   qualityPreset?: StreamQualityPreset;
   captureResolution?: string;
 }
@@ -70,7 +72,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
   let snapshot: PublisherSnapshot = {
     state: 'idle', media: null, streamId: null, viewerCount: 0, signal: 'good',
     audioMuted: false, hasAudio: false, error: null,
-    zoom: 1, maxZoom: 3, windFilter: true, audioLevel: 0, fps: 30, bitrateKbps: 0,
+    zoom: 1, maxZoom: 3, windFilter: true, audioLevel: 0, fps: 30, bitrateKbps: 0, rttMs: 0,
     qualityPreset: '720p', captureResolution: '1080p',
   };
   const listeners = new Set<() => void>();
@@ -133,10 +135,21 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
             enc.maxBitrate = 380_000;
             enc.scaleResolutionDownBy = 3;
             enc.maxFramerate = 30;
+          } else if (preset === '480p') {
+            if (enc.rid === 'q') { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 2; }
+            else { enc.maxBitrate = 900_000; enc.scaleResolutionDownBy = 1.5; }
+            enc.maxFramerate = 30;
           } else if (preset === '720p') {
             if (enc.rid === 'f') { enc.maxBitrate = 1_500_000; enc.scaleResolutionDownBy = 1.5; }
             else if (enc.rid === 'h') { enc.maxBitrate = 850_000; enc.scaleResolutionDownBy = 2; }
-            else { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 3; }
+            else if (enc.rid === 'q') { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 3; }
+            else { enc.maxBitrate = 2_500_000; enc.scaleResolutionDownBy = 1; }
+            enc.maxFramerate = 30;
+          } else if (preset === 'auto') {
+            if (enc.rid === 'f') { enc.maxBitrate = 2_200_000; enc.scaleResolutionDownBy = 1; }
+            else if (enc.rid === 'h') { enc.maxBitrate = 850_000; enc.scaleResolutionDownBy = 1.5; }
+            else if (enc.rid === 'q') { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 2; }
+            else { enc.maxBitrate = 2_200_000; enc.scaleResolutionDownBy = 1; }
             enc.maxFramerate = 30;
           } else {
             if (enc.rid === 'f') { enc.maxBitrate = 2_500_000; enc.scaleResolutionDownBy = 1; }
@@ -195,7 +208,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     cancelConnect?.(); cancelConnect = undefined;
     cancelDisconnect?.(); cancelDisconnect = undefined;
     cancelStats?.(); cancelStats = undefined;
-    if (pc) { pc.onconnectionstatechange = null; pc.close(); pc = undefined; }
+    if (pc) { pc.onconnectionstatechange = null; pc.oniceconnectionstatechange = null; pc.close(); pc = undefined; }
   }
   function retry() {
     if (!running || cancelRetry) return;
@@ -241,7 +254,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       try {
         const stats = await peer.getStats();
         if (pc !== peer || !running) return;
-        let packets = 0, bytes = 0, fps = snapshot.fps ?? 30;
+        let packets = 0, bytes = 0, fps = snapshot.fps ?? 30, rttMs = snapshot.rttMs ?? 0;
         let limited = false;
         stats.forEach((report) => {
           if (report.type === 'outbound-rtp' && report.kind === 'video') {
@@ -249,6 +262,9 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
             bytes += report.bytesSent ?? 0;
             if (typeof report.framesPerSecond === 'number') fps = Math.round(report.framesPerSecond);
             limited ||= report.qualityLimitationReason === 'bandwidth' || report.qualityLimitationReason === 'cpu';
+          } else if (report.type === 'candidate-pair' && report.state === 'succeeded' && typeof report.currentRoundTripTime === 'number') {
+            rttMs = Math.round(report.currentRoundTripTime * 1000);
+            if (report.currentRoundTripTime > 0.4) limited = true;
           }
         });
         const now = d.now();
@@ -258,6 +274,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
           signal: bitrate < 150_000 ? 'poor' : limited || bitrate < 500_000 ? 'fair' : 'good',
           fps,
           bitrateKbps: Math.max(0, Math.round(bitrate / 1000)),
+          rttMs,
         });
         lastBytes = bytes; lastAt = now;
         if (now - lastProgress >= 15_000) { recover(); return; }
@@ -340,6 +357,9 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
         cancelDisconnect?.(); cancelDisconnect = undefined;
         if (peer.connectionState === 'failed') recover();
         else if (peer.connectionState === 'disconnected') cancelDisconnect = d.schedule(recover, 5000);
+      };
+      peer.oniceconnectionstatechange = () => {
+        if (peer.iceConnectionState === 'failed') recover();
       };
       heartbeat(); monitor(peer);
       void acquireWake();
@@ -472,6 +492,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     },
     async caption(value: string) { await patch({ caption: value }); caption = value || null; },
     viewers(count: number) { update({ viewerCount: count }); },
+    reconnect() { recover(); },
     stop,
     dispose() { alive = false; unlisten(); void stop().catch(() => {}); listeners.clear(); },
   };

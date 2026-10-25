@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Heat, Session } from '../types';
 import { heat, race, session } from '../test/factories';
-import { computeTimings, formatTime, roundTo5Min } from './time';
+import {
+  computeTimings,
+  formatDelayDuration,
+  formatShiftDelta,
+  formatTime,
+  parsePausedAtMs,
+  predictMinutesPerRace,
+  roundTo5Min,
+} from './time';
 
 const base = Date.UTC(2026, 5, 1, 9, 0, 0);
 const at = (minutes: number) => new Date(base + minutes * 60_000).toISOString();
@@ -398,6 +406,69 @@ describe('computeTimings', () => {
       expect(timeOf(timings.get(2)!.effective)).toBe(ms(60));
     });
   });
+
+  describe('ongoing pause offset and learned pace prediction', () => {
+    it('formats delays and signed shifts as minutes under an hour and hours + minutes at or above 60m', () => {
+      expect(formatDelayDuration(25)).toBe('25 min');
+      expect(formatDelayDuration(60)).toBe('1h');
+      expect(formatDelayDuration(94)).toBe('1h 34m');
+      expect(formatDelayDuration(120)).toBe('2h');
+
+      expect(formatShiftDelta(15)).toBe('+15m');
+      expect(formatShiftDelta(-10)).toBe('-10m');
+      expect(formatShiftDelta(60)).toBe('+1h');
+      expect(formatShiftDelta(94)).toBe('+1h 34m');
+      expect(formatShiftDelta(-90)).toBe('-1h 30m');
+      expect(formatShiftDelta(-120)).toBe('-2h');
+    });
+
+    it('parses paused timestamps from notes and cascades ongoing pause once per arena lane', () => {
+      const pausedAt = ms(10);
+      expect(parsePausedAtMs(`[paused:${pausedAt}]`)).toBe(pausedAt);
+      expect(parsePausedAtMs('no pause here')).toBeNull();
+
+      const timings = computeTimings(
+        [
+          session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), notes: `[paused:${pausedAt}]`, heats: [heat(1)] }),
+          session(2, { orderIndex: 2, arenaName: 'Arena 1', scheduledStart: at(60), notes: `[paused:${pausedAt}]`, heats: [heat(2)] }),
+          session(3, { orderIndex: 3, arenaName: 'Arena 2', scheduledStart: at(60), heats: [heat(3)] }),
+        ],
+        { nowMs: ms(25) },
+      );
+      // 15m pause is applied once to Arena 1 (not doubled on session 2) and leaves Arena 2 untouched.
+      expect(timeOf(timings.get(1)!.effective)).toBe(ms(15));
+      expect(timeOf(timings.get(2)!.effective)).toBe(ms(75));
+      expect(timeOf(timings.get(3)!.effective)).toBe(ms(60));
+    });
+
+    it('learns pace from completed heats and scales remaining heat durations within [0.75, 1.5]', () => {
+      const fastRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true }));
+      const sessions = [
+        session(1, {
+          orderIndex: 1,
+          scheduledStart: at(0),
+          heats: [
+            heat(1, { orderIndex: 1, durationMinutes: 30, startedAt: at(0), finishedAt: at(20), races: fastRaces }),
+            heat(2, { orderIndex: 2, durationMinutes: 30, races: [1, 2, 3, 4, 5].map((id) => race(id + 10)) }),
+          ],
+        }),
+        session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(3, { durationMinutes: 30 })] }),
+      ];
+
+      const pace = predictMinutesPerRace(sessions);
+      expect(pace.avgMinutesPerRace).toBe(4);
+      expect(pace.multiplier).toBe(0.75); // 20/30 = 0.667 clamped to 0.75
+      expect(pace.sampleRaces).toBe(5);
+
+      const timings = computeTimings(sessions);
+      // Heat 2 starts at 30m (scheduled) and takes round(30 * 0.75) = 23m -> session 1 ends at 53m.
+      expect(timeOf(timings.get(1)!.effectiveEnd)).toBe(ms(53));
+
+      const fallback = predictMinutesPerRace([], 7.2);
+      expect(fallback.avgMinutesPerRace).toBe(7.2);
+      expect(fallback.multiplier).toBeCloseTo(1.2, 5);
+    });
+  });
 });
 
 
@@ -446,5 +517,49 @@ describe('race checkpoint boundaries and parity', () => {
     const timings = computeTimings([session(1, { scheduledStart: at(0), heats: [heat(1, { races: [race(1, { finishedAt: at(5) })] })] }),
       session(2, { orderIndex: 2, scheduledStart: at(60), heats: [heat(2)] })]);
     expect(timeOf(timings.get(2)!.effective)).toBe(ms(60));
+  });
+});
+
+
+describe('pause cascade regressions', () => {
+  const paused = `[paused:${ms(10)}]`;
+  it('applies a pause once across consecutive untimed sessions and whole-event items', () => {
+    const timings = computeTimings([
+      session(1, { orderIndex: 1, arenaName: 'A', scheduledStart: at(0), notes: paused, heats: [heat(1, { durationMinutes: 30 })] }),
+      session(2, { orderIndex: 2, arenaName: 'A', scheduledStart: null, notes: paused, heats: [heat(2, { durationMinutes: 30 })] }),
+      session(3, { orderIndex: 3, arenaName: 'A', scheduledStart: null, notes: paused, heats: [heat(3, { durationMinutes: 30 })] }),
+      session(4, { orderIndex: 4, arenaName: null, scheduledStart: at(120), notes: paused, heats: [heat(4)] }),
+    ], { nowMs: ms(25) });
+    expect(timeOf(timings.get(1)!.effective)).toBe(ms(15));
+    expect(timeOf(timings.get(2)!.effective)).toBe(ms(45));
+    expect(timeOf(timings.get(3)!.effective)).toBe(ms(75));
+    expect(timeOf(timings.get(4)!.effective)).toBe(ms(135));
+  });
+
+  it.each([false, true])('keeps earlier actual heat times and delays remaining heats once (finished=%s)', (finished) => {
+    const timings = computeTimings([session(1, {
+      scheduledStart: at(0), startedAt: at(0), notes: paused, status: 1,
+      heats: [
+        heat(1, { orderIndex: 1, durationMinutes: 30, startedAt: at(0), finishedAt: finished ? at(30) : null }),
+        heat(2, { orderIndex: 2, durationMinutes: 30 }),
+        heat(3, { orderIndex: 3, durationMinutes: 30 }),
+      ],
+    })], { nowMs: ms(25) });
+    expect(timings.get(1)!.heats.map((h) => timeOf(h.effective))).toEqual([ms(0), ms(45), ms(75)]);
+  });
+
+  it('learns later heats from their own race timestamps, excluding invalid dates', () => {
+    const races = (start: number) => Array.from({ length: 5 }, (_, i) => race(i + 1, {
+      isComplete: true, startedAt: at(start + i * 5), finishedAt: at(start + (i + 1) * 5),
+    }));
+    const pace = predictMinutesPerRace([session(1, { startedAt: at(0), heats: [
+      heat(1, { orderIndex: 1, durationMinutes: 30, races: races(0) }),
+      heat(2, { orderIndex: 2, durationMinutes: 30, races: races(30) }),
+      heat(3, { orderIndex: 3, startedAt: 'invalid', finishedAt: at(60), races: races(30) }),
+    ] })]);
+    expect(pace.avgMinutesPerRace).toBe(5);
+    expect(pace.sampleHeats).toBe(2);
+    expect(pace.multiplier).toBeCloseTo(25 / 30);
+    expect(parsePausedAtMs('[paused:999999999999999999999999]')).toBeNull();
   });
 });

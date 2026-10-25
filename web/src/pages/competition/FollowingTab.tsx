@@ -7,7 +7,7 @@ import { usePageHeader } from '../../components/CompactPageBarContext';
 import { useFavourites } from '../../hooks/useFavourites';
 import { arenaNames, arenaToShow, followedHeats, heatName, nextHeats, type FollowedHeat } from '../../lib/following';
 import { displaySectionName } from '../../lib/section';
-import { formatTime } from '../../lib/time';
+import { formatShiftDelta, formatTime } from '../../lib/time';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { sessionOrdinals } from '../../lib/timetableRows';
 import { useCompetition } from './context';
@@ -149,7 +149,7 @@ export function FollowingTab() {
                   <strong className="truncate text-[15px] font-semibold">{score.team.displayName}</strong>
                   <span className="text-xs text-[rgb(var(--mg-muted))]">Lane {score.lane}</span>
                   {live && <span className="text-[10px] font-bold tracking-[0.06em] text-[rgb(var(--mg-red))]">{isStale ? 'WAS IN ARENA' : onNowText(row)}</span>}
-                  {late && <span className="text-xs text-[rgb(var(--mg-late-time))]">+{row.delayMinutes} · <s>{formatTime(row.scheduled)}</s></span>}
+                  {late && <span className="text-xs text-[rgb(var(--mg-late-time))]">{row.delayMinutes >= 60 ? formatShiftDelta(row.delayMinutes) : `+${row.delayMinutes}`} · <s>{formatTime(row.scheduled)}</s></span>}
                 </span>
                 <span className="mg-line-sub">{where(row)}</span>
               </span>

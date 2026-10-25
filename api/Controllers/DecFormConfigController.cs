@@ -38,7 +38,8 @@ public class DecFormConfigController(AppDbContext db) : ControllerBase
         if (config.Validate() is { } problem) return BadRequest(new { message = problem });
         var competition = await db.Competitions.FirstOrDefaultAsync(c => c.Id == competitionId);
         if (competition is null) return NotFound();
-        competition.DecFormConfigJson = config.Normalised().ToJson();
+        var pinnedClubId = await PayoutClubAsync(competition.DecFormConfigJson, competition.CreatedByUserId);
+        competition.DecFormConfigJson = (config.Normalised() with { PayoutClubId = pinnedClubId }).ToJson();
         await db.SaveChangesAsync();
         return await DtoAsync(competitionId, competition.DecFormConfigJson);
     }
@@ -51,9 +52,11 @@ public class DecFormConfigController(AppDbContext db) : ControllerBase
     {
         var competition = await db.Competitions.FirstOrDefaultAsync(c => c.Id == competitionId);
         if (competition is null) return NotFound();
-        competition.DecFormConfigJson = null;
+        var pinnedClubId = await PayoutClubAsync(competition.DecFormConfigJson, competition.CreatedByUserId);
+        competition.DecFormConfigJson = pinnedClubId is null ? null
+            : (DecFormConfig.Standard with { PayoutClubId = pinnedClubId }).ToJson();
         await db.SaveChangesAsync();
-        return await DtoAsync(competitionId, null);
+        return await DtoAsync(competitionId, competition.DecFormConfigJson);
     }
 
     /// <summary>Teams whose dec form broke a rule, for the people who run the competition. Rider names appear in the sentences, so staff only.</summary>
@@ -72,10 +75,17 @@ public class DecFormConfigController(AppDbContext db) : ControllerBase
             .OrderBy(t => t.TeamName).ToList();
     }
 
+    private async Task<int?> PayoutClubAsync(string? json, string? ownerId)
+    {
+        var pinned = DecFormConfig.Parse(json)?.PayoutClubId;
+        return pinned ?? await db.Users.Where(u => u.Id == ownerId).Select(u => u.ClubId).FirstOrDefaultAsync();
+    }
+
     private async Task<DecFormConfigDto> DtoAsync(int competitionId, string? json)
     {
         var parsed = DecFormConfig.Parse(json);
         var count = await db.DeclarationForms.CountAsync(f => f.Team!.CompetitionId == competitionId);
-        return new DecFormConfigDto(parsed ?? DecFormConfig.Standard, parsed is null, count);
+        var isStandard = parsed is null || (parsed with { PayoutClubId = null }).ToJson() == DecFormConfig.Standard.ToJson();
+        return new DecFormConfigDto(parsed ?? DecFormConfig.Standard, isStandard, count);
     }
 }

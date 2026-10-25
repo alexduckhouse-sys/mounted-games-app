@@ -20,9 +20,24 @@ public static class ClubAccess
 
     /// <summary>A club's Team Manager: heads the club, so can see and run all of its teams and riders.</summary>
     public static async Task<bool> IsClubManagerAsync(this AppDbContext db, ClaimsPrincipal user, int clubId, CancellationToken ct = default)
-        => user.IsInRole(Roles.Manager) && await db.ClubIdOfAsync(user, ct) == clubId;
+        => user.IsInRole(Roles.Manager)
+            && await db.ClubIdOfAsync(user, ct) == clubId
+            && await db.HasAnyRoleInDbAsync(UserIdOf(user), [Roles.Manager], ct);
 
     /// <summary>A Team Manager or trainer of this club: they share the club's saved riders.</summary>
     public static async Task<bool> SharesClubRosterAsync(this AppDbContext db, ClaimsPrincipal user, int clubId, CancellationToken ct = default)
-        => (user.IsInRole(Roles.Manager) || user.IsInRole(Roles.Trainer)) && await db.ClubIdOfAsync(user, ct) == clubId;
+        => (user.IsInRole(Roles.Manager) || user.IsInRole(Roles.Trainer))
+            && await db.ClubIdOfAsync(user, ct) == clubId
+            && await db.HasAnyRoleInDbAsync(UserIdOf(user), [Roles.Manager, Roles.Trainer], ct);
+
+    private static async Task<bool> HasAnyRoleInDbAsync(this AppDbContext db, string? userId, string[] roleNames, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(userId)) return false;
+        return await (
+            from ur in db.UserRoles.AsNoTracking()
+            join r in db.Roles.AsNoTracking() on ur.RoleId equals r.Id
+            where ur.UserId == userId && r.Name != null && roleNames.Contains(r.Name)
+            select ur.RoleId
+        ).AnyAsync(ct);
+    }
 }

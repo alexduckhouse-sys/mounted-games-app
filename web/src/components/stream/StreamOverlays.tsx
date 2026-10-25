@@ -2,7 +2,7 @@ import { useEffect, useState, useContext, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Megaphone, VolumeX } from 'lucide-react';
 import { BibSwatch as BaseBibSwatch } from '../BibSwatch';
-import { LiveDataCardOverlay, OverlayChips, ProducerBanner, ScoreCardOverlay, activeArenaHeat } from './OverlayExtras';
+import { LiveDataCardOverlay, OverlayChips, ProducerBanner, ScoreCardOverlay, activeArenaHeat, readLiveOverlayCard, useDueCard } from './OverlayExtras';
 import { SponsorOverlay } from './SponsorOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
 import { CompetitionContext } from '../../pages/competition/context';
@@ -78,9 +78,15 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
   const compCtx = useContext(CompetitionContext);
   const competition = compCtx?.competition;
   const { overlay, look, scoreCards } = useOverlay();
+  const dueCard = useDueCard(scoreCards, stream.arenaName, overlay.scoreCardDelaySeconds * 1000, overlay.scoreCardSeconds * 1000);
+  const liveCardMode = readLiveOverlayCard(overlay).mode;
+  const overlayPopupActive =
+    liveCardMode !== 'none' ||
+    Boolean(dueCard && overlay.scoreCardMode !== 2 && look.elements.scoreCard.show);
 
   // Off hides the now-racing strip; Auto and On show it, naming the heat when one is running.
-  const showStrip = !hideCaption && overlay.stripMode !== 2 && look.elements.strip.show;
+  // Also hide the bottom bar automatically when a centred overlay popup card is active.
+  const showStrip = !hideCaption && !overlayPopupActive && overlay.stripMode !== 2 && look.elements.strip.show;
   const stripEdge = look.elements.strip.place === 'top' ? 'top-0 pt-12' : 'bottom-0';
 
   const activeHeat = heatProp !== undefined
