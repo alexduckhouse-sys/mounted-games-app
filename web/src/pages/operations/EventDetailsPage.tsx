@@ -7,7 +7,7 @@ import { payoutsLine } from '../../lib/payouts';
 import { MAX_SECTOR_NAME, MAX_TACK_SECTORS, isScored, sectorProblem } from '../../lib/tackCheck';
 import type { CompetitionDetail, PassportCheckBoard, TackCheckBoard, TackCheckMode, TackCheckSection } from '../../types';
 import { useCompetition } from '../competition/context';
-import { RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
+import { RefineChoiceRow, RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
 import { apiMessage } from './types';
 import './operations.css';
 
@@ -154,14 +154,7 @@ export function EventDetailsPage() {
           <RefineList as="div" label="Tack checks">
             {tack.map((section) => (
               <div key={section.sectionId}>
-                <div className="rf-row ops-wrap">
-                  <label className="rf-grow ops-tack-name" htmlFor={`tack-${section.sectionId}`}><span className="rf-t1">Tack check · {section.sectionName}</span></label>
-                  <span className="rf-fld ops-select">
-                    <select id={`tack-${section.sectionId}`} value={choiceOf(section)} onChange={(event) => chooseTack(section, event.target.value as TackChoice)}>
-                      {TACK_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </span>
-                </div>
+                <RefineChoiceRow label={`Tack check · ${section.sectionName}`} value={choiceOf(section)} options={TACK_OPTIONS} onChange={(choice) => chooseTack(section, choice)} />
                 {section.isEnabled && isScored(section.mode) && (
                   <ScoringTable section={section} open={scoring === section.sectionId} onToggle={(open) => setScoring(open ? section.sectionId : null)}
                     onSave={async (sectors, maxPoints) => {
