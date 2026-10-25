@@ -2,43 +2,42 @@
 
 ## Source and integration
 
-- Gemini source: `feat/consolidate-pages-and-tokens`, commit `df05777`.
-- The earlier source snapshots are already merged in PRs #142, #143 and #144. PR #144 is live at main commit `c263df3`.
-- This final delta is being reviewed on `feat/gemini-scoring-handoff`. The merge preserves the fixes made while reviewing those earlier snapshots.
+- Gemini source: `feat/consolidate-pages-and-tokens`, commit `6606fb6`.
+- The earlier source snapshots are already merged in PRs #142–#145. PR #145 is live at main commit `3d9503e`, including source commit `df05777`.
+- This final delta is being reviewed on `feat/gemini-backend-handoff`. The merge preserves the fixes made while reviewing those earlier snapshots.
 - Keep new Gemini edits separate from this committed source until they have their own handoff.
 
 ## Database
 
 This delta adds no EF migrations. `AddEquineVaccineCertification` and `AddScorerLinkScope` were applied and verified in production before PR #142.
 
-The source handoff also named `20261025093000_AddSignupIpAddress` and `20261025101500_AddTimetableDelaysAndClubJoinPin`, but neither migration exists in source commit `df05777`. Do not attempt to apply them. Account creation limits use hashed IP claims, and the existing session directives implement timetable pause/delay. The source does not implement the claimed club join PIN or historical cross-competition pace endpoint.
+The source handoff also named `20261025093000_AddSignupIpAddress` and `20261025101500_AddTimetableDelaysAndClubJoinPin`, but neither migration exists in source commit `6606fb6`. Do not attempt to apply them. Account creation limits use hashed IP claims, and the existing session directives implement timetable pause/delay. The source does not implement the claimed club join PIN or historical cross-competition pace endpoint.
 
 ## New code in this delta
 
-- Full-page phone scoring, race navigation, hold-to-eliminate and score-override controls.
-- Commentator prompts and post-race summaries on session and scoped scorer pages.
-- Searchable race selectors and ordered race lists, including custom races.
-- Lane-order preference in Settings and card-control visibility in the competition creator.
-- Announcement pinning and the separate Contact organisers page.
-- Updated regression tests and test fixtures.
+- Server-backed `UseRefereeCards` configuration and referee-card/flag fields in competition, team, heat and standings responses.
+- Team-card assignment and clearing without changing historical result notes.
+- A heat-scoped missing-team call endpoint and cleanup when scoring starts.
+- Server-side announcement pin/unpin support.
+- A documented frontend queue in `NEXT_STEPS.md`; it is future work, not part of this backend release.
 
 ## Review notes
 
-- Preserve official standings and scoped scorer permissions; a partial local summary is not an official section ranking.
-- Retain protected-race checks when editing session race lists.
-- Do not apply score or HC changes before confirmation.
-- Retain the PR #144 stream command, overlay-save, permission and clipboard error handling.
-- Create replacement announcement banners before deleting the old banner.
-- The card-visibility switch is device-local, not a shared competition setting. The creator explains this.
+- Preserve the server-selected payout club and referee-card configuration through declaration-form save/reset.
+- Ordinary bib or flag updates must not forge or overwrite trusted referee-card metadata.
+- Card changes must preserve historical scoring notes and audit records.
+- Ring calls must remain scoped to their heat and must not convert private messages to public announcements.
+- Preserve admin-only announcement moderation. The explicit ring-call endpoint is available to competition staff.
+- Serialise concurrent pin changes and heat-start/ring-call writes.
+- The current frontend still uses its existing device-local card-visibility switch and legacy generic ring-call posts. Wiring the new backend capabilities is queued frontend work.
 - The privacy contact address remains a placeholder until the owner confirms the correct address.
 
 ## Validation
 
-- `npm --prefix web run lint`: passed.
-- `npm run build`: passed. One existing EF1002 warning remains in `DbInitializer`; no build errors.
-- Node tests: 121 passed.
-- Vitest: 258 files, 3,472 tests passed. Coverage: 99.33% statements, 97.41% branches, 99.52% functions, 99.88% lines.
-- Focused scoring regressions: 143 passed; independent scoring/access review closed.
-- Phone browser smoke checks: organiser session scoring, restricted scorer link, Settings, finishing-order taps and the override dialog. No runtime errors or page overflow.
-- No API code or schema changes relative to PR #144. Its final CI passed 2,183 API tests; this PR will rerun the full CI suite before merge.
-- GitHub PR checks and production deployment remain the final shipping steps.
+- Full API suite: 2,211 passed, four Redis-dependent skips locally; 96.53% line coverage.
+- Final nested/cross-tag regressions: 88 focused tests passed after the last sanitisation fix; eight regression cases failed before that fix.
+- Chat/scoring/scorer-link regressions: 144 passed, including concurrent pin/call/start and lost commit acknowledgement cases.
+- `npm run build`: passed; no build errors.
+- PostgreSQL pending-model guard passed against the unchanged migration snapshot. The existing bib column is now an EF concurrency token; there is no relational schema change or migration to apply.
+- Web source is unchanged from PR #145 (3,472 web tests and all 97% coverage gates passed there). The PR will run both complete CI suites before merge.
+- Production rollout and health checks are the final shipping steps.

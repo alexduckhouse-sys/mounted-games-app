@@ -9,6 +9,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Operations;
+using MountedGames.Api.Hubs;
 
 namespace MountedGames.Api.Services;
 
@@ -51,6 +52,8 @@ public class ScoringService
     private readonly AppDbContext _db;
     private readonly PushNotifier? _push;
     private readonly ILogger<ScoringService>? _log;
+    private readonly ILiveBroadcaster? _live;
+    private readonly List<(int CompetitionId, int MessageId)> _clearedCalls = [];
 
     public static IReadOnlyList<ScoreClashDto> GetSessionClashes(int sessionId)
         => ActiveClashes.Values.Where(c => c.SessionId == sessionId).OrderBy(c => c.RaceOrder).ThenBy(c => c.RaceId).ToList();
@@ -61,11 +64,12 @@ public class ScoringService
     public static void DismissClash(int raceId)
         => ActiveClashes.TryRemove(raceId, out _);
 
-    public ScoringService(AppDbContext db, PushNotifier? push = null, ILogger<ScoringService>? log = null)
+    public ScoringService(AppDbContext db, PushNotifier? push = null, ILogger<ScoringService>? log = null, ILiveBroadcaster? live = null)
     {
         _db = db;
         _push = push;
         _log = log;
+        _live = live;
     }
 
     /// <summary>The largest field that races at once in the session: a heat with more teams than lanes races only the lanes.</summary>
@@ -316,11 +320,71 @@ public class ScoringService
         CancellationToken cancellationToken = default)
         => ApplyActionAsync(raceId, request, actorUserId, RaceScoreEventKind.Reopened, cancellationToken);
 
+    // A real row update makes call creation and scoring contend on the same heat in
+    // PostgreSQL and SQLite, including requests handled by different API instances.
+    private Task<int> LockHeatForRaceAsync(int raceId, CancellationToken cancellationToken)
+        => _db.Heats.Where(h => h.Races.Any(r => r.Id == raceId))
+            .ExecuteUpdateAsync(setters => setters.SetProperty(h => h.StartedAt, h => h.StartedAt), cancellationToken);
+
+    public Task<ChatMessage> CreateMissingTeamCallAsync(int heatId, int? competitionId, int? teamId,
+        string? body, string? userId, string authorName, CancellationToken cancellationToken = default)
+        => ExecuteTransactionAsync(async () =>
+        {
+            var exists = await _db.Heats.Where(h => h.Id == heatId
+                    && (competitionId == null || h.Session!.CompetitionId == competitionId))
+                .ExecuteUpdateAsync(setters => setters.SetProperty(h => h.StartedAt, h => h.StartedAt), cancellationToken);
+            if (exists == 0) throw new KeyNotFoundException("Heat not found.");
+            var heat = await _db.Heats.Include(h => h.Session)
+                .Include(h => h.Entries).ThenInclude(e => e.Team).Include(h => h.Races)
+                .SingleAsync(h => h.Id == heatId, cancellationToken);
+            if (heat.StartedAt.HasValue || heat.FinishedAt.HasValue
+                || heat.Races.Any(r => r.StartedAt.HasValue || r.FinishedAt.HasValue || r.IsComplete))
+                throw new ScoreConflictException("This heat has already started.");
+            if (teamId is not null)
+            {
+                var entry = heat.Entries.SingleOrDefault(e => e.TeamId == teamId)
+                    ?? throw new ScoreValidationException("Team is not in this heat.");
+                var arena = string.IsNullOrWhiteSpace(heat.Session!.ArenaName) ? "Main Arena" : heat.Session.ArenaName.Trim();
+                var label = string.IsNullOrWhiteSpace(heat.Label) ? $"Heat {heat.OrderIndex}" : heat.Label;
+                body = $"🔔 Ring call ({arena}): {entry.Team?.DisplayName ?? $"Team #{entry.TeamId}"} (Lane {entry.LaneIndex}) needed at the collecting ring now for {label}.";
+            }
+            var msg = new ChatMessage
+            {
+                CompetitionId = heat.Session!.CompetitionId, UserId = userId,
+                AuthorName = authorName.Length > 60 ? authorName[..60] : authorName,
+                Body = body!.Trim(), Type = ChatMessageType.Announcement, Tag = $"missing-team:{heatId}",
+            };
+            _db.ChatMessages.Add(msg);
+            await _db.SaveChangesAsync(cancellationToken);
+            return msg;
+        }, cancellationToken);
+
+    public Task<T> WithChatLockAsync<T>(int competitionId, Func<Task<T>> action,
+        CancellationToken cancellationToken = default)
+        => ExecuteTransactionAsync(async () =>
+        {
+            await _db.Competitions.Where(c => c.Id == competitionId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(c => c.Name, c => c.Name), cancellationToken);
+            return await action();
+        }, cancellationToken);
+
+    private async Task ClearMissingTeamCallsAsync(Heat heat, CancellationToken cancellationToken)
+    {
+        var tag = $"missing-team:{heat.Id}";
+        var calls = await _db.ChatMessages.Where(m => m.CompetitionId == heat.Session!.CompetitionId
+                && m.Tag == tag && m.Type == ChatMessageType.Announcement
+                && !m.AdminOnly && m.RecipientUserId == null)
+            .ToListAsync(cancellationToken);
+        _db.ChatMessages.RemoveRange(calls);
+        _clearedCalls.AddRange(calls.Select(m => (m.CompetitionId, m.Id)));
+    }
+
     public Task<Race> UpdateRaceClockAsync(
         int raceId, bool start, DateTime at, bool hasClientTimestamp,
         CancellationToken cancellationToken = default)
         => ExecuteTransactionAsync(async () =>
         {
+            await LockHeatForRaceAsync(raceId, cancellationToken);
             var race = await _db.Races
                 .Include(r => r.Heat).ThenInclude(h => h!.Session)
                 .Include(r => r.Results).ThenInclude(result => result.Team)
@@ -348,6 +412,17 @@ public class ScoringService
                     // Duplicate Start taps during the same live run are idempotent.
                     race.StartedAt ??= at;
                 }
+
+                if (race.Heat is { } heat)
+                {
+                    heat.StartedAt ??= at;
+                    if (heat.Session is { } session)
+                    {
+                        session.StartedAt ??= at;
+                        if (session.Status == SessionStatus.Upcoming)
+                            session.Status = SessionStatus.InArena;
+                    }
+                }
             }
             else
             {
@@ -358,6 +433,7 @@ public class ScoringService
                     race.StartedAt = at.AddSeconds(-1);
                 race.FinishedAt = at;
             }
+            await ClearMissingTeamCallsAsync(race.Heat!, cancellationToken);
             await _db.SaveChangesAsync(cancellationToken);
             return race;
         }, cancellationToken);
@@ -378,6 +454,7 @@ public class ScoringService
         {
         // Reset on every execution-strategy attempt, including an idempotent replay after an ambiguous commit.
         populatedFinalHeatId = null;
+        await LockHeatForRaceAsync(raceId, cancellationToken);
         var race = await _db.Races
             .Include(r => r.Heat).ThenInclude(h => h!.Entries).ThenInclude(e => e.Team)
             .Include(r => r.Heat).ThenInclude(h => h!.Races)
@@ -598,6 +675,7 @@ public class ScoringService
             PayloadFingerprint = payloadFingerprint,
             CreatedAt = now,
         });
+        await ClearMissingTeamCallsAsync(heat, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         ActiveClashes.TryRemove(raceId, out _);
         if (fresh.Count > 0)
@@ -754,16 +832,28 @@ public class ScoringService
     private async Task<T> ExecuteTransactionAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
     {
         var strategy = _db.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
+        _clearedCalls.Clear();
+        var result = await strategy.ExecuteAsync(async () =>
         {
             // A provider retry must not reuse mutations tracked by the failed attempt.
             _db.ChangeTracker.Clear();
             await using var transaction = await _db.Database.BeginTransactionAsync(
                 IsolationLevel.Serializable, cancellationToken);
-            var result = await action();
+            var value = await action();
             await transaction.CommitAsync(cancellationToken);
-            return result;
+            return value;
         });
+        if (_live is not null && _clearedCalls.Count > 0)
+        {
+            // Keep deletion notifications across a retry after an ambiguous commit, but
+            // do not announce a deletion from an attempt that rolled back and left the row.
+            var ids = _clearedCalls.Select(c => c.MessageId).Distinct().ToArray();
+            var remaining = await _db.ChatMessages.AsNoTracking().Where(m => ids.Contains(m.Id))
+                .Select(m => m.Id).ToListAsync(cancellationToken);
+            foreach (var (competitionId, messageId) in _clearedCalls.Distinct())
+                if (!remaining.Contains(messageId)) await _live.ChatMessageDeleted(competitionId, messageId);
+        }
+        return result;
     }
 
     private async Task<RaceScoreState> GetOrCreateStateAsync(Race race, CancellationToken cancellationToken)

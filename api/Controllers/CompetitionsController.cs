@@ -55,7 +55,7 @@ public class CompetitionsController : ControllerBase
 
     private IQueryable<Session> SessionsWithDetail() => _db.Sessions
         .Include(s => s.Section)
-        .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+        .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team).ThenInclude(t => t!.Results)
         .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team);
 
     private static (double? lat, double? lon) ExtractCoordsFromAppleMapsUrl(string? url)
@@ -152,8 +152,9 @@ public class CompetitionsController : ControllerBase
             .Include(c => c.Teams).ThenInclude(t => t.Club)
             .Include(c => c.Teams).ThenInclude(t => t.Section)
             .Include(c => c.Teams).ThenInclude(t => t.Trainer)
+            .Include(c => c.Teams).ThenInclude(t => t.Results)
             .Include(c => c.Sessions).ThenInclude(s => s.Section)
-            .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team).ThenInclude(t => t!.Results)
             .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return NotFound();
@@ -187,13 +188,13 @@ public class CompetitionsController : ControllerBase
         var sessions = await _db.Sessions.AsNoTracking().AsSplitQuery()
             .Where(s => sessionIds.Contains(s.Id))
             .Include(s => s.Section)
-            .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team).ThenInclude(t => t!.Results)
             .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
             .ToListAsync();
         var teamIds = sessions.SelectMany(s => s.Heats).SelectMany(h => h.Entries).Select(e => e.TeamId).Distinct().ToList();
         var teams = await _db.Teams.AsNoTracking()
             .Where(t => t.CompetitionId == id && teamIds.Contains(t.Id))
-            .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer)
+            .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer).Include(t => t.Results)
             .ToListAsync();
         var signupCounts = await ActiveSignupCountsAsync(id);
 
@@ -273,7 +274,11 @@ public class CompetitionsController : ControllerBase
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
             TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim(),
             // New competitions start with the basic dec form and pin the creator's club for payouts; older ones with no setup keep the standard form.
-            DecFormConfigJson = (MountedGames.Api.Services.DecForms.DecFormConfig.Basic with { PayoutClubId = creatorClubId }).ToJson(),
+            DecFormConfigJson = (MountedGames.Api.Services.DecForms.DecFormConfig.Basic with
+            {
+                PayoutClubId = creatorClubId,
+                UseRefereeCards = req.UseRefereeCards,
+            }).ToJson(),
             LaneHatbands = PlannedRaceList.Write(req.LaneHatbands),
             StartDate = req.StartDate,
             EndDate = req.EndDate,
@@ -321,12 +326,57 @@ public class CompetitionsController : ControllerBase
         c.PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
         c.TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim();
         if (req.LaneHatbands is not null) c.LaneHatbands = PlannedRaceList.Write(req.LaneHatbands);
+        if (req.UseRefereeCards.HasValue)
+        {
+            c.DecFormConfigJson = (MountedGames.Api.Services.DecForms.DecFormConfig.For(c) with
+            {
+                UseRefereeCards = req.UseRefereeCards.Value,
+            }).ToJson();
+        }
         c.StartDate = req.StartDate;
         c.EndDate = req.EndDate;
         c.IsActive = req.IsActive;
         c.IsArchived = req.IsArchived;
         await _db.SaveChangesAsync();
         return c.ToSummary();
+    }
+
+    [HttpPut("{id:int}/teams/{teamId:int}/card")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
+    public async Task<ActionResult<TeamDto>> SetTeamCard(int id, int teamId, SetTeamCardRequest req)
+    {
+        var raw = req.Card?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrEmpty(raw) && raw is not ("none" or "yellow" or "red"))
+            return BadRequest(new { message = "Card must be 'yellow', 'red', or null." });
+        var card = raw is "yellow" or "red" ? raw : null;
+
+        var team = await _db.Teams
+            .Include(t => t.Club)
+            .Include(t => t.Section)
+            .Include(t => t.Trainer)
+            .Include(t => t.Results)
+            .FirstOrDefaultAsync(t => t.Id == teamId && t.CompetitionId == id);
+        if (team is null) return NotFound();
+
+        if (req.RaceId is { } raceId && !await _db.Races.AnyAsync(r => r.Id == raceId
+            && r.Heat!.Session!.CompetitionId == id
+            && (r.Heat.Entries.Any(e => e.TeamId == teamId) || r.Results.Any(result => result.TeamId == teamId))))
+            return BadRequest(new { message = "The race must belong to this competition and include this team." });
+
+        // Team cards represent the current decision; scored race notes remain immutable here.
+        team.BibDescription = ResultStatuses.ApplyCardTag(team.BibDescription, card ?? "none");
+
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { message = "The team changed while you were editing. Reload and try again." });
+        }
+        await _live.ResultsUpdated(id, new { teamId = team.Id, refereeCard = card });
+        return team.ToDto();
     }
 
     [HttpDelete("{id:int}")]
@@ -979,8 +1029,9 @@ public class CompetitionsController : ControllerBase
             .Include(c => c.Teams).ThenInclude(t => t.Club)
             .Include(c => c.Teams).ThenInclude(t => t.Section)
             .Include(c => c.Teams).ThenInclude(t => t.Trainer)
+            .Include(c => c.Teams).ThenInclude(t => t.Results)
             .Include(c => c.Sessions).ThenInclude(s => s.Section)
-            .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team).ThenInclude(t => t!.Results)
             .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstAsync(c => c.Id == id);
 
@@ -991,15 +1042,12 @@ public class CompetitionsController : ControllerBase
             await _live.SessionUpdated(id, dto);
         }
 
-        return new CompetitionDetail(
-            refreshed.Id, refreshed.Name, refreshed.Location, refreshed.Description,
-            refreshed.Latitude, refreshed.Longitude,
-            refreshed.What3Words, refreshed.AppleMapsUrl,
-            refreshed.StartDate, refreshed.EndDate,
-            refreshed.IsActive, refreshed.IsArchived,
+        return refreshed.ToDto(
             refreshed.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
             refreshed.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             refreshed.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
-            IsDemo: await IsDemoCompetitionAsync(refreshed.Id), TermsText: refreshed.TermsText, LaneHatbands: PlannedRaceList.Read(refreshed.LaneHatbands));
+            isDemo: await IsDemoCompetitionAsync(refreshed.Id),
+            payoutsTo: await _db.PayoutsToAsync(refreshed.CreatedByUserId, refreshed.DecFormConfigJson),
+            includePaymentDetails: User.Identity?.IsAuthenticated == true);
     }
 }

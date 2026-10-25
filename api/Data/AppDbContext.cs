@@ -245,6 +245,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             e.Property(t => t.Suffix).HasMaxLength(10).IsRequired();
             e.Property(t => t.DisplayName).HasMaxLength(200).IsRequired();
+            // Bib text also carries organiser-owned metadata; stale edits must not overwrite it.
+            e.Property(t => t.BibDescription).IsConcurrencyToken();
             e.HasOne(t => t.Competition)
                 .WithMany(c => c.Teams)
                 .HasForeignKey(t => t.CompetitionId)

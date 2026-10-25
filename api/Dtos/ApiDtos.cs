@@ -49,7 +49,8 @@ public record CompetitionDetail(
     bool IsDemo = false,
     string? TermsText = null,
     PayoutsToDto? PayoutsTo = null,
-    IReadOnlyList<string>? LaneHatbands = null);
+    IReadOnlyList<string>? LaneHatbands = null,
+    bool UseRefereeCards = false);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -62,7 +63,8 @@ public record CreateCompetitionRequest(
     string? PaymentDestination = null,
     [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null,
     [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null,
-    IReadOnlyList<string>? LaneHatbands = null);
+    IReadOnlyList<string>? LaneHatbands = null,
+    bool UseRefereeCards = false);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -77,7 +79,8 @@ public record UpdateCompetitionRequest(
     [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null,
     [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null,
     /// <summary>Null leaves the hatbands as they are; an empty list clears them.</summary>
-    IReadOnlyList<string>? LaneHatbands = null);
+    IReadOnlyList<string>? LaneHatbands = null,
+    bool? UseRefereeCards = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 
@@ -206,20 +209,24 @@ public record TeamDto(
     bool IsWithdrawn = false,
     string? BibDescription = null,
     /// <summary>Set only on the my-teams list: the viewer looks after this team, its event hasn't finished, and it has no dec form yet.</summary>
-    bool? NeedsDeclaration = null);
+    bool? NeedsDeclaration = null,
+    string? RefereeCard = null,
+    string? Flag = null);
 
 public record CreateTeamRequest(
     int CompetitionSectionId, int ClubId, string Suffix,
     string? BibColour, string? TrainerUserId,
     bool IsHorsConcours = false,
-    [StringLength(200)] string? BibDescription = null);
+    [StringLength(200)] string? BibDescription = null,
+    [StringLength(20), RegularExpression(MountedGames.Api.Services.ResultStatuses.FlagPattern)] string? Flag = null);
 
 /// <summary>Omitted (null) fields stay as they are. An empty <c>TrainerUserId</c> or <c>BibDescription</c> clears it.</summary>
 public record UpdateTeamRequest(
     string? Suffix = null,
     bool? IsHorsConcours = null,
     string? TrainerUserId = null,
-    [StringLength(200)] string? BibDescription = null);
+    [StringLength(200)] string? BibDescription = null,
+    [StringLength(20), RegularExpression(MountedGames.Api.Services.ResultStatuses.FlagPattern)] string? Flag = null);
 
 /// <summary>A trainer who can be put in charge of a team.</summary>
 public record ClubTrainerDto(string UserId, string FullName);
@@ -328,11 +335,16 @@ public record UpdateHeatDurationRequest(int? DurationMinutes);
 /// <summary>When the scorer tapped Start/Stop, so a slow connection doesn't shift the race time.</summary>
 public record RaceClockRequest(DateTime? At);
 
-public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex);
+public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex,
+    string? RefereeCard = null, string? Flag = null, string? BibDescription = null);
 
 /// <summary>A result as everyone sees it. Status says why a team that did not finish (Eliminated is true) did not. The referee note is never here.</summary>
 public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, double Points, bool IsSitOut = false,
-    ResultStatus Status = ResultStatus.Finished);
+    ResultStatus Status = ResultStatus.Finished, string? RefereeCard = null, bool UnderReview = false);
+
+public record CallMissingTeamRequest(int TeamId);
+
+public record SetTeamCardRequest(string? Card, int? RaceId = null);
 
 public record CreateHeatRequest(
     string? Label, int OrderIndex,
@@ -359,7 +371,8 @@ public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated, ResultSt
 public record StandingRow(
     int TeamId, string TeamName, string ClubName, string? BibColour,
     double TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null,
-    bool Withdrawn = false, int BonusPoints = 0);
+    bool Withdrawn = false, int BonusPoints = 0, string? RefereeCard = null,
+    string? Flag = null, string? BibDescription = null);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,

@@ -1,4 +1,11 @@
 using System.Net;
+using Microsoft.AspNetCore.SignalR.Client;
+using System.Data.Common;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
+using MountedGames.Api.Data;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -498,4 +505,303 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal("Chief Steward", chat.AuthorName);
         Assert.Equal("Chief Steward", ann.AuthorName);
     }
+
+    [Fact]
+    public async Task PinAnnouncement_PinsAndReplacesPreviousPin_AndTogglesOff()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var admin = await _f.AdminAsync();
+
+        var first = await (await admin.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("Gate A closed", "info")))
+            .ReadAsync<ChatMessageDto>();
+        var second = await (await admin.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("Prize giving at 16:00", "info")))
+            .ReadAsync<ChatMessageDto>();
+
+        var pinFirst = await admin.PostAsync(Url(a, $"/{first.Id}/pin"), null);
+        Assert.Equal(HttpStatusCode.OK, pinFirst.StatusCode);
+        Assert.Equal("pinned", (await pinFirst.ReadAsync<ChatMessageDto>()).Tag);
+
+        var pinSecond = await admin.PostAsync(Url(a, $"/{second.Id}/pin"), null);
+        Assert.Equal(HttpStatusCode.OK, pinSecond.StatusCode);
+        Assert.Equal("pinned", (await pinSecond.ReadAsync<ChatMessageDto>()).Tag);
+
+        var list = await (await _f.CreateClient().GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.Null(list.Single(m => m.Id == first.Id).Tag);
+        Assert.Equal("pinned", list.Single(m => m.Id == second.Id).Tag);
+
+        var unpinSecond = await admin.PostAsync(Url(a, $"/{second.Id}/pin"), null);
+        Assert.Equal(HttpStatusCode.OK, unpinSecond.StatusCode);
+        Assert.Null((await unpinSecond.ReadAsync<ChatMessageDto>()).Tag);
+    }
+
+    [Fact]
+    public async Task Post_RingCallFromStaff_BecomesPublicAnnouncement_AndClearsWhenHeatStarts()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var (heatId, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var admin = await _f.AdminAsync();
+
+        var ringCall = await admin.PostAsJsonAsync($"/api/heats/{heatId}/call-missing-team", new CallMissingTeamRequest(a.TeamIds[0]));
+        Assert.Equal(HttpStatusCode.OK, ringCall.StatusCode);
+        var callDto = await ringCall.ReadAsync<ChatMessageDto>();
+        Assert.Equal(ChatMessageType.Announcement, callDto.Type);
+        Assert.Equal($"missing-team:{heatId}", callDto.Tag);
+        Assert.False(callDto.AdminOnly);
+
+        // Starting the first race in the heat stamps Heat.StartedAt and deletes the ring-call message.
+        var startResp = await admin.PostAsync($"/api/races/{races[0]}/start", null);
+        Assert.Equal(HttpStatusCode.OK, startResp.StatusCode);
+
+        var remaining = await (await _f.CreateClient().GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.DoesNotContain(remaining, m => m.Id == callDto.Id);
+
+        // Calling a missing team after the heat has started is refused with 409 Conflict.
+        var lateCall = await admin.PostAsJsonAsync($"/api/heats/{heatId}/call-missing-team", new CallMissingTeamRequest(a.TeamIds[0]));
+        Assert.Equal(HttpStatusCode.Conflict, lateCall.StatusCode);
+
+        var lateAnnounce = await admin.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("Late call", $"missing-team:{heatId}"));
+        Assert.Equal(HttpStatusCode.Conflict, lateAnnounce.StatusCode);
+    }
+    [Fact]
+    public async Task RingPrefix_DoesNotChangeGenericChatPrivacy_OrPrivateReplies()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var (owner, auth) = await _f.ApprovedTrainerAsync();
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Competitions.FindAsync(a.CompetitionId))!.CreatedByUserId = auth.User.Id;
+            await db.SaveChangesAsync();
+        });
+        var sent = await (await owner.PostAsJsonAsync(Url(a),
+            new PostChatMessageRequest("🔔 Ring call: synthetic private question"))).ReadAsync<ChatMessageDto>();
+        Assert.True(sent.AdminOnly);
+        Assert.Equal(ChatMessageType.Chat, sent.Type);
+        var admin = await _f.AdminAsync();
+        var reply = await (await admin.PostAsJsonAsync(Url(a),
+            new PostChatMessageRequest("🔔 Ring call: synthetic private reply", auth.User.Id))).ReadAsync<ChatMessageDto>();
+        Assert.True(reply.AdminOnly);
+        Assert.Equal(auth.User.Id, reply.RecipientUserId);
+        var publicMessages = await (await _f.CreateClient().GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.DoesNotContain(publicMessages, m => m.Id == sent.Id || m.Id == reply.Id);
+    }
+
+    [Fact]
+    public async Task OwnerCanCallOwnHeat_ButCannotModerateChat_OrCallOtherCompetitions()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var other = await _f.CreateArenaAsync(1);
+        var (heatId, _) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var (otherHeat, _) = await _f.AddHeatAsync(other.SessionId, other.TeamIds);
+        var (owner, auth) = await _f.ApprovedTrainerAsync();
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Competitions.FindAsync(a.CompetitionId))!.CreatedByUserId = auth.User.Id;
+            await db.SaveChangesAsync();
+        });
+        var call = await owner.PostAsJsonAsync($"/api/heats/{heatId}/call-missing-team", new CallMissingTeamRequest(a.TeamIds[0]));
+        Assert.Equal(HttpStatusCode.OK, call.StatusCode);
+        var id = (await call.ReadAsync<ChatMessageDto>()).Id;
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("Test", null))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsync(Url(a, $"/{id}/pin"), null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.PostAsJsonAsync($"/api/heats/{otherHeat}/call-missing-team", new CallMissingTeamRequest(other.TeamIds[0]))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync($"/api/heats/{heatId}/call-missing-team", new CallMissingTeamRequest(other.TeamIds[0]))).StatusCode);
+    }
+
+    [Fact]
+    public async Task TaggedAnnouncement_ValidatesHeatAndCanonicalisesTag_AndRingCallsCannotBePinned()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var other = await _f.CreateArenaAsync(1);
+        var (heat, _) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var (otherHeat, _) = await _f.AddHeatAsync(other.SessionId, other.TeamIds);
+        var admin = await _f.AdminAsync();
+        foreach (var invalid in new[] { otherHeat, int.MaxValue })
+            Assert.Equal(HttpStatusCode.NotFound, (await admin.PostAsJsonAsync(Url(a, "/announcement"),
+                new AnnouncementRequest("Call", $"missing-team:{invalid}"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync(Url(a, "/announcement"),
+            new AnnouncementRequest("Call", "missing-team:invalid"))).StatusCode);
+        var msg = await (await admin.PostAsJsonAsync(Url(a, "/announcement"),
+            new AnnouncementRequest("Call", $"MISSING-TEAM:{heat}"))).ReadAsync<ChatMessageDto>();
+        Assert.Equal($"missing-team:{heat}", msg.Tag);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync(Url(a, $"/{msg.Id}/pin"), null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Pin_RejectsPrivateAndOtherCompetitionMessages_AndNormalisesExistingPins()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var other = await _f.CreateArenaAsync(1);
+        var privateId = await SeedMessageAsync(a, "Private", DateTime.UtcNow, adminOnly: true);
+        var otherId = await SeedMessageAsync(other, "Other", DateTime.UtcNow);
+        var admin = await _f.AdminAsync();
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync(Url(a, $"/{privateId}/pin"), null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.PostAsync(Url(a, $"/{otherId}/pin"), null)).StatusCode);
+        var first = await (await admin.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("First", "PINNED"))).ReadAsync<ChatMessageDto>();
+        Assert.Equal("pinned", first.Tag);
+        var second = await SeedMessageAsync(a, "Second", DateTime.UtcNow);
+        (await admin.PostAsync(Url(a, $"/{second}/pin"), null)).EnsureSuccessStatusCode();
+        var messages = await (await admin.GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.Equal(second, Assert.Single(messages, m => m.Tag == "pinned").Id);
+        Assert.Null(messages.Single(m => m.Id == first.Id).Tag);
+    }
+
+    [Fact]
+    public async Task ConcurrentPins_LeaveAtMostOnePinnedAnnouncement()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var first = await SeedMessageAsync(a, "First", DateTime.UtcNow);
+        var second = await SeedMessageAsync(a, "Second", DateTime.UtcNow);
+        var admin = await _f.AdminAsync();
+        var responses = await Task.WhenAll(admin.PostAsync(Url(a, $"/{first}/pin"), null), admin.PostAsync(Url(a, $"/{second}/pin"), null));
+        Assert.All(responses, r => Assert.Contains(r.StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.Conflict }));
+        Assert.Contains(responses, r => r.StatusCode == HttpStatusCode.OK);
+        var messages = await (await admin.GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.Single(messages, m => m.Tag == "pinned");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StartingOrScoringThroughLink_ClearsOnlyExactPublicHeatCalls(bool useScorerLink)
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var (heat, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var (otherHeat, _) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var admin = await _f.AdminAsync();
+        var current = await (await admin.PostAsJsonAsync($"/api/heats/{heat}/call-missing-team", new CallMissingTeamRequest(a.TeamIds[0]))).ReadAsync<ChatMessageDto>();
+        var other = await (await admin.PostAsJsonAsync($"/api/heats/{otherHeat}/call-missing-team", new CallMissingTeamRequest(a.TeamIds[0]))).ReadAsync<ChatMessageDto>();
+        var legacy = await SeedMessageAsync(a, "🔔 Ring call: legacy history", DateTime.UtcNow);
+        var privateId = await SeedMessageAsync(a, "🔔 Ring call: private question", DateTime.UtcNow, adminOnly: true);
+        await _f.WithDbAsync(async db =>
+        {
+            var privateMessage = (await db.ChatMessages.FindAsync(privateId))!;
+            privateMessage.Tag = $"missing-team:{heat}";
+            privateMessage.Type = ChatMessageType.Announcement;
+            await db.SaveChangesAsync();
+        });
+        if (useScorerLink)
+        {
+            var link = await (await admin.PostAsJsonAsync($"/api/competitions/{a.CompetitionId}/scorer-links",
+                new { label = "Synthetic scorer", arenaName = "All arenas" })).ReadAsync<CreatedScorerLinkDto>();
+            var scorer = _f.CreateClient();
+            scorer.DefaultRequestHeaders.Add("X-Scorer-Token", link.Token);
+            (await scorer.PutAsJsonAsync($"/api/scorer/races/{races[0]}/score", new UpdateRaceScoreRequest(
+                a.TeamIds.Select((id, i) => new FinishingPlaceDto(id, i + 1, false)).ToList(), 0, "call-cleanup", null))).EnsureSuccessStatusCode();
+        }
+        else (await admin.PostAsync($"/api/races/{races[0]}/start", null)).EnsureSuccessStatusCode();
+        var messages = await (await admin.GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.DoesNotContain(messages, m => m.Id == current.Id);
+        foreach (var id in new[] { other.Id, legacy, privateId }) Assert.Contains(messages, m => m.Id == id);
+    }
+
+    [Fact]
+    public async Task ConcurrentCallAndStart_DoNotLeaveACallAfterTheHeatStarts()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var (heat, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var admin = await _f.AdminAsync();
+        var call = admin.PostAsJsonAsync($"/api/heats/{heat}/call-missing-team", new CallMissingTeamRequest(a.TeamIds[0]));
+        var start = admin.PostAsync($"/api/races/{races[0]}/start", null);
+        var responses = await Task.WhenAll(call, start);
+        Assert.All(responses, r => Assert.Contains(r.StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.Conflict }));
+        if ((await start).IsSuccessStatusCode)
+            Assert.False(await _f.WithDbAsync(db => db.ChatMessages.AnyAsync(m => m.Tag == $"missing-team:{heat}")));
+        // A provider may reject either overlapping transaction; retrying the start must settle the heat.
+        (await admin.PostAsync($"/api/races/{races[0]}/start", null)).EnsureSuccessStatusCode();
+        Assert.False(await _f.WithDbAsync(db => db.ChatMessages.AnyAsync(m => m.Tag == $"missing-team:{heat}")));
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync($"/api/heats/{heat}/call-missing-team", new CallMissingTeamRequest(a.TeamIds[0]))).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Pin_AmbiguousCommitRetry_PreservesIntendedToggle(bool initiallyPinned)
+    {
+        using var factory = new PinRetryFactory();
+        var arena = await factory.CreateArenaAsync(1);
+        var admin = await factory.AdminAsync();
+        var message = await (await admin.PostAsJsonAsync(Url(arena, "/announcement"),
+            new AnnouncementRequest("Synthetic retry announcement", initiallyPinned ? "pinned" : null))).ReadAsync<ChatMessageDto>();
+        factory.Failure.Armed = true;
+        var response = await admin.PostAsync(Url(arena, $"/{message.Id}/pin"), null);
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(initiallyPinned ? null : "pinned", (await response.ReadAsync<ChatMessageDto>()).Tag);
+        Assert.Equal(1, factory.Failure.Failures);
+        Assert.Equal(initiallyPinned ? null : "pinned", await factory.WithDbAsync(db =>
+            db.ChatMessages.Where(m => m.Id == message.Id).Select(m => m.Tag).SingleAsync()));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StartOrScore_AmbiguousCommitRetry_StillBroadcastsRingCallRemoval(bool score)
+    {
+        using var factory = new PinRetryFactory();
+        var arena = await factory.CreateArenaAsync(1);
+        var (heat, races) = await factory.AddHeatAsync(arena.SessionId, arena.TeamIds);
+        var admin = await factory.AdminAsync();
+        var call = await (await admin.PostAsJsonAsync($"/api/heats/{heat}/call-missing-team",
+            new CallMissingTeamRequest(arena.TeamIds[0]))).ReadAsync<ChatMessageDto>();
+        await using var viewer = new HubConnectionBuilder()
+            .WithUrl(new Uri(factory.Server.BaseAddress, "/hubs/live"), options =>
+            {
+                options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
+                options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
+            }).Build();
+        var deleted = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        viewer.On<JsonElement>("chatMessageDeleted", message => deleted.TrySetResult(message.GetProperty("id").GetInt32()));
+        await viewer.StartAsync();
+        await viewer.InvokeAsync("JoinCompetition", arena.CompetitionId);
+        factory.Failure.Armed = true;
+        var response = score
+            ? await admin.PutAsJsonAsync($"/api/races/{races[0]}/score", new UpdateRaceScoreRequest(
+                [new(arena.TeamIds[0], 1, false)], 0, "ring-call-retry", null))
+            : await admin.PostAsync($"/api/races/{races[0]}/start", null);
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(call.Id, await deleted.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal(1, factory.Failure.Failures);
+        Assert.False(await factory.WithDbAsync(db => db.ChatMessages.AnyAsync(m => m.Id == call.Id)));
+    }
+
+    private sealed class PinRetryFactory : ApiFactory
+    {
+        public PinCommitFailure Failure { get; } = new();
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureServices(services => services.AddDbContext<AppDbContext>(options =>
+                options.ReplaceService<IExecutionStrategyFactory, PinRetryStrategyFactory>().AddInterceptors(Failure)));
+        }
+    }
+
+    private sealed class PinTransientException : Exception;
+
+    private sealed class PinRetryStrategyFactory(ExecutionStrategyDependencies dependencies) : IExecutionStrategyFactory
+    {
+        public IExecutionStrategy Create() => new PinRetryStrategy(dependencies);
+    }
+
+    private sealed class PinRetryStrategy(ExecutionStrategyDependencies dependencies)
+        : ExecutionStrategy(dependencies, maxRetryCount: 1, maxRetryDelay: TimeSpan.Zero)
+    {
+        protected override bool ShouldRetryOn(Exception exception) => exception is PinTransientException;
+    }
+
+    private sealed class PinCommitFailure : DbTransactionInterceptor
+    {
+        public bool Armed { get; set; }
+        public int Failures { get; private set; }
+        public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData,
+            CancellationToken cancellationToken = default)
+        {
+            if (Armed)
+            {
+                Armed = false;
+                Failures++;
+                throw new PinTransientException();
+            }
+            return Task.CompletedTask;
+        }
+    }
+
 }
