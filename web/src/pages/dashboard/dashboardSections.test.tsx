@@ -1,12 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { autoConfirm } from '../../test/confirm';
 import { team } from '../../test/factories';
 import type { CompetitionPickerItem } from '../../types';
-import { AdminPage } from '../AdminPage';
 import { NeedsYouContext, type NeedsYouValue } from '../profile/needsYou';
 import { NeedsYouPanel } from './NeedsYouPanel';
 import { QuickActions } from './QuickActions';
@@ -139,15 +138,5 @@ describe('Today’s events', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Looking for what’s on');
     view.rerender(<MemoryRouter><TodaysEvents loaded events={[]} /></MemoryRouter>);
     expect(screen.getByText('Nothing is on today or this week.')).toBeInTheDocument();
-  });
-});
-
-describe('/admin', () => {
-  it('sends old links to the site admin section of Me', () => {
-    render(<MemoryRouter initialEntries={['/admin']}><Routes>
-      <Route path="/admin" element={<AdminPage />} />
-      <Route path="/me" element={<p>Me page</p>} />
-    </Routes></MemoryRouter>);
-    expect(screen.getByText('Me page')).toBeInTheDocument();
   });
 });

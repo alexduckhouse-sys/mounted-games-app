@@ -29,7 +29,7 @@ export function AppShell() {
 
 function Shell({ width }: { width: PageWidth }) {
   const cap = PAGE_WIDTH_CLASS[width];
-  const { user, canOrganise } = useAuth();
+  const { user, canOrganise, hasRole } = useAuth();
   const { current, rememberChoice, storageError } = useCurrentCompetition();
   const { meta } = useCompetitionMeta();
   const { config: compactBar, header: pageHeader } = useCompactPageBarState();
@@ -39,6 +39,8 @@ function Shell({ width }: { width: PageWidth }) {
   const openLiteSettings = () => navigate('/settings#lite-mode');
   const location = useLocation();
   const { count: needsYou } = useNeedsYou();
+  // On the site admin pages an admin's MG logo goes to the site admin dashboard rather than the events list.
+  const inAdminArea = hasRole('Admin') && /^\/admin(\/(competitions|trainer-requests|rules))?\/?$/.test(location.pathname);
   const onProfile = location.pathname === '/me' || location.pathname === '/me/';
   const choosingCompetition = ['/', '/events', '/competitions', '/competitions/past'].includes(location.pathname);
   const competitionId = competitionIdFromPath(location.pathname);
@@ -91,7 +93,7 @@ function Shell({ width }: { width: PageWidth }) {
             <div className={`mx-auto flex ${cap} items-center gap-2.5 py-3 pl-4 pr-3`}>
               {pageHeader?.backTo
                 ? <Link to={pageHeader.backTo} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-white" aria-label={pageHeader.backLabel ?? 'Back'}><ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.25} /></Link>
-                : <Link to="/events" className="mg-logo" aria-label="Mounted Games home">MG</Link>}
+                : <Link to={inAdminArea ? '/admin' : '/events'} className="mg-logo" aria-label={inAdminArea ? 'Site admin home' : 'Mounted Games home'}>MG</Link>}
               {pageHeader?.plain ? (
                 <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">
                   <h1 className="mg-display truncate text-[22px] font-bold leading-none">{pageHeader.title}</h1>

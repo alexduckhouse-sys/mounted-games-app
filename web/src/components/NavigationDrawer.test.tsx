@@ -272,7 +272,7 @@ describe('NavigationDrawer: signed in', () => {
 
   it('shows an admin the site admin section of the dashboard', () => {
     mount({ roles: ['Admin', 'Trainer'] });
-    expect(links('Account and management')).toEqual([['Site admin', '/me#site-admin']]);
+    expect(links('Account and management')).toEqual([['Site admin', '/admin']]);
   });
 
   it('shows extra links published by the current page', () => {

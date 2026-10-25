@@ -63,7 +63,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   ];
   // Account and club links (teams, dec forms, signups, shop, sign out) live on the profile page now.
   const accountLinks = [
-    { to: '/me#site-admin', label: 'Site admin', icon: Settings, show: hasRole('Admin') },
+    { to: '/admin', label: 'Site admin', icon: Settings, show: hasRole('Admin') },
   ].filter((item) => item.show);
   const selectedSection = location.pathname === `${base}/scoring` ? new URLSearchParams(location.search).get('section') : null;
   return (

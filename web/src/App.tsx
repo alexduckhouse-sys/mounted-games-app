@@ -46,10 +46,12 @@ const SponsorsPage = lazy(() => import('./pages/competition/SponsorsPage').then(
 const FollowingTab = lazy(() => import('./pages/competition/FollowingTab').then((module) => ({ default: module.FollowingTab })));
 const MyTeamsPage = lazy(() => import('./pages/MyTeamsPage').then((module) => ({ default: module.MyTeamsPage })));
 const DeclarationsIndexPage = lazy(() => import('./pages/DeclarationsIndexPage').then((module) => ({ default: module.DeclarationsIndexPage })));
-const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })));
+const SiteAdminDashboard = lazy(() => import('./pages/admin/SiteAdminDashboard').then((module) => ({ default: module.SiteAdminDashboard })));
+const AdminCompetitionsPage = lazy(() => import('./pages/admin/AdminCompetitionsPage').then((module) => ({ default: module.AdminCompetitionsPage })));
+const TrainerRequestsPage = lazy(() => import('./pages/admin/TrainerRequestsPage').then((module) => ({ default: module.TrainerRequestsPage })));
 const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
-const RulesPage = lazy(() => import('./pages/admin/RulesPage').then((module) => ({ default: module.RulesPage })));
+const RulesLibraryPage = lazy(() => import('./pages/admin/RulesLibraryPage').then((module) => ({ default: module.RulesLibraryPage })));
 const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
 const WeatherPage = lazy(() => import('./pages/competition/WeatherPage').then((module) => ({ default: module.WeatherPage })));
 const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').then((module) => ({ default: module.OperationsPage })));
@@ -165,7 +167,13 @@ export default function App() {
               <Route path="me/catalogue" element={<ProtectedRoute><SellerCataloguePage /></ProtectedRoute>} />
               <Route path="me/orders" element={<ProtectedRoute><CommerceOrdersPage /></ProtectedRoute>} />
               <Route path="admin" element={
-                <ProtectedRoute roles={['Admin']}><AdminPage /></ProtectedRoute>
+                <ProtectedRoute roles={['Admin']}><SiteAdminDashboard /></ProtectedRoute>
+              } />
+              <Route path="admin/competitions" element={
+                <ProtectedRoute roles={['Admin']}><AdminCompetitionsPage /></ProtectedRoute>
+              } />
+              <Route path="admin/trainer-requests" element={
+                <ProtectedRoute roles={['Admin']}><TrainerRequestsPage /></ProtectedRoute>
               } />
               <Route path="admin/competitions/new" element={
                 <ProtectedRoute roles={['Admin', 'Trainer']}><CompetitionEditor /></ProtectedRoute>
@@ -177,7 +185,7 @@ export default function App() {
                 <ProtectedRoute roles={['Admin', 'Trainer']}><FormatPage /></ProtectedRoute>
               } />
               <Route path="admin/rules" element={
-                <ProtectedRoute roles={['Admin']}><RulesPage /></ProtectedRoute>
+                <ProtectedRoute roles={['Admin']}><RulesLibraryPage /></ProtectedRoute>
               } />
               <Route path="privacy" element={<PrivacyPage />} />
               <Route path="terms" element={<PrivacyPage />} />
