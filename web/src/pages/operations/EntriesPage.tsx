@@ -10,6 +10,7 @@ import {
   type CustomField, type DecFormConfig,
 } from '../../lib/decFormConfig';
 import { heightText } from '../../lib/decForm';
+import { displaySectionName } from '../../lib/section';
 import type { DeclarationForm, RiderEntry, SectionSignup } from '../../types';
 import { useCompetition } from '../competition/context';
 import { RefineChoiceRow, RefineDateTimeRow, RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
@@ -100,7 +101,7 @@ export function EntriesPage() {
   const groups = useMemo(() => {
     const map = new Map<number, { name: string; teams: TeamEntry[] }>();
     for (const entry of entries ?? []) {
-      const group = map.get(entry.sectionId) ?? { name: entry.sectionName, teams: [] };
+      const group = map.get(entry.sectionId) ?? { name: displaySectionName(entry.sectionName), teams: [] };
       group.teams.push(entry);
       map.set(entry.sectionId, group);
     }
