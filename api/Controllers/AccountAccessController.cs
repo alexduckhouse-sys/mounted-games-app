@@ -10,7 +10,7 @@ using MountedGames.Api.Services.Accounts;
 namespace MountedGames.Api.Controllers;
 
 /// <summary>
-/// Locking and blocking accounts. Lock (master admin only) stops an Admin or organiser account signing in. Block (admins)
+/// Locking and blocking accounts. Lock stops an Admin or organiser account signing in (admins lock organisers; only a master admin locks an Admin). Block (admins)
 /// stops any account signing in, entering competitions and posting in chat, and blocks the networks it has used. Finding the
 /// account is the existing <c>GET /api/admin/users?q=</c>, which searches by name and email. See
 /// <see cref="AccountAccessService"/> for the rules. The block reason is for admins only.
@@ -23,9 +23,9 @@ public sealed class AccountAccessController(AppDbContext db, AccountAccessServic
 
     // ---- lock ----
 
-    /// <summary>Admin and organiser accounts with their lock state, newest first. Master admin only.</summary>
+    /// <summary>Admin and organiser accounts with their lock state, newest first. Admins.</summary>
     [HttpGet("api/admin/staff-accounts")]
-    [Authorize(Roles = Roles.MasterAdmin)]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<IReadOnlyList<StaffAccountDto>>> StaffAccounts([FromQuery] string? q, CancellationToken ct)
     {
         var staffIds = db.UserRoles.Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.Name })
@@ -45,14 +45,14 @@ public sealed class AccountAccessController(AppDbContext db, AccountAccessServic
     }
 
     [HttpPost("api/admin/users/{userId}/account-lock")]
-    [Authorize(Roles = Roles.MasterAdmin)]
+    [Authorize(Roles = Roles.Admin)]
     public Task<IActionResult> Lock(string userId, CancellationToken ct)
-        => RunAsync(() => access.LockAsync(userId, CallerId, ct));
+        => RunAsync(() => access.LockAsync(userId, CallerId, CallerIsMaster, ct));
 
     [HttpDelete("api/admin/users/{userId}/account-lock")]
-    [Authorize(Roles = Roles.MasterAdmin)]
+    [Authorize(Roles = Roles.Admin)]
     public Task<IActionResult> Unlock(string userId, CancellationToken ct)
-        => RunAsync(() => access.UnlockAsync(userId, ct));
+        => RunAsync(() => access.UnlockAsync(userId, CallerIsMaster, ct));
 
     // ---- block ----
 

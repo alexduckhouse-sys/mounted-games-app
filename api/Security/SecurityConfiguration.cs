@@ -10,6 +10,10 @@ public static class SecurityConfiguration
         if (environment.IsDevelopment()) return;
         RequireExternalSecret(configuration, "Jwt:Key", 32, required: true);
         RequireExternalSecret(configuration, "Admin:Key", 20, required: false);
+        // Optional. When set it must be the SHA-256 of the master admin key in hex, so a typo can't silently disable it.
+        var masterHash = configuration["MasterAdmin:KeyHash"];
+        if (!string.IsNullOrWhiteSpace(masterHash) && !MasterAdminKey.IsValidHash(masterHash))
+            throw new InvalidOperationException("MasterAdmin:KeyHash must be the SHA-256 of the key as 64 hex characters.");
         if (configuration.GetValue<bool>("Database:SeedDemoData"))
             throw new InvalidOperationException("Demo accounts must not be seeded outside Development.");
     }

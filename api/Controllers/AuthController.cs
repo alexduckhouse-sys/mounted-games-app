@@ -176,6 +176,40 @@ public class AuthController : ControllerBase
             new UserProfile(user.Id, emailOverride ?? user.Email!, titleOverride ?? user.FullName, user.ClubId, null, roles.ToList(), user.EmailConfirmed));
     }
 
+    /// <summary>
+    /// Becomes master admin by giving the master admin key. A signed-in Admin only. The key itself is never stored: the host holds
+    /// its SHA-256 (<c>MasterAdmin:KeyHash</c>). Without that setting this answers 404, as if it didn't exist. The shared
+    /// admin-key account can't take the role (everyone who signs in with the admin key would get it). Returns a fresh token,
+    /// because roles travel in the token. Logs only the account id.
+    /// </summary>
+    [EnableRateLimiting("auth")]
+    [HttpPost("master-admin")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<AuthResponse>> BecomeMasterAdmin(
+        MasterAdminKeyRequest req, [FromServices] IConfiguration config, [FromServices] ILogger<AuthController> log)
+    {
+        var hash = config["MasterAdmin:KeyHash"];
+        if (!MasterAdminKey.IsValidHash(hash)) return NotFound();
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        if (string.Equals(user.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Sign in with your own account to become master admin." });
+        if (!MasterAdminKey.Matches(req?.Key, hash!))
+        {
+            log.LogWarning("Wrong master admin key from account {UserId}.", user.Id);
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "That key isn't right." });
+        }
+        if (!await _users.IsInRoleAsync(user, Roles.MasterAdmin))
+        {
+            var granted = await _users.AddToRoleAsync(user, Roles.MasterAdmin);
+            if (!granted.Succeeded) return StatusCode(500, new { message = "Could not grant the role." });
+            log.LogInformation("Account {UserId} became master admin.", user.Id);
+        }
+        var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
+        return new AuthResponse(token, expiresAt,
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, null, roles.ToList(), user.EmailConfirmed));
+    }
+
     [EnableRateLimiting("auth")]
     [HttpPost("signup-trainer")]
     [AllowAnonymous]
