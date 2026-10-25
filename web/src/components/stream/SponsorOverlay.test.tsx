@@ -37,7 +37,7 @@ const cards = [
   sponsor(1, { name: 'Supporter Co', tier: 2, showOn: 16 }), sponsor(2, { name: 'Headline Ltd', tier: 0, showOn: 16 }), sponsor(3, { name: 'Major Plc', tier: 1, showOn: 16 }),
 ];
 
-beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(0); vi.mocked(exposure.recordSponsorView).mockClear(); vi.mocked(exposure.recordSponsorSeconds).mockClear(); });
+beforeEach(() => { vi.mocked(framerMotion.useReducedMotion).mockReturnValue(true); vi.useFakeTimers(); vi.setSystemTime(0); vi.mocked(exposure.recordSponsorView).mockClear(); vi.mocked(exposure.recordSponsorSeconds).mockClear(); });
 afterEach(() => { vi.useRealTimers(); });
 
 describe('sponsor cards over the video', () => {

@@ -1,5 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as framerMotion from 'framer-motion';
 import type { StreamOverlay } from '../../types';
 import { CompetitionContext, type CompetitionCtx } from '../../pages/competition/context';
 import { DEFAULT_OVERLAY } from '../../lib/overlays';
@@ -15,6 +16,9 @@ vi.mock('framer-motion', async (importOriginal) => {
     useReducedMotion: vi.fn(() => true),
   };
 });
+
+// mockReset clears the factory's return value before each test, so set it again: these tests check where overlays land, not how.
+beforeEach(() => { vi.mocked(framerMotion.useReducedMotion).mockReturnValue(true); });
 
 function show(overlay: Partial<StreamOverlay>, extra: { label?: string | null; arena?: string; scoreCards?: QueuedScoreCard[] } = {}) {
   const value: CompetitionCtx = {

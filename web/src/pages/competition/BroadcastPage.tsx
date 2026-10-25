@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'framer-motion';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Camera, Eye, Film, Handshake, Layers, Lock, Megaphone, Mic, MicOff, Pause, Play, RefreshCw, SkipForward, Square, Wifi, Wind } from 'lucide-react';
 import { api } from '../../api';
 import { sponsorsFor } from '../../lib/sponsors';
 import { SponsorOverlay } from '../../components/stream/SponsorOverlay';
 import { readMessages, writeMessages } from '../../lib/overlayMessages';
-import { DEFAULT_OVERLAY } from '../../lib/overlays';
+import { DEFAULT_OVERLAY, parseLook } from '../../lib/overlays';
+import { useReplayWipe } from '../../components/stream/ReplayWipe';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { browserPublisherDependencies, createStreamPublisher, type PublisherSnapshot } from '../../live/streamPublisher';
@@ -120,6 +122,10 @@ function BroadcastStudio() {
   const currentStream = streams.find((stream) => stream.id === snapshot.streamId);
   const currentOverlay = overlay ?? DEFAULT_OVERLAY;
   const currentLook = (currentOverlay.look ?? {}) as Record<string, unknown>;
+  const wipeLook = parseLook(currentOverlay.look);
+  const { wipe, layer: wipeLayer } = useReplayWipe(wipeLook.accent, wipeLook.background);
+  const showReplay = (clip: SavedReplayClip) => wipe({ title: 'Replay', detail: clip.label }, () => setInspectingClip(clip));
+  const backToLive = () => wipe({ title: 'Live' }, () => setInspectingClip(null));
   const activeCardMode: LiveOverlayCardMode =
     currentLook.liveCard === 'toplist' || currentLook.liveCard === 'heat' || currentLook.liveCard === 'lanes' || currentLook.liveCard === 'next'
       ? currentLook.liveCard
@@ -312,7 +318,7 @@ function BroadcastStudio() {
 
   function handleSaveReplay(secs = 15) {
     const buffer = replayBuffer.current;
-    if (buffer) void prepareReplay((options) => buffer.saveClip(`${arena || 'Arena'} · ${angle}`, { ...options, durationSeconds: secs }), setInspectingClip);
+    if (buffer) void prepareReplay((options) => buffer.saveClip(`${arena || 'Arena'} · ${angle}`, { ...options, durationSeconds: secs }), showReplay);
   }
 
   const hasActiveOverlayPopup = showOverlays || showAnnounce || showReplayDrawer || activeCardMode !== 'none';
@@ -556,7 +562,7 @@ function BroadcastStudio() {
         <div className="pointer-events-auto absolute bottom-4 left-4 right-24 flex flex-wrap items-center gap-2">
           {editingCaption ? <form className="mg-stream-glass flex flex-1 gap-2 p-2" onSubmit={(event) => { event.preventDefault(); void run(async () => { await publisher.current!.caption(caption); setEditingCaption(false); }); }}><input aria-label="Viewers see" className="min-w-0 flex-1 bg-transparent p-2 text-white" maxLength={80} value={caption} placeholder="Leave blank for the timetable" onChange={(event) => setCaption(event.target.value)} /><button disabled={busy}>Save</button></form>
             : <button className="mg-stream-glass px-3 py-2 text-left text-sm" onClick={() => setEditingCaption(true)}><span className="mr-2 text-xs uppercase text-[rgb(var(--mg-header-sub))]">Viewers see</span>{label}</button>}
-          <SavedReplaysButton competitionId={competition.id} arenaName={arena} onSelectClip={(c) => setInspectingClip(c)} />
+          <SavedReplaysButton competitionId={competition.id} arenaName={arena} onSelectClip={showReplay} />
           {currentOverlay.bannerText && !showAnnounce && (
             <button type="button" className="mg-stream-glass px-3 py-2 text-xs font-semibold text-amber-300" disabled={busy} onClick={() => void clearBanner()}>
               Clear banner
@@ -591,18 +597,22 @@ function BroadcastStudio() {
         competitionId={competition.id}
         open={showReplayDrawer}
         onClose={() => setShowReplayDrawer(false)}
-        onSelectClip={(c) => setInspectingClip(c)}
+        onSelectClip={showReplay}
         onCaptureBufferClip={(secs) => handleSaveReplay(secs)}
         bufferedSeconds={Math.floor(replayStatus.retainedSeconds)}
       />
-      {inspectingClip && (
-        <ReplayInspector
-          clip={inspectingClip}
-          clips={getSavedReplays(competition.id)}
-          onSelectClip={(c) => setInspectingClip(c)}
-          onClose={() => setInspectingClip(null)}
-        />
-      )}
+      <AnimatePresence>
+        {inspectingClip && (
+          <ReplayInspector
+            key="replay"
+            clip={inspectingClip}
+            clips={getSavedReplays(competition.id)}
+            onSelectClip={showReplay}
+            onClose={backToLive}
+          />
+        )}
+      </AnimatePresence>
+      {wipeLayer}
     </OverlayLayer>
   </div>, document.body);
   const soundField = (

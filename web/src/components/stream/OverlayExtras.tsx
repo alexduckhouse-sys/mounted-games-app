@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, ArrowDown, ArrowUp, Clock, Eye, MapPin, Megaphone } from 'lucide-react';
 import { BibSwatch as BaseBibSwatch } from '../BibSwatch';
 import type { CompetitionDetail, Heat, HeatEntry, LiveStream, Session, StandingRow, StreamOverlay, Team } from '../../types';
@@ -13,6 +13,9 @@ import { api } from '../../api';
 import { buildToplist } from '../../lib/toplist';
 import { computeTimings } from '../../lib/time';
 import { timetableRows } from '../../lib/timetableRows';
+import { EASE_OUT, ENTER, LEAVE, previousSlots, ROW_STAGGER_S, SHUFFLE_DELAY_S, SHUFFLE_S, SPRING, WIPE_HIDDEN_BOTTOM, WIPE_HIDDEN_LEFT, WIPE_HIDDEN_RIGHT, WIPE_SHOWN } from '../../lib/motion';
+import { useStillMotion } from '../../lite/useStillMotion';
+import { CountUp } from './CountUp';
 
 interface BibColourHolder {
   bibColour?: string | null;
@@ -93,54 +96,67 @@ export function OverlayChips({ stream, look, live }: { stream: LiveStream; look:
 
 /** The producer's banner, in the chosen style and position, on streams from the arenas it's meant for. */
 export function ProducerBanner({ stream, arenaName, overlay, look }: { stream?: LiveStream; arenaName?: string; overlay: StreamOverlay; look?: OverlayLook }) {
-  const reduced = useReducedMotion();
+  const still = useStillMotion();
   const resolvedLook = look ?? parseLook(overlay.look);
   const targetArena = arenaName ?? stream?.arenaName ?? '';
-  if (!resolvedLook.elements.banner.show || !bannerShowsIn(overlay, targetArena)) return null;
-  const text = overlay.bannerText!;
-  if (DATA_CARD_MODES.has(text)) return null;
+  const text = overlay.bannerText ?? '';
+  const visible = resolvedLook.elements.banner.show && bannerShowsIn(overlay, targetArena) && !DATA_CARD_MODES.has(text);
   const edge = resolvedLook.elements.banner.place === 'top' ? 'top-12' : 'bottom-12';
-  if (overlay.bannerStyle === 2) {
-    return (
+  // A new message, style or position replaces the old banner: it leaves, then the new one comes in.
+  const key = `${overlay.bannerStyle}|${edge}|${text}`;
+  let banner: ReactElement | null = null;
+  if (visible && overlay.bannerStyle === 2) {
+    // Alert: lands with a little weight, and its accent ring pulses once.
+    banner = (
       <motion.div
+        key={key}
         role="status"
         aria-live="polite"
-        initial={reduced ? false : { y: 10 }}
-        animate={{ y: 0 }}
-        transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+        initial={still ? false : { opacity: 0, scale: 0.88 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={still ? undefined : { opacity: 0, scale: 0.96, transition: LEAVE }}
+        transition={SPRING}
         className="absolute inset-x-3 top-1/3 flex justify-center"
       >
-        <div className="mg-ov-alert mg-stream-fade"><AlertTriangle aria-hidden="true" /><strong>{text}</strong></div>
+        <div className={`mg-ov-alert ${still ? '' : 'mg-ov-alert-ring'}`}><AlertTriangle aria-hidden="true" /><strong>{text}</strong></div>
       </motion.div>
     );
-  }
-  if (overlay.bannerStyle === 1) {
-    return (
+  } else if (visible && overlay.bannerStyle === 1) {
+    // Lower bar: the bar wipes on from its accent edge, the words follow, and it wipes off the far side.
+    banner = (
       <motion.div
+        key={key}
         role="status"
         aria-live="polite"
-        initial={reduced ? false : { y: 10 }}
-        animate={{ y: 0 }}
-        transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-        className={`mg-ov-lower mg-stream-fade absolute inset-x-0 ${edge}`}
+        initial={still ? false : { clipPath: WIPE_HIDDEN_LEFT }}
+        animate={{ clipPath: WIPE_SHOWN }}
+        exit={still ? undefined : { clipPath: WIPE_HIDDEN_RIGHT, transition: LEAVE }}
+        transition={ENTER}
+        className={`mg-ov-lower absolute inset-x-0 ${edge}`}
       >
-        <Megaphone aria-hidden="true" /><span>{text}</span>
+        <Megaphone aria-hidden="true" />
+        <motion.span initial={still ? false : { opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ ...ENTER, delay: 0.14 }}>{text}</motion.span>
+      </motion.div>
+    );
+  } else if (visible) {
+    // Ticker: the band rises into place, then the words crawl.
+    banner = (
+      <motion.div
+        key={key}
+        role="status"
+        aria-live="polite"
+        initial={still ? false : { clipPath: WIPE_HIDDEN_BOTTOM }}
+        animate={{ clipPath: WIPE_SHOWN }}
+        exit={still ? undefined : { clipPath: WIPE_HIDDEN_BOTTOM, transition: LEAVE }}
+        transition={ENTER}
+        className={`mg-ov-ticker absolute inset-x-0 ${edge}`}
+        aria-label={text}
+      >
+        <span aria-hidden="true">{text}</span>
       </motion.div>
     );
   }
-  return (
-    <motion.div
-      role="status"
-      aria-live="polite"
-      initial={reduced ? false : { opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-      className={`mg-ov-ticker absolute inset-x-0 ${edge}`}
-      aria-label={text}
-    >
-      <span aria-hidden="true">{text}</span>
-    </motion.div>
-  );
+  return <AnimatePresence mode="wait">{banner}</AnimatePresence>;
 }
 
 /** The latest card for this stream's arena, while it's due on screen: from the delay until the delay plus its length. */
@@ -179,49 +195,104 @@ export function ScoreCardOverlay({
   cards: QueuedScoreCard[];
   teams?: Team[];
 }) {
-  const reduced = useReducedMotion();
   const due = useDueCard(cards, stream.arenaName, overlay.scoreCardDelaySeconds * 1000, overlay.scoreCardSeconds * 1000);
   const optionalCompetition = useOptionalCompetition();
   const allTeams = teams ?? optionalCompetition?.teams;
-  if (!due || overlay.scoreCardMode === 2 || !look.elements.scoreCard.show) return null;
-  const { card } = due;
+  const visible = due !== null && overlay.scoreCardMode !== 2 && look.elements.scoreCard.show;
   const where = look.elements.scoreCard.place === 'bottom' ? 'mg-ov-card-bottom' : 'mg-ov-card-right';
   return (
-    <motion.section
-      initial={reduced ? false : { x: 18, scale: 0.96 }}
-      animate={{ x: 0, scale: 1 }}
-      transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-      className={`mg-ov-card mg-stream-fade ${where} mg-ov-card-center`}
-      aria-label={`Results: ${due.heading}`}
+    <AnimatePresence>
+      {visible && due && <ScoreCardPanel key={`${due.card.raceId}-${due.receivedAt}`} due={due} teams={allTeams} where={where} />}
+    </AnimatePresence>
+  );
+}
+
+/**
+ * The card itself. Rows arrive in the order they stood before this race, hold for a beat, then slide to their new
+ * places while the totals count up and the points this race added pop in. The list is always in final order in
+ * the page, so screen readers and copy-paste get the real table; only the drawing moves.
+ */
+function ScoreCardPanel({ due, teams, where }: { due: QueuedScoreCard; teams?: Team[]; where: string }) {
+  const still = useStillMotion();
+  const { card } = due;
+  const rows = card.rows.filter((row) => !due.hiddenTeamIds?.includes(row.teamId));
+  const before = previousSlots(rows);
+  const settled = SHUFFLE_DELAY_S + SHUFFLE_S;
+  return (
+    <CentreCard
+      className={`${where} mg-ov-card-center`}
+      label={`Results: ${due.heading}`}
+      heading={due.heading}
+      subtitle={`after ${card.raceName} (race ${card.raceNumber} of ${card.raceCount})`}
     >
-      <header>
-        <strong>{due.heading}</strong>
-        <span>after {card.raceName} (race {card.raceNumber} of {card.raceCount})</span>
-      </header>
       <ol>
-        {card.rows.filter((row) => !due.hiddenTeamIds?.includes(row.teamId)).map((row, idx) => {
-          const team = allTeams?.find((t) => t.id === row.teamId || t.displayName === row.teamName);
+        {rows.map((row, idx) => {
+          const team = teams?.find((t) => t.id === row.teamId || t.displayName === row.teamName);
           const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor ?? (row as BibColourHolder).bibColour ?? (row as BibColourHolder).bibColor;
+          // How many rows this team climbs (positive) or drops (negative) once the shuffle runs.
+          const climb = (before.get(row.teamId) ?? idx) - idx;
           return (
             <motion.li
               key={row.teamId}
-              initial={reduced ? false : { x: 10 }}
-              animate={{ x: 0 }}
-              transition={{ delay: reduced ? 0 : idx * 0.04 }}
+              style={climb > 0 ? { position: 'relative', zIndex: 2 } : undefined}
+              initial={still ? false : { opacity: 0, x: 12, y: `${climb * 100}%` }}
+              animate={{ opacity: 1, x: 0, y: '0%' }}
+              transition={{
+                opacity: { delay: idx * ROW_STAGGER_S, duration: 0.2 },
+                x: { ...SPRING, delay: idx * ROW_STAGGER_S },
+                y: { delay: SHUFFLE_DELAY_S, duration: SHUFFLE_S, ease: EASE_OUT },
+              }}
             >
               <span className="mg-ov-card-place">{row.place}</span>
               <span className="mg-ov-card-team">
                 {due.names?.[row.teamId] ?? row.teamName}
                 {bibColor && <BibSwatch color={bibColor} size={10} />}
               </span>
-              {row.change === 'up' && <ArrowUp className="mg-ov-card-up" aria-label="moved up" />}
-              {row.change === 'down' && <ArrowDown className="mg-ov-card-down" aria-label="moved down" />}
-              <span className={`mg-ov-card-added ${row.eliminated ? 'is-out' : ''}`}>{row.eliminated ? statusLetter(true, row.status) : row.sitOut ? 'S' : `+${row.added}`}</span>
-              <span className="mg-ov-card-total">{formatPoints(row.total)}</span>
+              {row.change === 'up' && <motion.span initial={still ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...ENTER, delay: settled }}><ArrowUp className="mg-ov-card-up" aria-label="moved up" /></motion.span>}
+              {row.change === 'down' && <motion.span initial={still ? false : { opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...ENTER, delay: settled }}><ArrowDown className="mg-ov-card-down" aria-label="moved down" /></motion.span>}
+              <motion.span
+                className={`mg-ov-card-added ${row.eliminated ? 'is-out' : ''}`}
+                initial={still ? false : { opacity: 0, scale: 0.4 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ ...SPRING, delay: SHUFFLE_DELAY_S + idx * ROW_STAGGER_S }}
+              >
+                {row.eliminated ? statusLetter(true, row.status) : row.sitOut ? 'S' : `+${row.added}`}
+              </motion.span>
+              <span className="mg-ov-card-total"><CountUp from={row.total - row.added} to={row.total} delay={SHUFFLE_DELAY_S} duration={SHUFFLE_S} format={formatPoints} /></span>
             </motion.li>
           );
         })}
       </ol>
+    </CentreCard>
+  );
+}
+
+/** The centred panel every overlay card uses: it lifts in, its accent rule draws across, and it drops away when replaced. */
+function CentreCard({ className = 'mg-ov-card-right mg-ov-card-center', label, heading, subtitle, children }: {
+  className?: string; label: string; heading: ReactNode; subtitle: ReactNode; children: ReactNode;
+}) {
+  const still = useStillMotion();
+  return (
+    <motion.section
+      initial={still ? false : { opacity: 0, y: 18, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={still ? undefined : { opacity: 0, y: -10, scale: 0.98, transition: LEAVE }}
+      transition={SPRING}
+      className={`mg-ov-card ${className}`}
+      aria-label={label}
+    >
+      <header>
+        <strong>{heading}</strong>
+        <span>{subtitle}</span>
+      </header>
+      <motion.span
+        aria-hidden="true"
+        className="mg-ov-card-rule"
+        initial={still ? false : { scaleX: 0 }}
+        animate={{ scaleX: 1 }}
+        transition={{ ...ENTER, delay: 0.12 }}
+      />
+      {children}
     </motion.section>
   );
 }
@@ -256,7 +327,7 @@ export function ToplistBody({
   rows: Array<{ teamId: number; teamName: string; position: number; points: number }>;
   started: boolean;
 }) {
-  const reduced = useReducedMotion();
+  const still = useStillMotion();
   return (
     <ol>
       {rows.slice(0, 8).map((row, idx) => {
@@ -265,9 +336,10 @@ export function ToplistBody({
         return (
           <motion.li
             key={row.teamId}
-            initial={reduced ? false : { opacity: 0, x: 10 }}
+            layout="position"
+            initial={still ? false : { opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: reduced ? 0 : idx * 0.04 }}
+            transition={{ delay: still ? 0 : idx * ROW_STAGGER_S, layout: { duration: SHUFFLE_S, ease: EASE_OUT } }}
           >
             <span className="mg-ov-card-place">{started ? row.position : '—'}</span>
             <span className="mg-ov-card-team">
@@ -285,7 +357,6 @@ export function ToplistBody({
 }
 
 function LiveToplistCard({ competition, sectionId }: { competition: CompetitionDetail; sectionId: number }) {
-  const reduced = useReducedMotion();
   const { ready } = useCompetition();
   const [result, setResult] = useState<{ rows: StandingRow[]; failed: boolean } | null>(null);
   useEffect(() => {
@@ -310,19 +381,9 @@ function LiveToplistCard({ competition, sectionId }: { competition: CompetitionD
     : result.failed ? (list.rows.length > 0 ? 'Last received standings' : 'Standings unavailable')
       : list.started ? 'Current standings' : 'Before Race 1';
   return (
-    <motion.section
-      initial={reduced ? false : { x: 18, scale: 0.96 }}
-      animate={{ x: 0, scale: 1 }}
-      transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-      className="mg-ov-card mg-stream-fade mg-ov-card-right mg-ov-card-center"
-      aria-label={`Live toplist: ${displaySectionName(section.displayName)}`}
-    >
-      <header>
-        <strong>{displaySectionName(section.displayName)} · Toplist</strong>
-        <span>{subtitle}</span>
-      </header>
+    <CentreCard label={`Live toplist: ${displaySectionName(section.displayName)}`} heading={`${displaySectionName(section.displayName)} · Toplist`} subtitle={subtitle}>
       <ToplistBody competition={competition} rows={list.rows} started={list.started} />
-    </motion.section>
+    </CentreCard>
   );
 }
 
@@ -333,7 +394,7 @@ export function LanesBody({
   entries: HeatEntry[];
   competition: CompetitionDetail;
 }) {
-  const reduced = useReducedMotion();
+  const still = useStillMotion();
   return (
     <ol>
       {entries.map((entry, idx) => {
@@ -342,9 +403,9 @@ export function LanesBody({
         return (
           <motion.li
             key={entry.id}
-            initial={reduced ? false : { opacity: 0, x: 10 }}
+            initial={still ? false : { opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: reduced ? 0 : idx * 0.04 }}
+            transition={{ delay: still ? 0 : idx * ROW_STAGGER_S, layout: { duration: SHUFFLE_S, ease: EASE_OUT } }}
           >
             <span className="mg-ov-card-place">L{entry.laneIndex}</span>
             <span className="mg-ov-card-team">
@@ -368,7 +429,7 @@ export function NextBody({
   entries: HeatEntry[];
   competition: CompetitionDetail;
 }) {
-  const reduced = useReducedMotion();
+  const still = useStillMotion();
   return (
     <ol>
       {entries.map((entry, idx) => {
@@ -377,9 +438,9 @@ export function NextBody({
         return (
           <motion.li
             key={entry.id}
-            initial={reduced ? false : { opacity: 0, x: 10 }}
+            initial={still ? false : { opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: reduced ? 0 : idx * 0.04 }}
+            transition={{ delay: still ? 0 : idx * ROW_STAGGER_S, layout: { duration: SHUFFLE_S, ease: EASE_OUT } }}
           >
             <span className="mg-ov-card-place">L{entry.laneIndex}</span>
             <span className="mg-ov-card-team">
@@ -414,7 +475,7 @@ export function HeatBody({
   scored: boolean;
   competition: CompetitionDetail;
 }) {
-  const reduced = useReducedMotion();
+  const still = useStillMotion();
   return (
     <ol>
       {rows.map((row, idx) => {
@@ -423,9 +484,10 @@ export function HeatBody({
         return (
           <motion.li
             key={row.teamId}
-            initial={reduced ? false : { opacity: 0, x: 10 }}
+            layout="position"
+            initial={still ? false : { opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: reduced ? 0 : idx * 0.04 }}
+            transition={{ delay: still ? 0 : idx * ROW_STAGGER_S, layout: { duration: SHUFFLE_S, ease: EASE_OUT } }}
           >
             <span className="mg-ov-card-place">{scored ? idx + 1 : `L${row.lane}`}</span>
             <span className="mg-ov-card-team">
@@ -445,11 +507,14 @@ export function HeatBody({
 /**
  * Live producer-selected overlay card (Toplist, Heat table, Starting lanes, or Up next).
  * Stored inside `overlay.look` (or `overlay.bannerText`) so all viewers and the broadcaster see it immediately.
+ * Switching card, section or heat lets the old card leave before the new one arrives.
  */
 export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string; overlay: StreamOverlay }) {
-  const reduced = useReducedMotion();
   const competition = useOptionalCompetition();
-  if (!competition) return null;
+  return <AnimatePresence mode="wait">{competition ? liveDataCard(competition, arenaName, overlay) : null}</AnimatePresence>;
+}
+
+function liveDataCard(competition: CompetitionDetail, arenaName: string, overlay: StreamOverlay): ReactElement | null {
   const { mode, sectionId } = readLiveOverlayCard(overlay);
   if (mode === 'none') return null;
 
@@ -458,7 +523,7 @@ export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string;
     const secId = sectionId ?? active?.session.competitionSectionId;
     const section = competition.sections.find((s) => s.id === secId);
     if (!section) return null;
-    return <LiveToplistCard key={`${competition.id}-${section.id}`} competition={competition} sectionId={section.id} />;
+    return <LiveToplistCard key={`toplist-${competition.id}-${section.id}`} competition={competition} sectionId={section.id} />;
   }
 
   const pair = activeArenaHeat(competition, arenaName, mode === 'next' ? 'next' : 'current');
@@ -470,23 +535,18 @@ export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string;
   if (mode === 'lanes' || mode === 'next') {
     const entries = [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex);
     return (
-      <motion.section
-        initial={reduced ? false : { opacity: 0, x: 18, scale: 0.96 }}
-        animate={{ opacity: 1, x: 0, scale: 1 }}
-        transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-        className="mg-ov-card mg-stream-fade mg-ov-card-right mg-ov-card-center"
-        aria-label={`${mode === 'next' ? 'Up next' : 'Starting lanes'}: ${heading}`}
+      <CentreCard
+        key={`${mode}-${heat.id}`}
+        label={`${mode === 'next' ? 'Up next' : 'Starting lanes'}: ${heading}`}
+        heading={heading}
+        subtitle={mode === 'next' ? 'Up next in collecting ring' : 'Starting lanes'}
       >
-        <header>
-          <strong>{heading}</strong>
-          <span>{mode === 'next' ? 'Up next in collecting ring' : 'Starting lanes'}</span>
-        </header>
         {mode === 'next' ? (
           <NextBody entries={entries} competition={competition} />
         ) : (
           <LanesBody entries={entries} competition={competition} />
         )}
-      </motion.section>
+      </CentreCard>
     );
   }
 
@@ -505,18 +565,13 @@ export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string;
     })
     .sort((a, b) => b.pts - a.pts || a.lane - b.lane);
   return (
-    <motion.section
-      initial={reduced ? false : { x: 18, scale: 0.96 }}
-      animate={{ x: 0, scale: 1 }}
-      transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-      className="mg-ov-card mg-stream-fade mg-ov-card-right mg-ov-card-center"
-      aria-label={`Heat table: ${heading}`}
+    <CentreCard
+      key={`heat-${heat.id}`}
+      label={`Heat table: ${heading}`}
+      heading={heading}
+      subtitle={scoredRaces.length > 0 ? `After race ${scoredRaces.length} of ${heat.races.length}` : `${heat.races.length} races`}
     >
-      <header>
-        <strong>{heading}</strong>
-        <span>{scoredRaces.length > 0 ? `After race ${scoredRaces.length} of ${heat.races.length}` : `${heat.races.length} races`}</span>
-      </header>
       <HeatBody rows={rows} scored={scoredRaces.length > 0} competition={competition} />
-    </motion.section>
+    </CentreCard>
   );
 }

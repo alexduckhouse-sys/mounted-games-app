@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Star } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ScoreFlash } from '../../components/ScoreFlash';
+import { EASE_OUT } from '../../lib/motion';
 import { useCompetition } from './context';
 import type { Heat, HeatEntry, Race, Session } from '../../types';
 import { computeTimings, formatDelayDuration } from '../../lib/time';
@@ -366,7 +369,8 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
                   {grid.teams.map((team) => {
                     const flag = parseBibAndFlag(competition.teams.find((item) => item.id === team.id)?.bibDescription).flag;
                     return (
-                      <tr key={team.id} className={team.isFav ? 'heat-row-fav' : undefined} data-followed={team.isFav ? 'true' : undefined}>
+                      // Rows slide to their new places when a race result re-ranks the heat.
+                      <motion.tr key={team.id} layout="position" transition={{ layout: { duration: 0.5, ease: EASE_OUT } }} className={team.isFav ? 'heat-row-fav' : undefined} data-followed={team.isFav ? 'true' : undefined}>
                         {finished && <td className="heat-rank-cell"><span className="sr-only">Position </span>{team.position}</td>}
                         <th scope="row" className="heat-team" title={team.name}>
                           <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="heat-team-link">
@@ -392,8 +396,8 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
                               : formatPoints(cell.points)}
                           </td>;
                         })}
-                        <td className="heat-total">{formatPoints(team.total)}</td>
-                      </tr>
+                        <td className="heat-total"><ScoreFlash value={team.total}>{formatPoints(team.total)}</ScoreFlash></td>
+                      </motion.tr>
                     );
                   })}
                 </tbody>
