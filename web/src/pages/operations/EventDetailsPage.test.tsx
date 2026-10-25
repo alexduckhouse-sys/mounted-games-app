@@ -28,6 +28,7 @@ describe('EventDetailsPage', () => {
   beforeEach(() => {
     vi.mocked(api.get).mockImplementation(async (url) => (String(url).endsWith('/passport-check')
       ? { data: { enabled: false, checked: 0, total: 0, sections: [] } }
+      : String(url).endsWith('/dec-form-config') ? { data: { config: { useRefereeCards: false } } }
       : { data: { competitionId: 7, sections } }) as never);
     vi.mocked(api.put).mockResolvedValue({ data: {} });
   });
@@ -85,10 +86,19 @@ describe('EventDetailsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save the passport check');
   });
 
-  it('leaves out the cards switch, which the API does not store', async () => {
+  it('saves the yellow and red cards switch at once through the competition update, and reverts on failure', async () => {
+    const user = userEvent.setup();
     show();
-    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
-    expect(screen.queryByRole('switch', { name: /cards/i })).not.toBeInTheDocument();
+    const toggle = await screen.findByRole('switch', { name: 'Yellow and red cards' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await user.click(toggle);
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ useRefereeCards: true, name: 'Spring Open' })));
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+
+    vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
+    await user.click(toggle);
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save the cards setting');
   });
 
   it('saves a tack check choice at once', async () => {
