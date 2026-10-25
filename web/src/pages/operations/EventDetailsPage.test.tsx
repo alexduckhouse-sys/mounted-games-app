@@ -105,17 +105,36 @@ describe('EventDetailsPage', () => {
     const user = userEvent.setup();
     show();
     await screen.findByRole('switch', { name: 'Passport and vaccination check' });
-    expect(screen.getByLabelText('Tack check · Teams Under 12')).toHaveValue('table');
-    expect(screen.getByLabelText('Tack check · Pairs Under 15')).toHaveValue('off');
+    expect(screen.getByRole('button', { name: 'Tack check · Teams Under 12: Own table' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tack check · Pairs Under 15: Off' })).toBeInTheDocument();
     expect(screen.getByText('2 sectors · 20 points')).toBeInTheDocument();
 
     vi.mocked(api.put).mockResolvedValueOnce({ data: { ...sections[1], isEnabled: true, mode: 2 } });
-    await user.selectOptions(screen.getByLabelText('Tack check · Pairs Under 15'), 'Adds to points');
+    await user.click(screen.getByRole('button', { name: 'Tack check · Pairs Under 15: Off' }));
+    expect(screen.getByRole('option', { name: 'Off' })).toHaveAttribute('aria-selected', 'true');
+    await user.click(screen.getByRole('option', { name: 'Adds to points' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith(
       '/event-tools/competitions/7/tack-check/sections/12',
       { isEnabled: true, mode: 2, maxPoints: 10, sectors: [{ id: null, name: 'Saddle' }] },
     ));
     expect(await screen.findAllByText(/Scoring table/)).toHaveLength(2);
+  });
+
+  it('opens the choice as a bottom sheet on phones and a small list on wide screens', async () => {
+    const user = userEvent.setup();
+    const { unmount } = show();
+    await user.click(await screen.findByRole('button', { name: 'Tack check · Pairs Under 15: Off' }));
+    expect(screen.getByRole('dialog', { name: 'Tack check · Pairs Under 15' })).toBeInTheDocument();
+    unmount();
+
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    show();
+    await user.click(await screen.findByRole('button', { name: 'Tack check · Pairs Under 15: Off' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('listbox', { name: 'Tack check · Pairs Under 15' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    vi.unstubAllGlobals();
   });
 
   it('edits the scoring table: blank new sector, dropped when left empty, saved on Done', async () => {

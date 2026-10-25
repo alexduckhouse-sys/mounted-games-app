@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
 import { usePageWidth } from '../../components/pageWidthState';
 import './refine.css';
 
@@ -188,5 +188,50 @@ export function RefineSheet({ title, onClose, children }: SheetProps) {
         {children}
       </div>
     </>
+  );
+}
+
+export interface ChoiceOption<T extends string> { value: T; label: string }
+
+/** A settings row: the label on the left, the current choice on the right with a chevron. Opens a sheet on phones and a small list under the row on wide screens. */
+export function RefineChoiceRow<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: ChoiceOption<T>[]; onChange: (value: T) => void }) {
+  const [open, setOpen] = useState(false);
+  const [wide, setWide] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches);
+  const wrap = useRef<HTMLDivElement>(null);
+  const current = options.find((option) => option.value === value)?.label ?? '';
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia('(min-width: 1024px)');
+    const update = () => setWide(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (!open || !wide) return;
+    const away = (event: MouseEvent) => { if (!wrap.current?.contains(event.target as Node)) setOpen(false); };
+    const esc = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open, wide]);
+  const choose = (next: T) => { setOpen(false); if (next !== value) onChange(next); };
+  const list = (
+    <div role="listbox" aria-label={label} className="rf-choices">
+      {options.map((option) => (
+        <button key={option.value} type="button" role="option" aria-selected={option.value === value} className="rf-choice" onClick={() => choose(option.value)}>
+          <span>{option.label}</span>{option.value === value && <Check className="h-4 w-4" aria-hidden="true" />}
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <div ref={wrap} className="rf-choice-wrap">
+      <button type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${current}`} onClick={() => setOpen((v) => !v)}>
+        <span className="rf-grow rf-t1">{label}</span>
+        <span className="rf-choice-val">{current}</span>
+        <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
+      </button>
+      {open && (wide ? <div className="rf-pop">{list}</div> : <RefineSheet title={label} onClose={() => setOpen(false)}>{list}</RefineSheet>)}
+    </div>
   );
 }

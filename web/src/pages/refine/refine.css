@@ -129,3 +129,13 @@ details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 .rf-state-mut { fill: rgb(var(--mg-tint)); }
 .rf-lockwrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 56px 24px 0; text-align: center; }
 .rf-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-line-orient: vertical; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Settings row choice: label left, current choice right in navy. A sheet on phones, a small list on wide screens. */
+.rf-choice-wrap { position: relative; }
+.rf-choice-val { font: 600 15px/1.2 var(--mg-font); color: rgb(var(--mg-heading)); text-align: right; }
+.rf-choices { display: flex; flex-direction: column; }
+.rf-choice { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 8px; border: 0; background: transparent; color: rgb(var(--mg-ink)); font: 500 16px/1.2 var(--mg-font); text-align: left; cursor: pointer; }
+.rf-choice + .rf-choice { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.rf-choice[aria-selected="true"] { font-weight: 700; color: rgb(var(--mg-heading)); }
+.rf-choice:hover { background: rgb(var(--mg-subtle)); }
+.rf-pop { position: absolute; right: 12px; top: calc(100% - 6px); z-index: 30; min-width: 200px; padding: 4px; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .18); }
