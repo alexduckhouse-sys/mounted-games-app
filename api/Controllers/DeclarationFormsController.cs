@@ -224,7 +224,7 @@ public class DeclarationFormsController : ControllerBase
             else
                 return BadRequest(new { message = "Enter the trainer's phone number as a UK or Irish number, like 07123 456789." });
         }
-        var bibWithoutFlag = System.Text.RegularExpressions.Regex.Replace(req.BibDescription ?? string.Empty, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+        var bibWithoutFlag = System.Text.RegularExpressions.Regex.Replace(ResultStatuses.PublicBibDescription(req.BibDescription) ?? string.Empty, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
         var flagMatch = System.Text.RegularExpressions.Regex.Match(req.BibDescription ?? string.Empty, @"^(\[flag:[a-z0-9-]+\])", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         var flagPrefix = flagMatch.Success ? flagMatch.Groups[1].Value : null;
         if (config.Bib == FieldRequirement.Required && explicitConfig is not null && string.IsNullOrWhiteSpace(bibWithoutFlag))
@@ -244,10 +244,10 @@ public class DeclarationFormsController : ControllerBase
         if (req.BibDescription is not null)
         {
             var effectiveBib = config.Bib == FieldRequirement.Off
-                ? System.Text.RegularExpressions.Regex.Replace(team.BibDescription ?? string.Empty, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim()
+                ? System.Text.RegularExpressions.Regex.Replace(ResultStatuses.PublicBibDescription(team.BibDescription) ?? string.Empty, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim()
                 : bibWithoutFlag;
             var combined = string.Join(" ", new[] { flagPrefix, effectiveBib }.Where(s => !string.IsNullOrWhiteSpace(s)));
-            team.BibDescription = string.IsNullOrWhiteSpace(combined) ? null : combined;
+            team.BibDescription = ResultStatuses.MergeBibTags(team.BibDescription, combined, ResultStatuses.TeamFlagOf(flagPrefix) ?? string.Empty);
         }
 
         // One declaration per team: submitting again updates it instead of adding a second form.
@@ -397,7 +397,14 @@ public class DeclarationFormsController : ControllerBase
             }
         }
 
-        await _db.SaveChangesAsync();
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { message = "The team changed while you were editing. Reload and try again." });
+        }
 
         await _db.Entry(form).Reference(f => f.Team).LoadAsync();
         await _db.Entry(form).Reference(f => f.SubmittedBy).LoadAsync();

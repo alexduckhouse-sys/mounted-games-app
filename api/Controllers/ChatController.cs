@@ -19,12 +19,14 @@ public class ChatController : ControllerBase
     private readonly AppDbContext _db;
     private readonly UserManager<AppUser> _users;
     private readonly ILiveBroadcaster _live;
+    private readonly ScoringService _scoring;
 
-    public ChatController(AppDbContext db, UserManager<AppUser> users, ILiveBroadcaster live)
+    public ChatController(AppDbContext db, UserManager<AppUser> users, ILiveBroadcaster live, ScoringService scoring)
     {
         _db = db;
         _users = users;
         _live = live;
+        _scoring = scoring;
     }
 
     [HttpGet]
@@ -146,29 +148,105 @@ public class ChatController : ControllerBase
 
     [HttpPost("announcement")]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<ActionResult<ChatMessageDto>> Announce(int competitionId, AnnouncementRequest req)
+    public async Task<ActionResult<ChatMessageDto>> Announce(int competitionId, AnnouncementRequest req,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(req.Body)) return BadRequest();
-        if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
+        if (string.IsNullOrWhiteSpace(req.Body) || req.Body.Length > 2000 || req.Tag?.Length > 100)
+            return BadRequest();
+        if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId, cancellationToken)) return NotFound();
+        var tag = req.Tag?.Trim();
         var user = await _users.GetUserAsync(User);
         var claimName = string.Equals(user?.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase)
-            ? User.FindFirstValue("fullName")
-            : null;
+            ? User.FindFirstValue("fullName") : null;
         var authorName = !string.IsNullOrWhiteSpace(claimName) ? claimName : (user?.FullName ?? "Organiser");
-        var msg = new ChatMessage
+        ChatMessage msg;
+        List<ChatMessage> previous = [];
+        try
         {
-            CompetitionId = competitionId,
-            UserId = user?.Id,
-            AuthorName = authorName,
-            Body = req.Body.Trim(),
-            Type = ChatMessageType.Announcement,
-            Tag = req.Tag
-        };
-        _db.ChatMessages.Add(msg);
-        await _db.SaveChangesAsync();
-        var dto = msg.ToDto();
-        await _live.Announcement(competitionId, dto);
-        await _live.ChatMessage(competitionId, dto);
-        return dto;
+            if (tag?.StartsWith("missing-team:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                if (!int.TryParse(tag["missing-team:".Length..], out var heatId) || heatId < 1) return BadRequest();
+                msg = await _scoring.CreateMissingTeamCallAsync(heatId, competitionId, null, req.Body,
+                    user?.Id, authorName, cancellationToken);
+            }
+            else
+            {
+                if (string.Equals(tag, "pinned", StringComparison.OrdinalIgnoreCase)) tag = "pinned";
+                msg = await _scoring.WithChatLockAsync(competitionId, async () =>
+                {
+                    previous = tag == "pinned" ? await ClearPinnedTagsAsync(competitionId, cancellationToken) : [];
+                    var announcement = new ChatMessage
+                    {
+                        CompetitionId = competitionId, UserId = user?.Id,
+                        AuthorName = authorName.Length > 60 ? authorName[..60] : authorName,
+                        Body = req.Body.Trim(), Type = ChatMessageType.Announcement, Tag = tag,
+                    };
+                    _db.ChatMessages.Add(announcement);
+                    await _db.SaveChangesAsync(cancellationToken);
+                    return announcement;
+                }, cancellationToken);
+            }
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
+        catch (Exception ex) when (ScoringController.IsScoringConcurrency(ex))
+        { return Conflict(new { message = "The announcement changed on another device. Please try again." }); }
+        foreach (var old in previous) await BroadcastAnnouncementAsync(old);
+        await BroadcastAnnouncementAsync(msg);
+        return msg.ToDto();
+    }
+
+    [HttpPost("{messageId:int}/pin")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<ChatMessageDto>> PinAnnouncement(int competitionId, int messageId,
+        CancellationToken cancellationToken = default)
+    {
+        List<ChatMessage> previous = [];
+        ChatMessage msg;
+        bool? shouldPin = null;
+        try
+        {
+            msg = await _scoring.WithChatLockAsync(competitionId, async () =>
+            {
+                var message = await _db.ChatMessages
+                    .FirstOrDefaultAsync(m => m.Id == messageId && m.CompetitionId == competitionId, cancellationToken)
+                    ?? throw new KeyNotFoundException();
+                if (message.AdminOnly || message.RecipientUserId != null)
+                    throw new ScoreValidationException("Private messages cannot be pinned publicly.");
+                if (message.Tag?.StartsWith("missing-team", StringComparison.OrdinalIgnoreCase) == true)
+                    throw new ScoreValidationException("Ring calls clear when their heat starts and cannot be pinned.");
+                // Keep the intended state when the provider retries after an ambiguous commit.
+                shouldPin ??= !string.Equals(message.Tag, "pinned", StringComparison.OrdinalIgnoreCase);
+                previous.AddRange(await ClearPinnedTagsAsync(competitionId, cancellationToken));
+                previous.RemoveAll(m => m.Id == messageId);
+                message.Type = ChatMessageType.Announcement;
+                message.Tag = shouldPin.Value ? "pinned" : null;
+                await _db.SaveChangesAsync(cancellationToken);
+                return message;
+            }, cancellationToken);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (Exception ex) when (ScoringController.IsScoringConcurrency(ex))
+        { return Conflict(new { message = "The pinned announcement changed on another device. Please try again." }); }
+        foreach (var old in previous.DistinctBy(m => m.Id)) await BroadcastAnnouncementAsync(old);
+        await BroadcastAnnouncementAsync(msg);
+        return msg.ToDto();
+    }
+
+    private async Task<List<ChatMessage>> ClearPinnedTagsAsync(int competitionId, CancellationToken cancellationToken)
+    {
+        var messages = await _db.ChatMessages.Where(m => m.CompetitionId == competitionId
+                && m.Tag != null && m.Tag.ToLower() == "pinned" && !m.AdminOnly && m.RecipientUserId == null)
+            .ToListAsync(cancellationToken);
+        foreach (var message in messages) message.Tag = null;
+        return messages;
+    }
+
+    private async Task BroadcastAnnouncementAsync(ChatMessage message)
+    {
+        var dto = message.ToDto();
+        await _live.Announcement(message.CompetitionId, dto);
+        await _live.ChatMessage(message.CompetitionId, dto);
     }
 }

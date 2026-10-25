@@ -38,8 +38,13 @@ public class DecFormConfigController(AppDbContext db) : ControllerBase
         if (config.Validate() is { } problem) return BadRequest(new { message = problem });
         var competition = await db.Competitions.FirstOrDefaultAsync(c => c.Id == competitionId);
         if (competition is null) return NotFound();
+        var existing = DecFormConfig.Parse(competition.DecFormConfigJson);
         var pinnedClubId = await PayoutClubAsync(competition.DecFormConfigJson, competition.CreatedByUserId);
-        competition.DecFormConfigJson = (config.Normalised() with { PayoutClubId = pinnedClubId }).ToJson();
+        competition.DecFormConfigJson = (config.Normalised() with
+        {
+            PayoutClubId = pinnedClubId,
+            UseRefereeCards = existing?.UseRefereeCards ?? false,
+        }).ToJson();
         await db.SaveChangesAsync();
         return await DtoAsync(competitionId, competition.DecFormConfigJson);
     }
@@ -53,8 +58,9 @@ public class DecFormConfigController(AppDbContext db) : ControllerBase
         var competition = await db.Competitions.FirstOrDefaultAsync(c => c.Id == competitionId);
         if (competition is null) return NotFound();
         var pinnedClubId = await PayoutClubAsync(competition.DecFormConfigJson, competition.CreatedByUserId);
-        competition.DecFormConfigJson = pinnedClubId is null ? null
-            : (DecFormConfig.Standard with { PayoutClubId = pinnedClubId }).ToJson();
+        var useRefereeCards = DecFormConfig.For(competition).UseRefereeCards;
+        competition.DecFormConfigJson = pinnedClubId is null && !useRefereeCards ? null
+            : (DecFormConfig.Standard with { PayoutClubId = pinnedClubId, UseRefereeCards = useRefereeCards }).ToJson();
         await db.SaveChangesAsync();
         return await DtoAsync(competitionId, competition.DecFormConfigJson);
     }
@@ -85,7 +91,7 @@ public class DecFormConfigController(AppDbContext db) : ControllerBase
     {
         var parsed = DecFormConfig.Parse(json);
         var count = await db.DeclarationForms.CountAsync(f => f.Team!.CompetitionId == competitionId);
-        var isStandard = parsed is null || (parsed with { PayoutClubId = null }).ToJson() == DecFormConfig.Standard.ToJson();
+        var isStandard = parsed is null || (parsed with { PayoutClubId = null, UseRefereeCards = false }).ToJson() == DecFormConfig.Standard.ToJson();
         return new DecFormConfigDto(parsed ?? DecFormConfig.Standard, isStandard, count);
     }
 }

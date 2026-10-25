@@ -95,8 +95,9 @@ public class ScoringController : ControllerBase
         {
             var score = await _scoring.ApplyVersionedAsync(raceId, request,
                 User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, cancellationToken);
+            var competitionId = await CompetitionIdOfRaceAsync(raceId);
             await BroadcastScore(raceId);
-            await BroadcastRaceFinalAsync(raceId, await CompetitionIdOfRaceAsync(raceId));
+            await BroadcastRaceFinalAsync(raceId, competitionId);
             return score;
         }
         catch (KeyNotFoundException) { return NotFound(); }
@@ -220,7 +221,7 @@ public class ScoringController : ControllerBase
     private async Task<HeatDto> HeatDtoAsync(int heatId)
     {
         var heat = await _db.Heats
-            .Include(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(h => h.Entries).ThenInclude(e => e.Team).ThenInclude(t => t!.Results)
             .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstAsync(h => h.Id == heatId);
         return heat.ToDto();
@@ -306,8 +307,34 @@ public class ScoringController : ControllerBase
         catch (Exception ex) when (IsScoringConcurrency(ex))
         { return Conflict(new { message = "These results were changed on another device." }); }
         var dto = race.ToDto();
-        await _live.ResultsUpdated(race.Heat!.Session!.CompetitionId,
-            new { sessionId = race.Heat.SessionId, raceId, started = race.StartedAt });
+        var competitionId = race.Heat!.Session!.CompetitionId;
+        var heatDto = await HeatDtoAsync(race.HeatId);
+        await _live.ResultsUpdated(competitionId,
+            new { sessionId = race.Heat.SessionId, raceId, started = race.StartedAt, heat = heatDto });
+        return dto;
+    }
+
+    [HttpPost("api/heats/{heatId:int}/call-missing-team")]
+    [CompetitionAccess("heatId", CompetitionResource.Heat)]
+    public async Task<ActionResult<ChatMessageDto>> CallMissingTeam(
+        int heatId, CallMissingTeamRequest req, CancellationToken cancellationToken = default)
+    {
+        ChatMessage msg;
+        try
+        {
+            msg = await _scoring.CreateMissingTeamCallAsync(heatId, null, req.TeamId, null,
+                User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
+                User.FindFirst("fullName")?.Value ?? "Organiser", cancellationToken);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
+        catch (Exception ex) when (IsScoringConcurrency(ex))
+        { return Conflict(new { message = "This heat changed on another device. Please try again." }); }
+
+        var dto = msg.ToDto();
+        await _live.Announcement(msg.CompetitionId, dto);
+        await _live.ChatMessage(msg.CompetitionId, dto);
         return dto;
     }
 

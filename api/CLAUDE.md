@@ -4,7 +4,7 @@ ASP.NET Core 10, EF Core (Npgsql in production, SQLite locally and in tests), Si
 
 ## Glossary (entity names in `Entities/`)
 
-- **Competition**: one event. `CreatedByUserId` is its owner; `SignupsLocked` closes entries; `TermsText` is the organiser's optional terms shown beside the sign-up tick; `EnablePassportCheck` enables equine passport/flu checks in event tools; The web disciplinary-card visibility switch is stored on the device; there are no `YellowCardsEnabled` or `RedCardsEnabled` entity fields.
+- **Competition**: one event. `CreatedByUserId` is its owner; `SignupsLocked` closes entries; `TermsText` is the organiser's optional terms shown beside the sign-up tick; `EnablePassportCheck` enables equine passport/flu checks in event tools; `DecFormConfig.UseRefereeCards` is the server setting (preserved through form save/reset); the current web visibility switch is still device-local until frontend wiring lands. There are no `YellowCardsEnabled` or `RedCardsEnabled` entity fields.
 - **Section** (`CompetitionSection`): an age group in a competition, with a `Format` (Pairs, Teams, Individual), `UsesRaceFinals`, `PriceMinor` (pence), `MaxParticipants` and `FinalistCount`.
 - **Session**: a timetable block with `Kind` (Race, Break, Briefing, Custom), `Status` (Upcoming, InArena, Finished) and `LanesPerHeat`. The **timetable** is sessions and heats ordered by `OrderIndex` and `ScheduledStart`. Organisers can shift uncompleted sessions (`POST .../sessions/shift-times`) or pause/resume an arena (`POST .../sessions/pause` and `resume`, tracked via `[paused:<ms>]` and `[shift:±N]` in `Session.Notes`).
 - **Heat**: the teams racing together, with `HeatEntry` lanes and a `RaceRoundStage` (None, Qualifier, Final). **Race**: one game run within a heat, holding `Result` rows (placing, points, eliminated). **RaceTemplate**: a library game with rules and `DiagramJson` across 4 governing bodies (**EGUK**, **Pony Club**, **MGA**, **STRUK**), fetched per race via `GET /api/race-templates/by-name/{name}`; `IsBuiltIn` ones are refreshed at startup.
@@ -32,7 +32,7 @@ ASP.NET Core 10, EF Core (Npgsql in production, SQLite locally and in tests), Si
 
 ## Invariants
 
-- **Scoring goes through `ScoringService`**; never write `Result` rows from a controller.
+- **Scoring goes through `ScoringService`**; never write `Result` rows from a controller. Team-card updates change current team metadata only and preserve historical result notes. `Team.BibDescription` is an EF concurrency token so stale ordinary edits cannot erase organiser-owned card metadata; return 409 when a conflicting edit needs reloading.
   - Placing points = largest heat size in the session − place + 1. Eliminated = 0.
   - Qualifier heats in race finals give 1 per finisher.
   - A referee note can carry one points directive: `[pts:N]` sets the race points and `[adj:±N]` moves the placing points (never stored points, so a re-save can't apply it twice). It wins over everything but a sit-out.

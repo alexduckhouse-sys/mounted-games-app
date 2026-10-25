@@ -36,7 +36,10 @@ public sealed class StandingsService(AppDbContext db)
                 t.Results.Count(r => r.Eliminated && ResultStatuses.Of(r) == ResultStatus.Eliminated),
                 tiers.TierOf(t.Id),
                 t.EntryStatus != TeamEntryStatus.Active,
-                bonus.GetValueOrDefault(t.Id)))
+                bonus.GetValueOrDefault(t.Id),
+                ResultStatuses.TeamCardOf(t),
+                ResultStatuses.TeamFlagOf(t.BibDescription),
+                ResultStatuses.PublicBibDescription(t.BibDescription)))
             .ToList();
         var facts = teams.ToDictionary(t => t.Id, t => ties.Facts(t.Id, t.CompetitionSectionId, t.Results, t.Results.Sum(r => r.Points) + bonus.GetValueOrDefault(t.Id)));
 
