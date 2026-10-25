@@ -4,7 +4,9 @@ import { CreditCard } from 'lucide-react';
 import { api } from '../../api';
 import type { MySignup } from '../../types';
 import { RefineFoot, RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
-import { OutcomeState } from './DemoPaymentFlow';
+import { OutcomeState, PaidAmount } from './DemoPaymentFlow';
+import { EntryRosette } from '../../components/Rosette';
+import { displaySectionName } from '../../lib/section';
 import { errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
 import type { DemoEntryPaymentResult, EventCommerceSettings, FakePaymentOutcome, TestPayment } from './types';
 
@@ -177,10 +179,13 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
             ? 'Nothing was charged. This was only a demonstration.'
             : 'This is a test receipt, not a real one. No money was taken.'}
         </TestBanner>
+        {shown.status === 0 && (
+          <EntryRosette team={signup.teamName?.trim() || signup.fullName} section={displaySectionName(signup.sectionName)} year={new Date(signup.competitionStart).getFullYear()} />
+        )}
         <OutcomeState
           payment={shown}
           title={shown.status === 0 ? 'Test payment approved' : shown.status === 1 ? 'Test card declined' : shown.status === 2 ? 'Test payment cancelled' : 'Test refund recorded'}
-          detail={shown.status === 0 ? `Test amount ${amount}` : shown.status === 3 ? 'No money moved.' : 'Nothing was charged.'}
+          detail={shown.status === 0 ? <>Test amount <PaidAmount amountMinor={signup.amountMinor} /></> : shown.status === 3 ? 'No money moved.' : 'Nothing was charged.'}
         />
         {!failed && (
           <>

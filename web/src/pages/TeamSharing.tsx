@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { CalendarPlus, Check, Copy } from 'lucide-react';
+import { CalendarPlus, Copy } from 'lucide-react';
+import { CopiedTick } from '../components/CopiedTick';
 import { api } from '../api';
 import { QrCode } from '../components/QrCode';
 import { feedLinks, joinTeamLink, type FeedLinks } from '../lib/sharing';
@@ -104,7 +105,7 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
           <div className="flex flex-wrap gap-1.5">
             <a className="mg-btn mg-btn-primary !min-h-8 !px-2.5 !py-1 text-xs" href={links.webcal}><CalendarPlus className="h-3.5 w-3.5" /> Add to calendar</a>
             <button type="button" onClick={copy} className="mg-small-btn gap-1.5 !min-h-8 !px-2.5 !py-1 text-xs">
-              {copied ? <Check className="h-3.5 w-3.5 text-[rgb(var(--mg-ok))]" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy link'}
+              {copied ? <CopiedTick className="h-3.5 w-3.5 text-[rgb(var(--mg-ok))]" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy link'}
             </button>
           </div>
         </div>

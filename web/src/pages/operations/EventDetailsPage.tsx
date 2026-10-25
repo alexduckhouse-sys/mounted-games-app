@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useSavedToast } from '../../components/SavedTick';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { api } from '../../api';
@@ -57,14 +58,23 @@ export function EventDetailsPage() {
     return () => { cancelled = true; };
   }, [competition.id]);
 
+  // Each change saves as you go, so a small toast confirms it wherever you are on the page.
+  const savedToast = useSavedToast();
+  const showSaved = savedToast.show;
+
   /** Runs one save, counting it while it is in flight and showing why it failed. Resolves true when it worked. */
   const track = useCallback(async (what: string, work: () => Promise<void>): Promise<boolean> => {
     setSaving((n) => n + 1);
     setError(null);
-    try { await work(); return true; }
+    try {
+      await work();
+      const name = what.replace(/^the /, '');
+      showSaved(name.charAt(0).toUpperCase() + name.slice(1));
+      return true;
+    }
     catch (caught) { setError(apiMessage(caught, `Couldn’t save ${what}. Try again.`)); return false; }
     finally { setSaving((n) => n - 1); }
-  }, []);
+  }, [showSaved]);
 
   const saveBasics = (what: string, patch: Record<string, string | boolean | null>) =>
     track(what, async () => {
@@ -106,6 +116,7 @@ export function EventDetailsPage() {
       <div className="ops-cards">
         {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
         {saving > 0 && <p role="status" className="rf-note">Saving…</p>}
+        {savedToast.node}
 
         <RefineSection title="About" />
         <div className="ops-fields">

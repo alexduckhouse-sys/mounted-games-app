@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangePop } from '../../components/ChangePop';
 import { ChevronDown } from 'lucide-react';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
@@ -177,7 +178,7 @@ export function EntriesPage() {
                       <span className="rf-grow">
                         <span className="rf-t1">{team.teamName}</span>
                         <span className="rf-t2">
-                          {mine.length > 0 && <span className={paid ? 'ops-paid' : 'ops-unpaid'}>{paid ? 'Paid' : 'Not paid'}</span>}
+                          {mine.length > 0 && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? 'Paid' : 'Not paid'} tick={paid}>{paid ? 'Paid' : 'Not paid'}</ChangePop></span>}
                           {mine.length > 0 && form ? ' · ' : ''}{form ? `Form in ${whenText(form.submittedAt)}` : ''}
                         </span>
                       </span>
@@ -188,7 +189,7 @@ export function EntriesPage() {
                       <div className="ops-entry-body">
                         {mine.length > 0 && (
                           <div className="ops-line">
-                            <span className="rf-grow"><span className="rf-t1">{paid ? 'Paid' : 'Not paid yet'}</span></span>
+                            <span className="rf-grow"><span className="rf-t1"><ChangePop value={paid ? 'Paid' : 'Not paid yet'} tick={paid}>{paid ? 'Paid' : 'Not paid yet'}</ChangePop></span></span>
                             <button type="button" className="rf-btn" disabled={busy} onClick={() => void setPaid(team, !paid)}>{paid ? 'Mark not paid' : 'Mark paid'}</button>
                           </div>
                         )}

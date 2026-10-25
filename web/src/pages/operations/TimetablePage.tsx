@@ -1,5 +1,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Minus, Pencil, Plus } from 'lucide-react';
+import { useSavedToast } from '../../components/SavedTick';
+import { TickerNumber } from '../../components/TickerNumber';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { apiErrorMessage } from '../../lib/apiError';
@@ -87,11 +89,13 @@ export function TimetablePage() {
     }));
   }, [items]);
 
+  // Changes save straight away, so a small toast confirms each one.
+  const savedToast = useSavedToast();
   async function run(failure: string, work: () => Promise<unknown>): Promise<boolean> {
     setBusy(true);
     setError(null);
     setNotice(null);
-    try { await work(); reload(); return true; }
+    try { await work(); reload(); savedToast.show('Changes'); return true; }
     catch (caught) { setError(apiErrorMessage(caught, failure)); return false; }
     finally { setBusy(false); }
   }
@@ -190,6 +194,7 @@ export function TimetablePage() {
 
   return (
     <RefinePage>
+      {savedToast.node}
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Timetable and draw" />
       <div className="ops-cards ops-tt" aria-busy={busy}>
         {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
@@ -200,7 +205,7 @@ export function TimetablePage() {
             <span className="rf-grow rf-t1">Move everything</span>
             <span className="ops-step-ctl" role="group" aria-label="Minutes to move everything">
               <button type="button" className="ops-ibtn" aria-label="Fewer minutes" disabled={move <= 5} onClick={() => setMove(Math.max(5, move - 5))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
-              <output>{move}</output>
+              <output><TickerNumber value={move} format={String} /></output>
               <button type="button" className="ops-ibtn" aria-label="More minutes" disabled={move >= 120} onClick={() => setMove(Math.min(120, move + 5))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
             </span>
             <span className="rf-t2">min</span>
@@ -347,7 +352,7 @@ function MinuteStepper({ label, value, min, max, disabled, onChange }: { label: 
       <span className="ops-step-label">{label} (min)</span>
       <span className="ops-step-ctl" role="group" aria-label={label}>
         <button type="button" className="ops-ibtn" aria-label={`Shorter ${label.toLowerCase()}`} disabled={disabled || value <= min} onClick={() => onChange(Math.max(min, value - 5))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
-        <output>{value}</output>
+        <output><TickerNumber value={value} format={String} /></output>
         <button type="button" className="ops-ibtn" aria-label={`Longer ${label.toLowerCase()}`} disabled={disabled || value >= max} onClick={() => onChange(Math.min(max, value + 5))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
       </span>
     </div>

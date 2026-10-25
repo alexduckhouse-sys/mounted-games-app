@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { TickerNumber } from '../../components/TickerNumber';
 import { api } from '../../api';
 import { useCompetition } from '../competition/context';
 import { RefineHeader, RefineList, RefineNote, RefinePage } from '../refine/Refine';
@@ -65,7 +66,7 @@ export function EquipmentPage() {
         {readiness && lines.length === 0 && <RefineNote>No equipment items were found for the current race list.</RefineNote>}
         {groups.map((group) => (
           <Fragment key={group.name}>
-            <h2 className="rf-sec ops-tt-head"><span>{group.name}</span><span>{group.rows.filter((row) => isOn(row.keys)).length} of {group.rows.length}</span></h2>
+            <h2 className="rf-sec ops-tt-head"><span>{group.name}</span><span><TickerNumber value={group.rows.filter((row) => isOn(row.keys)).length} format={String} /> of {group.rows.length}</span></h2>
             <RefineList as="div" label={group.name}>
               {group.rows.map((row) => {
                 const on = isOn(row.keys);

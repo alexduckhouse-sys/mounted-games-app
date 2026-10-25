@@ -31,7 +31,7 @@ export function StatusPill({ children, tone = 'neutral' }: { children: ReactNode
 
 export function TestReceipt({ payment }: { payment: TestPayment }) {
   return (
-    <div className="rounded-lg border-2 border-violet-400 bg-violet-50 p-3 text-violet-950" role="status">
+    <div className="mg-rise rounded-lg border-2 border-violet-400 bg-violet-50 p-3 text-violet-950" role="status">
       <p className="text-sm font-extrabold">{payment.receiptLabel}</p>
       <p className="mt-1 break-all text-xs">Test receipt: {payment.receiptReference}</p>
     </div>

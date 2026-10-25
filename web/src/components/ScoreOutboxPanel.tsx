@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CloudOff, AlertTriangle } from 'lucide-react';
 import { describePlacings, discard, overrule, retry, type QueuedScore } from '../offline/scoreOutbox';
 import { flushOutbox, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import { confirmDialog } from './ConfirmDialog';
+import { TickerNumber } from './TickerNumber';
+
+/** How long a sent result stays ticked off before the row goes. */
+export const SENT_SHOWN_MS = 2400;
 
 /** Results saved on this phone that haven't reached the server yet, and any that need a decision. */
 export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
@@ -10,8 +14,27 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [storageError, setStorageError] = useState(false);
   const update = (change: (list: QueuedScore[]) => QueuedScore[]) => setStorageError(!updateOutbox(change));
-  if (queued.length === 0 && !storageError) return null;
   const waiting = queued.filter((q) => q.state === 'waiting');
+
+  // A waiting result that leaves the outbox has been sent: tick it off. (Only conflicts and failures can be
+  // deleted, and those have stopped waiting, so a deletion never counts as sent.)
+  const waitingKey = waiting.map((q) => q.raceId).join(',');
+  const [before, setBefore] = useState({ key: waitingKey, items: waiting.map((q) => ({ raceId: q.raceId, label: q.label })) });
+  const [sent, setSent] = useState<{ raceId: number; label: string }[]>([]);
+  if (before.key !== waitingKey) {
+    const stillQueued = new Set(queued.map((q) => q.raceId));
+    const gone = before.items.filter((item) => !stillQueued.has(item.raceId));
+    setBefore({ key: waitingKey, items: waiting.map((q) => ({ raceId: q.raceId, label: q.label })) });
+    if (gone.length > 0) setSent((current) => [...current.filter((item) => !gone.some((g) => g.raceId === item.raceId)), ...gone]);
+  }
+  const sentKey = sent.map((item) => item.raceId).join(',');
+  useEffect(() => {
+    if (!sentKey) return;
+    const timer = setTimeout(() => setSent([]), SENT_SHOWN_MS);
+    return () => clearTimeout(timer);
+  }, [sentKey]);
+
+  if (queued.length === 0 && !storageError && sent.length === 0) return null;
 
   return (
     <div className="space-y-2">
@@ -52,11 +75,17 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
           </div>
         </div>
       ))}
+      {sent.map((item) => (
+        <p key={item.raceId} role="status" className="mg-sent-row">
+          <span className="mg-sent-tick" aria-hidden="true"><svg viewBox="0 0 24 24"><path pathLength={1} d="M5 12.5l4.5 4.5L19 7.5" /></svg></span>
+          {item.label} sent
+        </p>
+      ))}
       {waiting.length > 0 && (
         <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
           <CloudOff className="h-4 w-4 shrink-0" />
           <p className="flex-1">
-            {waiting.length === 1 ? `${waiting[0].label} is` : `${waiting.length} races are`} saved on this phone and will send when you have signal.
+            {waiting.length === 1 ? `${waiting[0].label} is` : <><TickerNumber value={waiting.length} format={String} /> races are</>} saved on this phone and will send when you have signal.
           </p>
           <button className="btn-ghost min-h-11" onClick={() => void flushOutbox()}>Send now</button>
         </div>

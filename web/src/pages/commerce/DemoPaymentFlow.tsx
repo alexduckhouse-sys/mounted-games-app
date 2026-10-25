@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { RefineFoot, RefineHeader, RefinePage } from '../refine/Refine';
 import { newIdempotencyKey, pounds } from './commerceFormat';
 import { TestReceipt } from './commerceUi';
+import { CountUp } from '../../components/stream/CountUp';
 import type { FakePaymentOutcome, TestPayment, TestPaymentStatus } from './types';
 import './demoPayment.css';
 
@@ -326,18 +327,26 @@ function ResultSlot({ payment, retry, render }: { payment: TestPayment; retry: (
 export function OutcomeState({ payment, title, detail, role }: { payment: TestPayment; title?: string; detail?: ReactNode; role?: 'alert' | 'status' }) {
   const tone = payment.status === 0 ? 'ok' : payment.status === 1 ? 'bad' : 'mut';
   const heading = title ?? (payment.status === 0 ? 'Payment approved' : payment.status === 1 ? 'The demo card was declined' : payment.status === 2 ? 'Payment cancelled' : 'Payment refunded');
-  const line = detail ?? (payment.status === 0 ? `Paid ${pounds(payment.amountMinor)}` : payment.status === 1 ? 'Nothing was charged.' : payment.status === 2 ? 'Nothing was charged.' : 'No money moved.');
+  const line = detail ?? (payment.status === 0
+    ? <>Paid <PaidAmount amountMinor={payment.amountMinor} /></>
+    : payment.status === 1 ? 'Nothing was charged.' : payment.status === 2 ? 'Nothing was charged.' : 'No money moved.');
+  // The disc pops in and its mark draws itself; a declined card gives a small shake (see demoPayment.css).
   return (
-    <div className="rf-state" role={role ?? (payment.status === 1 ? 'alert' : 'status')}>
+    <div className={`rf-state mg-outcome mg-outcome-${tone}`} role={role ?? (payment.status === 1 ? 'alert' : 'status')}>
       <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
         <circle cx="20" cy="20" r="19" className={`rf-state-${tone}`} />
-        {payment.status === 0 && <path d="M12 20.5l5 5L28 14.5" fill="none" stroke="rgb(var(--mg-ok))" strokeWidth="3" />}
+        {payment.status === 0 && <path className="mg-outcome-mark" pathLength={1} d="M12 20.5l5 5L28 14.5" fill="none" stroke="rgb(var(--mg-ok))" strokeWidth="3" />}
         {payment.status === 1 && <path d="M20 12v10M20 27v1" fill="none" stroke="rgb(var(--mg-elim))" strokeWidth="3" strokeLinecap="round" />}
-        {payment.status > 1 && <path d="M14 14l12 12M26 14L14 26" fill="none" stroke="rgb(var(--mg-body))" strokeWidth="3" strokeLinecap="round" />}
+        {payment.status > 1 && <path className="mg-outcome-mark" pathLength={1} d="M14 14l12 12M26 14L14 26" fill="none" stroke="rgb(var(--mg-body))" strokeWidth="3" strokeLinecap="round" />}
       </svg>
       <div><div className="rf-t1">{heading}</div><div className="rf-t2">{line}</div></div>
     </div>
   );
+}
+
+/** A paid amount that counts up from £0.00 as the approval lands. */
+export function PaidAmount({ amountMinor }: { amountMinor: number }) {
+  return <CountUp from={0} to={amountMinor} delay={0.25} duration={0.7} round={Math.round} format={pounds} />;
 }
 
 function resultTitle(status: TestPaymentStatus): string {

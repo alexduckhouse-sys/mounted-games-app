@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MotionConfig } from 'framer-motion';
-import { SAVED_TICK_MS, useSavedTick } from './SavedTick';
+import { SAVED_TICK_MS, SAVED_TOAST_MS, useSavedTick, useSavedToast } from './SavedTick';
 
 let play: (label: string) => void = () => {};
 const keep = (show: (label: string) => void) => { play = show; };
@@ -39,4 +39,28 @@ it('draws the tick in when motion is on', () => {
   render(<Harness />);
   act(() => play('Sack Race'));
   expect(document.querySelector('.mg-saved-tick-disc path')).not.toBeNull();
+});
+
+let toast: (label: string) => void = () => {};
+const keepToast = (show: (label: string) => void) => { toast = show; };
+function ToastHarness() {
+  const { show, node } = useSavedToast();
+  keepToast(show);
+  return <>{node}</>;
+}
+
+it('the small toast says what saved and drops away, restarting for each save', () => {
+  const { unmount } = render(<MotionConfig reducedMotion="always"><ToastHarness /></MotionConfig>);
+  act(() => toast('Venue'));
+  expect(screen.getByRole('status')).toHaveTextContent('Venue saved');
+  act(() => { vi.advanceTimersByTime(SAVED_TOAST_MS - 100); });
+  act(() => toast('Name'));
+  act(() => { vi.advanceTimersByTime(200); });
+  expect(screen.getByRole('status')).toHaveTextContent('Name saved');
+  act(() => { vi.advanceTimersByTime(SAVED_TOAST_MS); });
+  expect(screen.queryByRole('status')).toBeNull();
+  unmount();
+  render(<ToastHarness />);
+  act(() => toast('Start'));
+  expect(document.querySelector('.mg-saved-toast path')).not.toBeNull();
 });

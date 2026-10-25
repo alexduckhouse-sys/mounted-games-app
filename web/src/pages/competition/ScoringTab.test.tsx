@@ -216,7 +216,7 @@ describe('the finals list', () => {
   it('orders each final by its points with the place, the winner trophy and the qualifying chip', async () => {
     renderTab();
     const list = await screen.findByRole('list', { name: 'A Final' });
-    expect(rowNames(list)).toEqual(['1stTeam 3Q3Qualified 3rd6 points', '2ndTeam 1Q1Qualified 1st4 points', '3rdTeam 2Q2Qualified 2nd2 points']);
+    expect(rowNames(list)).toEqual(['1stTeam 3ChampionsQ3Qualified 3rd6 points', '2ndTeam 1Q1Qualified 1st4 points', '3rdTeam 2Q2Qualified 2nd2 points']);
     expect(within(list).getAllByRole('img', { name: 'Winner' })).toHaveLength(1);
   });
 
@@ -227,7 +227,7 @@ describe('the finals list', () => {
     await screen.findByRole('list', { name: 'A Final' });
     const labels = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
     expect(labels).toEqual(['A Final', 'B Final']);
-    expect(rowNames(screen.getByRole('list', { name: 'B Final' }))).toEqual(['1stTeam 45 points', '1stTeam 55 points', '3rdTeam 61 points']);
+    expect(rowNames(screen.getByRole('list', { name: 'B Final' }))).toEqual(['1stTeam 4Champions5 points', '1stTeam 5Champions5 points', '3rdTeam 61 points']);
     // No qualifying position for teams that did not take part in qualifying.
     expect(within(screen.getByRole('list', { name: 'B Final' })).queryByText(/Qualified/)).toBeNull();
   });

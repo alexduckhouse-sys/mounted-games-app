@@ -35,7 +35,7 @@ export function EntryEmailFields({ value, onChange }: {
       <p id={`${id}-why`} className="m-0 text-xs text-slate-500 dark:text-slate-300">
         We'll send you one email to confirm your entry. It goes to you, the adult entering, and never to a rider.
       </p>
-      {invalid && <p role="alert" className="m-0 text-xs font-semibold text-[rgb(var(--mg-elim))]">That email address doesn't look right.</p>}
+      {invalid && <p role="alert" className="mg-field-msg m-0 text-xs font-semibold text-[rgb(var(--mg-elim))]">That email address doesn't look right.</p>}
       <label className="flex items-start gap-2 text-xs">
         <input
           type="checkbox"

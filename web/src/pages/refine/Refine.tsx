@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboard
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
+import { TickerNumber } from '../../components/TickerNumber';
 import { usePageWidth } from '../../components/pageWidthState';
 import './refine.css';
 
@@ -138,7 +139,7 @@ export function RefineQty({ name, value, onChange, max = 99, disabled = false }:
   return (
     <span className="rf-qty" role="group" aria-label={`Quantity for ${name}`}>
       <button type="button" aria-label={`Remove one ${name}`} disabled={disabled || value <= 0} onClick={() => onChange(value - 1)}><Minus className="h-4 w-4" aria-hidden="true" /></button>
-      <output aria-live="polite">{value}</output>
+      <output aria-live="polite"><TickerNumber value={value} format={String} /></output>
       <button type="button" aria-label={`Add one ${name}`} disabled={disabled || value >= max} onClick={() => onChange(value + 1)}><Plus className="h-4 w-4" aria-hidden="true" /></button>
     </span>
   );

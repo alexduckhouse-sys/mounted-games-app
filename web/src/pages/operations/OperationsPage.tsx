@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePageWidth } from '../../components/pageWidthState';
 import { MoreHorizontal, RefreshCw } from 'lucide-react';
+import { TickerNumber } from '../../components/TickerNumber';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
@@ -353,7 +354,7 @@ function Preparations({ readiness, groups, competitionId, refreshFailed, checked
         : (
           <RefineList as="div">
             {toSort.map((row) => <Fragment key={row.key}>{open(row, <>
-              <span className="rf-num ops-count">{row.count}</span>
+              <span className="rf-num ops-count"><TickerNumber value={row.count} format={String} /></span>
               <span className="rf-grow rf-t1">{row.title}</span>
               <Chev />
             </>)}</Fragment>)}

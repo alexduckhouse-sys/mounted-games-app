@@ -132,10 +132,9 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
   flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; min-width: 44px;
   padding: 0 12px; border-radius: 10px; border: 1px solid rgb(var(--mg-header-line)); background: transparent; color: #fff;
   font: 600 14px/1 var(--mg-font); text-decoration: none !important; cursor: pointer;
-  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), transform 120ms var(--mg-ease-out);
+  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
 }
 .mg-nav-btn:hover { background: rgb(255 255 255 / .08); }
-.mg-nav-btn:active:not(:disabled) { transform: scale(0.98); }
 .mg-nav-btn[aria-pressed="true"] { background: #fff; color: rgb(var(--mg-header)); }
 .mg-header :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .mg-strip-bar { background: rgb(var(--mg-header-deep)); color: #fff; }
@@ -227,6 +226,8 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-conn-reconnecting { background: rgb(var(--mg-late-bg)); border-color: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); }
 .mg-conn-polling { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-control)); color: rgb(var(--mg-heading)); }
 .mg-conn-offline { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-elim)); color: rgb(var(--mg-elim)); }
+.mg-conn-back { cursor: default; background: rgb(var(--mg-ok)); border-color: rgb(var(--mg-ok)); color: #fff; animation: mg-conn-back 2.6s var(--mg-ease-out) both; }
+@keyframes mg-conn-back { 0% { transform: scale(.7); opacity: 0; } 12% { transform: scale(1.06); opacity: 1; } 20% { transform: scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
 .mg-conn-spin { animation: mg-conn-spin 1s linear infinite; }
 @keyframes mg-conn-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .mg-conn-spin { animation: none; } }
@@ -244,10 +245,13 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; padding: 0 18px; border-radius: 10px;
   border: 1.5px solid transparent; font: 600 16px/1.1 var(--mg-font); text-align: center; text-decoration: none !important;
-  cursor: pointer; transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), filter var(--mg-dur-fast) var(--mg-ease-out), transform 120ms var(--mg-ease-out);
+  cursor: pointer; transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), filter var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
 }
 .mg-btn:disabled { opacity: .5; cursor: not-allowed; }
-.mg-btn:active:not(:disabled), .mg-icon-btn:active:not(:disabled), .mg-chip:active:not(:disabled), .mg-small-btn:active:not(:disabled), .mg-sell-btn:active:not(:disabled) { transform: scale(0.98); }
+/* Buttons dip under a finger and spring back on release. `scale` (not transform) leaves any positioning transform alone. */
+.mg-btn:active:not(:disabled), .mg-icon-btn:active:not(:disabled), .mg-chip:active:not(:disabled), .mg-small-btn:active:not(:disabled), .mg-sell-btn:active:not(:disabled),
+.mg-nav-btn:active:not(:disabled), .mg-tint-link:active, .sc-tool-btn:active:not(:disabled), .mg-stream-control:active:not(:disabled) { --mg-press-t: 90ms; scale: .96; }
+.mg-small-btn, .mg-sell-btn, .sc-tool-btn, .mg-stream-control { transition: scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1); }
 .mg-btn-primary { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: #fff !important; }
 .mg-btn-primary:hover:not(:disabled) { filter: brightness(1.12); }
 .mg-btn-secondary { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-control)); color: rgb(var(--mg-heading)) !important; }
@@ -255,7 +259,7 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-icon-btn {
   flex-shrink: 0; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px;
   border: 1px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); cursor: pointer;
-  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), transform 120ms var(--mg-ease-out);
+  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
 }
 .mg-icon-btn:hover:not(:disabled) { border-color: rgb(var(--mg-heading)); }
 .mg-icon-btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -267,7 +271,7 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-tint-link {
   display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border-radius: 10px; width: 100%;
   background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)) !important; font: 600 15px/1.2 var(--mg-font); text-align: left; cursor: pointer;
-  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), transform 120ms var(--mg-ease-out);
+  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
 }
 .mg-field {
   display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; border-radius: 10px;
@@ -323,7 +327,7 @@ a.mg-row:active, button.mg-row:active { background: rgb(var(--mg-tint) / .65); }
   flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 16px;
   border-radius: 6px; border: 1px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important;
   font: 600 15px/1 var(--mg-font); white-space: nowrap; cursor: pointer;
-  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), transform 120ms var(--mg-ease-out);
+  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
 }
 .mg-chip[aria-pressed="true"], .mg-chip[aria-current="page"] { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: #fff !important; }
 /* Segmented control (age groups on the toplist) and a two-way switch (Totals / By session). */
@@ -530,6 +534,73 @@ html[data-lite="true"] dialog::backdrop { animation: none !important; }
 .mg-announce-pop-close { flex: none; width: 44px; display: grid; place-items: center; border: 0; border-left: 1px solid rgb(255 255 255 / .12); background: transparent; color: rgb(255 255 255 / .8); cursor: pointer; }
 .mg-announce-pop-close svg { width: 18px; height: 18px; }
 .mg-announce-pop-link:focus-visible, .mg-announce-pop-close:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
+
+/* Payment outcomes: the disc pops, its mark draws in, a decline shakes, and the receipt rises in after. */
+.mg-outcome svg { transform-origin: center; animation: mg-outcome-pop 480ms cubic-bezier(.34, 1.56, .64, 1); }
+.mg-outcome-mark { stroke-dasharray: 1; animation: mg-outcome-draw 320ms ease-out 200ms both; }
+.mg-outcome-bad svg { animation: mg-outcome-pop 300ms cubic-bezier(.34, 1.56, .64, 1), mg-shake 420ms ease-out 120ms; }
+.mg-outcome ~ :not(.rf-foot), .mg-rise { animation: mg-rise 420ms var(--mg-ease-out) 380ms both; }
+@keyframes mg-outcome-pop { from { transform: scale(.5); opacity: 0; } }
+@keyframes mg-outcome-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes mg-rise { from { opacity: 0; transform: translateY(14px); } }
+@keyframes mg-shake { 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+/* A status that changes while you look (an entry marked Paid) pops; a Paid one draws its tick. */
+.mg-change-pop { display: inline-flex; align-items: center; gap: 4px; animation: mg-change-pop 420ms var(--mg-ease-out); }
+.mg-change-pop svg { width: 1em; height: 1em; }
+.mg-change-pop path { stroke-dasharray: 1; animation: mg-outcome-draw 300ms ease-out 120ms both; }
+@keyframes mg-change-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+.mg-change-pop:has(svg) { color: rgb(var(--mg-ok)); font-weight: 700; }
+/* An entry is in: the rosette drops on its ribbon and swings to rest, then the words rise under it. */
+.mg-entry-rosette { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0 4px; text-align: center; }
+.mg-entry-rosette-hang { display: block; transform-origin: 50% 0; animation: mg-rosette-drop 1.5s ease-out both; }
+.mg-entry-rosette strong { font: 700 26px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); animation: mg-rise 400ms var(--mg-ease-out) 450ms both; }
+.mg-entry-rosette-note { max-width: 36ch; font: 500 14px/1.35 var(--mg-font); color: rgb(var(--mg-body)); animation: mg-rise 400ms var(--mg-ease-out) 600ms both; }
+@keyframes mg-rosette-drop {
+  0% { transform: translateY(-220px) rotate(0); opacity: 0; }
+  10% { opacity: 1; }
+  35% { transform: translateY(8px) rotate(0); }
+  50% { transform: translateY(0) rotate(9deg); }
+  65% { transform: rotate(-6deg); }
+  80% { transform: rotate(3.5deg); }
+  90% { transform: rotate(-1.5deg); }
+  100% { transform: rotate(0); }
+}
+/* Champions: the winner of a finished final gets a gold row, a rosette that pops on, and a shine that sweeps across twice. */
+.mg-champion { position: relative; overflow: hidden; background: rgb(217 165 32 / .12); box-shadow: inset 4px 0 0 #D9A520; }
+.mg-champion::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 30%, rgb(255 222 120 / .5) 50%, transparent 70%); transform: translateX(-120%); animation: mg-champion-shine 900ms ease-in-out 350ms, mg-champion-shine 900ms ease-in-out 1500ms; }
+.mg-champion-rosette { display: inline-flex; flex: none; animation: mg-champion-pop 600ms var(--mg-ease-out) 150ms both; }
+.mg-champion-label { flex: none; font: 700 12px/1 var(--mg-font); color: rgb(var(--mg-late-time)); }
+@keyframes mg-champion-shine { from { transform: translateX(-120%); } to { transform: translateX(120%); } }
+@keyframes mg-champion-pop { 0% { transform: scale(0) rotate(-90deg); } 70% { transform: scale(1.2) rotate(8deg); } 100% { transform: scale(1) rotate(0); } }
+
+/* A result that was waiting on this phone and has now sent: it ticks off, then the row fades away. */
+.mg-sent-row { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-ok) / .1); color: rgb(var(--mg-ok)); font: 600 14px/1.3 var(--mg-font); animation: mg-sent-row 2.4s var(--mg-ease-out) both; }
+.mg-sent-tick { display: grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 50%; background: rgb(var(--mg-ok)); animation: mg-change-pop 360ms var(--mg-ease-out); }
+.mg-sent-tick svg { width: 14px; height: 14px; }
+.mg-sent-tick path { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; animation: mg-outcome-draw 300ms ease-out 100ms both; }
+@keyframes mg-sent-row { 0% { opacity: 0; transform: translateY(-6px); } 10% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
+/* Without motion these would jump to their faded end; they stay put instead until they are removed. */
+@media (prefers-reduced-motion: reduce) { .mg-conn-back, .mg-sent-row { animation: none !important; } }
+html[data-lite="true"] .mg-conn-back, html[data-lite="true"] .mg-sent-row { animation: none !important; }
+
+/* Copy buttons: the tick pops in and draws itself. */
+.mg-copied-tick { flex: none; overflow: visible; animation: mg-copied-pop 320ms cubic-bezier(.34, 1.56, .64, 1); }
+.mg-copied-tick path { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; animation: mg-outcome-draw 280ms ease-out 60ms both; }
+@keyframes mg-copied-pop { from { transform: scale(.5) rotate(-20deg); } }
+
+/* A field that turns out wrong gives one small shake as it turns red, and its message slides in under it. */
+.mg-field[data-invalid="true"], input[aria-invalid="true"]:not(.mg-field input), textarea[aria-invalid="true"]:not(.mg-field textarea), .mg-select[aria-invalid="true"]:not(.mg-field .mg-select) { animation: mg-shake 380ms ease-out; }
+.mg-field-msg { animation: mg-field-msg 260ms var(--mg-ease-out); }
+@keyframes mg-field-msg { from { opacity: 0; transform: translateY(-4px); } }
+/* Photos and logos settle in from a soft blur as they arrive, instead of popping. */
+.mg-lazy-img[data-state="loaded"] { animation: mg-photo-in 480ms var(--mg-ease-out); }
+@keyframes mg-photo-in { from { opacity: .3; filter: blur(6px); transform: scale(1.03); } }
+
+/* The small "saved" pill for pages that save as you go. */
+.mg-saved-toast { position: fixed; z-index: 90; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px; background: rgb(var(--mg-header-deep)); color: #fff; font: 600 14px/1 var(--mg-font); white-space: nowrap; box-shadow: 0 8px 24px rgb(0 0 0 / .25); pointer-events: none; }
+.mg-saved-toast svg { flex: none; padding: 2px; border-radius: 50%; background: rgb(var(--mg-ok)); }
+.mg-saved-toast path { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Sponsors: a strip under a page, the full page, and the cards over the live video. */
 .mg-sponsors { padding: 12px; border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); box-shadow: var(--mg-shadow-sm); }

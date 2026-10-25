@@ -11,6 +11,7 @@ import { parseBibAndFlag } from '../../lib/bib';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { HeatScores } from './HeatScores';
 import { TeamSheet } from './TeamSheet';
+import { Rosette } from '../../components/Rosette';
 import { ScoreFlash } from '../../components/ScoreFlash';
 import { TickerNumber } from '../../components/TickerNumber';
 import { useRankMotion } from '../../hooks/useRankMotion';
@@ -466,22 +467,26 @@ function FinalsList({ groups, onOpen, isFav, renderTeamName, renderTeamLink, com
               {group.rows.map((row) => {
                 const openRow = onOpen(row.teamId);
                 const winner = row.place === 1;
+                // Once the final is over its winners are champions: a gold row, a rosette and a shine across it.
+                const champion = winner && group.complete === true;
                 const fav = isFav(row.teamId);
                 const content = <>
                   <span className={`mg-display w-9 shrink-0 text-lg font-bold leading-none ${winner ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{row.place != null ? ordinal(row.place) : <span aria-hidden="true">–</span>}</span>
                   <span className="flex min-w-0 flex-1 items-center gap-1.5">
                     <span className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, !openRow)}</span>
                     {winner && <Trophy aria-label="Winner" role="img" className="h-[13px] w-[13px] shrink-0 text-[rgb(var(--mg-late-time))]" />}
+                    {champion && <span className="mg-champion-label">Champions</span>}
                     {row.qualifyingPosition != null && (
                       <span className="shrink-0 rounded bg-[rgb(var(--mg-tint))] px-1.5 py-[3px] text-xs font-bold leading-none text-[rgb(var(--mg-body))]">
                         <span aria-hidden="true">Q{row.qualifyingPosition}</span><span className="sr-only">Qualified {ordinal(row.qualifyingPosition)}</span>
                       </span>
                     )}
                   </span>
+                  {champion && <span className="mg-champion-rosette"><Rosette width={26} /></span>}
                   <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{row.points != null ? formatPoints(row.points) : '–'}<span className="sr-only"> points</span></span>
                 </>;
                 return (
-                  <li key={row.teamId} data-followed={fav ? 'true' : undefined} className={`flex min-h-11 items-center pr-1 border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
+                  <li key={row.teamId} data-followed={fav ? 'true' : undefined} className={`flex min-h-11 items-center pr-1 border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${champion ? 'mg-champion' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
                     {openRow
                       ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1 text-left">{content}</button>
                       : <div className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1">{content}</div>}

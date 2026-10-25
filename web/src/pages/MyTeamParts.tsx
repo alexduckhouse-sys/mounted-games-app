@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { CopiedTick } from '../components/CopiedTick';
 import { useLocation } from 'react-router-dom';
 import { Check, ChevronDown, RefreshCw, X } from 'lucide-react';
 import { api } from '../api';
@@ -106,7 +107,7 @@ export function CodeRow({ team, onTeamUpdated }: { team: Team; onTeamUpdated: ()
           <span className="text-[10px] font-semibold uppercase leading-none tracking-[0.08em] text-[rgb(var(--mg-muted))]">Parent join code</span>
           <span className="mg-display truncate text-lg font-bold leading-none tracking-[0.08em]">{team.supporterJoinKey ?? 'Not set'}</span>
         </span>
-        {team.supporterJoinKey && <button type="button" onClick={copyKey} className="mg-small-btn" aria-label={`Copy join code for ${team.displayName}`}>{copied ? 'Copied' : 'Copy'}</button>}
+        {team.supporterJoinKey && <button type="button" onClick={copyKey} className="mg-small-btn" aria-label={`Copy join code for ${team.displayName}`}>{copied ? <><CopiedTick className="h-3.5 w-3.5 text-[rgb(var(--mg-ok))]" />Copied</> : 'Copy'}</button>}
         <button type="button" onClick={() => { setEditing(!editing); setCodeInput(team.supporterJoinKey ?? ''); setCodeErr(null); }} aria-expanded={editing} className="inline-flex min-h-11 items-center px-2.5 text-[13px] font-semibold text-[rgb(var(--mg-heading))]">{team.supporterJoinKey ? 'Change' : 'Set code'}<span className="sr-only"> join code for {team.displayName}</span></button>
       </div>
       {editing && (

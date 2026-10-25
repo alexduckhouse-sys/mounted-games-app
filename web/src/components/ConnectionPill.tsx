@@ -1,9 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Clock, RefreshCw, WifiOff } from 'lucide-react';
+import { Clock, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { useConnectionStatus } from '../live/ConnectionStatusContext';
 import { liveState } from '../live/connectionStatus';
 
 const time = (date: Date) => date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+/** How long "Back online" shows once the live link returns after the pill had appeared. */
+export const BACK_ONLINE_MS = 2600;
 
 /**
  * Says what the live connection is doing, only once it has really been lost (see `liveState`). Tapping it
@@ -26,9 +29,29 @@ function useConnectionPill(): ReactNode {
     return () => clearInterval(timer);
   }, [down]);
 
+  const state = status ? liveState(status, now) : 'live';
+  const shown = state !== 'live' && state !== 'connecting';
+  // After the pill has been up, the link coming back gets a short green "Back online" before it goes.
+  const [wasShown, setWasShown] = useState(false);
+  const [returns, setReturns] = useState(0);
+  const [cleared, setCleared] = useState(0);
+  if (shown !== wasShown) {
+    setWasShown(shown);
+    if (!shown && status?.connected) setReturns(returns + 1);
+  }
+  useEffect(() => {
+    if (returns === 0) return;
+    const timer = setTimeout(() => setCleared(returns), BACK_ONLINE_MS);
+    return () => clearTimeout(timer);
+  }, [returns]);
+
   if (!status) return null;
-  const state = liveState(status, now);
-  if (state === 'live' || state === 'connecting') return null;
+  if (!shown) {
+    if (returns > cleared && status.connected) {
+      return <span role="status" className="mg-conn-pill mg-conn-back"><Wifi aria-hidden="true" />Back online</span>;
+    }
+    return null;
+  }
 
   if (status.retrying) {
     return (
