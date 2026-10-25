@@ -56,6 +56,7 @@ const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').th
 const EventDetailsPage = lazy(() => import('./pages/operations/EventDetailsPage').then((module) => ({ default: module.EventDetailsPage })));
 const SectionsPage = lazy(() => import('./pages/operations/SectionsPage').then((module) => ({ default: module.SectionsPage })));
 const TimetablePage = lazy(() => import('./pages/operations/TimetablePage').then((module) => ({ default: module.TimetablePage })));
+const EquipmentPage = lazy(() => import('./pages/operations/EquipmentPage').then((module) => ({ default: module.EquipmentPage })));
 const EntriesPage = lazy(() => import('./pages/operations/EntriesPage').then((module) => ({ default: module.EntriesPage })));
 const RulebooksPage = lazy(() => import('./pages/operations/RulebooksPage').then((module) => ({ default: module.RulebooksPage })));
 const ShopPage = lazy(() => import('./pages/ShopPage').then((module) => ({ default: module.ShopPage })));
@@ -130,6 +131,7 @@ export default function App() {
                 <Route path="operations" element={<ProtectedRoute roles={['Admin', 'Trainer']}><OperationsPage /></ProtectedRoute>} />
                 <Route path="sections" element={<ProtectedRoute roles={['Admin', 'Trainer']}><SectionsPage /></ProtectedRoute>} />
                 <Route path="timetable-and-draw" element={<ProtectedRoute roles={['Admin', 'Trainer']}><TimetablePage /></ProtectedRoute>} />
+                <Route path="equipment" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EquipmentPage /></ProtectedRoute>} />
                 <Route path="entries" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EntriesPage /></ProtectedRoute>} />
                 <Route path="event-details" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EventDetailsPage /></ProtectedRoute>} />
                 <Route path="declarations" element={<DeclarationsTab />} />
