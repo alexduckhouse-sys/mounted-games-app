@@ -28,7 +28,17 @@ public sealed record CompetitionSetup(
     public sealed record SessionSetup(
         int? SectionIndex, string Name, string? ArenaName, double? StartOffsetMinutes, int OrderIndex, string? Notes,
         bool IsBreak, int? DurationMinutes, SessionKind Kind, string? Location, int? LanesPerHeat, int? MinutesPerHeat,
-        bool RaceOrderAlternating, LaneRotationMode LaneRotationMode, int? QualifiersPerHeat, string? PlannedRaces);
+        bool RaceOrderAlternating, LaneRotationMode LaneRotationMode, int? QualifiersPerHeat, string? PlannedRaces,
+        IReadOnlyList<FinalHeatSetup>? FinalHeats = null);
+
+    /// <summary>
+    /// An empty lettered final ("A Final") of a finals session: its label, order, timing and race names, with no teams. Kept so
+    /// "Populate from standings" still has heats to fill in the new event.
+    /// </summary>
+    public sealed record FinalHeatSetup(
+        string Label, int OrderIndex, int? DurationMinutes, double? StartOffsetMinutes, IReadOnlyList<FinalRaceSetup> Races);
+
+    public sealed record FinalRaceSetup(string Name, int OrderIndex);
 
     static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -56,7 +66,8 @@ public sealed record CompetitionSetup(
                 index >= 0 ? index : null, s.Name, s.ArenaName,
                 s.ScheduledStart.HasValue ? (s.ScheduledStart.Value - source.StartDate).TotalMinutes : null,
                 s.OrderIndex, CleanNotes(s.Notes), s.IsBreak, s.DurationMinutes, s.Kind, s.Location, s.LanesPerHeat,
-                s.MinutesPerHeat, s.RaceOrderAlternating, s.LaneRotationMode, s.QualifiersPerHeat, RaceList(s));
+                s.MinutesPerHeat, s.RaceOrderAlternating, s.LaneRotationMode, s.QualifiersPerHeat, RaceList(s),
+                FinalHeatsOf(s, source.StartDate));
         }).ToList();
         return new CompetitionSetup(
             source.Icon, source.Location, source.Latitude, source.Longitude, source.Description, source.What3Words,
@@ -66,6 +77,18 @@ public sealed record CompetitionSetup(
                 s.FinalistCount, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants)).ToList(),
             sessions);
     }
+
+    static List<FinalHeatSetup>? FinalHeatsOf(Session session, DateTime eventStart)
+    {
+        var heats = session.Heats.Where(SectionScoringLabel).OrderBy(h => h.OrderIndex).ThenBy(h => h.Id)
+            .Select(h => new FinalHeatSetup(h.Label ?? "", h.OrderIndex, h.DurationMinutes,
+                h.ScheduledStart.HasValue ? (h.ScheduledStart.Value - eventStart).TotalMinutes : null,
+                h.Races.OrderBy(r => r.OrderIndex).ThenBy(r => r.Id).Select(r => new FinalRaceSetup(r.Name, r.OrderIndex)).ToList()))
+            .ToList();
+        return heats.Count == 0 ? null : heats;
+    }
+
+    static bool SectionScoringLabel(Heat heat) => heat.RaceRoundStage == RaceRoundStage.None && FinalsTiers.ParseLabel(heat.Label) is not null;
 
     /// <summary>The races a session runs: the list chosen for it, or, for an older session, the races of its first heat.</summary>
     static string? RaceList(Session session)
@@ -159,7 +182,7 @@ public sealed class CompetitionSetupService(AppDbContext db)
 
             foreach (var s in setup.Sessions)
             {
-                db.Sessions.Add(new Session
+                var session = new Session
                 {
                     CompetitionId = clone.Id,
                     CompetitionSectionId = s.SectionIndex is { } i && i >= 0 && i < sections.Count ? sections[i].Id : null,
@@ -169,7 +192,18 @@ public sealed class CompetitionSetupService(AppDbContext db)
                     DurationMinutes = s.DurationMinutes, Kind = s.Kind, Location = s.Location, LanesPerHeat = s.LanesPerHeat,
                     MinutesPerHeat = s.MinutesPerHeat, RaceOrderAlternating = s.RaceOrderAlternating,
                     LaneRotationMode = s.LaneRotationMode, QualifiersPerHeat = s.QualifiersPerHeat, PlannedRaces = s.PlannedRaces,
-                });
+                };
+                foreach (var h in s.FinalHeats ?? [])
+                {
+                    var heat = new Heat
+                    {
+                        Label = h.Label, OrderIndex = h.OrderIndex, DurationMinutes = h.DurationMinutes,
+                        ScheduledStart = h.StartOffsetMinutes.HasValue ? startDate.AddMinutes(h.StartOffsetMinutes.Value) : null,
+                    };
+                    foreach (var r in h.Races) heat.Races.Add(new Race { Name = r.Name, OrderIndex = r.OrderIndex });
+                    session.Heats.Add(heat);
+                }
+                db.Sessions.Add(session);
             }
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
@@ -177,10 +211,10 @@ public sealed class CompetitionSetupService(AppDbContext db)
         });
     }
 
-    // The payout club is pinned to whoever creates the competition, as for a new one; with no club it keeps the copied value.
+    // The payout club is pinned to whoever creates the competition, as for a new one: no club means none, never the source event's.
     static string? PinPayoutClub(string? json, int? creatorClubId)
     {
-        if (creatorClubId is null || DecFormConfig.Parse(json) is not { } config) return json;
+        if (DecFormConfig.Parse(json) is not { } config) return json;
         return (config with { PayoutClubId = creatorClubId }).ToJson();
     }
 }

@@ -68,6 +68,10 @@ export interface CompetitionReadiness {
   }>;
   equipmentChecklist: EquipmentChecklistItem[];
   equipmentIssues: Array<{ raceName: string; message: string }>;
+  /** Teams whose latest dec form has riders with flags (counts only). */
+  flaggedDecForms?: Array<{ teamId: number; teamName: string; sectionId: number; sectionName: string; flaggedRiders: number }>;
+  /** Race sessions with no races chosen; `sessionId` is null for an age group with no race session. */
+  raceListsToChoose?: Array<{ sessionId: number | null; sessionName: string; sectionId: number; sectionName: string }>;
 }
 
 /** A list entry: the text is fetched separately when the rulebook is opened. */
