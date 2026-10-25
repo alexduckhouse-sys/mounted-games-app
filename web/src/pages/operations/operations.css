@@ -142,6 +142,27 @@
 .ops-addbar:hover:not(:disabled) { filter: brightness(.97); }
 .ops-addbar:disabled { opacity: .6; cursor: default; }
 
+/* Timetable and draw */
+.ops-tt .rf-list { overflow: visible; }
+.ops-tt .rf-row { min-height: 52px; }
+.ops-tt-head { margin-top: 22px; border-bottom: 0; }
+.rf-sec.ops-tt-head > span:first-child { font: 800 22px/1.1 var(--mg-font-display); letter-spacing: 0; text-transform: none; color: rgb(var(--mg-heading)); }
+.ops-mv { flex-wrap: wrap; padding-block: 8px; }
+.ops-mv-btns { flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (min-width: 640px) { .ops-mv-btns { flex: none; display: flex; } }
+.ops-time { flex: none; width: 52px; font: 700 18px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); font-variant-numeric: tabular-nums; }
+.ops-gap-line { padding: 2px 16px; font: 500 12px/1.6 var(--mg-font); color: rgb(var(--mg-muted)); background: rgb(var(--mg-subtle)); }
+.ops-tt-edit { background: rgb(var(--mg-subtle)); }
+.ops-tt-edit .ops-pair { grid-template-columns: 1fr; }
+.ops-time-input { min-height: 44px; padding: 0 10px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 600 16px/1 var(--mg-font); background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); }
+.ops-lane-badge { flex: none; width: 26px; height: 26px; border-radius: 13px; background: rgb(var(--mg-heading)); color: #fff; display: flex; align-items: center; justify-content: center; font: 700 12px/1 var(--mg-font); }
+.ops-dot-colour { display: inline-block; flex: none; width: 16px; height: 16px; border-radius: 8px; border: 1px solid rgb(0 0 0 / .25); }
+.ops-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ops-chips .rf-btn { min-height: 38px; padding: 0 12px; border-radius: 999px; font-size: 14px; }
+.ops-end-left { margin-top: 10px; }
+.ops-draw-actions { margin-top: 10px; }
+.ops-lane-label { flex: none; width: 60px; }
+.ops-addrow { margin: 0; border-radius: 0; border-top: 1px solid rgb(var(--mg-rule-soft)); background: transparent; min-height: 52px; }
 /* Entries and dec forms */
 .ops-entries .rf-sec { margin-top: 20px; border-bottom: 0; font-size: 22px; }
 .ops-entries .rf-list { overflow: visible; }
