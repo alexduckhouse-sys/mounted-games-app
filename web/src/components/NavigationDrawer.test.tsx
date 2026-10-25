@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { Clock } from 'lucide-react';
 import { useEffect } from 'react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MotionConfig } from 'framer-motion';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, type StoredAuth } from '../api';
 import { readScorerToken, scorerApi } from '../offline/scorerLink';
@@ -52,7 +53,7 @@ function Probe() {
 
 const onClose = vi.fn();
 
-function mount(options: Options = {}) {
+function mount(options: Options = {}, motion = false) {
   if (options.roles) {
     const auth: StoredAuth = {
       token: 't', expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -61,14 +62,15 @@ function mount(options: Options = {}) {
     localStorage.setItem('mg.auth', JSON.stringify(auth));
   }
   if (options.competition) document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 4, name: 'Spring Games' }))}; Path=/`;
+  // Most tests check what closes the menu, so motion is stilled as in lite mode; one test covers the slide out.
   return render(
-    <MemoryRouter initialEntries={[options.path ?? '/']}>
+    <MotionConfig reducedMotion={motion ? 'never' : 'always'}><MemoryRouter initialEntries={[options.path ?? '/']}>
       <AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider>
         <Seed meta={options.meta} groups={options.groups} extras={options.extras} />
         <NavigationDrawer onClose={onClose} />
         <Probe />
       </CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider>
-    </MemoryRouter>,
+    </MemoryRouter></MotionConfig>,
   );
 }
 const links = (name: string) => within(screen.getByRole('navigation', { name })).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]);
@@ -134,6 +136,15 @@ describe('NavigationDrawer: when no competition is followed', () => {
     await userEvent.click(screen.getByRole('link', { name: 'Rider and team stats' }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('probe')).toHaveTextContent('/stats');
+  });
+
+  it('slides out before it closes when motion is on, and ignores a second close meanwhile', async () => {
+    mount({}, true);
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }));
+    expect(screen.getByRole('dialog')).toHaveClass('is-closing');
+    fireEvent(screen.getByRole('dialog'), new Event('cancel'));
+    expect(onClose).not.toHaveBeenCalled();
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
   it('closes from its close button, Escape and a tap on the backdrop, but not from a tap inside', async () => {

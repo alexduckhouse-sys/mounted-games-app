@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useExitDelay } from '../hooks/useExitDelay';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
 
 const SWIPE_DISMISS_PX = 48;
@@ -9,6 +10,8 @@ export function RememberCompetitionDialog() {
   const ref = useRef<HTMLDialogElement>(null);
   const startY = useRef<number | null>(null);
   const [dragY, setDragY] = useState(0);
+  // Either answer slides the sheet away before it is removed.
+  const { closing, close: choose } = useExitDelay(setRememberChoice);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -28,7 +31,7 @@ export function RememberCompetitionDialog() {
     const distance = Math.max(dragY, (y ?? startY.current) - startY.current);
     startY.current = null;
     setDragY(0);
-    if (distance >= SWIPE_DISMISS_PX) setRememberChoice('visit');
+    if (distance >= SWIPE_DISMISS_PX) choose('visit');
   }
 
   return (
@@ -36,15 +39,15 @@ export function RememberCompetitionDialog() {
       ref={ref}
       aria-labelledby="remember-competition-title"
       aria-describedby="remember-competition-detail"
-      onCancel={() => setRememberChoice('visit')}
+      onCancel={(e) => { e.preventDefault(); choose('visit'); }}
       onTouchStart={(e) => beginDrag(e.touches[0].clientY)}
       onTouchMove={(e) => moveDrag(e.touches[0].clientY)}
       onTouchEnd={(e) => endDrag(e.changedTouches[0]?.clientY)}
       onPointerDown={(e) => beginDrag(e.clientY)}
       onPointerMove={(e) => moveDrag(e.clientY)}
       onPointerUp={(e) => endDrag(e.clientY)}
-      style={dragY > 0 ? { transform: `translateY(${dragY}px)` } : undefined}
-      className="mg-font mx-auto mb-0 mt-auto w-full max-w-xl rounded-t-[20px] bg-[rgb(var(--mg-surface))] px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-2.5 text-[rgb(var(--mg-ink))] shadow-xl backdrop:bg-[rgb(var(--mg-overlay)/0.45)]"
+      style={dragY > 0 ? { transform: `translateY(${dragY}px)`, '--drag': `${dragY}px` } as CSSProperties : undefined}
+      className={`mg-sheet${closing ? ' is-closing' : ''} mg-font mx-auto mb-0 mt-auto w-full max-w-xl rounded-t-[20px] bg-[rgb(var(--mg-surface))] px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-2.5 text-[rgb(var(--mg-ink))] shadow-xl backdrop:bg-[rgb(var(--mg-overlay)/0.45)]`}
     >
       <div className="flex flex-col gap-4">
         <span aria-hidden="true" className="mx-auto h-1 w-10 rounded-full bg-[rgb(var(--mg-control))]" />
@@ -53,8 +56,8 @@ export function RememberCompetitionDialog() {
         </div>
         <p id="remember-competition-detail" className="mg-meta !text-sm">We'll save a cookie on this device for six months, so {current?.name ?? 'it'} opens straight away next time. You can change this in Settings.</p>
         <div className="grid grid-cols-2 gap-2.5">
-          <button className="mg-btn mg-btn-secondary !border-[rgb(var(--mg-heading))]" onClick={() => setRememberChoice('visit')}>No thanks</button>
-          <button autoFocus className="mg-btn mg-btn-primary" onClick={() => setRememberChoice('remember')}>Remember</button>
+          <button className="mg-btn mg-btn-secondary !border-[rgb(var(--mg-heading))]" onClick={() => choose('visit')}>No thanks</button>
+          <button autoFocus className="mg-btn mg-btn-primary" onClick={() => choose('remember')}>Remember</button>
         </div>
       </div>
     </dialog>

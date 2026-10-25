@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useExitDelay } from '../hooks/useExitDelay';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, BarChart3, Trophy, QrCode } from 'lucide-react';
 import { api } from '../api';
@@ -21,6 +22,8 @@ const iconClass = (active: boolean) => `h-5 w-5 shrink-0 ${active ? '' : 'text-[
 
 export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Closing slides the drawer back out before it is removed; links navigate underneath as it goes.
+  const { closing, close } = useExitDelay(onClose);
   const { current } = useCurrentCompetition();
   const { user, hasRole } = useAuth();
   const { extras } = useNavExtras();
@@ -64,7 +67,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   ].filter((item) => item.show);
   const selectedSection = location.pathname === `${base}/scoring` ? new URLSearchParams(location.search).get('section') : null;
   return (
-    <dialog ref={ref} onCancel={onClose} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} aria-labelledby="navigation-title" className="mg-font fixed inset-y-0 left-auto right-0 m-0 h-dvh max-h-none w-[min(88vw,20rem)] max-w-none bg-[rgb(var(--mg-surface))] p-0 text-[rgb(var(--mg-ink))] shadow-xl backdrop:bg-[rgb(var(--mg-overlay)/0.55)]">
+    <dialog ref={ref} onCancel={(e) => { e.preventDefault(); close(); }} onClick={(e) => { if (e.target === e.currentTarget) close(); }} aria-labelledby="navigation-title" className={`mg-drawer${closing ? ' is-closing' : ''} mg-font fixed inset-y-0 left-auto right-0 m-0 h-dvh max-h-none w-[min(88vw,20rem)] max-w-none bg-[rgb(var(--mg-surface))] p-0 text-[rgb(var(--mg-ink))] shadow-xl backdrop:bg-[rgb(var(--mg-overlay)/0.55)]`}>
       <div className="flex min-h-full flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="mg-header flex items-start gap-2.5 p-4">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -74,12 +77,12 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
               {subtitle && <span className="mg-header-sub text-[13px] leading-tight">{subtitle}</span>}
             </> : <h2 id="navigation-title" className="mg-display text-xl font-bold leading-tight">Menu</h2>}
           </div>
-          <button autoFocus onClick={onClose} className="mg-nav-btn !px-0" aria-label="Close menu"><X className="h-5 w-5" /></button>
+          <button autoFocus onClick={close} className="mg-nav-btn !px-0" aria-label="Close menu"><X className="h-5 w-5" /></button>
         </div>
 
         <div className="flex flex-1 flex-col gap-5 p-4">
           {user && (
-            <Link to="/me" onClick={onClose} className="flex min-h-14 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 !no-underline hover:!no-underline">
+            <Link to="/me" onClick={close} className="flex min-h-14 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 !no-underline hover:!no-underline">
               <span aria-hidden="true" className="mg-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-base font-bold leading-none text-[rgb(var(--mg-surface))]">{initialsOf(user.fullName, user.email)}</span>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">{user.fullName || user.email}</span>
@@ -89,7 +92,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
             </Link>
           )}
 
-          {(current != null || showWeather) && !lite && <Link to={current ? `${base}/weather` : '/events'} onClick={onClose} className="flex min-h-12 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2 !no-underline hover:bg-[rgb(var(--mg-tint))]"><CloudSun className="h-5 w-5 shrink-0 text-[rgb(var(--mg-muted))]" /><span className="font-medium text-[rgb(var(--mg-ink))]">Weather</span>{showWeather && <span className="ml-auto"><WeatherBadge /></span>}</Link>}
+          {(current != null || showWeather) && !lite && <Link to={current ? `${base}/weather` : '/events'} onClick={close} className="flex min-h-12 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2 !no-underline hover:bg-[rgb(var(--mg-tint))]"><CloudSun className="h-5 w-5 shrink-0 text-[rgb(var(--mg-muted))]" /><span className="font-medium text-[rgb(var(--mg-ink))]">Weather</span>{showWeather && <span className="ml-auto"><WeatherBadge /></span>}</Link>}
 
           {current && ageGroups.competitionId === current.id && ageGroups.groups.length > 0 && (
             <nav aria-label="Age groups" className="flex flex-col gap-2.5">
@@ -97,7 +100,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
               <div className="grid grid-cols-3 gap-2">
                 {ageGroups.groups.map((group) => {
                   const active = selectedSection === String(group.id) || (location.pathname === `${base}/scoring` && !location.search && group.id === ageGroups.groups[0].id);
-                  return <Link key={group.id} to={`${base}/scoring?section=${group.id}`} onClick={onClose} aria-current={active ? 'page' : undefined} className="mg-chip !min-h-11 !px-2 text-center !text-sm !whitespace-normal">{group.name}</Link>;
+                  return <Link key={group.id} to={`${base}/scoring?section=${group.id}`} onClick={close} aria-current={active ? 'page' : undefined} className="mg-chip !min-h-11 !px-2 text-center !text-sm !whitespace-normal">{group.name}</Link>;
                 })}
               </div>
             </nav>
@@ -105,7 +108,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
 
           <nav aria-label="Main navigation" className="flex flex-col">
             {links.map((item) => (
-              <NavLink key={item.label} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => itemClass(isActive && current !== null)}>
+              <NavLink key={item.label} to={item.to} end={item.end} onClick={close} className={({ isActive }) => itemClass(isActive && current !== null)}>
                 {({ isActive }) => <>
                   <item.icon className={iconClass(isActive && current !== null)} />{item.label}
                 </>}
@@ -116,25 +119,25 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
           <div className="h-px bg-[rgb(var(--mg-rule-soft))]" />
 
           <div className="flex flex-col">
-            <NavLink to="/events" end onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><CalendarDays className={iconClass(isActive)} />Events</>}</NavLink>
-            {current && <NavLink to="/shop" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShoppingBag className={iconClass(isActive)} />Tack &amp; kit shop</>}</NavLink>}
-            <NavLink to={seasonsTo} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>
-            <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
-            <NavLink to="/stats" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><BarChart3 className={iconClass(isActive)} />Rider and team stats</>}</NavLink>
+            <NavLink to="/events" end onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><CalendarDays className={iconClass(isActive)} />Events</>}</NavLink>
+            {current && <NavLink to="/shop" onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShoppingBag className={iconClass(isActive)} />Tack &amp; kit shop</>}</NavLink>}
+            <NavLink to={seasonsTo} onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>
+            <NavLink to="/competitions/past" onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
+            <NavLink to="/stats" onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><BarChart3 className={iconClass(isActive)} />Rider and team stats</>}</NavLink>
             <button type="button" onClick={() => setQrOpen(true)} className={itemClass(false)}><QrCode className={iconClass(false)} />Scan QR code</button>
-            <NavLink to="/settings" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><SlidersHorizontal className={iconClass(isActive)} />Settings</>}</NavLink>
+            <NavLink to="/settings" onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><SlidersHorizontal className={iconClass(isActive)} />Settings</>}</NavLink>
           </div>
 
           {(accountLinks.length > 0 || extras.length > 0) && (
             <nav aria-label="Account and management" className="flex flex-col border-t border-[rgb(var(--mg-rule-soft))] pt-4">
-              {accountLinks.map((item) => <NavLink key={item.to} to={item.to} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}</NavLink>)}
-              {extras.map((item) => <NavLink key={item.to} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}</NavLink>)}
+              {accountLinks.map((item) => <NavLink key={item.to} to={item.to} onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}</NavLink>)}
+              {extras.map((item) => <NavLink key={item.to} to={item.to} end={item.end} onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}</NavLink>)}
             </nav>
           )}
 
           {!user && (
             <div className="mt-auto border-t border-[rgb(var(--mg-rule-soft))] pt-3">
-              <NavLink to="/login" onClick={onClose} className="mg-btn mg-btn-primary w-full !min-h-12 !text-base">Sign in</NavLink>
+              <NavLink to="/login" onClick={close} className="mg-btn mg-btn-primary w-full !min-h-12 !text-base">Sign in</NavLink>
             </div>
           )}
         </div>
@@ -144,7 +147,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
           onClose={() => setQrOpen(false)}
           onNavigate={(to) => {
             setQrOpen(false);
-            onClose();
+            close();
             navigate(to);
           }}
         />

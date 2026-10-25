@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, Link, useLocation } from 'react-router-dom';
+import { MotionConfig } from 'framer-motion';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../auth/AuthContext';
 import { CurrentCompetitionProvider } from '../competition/CurrentCompetitionContext';
@@ -30,7 +31,7 @@ function Probe() {
 }
 function mount(path: string) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <MotionConfig reducedMotion="always"><MemoryRouter initialEntries={[path]}>
       <LiteModeProvider><AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider><CompactPageBarProvider>
         <Routes>
           <Route element={<AppShell />}>
@@ -38,7 +39,7 @@ function mount(path: string) {
           </Route>
         </Routes>
       </CompactPageBarProvider></CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider></LiteModeProvider>
-    </MemoryRouter>,
+    </MemoryRouter></MotionConfig>,
   );
 }
 

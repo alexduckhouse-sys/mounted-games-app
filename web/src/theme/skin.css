@@ -495,6 +495,42 @@ span[data-grow] { display: inline-block; }
 .mg-saved-tick-disc path { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .mg-saved-tick-label { max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 16px/1.2 var(--mg-font); color: rgb(var(--mg-heading)); }
 
+/* Sheets and the side menu slide in and leave the same way (see hooks/useExitDelay); confirm boxes settle in. */
+@keyframes mg-fade-in { from { opacity: 0; } }
+@keyframes mg-fade-out { to { opacity: 0; } }
+@keyframes mg-drawer-in { from { transform: translateX(100%); } }
+@keyframes mg-drawer-out { to { transform: translateX(100%); } }
+@keyframes mg-sheet-in { from { transform: translateY(100%); } }
+@keyframes mg-sheet-out { from { transform: translateY(var(--drag, 0px)); } to { transform: translateY(100%); } }
+@keyframes mg-confirm-in { from { opacity: 0; transform: translateY(10px) scale(.95); } }
+dialog.mg-drawer[open] { animation: mg-drawer-in .3s var(--mg-ease-out); }
+dialog.mg-sheet[open] { animation: mg-sheet-in .34s var(--mg-ease-out); }
+dialog.mg-drawer[open]::backdrop, dialog.mg-sheet[open]::backdrop { animation: mg-fade-in .3s ease-out; }
+dialog.mg-drawer.is-closing { animation: mg-drawer-out .2s ease-in forwards; }
+dialog.mg-sheet.is-closing { animation: mg-sheet-out .2s ease-in forwards; }
+dialog.is-closing::backdrop { animation: mg-fade-out .2s ease-in forwards; }
+.mg-confirm-backdrop { animation: mg-fade-in .2s ease-out; }
+.mg-confirm { animation: mg-confirm-in .28s cubic-bezier(.34, 1.4, .64, 1); }
+@media (prefers-reduced-motion: reduce) {
+  dialog.mg-drawer, dialog.mg-sheet, dialog.mg-drawer::backdrop, dialog.mg-sheet::backdrop, .mg-confirm-backdrop, .mg-confirm { animation: none !important; }
+}
+html[data-lite="true"] dialog::backdrop { animation: none !important; }
+
+/* Content fades in over its loading placeholder. */
+.mg-settle { animation: mg-fade-in .26s ease-out; }
+/* A new announcement drops in under the header on any page. */
+.mg-announce-pop { position: fixed; z-index: 45; top: calc(var(--mg-shell-h, 64px) + 8px); left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); margin: 0 auto; max-width: 30rem; display: flex; align-items: stretch; border-radius: 14px; background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 14px 34px rgb(0 0 0 / .28), inset 4px 0 0 #F5B82E; overflow: hidden; }
+.mg-announce-pop-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 6px 10px 16px; color: #fff !important; text-decoration: none !important; }
+.mg-announce-pop-icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; background: rgb(245 184 46 / .18); color: #F5B82E; }
+.mg-announce-pop-icon svg { width: 18px; height: 18px; }
+.mg-announce-pop-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font: 500 14px/1.3 var(--mg-font); }
+.mg-announce-pop-text b { font: 700 12px/1 var(--mg-font); letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--mg-header-sub)); }
+.mg-announce-pop-text span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mg-announce-pop-go { flex: none; width: 18px; height: 18px; opacity: .7; }
+.mg-announce-pop-close { flex: none; width: 44px; display: grid; place-items: center; border: 0; border-left: 1px solid rgb(255 255 255 / .12); background: transparent; color: rgb(255 255 255 / .8); cursor: pointer; }
+.mg-announce-pop-close svg { width: 18px; height: 18px; }
+.mg-announce-pop-link:focus-visible, .mg-announce-pop-close:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
+
 /* Sponsors: a strip under a page, the full page, and the cards over the live video. */
 .mg-sponsors { padding: 12px; border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); box-shadow: var(--mg-shadow-sm); }
 .mg-sponsors-title { margin: 0 0 8px; font: 700 12px/1 var(--mg-font); letter-spacing: .08em; text-transform: uppercase; color: rgb(var(--mg-muted)); }
