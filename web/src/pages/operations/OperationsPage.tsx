@@ -11,7 +11,7 @@ import { ScorerLinksCard } from '../competition/ScorerLinksCard';
 import { Chevron, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet } from '../refine/Refine';
 import { DrawResult, DrawSettingsForm } from './DrawPreviewView';
 import { EntriesPanel } from './EntriesPanel';
-import { EquipmentList } from './EquipmentList';
+import { equipmentLines } from './equipment';
 import { buildIssueGroups, clock, drawSubtitle, type IssueGroup } from './readiness';
 import type { CompetitionReadiness, DrawPreview } from './types';
 import { apiMessage } from './types';
@@ -46,10 +46,10 @@ export function OperationsPage() {
   return <OperationsPageContent key={`${competition.id}:${user.id}`} />;
 }
 
-type View = 'checks' | 'equipment' | 'draw' | 'entries' | 'scorers' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
+type View = 'checks' | 'draw' | 'entries' | 'scorers' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
 type Sheet = 'draw' | null;
 
-const VALID_VIEWS = new Set<View>(['checks', 'equipment', 'draw', 'entries', 'scorers', 'tack', 'passport', 'import', 'print', 'results', 'duplicate']);
+const VALID_VIEWS = new Set<View>(['checks', 'draw', 'entries', 'scorers', 'tack', 'passport', 'import', 'print', 'results', 'duplicate']);
 
 function OperationsPageContent() {
   const canWrite = true; // anyone who can organise this competition may change it; the API decides
@@ -67,11 +67,7 @@ function OperationsPageContent() {
   const [readiness, setReadiness] = useState<CompetitionReadiness | null>(null);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [loadingReadiness, setLoadingReadiness] = useState(true);
-  const [savingChecklist, setSavingChecklist] = useState(false);
-  const [checkedEquipment, setCheckedEquipment] = useState<Set<string>>(new Set());
-  const [checklistSaved, setChecklistSaved] = useState(false);
   const [sectionId, setSectionId] = useState<number | null>(competition.sections[0]?.id ?? null);
   const [seed, setSeed] = useState('1');
   const [preview, setPreview] = useState<DrawPreview | null>(null);
@@ -84,15 +80,12 @@ function OperationsPageContent() {
   const loadReadiness = useCallback(async () => {
     setLoadingReadiness(true);
     setLoadError(null);
-    setChecklistSaved(false);
-    setSaveError(null);
     try {
       const { data } = await api.get<CompetitionReadiness>(
         `/competitions/${competition.id}/operations/readiness`,
       );
       setReadiness(data);
       setCheckedAt(new Date());
-      setCheckedEquipment(new Set(data.equipmentChecklist.filter((item) => item.acknowledged).map((item) => item.key)));
     } catch (error) {
       setLoadError(apiMessage(error, 'Couldn’t refresh the readiness checks. Try again.'));
     } finally {
@@ -104,41 +97,6 @@ function OperationsPageContent() {
     const timer = window.setTimeout(() => void loadReadiness(), 0);
     return () => window.clearTimeout(timer);
   }, [loadReadiness]);
-
-  async function saveChecklist() {
-    if (!readiness || savingChecklist || !canWrite) return;
-    setSavingChecklist(true);
-    setSaveError(null);
-    setChecklistSaved(false);
-    try {
-      const { data } = await api.put<CompetitionReadiness>(
-        `/competitions/${competition.id}/operations/equipment-acknowledgements`,
-        {
-          acknowledgedKeys: Array.from(checkedEquipment),
-          expectedFingerprint: readiness.equipmentFingerprint,
-        },
-      );
-      setReadiness(data);
-      setCheckedEquipment(new Set(data.equipmentChecklist.filter((item) => item.acknowledged).map((item) => item.key)));
-      setChecklistSaved(true);
-    } catch (error) {
-      const status = (error as { response?: { status?: number } })?.response?.status;
-      setSaveError(apiMessage(error, status === 409
-        ? 'The checklist changed on another device. Refresh before saving again.'
-        : 'Couldn’t save the equipment checklist. Try again.'));
-    } finally {
-      setSavingChecklist(false);
-    }
-  }
-
-  function toggleEquipment(key: string, value: boolean) {
-    setCheckedEquipment((current) => {
-      const next = new Set(current);
-      if (value) next.add(key); else next.delete(key);
-      return next;
-    });
-    setChecklistSaved(false);
-  }
 
   async function previewDraw(seedText = seed) {
     const parsedSeed = Number(seedText);
@@ -201,7 +159,6 @@ function OperationsPageContent() {
   const groups = useMemo(() => (readiness ? buildIssueGroups(readiness, competition.id) : []), [readiness, competition.id]);
   const shownView: View = view;
   const back = `/competitions/${competition.id}`;
-  const equipmentTotal = readiness?.equipmentChecklist.length ?? 0;
   const sectionName = (id: number) => competition.sections.find((section) => section.id === id)?.displayName ?? 'Section draw';
 
   const overflow = (
@@ -246,9 +203,6 @@ function OperationsPageContent() {
   } else if (shownView === 'duplicate') {
     title = 'Duplicate event';
     actions = null;
-  } else if (shownView === 'equipment') {
-    title = 'Equipment';
-    if (readiness) subtitle = `${checkedEquipment.size} of ${equipmentTotal} items checked`;
   } else if (preview) {
     title = sectionName(preview.sectionId);
     actions = overflow;
@@ -261,7 +215,6 @@ function OperationsPageContent() {
 
   const tabs = [
     { label: 'Preparations', active: shownView === 'checks', onSelect: () => setView('checks') },
-    { label: 'Equipment', active: shownView === 'equipment', onSelect: () => setView('equipment') },
     { label: 'Draw', active: shownView === 'draw', onSelect: () => setView('draw') },
     { label: 'Entries', active: shownView === 'entries', onSelect: () => setView('entries') },
     { label: 'Scorers & team', active: shownView === 'scorers', onSelect: () => setView('scorers') },
@@ -273,7 +226,6 @@ function OperationsPageContent() {
     ...(mayDuplicate ? [{ label: 'Duplicate event', active: shownView === 'duplicate', onSelect: () => setView('duplicate') }] : []),
   ];
 
-  const showSave = shownView === 'equipment' && !!readiness && equipmentTotal > 0;
   const showDrawFoot = shownView === 'draw' && !!preview;
 
   return (
@@ -281,17 +233,10 @@ function OperationsPageContent() {
       <RefineHeader back={back} backLabel="Back to event" context={context} actions={actions} title={title} subtitle={subtitle} tabs={tabs} tabsLabel="Event tools" tabsKind="tablist" />
 
       {loadError && (!readiness || shownView !== 'checks') && <p role="alert" className="mg-notice ops-alert">{loadError} <button type="button" className="rf-btn rf-btn-text" onClick={() => void loadReadiness()}>Try again</button></p>}
-      {saveError && <p role="alert" className="mg-notice ops-alert">{saveError}</p>}
       {loadingReadiness && !readiness && <p role="status" className="rf-note">Checking competition details…</p>}
 
       {shownView === 'checks' && readiness && (
-        <Preparations readiness={readiness} groups={groups} checkedEquipment={checkedEquipment} competitionId={competition.id} refreshFailed={loadError !== null} checkedAt={checkedAt} retrying={loadingReadiness} onRetry={() => void loadReadiness()} onOpen={setView} />
-      )}
-
-      {shownView === 'equipment' && readiness && (
-        <section aria-label="Equipment checklist">
-          <EquipmentList items={readiness.equipmentChecklist} checked={checkedEquipment} canWrite={canWrite} onToggle={toggleEquipment} />
-        </section>
+        <Preparations readiness={readiness} groups={groups} competitionId={competition.id} refreshFailed={loadError !== null} checkedAt={checkedAt} retrying={loadingReadiness} onRetry={() => void loadReadiness()} onOpen={setView} />
       )}
 
       {shownView === 'entries' && <EntriesPanel canWrite={canWrite} onTimetableChanged={reloadCompetition} />}
@@ -321,12 +266,6 @@ function OperationsPageContent() {
         </section>
       )}
 
-      {showSave && (
-        <RefineFoot aboveTabs label="Save checklist">
-          <button type="button" className="rf-btn rf-btn-primary rf-grow" onClick={() => void saveChecklist()} disabled={savingChecklist || !canWrite}>{savingChecklist ? 'Saving…' : 'Save checklist'}</button>
-          {checklistSaved && <span role="status" className="rf-t2">Checklist saved.</span>}
-        </RefineFoot>
-      )}
       {showDrawFoot && preview && (
         <RefineFoot aboveTabs column label="Apply draw">
           {drawMessage && <p role="status" className="ops-toast"><span>{drawMessage}</span><button type="button" className="rf-btn rf-btn-text" onClick={() => setDrawMessage(null)}>Dismiss</button></p>}
@@ -354,10 +293,9 @@ interface PrepRow { key: string; count: number; title: string; to?: string; view
 function Chev() { return <Chevron />; }
 
 /** The Preparations list: what is left to sort (rows with a zero count are hidden), then the places each set-up area is managed. */
-function Preparations({ readiness, groups, checkedEquipment, competitionId, refreshFailed, checkedAt, retrying, onRetry, onOpen }: {
+function Preparations({ readiness, groups, competitionId, refreshFailed, checkedAt, retrying, onRetry, onOpen }: {
   readiness: CompetitionReadiness;
   groups: IssueGroup[];
-  checkedEquipment: Set<string>;
   competitionId: number;
   refreshFailed: boolean;
   checkedAt: Date | null;
@@ -371,20 +309,21 @@ function Preparations({ readiness, groups, checkedEquipment, competitionId, refr
   const missing = readiness.missingDeclarations.length;
   const short = readiness.incompleteTeams.length;
   const equipmentDetails = readiness.equipmentIssues.length;
-  const equipmentToCheck = readiness.equipmentChecklist.filter((item) => !checkedEquipment.has(item.key)).length;
+  const acknowledged = new Set(readiness.equipmentChecklist.filter((item) => item.acknowledged).map((item) => item.key));
+  const equipmentToCheck = equipmentLines(readiness.equipmentChecklist).filter((line) => !line.keys.every((key) => acknowledged.has(key))).length;
   const toSort = ([
     { key: 'unpaid', count: unpaid, title: 'Entries not paid', to: `${base}/entries` },
     { key: 'missing', count: missing, title: 'Dec forms missing', to: `${base}/entries` },
     { key: 'short', count: short, title: 'Teams short of riders', to: `${base}/teams` },
     { key: 'details', count: equipmentDetails, title: 'Races missing equipment details', to: base },
-    { key: 'equipment', count: equipmentToCheck, title: 'Equipment to check', view: 'equipment' },
+    { key: 'equipment', count: equipmentToCheck, title: 'Equipment to check', to: `${base}/equipment` },
   ] as PrepRow[]).filter((row) => row.count > 0);
   const manage: Array<{ key: string; title: string; todo: boolean; to?: string; view?: View }> = [
     { key: 'details', title: 'Event details', todo: false, to: `${base}/event-details` },
     { key: 'sections', title: 'Sections and races', todo: false, to: `${base}/sections` },
     { key: 'entries', title: 'Entries and dec forms', todo: unpaid + missing + short > 0, to: `${base}/entries` },
     { key: 'timetable', title: 'Timetable and draw', todo: clashes.length + equipmentDetails > 0, to: `${base}/timetable-and-draw` },
-    { key: 'equipment', title: 'Equipment', todo: equipmentToCheck > 0, view: 'equipment' },
+    { key: 'equipment', title: 'Equipment', todo: equipmentToCheck > 0, to: `${base}/equipment` },
     { key: 'sponsors', title: 'Sponsors and sharing', todo: false, to: `${base}/sponsors` },
   ];
   const open = (target: { to?: string; view?: View }, children: ReactNode) => target.to

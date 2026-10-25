@@ -75,71 +75,15 @@ describe('OperationsPage', () => {
     expect(api.get).not.toHaveBeenCalled();
   });
 
-  it('lets an admin change the checklist and apply a draw with no edit mode to switch on', async () => {
+  it('lets an admin apply a draw with no edit mode to switch on', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
 
-    await screen.findByRole('tab', { name: 'Equipment' });
+    await screen.findByRole('tab', { name: 'Draw' });
     expect(screen.queryByText(/Edit mode/i)).not.toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Equipment' }));
-    expect(await screen.findByRole('checkbox', { name: /4 × Pole/i })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Save checklist' })).toBeEnabled();
     await user.click(screen.getByRole('tab', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
     expect(await screen.findByRole('button', { name: 'Apply draw' })).toBeEnabled();
-  });
-
-  it('shows readiness issues and saves the equipment checklist', async () => {
-    const user = userEvent.setup();
-    render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-
-    expect(await screen.findByText('Dec forms missing')).toBeInTheDocument();
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Equipment' }));
-    await user.click(screen.getByRole('checkbox', { name: /4 × Pole/i }));
-    await user.click(screen.getByRole('button', { name: 'Save checklist' }));
-
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith(
-      '/competitions/7/operations/equipment-acknowledgements',
-      { acknowledgedKeys: ['Lane|Pole|4'], expectedFingerprint: 'equipment-v1' },
-    ));
-  });
-
-  it('keeps checklist changes visible when another device saved first', async () => {
-    vi.mocked(api.put).mockRejectedValueOnce({ response: { status: 409 } });
-    const user = userEvent.setup();
-    render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-
-    await user.click(screen.getByRole('tab', { name: 'Equipment' }));
-    const checkbox = await screen.findByRole('checkbox', { name: /4 × Pole/i });
-    await user.click(checkbox);
-    await user.click(screen.getByRole('button', { name: 'Save checklist' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('The checklist changed on another device');
-    expect(checkbox).toBeChecked();
-  });
-
-  it('clears an old save error when the checks are reloaded', async () => {
-    vi.mocked(api.put).mockRejectedValueOnce({ response: { status: 409 } });
-    const user = userEvent.setup();
-    render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await user.click(screen.getByRole('tab', { name: 'Equipment' }));
-    await user.click(await screen.findByRole('checkbox', { name: /4 × Pole/i }));
-    await user.click(screen.getByRole('button', { name: 'Save checklist' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('The checklist changed on another device');
-
-    await user.click(screen.getByRole('button', { name: 'Recheck' }));
-    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
-  });
-
-  it('shows a failed refresh on the equipment view too, not only when nothing has loaded', async () => {
-    const user = userEvent.setup();
-    render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await user.click(screen.getByRole('tab', { name: 'Equipment' }));
-    await screen.findByRole('checkbox', { name: /4 × Pole/i });
-    vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));
-    await user.click(screen.getByRole('button', { name: 'Recheck' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t refresh the readiness checks');
   });
 
   it('previews and applies a deterministic draw', async () => {
@@ -169,7 +113,7 @@ describe('OperationsPage', () => {
     expect(screen.getByRole('heading', { name: 'Manage' })).toBeInTheDocument();
     expect(screen.getByText('Pairs overlaps Open')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Dec forms missing/ })).toHaveAttribute('href', '/competitions/7/entries');
-    expect(screen.getByRole('button', { name: /Equipment to check/ })).toHaveTextContent('1');
+    expect(screen.getByRole('link', { name: /Equipment to check/ })).toHaveTextContent('1');
     // Zero counts are hidden.
     expect(screen.queryByText('Entries not paid')).not.toBeInTheDocument();
     expect(screen.queryByText('Teams short of riders')).not.toBeInTheDocument();
@@ -178,7 +122,6 @@ describe('OperationsPage', () => {
   });
 
   it('links each set-up area to its page and marks the ones with jobs', async () => {
-    const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
     await screen.findByText('Dec forms missing');
 
@@ -187,8 +130,7 @@ describe('OperationsPage', () => {
     expect(screen.getByRole('link', { name: 'Sponsors and sharing' })).toHaveAttribute('href', '/competitions/7/sponsors');
     expect(screen.getByRole('link', { name: /Entries and dec forms/ })).toContainElement(screen.getAllByRole('img', { name: 'Has jobs to sort' })[0]);
     expect(screen.getByRole('link', { name: 'Event details' }).querySelector('[role="img"]')).toBeNull();
-    await user.click(screen.getAllByRole('button').find((button) => button.textContent === 'Equipment')!);
-    expect(await screen.findByRole('checkbox', { name: /4 × Pole/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Equipment(?! to check)/ })).toHaveAttribute('href', '/competitions/7/equipment');
   });
 
   it('says so when there is nothing to sort and offers no Blocking publish section', async () => {
@@ -313,10 +255,10 @@ describe('OperationsPage', () => {
     expect(screen.queryByRole('button', { name: 'Apply draw' })).not.toBeInTheDocument();
   });
 
-  it('keeps the Equipment tab on wide screens', async () => {
+  it('keeps the tab strip on wide screens', async () => {
     mockWideScreen(true);
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    expect(await screen.findByRole('tab', { name: 'Equipment' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Draw' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'To sort' })).toBeInTheDocument();
   });
 

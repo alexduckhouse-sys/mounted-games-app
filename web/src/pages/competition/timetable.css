@@ -25,7 +25,7 @@
 .tt-arena-live { flex: none; width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--mg-red)); }
 .tt-arena-chevron { position: absolute; right: 10px; top: 50%; margin-top: -7px; }
 
-.tt-body { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; }
+.tt-body { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; }
 .tt-group { display: flex; flex-direction: column; gap: 4px; }
 .tt-group-title {
   display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 0 2px 3px; border-bottom: 1.5px solid rgb(var(--mg-heading)); text-align: left;
@@ -51,7 +51,7 @@ button.tt-group-title:focus-visible, .tt-collapsed:focus-visible, a.tt-row:focus
 .tt-card > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .tt-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr) 8px 14px; align-items: center; column-gap: 10px;
-  min-height: 54px; padding: 0 10px 0 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important;
+  min-height: 50px; padding: 0 10px 0 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important;
   text-decoration: none !important; transition: background .15s;
 }
 .tt-row + .tt-row { border-top: 1px solid rgb(var(--mg-rule-soft)); }
@@ -66,7 +66,7 @@ a.tt-row:focus-visible { outline-offset: -2px; }
 .tt-time { font: 700 23px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
 .tt-time-late { color: rgb(var(--mg-late-time)); }
 .tt-time-early { color: #2E8B4F; }
-.tt-event { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding: 5px 0; overflow-wrap: anywhere; }
+.tt-event { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding: 3px 0; overflow-wrap: anywhere; }
 .tt-event strong { font-size: 16px; font-weight: 600; line-height: 1.25; }
 .tt-sub { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-muted)); }
 .tt-planned { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-late-time)); }

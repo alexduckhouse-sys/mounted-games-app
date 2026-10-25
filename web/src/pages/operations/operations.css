@@ -188,3 +188,7 @@
 /* An opened entry slides in under its row. */
 .ops-entry-body { animation: rf-reveal 220ms var(--mg-ease-out); }
 @media (prefers-reduced-motion: reduce) { .ops-check input:checked, .ops-entry-body { animation: none; } }
+
+/* Equipment */
+.ops-equip .ops-check { min-height: 52px; }
+.ops-struck { color: rgb(var(--mg-muted)); text-decoration: line-through; }
