@@ -348,6 +348,17 @@ public class ScoringService
                     // Duplicate Start taps during the same live run are idempotent.
                     race.StartedAt ??= at;
                 }
+
+                if (race.Heat is { } heat)
+                {
+                    heat.StartedAt ??= at;
+                    if (heat.Session is { } session)
+                    {
+                        session.StartedAt ??= at;
+                        if (session.Status == SessionStatus.Upcoming)
+                            session.Status = SessionStatus.InArena;
+                    }
+                }
             }
             else
             {

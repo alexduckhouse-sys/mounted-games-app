@@ -243,11 +243,12 @@ public class DeclarationFormsController : ControllerBase
 
         if (req.BibDescription is not null)
         {
+            var existingCard = ResultStatuses.RefereeCardOf(team.BibDescription);
             var effectiveBib = config.Bib == FieldRequirement.Off
-                ? System.Text.RegularExpressions.Regex.Replace(team.BibDescription ?? string.Empty, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim()
+                ? System.Text.RegularExpressions.Regex.Replace(ResultStatuses.PublicBibDescription(team.BibDescription) ?? string.Empty, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim()
                 : bibWithoutFlag;
             var combined = string.Join(" ", new[] { flagPrefix, effectiveBib }.Where(s => !string.IsNullOrWhiteSpace(s)));
-            team.BibDescription = string.IsNullOrWhiteSpace(combined) ? null : combined;
+            team.BibDescription = ResultStatuses.ApplyCardTag(string.IsNullOrWhiteSpace(combined) ? null : combined, existingCard);
         }
 
         // One declaration per team: submitting again updates it instead of adding a second form.

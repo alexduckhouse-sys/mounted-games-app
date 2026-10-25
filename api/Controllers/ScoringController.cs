@@ -55,6 +55,7 @@ public class ScoringController : ControllerBase
 
         var dto = await HeatDtoAsync(race.HeatId);
         var competitionId = race.Heat!.Session!.CompetitionId;
+        await ClearMissingTeamCallsAsync(competitionId, race.HeatId, cancellationToken);
         await _live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto, clashResolved = raceId });
         await BroadcastRaceFinalAsync(raceId, competitionId);
         return dto;
@@ -95,8 +96,11 @@ public class ScoringController : ControllerBase
         {
             var score = await _scoring.ApplyVersionedAsync(raceId, request,
                 User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, cancellationToken);
+            var competitionId = await CompetitionIdOfRaceAsync(raceId);
+            var heatId = await _db.Races.Where(r => r.Id == raceId).Select(r => r.HeatId).FirstAsync(cancellationToken);
+            await ClearMissingTeamCallsAsync(competitionId, heatId, cancellationToken);
             await BroadcastScore(raceId);
-            await BroadcastRaceFinalAsync(raceId, await CompetitionIdOfRaceAsync(raceId));
+            await BroadcastRaceFinalAsync(raceId, competitionId);
             return score;
         }
         catch (KeyNotFoundException) { return NotFound(); }
@@ -220,10 +224,24 @@ public class ScoringController : ControllerBase
     private async Task<HeatDto> HeatDtoAsync(int heatId)
     {
         var heat = await _db.Heats
-            .Include(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(h => h.Entries).ThenInclude(e => e.Team).ThenInclude(t => t!.Results)
             .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
             .FirstAsync(h => h.Id == heatId);
         return heat.ToDto();
+    }
+
+    private async Task ClearMissingTeamCallsAsync(int competitionId, int heatId, CancellationToken cancellationToken = default)
+    {
+        var heatTag = $"missing-team:{heatId}";
+        var stale = await _db.ChatMessages
+            .Where(m => m.CompetitionId == competitionId
+                && (m.Tag == "missing-team" || m.Tag == heatTag || m.Body.StartsWith("🔔 Ring call")))
+            .ToListAsync(cancellationToken);
+        if (stale.Count == 0) return;
+        _db.ChatMessages.RemoveRange(stale);
+        await _db.SaveChangesAsync(cancellationToken);
+        foreach (var msg in stale)
+            await _live.ChatMessageDeleted(competitionId, msg.Id);
     }
 
     private async Task<ActionResult<HeatDto>> ScoreConflict(
@@ -301,8 +319,59 @@ public class ScoringController : ControllerBase
         catch (Exception ex) when (IsScoringConcurrency(ex))
         { return Conflict(new { message = "These results were changed on another device." }); }
         var dto = race.ToDto();
-        await _live.ResultsUpdated(race.Heat!.Session!.CompetitionId,
-            new { sessionId = race.Heat.SessionId, raceId, started = race.StartedAt });
+        var competitionId = race.Heat!.Session!.CompetitionId;
+        await ClearMissingTeamCallsAsync(competitionId, race.HeatId, cancellationToken);
+        var heatDto = await HeatDtoAsync(race.HeatId);
+        await _live.ResultsUpdated(competitionId,
+            new { sessionId = race.Heat.SessionId, raceId, started = race.StartedAt, heat = heatDto });
+        return dto;
+    }
+
+    [HttpPost("api/heats/{heatId:int}/call-missing-team")]
+    [CompetitionAccess("heatId", CompetitionResource.Heat)]
+    public async Task<ActionResult<ChatMessageDto>> CallMissingTeam(
+        int heatId, CallMissingTeamRequest req, CancellationToken cancellationToken = default)
+    {
+        var heat = await _db.Heats
+            .Include(h => h.Session)
+            .Include(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(h => h.Races)
+            .FirstOrDefaultAsync(h => h.Id == heatId, cancellationToken);
+        if (heat is null) return NotFound();
+
+        if (heat.StartedAt.HasValue || heat.FinishedAt.HasValue
+            || heat.Races.Any(r => r.StartedAt.HasValue || r.FinishedAt.HasValue || r.IsComplete))
+        {
+            return Conflict(new { message = "This heat has already started." });
+        }
+
+        var entry = heat.Entries.FirstOrDefault(e => e.TeamId == req.TeamId);
+        if (entry is null)
+            return BadRequest(new { message = "Team is not in this heat." });
+
+        var arena = string.IsNullOrWhiteSpace(heat.Session?.ArenaName) ? "Main Arena" : heat.Session!.ArenaName!.Trim();
+        var heatLabel = string.IsNullOrWhiteSpace(heat.Label) ? $"Heat {heat.OrderIndex}" : heat.Label!;
+        var teamName = entry.Team?.DisplayName ?? $"Team #{entry.TeamId}";
+        var body = $"🔔 Ring call ({arena}): {teamName} (Lane {entry.LaneIndex}) needed at the collecting ring now for {heatLabel}.";
+
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var authorName = User.FindFirst("fullName")?.Value ?? "Organiser";
+        var msg = new ChatMessage
+        {
+            CompetitionId = heat.Session!.CompetitionId,
+            UserId = userId,
+            AuthorName = authorName,
+            Body = body,
+            Type = ChatMessageType.Announcement,
+            Tag = $"missing-team:{heat.Id}",
+            AdminOnly = false,
+        };
+        _db.ChatMessages.Add(msg);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var dto = msg.ToDto();
+        await _live.Announcement(msg.CompetitionId, dto);
+        await _live.ChatMessage(msg.CompetitionId, dto);
         return dto;
     }
 

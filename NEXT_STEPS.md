@@ -17,6 +17,39 @@ On 23 October the user walked through creating a competition on production and r
 - Added automatic first-race and halfway-race `(timeTaken - 2m)` delay maths, learned pace prediction, and organiser **Pause / Continue** + custom-minute shift controls on `TimetableBoard.tsx` and `TimetableTimes.cs` (`.ics` calendar sync).
 - Updated organiser-key sign-in (`POST /api/auth/admin-key`) to require a password when signing in with an email (claiming/verifying a password-protected `Admin` account so the organiser can sign in normally on subsequent visits and nobody can impersonate their email) and enforced `RateLimits:AccountsPerIp` (default 5 per IP) and `RateLimits:AuthPerMinute` (default 5/min per IP).
 - Pinned `PayoutClubId` on competition creation (`DecFormConfig.PayoutClubId`) and updated `ClubAccess.IsClubManagerAsync` to verify the `Manager` role against the database.
+- **Backend completed for Referee Cards, Team Flags, Ring-Call Auto-Clearing on Heat Start, and Post-Fact Announcement Pinning (`ResultStatuses.cs`, `DecFormConfig.cs`, `ApiDtos.cs`, `Mappings.cs`, `StandingsService.cs`, `ScoringService.cs`, `CompetitionsController.cs`, `TeamsController.cs`, `ScoringController.cs`, `ChatController.cs`)**:
+  - Added `UseRefereeCards` to `DecFormConfig` and `CompetitionDetail` / `CreateCompetitionRequest` / `UpdateCompetitionRequest`.
+  - Exposed `RefereeCard` (`"yellow"` | `"red"` | `null`) and `Flag` (`"gb-wls"` | `"gb-eng"` | etc.) on `TeamDto`, `HeatEntryDto`, and `StandingRow`, plus `RefereeCard` and `UnderReview` on `ResultDto`.
+  - Added `PUT /api/competitions/{id}/teams/{teamId}/card` (`SetTeamCardRequest`) to set or clear a team's yellow/red card before or during racing.
+  - Updated `ScoringService.UpdateRaceClockAsync` (`POST /api/races/{raceId}/start`) to set `heat.StartedAt ??= at` and `session.StartedAt ??= at` (`SessionStatus.InArena`), and updated `ScoringController` (`StartRace`, `SubmitRaceResults`, `UpdateRaceScore`) to automatically delete any active `"missing-team"` / `"🔔 Ring call"` announcements and broadcast `ChatMessageDeleted` + updated `HeatDto` over SignalR.
+  - Added `POST /api/heats/{heatId}/call-missing-team` (returning `409 Conflict` if the heat has already started) and `POST /api/competitions/{id}/chat/{messageId}/pin` for server-persisted announcement pinning.
+
+## Next Frontend Build Queue (Noted — Ready to Build Next)
+
+1. **`/me` (`ProfilePage.tsx`) Mobile Blank Sidebar Fix, Clubs Dropdown / Dedicated Page & User Name Only (`ProfilePage.tsx`, `SiteAdmin.tsx`, `QuickActions.tsx`, `LaptopParts.tsx`, `AppShell.tsx`, `NavigationDrawer.tsx`)**:
+   - **Mobile blank sidebar bug**: Below `1024px` (`lg:`) and `640px` (`sm:`), `ProfilePage.tsx:195-205` (`grid gap-6 lg:grid-cols-3`), `QuickActions.tsx:20`, and `SiteAdmin.tsx:267, 284, 408` lack `grid-cols-1` (`minmax(0, 1fr)`) and `min-w-0` on grid/flex children containing `truncate` (`white-space: nowrap`) text, while `.mg-band` (`ProfilePage.tsx:178`) uses a `100vmax` `border-image` without `overflow-x-clip` on `AppShell.tsx:71, 129`. Add `grid-cols-1` + `min-w-0` to those grids/children, `flex-wrap` to `PartHead` (`LaptopParts.tsx:8-11`), and `overflow-x-clip` to `AppShell.tsx`.
+   - **Clubs list**: Move the long inline Clubs list out of `SiteAdmin.tsx:408-455` on `/me` into a collapsible dropdown / dedicated `/clubs` management page.
+   - **Show user's name only (no title or role badge)**: On `ProfilePage.tsx:178-190` and `NavigationDrawer.tsx` / `AppShell.tsx`, display only the user's name without role/title labels.
+2. **"Call to Ring" Disappears Immediately When Heat Starts (`SessionPage.tsx:617-645`, `CommentaryDeskPage.tsx`)**:
+   - Hide the `"Late to ring — call missing team"` controls whenever `activeHeat.startedAt != null || activeHeat.finishedAt != null || activeHeat.races.some(r => r.startedAt != null || r.finishedAt != null || r.isComplete)` (and wire the button to `POST /api/heats/${activeHeat.id}/call-missing-team`).
+3. **Click a Session in the Timetable to Show All Heat Tables (`TimetableBoard.tsx`, `SessionsTab.tsx`)**:
+   - Make clicking a session card/header in `TimetableBoard.tsx` expand/render all `<HeatScores>` heat tables for that session inline (or in a full-page session heat-tables view).
+4. **Do Not Show Runoff Lanes on the Public Site (`ToplistView.tsx:272-291`, `toplist.ts:315-327`)**:
+   - Remove the public `<section aria-labelledby="runoff-title">` ("Run-off · Nth place — Lanes drawn for the tie at the final cut-off") from `ToplistView.tsx` so public toplists never display runoff lanes.
+5. **Render Team Flags & Referee Cards Next to Team Names Everywhere (`ScoringParts.tsx`, `ToplistView.tsx`, `HeatScores.tsx`, `CommentaryDeskPage.tsx`, `TvKioskPage.tsx`, `MyTeamsPage.tsx`, `MyTeamParts.tsx`, `TeamsTab.tsx`)**:
+   - Wire the new backend `flag` and `refereeCard` fields on `TeamDto`, `HeatEntryDto`, `StandingRow`, and `ResultDto` into `ScoringParts.tsx` (`ScoreRow`, `HeatGrid`, `Qualifiers`), `ScorerPage.tsx`, `CommentaryDeskPage.tsx`, `TvKioskPage.tsx`, and `MyTeamsPage.tsx` (and strip `[flag:...]` via `parseBibAndFlag` in `MyTeamsPage.tsx:151` & `MyTeamParts.tsx:200` so raw `[flag:...]` text is never shown).
+   - Add a flag/nation selector when creating or editing a team in `TeamsTab.tsx` and `MyTeamParts.tsx`.
+6. **Heat Reminder Timing in Settings — Custom Minutes Only (`SettingsPage.tsx:220-290`)**:
+   - Remove the preset timing buttons (`15m`, `30m`, `1h`) from `SettingsPage.tsx` and replace them with a clean, well-designed custom minutes control.
+7. **Move `Shift all arenas` Off Admin Timetable to PA View Only (`SessionsTab.tsx`, `TimetableBoard.tsx`, `CommentaryDeskPage.tsx`)**:
+   - Remove global `Shift all arenas` / global delay controls from the admin timetable (`SessionsTab.tsx` / `TimetableBoard.tsx`) and keep them exclusively on the PA Commentator Desk (`/competitions/:id/commentary`).
+8. **Full-Page Layouts Instead of Centred Boxes (`HeatScores.tsx`, `ScoringTab.tsx`, `ToplistView.tsx`, `TimetableBoard.tsx`, `CompetitionTeamPage.tsx`, `ScoringSection.tsx`, `ScorerPage.tsx`, `SettingsPage.tsx`, `Refine.tsx`)**:
+   - `HeatScores.tsx:321, 333`: Remove `mx-auto max-w-xl` (`576px` cap) and the `.mg-card` wrapper around `<table className="heat-grid">` so heat tables use the full page width.
+   - `ScoringTab.tsx:330` & `ToplistView.tsx:153, 217, 331, 399`: Remove `max-w-[560px] lg:max-w-3xl` and the individual `.mg-card` wrappers around Totals, Points by session, Points by game, and Finals tables.
+   - `timetable.css:2, 50` & `TimetableBoard.tsx:229`: Remove `max-width: 560px; margin: 0 auto` on `.timetable-board` and flatten `.tt-card` boxes into full-width sections.
+   - `CompetitionTeamPage.tsx:296, 302-609`: Replace the 7 stacked `.mg-card` boxes and `max-w-4xl` constraint with a clean full-page layout.
+   - `ScoringSection.tsx:197` & `ScorerPage.tsx:129`: Remove the outer `.sc-card` box and double horizontal padding so live phone scoring is truly edge-to-edge full-page.
+   - `SettingsPage.tsx:119`, `FollowingTab.tsx:79`, `MyTeamsPage.tsx:96`, `WeatherPage.tsx:371`, `ContactOrganisersPage.tsx:143`, and `Refine.tsx:11` (`RefinePage`): Remove narrow `max-w-[560px]` / `max-w-xl` / `max-w-2xl` centred-box wrappers in favour of full-page layouts.
 
 **Decisions taken in the walkthrough** (don't relitigate):
 - Admin **edit mode is removed** entirely; destructive actions use the red full-screen `ConfirmDialog`, never `window.confirm`.

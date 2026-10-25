@@ -498,4 +498,61 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal("Chief Steward", chat.AuthorName);
         Assert.Equal("Chief Steward", ann.AuthorName);
     }
+
+    [Fact]
+    public async Task PinAnnouncement_PinsAndReplacesPreviousPin_AndTogglesOff()
+    {
+        var a = await _f.CreateArenaAsync(1);
+        var admin = await _f.AdminAsync();
+
+        var first = await (await admin.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("Gate A closed", "info")))
+            .ReadAsync<ChatMessageDto>();
+        var second = await (await admin.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("Prize giving at 16:00", "info")))
+            .ReadAsync<ChatMessageDto>();
+
+        var pinFirst = await admin.PostAsync(Url(a, $"/{first.Id}/pin"), null);
+        Assert.Equal(HttpStatusCode.OK, pinFirst.StatusCode);
+        Assert.Equal("pinned", (await pinFirst.ReadAsync<ChatMessageDto>()).Tag);
+
+        var pinSecond = await admin.PostAsync(Url(a, $"/{second.Id}/pin"), null);
+        Assert.Equal(HttpStatusCode.OK, pinSecond.StatusCode);
+        Assert.Equal("pinned", (await pinSecond.ReadAsync<ChatMessageDto>()).Tag);
+
+        var list = await (await _f.CreateClient().GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.Null(list.Single(m => m.Id == first.Id).Tag);
+        Assert.Equal("pinned", list.Single(m => m.Id == second.Id).Tag);
+
+        var unpinSecond = await admin.PostAsync(Url(a, $"/{second.Id}/pin"), null);
+        Assert.Equal(HttpStatusCode.OK, unpinSecond.StatusCode);
+        Assert.Null((await unpinSecond.ReadAsync<ChatMessageDto>()).Tag);
+    }
+
+    [Fact]
+    public async Task Post_RingCallFromStaff_BecomesPublicAnnouncement_AndClearsWhenHeatStarts()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var (heatId, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var admin = await _f.AdminAsync();
+
+        var ringCall = await admin.PostAsJsonAsync($"/api/heats/{heatId}/call-missing-team", new CallMissingTeamRequest(a.TeamIds[0]));
+        Assert.Equal(HttpStatusCode.OK, ringCall.StatusCode);
+        var callDto = await ringCall.ReadAsync<ChatMessageDto>();
+        Assert.Equal(ChatMessageType.Announcement, callDto.Type);
+        Assert.Equal($"missing-team:{heatId}", callDto.Tag);
+        Assert.False(callDto.AdminOnly);
+
+        // Starting the first race in the heat stamps Heat.StartedAt and deletes the ring-call message.
+        var startResp = await admin.PostAsync($"/api/races/{races[0]}/start", null);
+        Assert.Equal(HttpStatusCode.OK, startResp.StatusCode);
+
+        var remaining = await (await _f.CreateClient().GetAsync(Url(a))).ReadAsync<List<ChatMessageDto>>();
+        Assert.DoesNotContain(remaining, m => m.Id == callDto.Id);
+
+        // Calling a missing team after the heat has started is refused with 409 Conflict.
+        var lateCall = await admin.PostAsJsonAsync($"/api/heats/{heatId}/call-missing-team", new CallMissingTeamRequest(a.TeamIds[0]));
+        Assert.Equal(HttpStatusCode.Conflict, lateCall.StatusCode);
+
+        var lateAnnounce = await admin.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("Late call", $"missing-team:{heatId}"));
+        Assert.Equal(HttpStatusCode.Conflict, lateAnnounce.StatusCode);
+    }
 }

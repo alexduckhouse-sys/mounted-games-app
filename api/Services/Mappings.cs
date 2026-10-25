@@ -38,7 +38,8 @@ public static class Mappings
         includePaymentDetails ? c.PaymentDestination : null,
         c.SignupsLocked, c.Icon, c.CreatedByUserId,
         IsDemo: isDemo, TermsText: c.TermsText,
-        PayoutsTo: payoutsTo, LaneHatbands: PlannedRaceList.Read(c.LaneHatbands));
+        PayoutsTo: payoutsTo, LaneHatbands: PlannedRaceList.Read(c.LaneHatbands),
+        UseRefereeCards: DecFormConfig.For(c).UseRefereeCards);
 
     /// <param name="activeSignups">Paid and pending entries: the ones that count towards <c>MaxParticipants</c>.</param>
     public static CompetitionSectionDto ToDto(this CompetitionSection s, int activeSignups = 0) =>
@@ -87,7 +88,9 @@ public static class Mappings
         t.TrainerUserId, t.Trainer?.FullName,
         t.IsHorsConcours,
         IsWithdrawn: t.EntryStatus != TeamEntryStatus.Active,
-        BibDescription: t.BibDescription);
+        BibDescription: ResultStatuses.PublicBibDescription(t.BibDescription),
+        RefereeCard: ResultStatuses.TeamCardOf(t),
+        Flag: ResultStatuses.TeamFlagOf(t.BibDescription));
 
     /// <summary>
     /// Same as ToDto but populates the viewer-specific Relationship and
@@ -108,7 +111,9 @@ public static class Mappings
             Relationship: isTrainer ? "trainer" : viewerManagesClub ? "manager" : isSupporter ? "supporter" : null,
             SupporterJoinKey: isTrainer || viewerManagesClub ? t.SupporterJoinKey : null,
             IsWithdrawn: t.EntryStatus != TeamEntryStatus.Active,
-            BibDescription: t.BibDescription);
+            BibDescription: ResultStatuses.PublicBibDescription(t.BibDescription),
+            RefereeCard: ResultStatuses.TeamCardOf(t),
+            Flag: ResultStatuses.TeamFlagOf(t.BibDescription));
     }
 
     public static TeamSupporterDto ToDto(this TeamSupporter s) => new(
@@ -123,12 +128,17 @@ public static class Mappings
         he.Id, he.TeamId,
         he.Team?.DisplayName ?? string.Empty,
         he.Team?.BibColour,
-        he.LaneIndex);
+        he.LaneIndex,
+        ResultStatuses.TeamCardOf(he.Team),
+        ResultStatuses.TeamFlagOf(he.Team?.BibDescription),
+        ResultStatuses.PublicBibDescription(he.Team?.BibDescription));
 
     public static ResultDto ToDto(this Result r) => new(
         r.Id, r.TeamId,
         r.Team?.DisplayName ?? string.Empty,
-        r.Placing, r.Eliminated, r.Points, r.IsSitOut, ResultStatuses.Of(r));
+        r.Placing, r.Eliminated, r.Points, r.IsSitOut, ResultStatuses.Of(r),
+        ResultStatuses.RefereeCardOf(r.RefereeNote),
+        ScoringService.IsUnderReview(r.RefereeNote));
 
     public static RaceDto ToDto(this Race r) => new(
         r.Id, r.HeatId, r.Name, r.OrderIndex, r.IsComplete,

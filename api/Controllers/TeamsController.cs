@@ -23,7 +23,8 @@ public record CreateTeamInput(
     [StringLength(150)] string? ClubName = null,
     [StringLength(150)] string? Club = null,
     string? Name = null,
-    string? DisplayName = null
+    string? DisplayName = null,
+    [StringLength(20)] string? Flag = null
 );
 
 public record UpdateTeamInput(
@@ -33,7 +34,8 @@ public record UpdateTeamInput(
     string? BibDescription = null,
     string? Name = null,
     string? DisplayName = null,
-    string? BibColour = null
+    string? BibColour = null,
+    [StringLength(20)] string? Flag = null
 );
 
 [ApiController]
@@ -46,7 +48,7 @@ public class TeamsController : ControllerBase
     [HttpGet]
     public async Task<IEnumerable<TeamDto>> List(int competitionId) =>
         (await _db.Teams
-            .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer)
+            .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer).Include(t => t.Results)
             .Where(t => t.CompetitionId == competitionId)
             .OrderBy(t => t.DisplayName)
             .ToListAsync())
@@ -110,7 +112,7 @@ public class TeamsController : ControllerBase
             BibColour = string.IsNullOrWhiteSpace(req.BibColour) ? club.BibColour : req.BibColour.Trim(),
             TrainerUserId = trainerUserId,
             IsHorsConcours = req.IsHorsConcours,
-            BibDescription = string.IsNullOrWhiteSpace(req.BibDescription) ? null : req.BibDescription.Trim(),
+            BibDescription = ResultStatuses.MergeBibTags(null, req.BibDescription, req.Flag),
         };
         _db.Teams.Add(team);
         await _db.SaveChangesAsync();
@@ -127,7 +129,7 @@ public class TeamsController : ControllerBase
     public async Task<ActionResult<TeamDto>> Update(int competitionId, int id, UpdateTeamInput req)
     {
         var t = await _db.Teams
-            .Include(x => x.Club).Include(x => x.Section).Include(x => x.Trainer)
+            .Include(x => x.Club).Include(x => x.Section).Include(x => x.Trainer).Include(x => x.Results)
             .FirstOrDefaultAsync(x => x.Id == id && x.CompetitionId == competitionId);
         if (t is null) return NotFound();
         var customName = (req.Name ?? req.DisplayName)?.Trim();
@@ -144,7 +146,7 @@ public class TeamsController : ControllerBase
         if (req.IsHorsConcours.HasValue) t.IsHorsConcours = req.IsHorsConcours.Value;
         if (req.BibColour is not null)
             t.BibColour = string.IsNullOrWhiteSpace(req.BibColour) ? t.Club?.BibColour : req.BibColour.Trim();
-        var problem = await ApplyTrainerAndBibAsync(t, req.TrainerUserId, req.BibDescription);
+        var problem = await ApplyTrainerAndBibAsync(t, req.TrainerUserId, req.BibDescription, flagOverride: req.Flag);
         if (problem is not null) return problem;
         await _db.SaveChangesAsync();
         return t.ToDto();
@@ -159,24 +161,25 @@ public class TeamsController : ControllerBase
     public async Task<ActionResult<TeamDto>> SetTrainer(int id, UpdateTeamRequest req)
     {
         var t = await _db.Teams
-            .Include(x => x.Club).Include(x => x.Section).Include(x => x.Trainer)
+            .Include(x => x.Club).Include(x => x.Section).Include(x => x.Trainer).Include(x => x.Results)
             .FirstOrDefaultAsync(x => x.Id == id);
         if (t is null) return NotFound();
         // 404, not 403, for people who can't see the team's management.
         if (!await CanManageTeamAsync(t)) return NotFound();
         // A club's manager can only pick trainers of that club; an organiser or admin can pick a visiting trainer.
         var clubOnly = !User.IsInRole(Roles.Admin) && !await _db.CanManageAsync(User, t.CompetitionId);
-        var problem = await ApplyTrainerAndBibAsync(t, req.TrainerUserId, req.BibDescription, clubOnly);
+        var problem = await ApplyTrainerAndBibAsync(t, req.TrainerUserId, req.BibDescription, clubOnly, req.Flag);
         if (problem is not null) return problem;
         await _db.SaveChangesAsync();
         return t.ToDto();
     }
 
     /// <summary>Applies the trainer and bib description of an update. Returns an error result, or null when fine.</summary>
-    private async Task<ActionResult?> ApplyTrainerAndBibAsync(Team t, string? trainerUserId, string? bibDescription, bool clubOnly = false)
+    private async Task<ActionResult?> ApplyTrainerAndBibAsync(
+        Team t, string? trainerUserId, string? bibDescription, bool clubOnly = false, string? flagOverride = null)
     {
-        if (bibDescription is not null)
-            t.BibDescription = string.IsNullOrWhiteSpace(bibDescription) ? null : bibDescription.Trim();
+        if (bibDescription is not null || flagOverride is not null)
+            t.BibDescription = ResultStatuses.MergeBibTags(t.BibDescription, bibDescription, flagOverride);
         if (trainerUserId is null) return null;
         if (string.IsNullOrWhiteSpace(trainerUserId))
         {

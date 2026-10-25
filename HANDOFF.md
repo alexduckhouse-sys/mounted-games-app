@@ -80,6 +80,14 @@
     - Removed club names from printed heat sheets and results books (`HeatPrintSheet.tsx`, `ResultsBookPage.tsx`).
     - Added the **Commentator Mode prompt** on `SessionPage.tsx` and `ScorerPage.tsx` (*"Do you want to see commentator facts while scoring?"*) with live facts and a post-race Heat Table + Section Toplist popup, plus `StreamControlStrip.tsx` on PA Desk & TV Kiosk and `QrAccessModal.tsx` for instant QR sharing.
 
+13. **Backend Completion for Referee Cards, Team Flags, Heat-Start Ring-Call Auto-Clearing & Post-Fact Announcement Pinning (`ResultStatuses.cs`, `DecFormConfig.cs`, `ApiDtos.cs`, `Mappings.cs`, `StandingsService.cs`, `ScoringService.cs`, `CompetitionsController.cs`, `TeamsController.cs`, `ScoringController.cs`, `ChatController.cs`)**:
+    - Added `UseRefereeCards` to `DecFormConfig` and `CompetitionDetail` / `CreateCompetitionRequest` / `UpdateCompetitionRequest`.
+    - Exposed `RefereeCard` (`"yellow"` | `"red"` | `null`) and `Flag` (`"gb-wls"` | `"gb-eng"` | etc.) on `TeamDto`, `HeatEntryDto`, and `StandingRow`, plus `RefereeCard` and `UnderReview` on `ResultDto`.
+    - Added `PUT /api/competitions/{id}/teams/{teamId}/card` (`SetTeamCardRequest`) to assign or clear a team's yellow/red card before or during racing, and updated `TeamsController` (`Create`, `Update`, `SetTrainer`) to accept `Flag` and preserve `[flag:...]` and `[card:...]` tags on `Team.BibDescription` while stripping internal `[card:...]` tags from public `BibDescription`.
+    - Updated `ScoringService.UpdateRaceClockAsync` (`POST /api/races/{raceId}/start`) to stamp `heat.StartedAt ??= at` and `session.StartedAt ??= at` (`SessionStatus.InArena`), and updated `ScoringController` (`StartRace`, `SubmitRaceResults`, `UpdateRaceScore`) to automatically delete any active `"missing-team"` / `"🔔 Ring call"` announcements from `ChatMessages` and broadcast `ChatMessageDeleted` + updated `HeatDto` over SignalR.
+    - Added `POST /api/heats/{heatId}/call-missing-team` (refusing with `409 Conflict` once a heat has started) and `POST /api/competitions/{id}/chat/{messageId}/pin` (persisting and toggling `"pinned"` announcements on the server).
+    - Documented the full **Next Frontend Build Queue** (including the `/me` mobile blank sidebar root cause, clubs dropdown/page, user name display, heat-table expansion on timetable session click, hiding public runoff lanes, custom-only reminder input, PA-only arena shift, and the full-page vs centred-box audit) in `NEXT_STEPS.md`.
+
 ---
 
 ## Verification Status (All Passing)

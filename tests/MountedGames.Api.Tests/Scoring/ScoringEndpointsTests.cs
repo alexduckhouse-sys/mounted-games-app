@@ -560,4 +560,71 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
         Assert.False(race.IsComplete);
         Assert.Empty(race.Results);
     }
+
+    [Fact]
+    public async Task RefereeCards_TeamFlags_AndCompetitionCardSetting_RoundTripAcrossEndpoints()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var (heatId, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var admin = await _f.AdminAsync();
+
+        // Enable UseRefereeCards on the competition.
+        var compBefore = await (await admin.GetAsync($"/api/competitions/{a.CompetitionId}")).ReadAsync<CompetitionDetail>();
+        Assert.False(compBefore.UseRefereeCards);
+
+        var updateComp = await admin.PutAsJsonAsync($"/api/competitions/{a.CompetitionId}", new UpdateCompetitionRequest(
+            compBefore.Name, compBefore.Location, compBefore.Description,
+            compBefore.Latitude, compBefore.Longitude, compBefore.What3Words, compBefore.AppleMapsUrl,
+            compBefore.StartDate, compBefore.EndDate, compBefore.IsActive, compBefore.IsArchived,
+            UseRefereeCards: true));
+        Assert.Equal(HttpStatusCode.OK, updateComp.StatusCode);
+
+        // Set team flag on team 0 and assign a yellow card before any race is scored.
+        var updateTeam = await admin.PutAsJsonAsync($"/api/competitions/{a.CompetitionId}/teams/{a.TeamIds[0]}",
+            new { bibDescription = "Red with white spots", flag = "gb-wls" });
+        Assert.Equal(HttpStatusCode.OK, updateTeam.StatusCode);
+        var teamWithFlag = await updateTeam.ReadAsync<TeamDto>();
+        Assert.Equal("gb-wls", teamWithFlag.Flag);
+
+        var cardResp = await admin.PutAsJsonAsync($"/api/competitions/{a.CompetitionId}/teams/{a.TeamIds[0]}/card",
+            new SetTeamCardRequest("yellow"));
+        Assert.Equal(HttpStatusCode.OK, cardResp.StatusCode);
+        var cardedTeam = await cardResp.ReadAsync<TeamDto>();
+        Assert.Equal("yellow", cardedTeam.RefereeCard);
+        Assert.Equal("gb-wls", cardedTeam.Flag);
+        Assert.DoesNotContain("[card:", cardedTeam.BibDescription ?? string.Empty);
+
+        // Score a race with [under-review] and [card:red] on team 1.
+        var scoreResp = await Submit(admin, races[0], new[]
+        {
+            P(a.TeamIds[0], 1),
+            new FinishingPlaceDto(a.TeamIds[1], 2, false, RefereeNote: "[card:red] [under-review] Lane interference"),
+        });
+        Assert.Equal(HttpStatusCode.OK, scoreResp.StatusCode);
+        var scoredHeat = await scoreResp.ReadAsync<HeatDto>();
+        var r1 = scoredHeat.Races.Single().Results.Single(r => r.TeamId == a.TeamIds[1]);
+        Assert.Equal("red", r1.RefereeCard);
+        Assert.True(r1.UnderReview);
+
+        // Standings and CompetitionDetail include RefereeCard and Flag.
+        var standings = await (await admin.GetAsync($"/api/competitions/{a.CompetitionId}/standings")).ReadAsync<List<StandingRow>>();
+        var row0 = standings.Single(s => s.TeamId == a.TeamIds[0]);
+        var row1 = standings.Single(s => s.TeamId == a.TeamIds[1]);
+        Assert.Equal("yellow", row0.RefereeCard);
+        Assert.Equal("gb-wls", row0.Flag);
+        Assert.Equal("red", row1.RefereeCard);
+
+        var compAfter = await (await admin.GetAsync($"/api/competitions/{a.CompetitionId}")).ReadAsync<CompetitionDetail>();
+        Assert.True(compAfter.UseRefereeCards);
+        var heatEntry0 = compAfter.Sessions.Single(s => s.Id == a.SessionId).Heats.Single(h => h.Id == heatId)
+            .Entries.Single(e => e.TeamId == a.TeamIds[0]);
+        Assert.Equal("yellow", heatEntry0.RefereeCard);
+        Assert.Equal("gb-wls", heatEntry0.Flag);
+
+        // Clear card on team 1.
+        var clearCard = await admin.PutAsJsonAsync($"/api/competitions/{a.CompetitionId}/teams/{a.TeamIds[1]}/card",
+            new SetTeamCardRequest(null));
+        Assert.Equal(HttpStatusCode.OK, clearCard.StatusCode);
+        Assert.Null((await clearCard.ReadAsync<TeamDto>()).RefereeCard);
+    }
 }

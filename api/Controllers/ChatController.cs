@@ -88,20 +88,27 @@ public class ChatController : ControllerBase
             : user.Email ?? "Organiser";
         if (authorName.Length > 60) authorName = authorName[..60];
 
+        var trimmedBody = req.Body.Trim();
+        var isRingCall = trimmedBody.StartsWith("🔔 Ring call", StringComparison.Ordinal)
+            && (isAdmin || await _db.CanManageAsync(User, competitionId));
+
         var msg = new ChatMessage
         {
             CompetitionId = competitionId,
             UserId = user.Id,
             AuthorName = authorName,
-            Body = req.Body.Trim(),
-            Type = ChatMessageType.Chat,
-            AdminOnly = !isAdmin || replyTo is not null,
-            RecipientUserId = replyTo,
+            Body = trimmedBody,
+            Type = isRingCall ? ChatMessageType.Announcement : ChatMessageType.Chat,
+            Tag = isRingCall ? "missing-team" : null,
+            AdminOnly = !isRingCall && (!isAdmin || replyTo is not null),
+            RecipientUserId = isRingCall ? null : replyTo,
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
         };
         _db.ChatMessages.Add(msg);
         await _db.SaveChangesAsync();
         var dto = msg.ToDto();
+        if (isRingCall)
+            await _live.Announcement(competitionId, dto);
         if (msg.AdminOnly)
             await _live.AdminOnlyChatMessage(competitionId, user.Id, dto, replyTo);
         else
@@ -145,11 +152,33 @@ public class ChatController : ControllerBase
     }
 
     [HttpPost("announcement")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize]
     public async Task<ActionResult<ChatMessageDto>> Announce(int competitionId, AnnouncementRequest req)
     {
         if (string.IsNullOrWhiteSpace(req.Body)) return BadRequest();
         if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
+        if (!User.IsInRole(Roles.Admin) && !await _db.CanManageAsync(User, competitionId)) return Forbid();
+
+        if (req.Tag is not null && req.Tag.StartsWith("missing-team:", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(req.Tag["missing-team:".Length..], out var heatId))
+        {
+            var heatStarted = await _db.Heats
+                .Where(h => h.Id == heatId && h.Session!.CompetitionId == competitionId)
+                .AnyAsync(h => h.StartedAt != null || h.FinishedAt != null
+                    || h.Races.Any(r => r.StartedAt != null || r.FinishedAt != null || r.IsComplete));
+            if (heatStarted)
+                return Conflict(new { message = "This heat has already started." });
+        }
+
+        if (string.Equals(req.Tag, "pinned", StringComparison.OrdinalIgnoreCase))
+        {
+            var previouslyPinned = await _db.ChatMessages
+                .Where(m => m.CompetitionId == competitionId && m.Tag == "pinned")
+                .ToListAsync();
+            foreach (var prev in previouslyPinned)
+                prev.Tag = null;
+        }
+
         var user = await _users.GetUserAsync(User);
         var claimName = string.Equals(user?.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase)
             ? User.FindFirstValue("fullName")
@@ -166,6 +195,34 @@ public class ChatController : ControllerBase
         };
         _db.ChatMessages.Add(msg);
         await _db.SaveChangesAsync();
+        var dto = msg.ToDto();
+        await _live.Announcement(competitionId, dto);
+        await _live.ChatMessage(competitionId, dto);
+        return dto;
+    }
+
+    [HttpPost("{messageId:int}/pin")]
+    [Authorize]
+    public async Task<ActionResult<ChatMessageDto>> PinAnnouncement(int competitionId, int messageId)
+    {
+        if (!User.IsInRole(Roles.Admin) && !await _db.CanManageAsync(User, competitionId)) return Forbid();
+        var msg = await _db.ChatMessages
+            .FirstOrDefaultAsync(m => m.Id == messageId && m.CompetitionId == competitionId);
+        if (msg is null) return NotFound();
+        if (msg.AdminOnly)
+            return BadRequest(new { message = "Private messages cannot be pinned publicly." });
+
+        var unpinning = string.Equals(msg.Tag, "pinned", StringComparison.OrdinalIgnoreCase);
+        var previouslyPinned = await _db.ChatMessages
+            .Where(m => m.CompetitionId == competitionId && m.Tag == "pinned" && m.Id != messageId)
+            .ToListAsync();
+        foreach (var prev in previouslyPinned)
+            prev.Tag = null;
+
+        msg.Type = ChatMessageType.Announcement;
+        msg.Tag = unpinning ? null : "pinned";
+        await _db.SaveChangesAsync();
+
         var dto = msg.ToDto();
         await _live.Announcement(competitionId, dto);
         await _live.ChatMessage(competitionId, dto);
