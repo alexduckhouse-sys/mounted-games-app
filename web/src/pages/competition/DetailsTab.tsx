@@ -18,7 +18,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
 import { EmbedCard } from './EmbedCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
-import { EventSponsorsSection, SponsorsCard } from './SponsorsCard';
+import { EventSponsorsSection } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
 import { CONSENT_VERSION } from '../../lib/termsTick';
@@ -188,7 +188,6 @@ export function DetailsTab() {
           <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
         )}
 
-        {mayOrganise && <SponsorsCard competitionId={competition.id} />}
         {/* Owner, competition admins and site admins can put live results on their own website. */}
         {mayOrganise && <EmbedCard kind="competition" competitionId={competition.id} name={competition.name} sections={competition.sections} />}
       </div>

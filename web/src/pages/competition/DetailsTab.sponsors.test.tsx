@@ -51,10 +51,11 @@ describe('sponsors on the details page', () => {
     expect(screen.queryByRole('region', { name: 'Sponsors' })).toBeNull();
   });
 
-  it('gives organisers the Sponsors management card on Details', async () => {
+  it('leaves sponsor management to the Sponsors and sharing page, even for organisers', async () => {
     auth.organiser = true;
     show([]);
-    expect(await screen.findByRole('region', { name: 'Sponsors' })).toBeInTheDocument();
-    expect(api.get).toHaveBeenCalledWith('/competitions/5/sponsors/manage');
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('region', { name: 'Sponsors' })).toBeNull();
+    expect(api.get).not.toHaveBeenCalledWith('/competitions/5/sponsors/manage');
   });
 });
