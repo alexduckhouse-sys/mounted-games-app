@@ -134,6 +134,28 @@ public class ReviewSeedFreshTests
     }
 
     [Fact]
+    public async Task ReseedVariesTheFinalOptionsAcrossTheDemoAgeGroups()
+    {
+        await using var db = await Database();
+        await ReviewCompetitionSeeder.SeedAsync(db, Today, Today.AddHours(10));
+        await ReviewCompetitionSeeder.ReseedAsync(db, Today.AddHours(11));
+
+        var sections = await db.CompetitionSections.AsNoTracking().ToListAsync();
+        Assert.Equal(24, sections.Count);
+        Assert.Contains(sections, s => s.HasFinal && s.CarryPointsIntoFinal && !s.DoublePointsInFinal);
+        Assert.Contains(sections, s => s.HasFinal && !s.CarryPointsIntoFinal && !s.DoublePointsInFinal);
+        Assert.Contains(sections, s => s.HasFinal && s.CarryPointsIntoFinal && s.DoublePointsInFinal);
+        Assert.Contains(sections, s => s.HasFinal && !s.CarryPointsIntoFinal && s.DoublePointsInFinal);
+        Assert.Contains(sections, s => !s.HasFinal);
+        // A section with no final has no finals session; the others have an "A Final" heat.
+        foreach (var section in sections)
+        {
+            var labels = await db.Heats.Where(h => h.Session!.CompetitionSectionId == section.Id).Select(h => h.Label).ToListAsync();
+            Assert.Equal(section.HasFinal, labels.Contains("A Final"));
+        }
+    }
+
+    [Fact]
     public async Task ReseedReplacesTheEightDemoEventsAndWorksTwiceInARow()
     {
         await using var db = await Database();
