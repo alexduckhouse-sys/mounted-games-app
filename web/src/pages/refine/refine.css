@@ -63,9 +63,9 @@ details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 .rf-demo { display: inline-block; font: 700 11px/1 var(--mg-font); letter-spacing: .08em; background: #ffe27a; color: #3a2a00; border-radius: 4px; padding: 4px 6px; vertical-align: middle; }
 
 /* Buttons and fields: matches .mg-btn and .mg-field */
-.rf-btn { min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1.5px solid rgb(var(--mg-border)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 15px/1.1 var(--mg-font); display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; text-decoration: none !important; white-space: nowrap; box-sizing: border-box; transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), filter var(--mg-dur-fast) var(--mg-ease-out), transform 120ms var(--mg-ease-out); }
+.rf-btn { min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1.5px solid rgb(var(--mg-border)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 15px/1.1 var(--mg-font); display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; text-decoration: none !important; white-space: nowrap; box-sizing: border-box; transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), filter var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1); }
 .rf-btn:hover:not(:disabled) { border-color: rgb(var(--mg-heading)); }
-.rf-btn:active:not(:disabled) { transform: scale(0.98); }
+.rf-btn:active:not(:disabled) { --mg-press-t: 90ms; scale: .96; }
 .rf-btn:disabled { opacity: .55; cursor: not-allowed; }
 .rf-btn-primary { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
 .rf-btn-primary:hover:not(:disabled) { border-color: rgb(var(--mg-button)); filter: brightness(1.12); }

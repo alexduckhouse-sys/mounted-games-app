@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectionStatusProvider, useConnectionStatus, type ConnectionStatus } from '../live/ConnectionStatusContext';
-import { ConnectionPill } from './ConnectionPill';
+import { BACK_ONLINE_MS, ConnectionPill } from './ConnectionPill';
 
 const START = new Date('2026-10-21T12:00:00Z').getTime();
 
@@ -95,6 +95,34 @@ describe('ConnectionPill', () => {
     show(status({ online: false, retrying: true }));
     tick(5_000);
     expect(screen.getByRole('button', { name: 'Trying now' })).toBeDisabled();
+  });
+
+  it('says it is back online for a moment once the link returns after the pill was up', () => {
+    const live = (
+      <ConnectionStatusProvider>
+        <Publish value={status({ connected: true, downSince: null })} />
+        <ConnectionPill />
+      </ConnectionStatusProvider>
+    );
+    const { rerender } = show(status({ downSince: START - 60_000 }));
+    tick(1_000);
+    expect(screen.getByRole('button')).toBeInTheDocument();
+    rerender(live);
+    expect(screen.getByRole('status')).toHaveTextContent('Back online');
+    tick(BACK_ONLINE_MS);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('stays quiet when a short drop comes back before the pill showed', () => {
+    const { rerender } = show(status());
+    tick(2_000);
+    rerender(
+      <ConnectionStatusProvider>
+        <Publish value={status({ connected: true, downSince: null })} />
+        <ConnectionPill />
+      </ConnectionStatusProvider>,
+    );
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('stops ticking once the live link is back', () => {

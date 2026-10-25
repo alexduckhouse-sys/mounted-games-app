@@ -18,3 +18,9 @@ it('shows the new total at once when nothing changed or motion is stilled', () =
   render(<MotionConfig reducedMotion="always"><CountUp from={4} to={10} format={points} /></MotionConfig>);
   expect(screen.getByText('10 pts')).toBeInTheDocument();
 });
+
+it('counts money in whole pence when given a rounding', async () => {
+  render(<CountUp from={0} to={4550} duration={0.05} round={Math.round} format={(v) => `£${(v / 100).toFixed(2)}`} />);
+  expect(screen.getByText('£0.00')).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText('£45.50')).toBeInTheDocument());
+});

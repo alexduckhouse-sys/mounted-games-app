@@ -79,6 +79,8 @@ export interface FinalGroup {
   rows: FinalRow[];
   /** Each team's result in every race of the final. */
   races: Map<number, TeamRaceResult[]>;
+  /** Every race of the final is scored (or the heat is marked finished): its winners are champions. */
+  complete?: boolean;
 }
 
 export interface TeamRaceResult { id: number; name: string; placing: number | null; eliminated: boolean; points: number; status?: number }
@@ -456,7 +458,7 @@ function buildFinalGroups(sessions: Session[], sectionId: number, standingRank?:
           races.set(result.teamId, [...(races.get(result.teamId) ?? []), { id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points, status: result.status }]);
         }
       }
-      groups.push({ id: heat.id, label: finalWording.test(named) ? named : [session.name, named].filter(Boolean).join(' · '), rows, races });
+      groups.push({ id: heat.id, label: finalWording.test(named) ? named : [session.name, named].filter(Boolean).join(' · '), rows, races, complete: heatDone(heat) });
     }
   }
   return groups;

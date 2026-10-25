@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, ExternalLink, Mic, Monitor, Printer, QrCode as QrCodeIcon, Smartphone, Users, X } from 'lucide-react';
+import { Copy, ExternalLink, Mic, Monitor, Printer, QrCode as QrCodeIcon, Smartphone, Users, X } from 'lucide-react';
+import { CopiedTick } from './CopiedTick';
 import { QrCode } from './QrCode';
 import { ScorerLinksCard } from '../pages/competition/ScorerLinksCard';
 
@@ -199,7 +200,7 @@ export function QrAccessModal({
                         >
                           {isCopied ? (
                             <>
-                              <Check className="h-3.5 w-3.5" aria-hidden="true" /> Copied
+                              <CopiedTick /> Copied
                             </>
                           ) : (
                             <>

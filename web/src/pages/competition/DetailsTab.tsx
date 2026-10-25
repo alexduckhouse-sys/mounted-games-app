@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { EntryRosette } from '../../components/Rosette';
+import { CopiedTick } from '../../components/CopiedTick';
+import { displaySectionName } from '../../lib/section';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Trophy,
@@ -231,7 +234,7 @@ export function EventShareRows({ competitionId, competitionName }: { competition
         <button type="button" className="rf-row" onClick={() => { void shareEvent(); }}>
           <span className="rf-grow rf-t1">{copied ? 'Link copied' : 'Share event link'}</span>
           {copied
-            ? <Check className="h-5 w-5 text-[rgb(var(--mg-ok))]" aria-hidden="true" />
+            ? <CopiedTick className="h-5 w-5 text-[rgb(var(--mg-ok))]" />
             : <Share2 className="h-5 w-5 rf-chev" aria-hidden="true" />}
         </button>
         {shareError && (
@@ -519,6 +522,8 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
   const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  // Who just entered, for the rosette; null on the waiting list, which isn't an entry yet.
+  const [enteredAs, setEnteredAs] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const canEnterWholeTeam = section.format === 2 && (hasRole('Manager') || hasRole('Trainer') || hasRole('Admin') || canOrganise(competition));
@@ -565,6 +570,7 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
         acceptTerms: privacy.agreed,
         consentVersion: CONSENT_VERSION,
       });
+      setEnteredAs(isWaitlist ? null : teamName.trim() || ponyClub.trim() || fullName.trim() || null);
       setFullName(''); setPonyClub(''); setContact(''); setTeamCode(''); setTeamName(''); setWholeTeam(false); setLookingForPair(false); setLookingForGuestRiders(false); setWaitingForGuestSpot(false);
       setEntryEmail({ email: '', optIn: false });
       requestId.current = null;
@@ -720,7 +726,10 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
               : 'Paid entries stay pending until the organiser confirms payment.'}
           </p>
           {err && <p role="alert" className="m-0 text-sm font-semibold text-[rgb(var(--mg-elim))]">{err}</p>}
-          {done && (
+          {done && enteredAs && (
+            <EntryRosette team={enteredAs} section={displaySectionName(section.displayName)} year={new Date(competition.startDate).getFullYear()}>{done}</EntryRosette>
+          )}
+          {done && !enteredAs && (
             <p role="status" className="m-0 flex items-center gap-1 text-sm font-semibold text-[rgb(var(--mg-ok))]">
               <Check className="h-4 w-4" aria-hidden="true" /> {done}
             </p>

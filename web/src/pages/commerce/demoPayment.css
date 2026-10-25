@@ -118,6 +118,19 @@
 
 @keyframes demo-lock-spin { to { transform: rotate(360deg); } }
 
+/* The result plays as it arrives: approved clicks the shackle shut, pops the lock and draws the tick;
+   declined shakes. Transitions alone can't do this, because the result is a fresh lock, not the waiting one. */
+.demo-lock__group { transform-box: view-box; transform-origin: 60px 64px; }
+.demo-lock[data-state='success'] .demo-lock__group, .demo-lock[data-state='refunded'] .demo-lock__group { animation: demo-lock-pop 520ms cubic-bezier(.34, 1.56, .64, 1); }
+.demo-lock[data-state='success'] .demo-lock__shackle { animation: demo-lock-shut 260ms ease-in; }
+.demo-lock[data-state='success'] .demo-lock__tick, .demo-lock[data-state='refunded'] .demo-lock__tick { animation: demo-lock-draw 320ms ease-out 260ms both; }
+.demo-lock[data-state='failed'] .demo-lock__group { animation: demo-lock-shake 420ms ease-out 80ms; }
+@keyframes demo-lock-pop { from { transform: scale(.82); } }
+@keyframes demo-lock-shut { from { transform: translateY(-12px); } }
+@keyframes demo-lock-draw { from { stroke-dashoffset: 46; } to { stroke-dashoffset: 0; } }
+@keyframes demo-lock-shake { 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+.demo-lock[data-reduced-motion='true'] * { animation: none !important; }
+
 @media (prefers-reduced-motion: reduce) {
   .demo-lock__ring { animation: none !important; }
   .demo-lock__shackle,

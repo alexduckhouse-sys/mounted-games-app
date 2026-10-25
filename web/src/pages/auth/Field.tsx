@@ -16,7 +16,7 @@ export function Field({ label, error, className = '', children }: FieldProps) {
     <div className={`flex flex-col gap-1.5 ${className}`}>
       <label htmlFor={id} className="text-sm font-semibold text-[rgb(var(--mg-body))]">{label}</label>
       {children({ id, invalid: !!error, describedBy: error ? errorId : undefined })}
-      {error && <span id={errorId} role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">{error}</span>}
+      {error && <span id={errorId} role="alert" className="mg-field-msg text-sm font-medium text-[rgb(var(--mg-elim))]">{error}</span>}
     </div>
   );
 }

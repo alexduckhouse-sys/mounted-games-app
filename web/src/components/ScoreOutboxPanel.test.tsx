@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import type { Placing, QueuedScore } from '../offline/scoreOutbox';
 import { heat } from '../test/factories';
-import { ScoreOutboxPanel } from './ScoreOutboxPanel';
+import { ScoreOutboxPanel, SENT_SHOWN_MS } from './ScoreOutboxPanel';
 
 import { autoConfirm } from '../test/confirm';
 vi.mock('../api', () => ({ api: { post: vi.fn() } }));
@@ -57,7 +57,10 @@ describe('ScoreOutboxPanel', () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
     await userEvent.click(screen.getByRole('button', { name: 'Send now' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/races/1/results', expect.anything(), expect.anything()));
-    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    // The sent result ticks off for a moment, then the panel empties.
+    expect(await screen.findByText('Heat 1 · Barrel Race sent')).toBeInTheDocument();
+    expect(screen.queryByText(/saved on this phone/)).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument(), { timeout: SENT_SHOWN_MS + 1000 });
   });
 
   describe('when another phone scored the race differently', () => {

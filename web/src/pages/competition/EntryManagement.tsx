@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChangePop } from '../../components/ChangePop';
 import { api } from '../../api';
 import { priceLabel } from '../../lib/money';
 import type { CompetitionDetail, SectionSignup } from '../../types';
@@ -72,7 +73,7 @@ function ManagedSignup({ signup: s, competition, onChanged }: { signup: Extended
   const label = s.status === 2 ? 'Refunded' : s.refundPending ? 'Withdrawn — refund pending' : s.isWithdrawn ? 'Withdrawn' : s.isWaitlist ? 'Waiting list' : ['Awaiting payment', 'Paid', 'Refunded', 'Cancelled'][s.status];
   return <li className="flex flex-col gap-2 py-2">
     <span className="font-semibold">{s.fullName}{(s.teamsCount ?? 1) > 1 && ` (${s.teamsCount} teams)`}</span>
-    <span>{s.sectionName} · {label} · {priceLabel(s.amountMinor)}</span>
+    <span>{s.sectionName} · <ChangePop value={label} tick={label === 'Paid'}>{label}</ChangePop> · {priceLabel(s.amountMinor)}</span>
     {!competition.isDemo && s.status === 0 && !s.isWithdrawn && <button type="button" disabled={busy} onClick={() => void update(true)} className="mg-btn mg-btn-secondary">Mark {s.fullName} as Paid</button>}
     {!competition.isDemo && s.status !== 2 && (s.status === 1 || s.refundPending) && <button type="button" disabled={busy} onClick={() => void update(false)} className="mg-btn mg-btn-secondary">Mark {s.fullName} refunded</button>}
     {error && <p role="alert">{error}</p>}

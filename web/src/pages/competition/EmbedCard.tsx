@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { CopiedTick } from '../../components/CopiedTick';
 import { Check, Copy } from 'lucide-react';
 import {
   clampEmbedHeight, EMBED_VIEWS, embedPath, embedSearch, embedUrl, iframeSnippet, MAX_EMBED_HEIGHT, MIN_EMBED_HEIGHT, SEASON_EMBED_HEIGHT,
@@ -136,7 +137,7 @@ export function EmbedCard(props: Props) {
             Copy code
           </button>
           <span role="status" className="text-sm text-[rgb(var(--mg-muted))]">
-            {copied === 'yes' ? 'Copied.' : copied === 'manual' ? 'Select the code above and copy it.' : ''}
+            {copied === 'yes' ? <><CopiedTick className="mr-1 inline h-4 w-4 align-[-2px] text-[rgb(var(--mg-ok))]" />Copied.</> : copied === 'manual' ? 'Select the code above and copy it.' : ''}
           </span>
         </div>
         <RefineNote>
