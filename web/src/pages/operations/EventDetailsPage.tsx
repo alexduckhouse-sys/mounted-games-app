@@ -38,6 +38,7 @@ export function EventDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(0);
   const [passport, setPassport] = useState<boolean | null>(null);
+  const [cards, setCards] = useState<boolean | null>(null);
   const [tack, setTack] = useState<TackCheckSection[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [scoring, setScoring] = useState<number | null>(null);
@@ -45,8 +46,12 @@ export function EventDetailsPage() {
   useEffect(() => {
     let cancelled = false;
     const base = `/event-tools/competitions/${competition.id}`;
-    Promise.all([api.get<PassportCheckBoard>(`${base}/passport-check`), api.get<TackCheckBoard>(`${base}/tack-check`)])
-      .then(([p, t]) => { if (cancelled) return; setPassport(p.data.enabled); setTack(t.data.sections); })
+    Promise.all([
+      api.get<PassportCheckBoard>(`${base}/passport-check`),
+      api.get<TackCheckBoard>(`${base}/tack-check`),
+      api.get<{ config?: { useRefereeCards?: boolean } }>(`/competitions/${competition.id}/dec-form-config`),
+    ])
+      .then(([p, t, d]) => { if (cancelled) return; setPassport(p.data.enabled); setTack(t.data.sections); setCards(Boolean(d.data?.config?.useRefereeCards)); })
       .catch((caught) => { if (!cancelled) setLoadError(apiMessage(caught, 'Couldn’t load the checks.')); });
     return () => { cancelled = true; };
   }, [competition.id]);
@@ -60,7 +65,7 @@ export function EventDetailsPage() {
     finally { setSaving((n) => n - 1); }
   }, []);
 
-  const saveBasics = (what: string, patch: Record<string, string | null>) =>
+  const saveBasics = (what: string, patch: Record<string, string | boolean | null>) =>
     track(what, async () => {
       await api.put(`/competitions/${competition.id}`, basicsPayload(competition, patch));
       reload();
@@ -71,6 +76,13 @@ export function EventDetailsPage() {
     setPassport(next);
     const ok = await track('the passport check', async () => { await api.put(`/event-tools/competitions/${competition.id}/passport-check/settings`, { enabled: next }); });
     if (!ok) setPassport(before);
+  }
+
+  async function setRefereeCards(next: boolean) {
+    const before = cards;
+    setCards(next);
+    const ok = await saveBasics('the cards setting', { useRefereeCards: next });
+    if (!ok) setCards(before);
   }
 
   async function saveTack(section: TackCheckSection, patch: Partial<Pick<TackCheckSection, 'isEnabled' | 'mode' | 'maxPoints'>> & { sectors?: Array<{ id: number; name: string }> }): Promise<boolean> {
@@ -101,7 +113,7 @@ export function EventDetailsPage() {
         </div>
 
         <RefineSection title="When and where" />
-        <div className="ops-fields ops-fields-row">
+        <div className="ops-fields-row">
           <DateField key={competition.startDate} label="Starts" value={competition.startDate} required other={competition.endDate} onSave={(iso) => saveBasics('the start', { startDate: iso })} onProblem={setError} />
           <DateField key={competition.endDate ?? ''} label="Ends" value={competition.endDate ?? ''} after={competition.startDate} onSave={(iso) => saveBasics('the end', { endDate: iso })} onProblem={setError} />
         </div>
@@ -120,7 +132,7 @@ export function EventDetailsPage() {
           <TextField key={competition.description ?? ''} label="Notes for riders (optional)" value={competition.description ?? ''} multiline onSave={(value) => saveBasics('the notes', { description: value || null })} />
         </div>
 
-        <RefineSection title="Checks" />
+        <RefineSection title="Checks and cards" />
         {loadError && <p role="alert" className="mg-notice ops-alert">{loadError}</p>}
         {passport !== null && (
           <RefineList as="div">
@@ -129,6 +141,13 @@ export function EventDetailsPage() {
                 <span className="ops-sw" aria-hidden="true" /><span>Passport and vaccination check</span>
               </button>
             </div>
+            {cards !== null && (
+              <div className="rf-row">
+                <button type="button" role="switch" aria-checked={cards} className="ops-swr" onClick={() => void setRefereeCards(!cards)}>
+                  <span className="ops-sw" aria-hidden="true" /><span>Yellow and red cards</span>
+                </button>
+              </div>
+            )}
           </RefineList>
         )}
         {tack && tack.length > 0 && (
@@ -163,7 +182,7 @@ export function EventDetailsPage() {
 }
 
 /** The whole update body: the API clears anything left out, so the fields not being changed are sent as they are. */
-function basicsPayload(competition: CompetitionDetail, patch: Record<string, string | null>) {
+function basicsPayload(competition: CompetitionDetail, patch: Record<string, string | boolean | null>) {
   return {
     name: competition.name,
     icon: competition.icon,
