@@ -380,7 +380,7 @@ function Preparations({ readiness, groups, checkedEquipment, competitionId, refr
   ] as PrepRow[]).filter((row) => row.count > 0);
   const manage: Array<{ key: string; title: string; todo: boolean; to?: string; view?: View }> = [
     { key: 'details', title: 'Event details', todo: false, to: `${base}/event-details` },
-    { key: 'sections', title: 'Sections and races', todo: false, to: `/admin/competitions/${competitionId}/format` },
+    { key: 'sections', title: 'Sections and races', todo: false, to: `${base}/sections` },
     { key: 'entries', title: 'Entries and dec forms', todo: unpaid + missing + short > 0, view: 'entries' },
     { key: 'timetable', title: 'Timetable and draw', todo: clashes.length + equipmentDetails > 0, view: 'draw' },
     { key: 'equipment', title: 'Equipment', todo: equipmentToCheck > 0, view: 'equipment' },

@@ -66,7 +66,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
     const created = await step('Creating competition…', () => api.post<{ id: number }>('/competitions', basicsPayload(draft)));
     competitionId = created.data.id;
   } else {
-    await step('Saving details…', () => api.put(`/competitions/${editingId}`, { ...basicsPayload(draft), isActive: true, isArchived: false }));
+    await step('Saving details…', () => api.put(`/competitions/${editingId}`, { ...basicsPayload(draft), isActive: competition?.isActive ?? true, isArchived: competition?.isArchived ?? false }));
   }
   const id = competitionId as number;
   if (draft.cardsEnabled !== undefined) {
