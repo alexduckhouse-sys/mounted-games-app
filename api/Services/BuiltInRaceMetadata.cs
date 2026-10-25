@@ -68,9 +68,24 @@ public static class BuiltInRaceMetadata
             rulebooks);
     }
 
+    public static readonly IReadOnlyDictionary<string, string> RaceNameAliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Litter Lifter"] = "Litter",
+            ["Bottle Shuttle"] = "Bottle",
+            ["Mug Shuffle"] = "Two Mug",
+            ["Pole Bending"] = "Bending",
+        };
+
+    public static string ResolveCanonicalName(string name)
+    {
+        var trimmed = (name ?? string.Empty).Trim();
+        return RaceNameAliases.TryGetValue(trimmed, out var canonical) ? canonical : trimmed;
+    }
+
     public static RaceTemplateDetailDto? FromBuiltInSeed(string name)
     {
-        var trimmed = name.Trim();
+        var trimmed = ResolveCanonicalName(name);
         var seed = RaceLibrarySeed.All.FirstOrDefault(
             s => string.Equals(s.Name, trimmed, StringComparison.OrdinalIgnoreCase));
         if (seed is null) return null;

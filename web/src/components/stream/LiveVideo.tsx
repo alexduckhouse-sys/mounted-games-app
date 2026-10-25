@@ -90,7 +90,7 @@ function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, labe
     return () => { unsubscribe(); next.dispose(); };
   }, [stream.competitionId, stream.id, invoke]);
   useEffect(() => { viewer.current!.sync(ready, stream.generation); }, [ready, stream.generation, stream.competitionId, stream.id, invoke]);
-  return <StreamPlayer media={snapshot.media} stream={stream} label={label} reconnecting={snapshot.state === 'reconnecting'} message={snapshot.message || (snapshot.state === 'connecting' ? 'Connecting…' : null)} announcement={announcement} captionBar={captionBar} quality={snapshot.preferredRid ?? 'f'} onQuality={(rid) => viewer.current?.setQuality(rid)} />;
+  return <StreamPlayer media={snapshot.media} stream={stream} label={label} reconnecting={snapshot.state === 'reconnecting'} message={snapshot.message || (snapshot.state === 'connecting' ? 'Connecting…' : null)} announcement={announcement} captionBar={captionBar} quality={snapshot.preferredRid ?? 'f'} onQuality={(rid) => viewer.current?.setQuality(rid)} audioOnly={snapshot.audioOnly} onAudioOnly={(enabled) => viewer.current?.setAudioOnly(enabled)} onSyncLive={() => viewer.current?.syncLive()} />;
 }
 export function CompStreamCard({ streamUrl, compName, publicLayout = false }: { streamUrl: string; compName: string; publicLayout?: boolean }) {
   const [loaded, setLoaded] = useState(false);

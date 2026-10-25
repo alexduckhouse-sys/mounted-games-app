@@ -102,11 +102,11 @@ describe('PrintEventPage', () => {
     expect(await screen.findByRole('heading', { name: 'Under 12 · Morning' })).toBeInTheDocument();
     expect(screen.getByText('Arena: Arena 1')).toBeInTheDocument();
     const headers = screen.getAllByRole('columnheader').map((cell) => cell.textContent);
-    expect(headers).toEqual(['Lane', 'Team', 'Club', '1. Bending', '2. Mug', 'Total']);
+    expect(headers).toEqual(['Lane', 'Team', '1. Bending', '2. Mug', 'Total']);
     const rows = screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent));
     expect(rows).toEqual([
-      ['1', 'North A', 'North', '', '', ''],
-      ['2', 'South B', 'South', '', '', ''],
+      ['1', 'North A', '', '', ''],
+      ['2', 'South B', '', '', ''],
     ]);
   });
 

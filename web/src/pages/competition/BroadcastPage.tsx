@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Camera, Eye, Film, Handshake, Layers, Lock, Megaphone, Mic, MicOff, Pause, Play, RefreshCw, SkipForward, Square, Wifi, Wind } from 'lucide-react';
 import { api } from '../../api';
 import { sponsorsFor } from '../../lib/sponsors';
@@ -12,8 +12,8 @@ import { useAuth } from '../../auth/AuthContext';
 import { browserPublisherDependencies, createStreamPublisher, type PublisherSnapshot } from '../../live/streamPublisher';
 import { useReplayPreparation } from '../../live/useReplayPreparation';
 import { ReplayPreparation } from '../../components/stream/ReplayPreparation';
-import { createReplayBuffer, getSavedReplays, type ReplayBufferHandle, type SavedReplayClip } from '../../live/replayBuffer';
-import { ReplayInspector, SavedReplaysButton } from '../../components/stream/ReplayInspector';
+import { createReplayBuffer, getSavedReplays, hydrateSavedReplays, type ReplayBufferHandle, type SavedReplayClip } from '../../live/replayBuffer';
+import { ReplayInspector, SavedReplaysButton, SavedReplaysDrawer } from '../../components/stream/ReplayInspector';
 import { streamHeatLabel } from '../../lib/streams';
 import { setBroadcasting } from '../../pwa';
 import { LiveDataCardOverlay, ProducerBanner, type LiveOverlayCardMode } from '../../components/stream/OverlayExtras';
@@ -27,7 +27,12 @@ const DEFAULT_STREAM_LIMIT_SECONDS = 30 * 60;
 const EXTEND_STREAM_SECONDS = 15 * 60;
 const MAX_STREAM_LIMIT_SECONDS = 45 * 60;
 const LOW_TIME_THRESHOLD_SECONDS = 5 * 60;
-const QUALITY_PRESETS: StreamQualityPreset[] = ['360p', '720p', '1080p'];
+const QUALITY_PRESETS: StreamQualityPreset[] = ['auto', '360p', '480p', '720p', '1080p'];
+const ON_AIR_QUALITY_OPTIONS: { preset: StreamQualityPreset; label: string }[] = [
+  { preset: 'auto', label: 'Auto HD' },
+  { preset: '720p', label: '720p' },
+  { preset: '480p', label: '480p Saver' },
+];
 const CAMERA_ZOOMS = [1, 2, 3] as const;
 
 const DATA_CARD_OPTIONS: { mode: LiveOverlayCardMode; label: string }[] = [
@@ -42,9 +47,30 @@ export function BroadcastPage() {
   usePageWidth('wide');
   const { competition, streamingEnabled } = useCompetition();
   const { canOrganise } = useAuth();
-  if (!canOrganise(competition)) return <p>Only the organiser can broadcast.</p>;
-  if (!streamingEnabled) return <p>Streaming is not set up for this event.</p>;
-  if (typeof RTCPeerConnection === 'undefined' || !navigator.mediaDevices) return <p>This browser cannot broadcast. Try Safari or Chrome over a secure connection.</p>;
+  if (!canOrganise(competition)) {
+    return (
+      <div className="mx-auto max-w-md space-y-3 p-4">
+        <p>Only the organiser can broadcast.</p>
+        <Link to={`/competitions/${competition.id}`} className="mg-btn mg-btn-secondary inline-flex">Back to competition</Link>
+      </div>
+    );
+  }
+  if (!streamingEnabled) {
+    return (
+      <div className="mx-auto max-w-md space-y-3 p-4">
+        <p>Streaming is not set up for this event.</p>
+        <Link to={`/competitions/${competition.id}`} className="mg-btn mg-btn-secondary inline-flex">Back to competition</Link>
+      </div>
+    );
+  }
+  if (typeof RTCPeerConnection === 'undefined' || !navigator.mediaDevices) {
+    return (
+      <div className="mx-auto max-w-md space-y-3 p-4">
+        <p>This browser cannot broadcast. Try Safari or Chrome over a secure connection.</p>
+        <Link to={`/competitions/${competition.id}`} className="mg-btn mg-btn-secondary inline-flex">Back to competition</Link>
+      </div>
+    );
+  }
   return <BroadcastStudio key={competition.id} />;
 }
 
@@ -63,17 +89,21 @@ function BroadcastStudio() {
   const [busy, setBusy] = useState(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
+  const [searchParams] = useSearchParams();
+  const paramArena = searchParams.get('arena')?.trim();
+  const paramAngle = searchParams.get('angle')?.trim();
   const arenas = [...new Set(competition.sessions.map((session) => session.arenaName?.trim()).filter((name): name is string => !!name))];
-  const [arena, setArena] = useState(arenas[0] ?? '');
-  const [angle, setAngle] = useState('Main camera');
-  const [otherArena, setOtherArena] = useState(arenas.length === 0);
-  const [otherAngle, setOtherAngle] = useState(false);
+  const [arena, setArena] = useState(paramArena || arenas[0] || '');
+  const [angle, setAngle] = useState(paramAngle || 'Main camera');
+  const [otherArena, setOtherArena] = useState(Boolean(paramArena && !arenas.includes(paramArena)) || arenas.length === 0);
+  const [otherAngle, setOtherAngle] = useState(Boolean(paramAngle && !['Main camera', 'Finish line', 'Start line', 'Wide'].includes(paramAngle)));
   const [sound, setSound] = useState(true);
   const [windFilter, setWindFilter] = useState(false);
   const [qualityPreset, setQualityPreset] = useState<StreamQualityPreset>('1080p');
   const [cameraZoom, setCameraZoom] = useState<number>(1);
   const [screenDimmed, setScreenDimmed] = useState(false);
   const [inspectingClip, setInspectingClip] = useState<SavedReplayClip | null>(null);
+  const [showReplayDrawer, setShowReplayDrawer] = useState(false);
   const [caption, setCaption] = useState('');
   const [editingCaption, setEditingCaption] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -100,6 +130,7 @@ function BroadcastStudio() {
   const arenaStreams = streams.filter((stream) => stream.status !== 2 && same(stream.arenaName, arena));
 
   useEffect(() => {
+    void hydrateSavedReplays(competition.id);
     const next = createStreamPublisher(competition.id, browserPublisherDependencies());
     publisher.current = next;
     const unsubscribe = next.subscribe(() => setSnapshot(next.getSnapshot()));
@@ -158,7 +189,7 @@ function BroadcastStudio() {
       const enabled = value === 'true';
       void publisher.current?.setWindFilter?.(enabled);
     } else if (command === 'setQualityPreset') {
-      if (value === '360p' || value === '720p' || value === '1080p') {
+      if (value === 'auto' || value === '360p' || value === '480p' || value === '720p' || value === '1080p') {
         void publisher.current?.setQualityPreset?.(value);
       }
     } else if (command === 'saveReplay') {
@@ -279,11 +310,12 @@ function BroadcastStudio() {
     });
   }
 
-  function handleSaveReplay() {
+  function handleSaveReplay(secs = 15) {
     const buffer = replayBuffer.current;
-    if (buffer) void prepareReplay((options) => buffer.saveClip(`${arena || 'Arena'} · ${angle}`, { ...options, durationSeconds: 15 }), setInspectingClip);
+    if (buffer) void prepareReplay((options) => buffer.saveClip(`${arena || 'Arena'} · ${angle}`, { ...options, durationSeconds: secs }), setInspectingClip);
   }
 
+  const hasActiveOverlayPopup = showOverlays || showAnnounce || showReplayDrawer || activeCardMode !== 'none';
   const preview = <video ref={video} muted autoPlay playsInline className="h-full w-full object-cover" aria-label="Camera preview" />;
   if (live) return createPortal(<div className="mg-font fixed inset-0 z-[100] bg-[rgb(var(--mg-header-deep))] text-white">
     {preview}
@@ -307,7 +339,47 @@ function BroadcastStudio() {
             </button>
           </span>
           <span className="mg-stream-glass flex items-center gap-1 px-2 py-1"><Eye className="h-4 w-4" />{snapshot.viewerCount}</span>
-          <span className={`mg-stream-glass flex items-center gap-1 border px-2 py-1 ${snapshot.signal === 'poor' ? 'border-[rgb(var(--mg-red))]' : snapshot.signal === 'fair' ? 'border-amber-400' : 'border-transparent'}`}><Wifi className="h-4 w-4" />{snapshot.signal === 'good' ? 'Good' : snapshot.signal === 'fair' ? 'Fair' : 'Weak signal'}</span>
+          <span className={`mg-stream-glass flex items-center gap-1 border px-2 py-1 ${snapshot.signal === 'poor' ? 'border-[rgb(var(--mg-red))]' : snapshot.signal === 'fair' ? 'border-amber-400' : 'border-transparent'}`}>
+            <Wifi className="h-4 w-4" />
+            <span>{snapshot.signal === 'good' ? 'Good' : snapshot.signal === 'fair' ? 'Fair' : 'Weak signal'}</span>
+            {(snapshot.signal !== 'good' || snapshot.state === 'reconnecting') && (
+              <button
+                type="button"
+                aria-label="Reconnect stream"
+                className="pointer-events-auto ml-1 rounded bg-white/15 px-1.5 py-0.5 text-xs font-bold text-white hover:bg-white/25"
+                onClick={() => publisher.current?.reconnect?.()}
+              >
+                Reconnect
+              </button>
+            )}
+          </span>
+          <button
+            type="button"
+            aria-label={snapshot.audioMuted ? 'Unmute microphone' : 'Mute microphone'}
+            aria-pressed={snapshot.audioMuted}
+            disabled={busy || !canControl}
+            className={`pointer-events-auto flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${snapshot.audioMuted ? 'bg-[rgb(var(--mg-red))] text-white' : 'mg-stream-glass text-white'}`}
+            onClick={() => void run(() => publisher.current!.mute(!snapshot.audioMuted))}
+          >
+            {snapshot.audioMuted ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+            <span>{snapshot.audioMuted ? 'Muted' : 'Mic on'}</span>
+          </button>
+          <div role="group" aria-label="Stream quality" className="mg-stream-glass pointer-events-auto flex items-center gap-0.5 rounded-full p-0.5 text-xs font-bold">
+            {ON_AIR_QUALITY_OPTIONS.map((opt) => (
+              <button
+                key={opt.preset}
+                type="button"
+                aria-pressed={qualityPreset === opt.preset}
+                className={`rounded-full px-2 py-0.5 transition-colors ${qualityPreset === opt.preset ? 'bg-amber-400 text-black' : 'text-white/85 hover:text-white'}`}
+                onClick={() => {
+                  setQualityPreset(opt.preset);
+                  void publisher.current?.setQualityPreset?.(opt.preset);
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <span className="mg-stream-glass px-2 py-1">{arena} · {angle}</span>
           {CAMERA_ZOOMS.map((z) => (
             <button
@@ -352,7 +424,7 @@ function BroadcastStudio() {
           className="mg-stream-control flex-col !rounded-xl p-2"
           disabled={busy || !canControl}
           aria-label="Save 15s replay"
-          onClick={handleSaveReplay}
+          onClick={() => handleSaveReplay(15)}
         >
           <Film />Replay
         </button>
@@ -386,33 +458,47 @@ function BroadcastStudio() {
       </div>
       {showAnnounce && (
         <form
-          className="mg-stream-glass pointer-events-auto absolute bottom-20 left-4 right-24 z-10 flex flex-wrap items-center gap-2 p-2.5"
+          className="mg-stream-glass pointer-events-auto fixed inset-4 sm:inset-12 z-30 m-auto flex max-h-[82vh] w-[min(94vw,40rem)] flex-col justify-center gap-3 rounded-2xl border border-white/20 p-5 shadow-2xl"
           onSubmit={(event) => { event.preventDefault(); void postAnnouncement(); }}
         >
-          <input
-            aria-label="Banner message"
-            className="min-w-0 flex-1 rounded bg-white/10 px-2.5 py-1.5 text-sm text-white placeholder:text-white/60"
-            maxLength={140}
-            value={announceText}
-            placeholder="Message for stream banner & announcements…"
-            onChange={(event) => setAnnounceText(event.target.value)}
-          />
-          <button type="submit" className="mg-stream-control !min-h-9 !rounded-lg px-3 text-xs font-bold" disabled={busy || !announceText.trim()}>
-            Post
-          </button>
-          {currentOverlay.bannerText && (
-            <button type="button" className="mg-stream-control !min-h-9 !rounded-lg px-3 text-xs" disabled={busy} onClick={() => void clearBanner()}>
-              Clear banner
+          <div className="flex items-center justify-between">
+            <strong className="text-sm font-bold">Live announcement &amp; stream banner</strong>
+            <button type="button" className="mg-stream-control !min-h-8 px-2.5 text-xs" onClick={() => setShowAnnounce(false)}>
+              Close
             </button>
-          )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              aria-label="Banner message"
+              className="min-w-0 flex-1 rounded bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/60"
+              maxLength={140}
+              value={announceText}
+              placeholder="Message for stream banner & announcements…"
+              onChange={(event) => setAnnounceText(event.target.value)}
+            />
+            <button type="submit" className="mg-stream-control !min-h-9 !rounded-lg px-3 text-xs font-bold" disabled={busy || !announceText.trim()}>
+              Post
+            </button>
+            {currentOverlay.bannerText && (
+              <button type="button" className="mg-stream-control !min-h-9 !rounded-lg px-3 text-xs" disabled={busy} onClick={() => void clearBanner()}>
+                Clear banner
+              </button>
+            )}
+          </div>
         </form>
       )}
       {showOverlays && (
         <section
           aria-label="Live overlays"
-          className="mg-stream-glass pointer-events-auto absolute bottom-20 left-4 right-24 z-10 flex flex-col gap-2.5 p-3 text-xs"
+          className="mg-stream-glass pointer-events-auto fixed inset-4 sm:inset-10 z-30 m-auto flex max-h-[84vh] w-[min(94vw,42rem)] flex-col justify-center gap-4 overflow-y-auto rounded-2xl border border-white/20 p-5 text-xs sm:text-sm shadow-2xl"
         >
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center justify-between border-b border-white/15 pb-2">
+            <strong className="text-sm font-bold">Centred stream overlays &amp; remote control</strong>
+            <button type="button" className="mg-stream-control !min-h-8 px-2.5 text-xs" onClick={() => setShowOverlays(false)}>
+              Close
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <span className="mr-1 font-semibold uppercase tracking-wider text-[rgb(var(--mg-header-sub))]">Data card</span>
             {DATA_CARD_OPTIONS.map((opt) => (
               <button
@@ -420,7 +506,7 @@ function BroadcastStudio() {
                 type="button"
                 aria-pressed={activeCardMode === opt.mode}
                 disabled={busy}
-                className={`rounded-full px-2.5 py-1 font-semibold ${activeCardMode === opt.mode ? 'bg-amber-400 text-black' : 'bg-white/15 text-white'}`}
+                className={`rounded-full px-3 py-1.5 font-semibold ${activeCardMode === opt.mode ? 'bg-amber-400 text-black' : 'bg-white/15 text-white'}`}
                 onClick={() => void selectDataCard(opt.mode)}
               >
                 {opt.label}
@@ -432,7 +518,7 @@ function BroadcastStudio() {
               type="button"
               aria-pressed={currentOverlay.scoreCardMode !== 2}
               disabled={busy}
-              className={`rounded-lg px-2.5 py-1.5 font-semibold ${currentOverlay.scoreCardMode !== 2 ? 'bg-amber-400 text-black' : 'bg-white/15 text-white'}`}
+              className={`rounded-lg px-3 py-1.5 font-semibold ${currentOverlay.scoreCardMode !== 2 ? 'bg-amber-400 text-black' : 'bg-white/15 text-white'}`}
               onClick={() => void toggleScoreStrip()}
             >
               Score strip
@@ -441,26 +527,43 @@ function BroadcastStudio() {
               type="button"
               aria-pressed={currentOverlay.stripMode !== 2}
               disabled={busy}
-              className={`rounded-lg px-2.5 py-1.5 font-semibold ${currentOverlay.stripMode !== 2 ? 'bg-amber-400 text-black' : 'bg-white/15 text-white'}`}
+              className={`rounded-lg px-3 py-1.5 font-semibold ${currentOverlay.stripMode !== 2 ? 'bg-amber-400 text-black' : 'bg-white/15 text-white'}`}
               onClick={() => void toggleLowerThird()}
             >
               Lower third
             </button>
             <SponsorButtons competitionId={competition.id} />
           </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/15 pt-2">
+            <button
+              type="button"
+              className="mg-stream-control !min-h-9 !rounded-lg px-3 text-xs font-semibold"
+              onClick={() => { setShowOverlays(false); setShowReplayDrawer(true); }}
+            >
+              30m replay hub
+            </button>
+            <Link
+              to={`/competitions/${competition.id}/produce`}
+              className="mg-stream-control !min-h-9 !rounded-lg px-3 text-xs font-semibold"
+            >
+              2nd phone remote &amp; dual-camera
+            </Link>
+          </div>
         </section>
       )}
       <div className="absolute bottom-20 left-4 right-24 flex flex-col items-start gap-2">{streamMessages.slice(-3).map((item) => <StreamNotice key={`${item.message.id}-${item.receivedAt}`} {...item} duration={10_000} />)}</div>
-      <div className="pointer-events-auto absolute bottom-4 left-4 right-24 flex flex-wrap items-center gap-2">
-        {editingCaption ? <form className="mg-stream-glass flex flex-1 gap-2 p-2" onSubmit={(event) => { event.preventDefault(); void run(async () => { await publisher.current!.caption(caption); setEditingCaption(false); }); }}><input aria-label="Viewers see" className="min-w-0 flex-1 bg-transparent p-2 text-white" maxLength={80} value={caption} placeholder="Leave blank for the timetable" onChange={(event) => setCaption(event.target.value)} /><button disabled={busy}>Save</button></form>
-          : <button className="mg-stream-glass px-3 py-2 text-left text-sm" onClick={() => setEditingCaption(true)}><span className="mr-2 text-xs uppercase text-[rgb(var(--mg-header-sub))]">Viewers see</span>{label}</button>}
-        <SavedReplaysButton competitionId={competition.id} arenaName={arena} onSelectClip={(c) => setInspectingClip(c)} />
-        {currentOverlay.bannerText && !showAnnounce && (
-          <button type="button" className="mg-stream-glass px-3 py-2 text-xs font-semibold text-amber-300" disabled={busy} onClick={() => void clearBanner()}>
-            Clear banner
-          </button>
-        )}
-      </div>
+      {!hasActiveOverlayPopup && (
+        <div className="pointer-events-auto absolute bottom-4 left-4 right-24 flex flex-wrap items-center gap-2">
+          {editingCaption ? <form className="mg-stream-glass flex flex-1 gap-2 p-2" onSubmit={(event) => { event.preventDefault(); void run(async () => { await publisher.current!.caption(caption); setEditingCaption(false); }); }}><input aria-label="Viewers see" className="min-w-0 flex-1 bg-transparent p-2 text-white" maxLength={80} value={caption} placeholder="Leave blank for the timetable" onChange={(event) => setCaption(event.target.value)} /><button disabled={busy}>Save</button></form>
+            : <button className="mg-stream-glass px-3 py-2 text-left text-sm" onClick={() => setEditingCaption(true)}><span className="mr-2 text-xs uppercase text-[rgb(var(--mg-header-sub))]">Viewers see</span>{label}</button>}
+          <SavedReplaysButton competitionId={competition.id} arenaName={arena} onSelectClip={(c) => setInspectingClip(c)} />
+          {currentOverlay.bannerText && !showAnnounce && (
+            <button type="button" className="mg-stream-glass px-3 py-2 text-xs font-semibold text-amber-300" disabled={busy} onClick={() => void clearBanner()}>
+              Clear banner
+            </button>
+          )}
+        </div>
+      )}
       {snapshot.state === 'paused' && <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[rgb(var(--mg-header-deep)/0.65)]"><h2 className="text-2xl font-bold">Viewers see Back soon</h2><button className="mg-stream-control pointer-events-auto px-4" disabled={busy} onClick={() => run(() => publisher.current!.pause(false))}><Play />Resume</button></div>}
       {(snapshot.state === 'starting' || snapshot.state === 'reconnecting') && <p role="status" className="mg-stream-glass absolute left-4 top-1/2 p-3">{snapshot.state === 'starting' ? 'Starting stream…' : 'Reconnecting…'}</p>}
       {error && <p role="alert" className="mg-stream-glass absolute left-4 right-24 top-20 p-3">{error}</p>}
@@ -484,6 +587,14 @@ function BroadcastStudio() {
           </button>
         </div>
       )}
+      <SavedReplaysDrawer
+        competitionId={competition.id}
+        open={showReplayDrawer}
+        onClose={() => setShowReplayDrawer(false)}
+        onSelectClip={(c) => setInspectingClip(c)}
+        onCaptureBufferClip={(secs) => handleSaveReplay(secs)}
+        bufferedSeconds={Math.floor(replayStatus.retainedSeconds)}
+      />
       {inspectingClip && (
         <ReplayInspector
           clip={inspectingClip}
@@ -541,7 +652,7 @@ function BroadcastStudio() {
                     void publisher.current?.setQualityPreset?.(preset);
                   }}
                 >
-                  {preset}
+                  {preset === 'auto' ? 'Auto HD' : preset === '480p' ? '480p Saver' : preset}
                 </button>
               ))}
             </div>

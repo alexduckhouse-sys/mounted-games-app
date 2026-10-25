@@ -2,9 +2,12 @@ import { HttpTransportType, HubConnection, HubConnectionBuilder, LogLevel } from
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { recoverConnection } from './recoverConnection';
 import { useAuth } from '../auth/AuthContext';
+import { isLiteModeActive } from '../lite/liteMode';
 import type { LiveStream, StreamCommand, StreamTelemetry } from '../types';
 import type { StreamInvoke } from './streamRuntime';
 import { readToken } from '../api';
+
+export const LITE_HUB_COALESCE_MS = 1000;
 
 export interface LiveHandlers {
   onStreamUpdated?: (stream: LiveStream) => void;
@@ -58,19 +61,45 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
       .build();
 
     connectionRef.current = conn;
-    // Events from a connection that has been replaced (new competition or auth session) are dropped.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const pending: { key?: string; deliver: () => void }[] = [];
+    // Events from a replaced connection never reach the current competition.
     const forward = <A extends unknown[]>(deliver: (...args: A) => void) => (...args: A) => { if (active) deliver(...args); };
+    // Batch data changes in order: session and result events can contain partial updates.
+    // Only replace telemetry/viewer totals, and only for the same stream.
+    const forwardCoalesced = <A extends unknown[]>(event: string, deliver: (...args: A) => void) => forward((...args: A) => {
+      if (!isLiteModeActive()) {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = undefined;
+        for (const item of pending.splice(0)) item.deliver();
+        deliver(...args);
+        return;
+      }
+      const payload = args[0] as { streamId?: unknown } | undefined;
+      const key = (event === 'streamTelemetry' || event === 'streamViewers') && typeof payload?.streamId === 'number'
+        ? `${event}:${payload.streamId}` : undefined;
+      if (key) {
+        const previous = pending.findIndex((item) => item.key === key);
+        if (previous >= 0) pending.splice(previous, 1);
+      }
+      pending.push({ key, deliver: () => deliver(...args) });
+      if (timer !== undefined) return;
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (active) for (const item of pending.splice(0)) item.deliver();
+      }, LITE_HUB_COALESCE_MS);
+    });
     conn.on('streamUpdated', forward((s) => handlersRef.current.onStreamUpdated?.(s as LiveStream)));
-    conn.on('streamTelemetry', forward((t) => handlersRef.current.onStreamTelemetry?.(t as StreamTelemetry)));
+    conn.on('streamTelemetry', forwardCoalesced('streamTelemetry', (t) => handlersRef.current.onStreamTelemetry?.(t as StreamTelemetry)));
     conn.on('streamCommand', forward((c) => handlersRef.current.onStreamCommand?.(c as StreamCommand)));
     conn.on('overlayUpdated', forward((o) => handlersRef.current.onOverlayUpdated?.(o)));
     conn.on('scoreCardControl', forward((c) => handlersRef.current.onScoreCardControl?.(c)));
     conn.on('sponsorControl', forward((c) => handlersRef.current.onSponsorControl?.(c)));
-    conn.on('streamViewers', forward((p) => handlersRef.current.onStreamViewers?.(p as { streamId: number; count: number })));
+    conn.on('streamViewers', forwardCoalesced('streamViewers', (p) => handlersRef.current.onStreamViewers?.(p as { streamId: number; count: number })));
     conn.on('chatMessage', forward((m) => handlersRef.current.onChatMessage?.(m)));
     conn.on('chatMessageDeleted', forward((p) => handlersRef.current.onChatMessageDeleted?.(p as { id: number })));
-    conn.on('sessionUpdated', forward((s) => handlersRef.current.onSessionUpdated?.(s)));
-    conn.on('resultsUpdated', forward((p) => handlersRef.current.onResultsUpdated?.(p)));
+    conn.on('sessionUpdated', forwardCoalesced('sessionUpdated', (s) => handlersRef.current.onSessionUpdated?.(s)));
+    conn.on('resultsUpdated', forwardCoalesced('resultsUpdated', (p) => handlersRef.current.onResultsUpdated?.(p)));
     conn.on('announcement', forward((a) => handlersRef.current.onAnnouncement?.(a)));
 
     const recovery = recoverConnection({
@@ -92,6 +121,8 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
     return () => {
       active = false;
       readyRef.current = false;
+      if (timer !== undefined) clearTimeout(timer);
+      pending.length = 0;
       // React runs this before the next effect, so the refs always hold this connection here.
       connectionRef.current = null;
       recoveryRef.current = null;

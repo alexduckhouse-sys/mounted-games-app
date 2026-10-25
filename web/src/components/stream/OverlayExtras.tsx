@@ -46,7 +46,8 @@ export type LiveOverlayCardMode = 'none' | 'toplist' | 'heat' | 'lanes' | 'next'
 
 const DATA_CARD_MODES = new Set<string>(['toplist', 'heat', 'lanes', 'next']);
 
-function readLiveOverlayCard(overlay: StreamOverlay): { mode: LiveOverlayCardMode; sectionId: number | null } {
+// eslint-disable-next-line react-refresh/only-export-components
+export function readLiveOverlayCard(overlay: StreamOverlay): { mode: LiveOverlayCardMode; sectionId: number | null } {
   const look = (overlay.look ?? {}) as Record<string, unknown>;
   const rawMode = typeof look.liveCard === 'string' ? look.liveCard : overlay.bannerText;
   const mode: LiveOverlayCardMode = rawMode === 'toplist' || rawMode === 'heat' || rawMode === 'lanes' || rawMode === 'next' ? rawMode : 'none';
@@ -143,7 +144,8 @@ export function ProducerBanner({ stream, arenaName, overlay, look }: { stream?: 
 }
 
 /** The latest card for this stream's arena, while it's due on screen: from the delay until the delay plus its length. */
-function useDueCard(cards: QueuedScoreCard[], arenaName: string, delayMs: number, defaultLengthMs: number): QueuedScoreCard | null {
+// eslint-disable-next-line react-refresh/only-export-components
+export function useDueCard(cards: QueuedScoreCard[], arenaName: string, delayMs: number, defaultLengthMs: number): QueuedScoreCard | null {
   const arena = arenaName.trim();
   const card = cards.filter((c) => c.arenaName === '' || c.arenaName === arena).at(-1) ?? null;
   // A producer can change how long this card stays up.
@@ -189,7 +191,7 @@ export function ScoreCardOverlay({
       initial={reduced ? false : { x: 18, scale: 0.96 }}
       animate={{ x: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-      className={`mg-ov-card mg-stream-fade ${where}`}
+      className={`mg-ov-card mg-stream-fade ${where} mg-ov-card-center`}
       aria-label={`Results: ${due.heading}`}
     >
       <header>
@@ -312,7 +314,7 @@ function LiveToplistCard({ competition, sectionId }: { competition: CompetitionD
       initial={reduced ? false : { x: 18, scale: 0.96 }}
       animate={{ x: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-      className="mg-ov-card mg-stream-fade mg-ov-card-right"
+      className="mg-ov-card mg-stream-fade mg-ov-card-right mg-ov-card-center"
       aria-label={`Live toplist: ${displaySectionName(section.displayName)}`}
     >
       <header>
@@ -472,7 +474,7 @@ export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string;
         initial={reduced ? false : { opacity: 0, x: 18, scale: 0.96 }}
         animate={{ opacity: 1, x: 0, scale: 1 }}
         transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-        className="mg-ov-card mg-stream-fade mg-ov-card-right"
+        className="mg-ov-card mg-stream-fade mg-ov-card-right mg-ov-card-center"
         aria-label={`${mode === 'next' ? 'Up next' : 'Starting lanes'}: ${heading}`}
       >
         <header>
@@ -507,7 +509,7 @@ export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string;
       initial={reduced ? false : { x: 18, scale: 0.96 }}
       animate={{ x: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-      className="mg-ov-card mg-stream-fade mg-ov-card-right"
+      className="mg-ov-card mg-stream-fade mg-ov-card-right mg-ov-card-center"
       aria-label={`Heat table: ${heading}`}
     >
       <header>

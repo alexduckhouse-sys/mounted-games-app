@@ -105,8 +105,8 @@ describe('signing in', () => {
     await act(async () => { await result.current.loginWithAdminKey('the-key'); });
     expect(post).toHaveBeenCalledWith('/auth/admin-key', { key: 'the-key' });
     expect(result.current.hasRole('Admin')).toBe(true);
-    await act(async () => { await result.current.loginWithAdminKey('the-key', 'Chief Steward', 'steward@example.com'); });
-    expect(post).toHaveBeenCalledWith('/auth/admin-key', { key: 'the-key', title: 'Chief Steward', email: 'steward@example.com' });
+    await act(async () => { await result.current.loginWithAdminKey('the-key', 'Chief Steward', 'steward@example.com', 'Passw0rd!x'); });
+    expect(post).toHaveBeenCalledWith('/auth/admin-key', { key: 'the-key', title: 'Chief Steward', email: 'steward@example.com', password: 'Passw0rd!x' });
   });
 
   it('clears loading when the admin key is wrong', async () => {

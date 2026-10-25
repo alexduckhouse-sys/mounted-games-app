@@ -2,9 +2,10 @@ import { Dropdown } from '../../components/Dropdown';
 import { displaySectionName } from '../../lib/section';
 import { TimetableBoard } from './TimetableBoard';
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronRight, Trophy, Sparkles, X, AlertTriangle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trophy, Sparkles, X, AlertTriangle, Mic, Monitor, QrCode as QrCodeIcon } from 'lucide-react';
+import { QrAccessModal } from '../../components/QrAccessModal';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
@@ -76,7 +77,12 @@ function defaultSectionId(competition: CompetitionDetail): number | null {
     }
   } catch { /* ignore invalid storage */ }
 
-  return competition.sections[0]?.id ?? null;
+  const populatedSection = competition.sections.find(
+    (s) =>
+      competition.teams.some((t) => t.competitionSectionId === s.id)
+      || competition.sessions.some((sess) => sess.competitionSectionId === s.id && sess.heats.length > 0),
+  );
+  return populatedSection?.id ?? competition.sections[0]?.id ?? null;
 }
 
 /** Puts the toplist's title and refresh button in the app header while the standalone page is showing. */
@@ -143,6 +149,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const [subTab, setSubTab] = useState<SectionSubTab>('draw');
   const [showToplist, setShowToplist] = useState(toplistOnly);
   const [showFinals, setShowFinals] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
   const [chosenView, setChosenView] = useState<ToplistViewTab | null>(readPreferredToplistView);
   const chooseView = (view: ToplistViewTab) => {
     setChosenView(view);
@@ -259,21 +266,55 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
       {sectionId != null && <TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} />}
     </section>
   );
-  const finalsButton = canManage(competition) && sectionId != null && (
-    <button onClick={() => setShowFinals(true)} className="mg-btn mg-btn-primary">
-      <Sparkles className="h-4 w-4" /> Create finals
-    </button>
+  const sectionQuery = sectionId != null ? `?section=${sectionId}` : '';
+  const finalsButton = canManage(competition) && (
+    <div className="flex flex-wrap items-center gap-2" role="region" aria-label="Organiser quick actions">
+      {sectionId != null && (
+        <button type="button" onClick={() => setShowFinals(true)} className="mg-btn mg-btn-primary">
+          <Sparkles className="h-4 w-4" /> Create finals
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => setShowQrModal(true)}
+        className="mg-btn mg-btn-secondary"
+      >
+        <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> QR Access
+      </button>
+      <Link
+        to={`/competitions/${competition.id}/commentary${sectionQuery}`}
+        className="mg-btn mg-btn-secondary"
+      >
+        <Mic className="h-4 w-4" aria-hidden="true" /> PA Commentator
+      </Link>
+      <Link
+        to={`/competitions/${competition.id}/tv${sectionQuery}`}
+        className="mg-btn mg-btn-secondary"
+      >
+        <Monitor className="h-4 w-4" aria-hidden="true" /> TV Kiosk
+      </Link>
+    </div>
   );
   const finalsModal = (
-    <AnimatePresence>
-      {showFinals && sectionId != null && (
-        <FinalsModal
-          sectionId={sectionId}
-          onClose={() => setShowFinals(false)}
-          onCreated={() => { setShowFinals(false); reload(); }}
-        />
-      )}
-    </AnimatePresence>
+    <>
+      <AnimatePresence>
+        {showFinals && sectionId != null && (
+          <FinalsModal
+            sectionId={sectionId}
+            onClose={() => setShowFinals(false)}
+            onCreated={() => { setShowFinals(false); reload(); }}
+          />
+        )}
+      </AnimatePresence>
+      <QrAccessModal
+        open={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        competitionId={competition.id}
+        competitionName={competition.name}
+        sectionId={sectionId}
+        canWrite={canManage(competition)}
+      />
+    </>
   );
 
   const ageGroups = !rail && competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} seamless={toplistOnly && standings.length > 0} onChange={chooseSection} />;

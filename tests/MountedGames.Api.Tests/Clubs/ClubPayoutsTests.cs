@@ -464,6 +464,97 @@ public class ClubPayoutsTests : IClassFixture<ApiFactory>
         Assert.Null((await (await admin.GetAsync($"/api/competitions/{adminOwned}")).ReadAsync<CompetitionDetail>()).PayoutsTo);
     }
 
+    [Fact]
+    public async Task Competition_PinsCreatorClubAtCreation_AndPreservesItWhenOrganiserChangesClubOrUpdatesDecForm()
+    {
+        var (manager, clubId, _) = await ManagerWithClubAsync();
+        var (trainer, trainerAuth) = await _f.ApprovedTrainerAsync();
+        var trainerId = trainerAuth.User.Id;
+        await _f.WithDbAsync(async db =>
+        {
+            var user = await db.Users.SingleAsync(u => u.Id == trainerId);
+            user.ClubId = clubId;
+            await db.SaveChangesAsync();
+        });
+        await manager.PutAsJsonAsync(Url(clubId), Complete());
+        await manager.PutAsJsonAsync(Url(clubId, "/bank"), UkBank());
+        await manager.PostAsync(Url(clubId, "/finish"), null);
+
+        var created = await trainer.PostAsJsonAsync("/api/competitions", new CreateCompetitionRequest(
+            $"Pinned Payout {Guid.NewGuid():N}", null, null, null, null, null, null, DateTime.UtcNow.AddDays(14), null));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var compId = (await created.ReadAsync<CompetitionSummary>()).Id;
+
+        // Even if the organiser later moves to another club and updates the dec form config, payouts stay pinned to the original club.
+        var otherClubId = await _f.SeedClubAsync("Different Club");
+        await _f.WithDbAsync(async db =>
+        {
+            var user = await db.Users.SingleAsync(u => u.Id == trainerId);
+            user.ClubId = otherClubId;
+            await db.SaveChangesAsync();
+        });
+
+        var admin = await _f.AdminAsync();
+        var putDecForm = await admin.PutAsJsonAsync($"/api/competitions/{compId}/dec-form-config",
+            MountedGames.Api.Services.DecForms.DecFormConfig.Basic);
+        Assert.Equal(HttpStatusCode.OK, putDecForm.StatusCode);
+
+        var detail = await (await _f.CreateClient().GetAsync($"/api/competitions/{compId}")).ReadAsync<CompetitionDetail>();
+        Assert.NotNull(detail.PayoutsTo);
+        Assert.StartsWith("Payout Club", detail.PayoutsTo!.ClubName);
+        Assert.Equal("••••9911", detail.PayoutsTo.MaskedAccount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DecFormResetAndSave_CannotRedirectTheServerSelectedPayoutClub(bool pinned)
+    {
+        var (trainer, auth) = await _f.ApprovedTrainerAsync();
+        var ownerClub = auth.User.ClubId!.Value;
+        var otherClub = await _f.SeedClubAsync($"Fake unrelated club {Guid.NewGuid():N}");
+        var compId = await _f.SeedCompetitionAsync(ownerUserId: auth.User.Id);
+        if (pinned) await _f.InDbAsync(async db =>
+        {
+            var comp = await db.Competitions.SingleAsync(c => c.Id == compId);
+            comp.DecFormConfigJson = (MountedGames.Api.Services.DecForms.DecFormConfig.Basic with { PayoutClubId = ownerClub }).ToJson();
+            await db.SaveChangesAsync();
+        });
+        var url = $"/api/competitions/{compId}/dec-form-config";
+        (await trainer.DeleteAsync(url)).EnsureSuccessStatusCode();
+        (await trainer.PutAsJsonAsync(url, MountedGames.Api.Services.DecForms.DecFormConfig.Basic with { PayoutClubId = otherClub })).EnsureSuccessStatusCode();
+        var stored = await _f.WithDbAsync(db => db.Competitions.Where(c => c.Id == compId).Select(c => c.DecFormConfigJson).SingleAsync());
+        Assert.Equal(ownerClub, MountedGames.Api.Services.DecForms.DecFormConfig.Parse(stored)!.PayoutClubId);
+        var reset = await trainer.DeleteAsync(url);
+        reset.EnsureSuccessStatusCode();
+        var dto = await reset.ReadAsync<MountedGames.Api.Controllers.DecFormConfigDto>();
+        Assert.True(dto.IsStandard);
+        Assert.Equal(ownerClub, dto.Config.PayoutClubId);
+    }
+
+    [Fact]
+    public async Task IsClubManagerAsync_RechecksDatabaseRoleWhenTokenHasStaleManagerClaim()
+    {
+        var (_, clubId, userId) = await ManagerWithClubAsync();
+        var claims = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+        [
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, userId),
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, MountedGames.Api.Auth.Roles.Manager),
+        ], "test"));
+
+        Assert.True(await _f.WithDbAsync(db => MountedGames.Api.Services.ClubAccess.IsClubManagerAsync(db, claims, clubId)));
+
+        await _f.WithDbAsync(async db =>
+        {
+            var roles = await db.UserRoles.Where(ur => ur.UserId == userId).ToListAsync();
+            db.UserRoles.RemoveRange(roles);
+            await db.SaveChangesAsync();
+        });
+
+        Assert.False(await _f.WithDbAsync(db => MountedGames.Api.Services.ClubAccess.IsClubManagerAsync(db, claims, clubId)));
+        Assert.False(await _f.WithDbAsync(db => MountedGames.Api.Services.ClubAccess.SharesClubRosterAsync(db, claims, clubId)));
+    }
+
     // ---- rules ----
 
     [Theory]

@@ -1,6 +1,6 @@
 import type { Heat, Session } from '../types';
 import { displaySectionName } from './section.ts';
-import type { HeatTiming, SessionTiming } from './time';
+import { formatDelayDuration, type HeatTiming, type SessionTiming } from './time.ts';
 
 export type TimetableStatus = 'on-time' | 'late' | 'live' | 'finished';
 export const TIMETABLE_COLOURS = { 'on-time': '#2E8B4F', late: '#C08308', live: '#2563EB', finished: '#A3A39B' } as const;
@@ -14,11 +14,11 @@ export function timetableStatus(finished: boolean, live: boolean, scheduled: Dat
   return { status: finished ? 'finished' : live ? 'live' : delayMinutes > 0 ? 'late' : 'on-time', delayMinutes };
 }
 
-/** The words on a row's status pill: "On now", "+8 min", "On time" or "Finished". */
+/** The words on a row's status pill: "On now", "+8 min", "+1h 34m", "On time" or "Finished". */
 export function statusLabel(status: TimetableStatus, delayMinutes: number): string {
   if (status === 'finished') return 'Finished';
   if (status === 'live') return 'On now';
-  return status === 'late' ? `+${delayMinutes} min` : 'On time';
+  return status === 'late' ? `+${formatDelayDuration(delayMinutes)}` : 'On time';
 }
 
 export interface TimetableRow {

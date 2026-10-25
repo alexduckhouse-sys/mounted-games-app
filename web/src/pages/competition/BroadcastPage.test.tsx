@@ -29,7 +29,7 @@ const publisher = vi.hoisted(() => ({
   getSnapshot: () => state.snapshot,
   subscribe: (listener: () => void) => { state.listener = listener; return () => {}; },
   capture: vi.fn(), devices: vi.fn(), audioDevices: vi.fn(async (): Promise<MediaDeviceInfo[]> => []), switchCamera: vi.fn(), switchAudio: vi.fn(),
-  setWindFilter: vi.fn(), setZoom: vi.fn(), setQualityPreset: vi.fn(),
+  setWindFilter: vi.fn(), setZoom: vi.fn(), setQualityPreset: vi.fn(), reconnect: vi.fn(),
   start: vi.fn(), stop: vi.fn(), dispose: vi.fn(), mute: vi.fn(), pause: vi.fn(), caption: vi.fn(), viewers: vi.fn(),
 }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
@@ -180,7 +180,11 @@ it('shows remaining free-plan stream time, allows +15m extension, and auto-stops
   });
   expect(publisher.stop).toHaveBeenCalledTimes(1);
 });
-it('redirects ProducePage to BroadcastPage', () => {
+it('renders ProducePage as the 2nd phone remote stream controller and dual-camera switcher', async () => {
+  state.streams = [
+    { id: 1, competitionId: 1, arenaName: 'Main Arena', angleName: 'Main camera', status: 0, viewerCount: 5 },
+    { id: 2, competitionId: 1, arenaName: 'Main Arena', angleName: 'Finish line', status: 0, viewerCount: 3 },
+  ];
   render(
     <MemoryRouter initialEntries={['/competitions/1/produce']}>
       <Routes>
@@ -189,7 +193,58 @@ it('redirects ProducePage to BroadcastPage', () => {
       </Routes>
     </MemoryRouter>,
   );
-  expect(screen.getByRole('heading', { name: 'Go live' })).toBeVisible();
+  expect(screen.getByRole('heading', { name: 'Remote stream controller' })).toBeVisible();
+
+  // Pair 2nd camera phone QR modal
+  fireEvent.click(screen.getByRole('button', { name: /Add 2nd camera phone/i }));
+  expect(screen.getByRole('region', { name: 'Add second camera phone' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Changeover line' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+  // Switch active camera angle
+  fireEvent.click(screen.getByRole('button', { name: 'Cut to angle' }));
+  await settle();
+  expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/2/command', {
+    command: 'selectAngle',
+    value: '2',
+  });
+
+  // Remote camera controls from 2nd phone
+  fireEvent.click(screen.getByRole('button', { name: '2x Zoom' }));
+  await settle();
+  expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/2/command', {
+    command: 'setZoom',
+    value: '2',
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: '480p Saver' }));
+  await settle();
+  expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/2/command', {
+    command: 'setQualityPreset',
+    value: '480p',
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Save 15s replay' }));
+  await settle();
+  expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/2/command', {
+    command: 'saveReplay',
+    value: '15',
+  });
+
+  // Centred overlay triggers from 2nd phone
+  fireEvent.click(screen.getByRole('button', { name: 'Toplist' }));
+  await settle();
+  expect(state.overlay?.look).toMatchObject({ liveCard: 'toplist' });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Hide overlay' }));
+  await settle();
+  expect(state.overlay?.look).toMatchObject({ liveCard: 'none' });
+
+  // Live announcement banner from 2nd phone
+  fireEvent.change(screen.getByLabelText('Banner message'), { target: { value: 'Next heat in arena' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Post' }));
+  await settle();
+  expect(state.overlay?.bannerText).toBe('Next heat in arena');
 });
 it('supports microphone selection, wind filter, quality presets, camera zoom, tripod screen dimming, multi-camera director cut, and remote commands', async () => {
   publisher.audioDevices.mockResolvedValue([{ deviceId: 'rodelink', label: 'Rode Wireless GO' } as MediaDeviceInfo]);
@@ -250,4 +305,43 @@ it('supports microphone selection, wind filter, quality presets, camera zoom, tr
   state.lastStreamCommand = { streamId: 1, arenaName: 'Main Arena', command: 'setQualityPreset', value: '360p', issuedAt: '2026-10-24T12:06:00Z' };
   rerender(<MemoryRouter initialEntries={['/competitions/1/broadcast']}><BroadcastPage /></MemoryRouter>);
   expect(publisher.setQualityPreset).toHaveBeenLastCalledWith('360p');
+
+  // On-air quality pills, quick mic mute button, and one-tap reconnect when signal drops
+  fireEvent.click(screen.getByRole('button', { name: '480p Saver' }));
+  expect(publisher.setQualityPreset).toHaveBeenLastCalledWith('480p');
+  fireEvent.click(screen.getByRole('button', { name: 'Auto HD' }));
+  expect(publisher.setQualityPreset).toHaveBeenLastCalledWith('auto');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Mute microphone' }));
+  await settle();
+  expect(publisher.mute).toHaveBeenLastCalledWith(true);
+
+  act(() => update({ signal: 'poor' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reconnect stream' }));
+  expect(publisher.reconnect).toHaveBeenCalledTimes(1);
+
+  // The on-air replay status reports retained media, not elapsed broadcast time
+  expect(screen.getByText(/Replay history:/)).toBeVisible();
+
+  // Bottom bar ("Viewers see") hides automatically when Overlays modal is opened
+  expect(screen.getByText('Viewers see')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Overlays' }));
+  expect(screen.queryByText('Viewers see')).toBeNull();
+
+  // Open 30m replay hub from Overlays modal
+  fireEvent.click(screen.getByRole('button', { name: '30m replay hub' }));
+  expect(screen.getByRole('dialog', { name: 'Saved replays' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Close saved replays' }));
+});
+
+it('pre-fills arena and camera angle from query parameters when pairing a 2nd camera phone', async () => {
+  render(
+    <MemoryRouter initialEntries={['/competitions/1/broadcast?arena=Second+Arena&angle=Finish+line']}>
+      <BroadcastPage />
+    </MemoryRouter>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Allow camera' }));
+  await settle();
+  expect(screen.getByRole('button', { name: 'Second Arena' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Finish line' })).toHaveAttribute('aria-pressed', 'true');
 });

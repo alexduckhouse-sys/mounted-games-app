@@ -614,8 +614,8 @@ function Draw({ data }: { data: PrintableDraw }) {
       return <div key={heat.heatId} className="event-print-block">
         <h3>{heat.label} <span>{time(heat.scheduledStart)}</span></h3>
         <div className="event-print-table-wrap"><table>
-          <thead><tr><th>Lane</th><th>Team</th><th>Club</th>{heat.races.map((race, index) => <th key={race.raceId} className="event-print-cell">{index + 1}. {race.name}</th>)}<th className="event-print-cell">Total</th></tr></thead>
-          <tbody>{teams.map((team) => <tr key={team.teamId}><td>{team.lane}</td><td>{team.teamName}</td><td>{team.clubName}</td>{heat.races.map((race) => <td key={race.raceId} className="event-print-cell" />)}<td className="event-print-cell" /></tr>)}</tbody>
+          <thead><tr><th>Lane</th><th>Team</th>{heat.races.map((race, index) => <th key={race.raceId} className="event-print-cell">{index + 1}. {race.name}</th>)}<th className="event-print-cell">Total</th></tr></thead>
+          <tbody>{teams.map((team) => <tr key={team.teamId}><td>{team.lane}</td><td>{team.teamName}</td>{heat.races.map((race) => <td key={race.raceId} className="event-print-cell" />)}<td className="event-print-cell" /></tr>)}</tbody>
         </table></div>
       </div>;
     })}
@@ -658,7 +658,7 @@ function Results({ data }: { data: PrintableResults }) {
   return <>{data.isProvisional && <p className="event-print-provisional">Provisional results: some races are not complete.</p>}{data.sections.length === 0 ? <p className="event-print-empty">No sections are available yet.</p> : data.sections.map((section) => {
     // Tack check bonus points are part of the total; the column shows them only when a section has any.
     const hasBonus = section.results.some((row) => (row.bonusPoints ?? 0) > 0);
-    return <section key={section.competitionSectionId} className="event-print-section"><h2>{section.sectionName}</h2>{section.results.length === 0 ? <p className="event-print-empty">No results yet.</p> : <div className="event-print-table-wrap"><table><thead><tr><th>Pos.</th><th>Team</th><th>Club</th><th>Points</th>{hasBonus && <th>Tack bonus</th>}<th>Races</th><th>Wins</th><th>Elim.</th></tr></thead><tbody>{section.results.map((row) => <tr key={row.teamId}><td>{row.rank}</td><td>{row.teamName}</td><td>{row.clubName}</td><td><strong>{row.totalPoints}</strong></td>{hasBonus && <td>{row.bonusPoints ?? 0}</td>}<td>{row.racesRun}</td><td>{row.wins}</td><td>{row.eliminations}</td></tr>)}</tbody></table></div>}</section>;
+    return <section key={section.competitionSectionId} className="event-print-section"><h2>{section.sectionName}</h2>{section.results.length === 0 ? <p className="event-print-empty">No results yet.</p> : <div className="event-print-table-wrap"><table><thead><tr><th>Pos.</th><th>Team</th><th>Points</th>{hasBonus && <th>Tack bonus</th>}<th>Races</th><th>Wins</th><th>Elim.</th></tr></thead><tbody>{section.results.map((row) => <tr key={row.teamId}><td>{row.rank}</td><td>{row.teamName}</td><td><strong>{row.totalPoints}</strong></td>{hasBonus && <td>{row.bonusPoints ?? 0}</td>}<td>{row.racesRun}</td><td>{row.wins}</td><td>{row.eliminations}</td></tr>)}</tbody></table></div>}</section>;
   })}</>;
 }
 

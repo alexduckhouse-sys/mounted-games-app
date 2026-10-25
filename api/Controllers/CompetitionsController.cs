@@ -164,7 +164,7 @@ public class CompetitionsController : ControllerBase
             c.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             isDemo: await IsDemoCompetitionAsync(c.Id),
-            payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId),
+            payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson),
             includePaymentDetails: User.Identity?.IsAuthenticated == true);
     }
 
@@ -202,7 +202,7 @@ public class CompetitionsController : ControllerBase
             teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             isDemo: await IsDemoCompetitionAsync(c.Id),
-            payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId),
+            payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson),
             includePaymentDetails: User.Identity?.IsAuthenticated == true);
     }
 
@@ -257,6 +257,7 @@ public class CompetitionsController : ControllerBase
             lat ??= gLat;
             lon ??= gLon;
         }
+        var creatorClubId = await _db.ClubIdOfAsync(User);
         var c = new Competition
         {
             Name = req.Name,
@@ -271,8 +272,8 @@ public class CompetitionsController : ControllerBase
             OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
             TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim(),
-            // New competitions start with the basic dec form; older ones with no setup keep the standard form.
-            DecFormConfigJson = MountedGames.Api.Services.DecForms.DecFormConfig.Basic.ToJson(),
+            // New competitions start with the basic dec form and pin the creator's club for payouts; older ones with no setup keep the standard form.
+            DecFormConfigJson = (MountedGames.Api.Services.DecForms.DecFormConfig.Basic with { PayoutClubId = creatorClubId }).ToJson(),
             LaneHatbands = PlannedRaceList.Write(req.LaneHatbands),
             StartDate = req.StartDate,
             EndDate = req.EndDate,

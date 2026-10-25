@@ -37,6 +37,7 @@ const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab')
 const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').then((module) => ({ default: module.BroadcastPage })));
 const ProducePage = lazy(() => import('./pages/competition/ProducePage').then((module) => ({ default: module.ProducePage })));
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
+const ContactOrganisersPage = lazy(() => import('./pages/competition/ContactOrganisersPage').then((module) => ({ default: module.ContactOrganisersPage })));
 const EntryPage = lazy(() => import('./pages/competition/EntryPage').then((module) => ({ default: module.EntryPage })));
 const SectionEntryPage = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.SectionEntryPage })));
 const DetailsTab = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.DetailsTab })));
@@ -115,6 +116,7 @@ export default function App() {
                 <Route path="arena" element={<ArenaPage />} />
                 <Route path="weather" element={<WeatherPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
+                <Route path="timetable" element={<Navigate to=".." replace />} />
                 <Route path="teams" element={<TeamsTab />} />
                 <Route path="teams/:teamId" element={<CompetitionTeamPage />} />
                 <Route path="following" element={<FollowingTab />} />
@@ -126,6 +128,7 @@ export default function App() {
                 <Route path="broadcast" element={<ProtectedRoute roles={['Admin', 'Trainer']}><BroadcastPage /></ProtectedRoute>} />
                 <Route path="produce" element={<ProtectedRoute roles={['Admin', 'Trainer']}><ProducePage /></ProtectedRoute>} />
                 <Route path="chat" element={<AfterDrawOnly><ChatTab /></AfterDrawOnly>} />
+                <Route path="contact" element={<ContactOrganisersPage />} />
                 <Route path="details" element={<DetailsTab />} />
                 <Route path="sponsors" element={<SponsorsPage />} />
                 <Route path="live" element={<Navigate to="../chat" replace />} />

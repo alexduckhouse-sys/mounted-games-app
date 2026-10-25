@@ -449,7 +449,12 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
       {canEditStream ? <button ref={changeRef} type="button" className="staff-stream-change" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>Change</button>
         : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>Change</Link> : null}
     </div>
-    {canBroadcast && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}><Video aria-hidden="true" />Go live from this device</Link>}
+    {canBroadcast && (
+      <div className="flex flex-wrap gap-2">
+        <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}><Video aria-hidden="true" />Go live from this device</Link>
+        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/produce`}>Remote controller (2nd phone)</Link>
+      </div>
+    )}
     {streamingNotSetUp && <p className="mg-notice" role="status">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</p>}
     {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
   </div>;

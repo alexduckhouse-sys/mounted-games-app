@@ -2,7 +2,7 @@ import type { CompetitionDetail, LiveStream } from '../types';
 import { competitionDateText } from './competitionDates';
 import { heatName } from './following';
 import { displaySectionName } from './section';
-import { computeTimings, formatTime } from './time';
+import { computeTimings, formatDelayDuration, formatTime } from './time';
 import { sessionOrdinals, timetableRows } from './timetableRows';
 
 export interface Fact { text: string; tone: 'normal' | 'late' | 'muted' }
@@ -39,7 +39,7 @@ export function eventFacts(competition: CompetitionDetail, streams: readonly Liv
   const arena = late?.session.arenaName?.trim();
   const firstOpen = open.find((row) => row.effective);
   const timetable: Fact = late
-    ? { text: `${arena ? `${arena} · ` : ''}${late.delayMinutes} min late`, tone: 'late' }
+    ? { text: `${arena ? `${arena} · ` : ''}${formatDelayDuration(late.delayMinutes)} late`, tone: 'late' }
     : running ? { text: 'Running on time', tone: 'normal' }
     : firstOpen ? { text: `Next at ${formatTime(firstOpen.effective)}`, tone: 'normal' }
     : { text: rows.length ? 'All done' : 'Not published yet', tone: 'muted' };

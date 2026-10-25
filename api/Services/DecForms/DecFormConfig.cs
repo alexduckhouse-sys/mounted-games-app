@@ -28,7 +28,8 @@ public record DecFormConfig(
     FieldRequirement PonyHeight, FieldRequirement PonyPassport, FieldRequirement PonyAge,
     FieldRequirement MembershipNumber, FieldRequirement EmergencyContact, FieldRequirement MedicalNotes,
     IReadOnlyList<DecFormCustomField> CustomFields,
-    FieldRequirement TrainerPhone = FieldRequirement.Off, FieldRequirement Bib = FieldRequirement.Off)
+    FieldRequirement TrainerPhone = FieldRequirement.Off, FieldRequirement Bib = FieldRequirement.Off,
+    int? PayoutClubId = null)
 {
     /// <summary>Today's form: date of birth, pony height and nothing else added. Kept exactly for competitions that never set one up.</summary>
     public static readonly DecFormConfig Standard = new(

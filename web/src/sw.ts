@@ -18,9 +18,9 @@ if (import.meta.env.PROD) {
 }
 
 registerRoute(
-  ({ url, request }) => url.origin === self.location.origin && canCachePublicApi(url.pathname, request.method) && !isEmbedRequest(request.headers),
+  ({ url, request }) => url.origin === self.location.origin && canCachePublicApi(url.pathname, request.method, request.headers) && !isEmbedRequest(request.headers),
   new NetworkFirst({
-    cacheName: 'mg-public-api-v2',
+    cacheName: 'mg-public-api-v3',
     networkTimeoutSeconds: 4,
     plugins: [
       {
@@ -37,7 +37,7 @@ registerRoute(({ url }) => url.pathname.startsWith('/api/') || url.pathname.star
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    await caches.delete('mg-api');
+    await Promise.all(['mg-api', 'mg-public-api-v2'].map((name) => caches.delete(name)));
     await self.clients.claim();
   })());
 });

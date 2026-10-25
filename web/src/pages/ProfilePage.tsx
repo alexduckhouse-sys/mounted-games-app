@@ -9,6 +9,7 @@ import { usePageWidth } from '../components/pageWidthState';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useMyTeams } from '../hooks/useMyTeams';
 import { heatRowsForTeam, heatTime } from '../lib/myTeams';
+import { formatDelayDuration } from '../lib/time';
 import { dayKey } from '../lib/timetableDay';
 import { displaySectionName } from '../lib/section';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
@@ -91,7 +92,7 @@ export function ProfilePage() {
         <span className={`shrink-0 font-semibold ${row.delayMinutes > 0 ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{heatTime(row)}</span>
         <span className="flex min-w-0 flex-col gap-1">
           <strong>{team.displayName}</strong>
-          <span className="text-xs text-[rgb(var(--mg-muted))]">{[displaySectionName(team.sectionName), row.sessionName, row.label, row.lane != null ? `Lane ${row.lane}` : '', row.delayMinutes > 0 ? `+${row.delayMinutes} min` : ''].filter(Boolean).join(' · ')}</span>
+          <span className="text-xs text-[rgb(var(--mg-muted))]">{[displaySectionName(team.sectionName), row.sessionName, row.label, row.lane != null ? `Lane ${row.lane}` : '', row.delayMinutes > 0 ? `+${formatDelayDuration(row.delayMinutes)}` : ''].filter(Boolean).join(' · ')}</span>
         </span>
       </Link>)}
     </div>

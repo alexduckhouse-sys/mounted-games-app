@@ -765,4 +765,14 @@ describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
     });
     renderWithComp({ look: { liveCard: 'lanes' } }, comp, 'Arena 1');
   });
+
+  it('centres live data overlay cards and hides the bottom now-racing strip while an overlay popup is active', () => {
+    const view = renderWithComp({ look: { liveCard: 'heat' } });
+    const card = screen.getByRole('region', { name: /Heat table:/i });
+    expect(card).toHaveClass('mg-ov-card-center');
+    expect(screen.queryByLabelText('Now racing')).toBeNull();
+
+    view.refresh({ overlay: { ...DEFAULT_OVERLAY, look: { liveCard: 'none' } } });
+    expect(screen.getByLabelText('Now racing')).toBeInTheDocument();
+  });
 });

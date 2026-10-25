@@ -1,6 +1,6 @@
 import type { CompetitionDetail, Session } from '../types';
 import { displaySectionName } from './section';
-import { computeTimings, formatTime } from './time';
+import { computeTimings, formatDelayDuration, formatTime } from './time';
 import { timetableRows } from './timetableRows';
 
 /** Uses the public timetable's timings and statuses, including pinned heat times. */
@@ -72,7 +72,7 @@ export function summariseNext(team: { sectionName?: string | null }, next: TeamN
     const arena = arenaToShow(row.session, arenas);
     const where = `${heatName(row)}, lane ${lane}${arena ? ` · ${arena}` : ''}`;
     const tone = row.status === 'live' ? 'live' : row.status === 'late' ? 'late' : 'ok';
-    const label = tone === 'live' ? 'On now' : tone === 'late' ? `+${row.delayMinutes} min` : 'Next heat';
+    const label = tone === 'live' ? 'On now' : tone === 'late' ? `+${formatDelayDuration(row.delayMinutes)}` : 'Next heat';
     return { sub: lead(where), time: formatTime(row.effective), label, tone };
   }
   if (next?.kind === 'done') return { sub: lead('finished'), time: '–', label: 'Heats done', tone: 'wait' };

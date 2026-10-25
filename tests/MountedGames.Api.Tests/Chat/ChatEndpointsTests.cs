@@ -488,7 +488,7 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
     {
         var a = await _f.CreateArenaAsync(1);
         var login = await (await _f.CreateClient().PostAsJsonAsync("/api/auth/admin-key",
-            new MountedGames.Api.Auth.AdminKeyRequest(ApiFactory.AdminKey, "Chief Steward", "steward@example.com")))
+            new MountedGames.Api.Auth.AdminKeyRequest(ApiFactory.AdminKey, "Chief Steward", "steward@example.com", "Passw0rd!x")))
             .ReadAsync<MountedGames.Api.Auth.AuthResponse>();
         var steward = _f.WithToken(login.Token);
 

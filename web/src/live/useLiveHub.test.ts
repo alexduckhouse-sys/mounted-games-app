@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeStoredAuth } from '../api';
-import { useLiveHub, type LiveHandlers } from './useLiveHub';
+import { LITE_HUB_COALESCE_MS, useLiveHub, type LiveHandlers } from './useLiveHub';
 
 const auth = vi.hoisted(() => ({ token: null as string | null }));
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ token: auth.token }) }));
@@ -297,6 +297,59 @@ describe('useLiveHub', () => {
       await vi.advanceTimersByTimeAsync(60_000);
       expect(connection.start).not.toHaveBeenCalled();
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('coalesces bursty scoring, session and telemetry events in Lite Mode and cancels pending timers on unmount', async () => {
+    vi.useFakeTimers();
+    document.documentElement.dataset.lite = 'true';
+    try {
+      const connection = next();
+      const onSessionUpdated = vi.fn();
+      const onResultsUpdated = vi.fn();
+      const onStreamViewers = vi.fn();
+      const onStreamTelemetry = vi.fn();
+      const { unmount } = renderHook(() => useLiveHub(1, { onSessionUpdated, onResultsUpdated, onStreamViewers, onStreamTelemetry }));
+      await flush();
+
+      connection.emit('sessionUpdated', { id: 1, name: 'v1' });
+      connection.emit('sessionUpdated', { id: 1, name: 'v2' });
+      connection.emit('resultsUpdated', { sessionId: 1, raceId: 10 });
+      connection.emit('resultsUpdated', { sessionId: 1, raceId: 11 });
+      connection.emit('streamViewers', { streamId: 6, count: 5 });
+      connection.emit('streamViewers', { streamId: 6, count: 9 });
+      connection.emit('streamTelemetry', { streamId: 6, arenaName: 'A', updatedAt: 't1' });
+      connection.emit('streamTelemetry', { streamId: 6, arenaName: 'A', updatedAt: 't2' });
+      connection.emit('streamViewers', { streamId: 7, count: 3 });
+      connection.emit('streamTelemetry', { streamId: 7, arenaName: 'B', updatedAt: 't2' });
+
+      expect(onSessionUpdated).not.toHaveBeenCalled();
+      expect(onResultsUpdated).not.toHaveBeenCalled();
+      expect(onStreamViewers).not.toHaveBeenCalled();
+      expect(onStreamTelemetry).not.toHaveBeenCalled();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(LITE_HUB_COALESCE_MS); });
+
+      expect(onSessionUpdated).toHaveBeenCalledTimes(2);
+      expect(onSessionUpdated).toHaveBeenCalledWith({ id: 1, name: 'v2' });
+      expect(onResultsUpdated).toHaveBeenCalledTimes(2);
+      expect(onResultsUpdated).toHaveBeenCalledWith({ sessionId: 1, raceId: 11 });
+      expect(onStreamViewers).toHaveBeenCalledTimes(2);
+      expect(onStreamViewers).toHaveBeenCalledWith({ streamId: 6, count: 9 });
+      expect(onStreamViewers).toHaveBeenCalledWith({ streamId: 7, count: 3 });
+      expect(onStreamTelemetry).toHaveBeenCalledTimes(2);
+      expect(onStreamTelemetry).toHaveBeenCalledWith({ streamId: 6, arenaName: 'A', updatedAt: 't2' });
+      expect(onStreamTelemetry).toHaveBeenCalledWith({ streamId: 7, arenaName: 'B', updatedAt: 't2' });
+      expect(onResultsUpdated.mock.calls).toEqual([[{ sessionId: 1, raceId: 10 }], [{ sessionId: 1, raceId: 11 }]]);
+
+      // Queue another burst, then unmount before the coalesce window elapses.
+      connection.emit('resultsUpdated', { sessionId: 1, raceId: 12 });
+      unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(LITE_HUB_COALESCE_MS * 2); });
+      expect(onResultsUpdated).toHaveBeenCalledTimes(2);
+    } finally {
+      delete document.documentElement.dataset.lite;
       vi.useRealTimers();
     }
   });

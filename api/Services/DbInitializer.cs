@@ -708,7 +708,7 @@ public static class DbInitializer
 
             var raceNames = new[]
             {
-                "Bending", "Litter Lifter", "Five Flag", "Stepping Stones",
+                "Bending", "Litter", "Five Flag", "Stepping Stones",
                 "Tack Shop", "Bottle", "Big Sack", "Two Flag",
             };
             var heat1 = new Heat

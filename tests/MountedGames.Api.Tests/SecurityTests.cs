@@ -186,7 +186,7 @@ public class SecurityTests
     [Fact]
     public async Task PasswordFailuresLockTheAccountEvenWhenTheNextPasswordIsCorrect()
     {
-        await using var server = await SecurityServer.Start();
+        await using var server = await SecurityServer.Start(authLimit: 20);
         using (var scope = server.App.Services.CreateScope())
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
@@ -209,7 +209,7 @@ public class SecurityTests
     public async Task AuthLimiterRejectsRepeatedAttemptsAndIgnoresSpoofedForwardedHeaders()
     {
         await using var server = await SecurityServer.Start();
-        for (var i = 0; i < 10; i++)
+        for (var i = 0; i < 5; i++)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "/limit");
             request.Headers.Add("X-Forwarded-For", $"192.0.2.{i + 1}");
@@ -400,7 +400,7 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
     public WebApplication App => app;
     public HttpClient Client => client;
 
-    public static async Task<SecurityServer> Start()
+    public static async Task<SecurityServer> Start(int? authLimit = null)
     {
         var directory = Directory.CreateTempSubdirectory("mg-security-").FullName;
         var webroot = Directory.CreateDirectory(Path.Combine(directory, "wwwroot")).FullName;
@@ -422,6 +422,7 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
         builder.Services.AddSignalR();
         builder.Services.AddSingleton<ILiveBroadcaster, LiveBroadcaster>();
         builder.Services.AddControllers().AddApplicationPart(typeof(SignupController).Assembly);
+        if (authLimit.HasValue) builder.Configuration["RateLimits:AuthPerMinute"] = authLimit.Value.ToString();
         builder.Services.AddRequestLimits(builder.Configuration);
         builder.Services.AddTrustedProxies(builder.Configuration);
         builder.Services.AddProblemDetails();

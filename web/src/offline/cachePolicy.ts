@@ -1,9 +1,25 @@
 /** Only responses with the same public representation for every viewer. */
-export function canCachePublicApi(pathname: string, method = 'GET'): boolean {
-  if (method !== 'GET') return false;
-  return /^\/api\/competitions(?:\/picker|\/[1-9]\d*(?:\/standings)?)?\/?$/.test(pathname)
+export function canCachePublicApi(pathname: string, method = 'GET', headers?: Pick<Headers, 'get'>): boolean {
+  if (method !== 'GET' || headers?.get('Authorization')) return false;
+  return /^\/api\/competitions(?:\/picker|\/[1-9]\d*(?:\/(?:standings|first-view))?)?\/?$/.test(pathname)
     || /^\/api\/competitions\/[1-9]\d*\/sponsors\/?$/.test(pathname)
     || /^\/api\/(?:race-templates|weather\/(?:at|current))\/?$/.test(pathname);
+}
+
+/** Freshness window (2 minutes) in Lite Mode before a stamped public GET response needs network revalidation. */
+export const LITE_CACHE_FRESH_MS = 2 * 60_000;
+
+/** True when a stamped cached response (`X-MG-Saved-At`) was stored within `maxAgeMs` of `now`. */
+export function isFreshCachedResponse(
+  response: Pick<Response, 'headers'> | undefined,
+  maxAgeMs = LITE_CACHE_FRESH_MS,
+  now = Date.now(),
+): boolean {
+  if (!response || maxAgeMs <= 0) return false;
+  const savedAt = Date.parse(response.headers.get('X-MG-Saved-At') ?? '');
+  if (Number.isNaN(savedAt)) return false;
+  const age = now - savedAt;
+  return age >= 0 && age <= maxAgeMs;
 }
 
 export async function stampPublicResponse(response: Response): Promise<Response | null> {

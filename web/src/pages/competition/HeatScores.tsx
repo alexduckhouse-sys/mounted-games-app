@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Star } from 'lucide-react';
 import { useCompetition } from './context';
 import type { Heat, HeatEntry, Race, Session } from '../../types';
-import { computeTimings } from '../../lib/time';
+import { computeTimings, formatDelayDuration } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { timetableRows } from '../../lib/timetableRows';
 import { useCompactPageBar } from '../../components/CompactPageBarContext';
@@ -130,7 +130,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
     ? `Race ${runningIndex + 1} of ${columns.length} · ${runningRace.name}`
     : finished
       ? [time, 'Final result'].filter(Boolean).join(' · ')
-      : time ? `Starts ${time}${status === 'late' && row ? ` · running ${row.delayMinutes} min late` : ''}` : 'Start time to be confirmed';
+      : time ? `Starts ${time}${status === 'late' && row ? ` · running ${formatDelayDuration(row.delayMinutes)} late` : ''}` : 'Start time to be confirmed';
   const compactSubtitle = [section ? `${section} heats` : 'Heats', session.arenaName?.trim()].filter(Boolean).join(' · ');
   const compactBadge = status === 'live' ? 'live' : finished ? 'finished' : 'next';
 

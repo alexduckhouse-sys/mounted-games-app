@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Mic, Monitor, Radio, Trophy, Users } from 'lucide-react';
+import { ClipboardCheck, Mic, Monitor, QrCode as QrCodeIcon, Radio, Sparkles, Table2, Trophy, Users } from 'lucide-react';
 import { api } from '../../api';
+import { useAuth } from '../../auth/AuthContext';
 import { BibSwatch } from '../../components/BibSwatch';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { QrAccessModal } from '../../components/QrAccessModal';
+import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
 import { usePageWidth } from '../../components/pageWidthState';
 import { formatPoints } from '../../lib/formatPoints';
 import { statusLetter } from '../../lib/resultStatus';
@@ -13,8 +16,9 @@ import { buildToplist, ordinal, sectionScoreVersion } from '../../lib/toplist';
 import { useLiveHub } from '../../live/useLiveHub';
 import type { DeclarationForm, Heat, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
+import { HeatScores } from './HeatScores';
 
-type DeskMode = 'split' | 'lanes' | 'standings';
+type DeskMode = 'split' | 'lanes' | 'heat' | 'standings';
 
 const isRaceSession = (s: Session) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0;
 const isHeatDone = (h: Heat) => Boolean(h.finishedAt) || (h.races.length > 0 && h.races.every((r) => r.isComplete));
@@ -29,6 +33,8 @@ function defaultDeskSectionId(sessions: Session[], sectionIds: number[], request
 export function CommentaryDeskPage() {
   usePageWidth('wide');
   const { competition, reload } = useCompetition();
+  const { canOrganise } = useAuth();
+  const canControlStreams = canOrganise(competition);
   const [searchParams, setSearchParams] = useSearchParams();
   const sectionIds = useMemo(() => competition.sections.map((s) => s.id), [competition.sections]);
   const requestedSection = Number(searchParams.get('section'));
@@ -44,6 +50,7 @@ export function CommentaryDeskPage() {
   const [standingsBySection, setStandingsBySection] = useState<Record<number, { rows: StandingRow[]; source: typeof refreshSource; failed?: boolean }>>({});
   const [declarations, setDeclarations] = useState<DeclarationForm[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [showQrModal, setShowQrModal] = useState(false);
 
   const bumpRefresh = useCallback(() => {
     setRefreshTick((t) => t + 1);
@@ -144,9 +151,10 @@ export function CommentaryDeskPage() {
     [standings, competition.sessions, competition.teams, sectionId, section?.finalistCount],
   );
 
-  // Compute last race result per team in this section
-  const lastRaceByTeamId = useMemo(() => {
+  // Compute last race result per team and latest race winner in this section
+  const { lastRaceByTeamId, latestRaceSummary } = useMemo(() => {
     const map = new Map<number, string>();
+    let latestWinner: string | null = null;
     const sessions = competition.sessions
       .filter((s) => isRaceSession(s) && (sectionId == null || s.competitionSectionId === sectionId))
       .slice()
@@ -166,10 +174,14 @@ export function CommentaryDeskPage() {
                   : 'Scored';
             map.set(res.teamId, `${placeText} in ${r.name} (${formatPoints(res.points)} pts)`);
           }
+          const winner = r.results.find((res) => !res.eliminated && !res.isSitOut && res.placing === 1);
+          if (winner) {
+            latestWinner = `${winner.teamName} won ${r.name} (+${formatPoints(winner.points)} pts)`;
+          }
         }
       }
     }
-    return map;
+    return { lastRaceByTeamId: map, latestRaceSummary: latestWinner };
   }, [competition.sessions, sectionId]);
 
   // Section heats in running order
@@ -275,6 +287,31 @@ export function CommentaryDeskPage() {
     return map;
   }, [orderedStandings]);
 
+  // Key Talking Points summary for the commentator
+  const talkingPoints = useMemo(() => {
+    const cutoffPlaces = section?.finalistCount ?? 6;
+    const leader = orderedStandings[0] ?? null;
+    const leaderText = toplist.started && leader
+      ? `${leader.teamName} (${formatPoints(leader.totalPoints)} pts, ${leader.wins} ${leader.wins === 1 ? 'win' : 'wins'})`
+      : 'No races scored yet';
+
+    let cutoffText = `Top ${cutoffPlaces} qualify for the A Final`;
+    if (toplist.started && orderedStandings.length > cutoffPlaces) {
+      const onBubble = orderedStandings[cutoffPlaces - 1];
+      const chasing = orderedStandings[cutoffPlaces];
+      if (onBubble && chasing) {
+        const diff = Math.max(0, onBubble.totalPoints - chasing.totalPoints);
+        cutoffText = `${onBubble.teamName} (${formatPoints(onBubble.totalPoints)} pts) holds ${ordinal(cutoffPlaces)} — ${chasing.teamName} is ${formatPoints(diff)} pts behind`;
+      }
+    }
+
+    return {
+      leaderText,
+      cutoffText,
+      latestWinner: latestRaceSummary ?? 'Waiting for first completed race',
+    };
+  }, [section?.finalistCount, orderedStandings, toplist.started, latestRaceSummary]);
+
   return (
     <div className="mx-auto flex w-full flex-col gap-4 py-3">
       {standingsStale && <p role="status">{standings.length ? 'Showing saved standings while results refresh.' : 'Waiting for official standings.'}</p>}
@@ -317,6 +354,23 @@ export function CommentaryDeskPage() {
               </label>
             )}
 
+            {activeHeatItem && (
+              <Link
+                to={`/competitions/${competition.id}/session/${activeHeatItem.session.id}?heat=${activeHeatItem.heat.id}&commentator=1`}
+                className="mg-btn mg-btn-primary !min-h-10 !px-3 text-xs font-bold"
+              >
+                <ClipboardCheck className="h-4 w-4" aria-hidden="true" /> Score &amp; Commentate
+              </Link>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowQrModal(true)}
+              className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
+            >
+              <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> QR Access
+            </button>
+
             <Link
               to={`/competitions/${competition.id}/tv${sectionId != null ? `?section=${sectionId}` : ''}`}
               className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
@@ -339,6 +393,9 @@ export function CommentaryDeskPage() {
             </button>
             <button type="button" aria-pressed={mode === 'lanes'} onClick={() => setMode('lanes')}>
               Current Heat Lanes
+            </button>
+            <button type="button" aria-pressed={mode === 'heat'} onClick={() => setMode('heat')}>
+              Heat Table
             </button>
             <button type="button" aria-pressed={mode === 'standings'} onClick={() => setMode('standings')}>
               Standings in Order
@@ -364,6 +421,36 @@ export function CommentaryDeskPage() {
           )}
         </div>
       </header>
+
+      {/* Live Stream & Overlay Control Strip */}
+      {canControlStreams && <StreamControlStrip
+        competitionId={competition.id}
+        arenaName={activeHeatItem?.session.arenaName}
+        sectionId={sectionId}
+        activeHeatId={activeHeatItem?.heat.id}
+      />}
+
+      {/* Key Talking Points Banner */}
+      <section aria-label="Key talking points" className="mg-card grid grid-cols-1 gap-3 p-3.5 sm:grid-cols-3">
+        <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-2">
+          <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
+            <Trophy className="h-3.5 w-3.5 text-[rgb(var(--mg-heading))]" aria-hidden="true" /> Section Leader
+          </span>
+          <p className="mt-1 mb-0 text-sm font-bold text-[rgb(var(--mg-ink))]">{talkingPoints.leaderText}</p>
+        </div>
+        <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-2">
+          <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
+            <Sparkles className="h-3.5 w-3.5 text-[rgb(var(--mg-heading))]" aria-hidden="true" /> Finals Cut-Off Battle
+          </span>
+          <p className="mt-1 mb-0 text-sm font-bold text-[rgb(var(--mg-ink))]">{talkingPoints.cutoffText}</p>
+        </div>
+        <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-2">
+          <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
+            <Radio className="h-3.5 w-3.5 text-[rgb(var(--mg-heading))]" aria-hidden="true" /> Latest Race Winner
+          </span>
+          <p className="mt-1 mb-0 text-sm font-bold text-[rgb(var(--mg-ink))]">{talkingPoints.latestWinner}</p>
+        </div>
+      </section>
 
       {/* Main Content Grid */}
       <div className={mode === 'split' ? 'grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start' : 'flex flex-col gap-4'}>
@@ -447,6 +534,32 @@ export function CommentaryDeskPage() {
           </section>
         )}
 
+        {mode === 'heat' && (
+          <section aria-label="Current Heat Table" className="mg-card overflow-hidden p-4">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] pb-2">
+              <div className="flex items-center gap-2">
+                <Table2 className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
+                <h2 className="mg-display m-0 text-lg font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+                  Current Heat Table
+                </h2>
+              </div>
+              {activeHeatItem && (
+                <span className="text-xs font-bold text-[rgb(var(--mg-body))]">{activeHeatItem.label}</span>
+              )}
+            </div>
+            {activeHeatItem ? (
+              <HeatScores
+                session={activeHeatItem.session}
+                heats={activeHeatItem.session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex)}
+                activeHeatId={activeHeatItem.heat.id}
+                embedded
+              />
+            ) : (
+              <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">No active heat in this section yet.</p>
+            )}
+          </section>
+        )}
+
         {(mode === 'split' || mode === 'standings') && (
           <section aria-label="Standings — Each Team in Order" className="mg-card overflow-hidden">
             <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
@@ -516,6 +629,15 @@ export function CommentaryDeskPage() {
           </section>
         )}
       </div>
+
+      <QrAccessModal
+        open={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        competitionId={competition.id}
+        competitionName={competition.name}
+        sectionId={sectionId}
+        canWrite={canControlStreams}
+      />
     </div>
   );
 }

@@ -8,6 +8,7 @@ using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Calendar;
 using MountedGames.Api.Services.Operations;
 
 namespace MountedGames.Api.Controllers;
@@ -1125,6 +1126,166 @@ public class SessionsController : ControllerBase
         return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
     }
 
+    /// <summary>Marks uncompleted sessions in the competition (or optional arena) as paused at the current UTC timestamp.</summary>
+    [HttpPost("pause")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<IEnumerable<SessionDto>>> PauseTimetable(
+        int competitionId, PauseTimetableRequest? req = null)
+    {
+        var sessions = await SessionsWithDetail()
+            .Where(s => s.CompetitionId == competitionId)
+            .OrderBy(s => s.OrderIndex)
+            .ToListAsync();
+
+        var arenaName = req?.ArenaName;
+        var targetSessions = sessions.Where(s =>
+            s.Status != SessionStatus.Finished
+            && (string.IsNullOrWhiteSpace(arenaName)
+                || string.Equals(s.ArenaName?.Trim(), arenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        foreach (var s in targetSessions)
+        {
+            if (!ParsePauseNoteMs(s.Notes).HasValue) s.Notes = ApplyPauseNote(s.Notes, nowMs);
+        }
+
+        await _db.SaveChangesAsync();
+        foreach (var s in targetSessions)
+            await _live.SessionUpdated(competitionId, s.ToDto());
+
+        return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+    }
+
+    /// <summary>Resumes paused sessions in the competition (or optional arena), converting elapsed pause time into a permanent shift.</summary>
+    [HttpPost("resume")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<IEnumerable<SessionDto>>> ResumeTimetable(
+        int competitionId, ResumeTimetableRequest? req = null)
+    {
+        var sessions = await SessionsWithDetail()
+            .Where(s => s.CompetitionId == competitionId)
+            .OrderBy(s => s.OrderIndex)
+            .ToListAsync();
+
+        var arenaName = req?.ArenaName;
+        var targetSessions = sessions.Where(s =>
+            s.Status != SessionStatus.Finished
+            && (string.IsNullOrWhiteSpace(arenaName)
+                || string.Equals(s.ArenaName?.Trim(), arenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var updatedSessions = new List<Session>();
+        var pausedSessionStarts = new Dictionary<int, DateTime?>();
+        var pausedTimings = TimetableTimes.Compute(sessions, DateTimeOffset.FromUnixTimeMilliseconds(nowMs).UtcDateTime, pausedSessionStarts);
+        foreach (var s in targetSessions)
+        {
+            var pausedMs = ParsePauseNoteMs(s.Notes);
+            if (!pausedMs.HasValue) continue;
+
+            var cleanedNotes = RemovePauseNote(s.Notes);
+            s.Notes = cleanedNotes;
+            var elapsedMs = Math.Max(0, nowMs - pausedMs.Value);
+            var deltaMinutes = elapsedMs >= 30_000 ? Math.Max(1, (int)Math.Round(elapsedMs / 60_000.0, MidpointRounding.AwayFromZero)) : 0;
+            if (deltaMinutes > 0)
+            {
+                var appliedShift = deltaMinutes;
+                if (!s.StartedAt.HasValue && pausedSessionStarts.TryGetValue(s.Id, out var pausedStart) && pausedStart.HasValue)
+                {
+                    // Include any delay already inherited from earlier sessions. A manual shift
+                    // replaces that delay, so adding only the pause would make the timetable jump back.
+                    if (s.ScheduledStart.HasValue)
+                        appliedShift = (int)Math.Round((pausedStart.Value - s.ScheduledStart.Value).TotalMinutes, MidpointRounding.AwayFromZero);
+                    else
+                        s.ScheduledStart = pausedStart.Value.AddMinutes(-appliedShift);
+                }
+                if (s.ScheduledStart.HasValue)
+                {
+                    s.ScheduledStart = s.ScheduledStart.Value.AddMinutes(appliedShift);
+                    s.Notes = ApplyShiftNote(s.Notes, appliedShift);
+                }
+                foreach (var h in s.Heats.Where(h => !h.FinishedAt.HasValue && !h.StartedAt.HasValue))
+                {
+                    // A live session keeps its actual start. Pin its remaining heats to the paused
+                    // timetable so the elapsed pause survives the StartedAt override on resume.
+                    if (s.StartedAt.HasValue && pausedTimings.TryGetValue(h.Id, out var timing))
+                        h.ScheduledStart = timing.Start;
+                    else if (h.ScheduledStart.HasValue)
+                        h.ScheduledStart = h.ScheduledStart.Value.AddMinutes(appliedShift);
+                }
+            }
+            updatedSessions.Add(s);
+        }
+
+        await _db.SaveChangesAsync();
+        foreach (var s in updatedSessions)
+            await _live.SessionUpdated(competitionId, s.ToDto());
+
+        return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+    }
+
+    /// <summary>Returns the learned minutes-per-race pace and duration multiplier for the competition.</summary>
+    [HttpGet("pace-prediction")]
+    [AllowAnonymous]
+    [MountedGames.Api.Security.PublicRead]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-read")]
+    public async Task<ActionResult<PacePredictionDto>> GetPacePrediction(int competitionId)
+    {
+        var comp = await _db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == competitionId);
+        if (comp is null) return NotFound();
+
+        var sessions = await _db.Sessions
+            .AsNoTracking()
+            .Where(s => s.CompetitionId == competitionId)
+            .Include(s => s.Heats).ThenInclude(h => h.Races)
+            .OrderBy(s => s.OrderIndex)
+            .ToListAsync();
+
+        double? historicalAvg = null;
+        var initial = TimetableTimes.PredictPace(sessions);
+        if (initial.AvgMinutesPerRace is null && !string.IsNullOrEmpty(comp.CreatedByUserId))
+        {
+            var pastSessions = await _db.Sessions
+                .AsNoTracking()
+                .Where(s => s.CompetitionId != competitionId && s.Competition != null && s.Competition.CreatedByUserId == comp.CreatedByUserId)
+                .Include(s => s.Heats).ThenInclude(h => h.Races)
+                .ToListAsync();
+            var pastPace = TimetableTimes.PredictPace(pastSessions);
+            historicalAvg = pastPace.AvgMinutesPerRace;
+        }
+
+        var pace = TimetableTimes.PredictPace(sessions, historicalAvg);
+        return new PacePredictionDto(
+            pace.AvgMinutesPerRace,
+            pace.RecommendedMinutesPer5RaceHeat,
+            pace.Multiplier,
+            pace.SampleHeats);
+    }
+
+    private static string ApplyPauseNote(string? notes, long timestampMs)
+    {
+        var cleaned = RemovePauseNote(notes);
+        var tag = $"[paused:{timestampMs}]";
+        return string.IsNullOrWhiteSpace(cleaned) ? tag : $"{cleaned} {tag}";
+    }
+
+    private static long? ParsePauseNoteMs(string? notes)
+    {
+        if (string.IsNullOrEmpty(notes)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(notes, @"\[paused:(\d+)\]");
+        return match.Success && long.TryParse(match.Groups[1].Value, out var ms) ? ms : null;
+    }
+
+    private static string? RemovePauseNote(string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes)) return null;
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(notes, @"\s*\[paused:\d+\]\s*", " ").Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+    }
+
     private static string? ApplyShiftNote(string? notes, int deltaMinutes)
     {
         var raw = notes ?? string.Empty;
@@ -1151,3 +1312,6 @@ public record SetCombinedScoringRequest(string ScoringMode);
 public record HoldCompetitionRequest(string? ResumeTime = null, int? DelayMinutes = null, string? ArenaName = null, bool PostAnnouncement = true);
 public record UpdateSessionRacesRequest(IReadOnlyList<string> RaceNames);
 public record ShiftSessionTimesRequest(int DeltaMinutes, string? ArenaName = null);
+public record PauseTimetableRequest(string? ArenaName = null);
+public record ResumeTimetableRequest(string? ArenaName = null);
+public record PacePredictionDto(double? AvgMinutesPerRace, int? RecommendedMinutesPer5RaceHeat, double Multiplier, int SampleHeats);

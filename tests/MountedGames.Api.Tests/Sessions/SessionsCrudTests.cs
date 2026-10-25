@@ -831,4 +831,166 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
         Assert.Contains("nothing was saved", await rejected.Content.ReadAsStringAsync());
     }
+
+    [Fact]
+    public async Task PauseAndResumeTimetable_RecordsPauseTag_AndConvertsElapsedPauseIntoShift()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var start = new DateTime(2030, 6, 1, 10, 0, 0, DateTimeKind.Utc);
+        await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}"), new UpdateSessionRequest("Session A", "Arena 1", start));
+
+        var pauseRes = await admin.PostAsJsonAsync(Url(a, "/pause"), new { arenaName = "Arena 1" });
+        Assert.Equal(HttpStatusCode.OK, pauseRes.StatusCode);
+        var pausedSession = (await pauseRes.ReadAsync<List<SessionDto>>()).Single(s => s.Id == a.SessionId);
+        Assert.Contains("[paused:", pausedSession.Notes);
+
+        // Backdate the pause timestamp to 12 minutes ago so resume converts it into a +12m shift.
+        var twelveMinsAgoMs = DateTimeOffset.UtcNow.AddMinutes(-12).ToUnixTimeMilliseconds();
+        await _f.WithDbAsync(async db =>
+        {
+            var s = await db.Sessions.SingleAsync(x => x.Id == a.SessionId);
+            s.Notes = $"[paused:{twelveMinsAgoMs}]";
+            await db.SaveChangesAsync();
+        });
+
+        var resumeRes = await admin.PostAsJsonAsync(Url(a, "/resume"), new { arenaName = "Arena 1" });
+        Assert.Equal(HttpStatusCode.OK, resumeRes.StatusCode);
+        var resumed = (await resumeRes.ReadAsync<List<SessionDto>>()).Single(s => s.Id == a.SessionId);
+        Assert.DoesNotContain("[paused:", resumed.Notes ?? string.Empty);
+        Assert.Contains("[shift:+12]", resumed.Notes);
+        Assert.Equal(start.AddMinutes(12), resumed.ScheduledStart);
+    }
+
+    [Fact]
+    public async Task GetPacePrediction_ReturnsLearnedMinutesPerRaceAndMultiplier()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var heat = await (await admin.PostAsJsonAsync(Url(a, $"/{a.SessionId}/heats"),
+            new CreateHeatRequest("Heat 1", 1, new[] { a.TeamIds[0], a.TeamIds[1] }, new[] { "R1", "R2", "R3", "R4", "R5" }))).ReadAsync<HeatDto>();
+
+        var t0 = new DateTime(2030, 6, 1, 9, 0, 0, DateTimeKind.Utc);
+        await _f.WithDbAsync(async db =>
+        {
+            var h = await db.Heats.Include(x => x.Races).SingleAsync(x => x.Id == heat.Id);
+            h.DurationMinutes = 30;
+            h.StartedAt = t0;
+            h.FinishedAt = t0.AddMinutes(25);
+            foreach (var r in h.Races) r.IsComplete = true;
+            await db.SaveChangesAsync();
+        });
+
+        var res = await _f.CreateClient().GetAsync(Url(a, "/pace-prediction"));
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var dto = await res.ReadAsync<MountedGames.Api.Controllers.PacePredictionDto>();
+        Assert.Equal(5.0, dto.AvgMinutesPerRace);
+        Assert.Equal(25, dto.RecommendedMinutesPer5RaceHeat);
+        Assert.Equal(1, dto.SampleHeats);
+        Assert.InRange(dto.Multiplier, 0.8, 0.9);
+    }
+
+    [Fact]
+    public async Task PauseRetryPreservesOriginalTimestamp_AndResumePreservesLiveUpcomingHeatTime()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var first = await _f.AddHeatAsync(a.SessionId, a.TeamIds, "Heat 1");
+        var next = await _f.AddHeatAsync(a.SessionId, a.TeamIds, "Heat 2");
+        var start = new DateTime(2030, 6, 1, 10, 0, 0, DateTimeKind.Utc);
+        var pauseMs = DateTimeOffset.UtcNow.AddMinutes(-12).ToUnixTimeMilliseconds();
+        await _f.WithDbAsync(async db =>
+        {
+            var session = await db.Sessions.Include(x => x.Heats).SingleAsync(x => x.Id == a.SessionId);
+            session.ScheduledStart = start;
+            session.StartedAt = start;
+            session.Status = SessionStatus.InArena;
+            session.ArenaName = "A";
+            session.Notes = $"Keep this note [paused:{pauseMs}]";
+            var active = session.Heats.Single(x => x.Id == first.HeatId);
+            active.OrderIndex = 1;
+            active.DurationMinutes = 30;
+            active.StartedAt = start;
+            session.Heats.Single(x => x.Id == next.HeatId).OrderIndex = 2;
+            await db.SaveChangesAsync();
+        });
+        var retry = await admin.PostAsJsonAsync(Url(a, "/pause"), new { arenaName = "A" });
+        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+        Assert.Contains($"[paused:{pauseMs}]", (await retry.ReadAsync<List<SessionDto>>()).Single().Notes);
+        var resume = await admin.PostAsJsonAsync(Url(a, "/resume"), new { arenaName = "A" });
+        Assert.Equal(HttpStatusCode.OK, resume.StatusCode);
+        var updated = (await resume.ReadAsync<List<SessionDto>>()).Single();
+        Assert.Contains("Keep this note", updated.Notes);
+        Assert.Equal(start, updated.StartedAt);
+        Assert.InRange(updated.Heats.Single(h => h.Id == next.HeatId).ScheduledStart!.Value,
+            start.AddMinutes(42), start.AddMinutes(42).AddSeconds(10));
+        var after = await _f.InDbAsync(async db =>
+        {
+            var sessions = await db.Sessions.Include(x => x.Heats).ThenInclude(x => x.Races)
+                .Where(x => x.CompetitionId == a.CompetitionId).ToListAsync();
+            return MountedGames.Api.Services.Calendar.TimetableTimes.Compute(sessions)[next.HeatId].Start;
+        });
+        Assert.Equal(updated.Heats.Single(h => h.Id == next.HeatId).ScheduledStart, after);
+        var resumedAgain = await admin.PostAsJsonAsync(Url(a, "/resume"), new { arenaName = "A" });
+        Assert.Equal(updated.ScheduledStart, (await resumedAgain.ReadAsync<List<SessionDto>>()).Single().ScheduledStart);
+    }
+
+    [Fact]
+    public async Task PauseAndResumeRequireCompetitionAccess()
+    {
+        var a = await _f.CreateArenaAsync();
+        var otherTrainer = await _f.ApprovedTrainerAsync();
+        foreach (var action in new[] { "pause", "resume" })
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized,
+                (await _f.CreateClient().PostAsJsonAsync(Url(a, $"/{action}"), new { })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await otherTrainer.Client.PostAsJsonAsync(Url(a, $"/{action}"), new { })).StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task ResumeKeepsInheritedDelayAndDoesNotDoubleAnUntimedCascade()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var first = await _f.AddHeatAsync(a.SessionId, a.TeamIds, "Heat 1");
+        var start = new DateTime(2030, 6, 1, 10, 0, 0, DateTimeKind.Utc);
+        var pauseMs = DateTimeOffset.UtcNow.AddMinutes(-12).ToUnixTimeMilliseconds();
+        var ids = await _f.InDbAsync(async db =>
+        {
+            var previous = await db.Sessions.Include(x => x.Heats).SingleAsync(x => x.Id == a.SessionId);
+            previous.OrderIndex = 1;
+            previous.ScheduledStart = start;
+            previous.StartedAt = start.AddMinutes(10);
+            previous.Status = SessionStatus.Finished;
+            previous.Heats.Single(x => x.Id == first.HeatId).DurationMinutes = 30;
+            var timed = new MountedGames.Api.Entities.Session
+            {
+                CompetitionId = a.CompetitionId, CompetitionSectionId = previous.CompetitionSectionId,
+                Name = "Next session", OrderIndex = 2, ScheduledStart = start.AddHours(1),
+                Notes = $"[paused:{pauseMs}]", DurationMinutes = 30,
+            };
+            var untimed = new MountedGames.Api.Entities.Session
+            {
+                CompetitionId = a.CompetitionId, CompetitionSectionId = previous.CompetitionSectionId,
+                Name = "Untimed session", OrderIndex = 3, Notes = $"[paused:{pauseMs}]", DurationMinutes = 30,
+            };
+            db.Sessions.AddRange(timed, untimed);
+            await db.SaveChangesAsync();
+            return (timed.Id, UntimedId: untimed.Id);
+        });
+        var response = await admin.PostAsJsonAsync(Url(a, "/resume"), new { });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var sessionStarts = await _f.InDbAsync(async db =>
+        {
+            var sessions = await db.Sessions.Include(x => x.Heats).ThenInclude(x => x.Races)
+                .Where(x => x.CompetitionId == a.CompetitionId).ToListAsync();
+            var starts = new Dictionary<int, DateTime?>();
+            MountedGames.Api.Services.Calendar.TimetableTimes.Compute(sessions, sessionStarts: starts);
+            return starts;
+        });
+        Assert.Equal(start.AddMinutes(82), sessionStarts[ids.Id]);
+        Assert.InRange(sessionStarts[ids.UntimedId]!.Value, start.AddMinutes(112), start.AddMinutes(112).AddSeconds(10));
+    }
 }
