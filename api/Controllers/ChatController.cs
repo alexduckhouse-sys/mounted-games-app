@@ -1,3 +1,4 @@
+using MountedGames.Api.Services.Accounts;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -77,8 +78,7 @@ public class ChatController : ControllerBase
 
         if (!isAdmin)
         {
-            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-            if (!string.IsNullOrEmpty(ip) && await _db.IpBlocks.AnyAsync(b => b.IpAddress == ip))
+            if (await _db.IsIpBlockedAsync(HttpContext))
                 return StatusCode(403, new { message = "Posting from this network is blocked." });
         }
 

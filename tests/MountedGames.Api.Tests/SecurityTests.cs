@@ -415,6 +415,7 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
         builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={Path.Combine(directory, "test.db")};Pooling=False"));
         builder.Services.AddIdentityCore<AppUser>().AddRoles<IdentityRole>().AddEntityFrameworkStores<AppDbContext>().AddSignInManager();
         builder.Services.AddScoped<TokenService>();
+        builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountIpRecorder>();
         builder.Services.AddAuthentication("test").AddScheme<AuthenticationSchemeOptions, TestAuthentication>("test", _ => { });
         builder.Services.AddAuthorizationWithCompetitionStaff();
         builder.Services.AddHttpClient();

@@ -62,8 +62,13 @@ public sealed class IpRetention(AppDbContext db, TimeProvider time, IConfigurati
         return HashPrefix + Convert.ToHexString(mac, 0, 16).ToLowerInvariant();
     }
 
+    /// <summary>The keyed hash of an address, in the form stored once retention has run (and for account blocks).</summary>
+    public static string HashFor(IConfiguration configuration, string ip) => Hash(ip, KeyFor(configuration));
+
+    private byte[] Key() => KeyFor(configuration);
+
     /// <summary>Its own key (<c>Privacy:IpHashKey</c>) when set; otherwise derived from the JWT key for a different purpose.</summary>
-    private byte[] Key()
+    internal static byte[] KeyFor(IConfiguration configuration)
     {
         var own = configuration["Privacy:IpHashKey"];
         if (!string.IsNullOrWhiteSpace(own)) return Encoding.UTF8.GetBytes(own);

@@ -154,6 +154,97 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.AccountInvite", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AcceptedUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Access")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InvitedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastEmailStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SendCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("AccountInvites");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.AccountIp", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IpHash")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IpHash");
+
+                    b.HasIndex("UserId", "IpHash")
+                        .IsUnique();
+
+                    b.ToTable("AccountIps");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.AppUser", b =>
                 {
                     b.Property<string>("Id")
@@ -161,6 +252,16 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("BlockReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("BlockedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BlockedByUserId")
+                        .HasColumnType("text");
 
                     b.Property<int?>("ClubId")
                         .HasColumnType("integer");
@@ -189,6 +290,12 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<DateTime?>("LastConfirmationSentAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LockedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LockedByUserId")
+                        .HasColumnType("text");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
@@ -1304,6 +1411,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("BlockedAccountUserId")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1319,6 +1429,8 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BlockedAccountUserId");
 
                     b.HasIndex("IpAddress")
                         .IsUnique();
@@ -3422,6 +3534,15 @@ namespace MountedGames.Api.Data.Migrations
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.AccountIp", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.AppUser", null)
                         .WithMany()
