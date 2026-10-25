@@ -20,7 +20,39 @@ public static class EmailOptInWording
 
 public record OptInResult(bool Joined, string? UnsubscribeToken);
 
-public class EmailOptInService(AppDbContext db, TimeProvider clock)
+/// <summary>
+/// Unsubscribe links for emails sent after the sign-up. The token stored with a consent is shown once and only its hash is
+/// kept, so a later email can't reuse it. These links are signed instead: <c>n1.{consent id}.{signature}</c>, with the signature
+/// an HMAC over the id, keyed from <c>Jwt:Key</c>. They hold no address, can't be forged, need nothing stored, work whichever
+/// API instance receives them, and never expire (an unsubscribe link must keep working).
+/// </summary>
+public static class EmailUnsubscribeTokens
+{
+    public const string Prefix = "n1.";
+
+    public static string Create(IConfiguration configuration, int optInId)
+        => $"{Prefix}{optInId}.{Sign(configuration, optInId)}";
+
+    public static bool TryRead(IConfiguration configuration, string? token, out int optInId)
+    {
+        optInId = 0;
+        if (token is null || !token.StartsWith(Prefix, StringComparison.Ordinal) || token.Length > 80) return false;
+        var parts = token.Split('.');
+        if (parts.Length != 3 || !int.TryParse(parts[1], out var id) || id < 1) return false;
+        if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(parts[2]), Encoding.ASCII.GetBytes(Sign(configuration, id)))) return false;
+        optInId = id;
+        return true;
+    }
+
+    private static string Sign(IConfiguration configuration, int id)
+    {
+        var jwt = configuration["Jwt:Key"] ?? "dev-only-secret-please-change-me-256-bit-min!!";
+        var key = HMACSHA256.HashData(Encoding.UTF8.GetBytes(jwt), Encoding.UTF8.GetBytes("mg:news-unsubscribe:v1"));
+        return Convert.ToBase64String(HMACSHA256.HashData(key, Encoding.UTF8.GetBytes($"optin|{id}"))).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    }
+}
+
+public class EmailOptInService(AppDbContext db, TimeProvider clock, IConfiguration configuration)
 {
     public static string HashToken(string token)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
@@ -53,9 +85,16 @@ public class EmailOptInService(AppDbContext db, TimeProvider clock)
     public async Task UnsubscribeAsync(string? token, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(token) || token.Length > 200) return;
-        var hash = HashToken(token.Trim());
-        var email = await db.EmailOptIns.Where(o => o.UnsubscribeTokenHash == hash)
-            .Select(o => o.Email).FirstOrDefaultAsync(ct);
+        token = token.Trim();
+        // A signed link from a later email names the consent row; the sign-up link carries the stored token's hash.
+        string? email;
+        if (EmailUnsubscribeTokens.TryRead(configuration, token, out var optInId))
+            email = await db.EmailOptIns.Where(o => o.Id == optInId).Select(o => o.Email).FirstOrDefaultAsync(ct);
+        else
+        {
+            var hash = HashToken(token);
+            email = await db.EmailOptIns.Where(o => o.UnsubscribeTokenHash == hash).Select(o => o.Email).FirstOrDefaultAsync(ct);
+        }
         if (email is null) return;
         var now = clock.GetUtcNow().UtcDateTime;
         // Every active row for the address, so one click ends all of their consents.
