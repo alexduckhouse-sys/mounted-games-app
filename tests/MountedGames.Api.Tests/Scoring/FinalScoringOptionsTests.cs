@@ -370,6 +370,30 @@ public class FinalScoringOptionsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task StartingPointsCarryTheSwitches_AndOldOnesReadWithTheOldBehaviour()
+    {
+        var s = await ArrangeAsync(carry: false, doubled: true, hasFinal: false, scoreFinal: false);
+        var trainer = await _f.TrainerAsync();
+        var saved = await (await trainer.PostAsJsonAsync($"/api/competitions/{s.CompetitionId}/starting-points", new SaveStartingPointRequest("Switches"))).ReadAsync<StartingPointDto>();
+        var made = await (await trainer.PostAsJsonAsync($"/api/starting-points/{saved.Id}/competition",
+            new CreateFromStartingPointRequest("From switches", new DateTime(2041, 1, 1, 9, 0, 0, DateTimeKind.Utc), null))).ReadAsync<CloneCompetitionResultDto>();
+        var section = await _f.WithDbAsync(db => db.CompetitionSections.SingleAsync(x => x.CompetitionId == made.CompetitionId));
+        Assert.Equal((false, false, true), (section.HasFinal, section.CarryPointsIntoFinal, section.DoublePointsInFinal));
+
+        // A starting point saved before the switches existed has none of the three in its JSON.
+        await _f.InDbAsync(async db =>
+        {
+            var row = await db.StartingPoints.SingleAsync(x => x.Id == saved.Id);
+            row.SetupJson = System.Text.RegularExpressions.Regex.Replace(row.SetupJson, ",\"(hasFinal|carryPointsIntoFinal|doublePointsInFinal)\":(true|false)", "");
+            await db.SaveChangesAsync();
+        });
+        var old = await (await trainer.PostAsJsonAsync($"/api/starting-points/{saved.Id}/competition",
+            new CreateFromStartingPointRequest("From old", new DateTime(2041, 2, 1, 9, 0, 0, DateTimeKind.Utc), null))).ReadAsync<CloneCompetitionResultDto>();
+        var oldSection = await _f.WithDbAsync(db => db.CompetitionSections.SingleAsync(x => x.CompetitionId == old.CompetitionId));
+        Assert.Equal((true, true, false), (oldSection.HasFinal, oldSection.CarryPointsIntoFinal, oldSection.DoublePointsInFinal));
+    }
+
+    [Fact]
     public async Task DuplicatingAnEventCopiesTheSwitches()
     {
         var s = await ArrangeAsync(carry: false, doubled: true, hasFinal: false, scoreFinal: false);
