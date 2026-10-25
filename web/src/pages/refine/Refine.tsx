@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -193,45 +194,85 @@ export function RefineSheet({ title, onClose, children }: SheetProps) {
 
 export interface ChoiceOption<T extends string> { value: T; label: string }
 
-/** A settings row: the label on the left, the current choice on the right with a chevron. Opens a sheet on phones and a small list under the row on wide screens. */
-export function RefineChoiceRow<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: ChoiceOption<T>[]; onChange: (value: T) => void }) {
+
+/**
+ * A settings row: the label on the left, the current choice on the right with a chevron. Tapping it opens a small list
+ * under the right end of the row, on every screen size. `allowOther` adds "Other…", which swaps the list for a box to
+ * type your own value in.
+ */
+export function RefineChoiceRow<T extends string>({ label, value, options, onChange, disabled = false, allowOther = false, placeholder = 'Choose' }: {
+  label: string; value: T; options: ChoiceOption<T>[]; onChange: (value: T) => void; disabled?: boolean; allowOther?: boolean; placeholder?: string;
+}) {
   const [open, setOpen] = useState(false);
-  const [wide, setWide] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches);
-  const wrap = useRef<HTMLDivElement>(null);
-  const current = options.find((option) => option.value === value)?.label ?? '';
+  const [typing, setTyping] = useState(false);
+  const [custom, setCustom] = useState('');
+  const [place, setPlace] = useState<{ top: number; right: number; max: number } | null>(null);
+  const rowRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const known = options.find((option) => option.value === value);
+  const current = known?.label ?? (value || placeholder);
+
+  const close = () => { setOpen(false); setTyping(false); };
+  function toggle() {
+    if (open) { close(); return; }
+    const rect = rowRef.current?.getBoundingClientRect();
+    if (rect) setPlace({ top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right + 12), max: Math.max(160, window.innerHeight - rect.bottom - 16) });
+    setCustom('');
+    setOpen(true);
+  }
   useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return;
-    const query = window.matchMedia('(min-width: 1024px)');
-    const update = () => setWide(query.matches);
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
-  }, []);
-  useEffect(() => {
-    if (!open || !wide) return;
-    const away = (event: MouseEvent) => { if (!wrap.current?.contains(event.target as Node)) setOpen(false); };
-    const esc = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    if (!open) return;
+    const away = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!popRef.current?.contains(target) && !rowRef.current?.contains(target)) close();
+    };
+    const esc = (event: KeyboardEvent) => { if (event.key === 'Escape') { close(); rowRef.current?.focus(); } };
+    const away2 = () => close();
     document.addEventListener('mousedown', away);
     document.addEventListener('keydown', esc);
-    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
-  }, [open, wide]);
-  const choose = (next: T) => { setOpen(false); if (next !== value) onChange(next); };
-  const list = (
+    window.addEventListener('resize', away2);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); window.removeEventListener('resize', away2); };
+  }, [open]);
+
+  const choose = (next: T) => { close(); if (next !== value) onChange(next); };
+  const submitCustom = () => { const text = custom.trim(); if (text) choose(text as T); };
+
+  const list = typing ? (
+    <form className="rf-choice-other" onSubmit={(event) => { event.preventDefault(); submitCustom(); }}>
+      <input autoFocus aria-label={`${label}, your own`} value={custom} onChange={(event) => setCustom(event.target.value)} maxLength={60} />
+      <button type="submit" className="rf-btn" disabled={!custom.trim()}>Use</button>
+    </form>
+  ) : (
     <div role="listbox" aria-label={label} className="rf-choices">
       {options.map((option) => (
         <button key={option.value} type="button" role="option" aria-selected={option.value === value} className="rf-choice" onClick={() => choose(option.value)}>
           <span>{option.label}</span>{option.value === value && <Check className="h-4 w-4" aria-hidden="true" />}
         </button>
       ))}
+      {allowOther && <button type="button" role="option" aria-selected={false} className="rf-choice" onClick={() => setTyping(true)}><span>Other…</span></button>}
     </div>
   );
   return (
-    <div ref={wrap} className="rf-choice-wrap">
-      <button type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${current}`} onClick={() => setOpen((v) => !v)}>
+    <div className="rf-choice-wrap">
+      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${current}`} disabled={disabled} onClick={toggle}>
         <span className="rf-grow rf-t1">{label}</span>
-        <span className="rf-choice-val">{current}</span>
+        <span className={`rf-choice-val ${known || value ? '' : 'rf-choice-empty'}`}>{current}</span>
         <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
       </button>
-      {open && (wide ? <div className="rf-pop">{list}</div> : <RefineSheet title={label} onClose={() => setOpen(false)}>{list}</RefineSheet>)}
+      {open && place && createPortal(
+        <div ref={popRef} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{list}</div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+/** A row with the label on the left and a small switch on the right. */
+export function RefineSwitchRow({ label, on, onChange, disabled = false }: { label: string; on: boolean; onChange: (next: boolean) => void; disabled?: boolean }) {
+  return (
+    <div className="rf-row">
+      <span className="rf-grow rf-t1">{label}</span>
+      <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} className="rf-sw" onClick={() => onChange(!on)}><span aria-hidden="true" /></button>
     </div>
   );
 }

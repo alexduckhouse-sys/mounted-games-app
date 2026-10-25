@@ -183,7 +183,7 @@ describe('OperationsPage', () => {
     await screen.findByText('Dec forms missing');
 
     expect(screen.getByRole('link', { name: 'Event details' })).toHaveAttribute('href', '/competitions/7/event-details');
-    expect(screen.getByRole('link', { name: 'Sections and races' })).toHaveAttribute('href', '/admin/competitions/7/format');
+    expect(screen.getByRole('link', { name: 'Sections and races' })).toHaveAttribute('href', '/competitions/7/sections');
     expect(screen.getByRole('link', { name: 'Sponsors and sharing' })).toHaveAttribute('href', '/competitions/7/sponsors');
     expect(screen.getByRole('button', { name: /Entries and dec forms/ })).toContainElement(screen.getAllByRole('img', { name: 'Has jobs to sort' })[0]);
     expect(screen.getByRole('link', { name: 'Event details' }).querySelector('[role="img"]')).toBeNull();
@@ -317,7 +317,7 @@ describe('OperationsPage', () => {
     mockWideScreen(true);
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
     expect(await screen.findByRole('tab', { name: 'Equipment' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'To sort' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'To sort' })).toBeInTheDocument();
   });
 
   it('opens the Scorers & team tab from ?tab=scorers or by clicking the tab', async () => {

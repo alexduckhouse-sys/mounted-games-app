@@ -101,3 +101,43 @@
 .ops-outof input { width: 64px; min-height: 44px; text-align: center; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 700 18px/1 var(--mg-font-display); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); }
 .ops-dup { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 16px; background: rgb(var(--mg-subtle)); border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .ops-danger-link { flex: none; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: rgb(var(--mg-elim)); font: 600 14px/1 var(--mg-font); text-decoration: underline; cursor: pointer; }
+
+/* Sections and races: cards with the section name above, navy bars between sections, even 52px rows. */
+.ops-sections { padding-bottom: 32px; }
+.ops-sections .rf-row, .ops-sections .rf-choice-row { min-height: 52px; padding-block: 0; }
+.ops-sections .rf-list { overflow: visible; }
+.ops-navybar { height: 3px; margin: 20px 0 14px; border: 0; background: rgb(var(--mg-heading)); }
+.ops-navybar-first { margin-top: 8px; }
+@media (max-width: 1023px) { .ops-navybar-first { display: none; } .ops-sections > .ops-section:first-of-type { margin-top: 12px; } }
+.ops-sec-name { margin: 0 0 10px; padding-left: 16px; font: 800 26px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.ops-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 16px; }
+.ops-step { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ops-step-label { font: 600 13px/1.2 var(--mg-font); color: rgb(var(--mg-body)); }
+.ops-step-ctl { display: inline-flex; align-items: center; gap: 6px; }
+.ops-step-ctl output { min-width: 36px; text-align: center; font: 700 22px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); font-variant-numeric: tabular-nums; }
+.ops-ibtn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 50%; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer; }
+.ops-ibtn:hover:not(:disabled) { background: rgb(var(--mg-subtle)); }
+.ops-ibtn:disabled { opacity: .4; cursor: default; }
+.ops-ibtn:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.ops-sub { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.ops-sub > h3 { margin: 0; padding: 12px 16px 4px; font: 700 12px/1.2 var(--mg-font); letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--mg-muted)); }
+.ops-sub > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.ops-sub > h3 + * { border-top: 0; }
+.ops-lines { white-space: pre-line; }
+.ops-races { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.ops-races-edit { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 16px; background: rgb(var(--mg-subtle)); border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.ops-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 12px; background: rgb(var(--mg-tint)); align-self: flex-start; }
+.ops-seg button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 8px; background: transparent; color: rgb(var(--mg-body)); font: 700 14px/1 var(--mg-font); cursor: pointer; }
+.ops-seg button[aria-selected="true"] { background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.ops-race-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ops-race-list li { display: flex; align-items: center; gap: 6px; min-height: 40px; }
+.ops-race-n { flex: none; width: 24px; font: 700 15px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.ops-race-name { flex: 1 1 auto; min-width: 0; font: 600 15px/1.2 var(--mg-font); }
+.ops-ibtn-red { color: rgb(var(--mg-elim)); border-color: transparent; }
+.ops-matches { display: flex; flex-wrap: wrap; gap: 6px; }
+.ops-matches .rf-btn { min-height: 40px; font-size: 14px; }
+.ops-race-actions { display: flex; justify-content: flex-end; gap: 4px; }
+.ops-end { justify-content: flex-end; }
+.ops-addbar { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; margin-top: 20px; border: 0; border-radius: 12px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 700 16px/1 var(--mg-font); cursor: pointer; }
+.ops-addbar:hover:not(:disabled) { filter: brightness(.97); }
+.ops-addbar:disabled { opacity: .6; cursor: default; }

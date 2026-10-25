@@ -120,21 +120,14 @@ describe('EventDetailsPage', () => {
     expect(await screen.findAllByText(/Scoring table/)).toHaveLength(2);
   });
 
-  it('opens the choice as a bottom sheet on phones and a small list on wide screens', async () => {
+  it('opens the choice as a small list under the row', async () => {
     const user = userEvent.setup();
-    const { unmount } = show();
-    await user.click(await screen.findByRole('button', { name: 'Tack check · Pairs Under 15: Off' }));
-    expect(screen.getByRole('dialog', { name: 'Tack check · Pairs Under 15' })).toBeInTheDocument();
-    unmount();
-
-    vi.stubGlobal('matchMedia', (query: string) => ({ matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     show();
     await user.click(await screen.findByRole('button', { name: 'Tack check · Pairs Under 15: Off' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('listbox', { name: 'Tack check · Pairs Under 15' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    vi.unstubAllGlobals();
   });
 
   it('edits the scoring table: blank new sector, dropped when left empty, saved on Done', async () => {

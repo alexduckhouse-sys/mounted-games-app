@@ -130,12 +130,22 @@ details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 .rf-lockwrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 56px 24px 0; text-align: center; }
 .rf-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-line-orient: vertical; -webkit-box-orient: vertical; overflow: hidden; }
 
-/* Settings row choice: label left, current choice right in navy. A sheet on phones, a small list on wide screens. */
+/* Settings row choice: label left, current choice right in navy, and a small list under the right end of the row. */
 .rf-choice-wrap { position: relative; }
 .rf-choice-val { font: 600 15px/1.2 var(--mg-font); color: rgb(var(--mg-heading)); text-align: right; }
+.rf-choice-empty { color: rgb(var(--mg-faint)); font-weight: 500; }
+.rf-choice-row:disabled { opacity: .6; cursor: default; }
 .rf-choices { display: flex; flex-direction: column; }
-.rf-choice { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 8px; border: 0; background: transparent; color: rgb(var(--mg-ink)); font: 500 16px/1.2 var(--mg-font); text-align: left; cursor: pointer; }
+.rf-choice { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 16px; border: 0; background: transparent; color: rgb(var(--mg-ink)); font: 500 16px/1.2 var(--mg-font); text-align: left; cursor: pointer; white-space: nowrap; }
 .rf-choice + .rf-choice { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .rf-choice[aria-selected="true"] { font-weight: 700; color: rgb(var(--mg-heading)); }
 .rf-choice:hover { background: rgb(var(--mg-subtle)); }
-.rf-pop { position: absolute; right: 12px; top: calc(100% - 6px); z-index: 30; min-width: 200px; padding: 4px; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .18); }
+.rf-pop { position: fixed; z-index: 70; min-width: 220px; max-width: calc(100vw - 16px); overflow-y: auto; padding: 4px 0; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: 14px; box-shadow: 0 8px 24px rgb(0 0 0 / .18); }
+.rf-choice-other { display: flex; gap: 8px; padding: 8px 12px; }
+.rf-choice-other input { flex: 1; min-width: 0; min-height: 44px; padding: 0 10px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 500 16px/1.2 var(--mg-font); background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); }
+.rf-sw { flex: none; position: relative; width: 38px; height: 22px; padding: 0; border: 0; border-radius: 11px; background: rgb(var(--mg-control)); cursor: pointer; transition: background-color .15s; }
+.rf-sw > span { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 9px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .2); transition: left .15s; }
+.rf-sw[aria-checked="true"] { background: rgb(var(--mg-button)); }
+.rf-sw[aria-checked="true"] > span { left: 18px; }
+.rf-sw:disabled { opacity: .5; cursor: default; }
+.rf-sw:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
