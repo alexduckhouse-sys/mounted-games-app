@@ -22,7 +22,9 @@ public sealed record CompetitionSetup(
 {
     public sealed record SectionSetup(
         SectionFormat Format, string AgeGroup, string DisplayName, string? RunoffRaceName, TieBreakRule TieBreakRule,
-        int? FinalistCount, bool UsesRaceFinals, int PriceMinor, int? MaxParticipants);
+        int? FinalistCount, bool UsesRaceFinals, int PriceMinor, int? MaxParticipants,
+        bool HasFinal = true, bool CarryPointsIntoFinal = true, bool DoublePointsInFinal = false);
+    // The three final switches default as an older section behaved, so a starting point saved before they existed still reads right.
 
     /// <summary>A timetable block. <c>StartOffsetMinutes</c> is its start relative to the competition's start, so the plan moves with the new dates.</summary>
     public sealed record SessionSetup(
@@ -74,7 +76,8 @@ public sealed record CompetitionSetup(
             source.AppleMapsUrl, source.TermsText, source.DecFormConfigJson, source.LaneHatbands, source.EnablePassportCheck,
             source.PaymentDestination,
             sections.Select(s => new SectionSetup(s.Format, s.AgeGroup, s.DisplayName, s.RunoffRaceName, s.TieBreakRule,
-                s.FinalistCount, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants)).ToList(),
+                s.FinalistCount, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants,
+                s.HasFinal, s.CarryPointsIntoFinal, s.DoublePointsInFinal)).ToList(),
             sessions);
     }
 
@@ -174,6 +177,7 @@ public sealed class CompetitionSetupService(AppDbContext db)
                     CompetitionId = clone.Id, Format = s.Format, AgeGroup = s.AgeGroup, DisplayName = s.DisplayName,
                     RunoffRaceName = s.RunoffRaceName, TieBreakRule = s.TieBreakRule, FinalistCount = s.FinalistCount,
                     UsesRaceFinals = s.UsesRaceFinals, PriceMinor = s.PriceMinor, MaxParticipants = s.MaxParticipants,
+                    HasFinal = s.HasFinal, CarryPointsIntoFinal = s.CarryPointsIntoFinal, DoublePointsInFinal = s.DoublePointsInFinal,
                 };
                 sections.Add(section);
                 db.CompetitionSections.Add(section);
