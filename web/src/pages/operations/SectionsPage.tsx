@@ -122,7 +122,13 @@ export function SectionsPage() {
 
   const sectionsById = useMemo(() => new Map(competition.sections.map((s) => [s.id, s])), [competition.sections]);
   const sessionsOf = (sectionId: number) => competition.sessions.filter((s) => isRaceSession(s) && s.competitionSectionId === sectionId);
-  const arenas = useMemo(() => [...new Set([MAIN_ARENA, ...draft.sections.map((s) => s.arena.trim()), ...competition.sessions.map((s) => s.arenaName?.trim() ?? '')].filter(Boolean))], [draft.sections, competition.sessions]);
+  const arenas = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const name of [MAIN_ARENA, ...draft.sections.map((s) => s.arena.trim()), ...competition.sessions.map((s) => s.arenaName?.trim() ?? '')]) {
+      if (name && !seen.has(name.toLowerCase())) seen.set(name.toLowerCase(), name);
+    }
+    return [...seen.values()];
+  }, [draft.sections, competition.sessions]);
   const arenaOptions: ChoiceOption<string>[] = arenas.map((name) => ({ value: name, label: name }));
 
   function setTieBreak(section: SectionDraft, rule: string) {
