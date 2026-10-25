@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { AlertTriangle, Lock, Megaphone, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
+import { AlertTriangle, Lock, Megaphone, MessageSquare, Pin, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -18,7 +18,6 @@ const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
 const BANNER_TAG = 'banner';
 
 interface LastChatComp { id: number; name: string }
-type ComposerMode = 'announcement' | 'banner';
 
 function loadLastChatComp(): LastChatComp | null {
   try {
@@ -47,33 +46,32 @@ function ChatTabSession() {
   const { competition, reload, streams, streamingEnabled, streamingChecked = true, invoke, ready, streamMessages } = useCompetition();
   const { user, canEdit, hasRole, canOrganise } = useAuth();
   const isAdmin = hasRole('Admin');
-  const isTrainer = hasRole('Trainer');
   // Older APIs don't keep private messages private, so they must say they do before anyone can send one.
   const privateMessagingAvailable = competition.staffChatEnabled === true;
-  const canPost = isAdmin || isTrainer;
+  const canPost = isAdmin || (!!user && canOrganise(competition));
   // Laptops get two columns and the whole feed inline; phones keep the single column and the "All" sheet.
   const desktop = useIsDesktop();
   usePageWidth('wide');
-  // Anyone signed in (trainer, team manager, member, rider) can message the organisers privately.
+  // Anyone signed in who is not an organiser can message the organisers on the dedicated contact page.
   const canMessageOrganisers = !!user && !isAdmin;
-  const [replyTo, setReplyTo] = useState<{ userId: string; name: string } | null>(null);
   const canModerate = canEdit();
-  const canManageStream = isAdmin ? canModerate : isTrainer && canOrganise(competition);
+  const canManageStream = !!user && canOrganise(competition);
   const canBroadcast = streamingEnabled && canManageStream;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(true);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [body, setBody] = useState('');
-  const [subTab, setSubTab] = useState<'announcements' | 'messages'>('announcements');
-  const [mode, setMode] = useState<ComposerMode>('announcement');
   const [sending, setSending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [allOpen, setAllOpen] = useState(false);
+  const [unpinnedTopId, setUnpinnedTopId] = useState<number | null>(null);
   const [lastChatComp, setLastChatComp] = useState<LastChatComp | null>(() => loadLastChatComp());
   const [dismissedCompWarning, setDismissedCompWarning] = useState(false);
   const loadController = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
+  const pinningRef = useRef(false);
+  const [pinnedSource, setPinnedSource] = useState<{ bannerId: number; messageId: number } | null>(null);
   const announcementsTriggerRef = useRef<HTMLButtonElement>(null);
 
   const requestMessages = useCallback((controller: AbortController) => {
@@ -115,29 +113,33 @@ function ChatTabSession() {
     onChatMessageDeleted: ({ id }) => setMessages((current) => current.filter((message) => message.id !== id)),
   });
 
-  const banners = messages.filter((message) => message.type === 2 && message.tag === BANNER_TAG);
-  const banner = banners.at(-1) ?? null;
-  const mineOrForMe = (message: ChatMessage) => !!user && (message.userId === user.id || message.recipientUserId === user.id);
-  const visibleMessages = messages.filter((message) => message.type !== 1 && message.tag !== BANNER_TAG && (subTab === 'messages' ? message.adminOnly && (canPost || mineOrForMe(message)) : !message.adminOnly));
+  // Hub deliveries can arrive out of order; IDs break timestamp ties consistently.
+  const orderedMessages = messages.slice().sort((a, b) =>
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id - b.id);
+  const banners = orderedMessages.filter((message) => message.type === 2 && message.tag === BANNER_TAG && !message.adminOnly);
+  const visibleMessages = orderedMessages.filter((message) => message.type !== 1 && message.tag !== BANNER_TAG && !message.adminOnly);
+  const privateCount = messages.filter((message) => message.adminOnly && !message.recipientUserId).length;
   const latest = visibleMessages.slice(desktop ? 0 : -3).reverse();
+
+  // All announcements appear at the top first; pinned announcements replace them, or more recent announcements replace the pin.
+  const latestPin = banners.at(-1) ?? null;
+  const latestAnnouncement = visibleMessages.at(-1) ?? null;
+  const pinIsNewer = Boolean(latestPin && (!latestAnnouncement ||
+    new Date(latestPin.createdAt).getTime() > new Date(latestAnnouncement.createdAt).getTime() ||
+    (new Date(latestPin.createdAt).getTime() === new Date(latestAnnouncement.createdAt).getTime() && latestPin.id > latestAnnouncement.id)));
+  const rawBanner = pinIsNewer ? latestPin : latestAnnouncement;
+  const banner = rawBanner && rawBanner.id !== unpinnedTopId ? rawBanner : null;
+  const pinnedId = banner && pinIsNewer
+    ? pinnedSource?.bannerId === banner.id ? pinnedSource.messageId
+      : visibleMessages.findLast((message) => message.body === banner.body)?.id ?? null
+    : null;
+
   const activeStreams = streams.filter((stream) => stream.status !== 2);
   const liveNow = activeStreams.length > 0;
-  const effectiveMode = canModerate ? mode : 'announcement';
-  const canCompose = subTab === 'announcements' ? canModerate : (canMessageOrganisers && privateMessagingAvailable) || (isAdmin && replyTo !== null);
-  const showChannelSwitcher = canPost || (canMessageOrganisers && privateMessagingAvailable);
-  const channelTabs = showChannelSwitcher ? <div role="tablist" aria-label="Chat channels" className="flex gap-2">
-    <button type="button" role="tab" className="mg-btn mg-btn-secondary !min-h-11 aria-selected:!bg-[rgb(var(--mg-tint))]" aria-selected={subTab === 'announcements'} onClick={() => { setSubTab('announcements'); setReplyTo(null); setBody(''); }}>Announcements</button>
-    <button type="button" role="tab" className="mg-btn mg-btn-secondary !min-h-11 aria-selected:!bg-[rgb(var(--mg-tint))]" aria-selected={subTab === 'messages'} onClick={() => { setSubTab('messages'); setBody(''); }}>Message Organisers</button>
-  </div> : null;
+  // Organisers make announcements here; non-organisers cannot make announcements (they message organisers on /contact).
+  const canCompose = canModerate;
   const closeAnnouncements = useCallback(() => setAllOpen(false), []);
   const dismissActionError = useCallback(() => setActionError(null), []);
-
-  function startReply(message: ChatMessage) {
-    if (!message.userId) return;
-    setSubTab('messages');
-    setReplyTo({ userId: message.userId, name: message.authorName });
-    setAllOpen(false);
-  }
 
   async function removeMessage(id: number, confirmFirst = true) {
     if (!canModerate) return;
@@ -176,12 +178,44 @@ function ChatTabSession() {
   }
 
   async function unpinBanners() {
+    if (!canModerate || pinningRef.current) return;
+    pinningRef.current = true;
     setActionError(null);
-    try { await deleteBanners(); }
-    catch {
+    try {
+      if (banners.length > 0) await deleteBanners();
+      if (latestAnnouncement) setUnpinnedTopId(latestAnnouncement.id);
+    } catch {
       setActionError('Couldn’t unpin the banner. Check your connection and try again.');
       loadMessages();
     } finally {
+      pinningRef.current = false;
+      reload();
+    }
+  }
+
+  async function pinMessage(target: ChatMessage) {
+    if (!canModerate || pinningRef.current || target.adminOnly) return;
+    pinningRef.current = true;
+    setActionError(null);
+    try {
+      const response = await api.post<ChatMessage>(`/competitions/${competition.id}/chat/announcement`, {
+        body: target.body,
+        tag: BANNER_TAG,
+      });
+      const posted = response.data;
+      if (!posted || typeof posted.id !== 'number' || posted.adminOnly || posted.tag !== BANNER_TAG) {
+        throw new Error('Invalid announcement response');
+      }
+      setMessages((current) => current.some((item) => item.id === posted.id) ? current : [...current, posted]);
+      setPinnedSource({ bannerId: posted.id, messageId: target.id });
+      setUnpinnedTopId(null);
+      // Keep the previous pin until the replacement is safely stored.
+      try { if (banners.length > 0) await deleteBanners(); }
+      catch { setActionError('The announcement was pinned, but the old banner could not be cleared. Try again.'); }
+    } catch {
+      setActionError('Couldn’t pin that announcement. Check your connection and try again.');
+    } finally {
+      pinningRef.current = false;
       reload();
     }
   }
@@ -193,25 +227,13 @@ function ChatTabSession() {
     setActionError(null);
     setSending(true);
     try {
-      let posted: ChatMessage | undefined;
-      if (isAdmin && canModerate && !replyTo) {
-        const response = await api.post<ChatMessage>(`/competitions/${competition.id}/chat/announcement`, { body: text, tag: effectiveMode === 'banner' ? BANNER_TAG : 'general' });
-        posted = response.data;
-        if (posted) setMessages((current) => current.some((item) => item.id === posted!.id) ? current : [...current, posted!]);
-        if (effectiveMode === 'banner') {
-          try { await deleteBanners(); }
-          catch {
-            setActionError('The new banner was pinned, but the old one could not be cleared. Check your connection and try again.');
-            loadMessages();
-          }
-        }
-      } else {
-        const response = await api.post<ChatMessage>(`/competitions/${competition.id}/chat`, replyTo ? { body: text, replyToUserId: replyTo.userId } : { body: text });
-        posted = response.data;
-        if (posted) setMessages((current) => current.some((item) => item.id === posted!.id) ? current : [...current, posted!]);
-        if (replyTo) setReplyTo(null);
+      const response = await api.post<ChatMessage>(`/competitions/${competition.id}/chat/announcement`, { body: text, tag: 'general' });
+      const posted = response.data;
+      if (posted && typeof posted.id === 'number') {
+        setMessages((current) => current.some((item) => item.id === posted.id) ? current : [...current, posted]);
       }
-      if (isAdmin && canModerate) reload();
+      setUnpinnedTopId(null);
+      reload();
       setBody((current) => current.trim() === text ? '' : current);
       const record = { id: competition.id, name: competition.name };
       saveLastChatComp(record);
@@ -227,6 +249,80 @@ function ChatTabSession() {
     }
   }
 
+  const announcementsSection = (
+    <>
+      <section className="live-announcements" aria-labelledby="announcements-title">
+        <div className="mg-section-head">
+          <h2 id="announcements-title">Announcements</h2>
+          {isAdmin && (
+            <Link to={`/competitions/${competition.id}/contact`} className="text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
+              Organiser messages{privateCount > 0 ? ` (${privateCount})` : ''}
+            </Link>
+          )}
+          {!desktop && visibleMessages.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>All {visibleMessages.length}</button>}
+        </div>
+        {lastChatComp && lastChatComp.id !== competition.id && !dismissedCompWarning && canCompose && (
+          <div className="live-comp-warning" role="status">
+            <AlertTriangle aria-hidden="true" />
+            <span>Your last post was for another competition. <Link to={`/competitions/${lastChatComp.id}/chat`}>Switch back to {lastChatComp.name}</Link>, or post here.</span>
+            <button type="button" aria-label="Dismiss competition warning" onClick={() => setDismissedCompWarning(true)}><X aria-hidden="true" /></button>
+          </div>
+        )}
+        {messagesError && <div className="live-feed-error" role="alert"><span>{messagesError}</span><button type="button" onClick={loadMessages}>Try again</button></div>}
+        {messagesLoading && messages.length === 0
+          ? <div className="live-feed-state mg-card" role="status">Loading announcements…</div>
+          : messagesError && messages.length === 0
+            ? null
+            : (
+              <AnnouncementList
+                messages={latest}
+                staff={canPost}
+                canModerate={canModerate}
+                pinnedId={pinnedId}
+                onPin={pinMessage}
+                onUnpin={unpinBanners}
+                onDelete={removeMessage}
+                onBlock={blockMessageAuthor}
+              />
+            )}
+      </section>
+
+      {canCompose && (
+        <div id="chat-composer" className="live-composer">
+          <div className="live-compose-row">
+            <label className="mg-field live-compose-field">
+              <span className="sr-only">Announcement</span>
+              <textarea
+                rows={desktop ? 3 : 1}
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    if (body.trim()) void send();
+                  }
+                }}
+                placeholder="Write an announcement…"
+              />
+            </label>
+            <button type="button" className="live-send" aria-label="Send" disabled={!body.trim() || sending} onClick={() => void send()}><Send aria-hidden="true" /></button>
+          </div>
+        </div>
+      )}
+
+      {!canCompose && canMessageOrganisers && (
+        privateMessagingAvailable ? (
+          <Link to={`/competitions/${competition.id}/contact`} className="mg-btn mg-btn-secondary">
+            <MessageSquare className="h-4 w-4" aria-hidden="true" />
+            Message organisers
+          </Link>
+        ) : (
+          <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Messaging the organisers isn’t available for this event yet.</div>
+        )
+      )}
+    </>
+  );
+
   return (
     <div className={`live-page ${canPost ? 'live-page-staff' : 'live-page-public'}`}>
       <div className="live-page-band mg-band">
@@ -238,10 +334,15 @@ function ChatTabSession() {
       {actionNotice && !allOpen && <div className="live-banner" role="status"><span>{actionNotice}</span><button type="button" aria-label="Dismiss notice" onClick={() => setActionNotice(null)}><X aria-hidden="true" /></button></div>}
 
       {banner && (
-        <div className="live-banner" role="status">
+        <div className="live-banner" role="status" aria-label="Top announcement">
           <Megaphone aria-hidden="true" />
-          <div><strong>{banner.body}</strong><span>{canPost ? 'Pinned banner · everyone sees this' : `Pinned by organisers · ${messageTime(banner)}`}</span></div>
-          {canModerate && <button type="button" onClick={() => void unpinBanners()}>Unpin</button>}
+          <div>
+            <strong>{banner.body}</strong>
+            <span>{pinIsNewer ? (canPost ? 'Pinned banner · everyone sees this' : `Pinned by organisers · ${messageTime(banner)}`) : `Latest announcement · ${messageTime(banner)}`}</span>
+          </div>
+          {canModerate && (pinIsNewer
+            ? <button type="button" onClick={() => void unpinBanners()}>Unpin</button>
+            : <button type="button" onClick={() => setUnpinnedTopId(banner.id)}>Hide on this device</button>)}
         </div>
       )}
 
@@ -249,149 +350,87 @@ function ChatTabSession() {
         <>
           <div className="live-col live-col-rail">
             <div className="mg-section-head live-stream-head"><h2>Stream</h2></div>
-        <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
-        {activeStreams.length > 0 && <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={null} competitionName={competition.name} publicLayout />}
+            <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
+            {activeStreams.length > 0 && <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={null} competitionName={competition.name} publicLayout />}
           </div>
           <div className="live-col live-col-main">
-      <section className="live-announcements" aria-labelledby="announcements-title">
-        <div className="mg-section-head">
-          {channelTabs}
-          <h2 id="announcements-title">{subTab === 'announcements' ? 'Announcements' : 'Message Organisers'}</h2>
-          {!desktop && visibleMessages.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>All {visibleMessages.length}</button>}
-        </div>
-        {lastChatComp && lastChatComp.id !== competition.id && !dismissedCompWarning && canCompose && (
-          <div className="live-comp-warning" role="status">
-            <AlertTriangle aria-hidden="true" />
-            <span>Your last post was for another competition. <Link to={`/competitions/${lastChatComp.id}/chat`}>Switch back to {lastChatComp.name}</Link>, or post here.</span>
-            <button type="button" aria-label="Dismiss competition warning" onClick={() => setDismissedCompWarning(true)}><X aria-hidden="true" /></button>
-          </div>
-        )}
-        {messagesError && <div className="live-feed-error" role="alert"><span>{messagesError}</span><button type="button" onClick={loadMessages}>Try again</button></div>}
-        {messagesLoading && messages.length === 0
-          ? <div className="live-feed-state mg-card" role="status">Loading announcements…</div>
-          : messagesError && messages.length === 0
-            ? null
-            : <AnnouncementList messages={latest} staff={canPost} canModerate={canModerate} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} />}
-      </section>
-
-      {canCompose && (
-        <div id="chat-composer" className="live-composer">
-          {replyTo ? (
-            <div className="live-composer-label"><Lock aria-hidden="true" /> Private reply to {replyTo.name}
-              <button type="button" className="live-reply-cancel" onClick={() => setReplyTo(null)}>Cancel</button>
-            </div>
-          ) : canModerate ? (
-            <div className="mg-seg" role="group" aria-label="Post type">
-              <button type="button" aria-pressed={effectiveMode === 'announcement'} onClick={() => setMode('announcement')}>Announcement</button>
-              <button type="button" aria-pressed={effectiveMode === 'banner'} onClick={() => setMode('banner')}>Pin as banner</button>
-            </div>
-          ) : (
-            <div className="live-composer-label"><Lock aria-hidden="true" /> Message organisers</div>
-          )}
-          <div className="live-compose-row">
-            <label className="mg-field live-compose-field">
-              <span className="sr-only">{replyTo ? `Reply to ${replyTo.name}` : effectiveMode === 'banner' ? 'Banner text' : canMessageOrganisers ? 'Message organisers' : 'Announcement'}</span>
-              <textarea rows={desktop ? 4 : 1} value={body} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (body.trim()) void send(); } }} placeholder={replyTo ? 'Write a private reply…' : effectiveMode === 'banner' ? 'Banner text, replaces the pinned one' : canMessageOrganisers ? 'Message the organisers…' : 'Write an announcement…'} />
-            </label>
-            <button type="button" className="live-send" aria-label="Send" disabled={!body.trim() || sending} onClick={send}><Send aria-hidden="true" /></button>
-          </div>
-        </div>
-      )}
-      {canMessageOrganisers && !privateMessagingAvailable && (
-        <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Messaging the organisers isn’t available for this event yet.</div>
-      )}
-
+            {announcementsSection}
           </div>
         </>
       ) : (
         <>
           <div className="live-col live-col-main">
             <div className="mg-section-head live-stream-head"><h2>Stream</h2></div>
-      <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
+            <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
           </div>
           <div className="live-col live-col-rail">
-      <section className="live-announcements" aria-labelledby="announcements-title">
-        <div className="mg-section-head">
-          {channelTabs}
-          <h2 id="announcements-title">{subTab === 'announcements' ? 'Announcements' : 'Message Organisers'}</h2>
-          {!desktop && visibleMessages.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>All {visibleMessages.length}</button>}
-        </div>
-        {lastChatComp && lastChatComp.id !== competition.id && !dismissedCompWarning && canCompose && (
-          <div className="live-comp-warning" role="status">
-            <AlertTriangle aria-hidden="true" />
-            <span>Your last post was for another competition. <Link to={`/competitions/${lastChatComp.id}/chat`}>Switch back to {lastChatComp.name}</Link>, or post here.</span>
-            <button type="button" aria-label="Dismiss competition warning" onClick={() => setDismissedCompWarning(true)}><X aria-hidden="true" /></button>
-          </div>
-        )}
-        {messagesError && <div className="live-feed-error" role="alert"><span>{messagesError}</span><button type="button" onClick={loadMessages}>Try again</button></div>}
-        {messagesLoading && messages.length === 0
-          ? <div className="live-feed-state mg-card" role="status">Loading announcements…</div>
-          : messagesError && messages.length === 0
-            ? null
-            : <AnnouncementList messages={latest} staff={canPost} canModerate={canModerate} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} />}
-      </section>
-
-      {canCompose && (
-        <div id="chat-composer" className="live-composer">
-          {replyTo ? (
-            <div className="live-composer-label"><Lock aria-hidden="true" /> Private reply to {replyTo.name}
-              <button type="button" className="live-reply-cancel" onClick={() => setReplyTo(null)}>Cancel</button>
-            </div>
-          ) : canModerate ? (
-            <div className="mg-seg" role="group" aria-label="Post type">
-              <button type="button" aria-pressed={effectiveMode === 'announcement'} onClick={() => setMode('announcement')}>Announcement</button>
-              <button type="button" aria-pressed={effectiveMode === 'banner'} onClick={() => setMode('banner')}>Pin as banner</button>
-            </div>
-          ) : (
-            <div className="live-composer-label"><Lock aria-hidden="true" /> Message organisers</div>
-          )}
-          <div className="live-compose-row">
-            <label className="mg-field live-compose-field">
-              <span className="sr-only">{replyTo ? `Reply to ${replyTo.name}` : effectiveMode === 'banner' ? 'Banner text' : canMessageOrganisers ? 'Message organisers' : 'Announcement'}</span>
-              <textarea rows={desktop ? 4 : 1} value={body} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (body.trim()) void send(); } }} placeholder={replyTo ? 'Write a private reply…' : effectiveMode === 'banner' ? 'Banner text, replaces the pinned one' : canMessageOrganisers ? 'Message the organisers…' : 'Write an announcement…'} />
-            </label>
-            <button type="button" className="live-send" aria-label="Send" disabled={!body.trim() || sending} onClick={send}><Send aria-hidden="true" /></button>
-          </div>
-        </div>
-      )}
-      {canMessageOrganisers && !privateMessagingAvailable && (
-        <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Messaging the organisers isn’t available for this event yet.</div>
-      )}
-
+            {announcementsSection}
           </div>
         </>
       )}
 
-      {allOpen && <AnnouncementsOverlay messages={visibleMessages.slice().reverse()} staff={canPost} canModerate={canModerate} error={actionError} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} onDismissError={dismissActionError} onClose={closeAnnouncements} returnFocusRef={announcementsTriggerRef} />}
+      {allOpen && (
+        <AnnouncementsOverlay
+          messages={visibleMessages.slice().reverse()}
+          staff={canPost}
+          canModerate={canModerate}
+          pinnedId={pinnedId}
+          error={actionError}
+          onPin={pinMessage}
+          onUnpin={unpinBanners}
+          onDelete={removeMessage}
+          onBlock={blockMessageAuthor}
+          onDismissError={dismissActionError}
+          onClose={closeAnnouncements}
+          returnFocusRef={announcementsTriggerRef}
+        />
+      )}
     </div>
   );
 }
 
-function AnnouncementList({ messages, staff, canModerate, onDelete, onBlock, onReply, full = false }: {
+function AnnouncementList({ messages, staff, canModerate, pinnedId, onPin, onUnpin, onDelete, onBlock, full = false }: {
   messages: ChatMessage[];
   staff: boolean;
   canModerate: boolean;
+  pinnedId: number | null;
+  onPin: (message: ChatMessage) => Promise<void>;
+  onUnpin: () => Promise<void>;
   onDelete: (id: number) => Promise<void>;
   onBlock: (id: number) => Promise<void>;
-  onReply?: (message: ChatMessage) => void;
   full?: boolean;
 }) {
   const reduceMotion = useReducedMotion();
   return <div className={`live-announcement-list mg-card mg-list ${full ? 'live-announcement-list-full' : ''}`}>
     <AnimatePresence initial={false}>
-      {messages.map((message) => <AnnouncementRow key={message.id} message={message} staff={staff} canModerate={canModerate} onDelete={onDelete} onBlock={onBlock} onReply={onReply} reduceMotion={!!reduceMotion} />)}
+      {messages.map((message) => (
+        <AnnouncementRow
+          key={message.id}
+          message={message}
+          staff={staff}
+          canModerate={canModerate}
+          isPinned={pinnedId === message.id}
+          onPin={onPin}
+          onUnpin={onUnpin}
+          onDelete={onDelete}
+          onBlock={onBlock}
+          reduceMotion={!!reduceMotion}
+        />
+      ))}
     </AnimatePresence>
     {messages.length === 0 && <p className="live-empty">Nothing posted yet.</p>}
   </div>;
 }
 
-function AnnouncementRow({ message, staff, canModerate, onDelete, onBlock, onReply, reduceMotion }: {
+function AnnouncementRow({ message, staff, canModerate, isPinned, onPin, onUnpin, onDelete, onBlock, reduceMotion }: {
   message: ChatMessage;
   staff: boolean;
   canModerate: boolean;
+  isPinned: boolean;
+  onPin: (message: ChatMessage) => Promise<void>;
+  onUnpin: () => Promise<void>;
   onDelete: (id: number) => Promise<void>;
   onBlock: (id: number) => Promise<void>;
-  onReply?: (message: ChatMessage) => void;
   reduceMotion: boolean;
 }) {
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -400,20 +439,38 @@ function AnnouncementRow({ message, staff, canModerate, onDelete, onBlock, onRep
     <time dateTime={message.createdAt}>{messageTime(message)}</time>
     {canBlock ? <button type="button" className="live-announcement-copy" aria-expanded={actionsOpen} onClick={(event) => { event.stopPropagation(); setActionsOpen((open) => !open); }}><span>{message.body}</span>{message.adminOnly && <small><Lock aria-hidden="true" /> Organisers only</small>}</button>
       : <div className="live-announcement-copy"><span>{message.body}</span>{message.adminOnly && <small><Lock aria-hidden="true" /> Organisers only</small>}</div>}
-    {onReply && message.adminOnly && !message.recipientUserId && message.userId && <button type="button" className="live-reply" onClick={(event) => { event.stopPropagation(); onReply(message); }}>Reply privately<span className="sr-only"> to {message.authorName}</span></button>}
-    {canModerate && <button type="button" className="live-delete" aria-label={`Delete: ${message.body}`} onClick={(event) => { event.stopPropagation(); void onDelete(message.id); }}><Trash2 aria-hidden="true" /></button>}
+    {canModerate && (
+      <div className="live-row-actions">
+        <button
+          type="button"
+          className={`live-pin ${isPinned ? 'live-pin-active' : ''}`}
+          aria-label={isPinned ? `Unpin: ${message.body}` : `Pin as banner: ${message.body}`}
+          aria-pressed={isPinned}
+          title={isPinned ? 'Unpin banner' : 'Pin as banner'}
+          onClick={(event) => {
+            event.stopPropagation();
+            void (isPinned ? onUnpin() : onPin(message));
+          }}
+        >
+          <Pin aria-hidden="true" />
+        </button>
+        <button type="button" className="live-delete" aria-label={`Delete: ${message.body}`} onClick={(event) => { event.stopPropagation(); void onDelete(message.id); }}><Trash2 aria-hidden="true" /></button>
+      </div>
+    )}
     {actionsOpen && canBlock && <button type="button" className="live-block" onClick={(event) => { event.stopPropagation(); setActionsOpen(false); void onBlock(message.id); }}><Shield aria-hidden="true" /> Block this sender</button>}
   </motion.div>;
 }
 
-function AnnouncementsOverlay({ messages, staff, canModerate, error, onDelete, onBlock, onReply, onDismissError, onClose, returnFocusRef }: {
+function AnnouncementsOverlay({ messages, staff, canModerate, pinnedId, error, onPin, onUnpin, onDelete, onBlock, onDismissError, onClose, returnFocusRef }: {
   messages: ChatMessage[];
   staff: boolean;
   canModerate: boolean;
+  pinnedId: number | null;
   error: string | null;
+  onPin: (message: ChatMessage) => Promise<void>;
+  onUnpin: () => Promise<void>;
   onDelete: (id: number) => Promise<void>;
   onBlock: (id: number) => Promise<void>;
-  onReply?: (message: ChatMessage) => void;
   onDismissError: () => void;
   onClose: () => void;
   returnFocusRef: RefObject<HTMLElement | null>;
@@ -424,7 +481,7 @@ function AnnouncementsOverlay({ messages, staff, canModerate, error, onDelete, o
     <div ref={dialogRef} className="live-all-dialog" role="dialog" aria-modal="true" aria-label="All announcements">
       <div className="live-all-head"><h2>All announcements</h2><button type="button" className="mg-icon-btn" aria-label="Close announcements" onClick={onClose}><X aria-hidden="true" /></button></div>
       {error && <div className="live-action-error" role="alert"><span>{error}</span><button type="button" aria-label="Dismiss error" onClick={onDismissError}><X aria-hidden="true" /></button></div>}
-      <AnnouncementList messages={messages} staff={staff} canModerate={canModerate} onDelete={onDelete} onBlock={onBlock} onReply={onReply} full />
+      <AnnouncementList messages={messages} staff={staff} canModerate={canModerate} pinnedId={pinnedId} onPin={onPin} onUnpin={onUnpin} onDelete={onDelete} onBlock={onBlock} full />
     </div>
   </div>;
 }
@@ -517,4 +574,3 @@ function CompStreamEditor({ competition, canEditStream, onSaved }: { competition
     {error && <p className="staff-stream-error" role="alert">{error}</p>}
   </div>;
 }
-

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axiosError, heat, race, result, session } from '../test/factories';
@@ -111,7 +111,8 @@ describe('ScorerPage', () => {
     })] })] }) });
     open();
     await opened('Flag');
-    await user.click(screen.getByRole('button', { name: /1\. Bending/ }));
+    await user.click(screen.getByRole('button', { name: 'Previous race' }));
+    await opened('Bending');
     // The saved placings are there to correct.
     expect(placed()).toBe(3);
 
@@ -130,8 +131,7 @@ describe('ScorerPage', () => {
       races: [race(11, { name: 'Bending', isComplete: true, results: [result(1, 1), result(2, 2), result(3, 3)] })],
     })] })] }) });
     open();
-    await screen.findByRole('button', { name: /1\. Bending/ });
-    await user.click(screen.getByRole('button', { name: /1\. Bending/ }));
+    await opened('Bending');
     await user.click(screen.getByRole('button', { name: /Clear/ }));
     expect(placed()).toBe(0);
   });
@@ -156,7 +156,7 @@ describe('ScorerPage', () => {
     open();
     await opened('Bending');
     await tapTeams(user, ['Team 1']);
-    await user.click(screen.getByRole('button', { name: 'Eliminate Team 2' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Team 2, lane/ }), { key: 'Delete' });
     await user.click(screen.getByRole('button', { name: 'Race complete' }));
     const sheet = await screen.findByRole('dialog', { name: 'Why were teams eliminated?' });
     await user.click(within(sheet).getByRole('button', { name: 'Did not start' }));
@@ -300,7 +300,7 @@ describe('ScorerPage', () => {
     act(() => { window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: { sessionId: 1, heat: newer } })); });
     act(() => { window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: {} })); });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /^1\. Bending.*1st Team 1/ })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Scoring Flag' })).toBeInTheDocument());
   });
 
   it('reloads when the phone comes back online or the page is shown again', async () => {
@@ -434,4 +434,21 @@ describe('tripod remote commands', () => {
     view.unmount(); expect(buffer.dispose).toHaveBeenCalledOnce();
   });
 
+});
+
+
+it('labels scoped scores honestly and keeps organiser and stream tools off a scoring-only link', async () => {
+  link.get.mockResolvedValue({ data: timetable({ scope: 0, sessions: [session(1, {
+    competitionSectionId: 9,
+    heats: [heatWith({ races: [race(11, { name: 'Bending', isComplete: true, results: [result(1, 1, { points: 3 })] })] })],
+  })] }) });
+  open();
+  await opened('Bending');
+  await userEvent.click(screen.getByRole('button', { name: 'Yes, show commentator facts' }));
+  const facts = screen.getByRole('region', { name: 'Live commentator facts' });
+  expect(facts).toHaveTextContent('Available scores: 3 pts');
+  expect(facts).not.toHaveTextContent('Rank');
+  expect(screen.queryByRole('region', { name: 'Live stream control strip' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Score history & correction' })).toBeNull();
+  expect(link.get).not.toHaveBeenCalledWith('/competitions/1/streams');
 });

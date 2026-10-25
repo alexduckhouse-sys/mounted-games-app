@@ -418,3 +418,34 @@ it('links organiser screen actions to the selected age group and hides them from
   renderTab('/?section=10', { toplistOnly: false });
   expect(screen.queryByRole('region', { name: 'Organiser quick actions' })).toBeNull();
 });
+
+  it('shows QR Access, PA Commentator, and TV Kiosk links for organisers and opens the QR Code Access Hub', async () => {
+    state.manage = true;
+    state.get.mockImplementation((url: string, config?: { params?: { sectionId?: number } }) => {
+      if (url.endsWith('/scorer-links')) {
+        return Promise.resolve({
+          data: { arenas: ['Main Arena'], defaultExpiresAt: '2026-11-02T00:00:00Z', links: [] },
+        });
+      }
+      return Promise.resolve({ data: config?.params?.sectionId === 9 ? standings : otherStandings, headers: {} });
+    });
+    const user = userEvent.setup();
+    renderTab('/?section=9', { toplistOnly: true });
+    await screen.findByRole('region', { name: 'Finals' });
+
+    const quickBar = screen.getByRole('region', { name: 'Organiser quick actions' });
+    expect(within(quickBar).getByRole('link', { name: /PA Commentator/ })).toHaveAttribute('href', '/competitions/1/commentary?section=9');
+    expect(within(quickBar).getByRole('link', { name: /TV Kiosk/ })).toHaveAttribute('href', '/competitions/1/tv?section=9');
+
+    await user.click(within(quickBar).getByRole('button', { name: /QR Access/ }));
+    const modal = await screen.findByRole('dialog', { name: 'QR Code Access Hub' });
+    expect(within(modal).getByRole('tab', { name: /Volunteer & Scorer QR Links/ })).toHaveAttribute('aria-selected', 'true');
+
+    await user.click(within(modal).getByRole('tab', { name: /Screens, PA & Spectator QR Codes/ }));
+    expect(within(modal).getByText('PA Commentator Desk')).toBeInTheDocument();
+    expect(within(modal).getByText('TV Kiosk Display')).toBeInTheDocument();
+    expect(within(modal).getByRole('link', { name: /Print QR Posters Sheet/ })).toHaveAttribute('href', '/event-tools/1/print/posters');
+
+    await user.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
+    expect(screen.queryByRole('dialog', { name: 'QR Code Access Hub' })).toBeNull();
+  });

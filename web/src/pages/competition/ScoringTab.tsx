@@ -6,6 +6,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, Trophy, Sparkles, X, AlertTriangle, Mic, Monitor, QrCode as QrCodeIcon } from 'lucide-react';
 import { QrAccessModal } from '../../components/QrAccessModal';
+import { RaceListPicker } from '../../components/RacePicker';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
@@ -501,10 +502,14 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
             <span className="text-xs font-semibold">Session name (optional)</span>
             <input className="input mt-1 text-sm" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
-          <label className="block">
-            <span className="text-xs font-semibold">Races (one per line)</span>
-            <textarea rows={5} className="input mt-1 text-sm font-mono" value={races} onChange={(e) => setRaces(e.target.value)} />
-          </label>
+          <div className="block">
+            <RaceListPicker
+              label="Races"
+              ariaLabel="Races"
+              races={races.split('\n').map((r) => r.trim()).filter(Boolean)}
+              onChange={(next) => setRaces(next.join('\n'))}
+            />
+          </div>
 
           {runoff && (
             <div className="rounded-md bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 p-2 text-[12px]">

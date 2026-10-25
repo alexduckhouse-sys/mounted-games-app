@@ -7,6 +7,7 @@ import type { CompetitionDetail, Role } from '../../types';
 import { chat, competition } from '../../test/factories';
 import { CompetitionContext } from './context';
 import { ChatTab } from './ChatTab';
+import { ContactOrganisersPage } from './ContactOrganisersPage';
 
 const state = vi.hoisted(() => ({
   token: 'fake-admin-token' as string | null,
@@ -42,12 +43,23 @@ function contextValue(extra: Partial<CompetitionDetail> = {}) {
   return { competition: competition(extra), reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [] };
 }
 
-function mount(extra: Partial<CompetitionDetail> = {}) {
+function mountChat(extra: Partial<CompetitionDetail> = {}) {
   const value = contextValue(extra);
   return render(
     <MemoryRouter>
       <CompetitionContext.Provider value={value}>
         <ChatTab />
+      </CompetitionContext.Provider>
+    </MemoryRouter>,
+  );
+}
+
+function mountContact(extra: Partial<CompetitionDetail> = {}) {
+  const value = contextValue(extra);
+  return render(
+    <MemoryRouter>
+      <CompetitionContext.Provider value={value}>
+        <ContactOrganisersPage />
       </CompetitionContext.Provider>
     </MemoryRouter>,
   );
@@ -60,13 +72,13 @@ beforeEach(() => {
   HTMLElement.prototype.scrollTo = vi.fn();
 });
 
-describe('ChatTab auth sessions', () => {
+describe('ChatTab and ContactOrganisersPage auth sessions', () => {
   it('does not offer private organiser messaging when the API omits the capability', async () => {
     state.token = 'fake-trainer-token';
     state.roles = ['Trainer'];
     state.get.mockResolvedValue({ data: [] });
 
-    mount({ staffChatEnabled: undefined });
+    mountChat({ staffChatEnabled: undefined });
 
     expect(screen.getByText('Messaging the organisers isn’t available for this event yet.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
@@ -74,28 +86,30 @@ describe('ChatTab auth sessions', () => {
     expect(state.post).not.toHaveBeenCalled();
   });
 
-  it('lets a trainer message organisers when the API explicitly enables staff chat', async () => {
+  it('links non-organisers from Live stream to the dedicated ContactOrganisersPage and lets them message organisers there', async () => {
     state.token = 'fake-trainer-token';
     state.roles = ['Trainer'];
     state.get.mockResolvedValue({ data: [] });
-    mount();
+    const chatView = mountChat({ staffChatEnabled: true });
 
-    expect(screen.queryByText('Messaging the organisers isn’t available for this event yet.')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
+    expect(screen.queryByRole('tab', { name: 'Message Organisers' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Message organisers/i })).toHaveAttribute('href', '/competitions/1/contact');
+    chatView.unmount();
+
+    mountContact({ staffChatEnabled: true });
     await userEvent.type(screen.getByPlaceholderText('Message the organisers…'), 'Please call collecting ring');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(state.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'Please call collecting ring' });
   });
 
-  it.each(['Manager', 'Member', 'Rider'] as const)('lets a %s message the organisers privately', async (role) => {
+  it.each(['Manager', 'Member', 'Rider'] as const)('lets a %s message the organisers privately on ContactOrganisersPage', async (role) => {
     state.token = 'fake-member-token';
     state.roles = [role];
     state.get.mockResolvedValue({ data: [] });
     state.post.mockResolvedValue({ data: chat(9, { body: 'Where is the ring?', type: 0, adminOnly: true, userId: 'fake-user' }) });
-    mount({ staffChatEnabled: true });
+    mountContact({ staffChatEnabled: true });
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
     await userEvent.type(screen.getByPlaceholderText('Message the organisers…'), 'Where is the ring?');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -111,20 +125,18 @@ describe('ChatTab auth sessions', () => {
       chat(2, { body: 'Your answer', type: 0, adminOnly: true, userId: 'admin-1', recipientUserId: 'fake-user' }),
       chat(3, { body: 'Someone else', type: 0, adminOnly: true, userId: 'other-user' }),
     ] });
-    mount({ staffChatEnabled: true });
+    mountContact({ staffChatEnabled: true });
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
     expect(await screen.findByText('Your answer')).toBeInTheDocument();
     expect(screen.getByText('My question')).toBeInTheDocument();
     expect(screen.queryByText('Someone else')).not.toBeInTheDocument();
   });
 
-  it('lets an admin reply privately to a message instead of announcing to everyone', async () => {
+  it('lets an admin reply privately to a message on ContactOrganisersPage instead of announcing to everyone', async () => {
     state.get.mockResolvedValue({ data: [chat(1, { body: 'Where is the ring?', type: 0, adminOnly: true, userId: 'asker-1', authorName: 'Sam Rider' })] });
     state.post.mockResolvedValue({ data: chat(2, { body: 'By the lorries', type: 0, adminOnly: true, userId: 'fake-user', recipientUserId: 'asker-1' }) });
-    mount({ staffChatEnabled: true });
+    mountContact({ staffChatEnabled: true });
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
     await userEvent.click(await screen.findByRole('button', { name: /Reply privately/ }));
     expect(screen.getByText(/Private reply to Sam Rider/)).toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText('Write a private reply…'), 'By the lorries');
@@ -138,8 +150,7 @@ describe('ChatTab auth sessions', () => {
   it('clears private messages and ignores the previous session response after sign-out', async () => {
     const privateMessage = chat(1, { body: 'Private trainer message', type: 0, adminOnly: true });
     state.get.mockResolvedValueOnce({ data: [privateMessage] });
-    const view = mount();
-    await userEvent.click(screen.getByRole('tab', { name: 'Message Organisers' }));
+    const view = mountContact();
     expect(await screen.findByText('Private trainer message')).toBeInTheDocument();
 
     const stale = deferred<{ data: typeof privateMessage[] }>();
@@ -155,7 +166,7 @@ describe('ChatTab auth sessions', () => {
     view.rerender(
       <MemoryRouter>
         <CompetitionContext.Provider value={contextValue()}>
-          <ChatTab />
+          <ContactOrganisersPage />
         </CompetitionContext.Provider>
       </MemoryRouter>,
     );
@@ -167,33 +178,21 @@ describe('ChatTab auth sessions', () => {
     stale.resolve({ data: [privateMessage] });
     await act(async () => { await stale.promise; });
     expect(screen.queryByText('Private trainer message')).not.toBeInTheDocument();
-
-    const publicMessage = chat(2, { body: 'Public announcement', type: 2 });
-    publicResponse.resolve({ data: [publicMessage] });
-    await act(async () => { await publicResponse.promise; });
-    expect(await screen.findByText('Public announcement')).toBeInTheDocument();
   });
 
-  it('splits Announcements and Message Organisers into two switchable sub-tabs', async () => {
-    state.token = 'fake-rider-token';
-    state.roles = ['Rider'];
+  it('keeps Announcements on ChatTab free of private messages and links admins to Organiser messages', async () => {
+    state.token = 'fake-admin-token';
+    state.roles = ['Admin'];
     state.get.mockResolvedValue({
       data: [
         chat(1, { body: 'Official heat 1 update', type: 2, adminOnly: false }),
-        chat(2, { body: 'Private question from rider', type: 0, adminOnly: true, userId: 'fake-user' }),
+        chat(2, { body: 'Private question from rider', type: 0, adminOnly: true, userId: 'rider-1' }),
       ],
     });
-    mount({ staffChatEnabled: true });
+    mountChat({ staffChatEnabled: true });
 
-    expect(await screen.findByText('Official heat 1 update')).toBeInTheDocument();
-    const announcementsTab = screen.getByRole('tab', { name: /^Announcements$/ });
-    const messagesTab = screen.getByRole('tab', { name: /Message Organisers/ });
-    expect(announcementsTab).toHaveAttribute('aria-selected', 'true');
-    expect(messagesTab).toHaveAttribute('aria-selected', 'false');
-
-    await userEvent.click(messagesTab);
-    expect(messagesTab).toHaveAttribute('aria-selected', 'true');
-    await waitFor(() => expect(screen.queryByText('Official heat 1 update')).not.toBeInTheDocument());
-    expect(screen.getByText('Private question from rider')).toBeInTheDocument();
+    expect(await screen.findAllByText('Official heat 1 update')).toHaveLength(2);
+    expect(screen.queryByText('Private question from rider')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Organiser messages \(1\)/ })).toHaveAttribute('href', '/competitions/1/contact');
   });
 });

@@ -23,8 +23,8 @@ export const team = (id: number, extra: Partial<Team> = {}): Team => ({
   suffix: '', displayName: `Team ${id}`, isHorsConcours: false, ...extra,
 });
 
-export const standing = (teamId: number, totalPoints: number): StandingRow => ({
-  teamId, teamName: `Team ${teamId}`, clubName: 'Club', totalPoints, racesRun: 0, wins: 0, eliminations: 0,
+export const standing = (teamId: number, totalPoints: number, extra: Partial<StandingRow> = {}): StandingRow => ({
+  teamId, teamName: `Team ${teamId}`, clubName: 'Club', totalPoints, racesRun: 0, wins: 0, eliminations: 0, ...extra,
 });
 
 export const chat = (id: number, extra: Partial<ChatMessage> = {}): ChatMessage => ({

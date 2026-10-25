@@ -42,11 +42,16 @@ describe('HeatPrintSheet', () => {
 });
 
 describe('the print button', () => {
-  it('opens the print dialog', async () => {
+  it('opens the print dialog when all races in the heat are complete', async () => {
     const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+    const finishedHeat: Heat = heat(1, {
+      label: 'Heat 1',
+      entries,
+      races: [done, race(2, { name: 'Race 2', isComplete: true, results: [result(2, 1, { points: 3 })] })],
+    });
     render(
       <ScoringSection
-        heat={h} races={h.races} activeRace={h.races[1]} onSelectRace={vi.fn()} sessionBase={3} laneRules={rules} qualifiers={3}
+        heat={finishedHeat} races={finishedHeat.races} activeRace={finishedHeat.races[1]} onSelectRace={vi.fn()} sessionBase={3} laneRules={rules} qualifiers={3}
         pending={[]} canScore queued={[]} onClickTeam={vi.fn()} onToggleElim={vi.fn()} onReset={vi.fn()} onSubmit={vi.fn()}
         correctionReason="" onCorrectionReason={vi.fn()}
       />,

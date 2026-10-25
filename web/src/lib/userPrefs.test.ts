@@ -201,6 +201,7 @@ describe('userPrefs', () => {
       result.current.setNotifyMinutesBefore(30);
       result.current.setTextSize('large');
       result.current.setScorerHaptics(false);
+      result.current.setSortByLaneOrder(false);
       result.current.setDefaultToplistView('results');
       result.current.setDefaultAgeGroup('Junior');
     });
@@ -210,8 +211,14 @@ describe('userPrefs', () => {
     expect(result.current.notifyLeadMins).toBe(30);
     expect(result.current.textSize).toBe('large');
     expect(result.current.scorerHaptics).toBe(false);
+    expect(result.current.sortByLaneOrder).toBe(false);
     expect(result.current.defaultToplistView).toBe('results');
     expect(result.current.defaultAgeGroup).toBe('Junior');
+
+    act(() => {
+      result.current.setSortByLaneOrder(true);
+    });
+    expect(result.current.sortByLaneOrder).toBe(true);
 
     // Simulate cross-tab storage event
     act(() => {

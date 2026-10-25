@@ -101,6 +101,7 @@ export const STORAGE_KEYS = {
   notifyLeadMins: 'mg.prefs.notifyLeadMins',
   textSize: 'mg.prefs.textSize',
   scorerHaptics: 'mg.prefs.scorerHaptics',
+  sortByLaneOrder: 'mg.prefs.sortByLaneOrder',
 } as const;
 
 export const PREFS_CHANGED_EVENT = 'mg:prefs-changed';
@@ -280,6 +281,17 @@ export function setScorerHaptics(enabled: boolean): void {
   notifyPrefsChanged();
 }
 
+export function getSortByLaneOrder(): boolean {
+  const raw = readStorage(STORAGE_KEYS.sortByLaneOrder);
+  if (raw === 'false' || raw === '0') return false;
+  return true;
+}
+
+export function setSortByLaneOrder(enabled: boolean): void {
+  writeStorage(STORAGE_KEYS.sortByLaneOrder, enabled ? 'true' : 'false');
+  notifyPrefsChanged();
+}
+
 export function triggerScorerHaptic(durationMs = 10): boolean {
   if (!getScorerHaptics()) return false;
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
@@ -300,6 +312,7 @@ export interface UserPrefsSnapshot {
   notifyLeadMins: NotifyLeadMins;
   textSize: TextSizePref;
   scorerHaptics: boolean;
+  sortByLaneOrder: boolean;
 }
 
 export function readUserPrefsSnapshot(): UserPrefsSnapshot {
@@ -312,6 +325,7 @@ export function readUserPrefsSnapshot(): UserPrefsSnapshot {
     notifyLeadMins: getNotifyMinutesBefore(),
     textSize: getTextSize(),
     scorerHaptics: getScorerHaptics(),
+    sortByLaneOrder: getSortByLaneOrder(),
   };
 }
 
@@ -348,6 +362,7 @@ export function useUserPrefs() {
     setNotifyMinutesBefore,
     setTextSize,
     setScorerHaptics,
+    setSortByLaneOrder,
   };
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { competition, heat, race, session, team } from '../test/factories';
 import type { CompetitionSection } from '../types';
 import { draftFromCompetition, hasScores, realFixedItems, teamCountsOf } from './creatorLoad';
@@ -8,6 +8,14 @@ const sec = (id: number, extra: Partial<CompetitionSection> = {}): CompetitionSe
 });
 
 describe('draftFromCompetition', () => {
+  it('loads card visibility only for this competition and tolerates blocked device storage', () => {
+    localStorage.setItem('mg.cardsEnabled.12', '1');
+    expect(draftFromCompetition(competition({ id: 12 })).cardsEnabled).toBe(true);
+    expect(draftFromCompetition(competition({ id: 13 })).cardsEnabled).toBe(false);
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    expect(draftFromCompetition(competition({ id: 12 })).cardsEnabled).toBe(false);
+  });
+
   it('opens a competition with nothing planned: one session per age group, races left for later', () => {
     const d = draftFromCompetition(competition({
       name: 'Old', startDate: '2026-06-01T08:30:00', endDate: '2026-06-02T16:00:00', icon: undefined, organiserName: 'Pony Club', location: 'Field',

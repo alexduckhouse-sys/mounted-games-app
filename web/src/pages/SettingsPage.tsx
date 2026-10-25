@@ -57,11 +57,13 @@ export function SettingsPage() {
     notifyLeadMins,
     textSize,
     scorerHaptics,
+    sortByLaneOrder,
     setBottomTabs,
     resetBottomTabs,
     setNotifyMinutesBefore,
     setTextSize,
     setScorerHaptics,
+    setSortByLaneOrder,
   } = useUserPrefs();
   const [customMinsText, setCustomMinsText] = useState<string | null>(null);
 
@@ -223,6 +225,7 @@ export function SettingsPage() {
         <h2 className="px-2 py-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Options</h2>
         <SettingSwitch icon={CloudSun} label="Show weather" checked={showWeather} onChange={toggleWeather} />
         <SettingSwitch icon={Vibrate} label="Scorer tap vibration" checked={scorerHaptics} onChange={() => setScorerHaptics(!scorerHaptics)} />
+        <SettingSwitch icon={LayoutGrid} label="Order scoring teams by lane" checked={sortByLaneOrder} onChange={() => setSortByLaneOrder(!sortByLaneOrder)} />
         <div className="flex min-h-12 w-full items-center gap-3 rounded-[10px] px-3 text-base font-medium text-[rgb(var(--mg-ink))]">
           <Type aria-hidden="true" className={iconClass(false)} />
           <span className="flex-1">Text size</span>

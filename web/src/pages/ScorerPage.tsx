@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, CloudOff, Eye, Film, Link2Off, Lock, Mic, MicOff, Pause, Play, QrCode, RefreshCw, Square, Video } from 'lucide-react';
+import { Camera, CloudOff, Eye, Film, Link2Off, Lock, Mic, MicOff, Pause, Play, QrCode, RefreshCw, Square, Table2, Trophy, Video, X } from 'lucide-react';
 import { QrPermissionScannerModal } from '../components/QrPermissionScannerModal';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
+import { StreamControlStrip } from '../components/stream/StreamControlStrip';
+import { formatPoints } from '../lib/formatPoints';
+import { statusLetter } from '../lib/resultStatus';
+import { ordinal } from '../lib/toplist';
 import { ScoreClashBanner, type ScoreClashItem } from './competition/ScoringParts';
 import { ScoringSection, type PendingPlace } from './competition/ScoringSection';
 import {
@@ -14,7 +18,7 @@ import { nextRoundLanes } from '../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo';
 import { overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
-import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
+import { displayLaneFor, lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import { browserPublisherDependencies, createStreamPublisher, type PublisherSnapshot } from '../live/streamPublisher';
 import { createReplayBuffer, getSavedReplays, type ReplayBufferHandle, type SavedReplayClip } from '../live/replayBuffer';
@@ -175,7 +179,7 @@ export function ScorerPage() {
             <ScoreOutboxPanel competitionId={session.competitionId} />
             {raceSessions.length === 0
               ? <p className="mg-card p-4">Nothing is timetabled for this arena yet. It will appear here once the organiser adds it.</p>
-              : <ArenaScoring key={session.competitionId} sessions={raceSessions} outbox={outbox} />}
+              : <ArenaScoring key={session.competitionId} sessions={raceSessions} outbox={outbox} canStream={session.scope === 2} />}
           </>
         )
       )}
@@ -599,7 +603,7 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
   );
 }
 
-function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: ReturnType<typeof useScoreOutbox> }) {
+function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; outbox: ReturnType<typeof useScoreOutbox>; canStream: boolean }) {
   const [chosenSessionId, setChosenSessionId] = useState<number | null>(null);
   const [chosenHeatId, setChosenHeatId] = useState<number | null>(null);
   const [chosenRaceId, setChosenRaceId] = useState<number | null>(null);
@@ -612,10 +616,36 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
   // Default to the first session with an unfinished heat, so the scorer lands where the action is.
   const session = sessions.find((s) => s.id === chosenSessionId)
     ?? sessions.find((s) => s.heats.some((h) => !heatIsComplete(h))) ?? sessions[0];
+
+  const [commentatorChoice, setCommentatorChoice] = useState<'yes' | 'no' | null>(() => {
+    try {
+      const fromUrl = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('commentator') === '1';
+      if (fromUrl) {
+        localStorage.setItem(`mg.commentatorScoring.${session.competitionId}`, 'yes');
+        return 'yes';
+      }
+      const val = localStorage.getItem(`mg.commentatorScoring.${session.competitionId}`);
+      if (val === 'yes' || val === 'no') return val;
+    } catch { /* ignore */ }
+    return null;
+  });
+  const [postRaceRecap, setPostRaceRecap] = useState<{
+    raceName: string;
+    summaryText: string;
+    heat: Heat;
+    session: Session;
+  } | null>(null);
+
+  const commentatorMode = commentatorChoice === 'yes';
+  function saveCommentatorChoice(next: 'yes' | 'no') {
+    setCommentatorChoice(next);
+    try { localStorage.setItem(`mg.commentatorScoring.${session.competitionId}`, next); } catch { /* ignore */ }
+  }
+
   const heats = session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
   const heat = heats.find((h) => h.id === chosenHeatId) ?? heats.find((h) => !heatIsComplete(h)) ?? heats[0] ?? null;
   const races = (heat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
-  const activeRace = races.find((r) => r.id === chosenRaceId) ?? races.find((r) => !r.isComplete) ?? null;
+  const activeRace = races.find((r) => r.id === chosenRaceId) ?? races.find((r) => !r.isComplete) ?? races[races.length - 1] ?? null;
   // A heat with more teams than lanes races only the lanes, so points are out of the lanes, not the teams.
   const sessionBase = sessionPointsBase(session.heats, session.lanesPerHeat);
   const laneRules = lanesOf(session);
@@ -629,6 +659,7 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
   const qualifierCap = heat?.raceRoundStage === 1 ? qualifiersOf(session) : null;
 
   function choose(change: { session?: number; heat?: number; race?: number }) {
+    setPostRaceRecap(null);
     if (change.session !== undefined) { setChosenSessionId(change.session); setChosenHeatId(null); setChosenRaceId(null); }
     if (change.heat !== undefined) { setChosenHeatId(change.heat); setChosenRaceId(null); }
     if (change.race !== undefined) setChosenRaceId(change.race);
@@ -675,10 +706,36 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
       state: 'waiting',
     };
     const queuedBefore = outbox.find((q) => q.raceId === activeRace.id) ?? null;
+    const nextOutbox = enqueue(outbox, item);
     if (!updateOutbox((list) => enqueue(list, item))) { setSaveError(OUTBOX_STORAGE_ERROR); return; }
     setSaveError(null);
     setUndoStack((stack) => pushUndo(dropDrafts(stack, activeRace.id), { kind: 'save', raceId: activeRace.id, sent: item, queuedBefore, draft: places }));
     setPending([]);
+
+    if (commentatorMode) {
+      const updatedHeats = heats.map((h) => withQueuedResults(h, nextOutbox, sessionBase));
+      const updatedHeat = updatedHeats.find((h) => h.id === heat.id) ?? heat;
+      const scoredRace = updatedHeat.races.find((r) => r.id === activeRace.id);
+      const summaryParts = (scoredRace?.results ?? [])
+        .slice()
+        .sort((a, b) => {
+          if (a.isSitOut !== b.isSitOut) return a.isSitOut ? 1 : -1;
+          if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
+          return (a.placing ?? 999) - (b.placing ?? 999) || b.points - a.points;
+        })
+        .map((res) => {
+          if (res.isSitOut) return `Sat out ${res.teamName}`;
+          if (res.eliminated) return `${statusLetter(true, res.status) ?? 'E'} ${res.teamName}`;
+          return `${res.placing != null ? ordinal(res.placing) : ''} ${res.teamName} (+${formatPoints(res.points)} pts)`.trim();
+        });
+      setPostRaceRecap({
+        raceName: activeRace.name,
+        summaryText: summaryParts.join(', ') || 'Results recorded',
+        heat: updatedHeat,
+        session: { ...session, heats: updatedHeats },
+      });
+    }
+
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
     const next = nextRaceToScore(heats, session.raceOrderAlternating === true, { heatId: heat.id, raceId: activeRace.id }, queuedIds);
     if (next) { setChosenHeatId(next.heatId); setChosenRaceId(next.raceId); }
@@ -754,10 +811,73 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
     );
   }
 
+  // Scorer links may contain one heat only; never present these totals as a section ranking.
+  const availableTotals = new Map<number, { teamId: number; teamName: string; points: number }>();
+  for (const s of sessions) {
+    if (s.competitionSectionId !== session.competitionSectionId) continue;
+    for (const h of s.heats) {
+      const viewed = withQueuedResults(h, outbox, sessionPointsBase(s.heats, s.lanesPerHeat));
+      for (const e of viewed.entries) {
+        const row = availableTotals.get(e.teamId) ?? { teamId: e.teamId, teamName: e.teamName, points: 0 };
+        row.points += viewed.races.reduce((total, race) => total + (race.results.find((r) => r.teamId === e.teamId)?.points ?? 0), 0);
+        availableTotals.set(e.teamId, row);
+      }
+    }
+  }
+  const availableRows = [...availableTotals.values()].sort((a, b) => b.points - a.points);
+
   return (
     <div className="space-y-3">
       {saveError && <p role="alert" className="mg-notice">{saveError}</p>}
       <ScoreClashBanner clashes={clashes} teamNamesById={teamNamesById} onResolve={resolveClash} />
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button
+          type="button"
+          aria-pressed={commentatorMode}
+          onClick={() => saveCommentatorChoice(commentatorMode ? 'no' : 'yes')}
+          className={`mg-btn !min-h-9 !px-3 text-xs font-bold ${
+            commentatorMode ? 'mg-btn-primary' : 'mg-btn-secondary'
+          }`}
+        >
+          <Mic className="h-3.5 w-3.5" aria-hidden="true" />
+          {commentatorMode ? 'Commentator facts: ON' : 'Commentator facts: OFF'}
+        </button>
+      </div>
+
+      {commentatorChoice === null && (
+        <section
+          aria-label="Commentator scoring prompt"
+          className="mg-card flex flex-wrap items-center justify-between gap-3 border-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] p-3.5"
+        >
+          <div className="min-w-0 flex-1">
+            <h2 className="m-0 flex items-center gap-1.5 text-sm font-bold text-[rgb(var(--mg-heading))]">
+              <Mic className="h-4 w-4 shrink-0" aria-hidden="true" />
+              Do you want to see commentator facts while scoring?
+            </h2>
+            <p className="mt-1 mb-0 text-xs text-[rgb(var(--mg-muted))]">
+              Shows the scores available to this link while you score, with a heat summary after each race.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => saveCommentatorChoice('yes')}
+              className="mg-btn mg-btn-primary !min-h-9 !px-3 text-xs font-bold"
+            >
+              Yes, show commentator facts
+            </button>
+            <button
+              type="button"
+              onClick={() => saveCommentatorChoice('no')}
+              className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
+            >
+              No, just score
+            </button>
+          </div>
+        </section>
+      )}
+
       {sessions.length > 1 && (
         <label className="flex flex-col gap-1 text-sm font-semibold">Session
           <select className="input min-h-11" value={session.id} onChange={(event) => choose({ session: Number(event.target.value) })}>
@@ -781,8 +901,56 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
           ))}
         </div>
       )}
+
+      {commentatorMode && viewHeat && (
+        <section aria-label="Live commentator facts" className="mg-card space-y-3 p-3.5">
+          <div className="flex items-center gap-2 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
+            <Mic className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
+            <h2 className="mg-display m-0 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+              Live Commentator Facts · {viewHeat.label || 'Current Heat'}
+            </h2>
+          </div>
+          {viewHeat.entries.length > 0 && (
+            <ul className="m-0 grid grid-cols-1 gap-2 list-none p-0 sm:grid-cols-2">
+              {viewHeat.entries
+                .slice()
+                .sort((a, b) => a.laneIndex - b.laneIndex)
+                .map((entry) => {
+                  const row = availableTotals.get(entry.teamId);
+                  const heatPts = viewHeat.races.reduce(
+                    (sum, r) => sum + (r.results.find((res) => res.teamId === entry.teamId)?.points ?? 0),
+                    0,
+                  );
+                  return (
+                    <li
+                      key={entry.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-2 text-xs"
+                    >
+                      <span className="font-bold text-[rgb(var(--mg-ink))]">
+                        Lane {displayLaneFor(viewHeat, entry, Math.max(0, races.findIndex((r) => r.id === activeRace?.id)), laneRules)}: {entry.teamName}
+                      </span>
+                      <span className="font-bold text-[rgb(var(--mg-heading))]">
+                        Available scores: {formatPoints(row?.points ?? 0)} pts (Heat: {formatPoints(heatPts)})
+                      </span>
+                    </li>
+                  );
+                })}
+            </ul>
+          )}
+          {canStream && <StreamControlStrip
+            competitionId={session.competitionId}
+            arenaName={session.arenaName}
+            sectionId={session.competitionSectionId}
+            activeHeatId={viewHeat.id}
+            compact
+            useScorerClient
+          />}
+        </section>
+      )}
+
       {viewHeat && (
         <ScoringSection
+          key={`${viewHeat.id}:${activeRace?.id}`}
           heat={viewHeat}
           races={viewRaces}
           activeRace={viewRaces.find((r) => r.id === activeRace?.id) ?? null}
@@ -805,6 +973,91 @@ function ArenaScoring({ sessions, outbox }: { sessions: Session[]; outbox: Retur
           correctionReason={activeRace ? reasons[activeRace.id] ?? '' : ''}
           onCorrectionReason={(reason) => { if (activeRace) setReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
         />
+      )}
+
+      {postRaceRecap && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Post-race commentator summary"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setPostRaceRecap(null)}
+        >
+          <div
+            className="mg-card flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden bg-[rgb(var(--mg-surface))] shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3.5">
+              <div>
+                <span className="block text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-ok))]">
+                  Post-Race Commentator Summary
+                </span>
+                <h2 className="mg-display m-0 text-lg font-bold text-[rgb(var(--mg-heading))]">
+                  Race complete: {postRaceRecap.raceName} — {postRaceRecap.summaryText}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPostRaceRecap(null)}
+                aria-label="Close post-race summary"
+                className="mg-btn mg-btn-secondary !min-h-9 !px-2.5"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto p-4">
+              <section aria-label="Updated heat table" className="space-y-2">
+                <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+                  <Table2 className="h-4 w-4" aria-hidden="true" /> Updated Heat Table · {postRaceRecap.heat.label || 'Heat'}
+                </h3>
+                <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] list-none p-0">
+                  {postRaceRecap.heat.entries
+                    .slice()
+                    .map((entry) => ({
+                      ...entry,
+                      points: postRaceRecap.heat.races.reduce(
+                        (sum, r) => sum + (r.results.find((res) => res.teamId === entry.teamId)?.points ?? 0),
+                        0,
+                      ),
+                    }))
+                    .sort((a, b) => b.points - a.points || a.laneIndex - b.laneIndex)
+                    .map((row, idx) => (
+                      <li key={row.teamId} className="flex items-center justify-between px-3 py-2 text-xs font-semibold">
+                        <span>{ordinal(idx + 1)} {row.teamName}</span>
+                        <span>{formatPoints(row.points)} pts</span>
+                      </li>
+                    ))}
+                </ol>
+              </section>
+
+              <section aria-label="Updated section toplist" className="space-y-2">
+                <p className="text-xs">These totals cover only the heats available to this link and include queued scores. They are not section standings.</p>
+                <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+                  <Trophy className="h-4 w-4" aria-hidden="true" /> Scores available to this link
+                </h3>
+                <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] list-none p-0">
+                  {availableRows.map((row) => (
+                    <li key={row.teamId} className="flex items-center justify-between px-3 py-2 text-xs font-semibold">
+                      <span>{row.teamName}</span>
+                      <span>{formatPoints(row.points)} pts</span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            </div>
+
+            <div className="flex items-center justify-end border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setPostRaceRecap(null)}
+                className="mg-btn mg-btn-primary !min-h-10 !px-4 text-sm font-bold"
+              >
+                Next race →
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
