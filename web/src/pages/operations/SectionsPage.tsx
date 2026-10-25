@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Minus, Plus, X } from 'lucide-react';
+import { TickerNumber } from '../../components/TickerNumber';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
@@ -254,7 +255,7 @@ function Stepper({ label, value, min, max, step = 1, disabled, onChange }: { lab
       <span className="ops-step-label" id={`step-${label}`}>{label}</span>
       <span className="ops-step-ctl" role="group" aria-labelledby={`step-${label}`}>
         <button type="button" className="ops-ibtn" aria-label={`Fewer ${label.toLowerCase()}`} disabled={disabled || value <= min} onClick={() => onChange(Math.max(min, value - step))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
-        <output aria-live="polite">{value}</output>
+        <output aria-live="polite"><TickerNumber value={value} format={String} /></output>
         <button type="button" className="ops-ibtn" aria-label={`More ${label.toLowerCase()}`} disabled={disabled || value >= max} onClick={() => onChange(Math.min(max, value + step))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
       </span>
     </div>

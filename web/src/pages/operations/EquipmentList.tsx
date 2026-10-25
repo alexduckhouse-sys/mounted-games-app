@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { TickerNumber } from '../../components/TickerNumber';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import type { EquipmentChecklistItem } from './types';
 
@@ -16,7 +17,7 @@ export function EquipmentList({ items, checked, canWrite, onToggle }: {
     <>
       {[...buckets.entries()].map(([bucket, rows]) => (
         <Fragment key={bucket}>
-          <RefineSection title={bucket} meta={`${rows.filter((row) => checked.has(row.key)).length} of ${rows.length} checked`} />
+          <RefineSection title={bucket} meta={<><TickerNumber value={rows.filter((row) => checked.has(row.key)).length} format={String} /> of {rows.length} checked</>} />
           <RefineList as="div">
             {rows.map((item) => (
               <label key={item.key} className="rf-row ops-check">

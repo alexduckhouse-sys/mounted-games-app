@@ -17,6 +17,9 @@
 .ops-check { cursor: pointer; }
 .ops-check input { width: 22px; height: 22px; flex: none; margin: 0; accent-color: rgb(var(--mg-button)); }
 .ops-check input:disabled { cursor: not-allowed; }
+/* Ticking a check gives the box a small pop. */
+.ops-check input:checked { animation: ops-check-pop 280ms cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes ops-check-pop { 0% { transform: scale(.7); } 100% { transform: scale(1); } }
 .ops-check:has(input:focus-visible) { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
 
 /* Draw preview */
@@ -182,3 +185,6 @@
 .ops-rule-head { min-height: 44px; }
 .ops-value { width: 88px; min-height: 44px; padding: 0 10px; text-align: right; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 700 18px/1 var(--mg-font-display); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); }
 .ops-entries > .rf-list + .rf-list { margin-top: 12px; }
+/* An opened entry slides in under its row. */
+.ops-entry-body { animation: rf-reveal 220ms var(--mg-ease-out); }
+@media (prefers-reduced-motion: reduce) { .ops-check input:checked, .ops-entry-body { animation: none; } }

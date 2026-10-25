@@ -597,6 +597,11 @@ html[data-lite="true"] .mg-conn-back, html[data-lite="true"] .mg-sent-row { anim
 .mg-lazy-img[data-state="loaded"] { animation: mg-photo-in 480ms var(--mg-ease-out); }
 @keyframes mg-photo-in { from { opacity: .3; filter: blur(6px); transform: scale(1.03); } }
 
+/* The small "saved" pill for pages that save as you go. */
+.mg-saved-toast { position: fixed; z-index: 90; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px; background: rgb(var(--mg-header-deep)); color: #fff; font: 600 14px/1 var(--mg-font); white-space: nowrap; box-shadow: 0 8px 24px rgb(0 0 0 / .25); pointer-events: none; }
+.mg-saved-toast svg { flex: none; padding: 2px; border-radius: 50%; background: rgb(var(--mg-ok)); }
+.mg-saved-toast path { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
+
 /* Sponsors: a strip under a page, the full page, and the cards over the live video. */
 .mg-sponsors { padding: 12px; border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); box-shadow: var(--mg-shadow-sm); }
 .mg-sponsors-title { margin: 0 0 8px; font: 700 12px/1 var(--mg-font); letter-spacing: .08em; text-transform: uppercase; color: rgb(var(--mg-muted)); }

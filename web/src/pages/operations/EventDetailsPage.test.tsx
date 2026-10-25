@@ -47,6 +47,8 @@ describe('EventDetailsPage', () => {
 
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ name: 'Spring Open', organiserName: 'Elm Club', location: 'Stoneleigh Park', startDate: competition.startDate })));
     expect(reload).toHaveBeenCalled();
+    // A small toast confirms it, since there is no Save button.
+    expect(await screen.findByText('Organiser saved')).toBeInTheDocument();
   });
 
   it('does not save an unchanged field, and refuses an empty name', async () => {
@@ -70,6 +72,7 @@ describe('EventDetailsPage', () => {
     await user.type(screen.getByLabelText('Venue'), ' North');
     await user.tab();
     expect(await screen.findByRole('alert')).toHaveTextContent('Not allowed.');
+    expect(screen.queryByText('Venue saved')).toBeNull();
   });
 
   it('turns the passport check on at once, and puts the switch back if it fails', async () => {
