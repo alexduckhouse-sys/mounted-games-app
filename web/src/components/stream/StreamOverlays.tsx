@@ -1,5 +1,5 @@
 import { useEffect, useState, useContext, type ReactNode } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Megaphone, VolumeX } from 'lucide-react';
 import { BibSwatch as BaseBibSwatch } from '../BibSwatch';
 import { LiveDataCardOverlay, OverlayChips, ProducerBanner, ScoreCardOverlay, activeArenaHeat, readLiveOverlayCard, useDueCard } from './OverlayExtras';
@@ -8,6 +8,8 @@ import { useOverlay } from '../../hooks/useOverlay';
 import { CompetitionContext } from '../../pages/competition/context';
 import { lookStyle } from '../../lib/overlays';
 import type { ChatMessage, Heat, LiveStream } from '../../types';
+import { ENTER, LEAVE, ROW_STAGGER_S, SPRING, WIPE_HIDDEN_LEFT, WIPE_SHOWN } from '../../lib/motion';
+import { useStillMotion } from '../../lite/useStillMotion';
 
 /** A broadcast bib swatch accepting colour/color and optional size, rendering nothing when no bib color exists. */
 export function BibSwatch({
@@ -38,16 +40,25 @@ export function OverlayLayer({ children }: { children: ReactNode }) {
   return <div className={`mg-font mg-ov-${look.size} pointer-events-none absolute inset-0 text-white`} style={lookStyle(look)}>{children}</div>;
 }
 export function StreamNotice({ message, receivedAt, duration = 8000 }: { message: ChatMessage; receivedAt: number; duration?: number }) {
+  const still = useStillMotion();
   const [visible, setVisible] = useState(() => Date.now() - receivedAt < duration);
   useEffect(() => {
     const timer = setTimeout(() => setVisible(false), Math.max(0, duration - (Date.now() - receivedAt)));
     return () => clearTimeout(timer);
   }, [receivedAt, duration]);
-  if (!visible) return null;
-  return <div role="status" className="mg-stream-glass mg-stream-fade flex max-w-md gap-2 p-3 text-sm">
-    {message.type === 2 && <Megaphone aria-hidden="true" className="h-5 w-5 shrink-0" />}
-    <p><strong>{message.type === 2 ? 'Announcement' : message.authorName}</strong> · {message.body}</p>
-  </div>;
+  return <AnimatePresence>
+    {visible && <motion.div
+      role="status"
+      className="mg-stream-glass flex max-w-md gap-2 p-3 text-sm"
+      initial={still ? false : { opacity: 0, y: -12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={still ? undefined : { opacity: 0, y: -8, transition: LEAVE }}
+      transition={SPRING}
+    >
+      {message.type === 2 && <Megaphone aria-hidden="true" className="h-5 w-5 shrink-0" />}
+      <p><strong>{message.type === 2 ? 'Announcement' : message.authorName}</strong> · {message.body}</p>
+    </motion.div>}
+  </AnimatePresence>;
 }
 interface HeatLaneLike {
   id?: number | string;
@@ -74,7 +85,7 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
   announcement?: { message: ChatMessage; receivedAt: number }; hideCaption?: boolean;
   currentHeat?: Heat | HeatLike | null; children?: ReactNode;
 }) {
-  const reduced = useReducedMotion();
+  const still = useStillMotion();
   const compCtx = useContext(CompetitionContext);
   const competition = compCtx?.competition;
   const { overlay, look, scoreCards } = useOverlay();
@@ -127,19 +138,25 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
         <motion.div
           key="now-racing-strip"
           aria-label="Now racing"
-          initial={reduced ? false : { y: 12 }}
-          animate={{ y: 0 }}
-          exit={reduced ? undefined : { opacity: 0, y: 10 }}
-          transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+          initial={still ? false : { clipPath: WIPE_HIDDEN_LEFT }}
+          animate={{ clipPath: WIPE_SHOWN }}
+          exit={still ? undefined : { clipPath: WIPE_HIDDEN_LEFT, transition: LEAVE }}
+          transition={ENTER}
           className={`mg-ov-strip absolute left-0 right-0 ${stripEdge} flex flex-col gap-1 px-3 py-2 text-xs sm:text-sm`}
         >
           <div className="flex items-center gap-2">
-            <div className="min-w-0 flex-1 truncate">
+            <motion.div
+              key={label ?? ''}
+              className="min-w-0 flex-1 truncate"
+              initial={still ? false : { opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ ...ENTER, delay: 0.1 }}
+            >
               <span className="block text-[10px] uppercase tracking-wider text-[rgb(var(--mg-header-sub))]">
                 {stream.caption ? 'Now' : label ? 'Now racing' : 'Live from'}
               </span>
               {label ?? `${stream.arenaName} · ${stream.angleName}`}
-            </div>
+            </motion.div>
             {stream.hasAudio && !stream.audioMuted && stream.status !== 1 && muted && (
               <button
                 className="mg-stream-glass pointer-events-auto flex min-h-11 shrink-0 items-center gap-1 px-2"
@@ -151,15 +168,23 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
           </div>
           {nowRacingLanes.length > 0 && (
             <div
+              // A new heat brings its lanes in afresh, one after another from lane 1.
+              key={label ?? ''}
               data-testid="now-racing-lanes"
               className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-xs"
             >
-              {nowRacingLanes.map((lane) => (
-                <div key={lane.key} className="inline-flex items-center gap-1 font-medium">
+              {nowRacingLanes.map((lane, idx) => (
+                <motion.div
+                  key={lane.key}
+                  className="inline-flex items-center gap-1 font-medium"
+                  initial={still ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...SPRING, delay: 0.2 + idx * ROW_STAGGER_S * 1.5 }}
+                >
                   <span className="font-semibold opacity-90">L{lane.laneNumber}</span>
                   <BibSwatch color={lane.bibColor} size={10} />
                   <span className="truncate">{lane.displayName}</span>
-                </div>
+                </motion.div>
               ))}
             </div>
           )}
@@ -171,8 +196,20 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
     <LiveDataCardOverlay arenaName={stream.arenaName} overlay={overlay} />
     <SponsorOverlay arenaName={stream.arenaName} track={stream.id !== 0} />
     {announcement && <div className="absolute left-3 right-3 top-14 flex justify-center"><StreamNotice key={`${announcement.message.id}-${announcement.receivedAt}`} {...announcement} /></div>}
-    {reconnecting && stream.status !== 1 && <div role="status" className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep)/0.7)]"><h3 className="text-2xl font-bold">Reconnecting…</h3><p className="text-sm">The signal dropped. Trying again.</p></div>}
-    {stream.status === 1 && <div role="status" className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep))]"><span className="mg-logo mb-3">MG</span><h3 className="text-3xl font-bold">Back soon</h3><p>The camera is being moved.</p><p className="mt-3 text-xs">{stream.arenaName} · {stream.angleName}</p></div>}
+    <AnimatePresence>
+      {reconnecting && stream.status !== 1 && <motion.div key="reconnecting" role="status" {...fadeCover(still)} className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep)/0.7)]"><h3 className="text-2xl font-bold">Reconnecting…</h3><p className="text-sm">The signal dropped. Trying again.</p></motion.div>}
+      {stream.status === 1 && <motion.div key="back-soon" role="status" {...fadeCover(still)} className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep))]"><span className="mg-logo mb-3">MG</span><h3 className="text-3xl font-bold">Back soon</h3><p>The camera is being moved.</p><p className="mt-3 text-xs">{stream.arenaName} · {stream.angleName}</p></motion.div>}
+    </AnimatePresence>
     {children}
   </OverlayLayer>;
+}
+
+/** Full-picture covers (reconnecting, camera moving) fade over the video rather than cutting. */
+function fadeCover(still: boolean) {
+  return {
+    initial: still ? false as const : { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: still ? undefined : { opacity: 0, transition: LEAVE },
+    transition: { duration: 0.3 },
+  };
 }

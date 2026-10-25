@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Star } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ScoreFlash } from '../../components/ScoreFlash';
+import { TickerNumber } from '../../components/TickerNumber';
+import { useRankMotion } from '../../hooks/useRankMotion';
+import { EASE_OUT } from '../../lib/motion';
 import { useCompetition } from './context';
 import type { Heat, HeatEntry, Race, Session } from '../../types';
 import { computeTimings, formatDelayDuration } from '../../lib/time';
@@ -315,6 +320,8 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
   }, [heat, heats, isRaceFinals, columns, finished, runningIndex, laneRules, competition.id, favHook, showCarriedForward, carriedForwardByTeam, cardsTick, cardsEnabled]);
 
   const manyRaces = columns.length >= 6;
+  // When a race re-ranks the heat, climbers swell and lift and big climbs sparkle.
+  const rowsRef = useRankMotion<HTMLTableSectionElement>(grid.teams.map((team) => team.id));
   const minWidth = manyRaces ? undefined : 12 + (finished ? 18 : 0) + 100 + (showCarriedForward ? 26 : 0) + columns.length * 22 + 40;
 
   return (
@@ -362,15 +369,16 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody ref={rowsRef}>
                   {grid.teams.map((team) => {
                     const flag = parseBibAndFlag(competition.teams.find((item) => item.id === team.id)?.bibDescription).flag;
                     return (
-                      <tr key={team.id} className={team.isFav ? 'heat-row-fav' : undefined} data-followed={team.isFav ? 'true' : undefined}>
+                      // Rows slide to their new places when a race result re-ranks the heat.
+                      <motion.tr key={team.id} layout="position" transition={{ layout: { duration: 0.5, ease: EASE_OUT } }} data-rank-id={team.id} className={team.isFav ? 'heat-row-fav' : undefined} data-followed={team.isFav ? 'true' : undefined}>
                         {finished && <td className="heat-rank-cell"><span className="sr-only">Position </span>{team.position}</td>}
                         <th scope="row" className="heat-team" title={team.name}>
                           <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="heat-team-link">
-                            <span className={`heat-team-name${team.name.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
+                            <span data-grow="start" className={`heat-team-name${team.name.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
                               {team.isFav && <Star aria-hidden="true" className="mr-1 inline h-3 w-3 fill-[#C08308] text-[#C08308]" />}
                               {flag && <img src={`/flags/${flag}.png`} alt="" className="mr-1 inline h-3.5 w-5 rounded-[2px] object-cover" />}
                               {team.name}
@@ -392,8 +400,8 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
                               : formatPoints(cell.points)}
                           </td>;
                         })}
-                        <td className="heat-total">{formatPoints(team.total)}</td>
-                      </tr>
+                        <td className="heat-total"><span data-grow="end"><ScoreFlash value={team.total}><TickerNumber value={team.total} /></ScoreFlash></span></td>
+                      </motion.tr>
                     );
                   })}
                 </tbody>

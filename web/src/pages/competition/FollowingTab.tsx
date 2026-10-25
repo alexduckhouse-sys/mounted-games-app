@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { FollowStar } from '../../components/FollowStar';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Plus, Star } from 'lucide-react';
 import { Dropdown } from '../../components/Dropdown';
@@ -121,7 +122,7 @@ export function FollowingTab() {
       <ul className="max-h-80 divide-y divide-[rgb(var(--mg-rule-soft))] overflow-y-auto">
         {filtered.map((team) => <li key={team.id} className="flex items-center gap-3 py-1">
           <div className="min-w-0 flex-1"><Link to={`/competitions/${competition.id}/teams/${team.id}`} className="font-semibold break-words hover:underline">{team.displayName}</Link><p className="mg-meta">{displaySectionName(team.sectionName)}</p></div>
-          <button className="mg-btn mg-btn-secondary !px-3" aria-pressed={ids.has(team.id)} aria-label={`${ids.has(team.id) ? 'Unfollow' : 'Follow'} ${team.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}><Star aria-hidden="true" className={`h-5 w-5 ${ids.has(team.id) ? 'fill-current' : ''}`} /></button>
+          <button className="mg-btn mg-btn-secondary !px-3" aria-pressed={ids.has(team.id)} aria-label={`${ids.has(team.id) ? 'Unfollow' : 'Follow'} ${team.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}><FollowStar on={ids.has(team.id)} /></button>
         </li>)}
       </ul>
       {teams.length > 0 && <button className="mg-btn mg-btn-secondary w-full" onClick={() => setShowTeams(false)}>Close team picker</button>}

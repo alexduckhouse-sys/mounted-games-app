@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'framer-motion';
 import { Headphones, Maximize, PictureInPicture2, Play, Radio, RotateCcw, VolumeX, X } from 'lucide-react';
 import type { ChatMessage, LiveStream, StreamQualityRid } from '../../types';
 import { useReplayPreparation } from '../../live/useReplayPreparation';
@@ -8,6 +9,8 @@ import { createReplayBuffer, getSavedReplays, removeSavedReplay, type SavedRepla
 import { syncVideoLiveEdge } from '../../live/streamViewer';
 import { ReplayInspector, SavedReplaysButton } from './ReplayInspector';
 import { StreamOverlays } from './StreamOverlays';
+import { useReplayWipe } from './ReplayWipe';
+import { useOverlay } from '../../hooks/useOverlay';
 
 const QUALITY_TIERS: { rid: StreamQualityRid; label: string; title: string }[] = [
   { rid: 'f', label: 'HD', title: 'High definition (720p/1080p)' },
@@ -32,6 +35,11 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
   const replayPreparation = useReplayPreparation();
   const [localAudioOnly, setLocalAudioOnly] = useState(false);
   const [activeReplay, setActiveReplay] = useState<SavedReplayClip | null>(null);
+  const { look } = useOverlay();
+  const { wipe, layer: wipeLayer } = useReplayWipe(look.accent, look.background);
+  // Into a replay, or from one clip to another, the band sweeps over the change; closing sweeps back to live.
+  const showReplay = (clip: SavedReplayClip) => wipe({ title: 'Replay', detail: clip.label }, () => setActiveReplay(clip));
+  const backToLive = () => wipe({ title: 'Live' }, () => setActiveReplay(null));
   const isAudioOnly = audioOnly ?? localAudioOnly;
   const soundOff = muted || stream.status === 1 || stream.audioMuted;
   useEffect(() => {
@@ -71,7 +79,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
   }, [media, stream.competitionId, stream.id, stream.arenaName]);
   function triggerInstantReplay() {
     const buffer = replayBufferRef.current;
-    if (buffer) void replayPreparation.prepare((options) => buffer.saveClip(label || `${stream.arenaName} -15s`, { ...options, durationSeconds: 15 }), setActiveReplay);
+    if (buffer) void replayPreparation.prepare((options) => buffer.saveClip(label || `${stream.arenaName} -15s`, { ...options, durationSeconds: 15 }), showReplay);
   }
   function togglePip() {
     const video = videoRef.current as (HTMLVideoElement & {
@@ -211,7 +219,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
         <SavedReplaysButton
           competitionId={stream.competitionId}
           arenaName={stream.arenaName}
-          onSelectClip={(clip) => setActiveReplay(clip)}
+          onSelectClip={showReplay}
         />
         {media && (
           <button
@@ -229,19 +237,23 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
       {message && <p role="status" className="mg-stream-glass absolute left-3 right-3 top-1/2 p-3 text-center">{message}</p>}
     </StreamOverlays>
     <div className="absolute bottom-12 left-3 right-3"><ReplayPreparation {...replayPreparation} /></div>
-    {activeReplay && (
-      <ReplayInspector
-        clip={activeReplay}
-        clips={getSavedReplays(stream.competitionId)}
-        onSelectClip={(clip) => setActiveReplay(clip)}
-        onDeleteClip={(id) => {
-          removeSavedReplay(id);
-          const remaining = getSavedReplays(stream.competitionId);
-          setActiveReplay(remaining.at(-1) ?? null);
-        }}
-        onClose={() => setActiveReplay(null)}
-      />
-    )}
+    <AnimatePresence>
+      {activeReplay && (
+        <ReplayInspector
+          key="replay"
+          clip={activeReplay}
+          clips={getSavedReplays(stream.competitionId)}
+          onSelectClip={showReplay}
+          onDeleteClip={(id) => {
+            removeSavedReplay(id);
+            const remaining = getSavedReplays(stream.competitionId);
+            setActiveReplay(remaining.at(-1) ?? null);
+          }}
+          onClose={backToLive}
+        />
+      )}
+    </AnimatePresence>
+    {wipeLayer}
   </div>;
   const showSound = stream.hasAudio && !stream.audioMuted && stream.status !== 1 && muted;
   return full ? <><div className="aspect-video rounded-xl bg-[rgb(var(--mg-header-deep))]" />{createPortal(player, document.body)}</> : captionBar ? <div className="live-stream-frame mg-card overflow-hidden">{player}<div className="live-stream-caption"><span className="mg-badge mg-badge-live">Live</span><strong>{label || `${stream.arenaName} · ${stream.angleName}`}</strong>{showSound && <button type="button" className="live-caption-sound" aria-label="Tap for sound" onClick={unmute}><VolumeX aria-hidden="true" /></button>}<button type="button" onClick={open}>Full screen</button></div></div> : player;

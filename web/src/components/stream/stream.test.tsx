@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import * as framerMotion from 'framer-motion';
 import { StreamChips } from './StreamChips';
 import { StreamNotice, StreamOverlays } from './StreamOverlays';
 import { StreamPlayer } from './StreamPlayer';
@@ -15,7 +16,16 @@ const play = vi.fn(async () => {});
 const requestFullscreen = vi.fn(async () => {});
 const exitFullscreen = vi.fn(async () => {});
 const lock = vi.fn(async () => {}), unlock = vi.fn();
+vi.mock('framer-motion', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('framer-motion')>();
+  return {
+    ...actual,
+    useReducedMotion: vi.fn(),
+  };
+});
+
 beforeEach(() => {
+  vi.mocked(framerMotion.useReducedMotion).mockReturnValue(true);
   vi.useFakeTimers(); resetMedia();
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(play);
   Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', { configurable: true, value: requestFullscreen });

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ChevronDown, ChevronRight, MapPin, Star, Users } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -422,6 +423,11 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   hasFollowedTeam?: boolean;
 }) {
   const { session, heat, status, delayMinutes } = row;
+  // A heat that goes live while you're looking lights up once; the "On now" label glides over from the heat before.
+  const live = status === 'live';
+  const [liveSeen, setLiveSeen] = useState({ live, lit: 0 });
+  if (liveSeen.live !== live) setLiveSeen({ live, lit: live ? liveSeen.lit + 1 : liveSeen.lit });
+  const lit = liveSeen.live === live ? liveSeen.lit : liveSeen.lit + (live ? 1 : 0);
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
   const name = race ? heatName : session.name;
@@ -450,11 +456,12 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
       {showShift && (
         <span className={`tt-planned${shiftMinutes < 0 ? ' tt-planned-early' : ''}`} aria-hidden="true">{shiftText} · <s>{formatTime(row.scheduled)}</s></span>
       )}
-      {status === 'live' && <span className="tt-onnow" aria-hidden="true">{onNowText}</span>}
+      {status === 'live' && <motion.span layoutId={`tt-onnow-${session.arenaName?.trim() ?? ''}`} layout="position" className="tt-onnow" aria-hidden="true">{onNowText}</motion.span>}
     </span>
     <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
     <span className="sr-only">{statusLabel(status, delayMinutes)}</span>
     {race ? <ChevronRight className="tt-chevron" size={14} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
+    {live && lit > 0 && <span key={lit} className="tt-lit" aria-hidden="true" />}
   </>;
   const className = `tt-row tt-${status}${hasFollowedTeam ? ' tt-followed' : ''}`;
   return race ? <Link className={className} data-followed={hasFollowedTeam ? 'true' : undefined} to={`/competitions/${competitionId}/session/${session.id}${heat ? `?heat=${heat.id}` : ''}`}>{content}</Link> : <div className={className} data-followed={hasFollowedTeam ? 'true' : undefined}>{content}</div>;

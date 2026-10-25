@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { FollowStar } from '../../components/FollowStar';
 import { Users, Plus, Save, ClipboardList, Ban, Star, Flag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFavourites } from '../../hooks/useFavourites';
@@ -260,7 +261,7 @@ export function TeamsTab() {
                     )}
                   </div>
                   <button className="mg-icon-btn" aria-pressed={followed.has(t.id)} aria-label={`${followed.has(t.id) ? 'Unfollow' : 'Follow'} ${t.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: t.id })}>
-                    <Star aria-hidden="true" className={`h-5 w-5 ${followed.has(t.id) ? 'fill-current' : ''}`} />
+                    <FollowStar on={followed.has(t.id)} />
                   </button>
                   {canEdit() && (
                     <button

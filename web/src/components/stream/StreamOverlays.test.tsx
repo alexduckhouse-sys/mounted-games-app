@@ -28,6 +28,9 @@ vi.mock('framer-motion', async (importOriginal) => {
   };
 });
 
+// mockReset clears the factory's return value before each test, so set it again: these tests check where overlays land, not how.
+beforeEach(() => { vi.mocked(framerMotion.useReducedMotion).mockReturnValue(true); });
+
 vi.mock('../../api', () => ({ api: { get: vi.fn() } }));
 beforeEach(() => {
   vi.mocked(api.get).mockImplementation(async (_path, config) => ({ data: (config?.params as { sectionId?: number } | undefined)?.sectionId === 6

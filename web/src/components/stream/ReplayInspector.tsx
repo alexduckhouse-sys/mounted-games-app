@@ -13,6 +13,9 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { LEAVE, SPRING } from '../../lib/motion';
+import { useStillMotion } from '../../lite/useStillMotion';
 import { useReplayPreparation } from '../../live/useReplayPreparation';
 import { ReplayPreparation } from './ReplayPreparation';
 import type { ReplayEncodingOptions } from '../../live/replayEncoding';
@@ -177,6 +180,7 @@ export function ReplayInspector({
   const videoRef = externalVideoRef || internalVideoRef;
   const viewportRef = useRef<HTMLDivElement>(null);
   const preparation = useReplayPreparation();
+  const still = useStillMotion();
 
   const [zoom, setZoom] = useState<number>(1);
   const [panX, setPanX] = useState<number>(0);
@@ -584,11 +588,15 @@ export function ReplayInspector({
   };
 
   return (
-    <div
+    <motion.div
       role="dialog"
       aria-modal="true"
       aria-label="Replay inspector"
       className="fixed inset-0 z-[100] flex flex-col bg-black/95 text-white mg-font select-none"
+      initial={still ? false : { opacity: 0, y: 28 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={still ? undefined : { opacity: 0, y: 28, transition: LEAVE }}
+      transition={SPRING}
     >
       {storageWarning && <p role="status" className="p-3 text-sm text-amber-200">{storageWarning}</p>}
       {/* Top Header Bar */}
@@ -1066,7 +1074,7 @@ export function ReplayInspector({
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 

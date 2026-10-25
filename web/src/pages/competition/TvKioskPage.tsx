@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Maximize2, Mic, Monitor, Pause, Play, QrCode as QrCodeIcon, Radio, SlidersHorizontal, Trophy } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
@@ -11,6 +12,8 @@ import { SponsorStrip } from '../../components/SponsorStrip';
 import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
 import { usePageWidth } from '../../components/pageWidthState';
 import { formatPoints } from '../../lib/formatPoints';
+import { DIAGONAL_HIDDEN_LEFT, DIAGONAL_HIDDEN_RIGHT, DIAGONAL_SHOWN, EASE_IN, EASE_OUT } from '../../lib/motion';
+import { useStillMotion } from '../../lite/useStillMotion';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { displaySectionName } from '../../lib/section';
 import { buildToplist, ordinal, sectionScoreVersion } from '../../lib/toplist';
@@ -73,6 +76,7 @@ export function TvKioskPage() {
   }, [autoFollowLive, liveSectionId, requestedSection, selectedSectionId, sectionIds, competition.sessions]);
 
   const [slide, setSlide] = useState<TvSlide>('lanes');
+  const still = useStillMotion();
   const [playing, setPlaying] = useState(true);
   const [standingsBySection, setStandingsBySection] = useState<Record<number, { rows: StandingRow[]; source: typeof refreshSource; failed?: boolean }>>({});
   const [refreshTick, setRefreshTick] = useState(0);
@@ -436,168 +440,178 @@ export function TvKioskPage() {
 
       {/* Main Slide Body */}
       <main className="flex-1 py-2">
-        {slide === 'lanes' && (
-          <section aria-label="In the Ring and Next Heat Lane Draw" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <HeatLaneCard
-              badge="In the Ring"
-              item={currentHeatItem}
-              teamById={teamById}
-              standingByTeamId={standingByTeamId}
-              emptyText="No active heat in the ring right now."
-            />
-            <HeatLaneCard
-              badge="Next Heat Lane Draw"
-              item={nextHeatItem}
-              teamById={teamById}
-              standingByTeamId={standingByTeamId}
-              emptyText="No upcoming heat scheduled after the current heat."
-            />
-          </section>
-        )}
-
-        {slide === 'heat' && (
-          <section aria-label="Current Heat Table" className="mg-card overflow-hidden p-4">
-            {currentHeatItem ? (
-              <HeatScores
-                session={currentHeatItem.session}
-                heats={currentHeatItem.session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex)}
-                activeHeatId={currentHeatItem.heat.id}
-                embedded
-              />
-            ) : (
-              <p className="p-4 text-base text-[rgb(var(--mg-muted))]">No active heat in this section yet.</p>
+        {/* Each slide wipes off on a slant and the next wipes on behind it, like the replay band on the stream. */}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={slide}
+            initial={still ? false : { clipPath: DIAGONAL_HIDDEN_LEFT }}
+            animate={{ clipPath: DIAGONAL_SHOWN, transition: { duration: 0.46, ease: EASE_OUT } }}
+            exit={still ? undefined : { clipPath: DIAGONAL_HIDDEN_RIGHT, transition: { duration: 0.34, ease: EASE_IN } }}
+          >
+            {slide === 'lanes' && (
+              <section aria-label="In the Ring and Next Heat Lane Draw" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <HeatLaneCard
+                  badge="In the Ring"
+                  item={currentHeatItem}
+                  teamById={teamById}
+                  standingByTeamId={standingByTeamId}
+                  emptyText="No active heat in the ring right now."
+                />
+                <HeatLaneCard
+                  badge="Next Heat Lane Draw"
+                  item={nextHeatItem}
+                  teamById={teamById}
+                  standingByTeamId={standingByTeamId}
+                  emptyText="No upcoming heat scheduled after the current heat."
+                />
+              </section>
             )}
-          </section>
-        )}
 
-        {slide === 'latest' && (
-          <section aria-label="Latest Race Result" className="mg-card overflow-hidden">
-            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Monitor className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-                <h2 className="mg-display m-0 text-xl font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                  Latest Race Result
-                </h2>
-              </div>
-              {latestRaceItem && (
-                <span className="text-sm font-bold text-[rgb(var(--mg-body))]">
-                  {latestRaceItem.session.name} · {latestRaceItem.heat.label || 'Heat'} · {latestRaceItem.race.name}
-                </span>
-              )}
-            </div>
-            {!latestRaceItem ? (
-              <p className="p-6 text-base text-[rgb(var(--mg-muted))]">No race results recorded yet for this section.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
-                  <thead>
-                    <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-muted))]">
-                      <th scope="col" className="py-2.5 pl-4 pr-2">Place</th>
-                      <th scope="col" className="py-2.5 px-2">Bib</th>
-                      <th scope="col" className="py-2.5 px-2">Team</th>
-                      <th scope="col" className="py-2.5 px-2 text-right">Race Pts</th>
-                      <th scope="col" className="py-2.5 pl-2 pr-4 text-right">Total Pts</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-                    {latestRaceItem.race.results
-                      .slice()
-                      .sort((a, b) => {
-                        if (a.isSitOut !== b.isSitOut) return a.isSitOut ? 1 : -1;
-                        if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
-                        return (a.placing ?? 999) - (b.placing ?? 999) || b.points - a.points;
-                      })
-                      .map((res) => {
-                        const team = teamById.get(res.teamId);
-                        const st = standingByTeamId.get(res.teamId);
-                        const placeText = res.isSitOut
-                          ? 'S'
-                          : res.eliminated
-                            ? (statusLetter(true, res.status) ?? 'E')
-                            : res.placing != null
-                              ? ordinal(res.placing)
-                              : '—';
-                        return (
-                          <tr key={res.id || res.teamId} className="text-base">
+            {slide === 'heat' && (
+              <section aria-label="Current Heat Table" className="mg-card overflow-hidden p-4">
+                {currentHeatItem ? (
+                  <HeatScores
+                    session={currentHeatItem.session}
+                    heats={currentHeatItem.session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex)}
+                    activeHeatId={currentHeatItem.heat.id}
+                    embedded
+                  />
+                ) : (
+                  <p className="p-4 text-base text-[rgb(var(--mg-muted))]">No active heat in this section yet.</p>
+                )}
+              </section>
+            )}
+
+            {slide === 'latest' && (
+              <section aria-label="Latest Race Result" className="mg-card overflow-hidden">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Monitor className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
+                    <h2 className="mg-display m-0 text-xl font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+                      Latest Race Result
+                    </h2>
+                  </div>
+                  {latestRaceItem && (
+                    <span className="text-sm font-bold text-[rgb(var(--mg-body))]">
+                      {latestRaceItem.session.name} · {latestRaceItem.heat.label || 'Heat'} · {latestRaceItem.race.name}
+                    </span>
+                  )}
+                </div>
+                {!latestRaceItem ? (
+                  <p className="p-6 text-base text-[rgb(var(--mg-muted))]">No race results recorded yet for this section.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left">
+                      <thead>
+                        <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-muted))]">
+                          <th scope="col" className="py-2.5 pl-4 pr-2">Place</th>
+                          <th scope="col" className="py-2.5 px-2">Bib</th>
+                          <th scope="col" className="py-2.5 px-2">Team</th>
+                          <th scope="col" className="py-2.5 px-2 text-right">Race Pts</th>
+                          <th scope="col" className="py-2.5 pl-2 pr-4 text-right">Total Pts</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+                        {latestRaceItem.race.results
+                          .slice()
+                          .sort((a, b) => {
+                            if (a.isSitOut !== b.isSitOut) return a.isSitOut ? 1 : -1;
+                            if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
+                            return (a.placing ?? 999) - (b.placing ?? 999) || b.points - a.points;
+                          })
+                          .map((res) => {
+                            const team = teamById.get(res.teamId);
+                            const st = standingByTeamId.get(res.teamId);
+                            const placeText = res.isSitOut
+                              ? 'S'
+                              : res.eliminated
+                                ? (statusLetter(true, res.status) ?? 'E')
+                                : res.placing != null
+                                  ? ordinal(res.placing)
+                                  : '—';
+                            return (
+                              <tr key={res.id || res.teamId} className="text-base">
+                                <td className="mg-display py-3 pl-4 pr-2 text-xl font-bold text-[rgb(var(--mg-heading))]">
+                                  <span title={res.eliminated ? (statusLabel(true, res.status) ?? undefined) : undefined}>{placeText}</span>
+                                </td>
+                                <td className="py-3 px-2">
+                                  <BibSwatch colour={team?.bibColour ?? st?.bibColour} />
+                                </td>
+                                <td className="py-3 px-2 font-bold text-[rgb(var(--mg-ink))]">{res.teamName}</td>
+                                <td className="mg-display py-3 px-2 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
+                                  +{formatPoints(res.points)}
+                                </td>
+                                <td className="mg-display py-3 pl-2 pr-4 text-right text-lg font-semibold tabular-nums text-[rgb(var(--mg-body))]">
+                                  {formatPoints(st?.totalPoints ?? res.points)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {slide === 'standings' && (
+              <section aria-label="Live Section Standings" className="mg-card overflow-hidden">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
+                    <h2 className="mg-display m-0 text-xl font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+                      {sectionName} · Standings (Each Team in Order)
+                    </h2>
+                  </div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
+                    {orderedStandingRows.length} {orderedStandingRows.length === 1 ? 'team' : 'teams'}
+                  </span>
+                </div>
+
+                {orderedStandingRows.length === 0 ? (
+                  <p className="p-6 text-base text-[rgb(var(--mg-muted))]">No teams in this section yet.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left">
+                      <thead>
+                        <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-muted))]">
+                          <th scope="col" className="py-2.5 pl-4 pr-2">Rank</th>
+                          <th scope="col" className="py-2.5 px-2">Bib</th>
+                          <th scope="col" className="py-2.5 px-2">Team</th>
+                          <th scope="col" className="py-2.5 px-2 text-right">Heat Pts</th>
+                          <th scope="col" className="py-2.5 px-2 text-right">Finals Pts</th>
+                          <th scope="col" className="py-2.5 pl-2 pr-4 text-right">Total Pts</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+                        {orderedStandingRows.map((row) => (
+                          <tr key={row.teamId} className="text-base">
                             <td className="mg-display py-3 pl-4 pr-2 text-xl font-bold text-[rgb(var(--mg-heading))]">
-                              <span title={res.eliminated ? (statusLabel(true, res.status) ?? undefined) : undefined}>{placeText}</span>
+                              {row.rankLabel}
                             </td>
                             <td className="py-3 px-2">
-                              <BibSwatch colour={team?.bibColour ?? st?.bibColour} />
+                              <BibSwatch colour={row.bibColour} />
                             </td>
-                            <td className="py-3 px-2 font-bold text-[rgb(var(--mg-ink))]">{res.teamName}</td>
-                            <td className="mg-display py-3 px-2 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-                              +{formatPoints(res.points)}
+                            <td className="py-3 px-2 font-bold text-[rgb(var(--mg-ink))]">{row.teamName}</td>
+                            <td className="mg-display py-3 px-2 text-right text-lg font-semibold tabular-nums text-[rgb(var(--mg-body))]">
+                              {formatPoints(row.heatPoints)}
                             </td>
-                            <td className="mg-display py-3 pl-2 pr-4 text-right text-lg font-semibold tabular-nums text-[rgb(var(--mg-body))]">
-                              {formatPoints(st?.totalPoints ?? res.points)}
+                            <td className="mg-display py-3 px-2 text-right text-lg font-semibold tabular-nums text-[rgb(var(--mg-body))]">
+                              {formatPoints(row.finalsPoints)}
+                            </td>
+                            <td className="mg-display py-3 pl-2 pr-4 text-right text-2xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
+                              {formatPoints(row.totalPoints)}
                             </td>
                           </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
             )}
-          </section>
-        )}
-
-        {slide === 'standings' && (
-          <section aria-label="Live Section Standings" className="mg-card overflow-hidden">
-            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Trophy className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-                <h2 className="mg-display m-0 text-xl font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                  {sectionName} · Standings (Each Team in Order)
-                </h2>
-              </div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-                {orderedStandingRows.length} {orderedStandingRows.length === 1 ? 'team' : 'teams'}
-              </span>
-            </div>
-
-            {orderedStandingRows.length === 0 ? (
-              <p className="p-6 text-base text-[rgb(var(--mg-muted))]">No teams in this section yet.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
-                  <thead>
-                    <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-muted))]">
-                      <th scope="col" className="py-2.5 pl-4 pr-2">Rank</th>
-                      <th scope="col" className="py-2.5 px-2">Bib</th>
-                      <th scope="col" className="py-2.5 px-2">Team</th>
-                      <th scope="col" className="py-2.5 px-2 text-right">Heat Pts</th>
-                      <th scope="col" className="py-2.5 px-2 text-right">Finals Pts</th>
-                      <th scope="col" className="py-2.5 pl-2 pr-4 text-right">Total Pts</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-                    {orderedStandingRows.map((row) => (
-                      <tr key={row.teamId} className="text-base">
-                        <td className="mg-display py-3 pl-4 pr-2 text-xl font-bold text-[rgb(var(--mg-heading))]">
-                          {row.rankLabel}
-                        </td>
-                        <td className="py-3 px-2">
-                          <BibSwatch colour={row.bibColour} />
-                        </td>
-                        <td className="py-3 px-2 font-bold text-[rgb(var(--mg-ink))]">{row.teamName}</td>
-                        <td className="mg-display py-3 px-2 text-right text-lg font-semibold tabular-nums text-[rgb(var(--mg-body))]">
-                          {formatPoints(row.heatPoints)}
-                        </td>
-                        <td className="mg-display py-3 px-2 text-right text-lg font-semibold tabular-nums text-[rgb(var(--mg-body))]">
-                          {formatPoints(row.finalsPoints)}
-                        </td>
-                        <td className="mg-display py-3 pl-2 pr-4 text-right text-2xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-                          {formatPoints(row.totalPoints)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* Bottom Sponsor Strip */}

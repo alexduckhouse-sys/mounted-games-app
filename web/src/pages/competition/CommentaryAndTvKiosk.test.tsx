@@ -312,21 +312,21 @@ describe('TvKioskPage', () => {
     await user.click(screen.getByRole('button', { name: /Stream Controls/ }));
     expect(await screen.findByRole('region', { name: 'Live stream control strip' })).toBeInTheDocument();
 
-    // Switch to Current Heat Table slide
+    // Switch to Current Heat Table slide (the old slide wipes off before the new one arrives)
     const slideGroup = screen.getByRole('group', { name: 'TV scoreboard slide' });
     await user.click(within(slideGroup).getByRole('button', { name: 'Current Heat Table' }));
-    expect(screen.getByRole('region', { name: 'Current Heat Table' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Current Heat Table' })).toBeInTheDocument();
 
     // Switch to Latest Race Result slide and verify Club column is removed
     await user.click(within(slideGroup).getByRole('button', { name: 'Latest Race Result' }));
-    const latestSection = screen.getByRole('region', { name: 'Latest Race Result' });
+    const latestSection = await screen.findByRole('region', { name: 'Latest Race Result' });
     const latestHeaders = within(latestSection).getAllByRole('columnheader').map((th) => th.textContent);
     expect(latestHeaders).toEqual(['Place', 'Bib', 'Team', 'Race Pts', 'Total Pts']);
     expect(latestHeaders).not.toContain('Club');
 
     // Switch to Live Section Standings slide and verify Club column is removed
     await user.click(within(slideGroup).getByRole('button', { name: 'Live Section Standings' }));
-    const standingsSection = screen.getByRole('region', { name: 'Live Section Standings' });
+    const standingsSection = await screen.findByRole('region', { name: 'Live Section Standings' });
     const standingsHeaders = within(standingsSection).getAllByRole('columnheader').map((th) => th.textContent);
     expect(standingsHeaders).toEqual(['Rank', 'Bib', 'Team', 'Heat Pts', 'Finals Pts', 'Total Pts']);
     expect(standingsHeaders).not.toContain('Club');
