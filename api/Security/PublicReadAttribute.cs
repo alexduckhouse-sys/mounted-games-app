@@ -16,7 +16,7 @@ public sealed class PublicReadAttribute : Attribute, IAsyncActionFilter
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
         var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-        if (await db.IsIpBlockedAsync(context.HttpContext, context.HttpContext.RequestAborted))
+        if (await db.IsIpBlockedAsync(context.HttpContext, context.HttpContext.RequestAborted, includeAccountBlocks: false))
         {
             context.Result = new ObjectResult(new { message = "This address has been blocked." }) { StatusCode = StatusCodes.Status403Forbidden };
             return;

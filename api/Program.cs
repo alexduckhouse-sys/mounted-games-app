@@ -201,6 +201,8 @@ if (RedisBackplane.Options(builder.Configuration) is { } redis)
     });
 
 var app = builder.Build();
+if (!app.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(app.Configuration["Privacy:IpHashKey"]))
+    app.Logger.LogWarning("Privacy:IpHashKey is not set, so stored network hashes are keyed from Jwt:Key. Set Privacy__IpHashKey to a separate secret.");
 
 if (args.Contains("--seed-review-competitions"))
 {

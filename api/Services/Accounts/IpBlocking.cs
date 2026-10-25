@@ -10,10 +10,15 @@ namespace MountedGames.Api.Services.Accounts;
 /// </summary>
 public static class IpBlocking
 {
-    public static async Task<bool> IsIpBlockedAsync(this AppDbContext db, HttpContext http, CancellationToken ct = default)
+    /// <param name="includeAccountBlocks">
+    /// False for public pages: networks added because an account was blocked stop sign-in, sign-up, entries and chat, but never
+    /// a public page (a shared network would lose the timetable). Only addresses an admin typed in apply there.
+    /// </param>
+    public static async Task<bool> IsIpBlockedAsync(this AppDbContext db, HttpContext http, CancellationToken ct = default, bool includeAccountBlocks = true)
     {
         var ip = http.Connection.RemoteIpAddress?.ToString();
         if (string.IsNullOrEmpty(ip)) return false;
+        if (!includeAccountBlocks) return await db.IpBlocks.AnyAsync(b => b.BlockedAccountUserId == null && b.IpAddress == ip, ct);
         var hash = IpRetention.HashFor(http.RequestServices.GetRequiredService<IConfiguration>(), ip);
         return await db.IpBlocks.AnyAsync(b => b.IpAddress == ip || b.IpAddress == hash, ct);
     }

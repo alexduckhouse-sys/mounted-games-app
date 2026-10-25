@@ -31,6 +31,13 @@ namespace MountedGames.Api.Data.Migrations
                 type: "timestamp with time zone",
                 nullable: true);
 
+            migrationBuilder.AddColumn<bool>(
+                name: "BlockedByMaster",
+                table: "AspNetUsers",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
             migrationBuilder.AddColumn<string>(
                 name: "BlockedByUserId",
                 table: "AspNetUsers",
@@ -42,6 +49,13 @@ namespace MountedGames.Api.Data.Migrations
                 table: "AspNetUsers",
                 type: "timestamp with time zone",
                 nullable: true);
+
+            migrationBuilder.AddColumn<bool>(
+                name: "LockedByMaster",
+                table: "AspNetUsers",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
 
             migrationBuilder.AddColumn<string>(
                 name: "LockedByUserId",
@@ -149,11 +163,19 @@ namespace MountedGames.Api.Data.Migrations
                 table: "AspNetUsers");
 
             migrationBuilder.DropColumn(
+                name: "BlockedByMaster",
+                table: "AspNetUsers");
+
+            migrationBuilder.DropColumn(
                 name: "BlockedByUserId",
                 table: "AspNetUsers");
 
             migrationBuilder.DropColumn(
                 name: "LockedAt",
+                table: "AspNetUsers");
+
+            migrationBuilder.DropColumn(
+                name: "LockedByMaster",
                 table: "AspNetUsers");
 
             migrationBuilder.DropColumn(

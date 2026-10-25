@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MountedGames.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261025212222_AddAdminAccounts")]
+    [Migration("20261025223122_AddAdminAccounts")]
     partial class AddAdminAccounts
     {
         /// <inheritdoc />
@@ -263,6 +263,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<DateTime?>("BlockedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("BlockedByMaster")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("BlockedByUserId")
                         .HasColumnType("text");
 
@@ -296,6 +299,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<DateTime?>("LockedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("LockedByMaster")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("LockedByUserId")
                         .HasColumnType("text");

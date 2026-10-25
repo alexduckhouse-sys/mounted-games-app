@@ -479,6 +479,122 @@ public class AdminAccountsTests : IClassFixture<ApiFactory>
         Assert.Equal((false, true), (blocked.IsLocked, blocked.IsBlocked));
     }
 
+    // ---- lock evasion and escalation ----
+
+    [Fact]
+    public async Task ALockedAdminCannotBeStrippedOfTheAdminRoleAndRestoredToDodgeTheLock()
+    {
+        var master = await _f.AdminAsync();
+        var plain = await NewPlainAdminAsync();
+        var target = await NewPlainAdminAsync();
+        await master.PostAsync(Lock(target.Id), null);
+
+        // Only a master admin touches the Admin role, and a locked account's roles are frozen anyway.
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.PostAsJsonAsync($"/api/admin/users/{target.Id}/roles", new ToggleUserRoleRequest(Roles.Admin, false))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await master.PostAsJsonAsync($"/api/admin/users/{target.Id}/roles", new ToggleUserRoleRequest(Roles.Admin, false))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.DeleteAsync(Lock(target.Id))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await LoginFromAsync(target.Email, "203.0.113.70")).StatusCode);
+        // A plain admin can't hand out the Admin role to anyone, or make an admin account.
+        var member = await NewMemberAsync();
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.PostAsJsonAsync($"/api/admin/users/{member.Id}/roles", new ToggleUserRoleRequest(Roles.Admin, true))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.PostAsJsonAsync("/api/auth/register",
+            new RegisterRequest($"x-{Guid.NewGuid():N}@example.org", Password, "X", Roles.Admin, null))).StatusCode);
+        // Other roles still work for a plain admin, until the account is stopped.
+        Assert.Equal(HttpStatusCode.OK, (await plain.Client.PostAsJsonAsync($"/api/admin/users/{member.Id}/roles", new ToggleUserRoleRequest(Roles.Trainer, true))).StatusCode);
+        await plain.Client.PostAsJsonAsync(Block(member.Id), new BlockAccountRequest(null));
+        Assert.Equal(HttpStatusCode.Conflict, (await plain.Client.PostAsJsonAsync($"/api/admin/users/{member.Id}/roles", new ToggleUserRoleRequest(Roles.Trainer, false))).StatusCode);
+    }
+
+    [Fact]
+    public async Task OnlyAMasterAdminLiftsAMasterAdminsLockOrBlock()
+    {
+        var master = await _f.AdminAsync();
+        var plain = await NewPlainAdminAsync();
+        var lockedByMaster = await NewOrganiserAsync();
+        var blockedByMaster = await NewMemberAsync();
+        await master.PostAsync(Lock(lockedByMaster.Id), null);
+        await master.PostAsJsonAsync(Block(blockedByMaster.Id), new BlockAccountRequest("Master's call"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.DeleteAsync(Lock(lockedByMaster.Id))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.DeleteAsync(Block(blockedByMaster.Id))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await master.DeleteAsync(Lock(lockedByMaster.Id))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await master.DeleteAsync(Block(blockedByMaster.Id))).StatusCode);
+        // What a plain admin locked, another plain admin can lift.
+        var other = await NewPlainAdminAsync();
+        var organiser = await NewOrganiserAsync();
+        await plain.Client.PostAsync(Lock(organiser.Id), null);
+        Assert.Equal(HttpStatusCode.NoContent, (await other.Client.DeleteAsync(Lock(organiser.Id))).StatusCode);
+    }
+
+    [Fact]
+    public async Task TheAdminKeyIsNoWayRoundALockABlockOrABlockedNetwork()
+    {
+        var master = await _f.AdminAsync();
+        var email = $"keyed-{Guid.NewGuid():N}@example.org";
+        (await _f.CreateClient().PostAsJsonAsync("/api/auth/admin-key", new AdminKeyRequest(ApiFactory.AdminKey, "Keyed", email, Password))).EnsureSuccessStatusCode();
+        var id = (await _f.LoginAsync(email, Password)).User.Id;
+        await master.PostAsJsonAsync(Block(id), new BlockAccountRequest(null));
+        // Even with the wrong password the answer is the stopped one, never a way in.
+        var blocked = await _f.CreateClient().PostAsJsonAsync("/api/auth/admin-key", new AdminKeyRequest(ApiFactory.AdminKey, "Keyed", email, Password));
+        Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
+        Assert.Contains("account_stopped", await TextOf(blocked));
+
+        await _f.InDbAsync(async db => { db.IpBlocks.Add(new IpBlock { IpAddress = "203.0.113.81" }); await db.SaveChangesAsync(); });
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/admin-key") { Content = JsonContent.Create(new AdminKeyRequest(ApiFactory.AdminKey)) };
+        request.Headers.Add("X-Test-Ip", "203.0.113.81");
+        Assert.Equal(HttpStatusCode.Forbidden, (await _f.CreateClient().SendAsync(request)).StatusCode);
+    }
+
+    [Fact]
+    public async Task NetworksBlockedBecauseOfAnAccountNeverBlockPublicPages()
+    {
+        var plain = await NewPlainAdminAsync();
+        var target = await NewMemberAsync();
+        await LoginFromAsync(target.Email, "203.0.113.91");
+        await plain.Client.PostAsJsonAsync(Block(target.Id), new BlockAccountRequest(null));
+        var id = await _f.SeedCompetitionAsync();
+        await _f.InDbAsync(async db => { db.IpBlocks.Add(new IpBlock { IpAddress = "203.0.113.92", Reason = "by hand" }); await db.SaveChangesAsync(); });
+
+        HttpRequestMessage Get(string ip) { var r = new HttpRequestMessage(HttpMethod.Get, $"/api/share/competitions/{id}"); r.Headers.Add("X-Test-Ip", ip); return r; }
+
+        Assert.Equal(HttpStatusCode.OK, (await _f.CreateClient().SendAsync(Get("203.0.113.91"))).StatusCode);   // account-derived: public page still fine
+        Assert.Equal(HttpStatusCode.Forbidden, (await _f.CreateClient().SendAsync(Get("203.0.113.92"))).StatusCode); // typed by an admin: applies
+        // ...while sign-in and chat from the account's network are stopped.
+        var section = await _f.NewSectionAsync();
+        var other = await NewMemberAsync();
+        var chat = new HttpRequestMessage(HttpMethod.Post, $"/api/competitions/{section.CompetitionId}/chat") { Content = JsonContent.Create(new PostChatMessageRequest("hi")) };
+        chat.Headers.Add("X-Test-Ip", "203.0.113.91");
+        chat.Headers.Authorization = other.Client.DefaultRequestHeaders.Authorization;
+        Assert.Equal(HttpStatusCode.Forbidden, (await _f.CreateClient().SendAsync(chat)).StatusCode);
+    }
+
+    [Fact]
+    public async Task BlockingTwoAccountsOnTheSameNetworkAtOnceNeverFails()
+    {
+        var plain = await NewPlainAdminAsync();
+        var people = new List<Person>();
+        for (var i = 0; i < 6; i++)
+        {
+            var p = await NewMemberAsync();
+            await LoginFromAsync(p.Email, "203.0.113.101");
+            people.Add(p);
+        }
+        // Six accounts share the network, so it is "shared" and skipped; use fresh ones for the race.
+        var a = await NewMemberAsync();
+        var b = await NewMemberAsync();
+        await LoginFromAsync(a.Email, "203.0.113.102");
+        await LoginFromAsync(b.Email, "203.0.113.102");
+
+        var results = await Task.WhenAll(
+            plain.Client.PostAsJsonAsync(Block(a.Id), new BlockAccountRequest(null)),
+            plain.Client.PostAsJsonAsync(Block(b.Id), new BlockAccountRequest(null)));
+
+        Assert.All(results, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        Assert.Equal(1, await _f.WithDbAsync(db => db.IpBlocks.CountAsync(x => x.IpAddress == IpRetention.HashFor(Config(), "203.0.113.102"))));
+        Assert.False(await _f.WithDbAsync(db => db.Users.AnyAsync(u => u.Id == a.Id && u.BlockedAt == null)));
+        Assert.False(await _f.WithDbAsync(db => db.Users.AnyAsync(u => u.Id == b.Id && u.BlockedAt == null)));
+    }
+
     // ---- housekeeping ----
 
     [Fact]
