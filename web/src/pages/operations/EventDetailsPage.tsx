@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { competitionUpdateBody } from '../../lib/competitionPayload';
 import { payoutsLine } from '../../lib/payouts';
 import { MAX_SECTOR_NAME, MAX_TACK_SECTORS, isScored, sectorProblem } from '../../lib/tackCheck';
 import type { CompetitionDetail, PassportCheckBoard, TackCheckBoard, TackCheckMode, TackCheckSection } from '../../types';
@@ -67,7 +68,7 @@ export function EventDetailsPage() {
 
   const saveBasics = (what: string, patch: Record<string, string | boolean | null>) =>
     track(what, async () => {
-      await api.put(`/competitions/${competition.id}`, basicsPayload(competition, patch));
+      await api.put(`/competitions/${competition.id}`, competitionUpdateBody(competition, patch));
       reload();
     });
 
@@ -172,29 +173,6 @@ export function EventDetailsPage() {
       </div>
     </RefinePage>
   );
-}
-
-/** The whole update body: the API clears anything left out, so the fields not being changed are sent as they are. */
-function basicsPayload(competition: CompetitionDetail, patch: Record<string, string | boolean | null>) {
-  return {
-    name: competition.name,
-    icon: competition.icon,
-    location: competition.location ?? null,
-    description: competition.description ?? null,
-    latitude: competition.latitude ?? null,
-    longitude: competition.longitude ?? null,
-    what3Words: competition.what3Words ?? null,
-    appleMapsUrl: competition.appleMapsUrl ?? null,
-    streamUrl: competition.streamUrl ?? null,
-    organiserName: competition.organiserName ?? null,
-    paymentDestination: competition.paymentDestination ?? null,
-    termsText: competition.termsText ?? null,
-    startDate: competition.startDate,
-    endDate: competition.endDate ?? null,
-    isActive: competition.isActive,
-    isArchived: competition.isArchived,
-    ...patch,
-  };
 }
 
 /** A text box that saves when it loses focus, and only if it changed. */

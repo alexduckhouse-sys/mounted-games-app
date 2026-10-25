@@ -382,7 +382,7 @@ function Preparations({ readiness, groups, checkedEquipment, competitionId, refr
     { key: 'details', title: 'Event details', todo: false, to: `${base}/event-details` },
     { key: 'sections', title: 'Sections and races', todo: false, to: `${base}/sections` },
     { key: 'entries', title: 'Entries and dec forms', todo: unpaid + missing + short > 0, view: 'entries' },
-    { key: 'timetable', title: 'Timetable and draw', todo: clashes.length + equipmentDetails > 0, view: 'draw' },
+    { key: 'timetable', title: 'Timetable and draw', todo: clashes.length + equipmentDetails > 0, to: `${base}/timetable-and-draw` },
     { key: 'equipment', title: 'Equipment', todo: equipmentToCheck > 0, view: 'equipment' },
     { key: 'sponsors', title: 'Sponsors and sharing', todo: false, to: `${base}/sponsors` },
   ];
