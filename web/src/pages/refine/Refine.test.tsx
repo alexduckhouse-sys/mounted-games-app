@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineQty, RefineSection, RefineSheet, RefineStatus } from './Refine';
+import { RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineMenu, RefineQty, RefineSection, RefineSheet, RefineStatus } from './Refine';
 
 describe('RefineHeader', () => {
   it('shows the context, title and DEMO chip, with a back link or an in-page back button', async () => {
@@ -111,5 +111,29 @@ describe('RefineSheet', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Open' }));
     document.querySelector<HTMLElement>('.rf-scrim')!.click();
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('RefineMenu', () => {
+  it('opens a small menu, runs the chosen item and closes, with Remove-style items in red', async () => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    const remove = vi.fn();
+    render(<RefineMenu label="More for Red" items={[{ label: 'Change colour', onSelect: change }, { label: 'Remove', onSelect: remove, danger: true }]} />);
+    const button = screen.getByRole('button', { name: 'More for Red' });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    await user.click(button);
+    expect(screen.getByRole('menuitem', { name: 'Remove' })).toHaveClass('rf-menu-danger');
+    expect(screen.getByRole('menuitem', { name: 'Change colour' })).not.toHaveClass('rf-menu-danger');
+    await user.click(screen.getByRole('menuitem', { name: 'Change colour' }));
+    expect(change).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    await user.click(button);
+    await user.click(button);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    await user.click(button);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(remove).not.toHaveBeenCalled();
   });
 });

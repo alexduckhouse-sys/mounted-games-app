@@ -4,6 +4,7 @@ import type { CompetitionDetail, Session, Team } from '../types';
 import { SessionKind } from '../types';
 import { computeTimings } from '../lib/time';
 import { subscribeForPush, unsubscribeFromPush } from '../lib/push';
+import { hatbandName } from '../lib/hatbands';
 import { formatNotifyLeadReminder, getNotifyMinutesBefore } from '../lib/userPrefs';
 
 const ENABLED_KEY = 'mg.notify.enabled';
@@ -154,7 +155,7 @@ function maybeFire(
       if (!isFinalHeat) continue;
       const entry = heat.entries?.find((e) => e.teamId === team.id);
       if (!entry) continue;
-      const hatband = laneHatbands?.[entry.laneIndex - 1]?.trim();
+      const hatband = hatbandName(laneHatbands?.[entry.laneIndex - 1]);
       const laneDetail = hatband
         ? `Lane ${entry.laneIndex} (${hatband} hatband/silk)`
         : `Lane ${entry.laneIndex}`;
@@ -179,7 +180,7 @@ function maybeFire(
   if (kind === SessionKind.Race && minsAhead <= leadMins && minsAhead > leadMins - 5) {
     const { tag, title } = formatNotifyLeadReminder(leadMins, sess.id, team.id, teamLabel);
     const teamEntry = sess.heats?.flatMap((h) => h.entries ?? []).find((e) => e.teamId === team.id);
-    const hatband = teamEntry ? laneHatbands?.[teamEntry.laneIndex - 1]?.trim() : undefined;
+    const hatband = teamEntry ? hatbandName(laneHatbands?.[teamEntry.laneIndex - 1]) : '';
     const laneSuffix = teamEntry
       ? ` · Lane ${teamEntry.laneIndex}${hatband ? ` (${hatband} hatband/silk)` : ''}`
       : '';

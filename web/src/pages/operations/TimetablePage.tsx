@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Minus, Pencil, Plus } from 'lucide-react';
 import { useSavedToast } from '../../components/SavedTick';
 import { TickerNumber } from '../../components/TickerNumber';
@@ -7,19 +7,17 @@ import { confirmDialog } from '../../components/ConfirmDialog';
 import { apiErrorMessage } from '../../lib/apiError';
 import { competitionUpdateBody } from '../../lib/competitionPayload';
 import { HATBAND_COLOURS, MAX_LANES, lanesFor } from '../../lib/creatorDraft';
+import { HATBAND_PALETTE, formatHatband, hatbandColour, hatbandHex, hatbandName, isHatbandHex, parseHatband } from '../../lib/hatbands';
 import { defaultEventStart, heatSizes, planTimetable } from '../../lib/formatPlan';
 import { SessionKind, type Session } from '../../types';
 import { useCompetition } from '../competition/context';
-import { RefineChoiceRow, RefineHeader, RefineList, RefinePage, RefineSwitchRow, type ChoiceOption } from '../refine/Refine';
+import { RefineChoiceRow, RefineHeader, RefineList, RefineMenu, RefinePage, RefineSwitchRow, type ChoiceOption } from '../refine/Refine';
 import type { DrawPreview } from './types';
 import './operations.css';
 
 const DEFAULT_MINUTES = 10;
 const BREAK_NAMES: ChoiceOption<string>[] = [{ value: 'Lunch', label: 'Lunch' }, { value: 'Tea', label: 'Tea' }];
-const COLOUR: Record<string, string> = {
-  Red: '#C8202F', White: '#FFFFFF', Blue: '#2B5FA8', Yellow: '#E8B400', Green: '#2E8B57', Black: '#222222', Orange: '#E87B00', Pink: '#E86AA6',
-};
-const dotColour = (name: string) => COLOUR[name.trim()] ?? '#8A93A0';
+const NO_COLOUR = '#8A93A0';
 
 const isRace = (s: Session) => !s.isBreak && (s.kind ?? SessionKind.Race) === SessionKind.Race;
 const hhmm = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -175,8 +173,12 @@ export function TimetablePage() {
   const bands = competition.laneHatbands ?? [];
   const saveBands = (next: string[]) => run('Couldn’t save the hatbands.', () => api.put(`/competitions/${competition.id}`, competitionUpdateBody(competition, { laneHatbands: next })));
   const [addingBand, setAddingBand] = useState(false);
-  const [bandName, setBandName] = useState('');
-  const moveBand = (i: number, by: -1 | 1) => { const next = [...bands]; [next[i], next[i + by]] = [next[i + by], next[i]]; void saveBands(next); };
+  const [changing, setChanging] = useState<number | null>(null);
+  const moveBand = (i: number, by: -1 | 1) => { const next = [...bands]; [next[i], next[i + by]] = [next[i + by], next[i]]; setChanging(null); void saveBands(next); };
+  // The colour panel sends its edits from a timer, so it reads the hatbands as they are when it fires.
+  const bandsRef = useRef(bands);
+  useEffect(() => { bandsRef.current = bands; });
+  const saveBand = (i: number, value: string) => { const next = [...bandsRef.current]; next[i] = value; return saveBands(next); };
 
   // ----- draw -----
   const [sectionId, setSectionId] = useState<string>(String(competition.sections[0]?.id ?? ''));
@@ -285,33 +287,29 @@ export function TimetablePage() {
         <h2 className="rf-sec ops-tt-head"><span>Hatbands</span><span>{bands.length}</span></h2>
         <RefineList as="div" label="Hatbands">
           {bands.map((band, i) => (
-            <div key={`${band}-${i}`} className="rf-row">
-              <span className="ops-lane-badge">{i + 1}</span>
-              <span className="ops-dot-colour" aria-hidden="true" style={{ background: dotColour(band) }} />
-              <span className="rf-grow rf-t1">{band}</span>
-              <button type="button" className="ops-ibtn" aria-label={`Move ${band} up`} disabled={busy || i === 0} onClick={() => moveBand(i, -1)}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
-              <button type="button" className="ops-ibtn" aria-label={`Move ${band} down`} disabled={busy || i === bands.length - 1} onClick={() => moveBand(i, 1)}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
-              <button type="button" className="ops-danger-link" aria-label={`Remove ${band}`} disabled={busy} onClick={() => void saveBands(bands.filter((_, j) => j !== i))}>Remove</button>
-            </div>
+            <Fragment key={i}>
+              <div className="rf-row">
+                <span className="ops-lane-badge">{i + 1}</span>
+                <span className="ops-dot-colour" aria-hidden="true" style={{ background: hatbandColour(band) }} />
+                <span className="rf-grow rf-t1">{hatbandName(band)}</span>
+                <button type="button" className="ops-ibtn" aria-label={`Move ${hatbandName(band)} up`} disabled={busy || i === 0} onClick={() => moveBand(i, -1)}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
+                <button type="button" className="ops-ibtn" aria-label={`Move ${hatbandName(band)} down`} disabled={busy || i === bands.length - 1} onClick={() => moveBand(i, 1)}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
+                <RefineMenu label={`More for ${hatbandName(band)}`} disabled={busy} items={[
+                  { label: 'Change colour', onSelect: () => { setAddingBand(false); setChanging(i); } },
+                  { label: 'Remove', danger: true, onSelect: () => { setChanging(null); void saveBands(bands.filter((_, j) => j !== i)); } },
+                ]} />
+              </div>
+              {changing === i && <BandEditor band={band} onSave={(value) => void saveBand(i, value)} onDone={() => setChanging(null)} />}
+            </Fragment>
           ))}
           {bands.length === 0 && (
             <div className="rf-row"><span className="rf-grow rf-t2">No hatbands</span>
               <button type="button" className="rf-btn" disabled={busy} onClick={() => void saveBands(HATBAND_COLOURS.slice(0, 6))}>Use the usual colours</button></div>
           )}
-          {bands.length < MAX_LANES && !addingBand && <button type="button" className="ops-addbar ops-addrow" disabled={busy} onClick={() => setAddingBand(true)}><Plus className="h-4 w-4" aria-hidden="true" />Add a hatband</button>}
-          {addingBand && (
-            <form className="ops-dup" onSubmit={(event) => { event.preventDefault(); const name = bandName.trim(); if (name) { void saveBands([...bands, name]); setBandName(''); setAddingBand(false); } }}>
-              <div className="ops-chips" role="group" aria-label="Quick colours">
-                {HATBAND_COLOURS.map((name) => (
-                  <button key={name} type="button" className="rf-btn" onClick={() => setBandName(name)}><span className="ops-dot-colour" aria-hidden="true" style={{ background: dotColour(name) }} />{name}</button>
-                ))}
-              </div>
-              <label className="rf-fld">Name<input value={bandName} placeholder="Any name" maxLength={30} onChange={(event) => setBandName(event.target.value)} /></label>
-              <div className="rf-actions"><button type="submit" className="rf-btn rf-btn-primary" disabled={!bandName.trim()}>Add hatband</button><button type="button" className="rf-btn" onClick={() => { setAddingBand(false); setBandName(''); }}>Cancel</button></div>
-            </form>
-          )}
+          {bands.length < MAX_LANES && !addingBand && <button type="button" className="ops-addbar ops-addrow" disabled={busy} onClick={() => { setChanging(null); setAddingBand(true); }}><Plus className="h-4 w-4" aria-hidden="true" />Add a hatband</button>}
+          {addingBand && <AddBand busy={busy} onAdd={(value) => { void saveBands([...bands, value]); setAddingBand(false); }} onCancel={() => setAddingBand(false)} />}
         </RefineList>
-        {bands.length > 0 && <div className="ops-end-left"><button type="button" className="ops-danger-link" disabled={busy} onClick={() => void saveBands([])}>Remove all hatbands</button></div>}
+        {bands.length > 0 && <div className="ops-end-left"><button type="button" className="ops-danger-link" disabled={busy} onClick={() => { setChanging(null); void saveBands([]); }}>Remove all hatbands</button></div>}
 
         <h2 className="rf-sec ops-tt-head"><span>Draw</span></h2>
         <RefineList as="div">
@@ -328,7 +326,7 @@ export function TimetablePage() {
             <RefineList as="div" label="Heat 1">
               {heatOne.teams.slice().sort((a, b) => a.laneIndex - b.laneIndex).map((team) => (
                 <div key={team.teamId} className="rf-row">
-                  <span className="ops-dot-colour" aria-hidden="true" style={{ background: dotColour(bands[team.laneIndex - 1] ?? '') }} />
+                  <span className="ops-dot-colour" aria-hidden="true" style={{ background: bands[team.laneIndex - 1] ? hatbandColour(bands[team.laneIndex - 1]) : NO_COLOUR }} />
                   <span className="rf-t1 ops-lane-label">Lane {team.laneIndex}</span>
                   <span className="rf-grow rf-t1">{team.teamName}</span>
                 </div>
@@ -373,5 +371,67 @@ function BreakForm({ list, busy, onAdd, onCancel }: { list: Item[]; busy: boolea
         <button type="button" className="rf-btn" onClick={onCancel}>Cancel</button>
       </div>
     </div>
+  );
+}
+
+/** A colour picker with a box beside it for the #RRGGBB. Choosing from either updates the other; only a complete colour is passed on. */
+function ColourField({ hex, onChange }: { hex: string; onChange: (hex: string) => void }) {
+  const [text, setText] = useState(hex);
+  function typed(value: string) {
+    setText(value);
+    const full = /^[0-9a-f]{6}$/i.test(value) ? `#${value}` : value;
+    if (isHatbandHex(full)) onChange(full.toUpperCase());
+  }
+  return (
+    <div className="ops-colour-field">
+      <input type="color" aria-label="Colour" value={hex.toLowerCase()} onChange={(event) => { setText(event.target.value.toUpperCase()); onChange(event.target.value.toUpperCase()); }} />
+      <input aria-label="Colour code" value={text} maxLength={7} spellCheck={false} autoCapitalize="characters" onChange={(event) => typed(event.target.value)}
+        onBlur={() => setText(hex)} />
+    </div>
+  );
+}
+
+/** The panel under a hatband row: its name and colour. Edits are sent a moment after the last change, and the last one on Done. */
+function BandEditor({ band, onSave, onDone }: { band: string; onSave: (value: string) => void; onDone: () => void }) {
+  const [name, setName] = useState(hatbandName(band));
+  const [hex, setHex] = useState(hatbandHex(band));
+  const timer = useRef<number | null>(null);
+  const latest = useRef({ name, hex, onSave, band });
+  useEffect(() => { latest.current = { name, hex, onSave, band }; });
+  const send = () => {
+    timer.current = null;
+    const { name: n, hex: h, onSave: save, band: original } = latest.current;
+    // An empty name keeps the old one rather than saving a blank.
+    const value = formatHatband(n.trim() ? n : parseHatband(original).name || 'Custom colour', h);
+    if (value !== original) save(value);
+  };
+  const soon = () => { if (timer.current !== null) window.clearTimeout(timer.current); timer.current = window.setTimeout(send, 400); };
+  useEffect(() => () => { if (timer.current !== null) { window.clearTimeout(timer.current); send(); } }, []);
+  return (
+    <div className="ops-dup" role="group" aria-label={`Change colour of ${hatbandName(band)}`}>
+      <label className="rf-fld">Name<input value={name} maxLength={30} onChange={(event) => { setName(event.target.value); latest.current.name = event.target.value; soon(); }} /></label>
+      <ColourField hex={hex} onChange={(value) => { setHex(value); latest.current.hex = value; soon(); }} />
+      <div className="rf-actions"><button type="button" className="rf-btn rf-btn-primary" onClick={onDone}>Done</button></div>
+    </div>
+  );
+}
+
+/** Adding a hatband: pick a usual colour or choose your own, name it, and add it. */
+function AddBand({ busy, onAdd, onCancel }: { busy: boolean; onAdd: (value: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState('');
+  const [hex, setHex] = useState('#C8202F');
+  const [pick, setPick] = useState(0);
+  const choose = (colour: string) => { setName(colour); setHex(HATBAND_PALETTE[colour]); setPick((n) => n + 1); };
+  return (
+    <form className="ops-dup" onSubmit={(event) => { event.preventDefault(); if (name.trim()) onAdd(formatHatband(name, hex)); }}>
+      <div className="ops-chips" role="group" aria-label="Quick colours">
+        {HATBAND_COLOURS.map((colour) => (
+          <button key={colour} type="button" className="rf-btn" onClick={() => choose(colour)}><span className="ops-dot-colour" aria-hidden="true" style={{ background: HATBAND_PALETTE[colour] ?? NO_COLOUR }} />{colour}</button>
+        ))}
+      </div>
+      <label className="rf-fld">Name<input value={name} placeholder="Any name" maxLength={30} onChange={(event) => setName(event.target.value)} /></label>
+      <ColourField key={pick} hex={hex} onChange={setHex} />
+      <div className="rf-actions"><button type="submit" className="rf-btn rf-btn-primary" disabled={busy || !name.trim()}>Add hatband</button><button type="button" className="rf-btn" onClick={onCancel}>Cancel</button></div>
+    </form>
   );
 }

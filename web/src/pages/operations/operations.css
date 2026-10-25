@@ -201,3 +201,6 @@
 @media (min-width: 1024px) { .ops-back { display: inline-flex; } }
 .ops-dates { padding: 4px 16px 14px; margin: 0; }
 .ops-remove { margin-top: 28px; }
+.ops-colour-field { display: flex; align-items: center; gap: 10px; }
+.ops-colour-field input[type="color"] { flex: none; width: 52px; height: 44px; padding: 2px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; background: rgb(var(--mg-surface)); cursor: pointer; }
+.ops-colour-field input:not([type="color"]) { width: 120px; min-height: 44px; padding: 0 10px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 600 16px/1 var(--mg-font); text-transform: uppercase; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); }
