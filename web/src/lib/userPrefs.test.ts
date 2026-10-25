@@ -109,13 +109,17 @@ describe('userPrefs', () => {
     expect(getDefaultAgeGroup()).toBeNull();
   });
 
-  it('manages notification lead minutes (15, 30, 60)', () => {
+  it('manages notification lead minutes (1 to 240, including custom timings)', () => {
     expect(getNotifyMinutesBefore()).toBe(60);
     setNotifyMinutesBefore(15);
     expect(getNotifyMinutesBefore()).toBe(15);
     setNotifyMinutesBefore(30);
     expect(getNotifyMinutesBefore()).toBe(30);
-    setNotifyMinutesBefore(99 as never);
+    setNotifyMinutesBefore(45);
+    expect(getNotifyMinutesBefore()).toBe(45);
+    setNotifyMinutesBefore(999);
+    expect(getNotifyMinutesBefore()).toBe(60);
+    setNotifyMinutesBefore(0);
     expect(getNotifyMinutesBefore()).toBe(60);
     localStorage.setItem(STORAGE_KEYS.notifyLeadMins, 'invalid');
     expect(getNotifyMinutesBefore()).toBe(60);

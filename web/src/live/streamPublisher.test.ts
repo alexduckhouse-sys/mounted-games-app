@@ -466,6 +466,27 @@ describe('publisher camera switching and early controls', () => {
     expect(p.getSnapshot().qualityPreset).toBe('720p');
     await p.switchAudio('ext-mic');
     expect(getUserMedia).toHaveBeenLastCalledWith({ video: false, audio: { echoCancellation: true, noiseSuppression: true, deviceId: { exact: 'ext-mic' } } });
+
+    // Switch audio with 1440p and 1080p resolution labels & error handling
+    let heightToReport = 1440;
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+      const vTrack = Object.assign(new FakeTrack(), {
+        getSettings: () => ({ height: heightToReport }),
+      });
+      return asMedia(new FakeMediaStream([
+        ...(constraints.video ? [vTrack] : []),
+        ...(constraints.audio ? [new FakeTrack('audio')] : []),
+      ]));
+    });
+    await p.switchCamera('cam-1440');
+    expect(p.getSnapshot().captureResolution).toBe('1440p');
+    heightToReport = 1080;
+    await p.switchCamera('cam-1080');
+    expect(p.getSnapshot().captureResolution).toBe('1080p');
+
+    // Audio replaceTrack failure releases track
+    FakePeer.instances[0].transceivers[1].sender.replaceTrack.mockRejectedValueOnce(new Error('mic error'));
+    await expect(p.switchAudio('bad-mic')).rejects.toThrow('mic error');
     p.dispose();
   });
 });

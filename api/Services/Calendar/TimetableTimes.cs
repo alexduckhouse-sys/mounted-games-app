@@ -65,11 +65,14 @@ public static class TimetableTimes
             }
 
             var cursor = effective;
-            foreach (var heat in session.Heats.OrderBy(h => h.OrderIndex))
+            var scheduledCursor = scheduled;
+            var heats = session.Heats.OrderBy(h => h.OrderIndex).ToList();
+            foreach (var heat in heats)
             {
                 var minutes = HeatMinutes(heat, session);
                 var rawPinned = Utc(heat.ScheduledStart);
                 var pinned = rawPinned - (heat.FinishedAt.HasValue ? TimeSpan.Zero : shift);
+                var heatScheduled = pinned ?? scheduledCursor;
                 DateTime? start = null;
                 if (heat.StartedAt is { } heatStarted) start = Utc(heatStarted);
                 else if (pinned is { } pin)
@@ -78,8 +81,43 @@ public static class TimetableTimes
                     start = cursor is { } previousEnd && previousEnd > delayed ? previousEnd : delayed;
                 }
                 else if (cursor is not null) start = cursor;
+                // Keep the first-race and halfway checkpoints identical to computeTimings in time.ts.
+                var races = heat.Races.OrderBy(r => r.OrderIndex).ToList();
+                var singleFinished = races.Count == 1 && heat.FinishedAt.HasValue && !races[0].StartedAt.HasValue
+                    && session.StartedAt.HasValue && session.StartedAt < heat.FinishedAt;
+                var firstStamp = singleFinished ? null : Utc(races.FirstOrDefault()?.StartedAt ?? races.FirstOrDefault()?.FinishedAt);
+                if (heatScheduled is { } firstScheduled && firstStamp is { } firstTime)
+                {
+                    var taken = firstTime - firstScheduled;
+                    if (taken > TimeSpan.FromMinutes(5))
+                    {
+                        var delay = taken - TimeSpan.FromMinutes(2);
+                        var autoStamped = (Utc(session.StartedAt) is { } sessionStart && Math.Abs((sessionStart - firstTime).TotalSeconds) <= 5)
+                            || (Utc(heat.StartedAt) is { } heatStart && Math.Abs((heatStart - firstTime).TotalSeconds) <= 5);
+                        if (autoStamped)
+                        {
+                            lane.Offset = delay;
+                            start = firstScheduled + delay;
+                            if (heat == heats[0]) effective = start;
+                        }
+                        else if (delay > lane.Offset) lane.Offset = delay;
+                    }
+                }
+                var halfIndex = races.Count / 2 - 1;
+                var halfwayStamp = halfIndex >= 1 ? Utc(races[halfIndex].FinishedAt ?? races[halfIndex].StartedAt) : null;
+                if (heatScheduled is { } halfwayScheduled && halfwayStamp is { } halfwayTime)
+                {
+                    var expected = halfwayScheduled.AddMinutes((double)halfIndex / races.Count * minutes);
+                    var taken = halfwayTime - expected;
+                    if (taken > TimeSpan.FromMinutes(5) && taken - TimeSpan.FromMinutes(2) > lane.Offset)
+                        lane.Offset = taken - TimeSpan.FromMinutes(2);
+                }
                 result[heat.Id] = new HeatTime(start, minutes);
-                cursor = start?.AddMinutes(minutes);
+                var nextStart = start;
+                if (start is { } actual && heatScheduled is { } planned && planned + lane.Offset > actual)
+                    nextStart = planned + lane.Offset;
+                cursor = nextStart?.AddMinutes(minutes);
+                scheduledCursor = (pinned ?? scheduledCursor)?.AddMinutes(minutes);
             }
             var isBreakLike = session.Kind is SessionKind.Break or SessionKind.Briefing or SessionKind.Custom;
             var effectiveEnd = !isBreakLike && session.Heats.Count > 0 && cursor is not null

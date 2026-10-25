@@ -13,6 +13,9 @@ export function LiteModeSetting() {
   return (
     <div role="group" aria-label="Lite mode" className="flex flex-col gap-2">
       <h3 className="px-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Lite mode</h3>
+      <p className="px-1 text-xs leading-snug text-[rgb(var(--mg-muted))]">
+        Saves battery and mobile data on busy showgrounds by turning off animations, stream previews and background weather checks.
+      </p>
       <div className="mg-seg">
         {OPTIONS.map((option) => (
           <button key={option.id} type="button" aria-pressed={setting === option.id} onClick={() => setSetting(option.id)}>{option.label}</button>

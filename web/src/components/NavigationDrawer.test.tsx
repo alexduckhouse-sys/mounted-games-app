@@ -89,14 +89,14 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(document.body.style.overflow).toBe('auto');
   });
 
-  it('sends the extra competition links to the events list when no competition is followed', () => {
+  it('sends the extra competition links to general pages when no competition is followed', () => {
     mount();
     expect(links('Main navigation')).toEqual([
       ['Following', '/following'], ['Event shop', '/shop'],
     ]);
   });
 
-  it('invites a visitor to sign in', () => {
+  it('invites a visitor to sign in at the bottom of the menu without a role caption', () => {
     mount();
     const signIn = screen.getByRole('link', { name: 'Sign in' });
     expect(signIn).toHaveAttribute('href', '/login');
@@ -275,21 +275,50 @@ describe('NavigationDrawer: signed in', () => {
   });
 });
 
-describe('NavigationDrawer: settings and weather', () => {
+describe('NavigationDrawer: settings, QR scanner and weather', () => {
   it('links to the Settings page and highlights it when active', () => {
     mount({ path: '/settings' });
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('hides the weather row by default', () => {
+  it('opens the QR permission scanner above Settings and rejects unsupported pairing links', async () => {
+    mount();
+    const scanBtn = screen.getByRole('button', { name: 'Scan QR code' });
+    const settingsLink = screen.getByRole('link', { name: 'Settings' });
+    expect(scanBtn.compareDocumentPosition(settingsLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await userEvent.click(scanBtn);
+    expect(screen.getByRole('dialog', { name: 'Scan permission QR code' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close QR scanner' }));
+    expect(screen.queryByRole('dialog', { name: 'Scan permission QR code' })).not.toBeInTheDocument();
+
+    await userEvent.click(scanBtn);
+    fireEvent.change(screen.getByLabelText('Permission link or key'), {
+      target: { value: '/competitions/4/broadcast?pair=pair_secret_1234567890' },
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Invalid permission QR code');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('hides the weather row by default when no competition is followed', () => {
     mount();
     expect(screen.queryByText('Weather', { selector: 'span.font-medium' })).not.toBeInTheDocument();
   });
 
-  it('shows the weather when it was switched on before', () => {
+  it('shows the weather when it was switched on before or when following a competition', async () => {
     localStorage.setItem('mg.showWeather', '1');
-    mount();
+    const first = mount();
     expect(screen.getByText('Weather', { selector: 'span.font-medium' })).toBeInTheDocument();
+    first.unmount();
+
+    localStorage.removeItem('mg.showWeather');
+    vi.mocked(getWeather).mockClear();
+    mount({ competition: true });
+    const weatherLink = screen.getByRole('link', { name: /Weather/ });
+    expect(weatherLink).toHaveAttribute('href', '/competitions/4/weather');
+    expect(getWeather).not.toHaveBeenCalled();
   });
 
   it('still works when storage is blocked', () => {

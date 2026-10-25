@@ -807,7 +807,8 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
   cardsByTeam?: Record<number, RefereeCard>;
 }) {
   const teams = inLaneOrder(heat, activeIndex, rules);
-  const minWidth = 12 + 116 + races.length * 23 + 44;
+  const manyRaces = races.length >= 6;
+  const minWidth = manyRaces ? undefined : 12 + 100 + races.length * 22 + 40;
   const activeRace = races.find((r) => r.id === activeRaceId) ?? null;
   const allDone = races.length > 0 && races.every((r) => r.isComplete);
   const metaText = activeRace
@@ -854,7 +855,7 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
   return (
     <section aria-label="Heat table" className="sc-card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="heat-grid" style={{ minWidth }}>
+        <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`} style={{ minWidth }}>
           <thead>
             <tr>
               <th scope="col" className="heat-team-head">
@@ -882,7 +883,7 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
                 <tr key={t.teamId}>
                   <th scope="row" className="heat-team" title={t.teamName}>
                     <div className="heat-team-link">
-                      <span className="heat-team-name">
+                      <span className={`heat-team-name${t.teamName.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
                         <span aria-hidden="true" className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle" style={{ background: dotColour(t.bibColour) }} />
                         {t.teamName}
                         <TeamCardBadge card={card} />

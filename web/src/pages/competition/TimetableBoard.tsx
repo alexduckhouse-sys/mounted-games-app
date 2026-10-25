@@ -98,7 +98,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   days.sort();
   const selectedDay = pickedDay && days.includes(pickedDay) ? pickedDay : defaultTimetableDay(days, today);
   const dayRows = rows.filter((row) => rowDay(row) === selectedDay);
-  const arenas = [...new Set(dayRows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
+  const arenas = [...new Set(rows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
   const showArenaSelect = sectionId == null && arenas.length > 1;
   const selectedArena = showArenaSelect && arenas.includes(arena) ? arena : '';
   const sections = useMemo(
@@ -188,7 +188,8 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
     }
     const groupArenas = [...new Set(group.rows.map((row) => row.session.arenaName?.trim() ?? ''))];
     const sharedArena = groupArenas.length === 1 ? groupArenas[0] : '';
-    const maxLate = groupMaxDelay(group.rows);
+    const sessionLive = group.rows.some((row) => row.status === 'live' || row.session.status === 1);
+    const maxLate = sessionLive ? 0 : groupMaxDelay(group.rows);
     const count = `${group.rows.length} ${group.rows.length === 1 ? group.noun[0] : group.noun[1]}`;
     const summary = maxLate > 0 ? [sharedArena, `${maxLate} min late`] : [sharedArena, count];
     const titleRow = group.title && <>
@@ -217,7 +218,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
     <div className="timetable-board">
       {bandExtra}
       {(days.length > 1 || showArenaSelect || showSectionSelect) && (
-        <div className="tt-strip">
+        <div className={`tt-strip${days.length > 1 && (showArenaSelect || showSectionSelect) ? ' tt-strip-stacked' : ''}`}>
           {days.length > 1 && (
             <div className="tt-days" role="group" aria-label="Choose day">
               {days.map((day, index) => <button key={day} type="button" className="tt-day" aria-pressed={selectedDay === day} aria-label={`Day ${index + 1}, ${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${day === today ? ', today' : ''}`} onClick={() => setPickedDay(day)}>
@@ -253,7 +254,13 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
           <p className="tt-provisional-note" role="note">Provisional timetable: times are estimates until teams and races are confirmed.</p>
         )}
         {activeGroups.map(renderGroup)}
-        {finishedGroups.length > 0 && (
+        {visibleRows.length > 0 && (
+          <ul className="tt-key" aria-label="Status colours">
+            {STATUS_KEY.map(([status, label]) => <li key={status}><span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />{label}</li>)}
+          </ul>
+        )}
+        {visibleRows.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">Nothing scheduled for this day.</p>}
+        {(finishedGroups.length > 0 || Boolean(footer)) && (
           <button
             type="button"
             className="mg-text-link self-center"
@@ -263,20 +270,18 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
             {showFinished ? 'Hide finished sessions' : 'Show full timetable'}
           </button>
         )}
-        {finishedGroups.length > 0 && showFinished && (
+        {showFinished && (
           <>
-            <h2 className="tt-divider">{selectedDay === today ? 'Finished today' : 'Finished'} · {finishedGroups.length}<span aria-hidden="true" /></h2>
-            {finishedGroups.map(renderGroup)}
+            {finishedGroups.length > 0 && (
+              <>
+                <h2 className="tt-divider">{selectedDay === today ? 'Finished today' : 'Finished'} · {finishedGroups.length}<span aria-hidden="true" /></h2>
+                {finishedGroups.map(renderGroup)}
+              </>
+            )}
+            {footer}
           </>
         )}
-        {visibleRows.length > 0 && (
-          <ul className="tt-key" aria-label="Status colours">
-            {STATUS_KEY.map(([status, label]) => <li key={status}><span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />{label}</li>)}
-          </ul>
-        )}
-        {visibleRows.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">Nothing scheduled for this day.</p>}
         <SponsorStrip placement="Timetable" />
-        {footer}
       </div>
     </div>
   );
@@ -351,28 +356,25 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
     : 0;
   const shiftMinutes = Math.abs(rawDrift) >= 5 ? rawDrift : 0;
   const moved = shiftMinutes !== 0 && !!row.scheduled;
-  const shiftCardText = shiftMinutes > 0 ? `+${shiftMinutes}m` : `${shiftMinutes}m`;
+  const showShift = moved && status !== 'live' && status !== 'finished' && session.status !== 1;
+  const shiftText = shiftMinutes > 0 ? `+${shiftMinutes}m` : `${shiftMinutes}m`;
   const orderedRaces = heat ? heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const runningRaceIndex = orderedRaces.findIndex((r) => !r.isComplete);
   const currentRaceNum = runningRaceIndex >= 0 ? runningRaceIndex + 1 : orderedRaces.length;
   const onNowText = orderedRaces.length > 0 ? `ON NOW · Race ${currentRaceNum} of ${orderedRaces.length}` : 'ON NOW';
+  const timeColourClass = showShift ? (shiftMinutes > 0 ? ' tt-time-late' : ' tt-time-early') : '';
   const content = <>
-    <span className="tt-time">{moved && <span className="sr-only">Planned {formatTime(row.scheduled)}, now </span>}{formatTime(row.effective)}</span>
+    <span className={`tt-time${timeColourClass}`}>{showShift && <span className="sr-only">Planned {formatTime(row.scheduled)}, now </span>}{formatTime(row.effective)}</span>
     <span className="tt-event">
       <strong>
         {hasFollowedTeam && <Star aria-hidden="true" className="tt-fav-star" size={12} />}
         {name}
       </strong>
       {sub && <span className="tt-sub">{sub}</span>}
-      {status !== 'live' && status !== 'finished' && moved && (
-        <span className="tt-planned" aria-hidden="true">{shiftMinutes > 0 ? `+${shiftMinutes}` : shiftMinutes} · <s>{formatTime(row.scheduled)}</s></span>
+      {showShift && (
+        <span className={`tt-planned${shiftMinutes < 0 ? ' tt-planned-early' : ''}`} aria-hidden="true">{shiftText} · <s>{formatTime(row.scheduled)}</s></span>
       )}
       {status === 'live' && <span className="tt-onnow" aria-hidden="true">{onNowText}</span>}
-      {moved && status !== 'finished' && (
-        <span className={`tt-shift-card ${shiftMinutes > 0 ? 'tt-shift-late' : 'tt-shift-early'}`} aria-label={`Time shifted ${shiftCardText}`}>
-          {shiftCardText}
-        </span>
-      )}
     </span>
     <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
     <span className="sr-only">{statusLabel(status, delayMinutes)}</span>
