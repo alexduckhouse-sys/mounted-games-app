@@ -238,6 +238,11 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "CompetitionSections", "TieBreakRule", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "FinalistCount", "INTEGER NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "UsesRaceFinals", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "CompetitionSections", "HasFinal", "INTEGER NOT NULL DEFAULT 1");
+        // Sections that already exist keep carrying points into the final, as they always did (the default only fills
+        // existing rows; EF writes the real value for new ones). Same as the Postgres migration's backfill.
+        await EnsureColumnAsync(db, "CompetitionSections", "CarryPointsIntoFinal", "INTEGER NOT NULL DEFAULT 1");
+        await EnsureColumnAsync(db, "CompetitionSections", "DoublePointsInFinal", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Teams", "SupporterJoinKey", "TEXT NULL");
         await EnsureColumnAsync(db, "Teams", "CalendarFeedTokenHash", "TEXT NULL");
         await EnsureColumnAsync(db, "Teams", "CalendarFeedTokenCreatedAt", "TEXT NULL");
