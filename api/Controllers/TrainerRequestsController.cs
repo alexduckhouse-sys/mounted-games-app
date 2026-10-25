@@ -171,6 +171,12 @@ public class AdminUsersController(AppDbContext db, UserManager<AppUser> users) :
         if (user is null) return NotFound();
 
         var currentRoles = await users.GetRolesAsync(user);
+        // The Admin role is a master admin's to give and take away, or a lock could be dodged by dropping the role and regaining it.
+        if (req.Role == Roles.Admin && !User.IsInRole(Roles.MasterAdmin))
+            return Forbid();
+        // A locked or blocked account's roles are frozen until it is restored.
+        if (user.IsAccessStopped)
+            return Conflict(new { message = "This account is locked or blocked, so its roles can't be changed." });
         // A master admin's roles are theirs to change: otherwise any admin could strip the Admin role from one.
         if (currentRoles.Contains(Roles.MasterAdmin) && !User.IsInRole(Roles.MasterAdmin))
             return Forbid();

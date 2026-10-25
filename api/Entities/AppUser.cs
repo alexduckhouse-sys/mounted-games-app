@@ -17,10 +17,14 @@ public class AppUser : IdentityUser
     /// <summary>Set when a master admin locks an Admin or organiser account. A locked account can't sign in and its tokens stop working.</summary>
     public DateTime? LockedAt { get; set; }
     public string? LockedByUserId { get; set; }
+    /// <summary>The lock was placed by a master admin, so only a master admin can lift it.</summary>
+    public bool LockedByMaster { get; set; }
 
     /// <summary>Set when an admin blocks the account: no sign-in, no entries, no chat. Its network addresses are blocked as well.</summary>
     public DateTime? BlockedAt { get; set; }
     public string? BlockedByUserId { get; set; }
+    /// <summary>The block was placed by a master admin, so only a master admin can lift it.</summary>
+    public bool BlockedByMaster { get; set; }
     /// <summary>Why the account was blocked. For admins only: it is never in a DTO a non-admin can read, and never shown to the blocked person.</summary>
     public string? BlockReason { get; set; }
 

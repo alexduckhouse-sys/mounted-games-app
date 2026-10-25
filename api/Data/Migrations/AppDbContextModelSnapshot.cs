@@ -260,6 +260,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<DateTime?>("BlockedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("BlockedByMaster")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("BlockedByUserId")
                         .HasColumnType("text");
 
@@ -293,6 +296,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<DateTime?>("LockedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("LockedByMaster")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("LockedByUserId")
                         .HasColumnType("text");

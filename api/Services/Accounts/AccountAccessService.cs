@@ -45,7 +45,8 @@ public sealed class AccountAccessService(
         if (target.LockedAt is not null) return;
         var now = time.GetUtcNow().UtcDateTime;
         await db.Users.Where(u => u.Id == targetId)
-            .ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedAt, now).SetProperty(u => u.LockedByUserId, callerId), ct);
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedAt, now).SetProperty(u => u.LockedByUserId, callerId)
+                .SetProperty(u => u.LockedByMaster, callerIsMaster), ct);
         liveAccounts.Forget(targetId);
     }
 
@@ -54,8 +55,11 @@ public sealed class AccountAccessService(
         var target = await FindAsync(targetId);
         if (!callerIsMaster && await users.IsInRoleAsync(target, Roles.Admin))
             throw new AccountAccessException("Only a master admin can unlock an admin account.", 403);
+        if (!callerIsMaster && target.LockedByMaster)
+            throw new AccountAccessException("A master admin locked this account, so only a master admin can unlock it.", 403);
         await db.Users.Where(u => u.Id == targetId)
-            .ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedAt, (DateTime?)null).SetProperty(u => u.LockedByUserId, (string?)null), ct);
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedAt, (DateTime?)null).SetProperty(u => u.LockedByUserId, (string?)null)
+                .SetProperty(u => u.LockedByMaster, false), ct);
         liveAccounts.Forget(targetId);
     }
 
@@ -84,6 +88,7 @@ public sealed class AccountAccessService(
             await db.Users.Where(u => u.Id == targetId).ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.BlockedAt, u => u.BlockedAt ?? now)
                 .SetProperty(u => u.BlockedByUserId, u => u.BlockedAt == null ? callerId : u.BlockedByUserId)
+                .SetProperty(u => u.BlockedByMaster, u => u.BlockedAt == null ? callerIsMaster : (u.BlockedByMaster || callerIsMaster))
                 .SetProperty(u => u.BlockReason, string.IsNullOrEmpty(cleanReason) ? (string?)null : cleanReason), ct);
 
             added = 0;
@@ -93,11 +98,10 @@ public sealed class AccountAccessService(
                 var others = await db.AccountIps.Where(a => a.IpHash == hash && a.UserId != targetId)
                     .Select(a => a.UserId).Distinct().CountAsync(ct);
                 if (others >= SharedNetworkAccounts) continue;
-                db.IpBlocks.Add(new IpBlock
-                {
-                    IpAddress = hash, Reason = "Account blocked", CreatedByUserId = callerId, BlockedAccountUserId = targetId, CreatedAt = now,
-                });
-                added++;
+                // Insert-if-absent in one statement, so two blocks racing for the same network can't hit the unique
+                // index (which on Postgres would abort the whole transaction).
+                added += await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO \"IpBlocks\" (\"IpAddress\", \"Reason\", \"CreatedByUserId\", \"BlockedAccountUserId\", \"CreatedAt\") VALUES ({hash}, {"Account blocked"}, {callerId}, {targetId}, {now}) ON CONFLICT (\"IpAddress\") DO NOTHING", ct);
             }
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
@@ -111,6 +115,8 @@ public sealed class AccountAccessService(
         var target = await FindAsync(targetId);
         if (!callerIsMaster && await users.IsInRoleAsync(target, Roles.Admin))
             throw new AccountAccessException("Only a master admin can unblock an admin account.", 403);
+        if (!callerIsMaster && target.BlockedByMaster)
+            throw new AccountAccessException("A master admin blocked this account, so only a master admin can unblock it.", 403);
 
         await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
@@ -118,7 +124,7 @@ public sealed class AccountAccessService(
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
             await db.Users.Where(u => u.Id == targetId).ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.BlockedAt, (DateTime?)null)
-                .SetProperty(u => u.BlockedByUserId, (string?)null)
+                .SetProperty(u => u.BlockedByUserId, (string?)null).SetProperty(u => u.BlockedByMaster, false)
                 .SetProperty(u => u.BlockReason, (string?)null), ct);
 
             // A network another blocked account has also used stays blocked, now on that account's behalf.

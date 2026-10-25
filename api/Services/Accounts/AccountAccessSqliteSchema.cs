@@ -13,6 +13,8 @@ public static class AccountAccessSqliteSchema
         await DbInitializer.EnsureColumnAsync(db, "AspNetUsers", "BlockedAt", "TEXT NULL");
         await DbInitializer.EnsureColumnAsync(db, "AspNetUsers", "BlockedByUserId", "TEXT NULL");
         await DbInitializer.EnsureColumnAsync(db, "AspNetUsers", "BlockReason", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "AspNetUsers", "LockedByMaster", "INTEGER NOT NULL DEFAULT 0");
+        await DbInitializer.EnsureColumnAsync(db, "AspNetUsers", "BlockedByMaster", "INTEGER NOT NULL DEFAULT 0");
         await DbInitializer.EnsureColumnAsync(db, "IpBlocks", "BlockedAccountUserId", "TEXT NULL");
         await db.Database.ExecuteSqlRawAsync("""
             CREATE INDEX IF NOT EXISTS "IX_IpBlocks_BlockedAccountUserId" ON "IpBlocks" ("BlockedAccountUserId");

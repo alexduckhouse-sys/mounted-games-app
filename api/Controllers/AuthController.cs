@@ -80,6 +80,10 @@ public class AuthController : ControllerBase
                 SHA256.HashData(Encoding.UTF8.GetBytes(req.Key)), SHA256.HashData(Encoding.UTF8.GetBytes(expected))))
             return Unauthorized(new { message = "Invalid admin key." });
 
+        // The key is not a way round a block on the network.
+        if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Sign-in from this network is blocked." });
+
         string? titleOverride = null;
         if (!string.IsNullOrWhiteSpace(req.Title))
         {
@@ -106,6 +110,9 @@ public class AuthController : ControllerBase
             var existing = await _users.FindByEmailAsync(emailOverride);
             if (existing is not null)
             {
+                // Nor a way round a lock or block on the account.
+                if (existing.IsAccessStopped)
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
                 // A shared organiser key does not prove ownership of an existing passwordless identity.
                 if (await _users.IsLockedOutAsync(existing) || !await _users.HasPasswordAsync(existing))
                     return Unauthorized(new { message = "This account cannot use organiser-key sign-in. Use your account recovery process or a different address." });
@@ -389,6 +396,8 @@ public class AuthController : ControllerBase
             return PasswordProblems(result);
 
         var role = string.IsNullOrWhiteSpace(req.Role) ? Roles.Trainer : req.Role;
+        if (role == Roles.Admin && !User.IsInRole(Roles.MasterAdmin))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only a master admin can make an admin account." });
         // MasterAdmin is never handed out here, so no admin can make a master admin.
         if (!Roles.Assignable.Contains(role))
             role = Roles.Trainer;
