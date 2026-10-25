@@ -145,7 +145,8 @@
 /* Timetable and draw */
 .ops-tt .rf-list { overflow: visible; }
 .ops-tt .rf-row { min-height: 52px; }
-.ops-tt-head { margin-top: 22px; border-bottom: 0; font-size: 20px; }
+.ops-tt-head { margin-top: 22px; border-bottom: 0; }
+.rf-sec.ops-tt-head > span:first-child { font: 800 22px/1.1 var(--mg-font-display); letter-spacing: 0; text-transform: none; color: rgb(var(--mg-heading)); }
 .ops-mv { flex-wrap: wrap; padding-block: 8px; }
 .ops-mv-btns { flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 @media (min-width: 640px) { .ops-mv-btns { flex: none; display: flex; } }
