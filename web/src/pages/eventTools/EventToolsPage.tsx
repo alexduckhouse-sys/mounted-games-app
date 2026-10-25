@@ -142,7 +142,7 @@ export function DuplicateEventPanel({ competition }: { competition: CompetitionF
       {success && <div role="status" className="tools-success"><CheckCircle2 className="h-5 w-5" aria-hidden="true" />{success}</div>}
       <RefineSection title="Duplicate event setup" />
       <h2 id="duplicate-title" className="sr-only">Duplicate event setup</h2>
-      <RefineNote>Copies sections, teams, sessions, heats and races without results or payments.</RefineNote>
+      <RefineNote>Copies the set-up: age groups, scoring settings, race lists, timetable, hatbands, dec form and payment details. Teams, heats, results, entries and payments are left behind.</RefineNote>
       <form className="tools-form" onSubmit={cloneCompetition}><fieldset disabled={busy} className="tools-fields"><legend className="sr-only">New event details</legend>
         <label className="rf-fld">New competition name<input value={cloneName} onChange={(event) => setCloneName(event.target.value)} maxLength={200} required /></label>
         <label className="rf-fld">Starts<input type="datetime-local" value={cloneStart} onChange={(event) => setCloneStart(event.target.value)} required /></label>
@@ -153,7 +153,7 @@ export function DuplicateEventPanel({ competition }: { competition: CompetitionF
         <RefineSection title="New event" />
         <RefineList as="div">
           <Link className="rf-row" to={`/admin/competitions/${cloneResult.competitionId}`}>
-            <span className="rf-grow"><span className="rf-t1">{cloneResult.name}</span><span className="rf-t2">{cloneResult.sections} sections, {cloneResult.teams} teams and {cloneResult.heats} heats copied.</span></span>
+            <span className="rf-grow"><span className="rf-t1">{cloneResult.name}</span><span className="rf-t2">{cloneResult.sections} age groups and {cloneResult.sessions} timetable sessions copied.</span></span>
             <span className="rf-st rf-ok">Edit the new event</span><Chevron />
           </Link>
         </RefineList>

@@ -43,6 +43,7 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
 
         // --- Private to the person: removed. ---
         await db.TrainerNotes.Where(n => n.UserId == id).ExecuteDeleteAsync(ct);
+        await db.StartingPoints.Where(p => p.OwnerUserId == id).ExecuteDeleteAsync(ct);
         await db.PushSubscriptions.Where(p => p.UserId == id).ExecuteDeleteAsync(ct);
         await db.OverlayLooks.Where(l => l.OwnerUserId == id).ExecuteDeleteAsync(ct);
         await db.TeamSupporters.Where(s => s.UserId == id).ExecuteDeleteAsync(ct);

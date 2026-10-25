@@ -46,7 +46,15 @@ public record CompetitionReadinessDto(int CompetitionId, bool IsReady, string Eq
     IReadOnlyList<IncompleteTeamDto> IncompleteTeams,
     IReadOnlyList<SessionOverlapDto> SessionOverlaps,
     IReadOnlyList<EquipmentChecklistItemDto> EquipmentChecklist,
-    IReadOnlyList<EquipmentReadinessIssueDto> EquipmentIssues);
+    IReadOnlyList<EquipmentReadinessIssueDto> EquipmentIssues,
+    IReadOnlyList<FlaggedDecFormDto> FlaggedDecForms,
+    IReadOnlyList<RaceListToChooseDto> RaceListsToChoose);
+/// <summary>A team whose latest dec form has riders with flags (an answer outside the organiser's limits). Counts only: no rider details.</summary>
+public record FlaggedDecFormDto(int TeamId, string TeamName, int SectionId, string SectionName, int FlaggedRiders);
+/// <summary>
+/// A race session with no races chosen yet. <c>SessionId</c> is null when the age group has no race session at all.
+/// </summary>
+public record RaceListToChooseDto(int? SessionId, string SessionName, int SectionId, string SectionName);
 public record UpdateEquipmentAcknowledgementsRequest(
     IReadOnlyList<string> AcknowledgedKeys, string ExpectedFingerprint);
 

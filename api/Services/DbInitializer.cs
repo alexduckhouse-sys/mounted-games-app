@@ -419,6 +419,21 @@ public static class DbInitializer
             """);
         await EnsureColumnAsync(db, "ScorerLinks", "Scope", "INTEGER NOT NULL DEFAULT 0");
 
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "StartingPoints" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_StartingPoints" PRIMARY KEY AUTOINCREMENT,
+                "Name" TEXT NOT NULL,
+                "OwnerUserId" TEXT NOT NULL,
+                "SourceName" TEXT NULL,
+                "SetupJson" TEXT NOT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NOT NULL,
+                CONSTRAINT "FK_StartingPoints_AspNetUsers_OwnerUserId" FOREIGN KEY ("OwnerUserId")
+                    REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS "IX_StartingPoints_OwnerUserId" ON "StartingPoints" ("OwnerUserId");
+            """);
+
         await Commerce.CommerceSqliteSchema.EnsureAsync(db);
 
         await Seasons.SeasonsSqliteSchema.EnsureAsync(db);

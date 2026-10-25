@@ -170,13 +170,13 @@ describe('EventToolsPage merged into OperationsPage', () => {
   });
 
   it('shows the copied counts and a link to the new event after duplicating', async () => {
-    post.mockResolvedValue({ data: { competitionId: 99, name: 'Spring event copy', sections: 2, teams: 8, sessions: 3, heats: 6, races: 12 } });
+    post.mockResolvedValue({ data: { competitionId: 99, name: 'Spring event copy', sections: 2, teams: 0, sessions: 3, heats: 0, races: 0 } });
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('tab', { name: 'Duplicate event' }));
     await user.click(screen.getByRole('button', { name: 'Duplicate setup' }));
 
-    expect(await screen.findByText('2 sections, 8 teams and 6 heats copied.')).toBeInTheDocument();
+    expect(await screen.findByText('2 age groups and 3 timetable sessions copied.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Spring event copy/ })).toHaveAttribute('href', '/admin/competitions/99');
     expect(screen.getByRole('status')).toHaveTextContent('Spring event copy is ready to edit.');
   });

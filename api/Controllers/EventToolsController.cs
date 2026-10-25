@@ -46,7 +46,7 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
         if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
         try
         {
-            var result = await new CompetitionCloneService(db).CloneAsync(competitionId, request, userId, User.IsInRole(Roles.Admin), ct);
+            var result = await new CompetitionCloneService(db).CloneAsync(competitionId, request, userId, ct);
             return Created($"/api/competitions/{result.CompetitionId}", result);
         }
         catch (EventToolsException ex)

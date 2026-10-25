@@ -49,3 +49,11 @@ public record PrintableSectionResultsDto(
 public record PrintableResultsDto(
     PrintableCompetitionDto Competition, bool IsProvisional,
     IReadOnlyList<PrintableSectionResultsDto> Sections);
+
+/// <summary>A saved starting point. <c>OwnerName</c> is filled for admins only, who see everyone's.</summary>
+public record StartingPointDto(
+    int Id, string Name, string? SourceName, int Sections, int Sessions, DateTime CreatedAt, DateTime UpdatedAt,
+    bool IsMine, string? OwnerName);
+public record SaveStartingPointRequest(string Name);
+public record RenameStartingPointRequest(string Name);
+public record CreateFromStartingPointRequest(string Name, DateTime StartDate, DateTime? EndDate);
