@@ -164,7 +164,7 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task CloneCopiesTheSetupWithoutTeamsHeatsResultsEntriesOrPayments()
+    public async Task CloneCopiesTheSetupWithoutTeamsResultsEntriesOrPayments()
     {
         var source = await ArrangeCloneSourceAsync();
         var trainer = await _f.TrainerAsync();
@@ -197,7 +197,7 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
             Assert.Empty(await db.Set<EventTeamProfileLink>().Where(x => x.CompetitionId == clone.CompetitionId).ToListAsync());
             // Timetable plan: sessions keep their shape and move with the dates; heats stay behind.
             var sessions = copied.Sessions.OrderBy(x => x.OrderIndex).ToList();
-            Assert.All(sessions, x => Assert.Empty(x.Heats));
+            Assert.Empty(sessions[0].Heats); // an ordinary session's heats are drawn again for the new event
             var race = sessions[0];
             Assert.Equal(6, race.LanesPerHeat);
             Assert.Equal(start.AddHours(1), race.ScheduledStart);
@@ -320,7 +320,7 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task CloneLeavesFinalsToTheNewEventButKeepsTheFinalsSession()
+    public async Task CloneKeepsTheFinalsSessionWithEmptyLetteredFinalHeats()
     {
         var source = await ArrangeCloneSourceAsync(standardFinal: true);
         var trainer = await _f.TrainerAsync();
@@ -330,11 +330,37 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
 
         await _f.WithDbAsync(async db =>
         {
-            var session = await db.Sessions.Include(x => x.Heats)
+            var session = await db.Sessions.Include(x => x.Heats).ThenInclude(h => h.Races)
                 .SingleAsync(x => x.CompetitionId == clone.CompetitionId && x.Name == "Finals · U12");
-            Assert.Empty(session.Heats);
+            // The heat is there to be populated from the new event's standings, with its race, and no teams.
+            var heat = Assert.Single(session.Heats);
+            Assert.Equal("A Final", heat.Label);
+            Assert.Equal("Race 1", Assert.Single(heat.Races).Name);
+            Assert.False(heat.Races.Single().IsComplete);
+            Assert.Equal(start.AddHours(1), heat.ScheduledStart);
             Assert.Equal(0, await db.HeatEntries.CountAsync(x => x.Heat!.Session!.CompetitionId == clone.CompetitionId));
+            Assert.Equal(0, await db.Results.CountAsync(x => x.Race!.Heat!.Session!.CompetitionId == clone.CompetitionId));
         });
+    }
+
+    [Fact]
+    public async Task CloneLeavesThePayoutClubEmptyWhenTheCreatorHasNone()
+    {
+        var source = await ArrangeCloneSourceAsync();
+        await _f.InDbAsync(async db =>
+        {
+            var c = await db.Competitions.SingleAsync(x => x.Id == source.CompetitionId);
+            c.DecFormConfigJson = (DecFormConfig.Basic with { PayoutClubId = 4242 }).ToJson();
+            await db.SaveChangesAsync();
+            var ownerId = c.CreatedByUserId;
+            (await db.Users.SingleAsync(u => u.Id == ownerId)).ClubId = null;
+            await db.SaveChangesAsync();
+        });
+        var trainer = await _f.TrainerAsync();
+        var clone = await (await trainer.PostAsJsonAsync($"/api/event-tools/competitions/{source.CompetitionId}/clone",
+            new CloneCompetitionRequest("No club", new DateTime(2036, 9, 1, 9, 0, 0, DateTimeKind.Utc), null))).ReadAsync<CloneCompetitionResultDto>();
+        var config = await _f.WithDbAsync(db => db.Competitions.Where(c => c.Id == clone.CompetitionId).Select(c => c.DecFormConfigJson).SingleAsync());
+        Assert.Null(DecFormConfig.Parse(config)!.PayoutClubId);
     }
 
     private async Task<(int CompetitionId, int TeamId)> ArrangeCloneSourceAsync(bool derivedFinal = false, bool standardFinal = false, bool plannedRaces = true)
