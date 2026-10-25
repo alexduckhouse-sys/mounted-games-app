@@ -333,6 +333,66 @@ public class ReadinessAndRulebooksTests : IClassFixture<ApiFactory>
 
     private sealed record RiderClash(int CompetitionId, int FirstSessionId, int SecondSessionId, DateTime Start);
 
+    [Fact]
+    public async Task Readiness_CountsFlaggedRidersPerTeam_FromTheLatestFormOnly_WithoutNamingThem()
+    {
+        var arena = await _f.CreateArenaAsync(2);
+        await _f.WithDbAsync(async db =>
+        {
+            var oldForm = new DeclarationForm { TeamId = arena.TeamIds[0], SubmittedAt = DateTime.UtcNow.AddDays(-2) };
+            oldForm.Riders.Add(new RiderEntry { FullName = "Old Flagged", OrderIndex = 1, FlagsJson = "[\"Pony too small\"]" });
+            var newForm = new DeclarationForm { TeamId = arena.TeamIds[0], SubmittedAt = DateTime.UtcNow };
+            newForm.Riders.Add(new RiderEntry { FullName = "Secret Rider One", OrderIndex = 1, FlagsJson = "[\"Over weight limit\"]" });
+            newForm.Riders.Add(new RiderEntry { FullName = "Secret Rider Two", OrderIndex = 2, FlagsJson = "[\"Pony too small\"]" });
+            newForm.Riders.Add(new RiderEntry { FullName = "Fine Rider", OrderIndex = 3, FlagsJson = "[]" });
+            var clean = new DeclarationForm { TeamId = arena.TeamIds[1] };
+            clean.Riders.Add(new RiderEntry { FullName = "Clean Rider", OrderIndex = 1 });
+            db.DeclarationForms.AddRange(oldForm, newForm, clean);
+            await db.SaveChangesAsync();
+        });
+
+        var response = await (await _f.AdminAsync()).GetAsync(ReadinessUrl(arena.CompetitionId));
+        var report = await response.ReadAsync<CompetitionReadinessDto>();
+
+        var flagged = Assert.Single(report.FlaggedDecForms);
+        Assert.Equal((arena.TeamIds[0], 2), (flagged.TeamId, flagged.FlaggedRiders));
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("Secret Rider", json);
+        Assert.DoesNotContain("Over weight limit", json);
+    }
+
+    [Fact]
+    public async Task Readiness_ListsRaceSessionsAndAgeGroupsWithNoRaceListChosen()
+    {
+        var competitionId = await _f.SeedCompetitionAsync(start: new DateTime(2038, 1, 1, 9, 0, 0, DateTimeKind.Utc));
+        var chosen = await _f.SeedSectionAsync(competitionId, "Chosen");
+        var viaHeats = await _f.SeedSectionAsync(competitionId, "Via heats");
+        var empty = await _f.SeedSectionAsync(competitionId, "Empty");
+        var none = await _f.SeedSectionAsync(competitionId, "No session");
+        await _f.WithDbAsync(async db =>
+        {
+            db.Sessions.Add(new Session { CompetitionId = competitionId, CompetitionSectionId = chosen, Name = "Planned", OrderIndex = 1, PlannedRaces = "[\"Bending\"]" });
+            var withHeat = new Session { CompetitionId = competitionId, CompetitionSectionId = viaHeats, Name = "Has races", OrderIndex = 2 };
+            db.Add(withHeat);
+            db.Sessions.Add(new Session { CompetitionId = competitionId, CompetitionSectionId = empty, Name = "Nothing chosen", OrderIndex = 3 });
+            db.Sessions.Add(new Session { CompetitionId = competitionId, CompetitionSectionId = empty, Name = "Tea", OrderIndex = 4, Kind = SessionKind.Break });
+            await db.SaveChangesAsync();
+            var heat = new Heat { SessionId = withHeat.Id, Label = "Heat 1", OrderIndex = 1 };
+            db.Add(heat);
+            await db.SaveChangesAsync();
+            db.Races.Add(new Race { HeatId = heat.Id, Name = "Mug", OrderIndex = 1 });
+            await db.SaveChangesAsync();
+        });
+
+        var report = await (await (await _f.AdminAsync()).GetAsync(ReadinessUrl(competitionId))).ReadAsync<CompetitionReadinessDto>();
+
+        Assert.Equal(2, report.RaceListsToChoose.Count);
+        var unchosen = report.RaceListsToChoose.Single(x => x.SessionId is not null);
+        Assert.Equal(("Nothing chosen", empty), (unchosen.SessionName, unchosen.SectionId));
+        var missingSession = report.RaceListsToChoose.Single(x => x.SessionId is null);
+        Assert.Equal(none, missingSession.SectionId);
+    }
+
     private async Task<ReadinessData> CreateReadinessDataAsync()
     {
         var arena = await _f.CreateArenaAsync(1);

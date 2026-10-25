@@ -115,3 +115,16 @@ export interface PrintableResults {
   isProvisional: boolean;
   sections: PrintableSectionResults[];
 }
+
+/** A saved starting point (`GET /api/starting-points`). `ownerName` is set for admins only. */
+export interface StartingPoint {
+  id: number;
+  name: string;
+  sourceName: string | null;
+  sections: number;
+  sessions: number;
+  createdAt: string;
+  updatedAt: string;
+  isMine: boolean;
+  ownerName: string | null;
+}
