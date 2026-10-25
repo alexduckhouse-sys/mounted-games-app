@@ -25,8 +25,7 @@ public static class CustomEmailAudiences
 
     /// <summary>
     /// News: everyone still opted in, one row per address. The others: accounts holding the role whose address is confirmed,
-    /// that haven't been emptied by account deletion, and are a real mailbox (not a made-up username address).
-    /// TODO once admin lock and block land (PR 153): leave locked and blocked accounts out here too.
+    /// that haven't been emptied by account deletion or locked or blocked by an admin, and are a real mailbox (not a made-up username address).
     /// Duplicates are removed, ignoring case.
     /// </summary>
     public static async Task<List<Recipient>> ResolveAsync(AppDbContext db, CustomEmailAudience audience, CancellationToken ct)
@@ -34,7 +33,9 @@ public static class CustomEmailAudiences
         var found = new Dictionary<string, Recipient>(StringComparer.OrdinalIgnoreCase);
         void Add(string? raw, int? optInId)
         {
-            if (EmailAddresses.TryNormalise(raw, out var address) && !address.EndsWith(".mg.local", StringComparison.Ordinal))
+            // Never the shared admin-key account, nor any made-up address under mg.local: they have no mailbox.
+            if (EmailAddresses.TryNormalise(raw, out var address) && address != "admin@mg.local"
+                && !address.EndsWith("@mg.local", StringComparison.Ordinal) && !address.EndsWith(".mg.local", StringComparison.Ordinal))
                 found.TryAdd(address, new Recipient(address, optInId));
         }
 
@@ -49,7 +50,7 @@ public static class CustomEmailAudiences
             var roleNames = audience == CustomEmailAudience.Trainers ? new[] { Roles.Trainer } : [Roles.Trainer, Roles.Admin];
             var holders = from ur in db.UserRoles join r in db.Roles on ur.RoleId equals r.Id where roleNames.Contains(r.Name!) select ur.UserId;
             var people = await db.Users.AsNoTracking()
-                .Where(u => holders.Contains(u.Id) && u.EmailConfirmed && u.Email != null)
+                .Where(u => holders.Contains(u.Id) && u.EmailConfirmed && u.Email != null && u.LockedAt == null && u.BlockedAt == null)
                 .OrderBy(u => u.Id).Select(u => new { u.Email, u.LockoutEnd }).ToListAsync(ct);
             foreach (var person in people.Where(p => p.LockoutEnd != DateTimeOffset.MaxValue)) Add(person.Email, null);
         }
@@ -392,7 +393,13 @@ public sealed class CustomEmailService(
         if (email.Audience == CustomEmailAudience.News && recipient.OptInId is { } optInId)
         {
             unsubscribe = $"{site}/unsubscribe?token={Uri.EscapeDataString(EmailUnsubscribeTokens.Create(configuration, optInId))}";
-            headers = new Dictionary<string, string> { ["List-Unsubscribe"] = $"<{unsubscribe}>" };
+            // RFC 8058 one-click: a mail app POSTs to the first address without opening a page.
+            var token = Uri.EscapeDataString(EmailUnsubscribeTokens.Create(configuration, optInId));
+            headers = new Dictionary<string, string>
+            {
+                ["List-Unsubscribe"] = $"<{site}/api/email/unsubscribe-one-click?token={token}>, <{unsubscribe}>",
+                ["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click",
+            };
         }
         return new EmailMessage(recipient.Address, email.Subject,
             CustomEmailRenderer.ForRecipient(email.TextBody, unsubscribe), CustomEmailRenderer.ForRecipient(email.HtmlBody, unsubscribe),

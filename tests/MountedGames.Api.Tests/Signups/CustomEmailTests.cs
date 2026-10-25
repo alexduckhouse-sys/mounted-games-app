@@ -10,6 +10,7 @@ using MountedGames.Api.Controllers;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Services.Email;
+using MountedGames.Api.Tests.Calendar;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Signups;
@@ -63,6 +64,8 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
 
     private async Task<CustomEmailDto> StartAsync(HttpClient admin, CustomEmailContentRequest content, int? expected = null)
     {
+        // Tests share one database and the daily limit is real, so start each send from an empty history.
+        await _f.InDbAsync(async db => { db.CustomEmails.RemoveRange(db.CustomEmails); await db.SaveChangesAsync(); });
         var count = expected ?? await CountAsync(admin, content.Audience);
         var response = await admin.PostAsJsonAsync("/api/admin/custom-emails", new SendCustomEmailRequest(content.Subject, content.Audience, content.Blocks, true, count));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -342,7 +345,11 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
             var token = Unsubscribe.Match(m.Text).Groups[1].Value;
             Assert.StartsWith("n1.", Uri.UnescapeDataString(token));
             Assert.Contains(Uri.EscapeDataString(Uri.UnescapeDataString(token)), m.Html);
-            Assert.Contains("List-Unsubscribe", m.Body.GetProperty("headers").EnumerateObject().Select(p => p.Name));
+            var headers = m.Body.GetProperty("headers");
+            Assert.Equal("List-Unsubscribe=One-Click", headers.GetProperty("List-Unsubscribe-Post").GetString());
+            var listUnsubscribe = headers.GetProperty("List-Unsubscribe").GetString()!;
+            Assert.StartsWith($"<{EmailApiFactory.SiteUrl}/api/email/unsubscribe-one-click?token=n1.", listUnsubscribe);
+            Assert.Contains($"{EmailApiFactory.SiteUrl}/unsubscribe?token=n1.", listUnsubscribe);
         });
         // Each person's link is their own.
         Assert.Equal(25, messages.Select(m => Unsubscribe.Match(m.Text).Groups[1].Value).Distinct().Count());
@@ -377,6 +384,51 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
         Assert.Equal(1, await CountAsync(admin, CustomEmailAudience.News));
         Assert.NotNull((await _f.WithDbAsync(db => db.EmailOptIns.SingleAsync(o => o.Email == people[0]))).UnsubscribedAt);
         Assert.Null((await _f.WithDbAsync(db => db.EmailOptIns.SingleAsync(o => o.Email == people[1]))).UnsubscribedAt);
+    }
+
+    [Fact]
+    public async Task OneClickUnsubscribeWorksFromTheHeaderLinkWithAFormPost()
+    {
+        var admin = await AdminAsync();
+        var people = Addresses(2);
+        await OptInsAsync(people);
+        await FinishAsync(admin, (await StartAsync(admin, Content())).Id);
+        var message = SentTo(people).First(m => m.To == people[0]);
+        var link = Regex.Match(message.Body.GetProperty("headers").GetProperty("List-Unsubscribe").GetString()!, @"<([^>]*one-click[^>]*)>").Groups[1].Value;
+        var path = new Uri(link).PathAndQuery;
+
+        var response = await _f.CreateClient().PostAsync(path, new FormUrlEncodedContent([new("List-Unsubscribe", "One-Click")]));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull((await _f.WithDbAsync(db => db.EmailOptIns.SingleAsync(o => o.Email == people[0]))).UnsubscribedAt);
+        Assert.Null((await _f.WithDbAsync(db => db.EmailOptIns.SingleAsync(o => o.Email == people[1]))).UnsubscribedAt);
+        // A forged token does nothing, and says the same.
+        var forged = await _f.CreateClient().PostAsync("/api/email/unsubscribe-one-click?token=n1.1.AAAA", new FormUrlEncodedContent([new("List-Unsubscribe", "One-Click")]));
+        Assert.Equal(HttpStatusCode.OK, forged.StatusCode);
+    }
+
+    [Fact]
+    public async Task TheSharedAdminAccountAndMadeUpAddressesAreNeverMailed_NorAreLockedOrBlockedAccounts()
+    {
+        var admin = await AdminAsync();
+        // The shared admin-key account is confirmed, but has no mailbox.
+        await OptInsAsync("admin@mg.local", "x@trainer.mg.local", "real-" + Guid.NewGuid().ToString("N") + "@example.org");
+        Assert.Equal(1, await CountAsync(admin, CustomEmailAudience.News));
+        Assert.DoesNotContain(await _f.WithDbAsync(db => CustomEmailAudiences.ResolveAsync(db, CustomEmailAudience.OrganisersAndAdmins, default)), r => r.Address == "admin@mg.local");
+
+        var kept = await MailableOrganiserAsync();
+        var locked = await MailableOrganiserAsync();
+        var blocked = await MailableOrganiserAsync();
+        await _f.InDbAsync(async db =>
+        {
+            (await db.Users.SingleAsync(u => u.Email == locked)).LockedAt = DateTime.UtcNow;
+            (await db.Users.SingleAsync(u => u.Email == blocked)).BlockedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        });
+        var addresses = (await _f.WithDbAsync(db => CustomEmailAudiences.ResolveAsync(db, CustomEmailAudience.Trainers, default))).Select(r => r.Address).ToList();
+        Assert.Contains(kept, addresses);
+        Assert.DoesNotContain(locked, addresses);
+        Assert.DoesNotContain(blocked, addresses);
     }
 
     [Fact]
@@ -748,5 +800,29 @@ public class CustomEmailBudgetTests : IClassFixture<CustomEmailBudgetTests.Tight
         for (var i = 0; i < count && last.Remaining > 0; i++)
             last = await (await admin.PostAsync($"/api/admin/custom-emails/{started.Id}/send-batch", null)).ReadAsync<CustomEmailDto>();
         Assert.Equal((CustomEmailStatus.Done, count), (last.Status, last.Sent));
+    }
+}
+
+/// <summary>The anonymous picture endpoint is limited per address like the other public reads.</summary>
+public class CustomEmailImageRateLimitTests : IClassFixture<LowPublicLimitFactory>
+{
+    private readonly LowPublicLimitFactory _f;
+    public CustomEmailImageRateLimitTests(LowPublicLimitFactory f) => _f = f;
+
+    [Fact]
+    public async Task PicturesAreLimitedPerAddress()
+    {
+        var admin = await _f.AdminAsync();
+        var upload = new ByteArrayContent([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0]);
+        upload.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        var id = (await (await admin.PostAsync("/api/admin/custom-email-images", upload)).ReadAsync<CustomEmailImageDto>()).Id;
+        HttpResponseMessage last = null!;
+        for (var i = 0; i < 4; i++)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, $"/api/email-images/{id}");
+            request.Headers.Add("X-Test-Ip", "198.51.100.9");
+            last = await _f.CreateClient().SendAsync(request);
+        }
+        Assert.Equal(HttpStatusCode.TooManyRequests, last.StatusCode);
     }
 }
