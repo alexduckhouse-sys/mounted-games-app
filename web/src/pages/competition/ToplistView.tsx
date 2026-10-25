@@ -12,6 +12,8 @@ import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { HeatScores } from './HeatScores';
 import { TeamSheet } from './TeamSheet';
 import { ScoreFlash } from '../../components/ScoreFlash';
+import { TickerNumber } from '../../components/TickerNumber';
+import { useRankMotion } from '../../hooks/useRankMotion';
 import { EASE_OUT } from '../../lib/motion';
 
 // When a result moves teams, their rows slide to the new places rather than jumping.
@@ -108,6 +110,10 @@ export function ToplistView({
   const setChosen = onChooseView ?? setInternalChosen;
   const [chosenGame, setChosenGame] = useState<string | null>(null);
   const [openTeam, setOpenTeam] = useState<{ sectionId: number | null; teamId: number } | null>(null);
+  // When results re-rank the table: climbers swell and lift, big climbs sparkle, and crossing the cut-off throws confetti.
+  const rankIds = list.rows.map((row) => row.teamId);
+  const totalsRef = useRankMotion<HTMLOListElement>(rankIds, list.cutAfter ?? null);
+  const sessionsRef = useRankMotion<HTMLTableSectionElement>(rankIds, list.cutAfter ?? null);
   const currentSectionId = section?.id ?? null;
   const activeOpenTeam = openTeam?.sectionId === currentSectionId ? openTeam.teamId : null;
   const tabs: [View, string][] = [
@@ -157,7 +163,7 @@ export function ToplistView({
         {view === 'totals' && <>
           {places != null && places > 0 && <p className="text-sm font-medium leading-snug text-[rgb(var(--mg-body))]">Top {places} make the final</p>}
           <section aria-label="Totals" className="mg-card overflow-hidden">
-            <ol>
+            <ol ref={totalsRef}>
               {list.rows.map((row, index) => {
                 const note = toplistNote(row);
                 const lastInRunoff = row.runoff && list.rows[index + 1]?.runoff;
@@ -170,11 +176,11 @@ export function ToplistView({
                 const content = <>
                   <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none">{list.started ? row.position : '—'}<span className="sr-only">{list.started && row.joint ? ' (joint)' : ''}</span></span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
-                    <span className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, !openRow)}</span>
+                    <span data-grow="start" className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, !openRow)}</span>
                     {note && <span className="text-[13.5px] font-medium leading-none text-[rgb(var(--mg-body))]">{note}</span>}
                   </span>
-                  <span className="flex shrink-0 flex-col items-end gap-0.5">
-                    <ScoreFlash value={row.points} className="mg-display text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(row.points)}<span className="sr-only"> points</span></ScoreFlash>
+                  <span data-grow="end" className="flex shrink-0 flex-col items-end gap-0.5">
+                    <ScoreFlash value={row.points} className="mg-display text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]"><TickerNumber value={row.points} /><span className="sr-only"> points</span></ScoreFlash>
                     {gap > 0 && <span className="text-[11px] font-semibold leading-none tabular-nums text-[rgb(var(--mg-muted))]" title={`${formatPoints(gap)} behind leader`}>−{formatPoints(gap)}</span>}
                   </span>
                 </>;
@@ -183,6 +189,7 @@ export function ToplistView({
                     <motion.li
                       layout="position"
                       transition={RESORT}
+                      data-rank-id={row.teamId}
                       data-followed={fav ? 'true' : undefined}
                       className={`flex min-h-11 items-center pr-1 ${lastInRunoff ? 'border-b border-dashed border-[rgb(var(--mg-rule))]' : 'border-b border-[rgb(var(--mg-rule-soft))]'} ${row.runoff ? 'shadow-[inset_6px_0_0_rgb(var(--mg-ink))]' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}
                     >
@@ -233,13 +240,13 @@ export function ToplistView({
                   <th scope="col" className="w-6"><span className="sr-only">Open</span></th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody ref={sessionsRef}>
                 {list.rows.map((row) => {
                   const cells = list.bySession.cells.get(row.teamId);
                   const openRow = open(row.teamId);
                   const fav = isFav(row.teamId);
                   return (
-                    <motion.tr key={row.teamId} layout="position" transition={RESORT} data-followed={fav ? 'true' : undefined} className={`border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
+                    <motion.tr key={row.teamId} layout="position" transition={RESORT} data-rank-id={row.teamId} data-followed={fav ? 'true' : undefined} className={`border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
                       <td className="mg-display h-11 py-0 pl-3 text-base font-bold">{list.started ? row.position : '—'}</td>
                       <th scope="row" className="min-w-0 py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
                         {openRow ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="block min-h-11 w-full text-left font-semibold">{renderTeamName(row.teamId, row.teamName, fav, false)}</button> : renderTeamName(row.teamId, row.teamName, fav, true)}
@@ -249,7 +256,7 @@ export function ToplistView({
                           {cells ? formatPoints(cells[i]) : <><span aria-hidden="true" className="text-[rgb(var(--mg-dash))]">–</span><span className="sr-only">No points yet</span></>}
                         </td>
                       ))}
-                      <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]"><ScoreFlash value={row.points}>{formatPoints(row.points)}</ScoreFlash></td>
+                      <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]"><span data-grow="end"><ScoreFlash value={row.points}><TickerNumber value={row.points} /></ScoreFlash></span></td>
                       <td>{openRow && renderTeamLink(row.teamId, row.teamName)}</td>
                     </motion.tr>
                   );

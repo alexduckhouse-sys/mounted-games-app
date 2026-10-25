@@ -53,3 +53,33 @@ export function countStep(from: number, to: number, progress: number): number {
   if (progress >= 1) return to;
   return Math.round((from + (to - from) * Math.max(0, progress)) * 2) / 2;
 }
+
+/** How long a row takes to slide to its new place in a re-sorted table. */
+export const MOVE_S = 0.5;
+
+/** A row climbing this many places or more leaves a trail of sparkles. */
+export const SPARKLE_CLIMB = 3;
+
+/** How much a climbing row's name and points swell while it slides: more for a bigger climb, up to five places. */
+export function climbScale(climb: number): number {
+  return 1 + Math.min(Math.max(climb, 0), 5) * 0.05;
+}
+
+/** One move per team in a re-sorted list: how many places it climbed, and whether it crossed into the qualifying places. */
+export interface RankMove {
+  id: number;
+  climb: number;
+  crossedIn: boolean;
+}
+
+/**
+ * Compares two orders of the same list. Teams new to the list don't move. `cutAfter` is the index of the last
+ * qualifying place (the row above the final cut-off), or null when there's no cut.
+ */
+export function rankMoves(before: number[], now: number[], cutAfter: number | null = null): RankMove[] {
+  return now.flatMap((id, index) => {
+    const was = before.indexOf(id);
+    if (was < 0) return [];
+    return [{ id, climb: was - index, crossedIn: cutAfter !== null && was > cutAfter && index <= cutAfter }];
+  });
+}

@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { TabMark } from './TabMark';
 import { CalendarDays, Star, UserRound } from 'lucide-react';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { globalTabsPath, GLOBAL_EVENTS, GLOBAL_ME } from '../lib/routes';
@@ -29,7 +30,8 @@ export function GlobalTabs({ meCount = 0 }: { meCount?: number }) {
   ];
   return (
     <nav aria-label="Main" className="mg-tabs">
-      <div className="mx-auto grid max-w-xl grid-cols-3">
+      <div className="relative mx-auto grid max-w-xl grid-cols-3">
+        <TabMark index={tabs.findIndex((tab) => tab.active)} count={3} />
         {tabs.map((tab) => (
           <Link key={tab.label} to={tab.to} className="mg-tab" aria-current={tab.active ? 'page' : undefined}>
             <span className="relative inline-flex">

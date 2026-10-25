@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { FollowStar } from '../../components/FollowStar';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Ban, Calendar, ChevronRight, ClipboardList, Shield, Star } from 'lucide-react';
+import { ArrowLeft, Ban, Calendar, ChevronRight, ClipboardList, Shield } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompactPageBar, usePageHeader } from '../../components/CompactPageBarContext';
@@ -329,7 +330,7 @@ export function CompetitionTeamPage() {
               aria-label={`${isFollowed ? 'Unfollow' : 'Follow'} ${team.displayName}`}
               onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
             >
-              <Star aria-hidden="true" className={`h-5 w-5 ${isFollowed ? 'fill-current' : ''}`} />
+              <FollowStar on={isFollowed} />
             </button>
           </div>
         </div>

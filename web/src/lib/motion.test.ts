@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countStep, previousSlots } from './motion';
+import { climbScale, countStep, previousSlots, rankMoves } from './motion';
 
 describe('previousSlots', () => {
   it('ranks rows on their total before the race just scored', () => {
@@ -30,5 +30,34 @@ describe('countStep', () => {
     expect(countStep(0, 1, 0.3)).toBe(0.5);
     expect(countStep(4, 10.5, 1)).toBe(10.5);
     expect(countStep(4, 10.5, 2)).toBe(10.5);
+  });
+});
+
+describe('climbScale', () => {
+  it('grows more for a bigger climb, up to five places, and never for a drop', () => {
+    expect(climbScale(-2)).toBe(1);
+    expect(climbScale(0)).toBe(1);
+    expect(climbScale(1)).toBeCloseTo(1.05);
+    expect(climbScale(3)).toBeCloseTo(1.15);
+    expect(climbScale(9)).toBeCloseTo(1.25);
+  });
+});
+
+describe('rankMoves', () => {
+  it('measures each climb and spots teams crossing into the qualifying places', () => {
+    // Top two qualify (cutAfter = index 1). Team 3 climbs from third to first.
+    expect(rankMoves([1, 2, 3, 4], [3, 1, 2, 4], 1)).toEqual([
+      { id: 3, climb: 2, crossedIn: true },
+      { id: 1, climb: -1, crossedIn: false },
+      { id: 2, climb: -1, crossedIn: false },
+      { id: 4, climb: 0, crossedIn: false },
+    ]);
+  });
+
+  it('leaves out teams that were not in the list before, and never crosses without a cut', () => {
+    expect(rankMoves([1, 2], [3, 2, 1])).toEqual([
+      { id: 2, climb: 0, crossedIn: false },
+      { id: 1, climb: -2, crossedIn: false },
+    ]);
   });
 });

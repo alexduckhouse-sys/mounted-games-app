@@ -55,6 +55,12 @@ button.tt-group-title:focus-visible, .tt-collapsed:focus-visible, a.tt-row:focus
   text-decoration: none !important; transition: background .15s;
 }
 .tt-row + .tt-row { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.tt-row { position: relative; }
+/* A heat that has just gone live: a red glow sweeps over the row once and fades. */
+.tt-lit { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgb(var(--mg-red) / .22), rgb(var(--mg-red) / .06)); animation: tt-lit 1.8s var(--mg-ease-out, ease-out) both; }
+@keyframes tt-lit { 0% { opacity: 0; clip-path: inset(0 100% 0 0); } 25% { opacity: 1; clip-path: inset(0 0 0 0); } 100% { opacity: 0; clip-path: inset(0 0 0 0); } }
+@media (prefers-reduced-motion: reduce) { .tt-lit { display: none; } }
+html[data-lite="true"] .tt-lit { display: none; }
 a.tt-row:hover { background: rgb(var(--mg-subtle)); }
 a.tt-row:focus-visible { outline-offset: -2px; }
 .tt-time { font: 700 23px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }

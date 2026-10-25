@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, ArrowDown, ArrowUp, Clock, Eye, MapPin, Megaphone } from 'lucide-react';
 import { BibSwatch as BaseBibSwatch } from '../BibSwatch';
@@ -16,6 +16,8 @@ import { timetableRows } from '../../lib/timetableRows';
 import { EASE_OUT, ENTER, LEAVE, previousSlots, ROW_STAGGER_S, SHUFFLE_DELAY_S, SHUFFLE_S, SPRING, WIPE_HIDDEN_BOTTOM, WIPE_HIDDEN_LEFT, WIPE_HIDDEN_RIGHT, WIPE_SHOWN } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { CountUp } from './CountUp';
+import { TickerNumber } from '../TickerNumber';
+import { playRankMoves, useRankMotion } from '../../hooks/useRankMotion';
 
 interface BibColourHolder {
   bibColour?: string | null;
@@ -218,6 +220,15 @@ function ScoreCardPanel({ due, teams, where }: { due: QueuedScoreCard; teams?: T
   const rows = card.rows.filter((row) => !due.hiddenTeamIds?.includes(row.teamId));
   const before = previousSlots(rows);
   const settled = SHUFFLE_DELAY_S + SHUFFLE_S;
+  // The card mounts with its rows already in their new order; play the climbs as the shuffle runs.
+  const listRef = useRef<HTMLOListElement>(null);
+  const beforeIds = [...before].sort((a, b) => a[1] - b[1]).map(([id]) => id);
+  const nowKey = rows.map((row) => row.teamId).join(',');
+  const beforeKey = beforeIds.join(',');
+  useEffect(() => {
+    if (still || !listRef.current) return;
+    return playRankMoves(listRef.current, beforeKey.split(',').map(Number), nowKey.split(',').map(Number), { delayS: SHUFFLE_DELAY_S });
+  }, [still, beforeKey, nowKey]);
   return (
     <CentreCard
       className={`${where} mg-ov-card-center`}
@@ -225,7 +236,7 @@ function ScoreCardPanel({ due, teams, where }: { due: QueuedScoreCard; teams?: T
       heading={due.heading}
       subtitle={`after ${card.raceName} (race ${card.raceNumber} of ${card.raceCount})`}
     >
-      <ol>
+      <ol ref={listRef}>
         {rows.map((row, idx) => {
           const team = teams?.find((t) => t.id === row.teamId || t.displayName === row.teamName);
           const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor ?? (row as BibColourHolder).bibColour ?? (row as BibColourHolder).bibColor;
@@ -234,6 +245,7 @@ function ScoreCardPanel({ due, teams, where }: { due: QueuedScoreCard; teams?: T
           return (
             <motion.li
               key={row.teamId}
+              data-rank-id={row.teamId}
               style={climb > 0 ? { position: 'relative', zIndex: 2 } : undefined}
               initial={still ? false : { opacity: 0, x: 12, y: `${climb * 100}%` }}
               animate={{ opacity: 1, x: 0, y: '0%' }}
@@ -244,7 +256,7 @@ function ScoreCardPanel({ due, teams, where }: { due: QueuedScoreCard; teams?: T
               }}
             >
               <span className="mg-ov-card-place">{row.place}</span>
-              <span className="mg-ov-card-team">
+              <span className="mg-ov-card-team" data-grow="start">
                 {due.names?.[row.teamId] ?? row.teamName}
                 {bibColor && <BibSwatch color={bibColor} size={10} />}
               </span>
@@ -258,7 +270,7 @@ function ScoreCardPanel({ due, teams, where }: { due: QueuedScoreCard; teams?: T
               >
                 {row.eliminated ? statusLetter(true, row.status) : row.sitOut ? 'S' : `+${row.added}`}
               </motion.span>
-              <span className="mg-ov-card-total"><CountUp from={row.total - row.added} to={row.total} delay={SHUFFLE_DELAY_S} duration={SHUFFLE_S} format={formatPoints} /></span>
+              <span className="mg-ov-card-total" data-grow="end"><CountUp from={row.total - row.added} to={row.total} delay={SHUFFLE_DELAY_S} duration={SHUFFLE_S} format={formatPoints} /></span>
             </motion.li>
           );
         })}
@@ -328,27 +340,29 @@ export function ToplistBody({
   started: boolean;
 }) {
   const still = useStillMotion();
+  const listRef = useRankMotion<HTMLOListElement>(rows.slice(0, 8).map((row) => row.teamId));
   return (
-    <ol>
+    <ol ref={listRef}>
       {rows.slice(0, 8).map((row, idx) => {
         const team = competition.teams.find((t) => t.id === row.teamId || t.displayName === row.teamName);
         const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor;
         return (
           <motion.li
             key={row.teamId}
+            data-rank-id={row.teamId}
             layout="position"
             initial={still ? false : { opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: still ? 0 : idx * ROW_STAGGER_S, layout: { duration: SHUFFLE_S, ease: EASE_OUT } }}
           >
             <span className="mg-ov-card-place">{started ? row.position : '—'}</span>
-            <span className="mg-ov-card-team">
+            <span className="mg-ov-card-team" data-grow="start">
               {row.teamName}
               {bibColor && <BibSwatch color={bibColor} size={10} />}
             </span>
             <span />
             <span />
-            <span className="mg-ov-card-total">{formatPoints(row.points)}</span>
+            <span className="mg-ov-card-total" data-grow="end"><TickerNumber value={row.points} /></span>
           </motion.li>
         );
       })}
