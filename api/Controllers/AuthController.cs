@@ -13,6 +13,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Security;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Accounts;
 using MountedGames.Api.Services.Email;
 
 namespace MountedGames.Api.Controllers;
@@ -43,7 +44,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     [HttpPost("login")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> Login(LoginRequest req)
+    public async Task<ActionResult<AuthResponse>> Login(LoginRequest req, [FromServices] AccountIpRecorder ipRecorder)
     {
         var user = await _users.FindByEmailAsync(req.Email);
         // The shared organiser account uses the admin key. Old demo databases
@@ -55,17 +56,24 @@ public class AuthController : ControllerBase
         var check = await _signIn.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: true);
         if (!check.Succeeded)
             return Unauthorized(new { message = "Invalid email or password." });
+        // Only someone who knows the password hears that the account is stopped, and not why: a lock or a block gives the same answer.
+        if (user.IsAccessStopped)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
 
+        await ipRecorder.RecordAsync(user.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
         var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
         var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
         return new AuthResponse(token, expiresAt,
             new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed));
     }
 
+    private const string AccessStoppedMessage = "This account can't sign in right now. Contact an organiser or administrator.";
+
     [EnableRateLimiting("auth")]
     [HttpPost("admin-key")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> AdminKey([FromServices] IConfiguration config, AdminKeyRequest req, [FromServices] AccountEmailService accountEmail)
+    public async Task<ActionResult<AuthResponse>> AdminKey([FromServices] IConfiguration config, AdminKeyRequest req, [FromServices] AccountEmailService accountEmail,
+        [FromServices] AccountIpRecorder ipRecorder)
     {
         var expected = config["Admin:Key"];
         if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrEmpty(req.Key) || !CryptographicOperations.FixedTimeEquals(
@@ -104,6 +112,9 @@ public class AuthController : ControllerBase
                 var check = await _signIn.CheckPasswordSignInAsync(existing, req.Password, lockoutOnFailure: true);
                 if (!check.Succeeded)
                     return Unauthorized(new { message = "That email already has an account — enter its password to sign in." });
+                if (existing.IsAccessStopped)
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
+                await ipRecorder.RecordAsync(existing.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
                 return await _db.Database.CreateExecutionStrategy().ExecuteAsync<ActionResult<AuthResponse>>(async () =>
                 {
                     _db.ChangeTracker.Clear();
@@ -150,7 +161,10 @@ public class AuthController : ControllerBase
                     new UserProfile(adminUser.Id, adminUser.Email!, adminUser.FullName, null, null, adminRoles.ToList(), adminUser.EmailConfirmed));
             });
             if (createdAccount.Value is { } createdProfile)
+            {
+                await ipRecorder.RecordAsync(createdProfile.User.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
                 await accountEmail.SendConfirmationAsync((await _users.FindByIdAsync(createdProfile.User.Id))!);
+            }
             return createdAccount;
         }
 
@@ -169,7 +183,8 @@ public class AuthController : ControllerBase
         SignupTrainerRequest req,
         [FromServices] IEmailDomainChecker domains,
         [FromServices] AccountEmailService accountEmail,
-        [FromServices] IConfiguration config)
+        [FromServices] IConfiguration config,
+        [FromServices] AccountIpRecorder ipRecorder)
     {
         var raw = (req.Username ?? string.Empty).Trim();
         if (raw.Length == 0)
@@ -253,6 +268,8 @@ public class AuthController : ControllerBase
                 new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club.Name, rolesOut.ToList(), user.EmailConfirmed));
         });
         // Send once, after the retryable database transaction has committed.
+        if (createdAccount.Value is { } signedUp)
+            await ipRecorder.RecordAsync(signedUp.User.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
         if (realEmail && createdAccount.Value is { } createdProfile)
             await accountEmail.SendConfirmationAsync((await _users.FindByIdAsync(createdProfile.User.Id))!);
         return createdAccount;
@@ -338,7 +355,8 @@ public class AuthController : ControllerBase
             return PasswordProblems(result);
 
         var role = string.IsNullOrWhiteSpace(req.Role) ? Roles.Trainer : req.Role;
-        if (!Roles.All.Contains(role))
+        // MasterAdmin is never handed out here, so no admin can make a master admin.
+        if (!Roles.Assignable.Contains(role))
             role = Roles.Trainer;
         await _users.AddToRoleAsync(user, role);
 

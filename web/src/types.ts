@@ -1,4 +1,4 @@
-export type Role = 'Admin' | 'Trainer' | 'TrainerRequest' | 'ManagerRequest' | 'Manager' | 'Member' | 'Rider';
+export type Role = 'Admin' | 'MasterAdmin' | 'Trainer' | 'TrainerRequest' | 'ManagerRequest' | 'Manager' | 'Member' | 'Rider';
 
 /** Self-service signup choices. Trainer accounts need approval from an admin or their club's manager; team managers from an admin. */
 export const SIGNUP_ROLES: { value: 'Trainer' | 'Manager' | 'Member'; label: string; description: string }[] = [

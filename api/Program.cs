@@ -150,6 +150,9 @@ builder.Services.AddScoped<MountedGames.Api.Services.Email.SignupConfirmationSer
 builder.Services.AddScoped<MountedGames.Api.Services.Email.EmailOptInService>();
 builder.Services.AddSingleton<MountedGames.Api.Services.Email.EmailConfirmationTokens>();
 builder.Services.AddScoped<MountedGames.Api.Services.Email.AccountEmailService>();
+builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountIpRecorder>();
+builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountAccessService>();
+builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountInviteService>();
 // Does an address's domain take mail? Short timeout, one retry; a DNS failure lets the sign-up through.
 builder.Services.AddSingleton<DnsClient.ILookupClient>(_ => new DnsClient.LookupClient(new DnsClient.LookupClientOptions
 {

@@ -1,3 +1,4 @@
+using MountedGames.Api.Services.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -50,7 +51,7 @@ public class ShopController : ControllerBase
     {
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        if (!string.IsNullOrEmpty(ip) && await _db.IpBlocks.AnyAsync(b => b.IpAddress == ip))
+        if (await _db.IsIpBlockedAsync(HttpContext))
             return StatusCode(403, new { message = "Posting from this network is blocked." });
         var title = req.Title?.Trim();
         var body = (req.Body ?? req.Description)?.Trim();
@@ -85,8 +86,7 @@ public class ShopController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ShopPostDto>> Update(int id, UpdateShopPostRequest req)
     {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        if (!string.IsNullOrEmpty(ip) && await _db.IpBlocks.AnyAsync(b => b.IpAddress == ip))
+        if (await _db.IsIpBlockedAsync(HttpContext))
             return StatusCode(403, new { message = "Posting from this network is blocked." });
         if (req.ImageBase64 is { Length: > MaxImageBase64Bytes })
             return BadRequest(new { message = "Image is too large (max ~500 KB after compression)." });

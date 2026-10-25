@@ -21,6 +21,9 @@ interface AdminUser {
   clubName?: string | null;
   roles: string[];
   isLockedOut: boolean;
+  /** A master admin has locked the account, or an admin has blocked it. */
+  isLocked?: boolean;
+  isBlocked?: boolean;
   createdAt: string;
 }
 

@@ -134,6 +134,8 @@ public class AdminUsersController(AppDbContext db, UserManager<AppUser> users) :
                 ClubName = u.Club == null ? null : u.Club.Name,
                 u.LockoutEnd,
                 u.CreatedAt,
+                u.LockedAt,
+                u.BlockedAt,
             })
             .ToListAsync(ct);
 
@@ -155,7 +157,8 @@ public class AdminUsersController(AppDbContext db, UserManager<AppUser> users) :
             u.ClubName,
             rolesByUser.GetValueOrDefault(u.Id, Array.Empty<string>()),
             u.LockoutEnd.HasValue && u.LockoutEnd.Value > now,
-            DateTime.SpecifyKind(u.CreatedAt, DateTimeKind.Utc))).ToList();
+            DateTime.SpecifyKind(u.CreatedAt, DateTimeKind.Utc),
+            u.LockedAt != null, u.BlockedAt != null)).ToList();
     }
 
     [HttpPost("{userId}/roles")]
@@ -168,6 +171,9 @@ public class AdminUsersController(AppDbContext db, UserManager<AppUser> users) :
         if (user is null) return NotFound();
 
         var currentRoles = await users.GetRolesAsync(user);
+        // A master admin's roles are theirs to change: otherwise any admin could strip the Admin role from one.
+        if (currentRoles.Contains(Roles.MasterAdmin) && !User.IsInRole(Roles.MasterAdmin))
+            return Forbid();
         if (req.Grant && !currentRoles.Contains(req.Role))
         {
             var res = await users.AddToRoleAsync(user, req.Role);
@@ -191,7 +197,8 @@ public class AdminUsersController(AppDbContext db, UserManager<AppUser> users) :
             clubName,
             updatedRoles,
             user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTimeOffset.UtcNow,
-            DateTime.SpecifyKind(user.CreatedAt, DateTimeKind.Utc));
+            DateTime.SpecifyKind(user.CreatedAt, DateTimeKind.Utc),
+            user.LockedAt != null, user.BlockedAt != null);
     }
 
     [HttpPost("{userId}/unlock")]
@@ -213,6 +220,8 @@ public record AdminUserDto(
     string? ClubName,
     IReadOnlyList<string> Roles,
     bool IsLockedOut,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    bool IsLocked = false,
+    bool IsBlocked = false);
 
 public record ToggleUserRoleRequest(string Role, bool Grant);

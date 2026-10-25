@@ -1,3 +1,4 @@
+using MountedGames.Api.Services.Accounts;
 using System.ComponentModel.DataAnnotations;
 using System.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -413,8 +414,7 @@ public class SignupController : ControllerBase
             && (long)await ActivePlacesAsync(sectionId) + teamsCount > section.MaxParticipants.Value)
             return StatusCode(403, new { message = $"Section is full ({section.MaxParticipants} max)." });
 
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        if (!string.IsNullOrEmpty(ip) && await _db.IpBlocks.AnyAsync(b => b.IpAddress == ip))
+        if (await _db.IsIpBlockedAsync(HttpContext))
             return StatusCode(403, new { message = "Signups from this network are blocked." });
 
         // Optional team-code join: if the entrant supplies a code that matches
