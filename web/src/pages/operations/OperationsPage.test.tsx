@@ -182,7 +182,7 @@ describe('OperationsPage', () => {
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
     await screen.findByText('Dec forms missing');
 
-    expect(screen.getByRole('link', { name: 'Event details' })).toHaveAttribute('href', '/admin/competitions/7');
+    expect(screen.getByRole('link', { name: 'Event details' })).toHaveAttribute('href', '/competitions/7/event-details');
     expect(screen.getByRole('link', { name: 'Sections and races' })).toHaveAttribute('href', '/admin/competitions/7/format');
     expect(screen.getByRole('link', { name: 'Sponsors and sharing' })).toHaveAttribute('href', '/competitions/7/sponsors');
     expect(screen.getByRole('button', { name: /Entries and dec forms/ })).toContainElement(screen.getAllByRole('img', { name: 'Has jobs to sort' })[0]);

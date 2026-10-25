@@ -1,0 +1,160 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../../api';
+import { EventDetailsPage } from './EventDetailsPage';
+
+const reload = vi.fn();
+const competition = {
+  id: 7, name: 'Spring Open', organiserName: 'Oak Club', location: 'Stoneleigh Park', description: null, icon: 'trophy',
+  startDate: '2031-05-04T09:00:00.000Z', endDate: '2031-05-05T17:00:00.000Z', isActive: true, isArchived: false,
+  sections: [], teams: [], sessions: [], payoutsTo: null,
+};
+vi.mock('../competition/context', () => ({ useCompetition: () => ({ competition, reload }) }));
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ hasRole: (role: string) => role === 'Admin' }) }));
+vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn() } }));
+
+const sections = [
+  { sectionId: 11, sectionName: 'Teams Under 12', configured: true, isEnabled: true, mode: 1, maxPoints: 10, sectors: [{ id: 1, name: 'Saddle' }, { id: 2, name: 'Bridle' }], teams: [] },
+  { sectionId: 12, sectionName: 'Pairs Under 15', configured: false, isEnabled: false, mode: 0, maxPoints: 10, sectors: [{ id: 0, name: 'Saddle' }], teams: [] },
+];
+
+function show() {
+  return render(<MemoryRouter><EventDetailsPage /></MemoryRouter>);
+}
+
+describe('EventDetailsPage', () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockImplementation(async (url) => (String(url).endsWith('/passport-check')
+      ? { data: { enabled: false, checked: 0, total: 0, sections: [] } }
+      : { data: { competitionId: 7, sections } }) as never);
+    vi.mocked(api.put).mockResolvedValue({ data: {} });
+  });
+
+  it('has no Save button and saves a text field when it loses focus, sending the other fields as they are', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    expect(screen.queryByRole('button', { name: /^Save/ })).not.toBeInTheDocument();
+
+    const organiser = screen.getByLabelText('Organiser');
+    await user.clear(organiser);
+    await user.type(organiser, 'Elm Club');
+    expect(api.put).not.toHaveBeenCalled();
+    await user.tab();
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ name: 'Spring Open', organiserName: 'Elm Club', location: 'Stoneleigh Park', startDate: competition.startDate })));
+    expect(reload).toHaveBeenCalled();
+  });
+
+  it('does not save an unchanged field, and refuses an empty name', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    await user.click(screen.getByLabelText('Venue'));
+    await user.tab();
+    const name = screen.getByLabelText('Name');
+    await user.clear(name);
+    await user.tab();
+    expect(api.put).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Name can’t be empty.');
+  });
+
+  it('shows why a save failed', async () => {
+    vi.mocked(api.put).mockRejectedValueOnce({ response: { data: { message: 'Not allowed.' } } });
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    await user.type(screen.getByLabelText('Venue'), ' North');
+    await user.tab();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not allowed.');
+  });
+
+  it('turns the passport check on at once, and puts the switch back if it fails', async () => {
+    const user = userEvent.setup();
+    show();
+    const toggle = await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    await user.click(toggle);
+    expect(api.put).toHaveBeenCalledWith('/event-tools/competitions/7/passport-check/settings', { enabled: true });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+
+    vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
+    await user.click(toggle);
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save the passport check');
+  });
+
+  it('leaves out the cards switch, which the API does not store', async () => {
+    show();
+    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    expect(screen.queryByRole('switch', { name: /cards/i })).not.toBeInTheDocument();
+  });
+
+  it('saves a tack check choice at once', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    expect(screen.getByLabelText('Tack check · Teams Under 12')).toHaveValue('table');
+    expect(screen.getByLabelText('Tack check · Pairs Under 15')).toHaveValue('off');
+    expect(screen.getByText('2 sectors · 20 points')).toBeInTheDocument();
+
+    vi.mocked(api.put).mockResolvedValueOnce({ data: { ...sections[1], isEnabled: true, mode: 2 } });
+    await user.selectOptions(screen.getByLabelText('Tack check · Pairs Under 15'), 'Adds to points');
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith(
+      '/event-tools/competitions/7/tack-check/sections/12',
+      { isEnabled: true, mode: 2, maxPoints: 10, sectors: [{ id: null, name: 'Saddle' }] },
+    ));
+    expect(await screen.findAllByText(/Scoring table/)).toHaveLength(2);
+  });
+
+  it('edits the scoring table: blank new sector, dropped when left empty, saved on Done', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByLabelText('Sector 1 name')).toHaveValue('Saddle');
+
+    await user.click(screen.getByRole('button', { name: 'Add a sector' }));
+    const blank = screen.getByLabelText('Sector 3 name');
+    expect(blank).toHaveValue('');
+    await user.tab();
+    await user.click(document.body);
+    expect(screen.queryByLabelText('Sector 3 name')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Remove sector 2' }));
+    await user.click(screen.getByRole('button', { name: 'Add a sector' }));
+    await user.type(screen.getByLabelText('Sector 2 name'), 'Boots');
+    vi.mocked(api.put).mockResolvedValueOnce({ data: { ...sections[0], sectors: [{ id: 1, name: 'Saddle' }, { id: 5, name: 'Boots' }] } });
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith(
+      '/event-tools/competitions/7/tack-check/sections/11',
+      { isEnabled: true, mode: 1, maxPoints: 10, sectors: [{ id: 1, name: 'Saddle' }, { id: null, name: 'Boots' }] },
+    ));
+    await waitFor(() => expect(screen.queryByLabelText('Sector 1 name')).not.toBeInTheDocument());
+  });
+
+  it('keeps the table open and says what is wrong when the sectors cannot be saved', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Remove sector 1' }));
+    await user.click(screen.getByRole('button', { name: 'Remove sector 1' }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Add between 1 and');
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('duplicates the set-up for next year', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { competitionId: 9, name: 'Spring Open copy' } });
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    await user.click(screen.getByRole('button', { name: 'Duplicate' }));
+    await user.click(screen.getByRole('button', { name: 'Duplicate' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/event-tools/competitions/7/clone', expect.objectContaining({ name: 'Spring Open copy' })));
+    expect(await screen.findByRole('link', { name: 'Open it' })).toHaveAttribute('href', '/competitions/9');
+  });
+});
