@@ -152,7 +152,6 @@ public class AccountInviteTests : IClassFixture<EmailApiFactory>
 
         Assert.Equal([Roles.Admin], auth.User.Roles);
         Assert.Equal(HttpStatusCode.OK, (await _f.WithToken(auth.Token).GetAsync("/api/admin/invites")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await _f.WithToken(auth.Token).GetAsync("/api/admin/staff-accounts")).StatusCode);
     }
 
     [Fact]

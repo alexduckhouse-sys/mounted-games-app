@@ -106,18 +106,29 @@ public class AdminAccountsTests : IClassFixture<ApiFactory>
     // ---- lock ----
 
     [Fact]
-    public async Task Lock_IsForTheMasterAdminOnly()
+    public async Task SiteAdminsLockOrganisers_ButOnlyAMasterAdminLocksOrUnlocksAnAdmin()
     {
         var organiser = await NewOrganiserAsync();
         Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PostAsync(Lock(organiser.Id), null)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await (await NewMemberAsync()).Client.PostAsync(Lock(organiser.Id), null)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await (await NewOrganiserAsync()).Client.PostAsync(Lock(organiser.Id), null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await (await NewOrganiserAsync()).Client.GetAsync("/api/admin/staff-accounts")).StatusCode);
+
         var plain = await NewPlainAdminAsync();
-        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.PostAsync(Lock(organiser.Id), null)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.DeleteAsync(Lock(organiser.Id))).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.GetAsync("/api/admin/staff-accounts")).StatusCode);
-        // Nothing happened.
+        Assert.Equal(HttpStatusCode.OK, (await plain.Client.GetAsync("/api/admin/staff-accounts")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await plain.Client.PostAsync(Lock(organiser.Id), null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await LoginFromAsync(organiser.Email, "203.0.113.10")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await plain.Client.DeleteAsync(Lock(organiser.Id))).StatusCode);
         (await LoginFromAsync(organiser.Email, "203.0.113.10")).EnsureSuccessStatusCode();
+
+        // An Admin account is the master admin's to lock and unlock.
+        var otherAdmin = await NewPlainAdminAsync();
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.PostAsync(Lock(otherAdmin.Id), null)).StatusCode);
+        var master = await _f.AdminAsync();
+        Assert.Equal(HttpStatusCode.NoContent, (await master.PostAsync(Lock(otherAdmin.Id), null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.Client.DeleteAsync(Lock(otherAdmin.Id))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await LoginFromAsync(otherAdmin.Email, "203.0.113.10")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await master.DeleteAsync(Lock(otherAdmin.Id))).StatusCode);
     }
 
     [Fact]

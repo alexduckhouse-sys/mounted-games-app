@@ -13,7 +13,7 @@ public sealed class AccountAccessException(string message, int statusCode) : Exc
 }
 
 /// <summary>
-/// Locking (master admin; Admin and organiser accounts) and blocking (admins; any account). Both stop sign-in at once and make
+/// Locking (site admins for organisers; master admin for Admin accounts) and blocking (admins; any account). Both stop sign-in at once and make
 /// existing tokens stop working (<see cref="LiveAccounts"/>). Blocking also adds the networks the account has used to the IP
 /// block list, as hashes, and unblocking takes them off again. A lock is not the Identity lockout that a run of wrong
 /// passwords causes: the admin "unlock" endpoint only clears that one, so it can never undo a master admin's lock.
@@ -31,7 +31,7 @@ public sealed class AccountAccessService(
 
     // ---- lock (master admin) ----
 
-    public async Task LockAsync(string targetId, string callerId, CancellationToken ct)
+    public async Task LockAsync(string targetId, string callerId, bool callerIsMaster, CancellationToken ct)
     {
         var target = await FindAsync(targetId);
         if (target.Id == callerId) throw new AccountAccessException("You can't lock your own account.", 409);
@@ -40,6 +40,8 @@ public sealed class AccountAccessService(
         if (IsSharedAdmin(target)) throw new AccountAccessException("The shared organiser account can't be locked: it is how everyone signs in with the admin key.", 409);
         if (!roles.Contains(Roles.Admin) && !roles.Contains(Roles.Trainer))
             throw new AccountAccessException("Only admin and organiser accounts can be locked.", 409);
+        if (roles.Contains(Roles.Admin) && !callerIsMaster)
+            throw new AccountAccessException("Only a master admin can lock an admin account.", 403);
         if (target.LockedAt is not null) return;
         var now = time.GetUtcNow().UtcDateTime;
         await db.Users.Where(u => u.Id == targetId)
@@ -47,9 +49,11 @@ public sealed class AccountAccessService(
         liveAccounts.Forget(targetId);
     }
 
-    public async Task UnlockAsync(string targetId, CancellationToken ct)
+    public async Task UnlockAsync(string targetId, bool callerIsMaster, CancellationToken ct)
     {
-        await FindAsync(targetId);
+        var target = await FindAsync(targetId);
+        if (!callerIsMaster && await users.IsInRoleAsync(target, Roles.Admin))
+            throw new AccountAccessException("Only a master admin can unlock an admin account.", 403);
         await db.Users.Where(u => u.Id == targetId)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedAt, (DateTime?)null).SetProperty(u => u.LockedByUserId, (string?)null), ct);
         liveAccounts.Forget(targetId);
