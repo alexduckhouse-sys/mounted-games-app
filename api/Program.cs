@@ -83,7 +83,20 @@ builder.Services
                 var uid = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
                 var accounts = ctx.HttpContext.RequestServices.GetRequiredService<LiveAccounts>();
                 if (uid is null || !await accounts.IsActiveAsync(uid, ctx.HttpContext.RequestAborted))
+                {
                     ctx.Fail("This account no longer exists.");
+                    return;
+                }
+                // Revoked roles stop working on existing tokens. Newly granted roles still require a fresh sign-in.
+                // Preserve the token's identity, including the shared-key display name.
+                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var roles = await (from membership in db.UserRoles
+                                   join role in db.Roles on membership.RoleId equals role.Id
+                                   where membership.UserId == uid && role.Name != null
+                                   select role.Name!).ToListAsync(ctx.HttpContext.RequestAborted);
+                foreach (var identity in ctx.Principal!.Identities)
+                    foreach (var claim in identity.FindAll(identity.RoleClaimType).Where(c => !roles.Contains(c.Value)).ToArray())
+                        identity.RemoveClaim(claim);
             }
         };
     });

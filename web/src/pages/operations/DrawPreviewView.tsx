@@ -27,7 +27,7 @@ export function DrawSettingsForm({ sections, sectionId, seed, previewing, onSect
       <label className="rf-fld">Draw number
         <NumberField allowNegative  step="1" value={seed} onChange={(event) => onSeed(event.target.value)} />
       </label>
-      <RefineNote>The same number gives the same draw. Change it to try a different arrangement.</RefineNote>
+      <RefineNote>Change the number for a different draw.</RefineNote>
       <button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={onPreview} disabled={previewing || sectionId == null}>
         {previewing ? 'Preparing…' : 'Preview draw'}
       </button>

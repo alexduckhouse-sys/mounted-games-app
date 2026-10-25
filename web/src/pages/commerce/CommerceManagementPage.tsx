@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { usePageWidth } from '../../components/pageWidthState';
 import { useCompetition } from '../competition/context';
 import { LoadError, StatusPill } from './commerceUi';
 import { CATEGORY_LABEL, LISTING_LABEL, ORDER_LABEL, errorMessage, pounds } from './commerceFormat';
@@ -11,6 +12,7 @@ import './commerce.css';
 type ManagementView = 'listings' | 'orders' | 'settings';
 
 export function CommerceManagementPage() {
+  usePageWidth('wide');
   const { competition } = useCompetition();
   const { user } = useAuth();
   return <CommerceManagementContent key={`${competition.id}:${user?.id ?? 'signed-out'}`} />;
@@ -92,7 +94,7 @@ function CommerceManagementContent() {
 
   return (
     <div className="skin commerce-page mx-auto w-full max-w-4xl pb-6">
-      <header className="commerce-title-block"><p className="mg-eyebrow">{competition.name}</p><h1 className="mg-h1">Manage shop</h1><p className="mg-lede">Approve listings, check orders and choose how this event records payments.</p></header>
+      <header className="commerce-title-block"><p className="mg-eyebrow">{competition.name}</p><h1 className="mg-h1">Manage shop</h1><p className="mg-lede">Listings, orders and payment mode.</p></header>
       <div className="mg-seg w-full" aria-label="Shop management view">
         <button type="button" aria-pressed={view === 'listings'} onClick={() => setView('listings')}>Listings{pending.length > 0 ? ` (${pending.length})` : ''}</button>
         <button type="button" aria-pressed={view === 'orders'} onClick={() => setView('orders')}>Orders{orders?.length ? ` (${orders.length})` : ''}</button>
@@ -103,7 +105,7 @@ function CommerceManagementContent() {
       {view === 'settings' && <section className="flex flex-col gap-4" aria-labelledby="payment-mode-title">
         <div>
           <h2 id="payment-mode-title" className="mg-h2">Payment mode</h2>
-          <p className="mg-meta mt-1">Manual records payments made to the organiser. Demo is for testing and never takes money.</p>
+          <p className="mg-meta mt-1">Manual logs external payments. Demo is for testing.</p>
         </div>
         {settings == null ? <p role="status">Loading payment mode…</p> : (
           <div className="flex flex-wrap items-center gap-3">

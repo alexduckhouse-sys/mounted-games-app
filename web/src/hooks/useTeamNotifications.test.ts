@@ -212,6 +212,99 @@ describe('useTeamNotifications: what it announces', () => {
     expect(shown).toEqual([{ title: 'Ashdown A — 1 hour to go', options: { body: `Seniors heats starts at ${clock(58)} (Spring Games).`, tag: '1h:1:1' } }]);
   });
 
+  it('includes the lane number and hatband/silk colour in the session reminder when assigned', async () => {
+    enable();
+    competitions = {
+      1: competition({
+        name: 'Spring Games',
+        laneHatbands: ['White', 'Red', 'Yellow'],
+        sessions: [
+          session(1, {
+            name: 'Seniors heats',
+            scheduledStart: at(58),
+            heats: [heat(10, { entries: [{ id: 1, laneIndex: 2, teamId: 1, teamName: 'Ashdown A' }] })],
+          }),
+        ],
+      }),
+    };
+    await mount([myTeam()]);
+    expect(shown).toEqual([{
+      title: 'Ashdown A — 1 hour to go',
+      options: {
+        body: `Seniors heats starts at ${clock(58)} · Lane 2 (Red hatband/silk) (Spring Games).`,
+        tag: '1h:1:1',
+      },
+    }]);
+  });
+
+  it('notifies immediately when a team is drawn into a Final with time, lane and hatband/silk colour', async () => {
+    enable();
+    competitions = {
+      1: competition({
+        name: 'Spring Games',
+        laneHatbands: ['White', 'Red', 'Yellow'],
+        sessions: [
+          session(1, {
+            name: 'Seniors Finals',
+            scheduledStart: at(120),
+            heats: [
+              heat(21, {
+                label: 'A Final',
+                raceRoundStage: 2,
+                entries: [
+                  { id: 1, laneIndex: 3, teamId: 1, teamName: 'Ashdown A' },
+                  { id: 2, laneIndex: 1, teamId: 9, teamName: 'Other Team' },
+                ],
+              }),
+              heat(22, {
+                label: 'B Final',
+                raceRoundStage: 2,
+                entries: [{ id: 3, laneIndex: 1, teamId: 8, teamName: 'Third Team' }],
+              }),
+            ],
+          }),
+        ],
+      }),
+    };
+    await mount([myTeam()]);
+    expect(shown).toEqual([{
+      title: 'Ashdown A — A Final',
+      options: {
+        body: `A Final at ${clock(120)} · Lane 3 (Yellow hatband/silk) (Spring Games).`,
+        tag: 'final-draw:21:1:3',
+      },
+    }]);
+  });
+
+  it('notifies for a Final draw without hatbands or scheduled time when omitted', async () => {
+    enable();
+    competitions = {
+      1: competition({
+        name: 'Spring Games',
+        laneHatbands: null,
+        sessions: [
+          session(1, {
+            name: 'Open Finals',
+            heats: [
+              heat(31, {
+                label: '',
+                entries: [{ id: 1, laneIndex: 4, teamId: 1, teamName: 'Ashdown A' }],
+              }),
+            ],
+          }),
+        ],
+      }),
+    };
+    await mount([myTeam()]);
+    expect(shown).toEqual([{
+      title: 'Ashdown A — Open Finals',
+      options: {
+        body: 'Open Finals · Lane 4 (Spring Games).',
+        tag: 'final-draw:31:1:4',
+      },
+    }]);
+  });
+
   it.each([[61], [55], [30], [-5]])('stays quiet for a race starting in %i minutes', async (minutes) => {
     await ready([session(1, { scheduledStart: at(minutes) })]);
     expect(shown).toEqual([]);

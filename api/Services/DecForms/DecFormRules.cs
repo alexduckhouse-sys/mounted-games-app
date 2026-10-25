@@ -18,10 +18,14 @@ public static class DecFormRules
     /// Why the rider can't be accepted, or null. On success the rider's entry has been filled in.
     /// <paramref name="lenient"/> is the standard form of a competition that never set one up: nothing is newly refused there.
     /// </summary>
-    public static string? Apply(DecFormConfig config, bool lenient, RiderEntryInput input, bool isReserve, RiderEntry entry, int currentYear)
+    public static string? Apply(DecFormConfig config, bool lenient, RiderEntryInput input, bool isReserve, RiderEntry entry, int currentYear, string? sectionAgeGroup = null, int? competitionYear = null)
     {
         var who = string.IsNullOrWhiteSpace(input.FullName) ? "A rider" : input.FullName.Trim();
         string Missing(string what) => $"{who}: {what} is needed.";
+
+        var autoPrivacy = HasSingleLetterSurnameInitial(input.FullName);
+        entry.UseInitialOnly = input.UseInitialOnly || autoPrivacy;
+        entry.NoFilming = input.NoFilming || autoPrivacy;
 
         // Date of birth, in whichever form the organiser chose.
         entry.DateOfBirth = null; entry.BirthYear = null; entry.AgeGroup = null;
@@ -53,7 +57,7 @@ public static class DecFormRules
         // Pony parts: a non-riding reserve has no pony.
         if (isReserve)
         {
-            entry.PonyPassportNumber = null; entry.PonyAge = null;
+            entry.PonyPassportNumber = null; entry.PonyOwnerFullName = null; entry.PonyAge = null;
         }
         else
         {
@@ -61,6 +65,7 @@ public static class DecFormRules
             else if (entry.PonyHeightHands is null && config.PonyHeight == FieldRequirement.Required && !lenient) return Missing("the pony's height");
             entry.PonyPassportNumber = config.PonyPassport == FieldRequirement.Off ? null : Clean(input.PonyPassportNumber);
             if (entry.PonyPassportNumber is null && config.PonyPassport == FieldRequirement.Required) return Missing("the pony's passport or ID number");
+            entry.PonyOwnerFullName = Clean(input.PonyOwnerFullName);
             entry.PonyAge = config.PonyAge == FieldRequirement.Off ? null : input.PonyAge;
             if (entry.PonyAge is null && config.PonyAge == FieldRequirement.Required) return Missing("the pony's age");
         }
@@ -110,9 +115,74 @@ public static class DecFormRules
             if (field.Min is { } min && number < min)
                 flags.Add($"{who}: {field.Label} is {Show(number)}{unit}, under the minimum of {Show(min)}{unit}.");
         }
+        if (CheckAgeEligibility(entry, new DateTime(competitionYear ?? currentYear, 1, 1), sectionAgeGroup) is { } ageFlag)
+            flags.Add(ageFlag);
         entry.CustomValuesJson = values.Count == 0 ? null : JsonSerializer.Serialize(values, Json);
         entry.FlagsJson = flags.Count == 0 ? null : JsonSerializer.Serialize(flags, Json);
         return null;
+    }
+
+    /// <summary>
+    /// Rider age for Mounted Games eligibility is always calculated as of 1st January of the competition year,
+    /// not the event start date.
+    /// </summary>
+    public static int AgeYears(DateTime dateOfBirth, DateTime competitionStartDate)
+    {
+        var jan1 = new DateTime(competitionStartDate.Year, 1, 1);
+        var age = jan1.Year - dateOfBirth.Year;
+        if (dateOfBirth.Date > jan1.AddYears(-age)) age--;
+        return age;
+    }
+
+    /// <summary>Parses an "Under N" or "UN" age-group limit (e.g. "Under 12" or "U17" -> 12, 17).</summary>
+    public static int? ParseUnderAgeLimit(string? ageGroup)
+    {
+        if (string.IsNullOrWhiteSpace(ageGroup)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(
+            ageGroup.Trim(),
+            @"^(?:under\s+|u)(\d{1,2})\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success && int.TryParse(match.Groups[1].Value, CultureInfo.InvariantCulture, out var limit)
+            ? limit
+            : null;
+    }
+
+    /// <summary>
+    /// Checks whether a rider exceeds their age-group limit as of 1st January of the competition year,
+    /// falling back to <paramref name="sectionAgeGroup"/> when <see cref="RiderEntry.AgeGroup"/> is empty.
+    /// </summary>
+    public static string? CheckAgeEligibility(RiderEntry rider, DateTime competitionStartDate, string? sectionAgeGroup = null)
+    {
+        var effectiveAgeGroup = !string.IsNullOrWhiteSpace(rider.AgeGroup) ? rider.AgeGroup : sectionAgeGroup;
+        if (ParseUnderAgeLimit(effectiveAgeGroup) is not { } limit) return null;
+        var who = string.IsNullOrWhiteSpace(rider.FullName) ? "A rider" : rider.FullName.Trim();
+        if (rider.DateOfBirth is { } dob)
+        {
+            var age = AgeYears(dob, competitionStartDate);
+            if (age >= limit)
+                return $"{who}: aged {age} on 1 January {competitionStartDate.Year}, over the {effectiveAgeGroup!.Trim()} limit.";
+        }
+        else if (rider.BirthYear is { } birthYear)
+        {
+            var minAgeOnJan1 = competitionStartDate.Year - birthYear - 1;
+            if (minAgeOnJan1 >= limit)
+                return $"{who}: aged {minAgeOnJan1} on 1 January {competitionStartDate.Year}, over the {effectiveAgeGroup!.Trim()} limit.";
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// True when the rider's name has at least two words and the last word is a single letter or a single letter
+    /// followed by a full stop (e.g. "Oliver S" or "Oliver S."). Automatically enables surname-initial privacy and
+    /// filming opt-out without requiring separate checkboxes on the form.
+    /// </summary>
+    public static bool HasSingleLetterSurnameInitial(string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return false;
+        var parts = fullName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 2) return false;
+        var last = parts[^1].TrimEnd('.');
+        return last.Length == 1 && char.IsLetter(last[0]);
     }
 
     static string Show(decimal n) => n.ToString("0.##", CultureInfo.InvariantCulture);

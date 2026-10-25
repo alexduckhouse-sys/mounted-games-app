@@ -82,7 +82,7 @@ public sealed class ViewerRegistry : IDisposable
     /// Null means no per-address cap (signed-in viewers, or an address that isn't known).
     /// </param>
     public async Task<WatchStreamResponse> WatchAsync(string connectionId, int competitionId, int streamId,
-        CancellationToken ct = default, string? clientIp = null)
+        CancellationToken ct = default, string? clientIp = null, string? preferredRid = null)
     {
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -127,7 +127,7 @@ public sealed class ViewerRegistry : IDisposable
         try
         {
             if (replaced is not null) await CloseAsync(replaced);
-            var session = await _sfu.WatchAsync(stream.SfuSessionId, stream.HasAudio, stream.Simulcast, setupToken);
+            var session = await _sfu.WatchAsync(stream.SfuSessionId, stream.HasAudio, stream.Simulcast, setupToken, preferredRid);
             bool active;
             lock (_gate)
             {

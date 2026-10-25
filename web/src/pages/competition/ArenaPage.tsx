@@ -7,12 +7,19 @@ import {
 import { api } from '../../api';
 import type { Heat, RaceTemplate, Session } from '../../types';
 import { useCompetition } from './context';
-import { RulesLink } from './RulesLink';
+import { usePageHeader } from '../../components/CompactPageBarContext';
 import { RaceDiagram } from '../../components/RaceDiagram';
+import {
+  buildRaceRulebooks,
+  RaceRulebookSection,
+  type RaceTemplateDetail,
+} from '../../components/RaceRulesSheet';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
-import { equipmentFromDiagram, type EquipmentCount } from '../../lib/raceEquipment';
+import {
+  diffRaceEquipment, equipmentFromDiagram, type EquipmentCount, type RaceChangeoverDiff,
+} from '../../lib/raceEquipment';
 import { displaySectionName } from '../../lib/section';
 import { formatTime, roundTo5Min, computeTimings } from '../../lib/time';
 
@@ -71,11 +78,54 @@ function EquipmentList({ items }: { items: EquipmentCount[] }) {
   );
 }
 
+function ChangeoverStrip({ diff }: { diff: RaceChangeoverDiff }) {
+  return (
+    <div
+      className="mt-2.5 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-2.5 text-xs space-y-1.5"
+      aria-label="Ring crew changeover"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-bold uppercase tracking-wide text-[rgb(var(--mg-muted))]">Ring crew changeover</span>
+        <span className="rounded bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 font-semibold text-amber-900 dark:text-amber-200">
+          {diff.poleLabel}
+        </span>
+      </div>
+      {diff.removeItems.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-bold uppercase text-rose-700 dark:text-rose-300">OUT:</span>
+          {diff.removeItems.map((it) => (
+            <span key={`${it.label}-${it.zone}`} className="rounded bg-rose-50 dark:bg-rose-950/50 px-1.5 py-0.5 font-medium text-rose-800 dark:text-rose-200">
+              −{it.count} {it.label} · {it.zone}
+            </span>
+          ))}
+        </div>
+      )}
+      {diff.addItems.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-bold uppercase text-emerald-700 dark:text-emerald-300">IN:</span>
+          {diff.addItems.map((it) => (
+            <span key={`${it.label}-${it.zone}`} className="rounded bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 font-medium text-emerald-800 dark:text-emerald-200">
+              +{it.count} {it.label} · {it.zone}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ArenaPage() {
   usePageWidth('wide');
   const desktop = useIsDesktop();
   const { competition } = useCompetition();
+  usePageHeader({
+    title: 'Arena setup',
+    subtitle: competition.name,
+    backTo: `/competitions/${competition.id}/timetable`,
+    backLabel: 'Timetable',
+  });
   const [templates, setTemplates] = useState<RaceTemplate[]>([]);
+  const [byNameDetails, setByNameDetails] = useState<Record<string, RaceTemplateDetail>>({});
   const arenas = useMemo(
     () => [...new Set(competition.sessions.filter(isRaceSession).map(arenaOf).filter(Boolean))],
     [competition.sessions],
@@ -124,6 +174,28 @@ export function ArenaPage() {
   const activeIdx = Math.max(0, Math.min(orderedRaces.length - 1,
     (baseIdx >= 0 ? baseIdx : 0) + stepOffset
   ));
+  const activeRace = orderedRaces[activeIdx];
+  const activeRaceName = activeRace?.name?.trim() ?? '';
+  const activeKey = activeRaceName.toLowerCase();
+
+  useEffect(() => {
+    if (!activeRaceName || byNameDetails[activeKey]) return;
+    let cancelled = false;
+    api
+      .get<RaceTemplateDetail>(`/race-templates/by-name/${encodeURIComponent(activeRaceName)}`)
+      .then((res) => {
+        if (!cancelled && res?.data && typeof res.data.name === 'string') {
+          setByNameDetails((cur) => ({
+            ...cur,
+            [activeKey]: { ...res.data, rulebooks: buildRaceRulebooks(res.data) },
+          }));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRaceName, activeKey, byNameDetails]);
 
   const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
   const heatTiming = target ? timings.get(target.session.id)?.heats[target.heatIndex] ?? null : null;
@@ -131,9 +203,7 @@ export function ArenaPage() {
   if (!target) {
     return (
       <div className="space-y-2.5 pt-2">
-        <Link to=".." className="mg-btn mg-btn-secondary !min-h-10 !px-3 !py-1.5 text-sm">
-          <ChevronLeft className="h-4 w-4" /> Back
-        </Link>
+        <h1 className="sr-only">Arena setup</h1>
         {arenaBar}
         <div className="mg-card p-6 text-center">
           <Activity className="mx-auto mb-2 h-10 w-10 text-[rgb(var(--mg-faint))]" />
@@ -143,26 +213,20 @@ export function ArenaPage() {
     );
   }
 
-  const activeRace = orderedRaces[activeIdx];
-  const template = activeRace ? tmplByName.get(activeRace.name.toLowerCase().trim()) : null;
+  const template = activeRace ? (byNameDetails[activeKey] ?? tmplByName.get(activeKey) ?? null) : null;
   const activeEquipment = equipmentFromDiagram(template?.diagramJson);
   const nextRace = orderedRaces[activeIdx + 1] ?? null;
   const nextTemplate = nextRace ? tmplByName.get(nextRace.name.toLowerCase().trim()) : null;
   const nextEquipment = equipmentFromDiagram(nextTemplate?.diagramJson);
   const nextDescription = nextTemplate?.summary || nextTemplate?.rules || null;
   const prevRace = activeIdx > 0 ? orderedRaces[activeIdx - 1] : null;
+  const prevTemplate = prevRace ? tmplByName.get(prevRace.name.toLowerCase().trim()) : null;
+  const activeChangeover = template ? diffRaceEquipment(prevTemplate?.diagramJson, template.diagramJson) : null;
+  const nextChangeover = nextTemplate ? diffRaceEquipment(template?.diagramJson, nextTemplate.diagramJson) : null;
 
   return (
     <div className="space-y-2.5 pt-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Link to=".." className="mg-btn mg-btn-secondary !min-h-10 !px-3 !py-1.5 text-sm">
-          <ChevronLeft className="h-4 w-4" /> Back
-        </Link>
-        <h1 className="mg-h1 mg-h1-sm flex items-center gap-2">
-          <Activity className="h-5 w-5 text-[rgb(var(--mg-red))]" /> Arena setup
-        </h1>
-        <RulesLink className="ml-auto" />
-      </div>
+      <h1 className="sr-only">Arena setup</h1>
       {arenaBar}
 
       <PageGrid aside={(
@@ -216,6 +280,14 @@ export function ArenaPage() {
               Done
             </span>
           )}
+          {activeRace && (
+            <Link
+              to={`/competitions/${competition.id}/rulebooks?race=${encodeURIComponent(activeRace.name)}`}
+              className="btn-ghost !py-1 !px-2 text-xs"
+            >
+              <BookOpen aria-hidden="true" className="h-3.5 w-3.5" /> Rules
+            </Link>
+          )}
         </div>
 
         {template ? (
@@ -235,16 +307,8 @@ export function ArenaPage() {
               </AnimatePresence>
             </div>
             <EquipmentList items={activeEquipment} />
-            {template.rules && (
-              <div className="mt-3 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3">
-                <div className="mb-1 flex items-center gap-1.5 text-sm font-bold text-[rgb(var(--mg-heading))]">
-                  <BookOpen className="h-4 w-4" /> Set-up rules
-                </div>
-                <p className="whitespace-pre-wrap text-sm text-[rgb(var(--mg-body))]">
-                  {template.rules}
-                </p>
-              </div>
-            )}
+            {activeChangeover && <ChangeoverStrip diff={activeChangeover} />}
+            <RaceRulebookSection template={template} />
           </>
         ) : (
           <div className="rounded-lg border-2 border-dashed border-[rgb(var(--mg-dash))] p-6 text-center">
@@ -273,6 +337,7 @@ export function ArenaPage() {
                 <RaceDiagram diagramJson={nextTemplate.diagramJson} height={150} />
               </div>
               <EquipmentList items={nextEquipment} />
+              {nextChangeover && <ChangeoverStrip diff={nextChangeover} />}
             </>
           ) : (
             <p className="text-xs text-slate-500">No setup diagram for "{nextRace.name}" yet.</p>

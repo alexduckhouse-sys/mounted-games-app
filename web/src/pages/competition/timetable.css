@@ -48,22 +48,6 @@ button.tt-group-title:focus-visible, .tt-collapsed:focus-visible, a.tt-row:focus
 
 .tt-card { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
 .tt-card > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
-.tt-row-wrap { display: flex; align-items: stretch; background: rgb(var(--mg-surface)); }
-.tt-row-wrap > .tt-row { flex: 1; min-width: 0; }
-.tt-lanes-btn {
-  display: inline-flex; align-items: center; gap: 4px; padding: 0 12px; border-left: 1px solid rgb(var(--mg-rule-soft));
-  color: rgb(var(--mg-heading)); font: 600 12px/1 var(--mg-font); white-space: nowrap; transition: background .15s;
-}
-.tt-lanes-btn:hover { background: rgb(var(--mg-subtle)); }
-.tt-lanes-btn:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
-.tt-lanes {
-  margin: 0; padding: 6px 12px 8px; list-style: none; border-top: 1px solid rgb(var(--mg-rule-soft));
-  background: rgb(var(--mg-subtle)); display: flex; flex-direction: column; gap: 4px;
-}
-.tt-lane-item { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.35; }
-.tt-lane-num { font-weight: 600; color: rgb(var(--mg-muted)); font-variant-numeric: tabular-nums; min-width: 52px; }
-.tt-lane-team { font-weight: 600; color: rgb(var(--mg-ink)); text-decoration: none; }
-.tt-lane-team:hover { text-decoration: underline; }
 .tt-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr) 8px 14px; align-items: center; column-gap: 10px;
   min-height: 54px; padding: 0 10px 0 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important;
@@ -78,6 +62,12 @@ a.tt-row:focus-visible { outline-offset: -2px; }
 .tt-sub { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-muted)); }
 .tt-planned { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-late-time)); }
 .tt-onnow { color: rgb(var(--mg-red)); font: 700 10px/1 var(--mg-font); letter-spacing: .06em; }
+.tt-shift-card {
+  display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 5px;
+  font: 700 11px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; letter-spacing: .02em;
+}
+.tt-shift-late { background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); border: 1px solid rgb(var(--mg-late-time) / .35); }
+.tt-shift-early { background: rgb(var(--mg-done-bg)); color: #166534; border: 1px solid #16a34a40; }
 .tt-provisional-note { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 500 14px/1.35 var(--mg-font); }
 .tt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .tt-live .tt-dot { animation: tt-pulse 1.6s ease-in-out infinite; }
@@ -98,6 +88,12 @@ a.tt-live:hover { background: rgb(var(--mg-live-row)); filter: brightness(.98); 
 /* Laptop: the board uses the page width, and session blocks sit two across. Everything else spans the row. */
 @media (min-width: 1024px) {
   .timetable-board { max-width: none; }
+  .tt-strip {
+    border-image: none;
+    background: rgb(var(--mg-header));
+    border-radius: var(--mg-radius, var(--mg-radius-card, 12px));
+    padding: 10px 12px;
+  }
   .tt-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px 24px; padding-top: 16px; }
   .tt-body > * { grid-column: 1 / -1; }
   .tt-body > .tt-group, .tt-body > .tt-cell { grid-column: auto; }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Star } from 'lucide-react';
 import { useCompetition } from './context';
@@ -12,6 +12,7 @@ import { parseBibAndFlag } from '../../lib/bib';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { useFavourites } from '../../hooks/useFavourites';
 import { displayLaneFor, lanesOf, sitsOutOf, type LaneRules } from './laneRules';
+import { TeamCardBadge, getStoredCards, parseRefereeCard, useCardsEnabled, type RefereeCard } from './ScoringParts';
 import './heat.css';
 import { formatPoints } from '../../lib/formatPoints';
 
@@ -50,14 +51,23 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
 }) {
   const { competition, streams } = useCompetition();
   const [showRules, setShowRules] = useState(false);
+  const [cardsTick, setCardsTick] = useState(0);
+  const [cardsEnabled] = useCardsEnabled(competition.id);
+
+  useEffect(() => {
+    function onCards() { setCardsTick((t) => t + 1); }
+    window.addEventListener('mg-cards-updated', onCards);
+    window.addEventListener('storage', onCards);
+    return () => {
+      window.removeEventListener('mg-cards-updated', onCards);
+      window.removeEventListener('storage', onCards);
+    };
+  }, []);
+
   const favHook = useFavourites() as {
     favourites?: { competitionId: number; teamId: number }[];
     isTeamFav?: (compId: number, teamId: number) => boolean;
   };
-  const isTeamFav = (compId: number, teamId: number) =>
-    typeof favHook.isTeamFav === 'function'
-      ? favHook.isTeamFav(compId, teamId)
-      : (favHook.favourites ?? []).some((f) => f.competitionId === compId && f.teamId === teamId);
 
   const canWatch = !!competition.streamUrl || (streams ?? []).some((stream) => stream.status !== 2);
   // The page can be reached with ?heat=<id> while already mounted (next-heat link), so the URL wins over the parent's initial pick.
@@ -249,6 +259,8 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
         ? Math.max(0, columns.findIndex((c) => !c.race.isComplete && c.race.results.length === 0))
         : 0;
 
+    const storedCards = cardsEnabled ? getStoredCards(competition.id) : {};
+
     const list = [...teams.values()].map((team) => {
       const carriedForward = showCarriedForward ? (carriedForwardByTeam.get(team.id) ?? 0) : 0;
       const total = carriedForward + columns.reduce((sum, col) => sum + (cells.get(`${team.id}|${col.key}`)?.points ?? 0), 0);
@@ -259,16 +271,40 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
       } else if (team.lane > 0 && team.lane < Number.MAX_SAFE_INTEGER) {
         laneLabel = `Lane ${team.lane}`;
       }
+
+      let card: RefereeCard = cardsEnabled ? (storedCards[team.id] ?? null) : null;
+      if (cardsEnabled && !card) {
+        for (const h of sourceHeats) {
+          for (const r of h.races) {
+            for (const res of r.results) {
+              if (res.teamId === team.id) {
+                const parsed = parseRefereeCard((res as { refereeNote?: string }).refereeNote);
+                if (parsed.card) {
+                  card = parsed.card;
+                  break;
+                }
+              }
+            }
+            if (card) break;
+          }
+          if (card) break;
+        }
+      }
+
       return {
         ...team,
         carriedForward,
         total,
         laneLabel,
-        isFav: isTeamFav(competition.id, team.id),
+        card,
+        isFav: typeof favHook.isTeamFav === 'function'
+          ? favHook.isTeamFav(competition.id, team.id)
+          : (favHook.favourites ?? []).some((f) => f.competitionId === competition.id && f.teamId === team.id),
       };
     });
 
     // Order by starting lane before any race is scored; as soon as any race is scored (live or finished), order by heat leader.
+    void cardsTick;
     const sortByPoints = anyScored || finished;
     list.sort((a, b) => (sortByPoints ? b.total - a.total : 0) || a.lane - b.lane || a.name.localeCompare(b.name));
     const ranked = list.map((team, i) => ({
@@ -276,12 +312,12 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
       position: sortByPoints ? 1 + list.findIndex((other) => other.total === team.total) : i + 1,
     }));
     return { teams: ranked, cells, anyScored };
-  }, [heat, heats, isRaceFinals, columns, finished, runningIndex, laneRules, competition.id, isTeamFav, showCarriedForward, carriedForwardByTeam]);
+  }, [heat, heats, isRaceFinals, columns, finished, runningIndex, laneRules, competition.id, favHook, showCarriedForward, carriedForwardByTeam, cardsTick, cardsEnabled]);
 
   const minWidth = 12 + (finished ? 18 : 0) + 116 + (showCarriedForward ? 28 : 0) + columns.length * 23 + 44;
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
+    <div className={`mx-auto flex w-full max-w-xl flex-col gap-4 ${embedded ? '' : 'pt-3'}`}>
       {!embedded && (
         <HeatScoresPageBar
           backTo={`/competitions/${competition.id}`}
@@ -337,6 +373,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
                               {team.isFav && <Star aria-hidden="true" className="mr-1 inline h-3 w-3 fill-[#C08308] text-[#C08308]" />}
                               {flag && <img src={`/flags/${flag}.png`} alt="" className="mr-1 inline h-3.5 w-5 rounded-[2px] object-cover" />}
                               {team.name}
+                              {cardsEnabled && <TeamCardBadge card={team.card} />}
                             </span>
                             {team.laneLabel && <span className="heat-team-lane">{team.laneLabel}</span>}
                           </Link>

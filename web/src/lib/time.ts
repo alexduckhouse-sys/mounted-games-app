@@ -92,14 +92,20 @@ export function computeTimings(sessions: Session[]): Map<number, SessionTiming> 
       lane = laneFor(key);
     }
 
-    const scheduled = s.scheduledStart ? new Date(s.scheduledStart) : null;
+    const rawScheduled = s.scheduledStart ? new Date(s.scheduledStart) : null;
+    const shiftMatch = s.notes?.match(/\[shift:([+-]?\d+)\]/);
+    const manualShiftMs = shiftMatch ? parseInt(shiftMatch[1], 10) * 60_000 : 0;
+    const scheduled = rawScheduled ? new Date(rawScheduled.getTime() - manualShiftMs) : null;
     let effective: Date | null = null;
 
     if (s.startedAt) {
       effective = new Date(s.startedAt);
       if (scheduled) lane.offsetMs = effective.getTime() - scheduled.getTime();
-    } else if (scheduled) {
-      effective = new Date(scheduled.getTime() + lane.offsetMs);
+    } else if (scheduled && rawScheduled) {
+      effective = manualShiftMs !== 0
+        ? new Date(rawScheduled.getTime())
+        : new Date(scheduled.getTime() + lane.offsetMs);
+      if (manualShiftMs !== 0) lane.offsetMs = manualShiftMs;
       // Don't let an early-shifted session start before the previous one ended.
       if (lane.lastEffectiveEnd && effective < lane.lastEffectiveEnd) {
         effective = new Date(lane.lastEffectiveEnd);
@@ -118,13 +124,14 @@ export function computeTimings(sessions: Session[]): Map<number, SessionTiming> 
       const dur = heatDurationMinutes(h, s);
       // Per-heat scheduledStart, when set, pins the heat: it carries the session's delay, and never
       // starts before the heat ahead of it has finished.
-      const pinned = h.scheduledStart ? new Date(h.scheduledStart) : null;
+      const rawPinned = h.scheduledStart ? new Date(h.scheduledStart) : null;
+      const pinned = rawPinned ? new Date(rawPinned.getTime() - (!h.finishedAt ? manualShiftMs : 0)) : null;
       const hScheduled = pinned ?? (scheduledCursor ? new Date(scheduledCursor) : null);
       let hEffective: Date | null = null;
       if (h.startedAt) {
         hEffective = new Date(h.startedAt);
-      } else if (pinned) {
-        const delayed = pinned.getTime() + lane.offsetMs;
+      } else if (pinned && rawPinned) {
+        const delayed = manualShiftMs !== 0 ? rawPinned.getTime() : pinned.getTime() + lane.offsetMs;
         hEffective = new Date(heatCursor ? Math.max(delayed, heatCursor.getTime()) : delayed);
       } else if (heatCursor) {
         hEffective = new Date(heatCursor);

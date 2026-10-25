@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 
@@ -7,21 +8,24 @@ namespace MountedGames.Api.Services;
 /// <summary>
 /// Walks a competition's sessions, looks up the diagram for each race in each
 /// heat, counts equipment elements, multiplies by the largest heat size in
-/// the session, then DEDUPLICATES per kind across sessions by taking the
-/// MAX — so if Session A needs 10 litter cones and Session B needs 12, the
-/// total order is 12, not 22.
+/// the session, takes the MAX across sequential sessions within the same
+/// arena, and SUMS across distinct concurrent arenas.
 ///
 /// Within a session, arena fixtures that stay put between races (poles,
 /// cones, tables / stations) are reused: the session needs the MAX any single
 /// race asks for, not the sum. Everything else (items such as mugs, batons or
 /// buckets) is kit set out per race, so those counts still add up.
 ///
-/// Output is bucketed into Lane / Start / Top / Side / Other by the
+/// Output is bucketed into Lane / Start / Top / Mid / Other by the
 /// element's anchor + position so an organiser can read the printable
 /// equipment list per arena zone.
 /// </summary>
 public class EquipmentCalculator
 {
+    private static readonly Regex PositionalLabelPattern = new(
+        @"^(?:p?\d+|pole\s*\d+|cone\s*\d+|\d+(?:st|nd|rd|th)(?:\s*(?:pole|cone))?)$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private readonly AppDbContext _db;
     public EquipmentCalculator(AppDbContext db) => _db = db;
 
@@ -56,8 +60,9 @@ public class EquipmentCalculator
             .Where(x => x.Template is not null)
             .ToDictionary(x => x.Name, x => x.Template!, StringComparer.OrdinalIgnoreCase);
 
-        // Per session, accumulate per-kind+bucket counts.
-        var perSession = new List<Dictionary<(string Kind, string Bucket), int>>();
+        // Per arena, take the MAX across that arena's sequential sessions;
+        // across distinct arenas, SUM the arena peaks because arenas run in parallel.
+        var perArenaMax = new Dictionary<string, Dictionary<(string Kind, string Bucket), int>>(StringComparer.OrdinalIgnoreCase);
         var racesCounted = 0;
         foreach (var session in sessions)
         {
@@ -92,15 +97,25 @@ public class EquipmentCalculator
             {
                 sessionMax[key] = (sessionMax.TryGetValue(key, out var cur) ? cur : 0) + v;
             }
-            perSession.Add(sessionMax);
+
+            var arenaKey = string.IsNullOrWhiteSpace(session.ArenaName) ? "Main Arena" : session.ArenaName.Trim();
+            if (!perArenaMax.TryGetValue(arenaKey, out var arenaTotals))
+            {
+                arenaTotals = new Dictionary<(string Kind, string Bucket), int>();
+                perArenaMax[arenaKey] = arenaTotals;
+            }
+            foreach (var (k, v) in sessionMax)
+            {
+                if (!arenaTotals.TryGetValue(k, out var cur) || v > cur) arenaTotals[k] = v;
+            }
         }
 
-        // Dedupe across sessions by taking the MAX per (kind, bucket).
+        // Sum peak quantities across distinct arenas.
         var total = new Dictionary<(string Kind, string Bucket), int>();
-        foreach (var s in perSession)
-        foreach (var (k, v) in s)
+        foreach (var arenaTotals in perArenaMax.Values)
+        foreach (var (k, v) in arenaTotals)
         {
-            if (!total.TryGetValue(k, out var cur) || v > cur) total[k] = v;
+            total[k] = (total.TryGetValue(k, out var cur) ? cur : 0) + v;
         }
 
         var lines = total
@@ -111,51 +126,68 @@ public class EquipmentCalculator
     }
 
     /// <summary>
-    /// Pulls (kind, bucket) for each non-midline element. `kind` is the
-    /// `kind` field for items/cones or the type name for poles/ins. `bucket`
-    /// is one of: Lane (poles, anything on poleN), Start, Top (changeover or
-    /// past top), Side (named anchor not above), Other. `Reusable` marks fixtures
-    /// that stay in the arena between races.
+    /// Pulls (kind, bucket) for each non-midline/non-lane element and any
+    /// stacked `on` children at arbitrary depth.
     /// </summary>
     private static IEnumerable<(string Kind, string Bucket, bool Reusable)> BucketEach(IEnumerable<JsonElement> elements)
     {
-        foreach (var el in elements)
+        foreach (var root in elements)
         {
-            if (!el.TryGetProperty("t", out var t)) continue;
-            var type = t.GetString() ?? "";
-            if (type == "midline") continue;
+            if (!root.TryGetProperty("t", out var rt)) continue;
+            var rootType = rt.GetString() ?? "";
+            if (IsIgnoredType(rootType)) continue;
 
-            var kind = type switch
-            {
-                "pole" => "Pole",
-                "in" or "table" => "In / station",
-                _ => el.TryGetProperty("kind", out var k)
-                    ? Capitalise(k.GetString() ?? type)
-                    : Capitalise(type),
-            };
-            var bucket = ClassifyBucket(el, type);
-            yield return (kind, bucket, IsReusable(type));
+            var bucket = ClassifyBucket(root, rootType);
+            var queue = new Queue<JsonElement>();
+            queue.Enqueue(root);
 
-            // Recurse into stacked equipment (on:[…]).
-            if (el.TryGetProperty("on", out var onArr) && onArr.ValueKind == JsonValueKind.Array)
+            while (queue.Count > 0)
             {
-                foreach (var child in onArr.EnumerateArray())
+                var cur = queue.Dequeue();
+                if (!cur.TryGetProperty("t", out var ct)) continue;
+                var ctype = ct.GetString() ?? "";
+                if (IsIgnoredType(ctype)) continue;
+
+                yield return (ElementDisplayName(cur, ctype), bucket, IsReusable(ctype));
+
+                if (cur.TryGetProperty("on", out var onArr) && onArr.ValueKind == JsonValueKind.Array)
                 {
-                    if (!child.TryGetProperty("t", out var ct)) continue;
-                    var ctype = ct.GetString() ?? "";
-                    if (ctype == "midline") continue;
-                    var childKind = ctype switch
+                    foreach (var child in onArr.EnumerateArray())
                     {
-                        "pole" => "Pole",
-                        "in" or "table" => "In / station",
-                        _ => child.TryGetProperty("kind", out var k2)
-                            ? Capitalise(k2.GetString() ?? ctype)
-                            : Capitalise(ctype),
-                    };
-                    yield return (childKind, bucket, IsReusable(ctype)); // inherit parent's bucket
+                        queue.Enqueue(child);
+                    }
                 }
             }
         }
+    }
+
+    private static bool IsIgnoredType(string type)
+        => string.Equals(type, "midline", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(type, "lane", StringComparison.OrdinalIgnoreCase);
+
+    private static string ElementDisplayName(JsonElement el, string type)
+    {
+        if (string.Equals(type, "pole", StringComparison.OrdinalIgnoreCase)) return "Pole";
+        if (string.Equals(type, "in", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(type, "table", StringComparison.OrdinalIgnoreCase))
+        {
+            return "In / station";
+        }
+
+        var hasKind = el.TryGetProperty("kind", out var k);
+        var kindStr = hasKind ? k.GetString() : null;
+        if (string.IsNullOrWhiteSpace(kindStr)
+            && el.TryGetProperty("label", out var lbl)
+            && lbl.ValueKind == JsonValueKind.String)
+        {
+            var labelText = lbl.GetString()?.Trim();
+            if (!string.IsNullOrWhiteSpace(labelText) && !PositionalLabelPattern.IsMatch(labelText))
+            {
+                return Capitalise(labelText);
+            }
+        }
+
+        return hasKind ? Capitalise(kindStr ?? type) : Capitalise(type);
     }
 
     /// <summary>
@@ -171,10 +203,21 @@ public class EquipmentCalculator
         if (!string.IsNullOrEmpty(anchor))
         {
             if (anchor.StartsWith("pole", StringComparison.OrdinalIgnoreCase)) return "Lane";
-            return anchor switch
+            if (anchor.StartsWith("gap", StringComparison.OrdinalIgnoreCase))
+            {
+                if (el.TryGetProperty("x", out var gx) && gx.ValueKind == JsonValueKind.Number)
+                {
+                    var gv = gx.GetDouble();
+                    if (gv < 24) return "Start";
+                    if (gv >= 88) return "Top";
+                    return "Lane";
+                }
+                return string.Equals(anchor, "gap0", StringComparison.OrdinalIgnoreCase) ? "Start" : "Lane";
+            }
+            return anchor.ToLowerInvariant() switch
             {
                 "start" => "Start",
-                "top" or "finish" or "changeover" => "Top",
+                "top" or "finish" or "changeover" or "beyond" => "Top",
                 "midline" => "Mid",
                 _ => "Other",
             };
@@ -182,9 +225,10 @@ public class EquipmentCalculator
         if (el.TryGetProperty("x", out var x) && x.ValueKind == JsonValueKind.Number)
         {
             var v = x.GetDouble();
-            if (v < 10) return "Start";
-            if (v > 80) return "Top";
-            return "Mid";
+            if (v < 24) return "Start";
+            if (v >= 80) return "Top";
+            if (v >= 45 && v <= 55) return "Mid";
+            return "Lane";
         }
         return "Other";
     }

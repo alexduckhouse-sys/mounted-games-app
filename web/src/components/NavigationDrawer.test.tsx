@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Clock } from 'lucide-react';
 import { useEffect } from 'react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, type StoredAuth } from '../api';
+import { readScorerToken, scorerApi } from '../offline/scorerLink';
 import { AuthProvider } from '../auth/AuthContext';
 import { CurrentCompetitionProvider, useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { ThemeProvider } from '../theme/ThemeContext';
@@ -44,9 +45,9 @@ function Seed({ meta, groups, extras }: Pick<Options, 'meta' | 'groups' | 'extra
   return null;
 }
 function Probe() {
-  const { pathname, search } = useLocation();
+  const { pathname, search, hash } = useLocation();
   const { rememberChoice } = useCurrentCompetition();
-  return <span data-testid="probe">{pathname}{search}|{rememberChoice}</span>;
+  return <span data-testid="probe">{pathname}{search}{hash}|{rememberChoice}</span>;
 }
 
 const onClose = vi.fn();
@@ -91,7 +92,7 @@ describe('NavigationDrawer: when no competition is followed', () => {
   it('sends the extra competition links to the events list when no competition is followed', () => {
     mount();
     expect(links('Main navigation')).toEqual([
-      ['Following', '/following'], ['Event shop', '/shop'], ['Rulebooks', '/events'],
+      ['Following', '/following'], ['Event shop', '/shop'],
     ]);
   });
 
@@ -100,9 +101,8 @@ describe('NavigationDrawer: when no competition is followed', () => {
     const signIn = screen.getByRole('link', { name: 'Sign in' });
     expect(signIn).toHaveAttribute('href', '/login');
     expect(signIn).toHaveClass('mg-btn-primary');
-    // It leads the menu as a button rather than sitting in the list of links.
-    expect(screen.getByRole('navigation', { name: 'Main navigation' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-    expect(screen.getByText('For trainers, organisers and stewards')).toBeInTheDocument();
+    // Sign-in stays at the bottom, after the navigation links.
+    expect(screen.getByRole('navigation', { name: 'Main navigation' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: 'Account and management' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Notifications/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
@@ -166,7 +166,7 @@ describe('NavigationDrawer: following a competition', () => {
   it('links to the competition’s extra pages (omitting duplicate bottom-tab links)', async () => {
     mount({ competition: true });
     expect(links('Main navigation')).toEqual([
-      ['Following', '/competitions/4/following'], ['Event shop', '/competitions/4/shop'], ['Rulebooks', '/competitions/4/rulebooks'],
+      ['Following', '/competitions/4/following'], ['Event shop', '/competitions/4/shop'],
     ]);
     const communityShop = screen.getByRole('link', { name: 'Tack & kit shop' });
     expect(communityShop).toHaveAttribute('href', '/shop');
@@ -185,7 +185,8 @@ describe('NavigationDrawer: following a competition', () => {
   it('does not highlight anything when no competition is followed', () => {
     mount({ path: '/events' });
     const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
-    expect(nav.getByRole('link', { name: 'Rulebooks' }).className).not.toMatch(/font-semibold/);
+    expect(nav.getAllByRole('link').some((link) => link.hasAttribute('aria-current'))).toBe(false);
+    expect(screen.queryByRole('link', { name: 'Rulebooks' })).not.toBeInTheDocument();
   });
 });
 
@@ -337,3 +338,63 @@ describe('NavigationDrawer: the Seasons link', () => {
   });
 });
 
+
+describe('NavigationDrawer: permission scanner', () => {
+  it('opens and closes the scanner without dismissing or navigating the menu', async () => {
+    mount();
+    await userEvent.click(screen.getByRole('button', { name: 'Scan QR code' }));
+    expect(screen.getByRole('dialog', { name: 'Scan permission QR code' })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Close QR scanner' }));
+    expect(screen.queryByRole('dialog', { name: 'Scan permission QR code' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Menu' })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId('probe')).toHaveTextContent('/|');
+  });
+
+  it('verifies through the scoped client before closing the menu and navigating with the permission fragment', async () => {
+    const token = 'mgs_fake_drawer_permission';
+    const session = { competitionId: 4, competitionName: 'Fake event', label: 'Fake camera', arenaName: 'Main', scope: 1, sessions: [] };
+    const verify = vi.spyOn(scorerApi, 'get').mockResolvedValue({ data: session });
+    mount();
+    await userEvent.click(screen.getByRole('button', { name: 'Scan QR code' }));
+    fireEvent.change(screen.getByLabelText('Permission link or key'), { target: { value: `/score#t=${token}` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
+    await waitFor(() => expect(screen.getByTestId('probe')).toHaveTextContent(`/score#t=${token}`));
+    expect(verify).toHaveBeenCalledExactlyOnceWith('/scorer/session', { headers: { 'X-Scorer-Token': token } });
+    expect(readScorerToken()).toBe(token);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: 'Scan permission QR code' })).not.toBeInTheDocument();
+    expect(api.get).not.toHaveBeenCalledWith('/scorer/session', expect.anything());
+  });
+
+  it('keeps the drawer and scanner open when verification fails', async () => {
+    vi.spyOn(scorerApi, 'get').mockRejectedValue({ response: { status: 410 } });
+    mount();
+    await userEvent.click(screen.getByRole('button', { name: 'Scan QR code' }));
+    fireEvent.change(screen.getByLabelText('Permission link or key'), { target: { value: 'mgs_fake_expired_permission' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid or expired permission key');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(readScorerToken()).toBeNull();
+    expect(screen.getByTestId('probe')).toHaveTextContent('/|');
+  });
+});
+
+describe('NavigationDrawer: abandoned season requests', () => {
+  it.each(['resolve', 'reject'] as const)('ignores a late season %s after the drawer closes', async (outcome) => {
+    let resolve!: (value: { data: { id: string }[] }) => void;
+    let reject!: (error: Error) => void;
+    const pending = new Promise<{ data: { id: string }[] }>((yes, no) => { resolve = yes; reject = no; });
+    vi.mocked(api.get).mockReturnValue(pending);
+    const view = mount({ competition: true });
+    expect(api.get).toHaveBeenCalledWith('/seasons/for-competition/4');
+    view.unmount();
+    await act(async () => {
+      if (outcome === 'resolve') resolve({ data: [{ id: 'fake-season' }] });
+      else reject(new Error('offline after close'));
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});

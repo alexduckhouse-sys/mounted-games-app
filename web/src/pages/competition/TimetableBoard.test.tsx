@@ -287,48 +287,45 @@ it('shows ON NOW · Race X of Y when a live heat has races, highlights followed 
   expect(headings).toEqual(['Under 12 · Session 1', 'Under 15 · Session 1']);
 });
 
-it('filters the timetable down to one team’s heats and shows their lane when heats have teams', () => {
+it('filters the timetable by age group (section) when the competition has multiple sections', () => {
   setCompetition({
+    sections: [
+      { id: 10, competitionId: 1, format: 2, ageGroup: 'Under 12', displayName: 'Teams Under 12' },
+      { id: 20, competitionId: 1, format: 2, ageGroup: 'Under 15', displayName: 'Teams Under 15' },
+    ],
     sessions: [
       session(1, {
+        competitionSectionId: 10,
+        sectionName: 'Teams Under 12',
         arenaName: 'Main Arena',
         scheduledStart: `${day}T10:00:00`,
-        heats: [
-          heat(11, {
-            sessionId: 1,
-            orderIndex: 0,
-            label: 'Heat 1',
-            entries: [
-              { id: 1, teamId: 101, teamName: 'Cheshire A', laneIndex: 0 },
-              { id: 2, teamId: 102, teamName: 'Oakley B', laneIndex: 2 },
-            ],
-          }),
-          heat(12, {
-            sessionId: 1,
-            orderIndex: 1,
-            label: 'Heat 2',
-            entries: [
-              { id: 3, teamId: 103, teamName: 'Romney C', laneIndex: 1 },
-            ],
-          }),
-        ],
+        heats: [heat(11, { sessionId: 1, orderIndex: 0, label: 'U12 Heat 1' })],
+      }),
+      session(2, {
+        competitionSectionId: 20,
+        sectionName: 'Teams Under 15',
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T10:30:00`,
+        heats: [heat(22, { sessionId: 2, orderIndex: 0, label: 'U15 Heat 1' })],
       }),
     ],
   });
   renderBoard();
-  const select = screen.getByRole('combobox', { name: 'Team' });
-  fireEvent.click(select);
-  expect(within(screen.getByRole('listbox', { name: 'Team' })).getAllByRole('option').map((o) => o.textContent))
-    .toEqual(['All teams', 'Cheshire A', 'Oakley B', 'Romney C']);
+  expect(screen.queryByRole('combobox', { name: 'Team' })).toBeNull();
+  expect(screen.queryByRole('searchbox', { name: 'Search timetable' })).toBeNull();
 
-  fireEvent.click(screen.getByRole('option', { name: 'Oakley B' }));
-  expect(screen.getByText('Heat 1')).toBeVisible();
-  expect(screen.getByText('Lane 3')).toBeVisible();
-  expect(screen.queryByText('Heat 2')).toBeNull();
+  const select = screen.getByRole('combobox', { name: 'Age group' });
+  fireEvent.click(select);
+  expect(within(screen.getByRole('listbox', { name: 'Age group' })).getAllByRole('option').map((o) => o.textContent))
+    .toEqual(['All age groups', 'Under 12', 'Under 15']);
+
+  fireEvent.click(screen.getByRole('option', { name: 'Under 15' }));
+  expect(screen.getByText('U15 Heat 1')).toBeVisible();
+  expect(screen.queryByText('U12 Heat 1')).toBeNull();
 
   fireEvent.click(select);
-  fireEvent.click(screen.getByRole('option', { name: 'All teams' }));
-  expect(screen.getByText('Heat 2')).toBeVisible();
+  fireEvent.click(screen.getByRole('option', { name: 'All age groups' }));
+  expect(screen.getByText('U12 Heat 1')).toBeVisible();
 });
 
 it('hides the arena selector when viewing a specific section', () => {
@@ -342,40 +339,49 @@ it('hides the arena selector when viewing a specific section', () => {
   expect(screen.queryByRole('combobox', { name: 'Arena' })).toBeNull();
 });
 
-it('toggles the lanes dropdown on a heat row to reveal lane numbers and team links', () => {
+it('links heat rows directly to the heat without a lanes dropdown and shows + / - shift cards on every moved heat', () => {
   setCompetition({
     sessions: [
       session(1, {
+        status: 1,
         arenaName: 'Main Arena',
         scheduledStart: `${day}T10:00:00`,
+        startedAt: `${day}T10:15:00`,
         heats: [
           heat(11, {
             sessionId: 1,
             orderIndex: 0,
             label: 'Heat 1',
             entries: [
-              { id: 1, teamId: 101, teamName: 'Cheshire A', laneIndex: 0 },
-              { id: 2, teamId: 102, teamName: 'Oakley B', laneIndex: 2 },
+              { id: 1, teamId: 101, teamName: 'Cheshire A', laneIndex: 1 },
+              { id: 2, teamId: 102, teamName: 'Oakley B', laneIndex: 3 },
             ],
+          }),
+          heat(12, {
+            sessionId: 1,
+            orderIndex: 1,
+            label: 'Heat 2',
+          }),
+        ],
+      }),
+      session(2, {
+        status: 0,
+        arenaName: 'Arena Two',
+        scheduledStart: `${day}T10:45:00`,
+        notes: '[shift:-15]',
+        heats: [
+          heat(21, {
+            sessionId: 2,
+            orderIndex: 0,
+            label: 'Early Heat 3',
           }),
         ],
       }),
     ],
   });
   renderBoard();
-  const toggle = screen.getByRole('button', { name: 'Lanes for Heat 1' });
-  expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByRole('list', { name: 'Lanes for Heat 1' })).toBeNull();
-
-  fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  const lanesList = screen.getByRole('list', { name: 'Lanes for Heat 1' });
-  expect(within(lanesList).getByText('Lane 1')).toBeVisible();
-  expect(within(lanesList).getByText('Lane 3')).toBeVisible();
-  expect(within(lanesList).getByRole('link', { name: 'Cheshire A' })).toHaveAttribute('href', '/competitions/1/teams/101');
-  expect(within(lanesList).getByRole('link', { name: 'Oakley B' })).toHaveAttribute('href', '/competitions/1/teams/102');
-
-  fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByRole('list', { name: 'Lanes for Heat 1' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Lanes for/i })).toBeNull();
+  expect(screen.getByRole('link', { name: /Heat 1/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=11');
+  expect(screen.getAllByLabelText('Time shifted +15m')).toHaveLength(2);
+  expect(screen.getByLabelText('Time shifted -15m')).toHaveTextContent('-15m');
 });

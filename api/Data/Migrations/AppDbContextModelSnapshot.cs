@@ -272,6 +272,82 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("CalendarHeatVersions");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.CertifiedHorse", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FluValidUntil")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("HorseKey")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("HorseName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTime>("InspectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InspectedByName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("InspectedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("InspectorRole")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("LastFluVaccineDate")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("LastTetanusDate")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("OfficialNotes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("OwnerFullName")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("OwnerKey")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("PassportCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("TetanusValidUntil")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PassportCode");
+
+                    b.HasIndex("HorseKey", "OwnerKey");
+
+                    b.ToTable("CertifiedHorses", (string)null);
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.ChatMessage", b =>
                 {
                     b.Property<int>("Id")
@@ -1703,6 +1779,34 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("CompetitionId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("FluValidUntil")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("InspectorRole")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("LastFluVaccineDate")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("LastTetanusDate")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("OfficialNotes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("OwnerFullName")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("PassportCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<string>("PonyKey")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1715,6 +1819,10 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int>("TeamId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TetanusValidUntil")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.HasKey("Id");
 
@@ -1967,9 +2075,13 @@ namespace MountedGames.Api.Data.Migrations
                         .HasPrecision(4, 1)
                         .HasColumnType("numeric(4,1)");
 
+                    b.Property<string>("PonyOwnerFullName")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
                     b.Property<string>("PonyPassportNumber")
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
 
                     b.Property<int?>("SavedRiderId")
                         .HasColumnType("integer");
@@ -2032,6 +2144,14 @@ namespace MountedGames.Api.Data.Migrations
                         .HasPrecision(4, 1)
                         .HasColumnType("numeric(4,1)");
 
+                    b.Property<string>("PonyOwnerFullName")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("PonyPassportNumber")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2083,6 +2203,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
@@ -3934,12 +4057,14 @@ namespace MountedGames.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("FK_SignupMatchmaking_PairTo");
 
-                    b.HasOne("MountedGames.Api.Entities.SectionSignup", null)
+                    b.HasOne("MountedGames.Api.Entities.SectionSignup", "Signup")
                         .WithOne()
                         .HasForeignKey("MountedGames.Api.Entities.SignupMatchmaking", "SignupId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("FK_SignupMatchmaking_Signup");
+
+                    b.Navigation("Signup");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.SignupTeamLink", b =>

@@ -14,6 +14,7 @@ import type { QueuedScore } from '../../offline/scoreOutbox';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
 import { ScoringSection } from './ScoringSection';
+import { ScoreClashBanner, TeamCardBadge, getStoredCards, playAlertChime, setStoredCard, useCardsEnabled, type ScoreClashItem } from './ScoringParts';
 import { bibAccent } from '../../lib/bib';
 import { enqueue, placingsOf } from '../../offline/scoreOutbox';
 import { nextRoundLanes } from '../../lib/nextRoundLanes';
@@ -89,6 +90,27 @@ export function SessionPage() {
   const [showGenerator, setShowGenerator] = useState(false);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [decForms, setDecForms] = useState<DeclarationForm[]>([]);
+  const [callingTeamId, setCallingTeamId] = useState<number | null>(null);
+  const [ringCallNotice, setRingCallNotice] = useState<string | null>(null);
+
+  async function handleCallMissingTeam(entry: { teamId: number; teamName: string; laneIndex: number }) {
+    if (!activeHeat || !session) return;
+    setCallingTeamId(entry.teamId);
+    const heatIndex = orderedHeats.findIndex((h) => h.id === activeHeat.id);
+    const heatLabel = activeHeat.label ?? `Heat ${heatIndex + 1}`;
+    const arena = session.arenaName?.trim() || 'Main Arena';
+    const body = `🔔 Ring call (${arena}): ${entry.teamName} (Lane ${entry.laneIndex}) needed at the collecting ring now for ${heatLabel}.`;
+    try {
+      await api.post(`/competitions/${competition.id}/chat`, { body, type: 1 });
+      playAlertChime();
+      setRingCallNotice(`Ring call sent for ${entry.teamName}`);
+      window.setTimeout(() => setRingCallNotice(null), 4000);
+    } catch {
+      setSaveError('Couldn’t send ring call. Try again.');
+    } finally {
+      setCallingTeamId(null);
+    }
+  }
 
   useEffect(() => {
     if (!session) return;
@@ -336,9 +358,92 @@ export function SessionPage() {
     ?? null;
   const nextLanes = viewHeat ? nextRoundLanes({ ...session, heats: viewHeats }, viewHeat, followingHeat, qualifiersOf(session), hcTeamIds) : null;
 
+  const teamNamesById: Record<number, string> = {};
+  for (const t of competition.teams) teamNamesById[t.id] = t.displayName;
+  for (const h of orderedHeats) {
+    for (const e of h.entries) teamNamesById[e.teamId] = e.teamName;
+  }
+
+  const clashes: ScoreClashItem[] = outbox
+    .filter((q) => q.state === 'conflict' && q.sessionId === session.id)
+    .map((q) => {
+      const serverRace = orderedHeats.flatMap((h) => h.races).find((r) => r.id === q.raceId);
+      return {
+        raceId: q.raceId,
+        raceName: serverRace?.name ?? q.label,
+        raceOrder: serverRace?.orderIndex,
+        sessionId: q.sessionId,
+        existingPlaces: (serverRace?.results ?? []).map((r) => ({
+          teamId: r.teamId,
+          place: r.placing ?? 0,
+          eliminated: r.eliminated,
+          points: r.points,
+          status: r.status,
+        })),
+        incomingPlaces: q.places.map((p) => ({
+          teamId: p.teamId,
+          place: p.place,
+          eliminated: p.eliminated,
+          points: p.points,
+          status: p.status,
+        })),
+      };
+    });
+
+  function resolveClash(clash: ScoreClashItem, useIncoming: boolean) {
+    if (!useIncoming) {
+      updateOutbox((list) => list.filter((q) => q.raceId !== clash.raceId));
+      return;
+    }
+    const existingItem = outbox.find((q) => q.raceId === clash.raceId);
+    if (!existingItem) return;
+    updateOutbox((list) =>
+      enqueue(list, {
+        ...existingItem,
+        saveId: crypto.randomUUID(),
+        expected: clash.existingPlaces.map((p) => ({ teamId: p.teamId, place: p.place, eliminated: p.eliminated })),
+        reason: 'Score clash resolved',
+        state: 'waiting',
+      }),
+    );
+  }
+
+  const assignedTeamIds = new Set(orderedHeats.flatMap((h) => h.entries.map((e) => e.teamId)));
+  const unassignedTeams = orderedHeats.length === 0
+    ? []
+    : competition.teams.filter(
+        (t) =>
+          !t.isWithdrawn
+          && (session.competitionSectionId == null || t.competitionSectionId === session.competitionSectionId)
+          && !assignedTeamIds.has(t.id),
+      );
+
+  async function addUnassignedTeamToActiveHeat(teamId: number) {
+    if (!activeHeat || !session) return;
+    const assignments = orderedHeats.map((h, i) => {
+      const label = h.label?.trim() || `Heat ${i + 1}`;
+      const currentIds = h.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex).map((e) => e.teamId);
+      return {
+        label,
+        teamIds: h.id === activeHeat.id ? [...currentIds, teamId] : currentIds,
+      };
+    });
+    try {
+      await api.put(
+        `/competitions/${competition.id}/sessions/${session.id}/heat-assignments?preserveCompletedScores=true`,
+        { assignments },
+      );
+      setSaveError(null);
+      reload();
+    } catch {
+      setSaveError('Couldn’t add team to this heat. Try again.');
+    }
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 pt-3">
       {saveError && <p role="alert" className="mg-notice">{saveError}</p>}
+      <ScoreClashBanner clashes={clashes} teamNamesById={teamNamesById} onResolve={resolveClash} />
 
       {canManage(competition) ? (
         <>
@@ -348,6 +453,56 @@ export function SessionPage() {
             activeHeatId={activeHeatId}
             onSelect={(id) => { setActiveHeatId(id); setPending([]); setUndoStack((stack) => dropDrafts(stack)); }}
           />
+          {canOrganise(competition) && activeHeat && unassignedTeams.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/80 px-3 py-2 text-xs text-amber-950">
+              <span className="font-semibold">Unassigned teams ({unassignedTeams.length}):</span>
+              {unassignedTeams.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => void addUnassignedTeamToActiveHeat(t.id)}
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-white px-2.5 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+                >
+                  + Add {t.displayName} to {activeHeat.label ?? 'this heat'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {canOrganise(competition) && activeHeat && activeHeat.entries.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+              <div className="flex items-center gap-1.5 font-bold">
+                <span aria-hidden="true">🔔</span>
+                <span>Call missing team to ring:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {activeHeat.entries
+                  .slice()
+                  .sort((a, b) => a.laneIndex - b.laneIndex)
+                  .map((entry) => (
+                    <button
+                      key={entry.teamId}
+                      type="button"
+                      disabled={callingTeamId === entry.teamId}
+                      onClick={() => void handleCallMissingTeam(entry)}
+                      className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-white px-2.5 py-1 text-xs font-semibold text-amber-950 shadow-2xs hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:bg-stone-900 dark:text-amber-100 dark:hover:bg-amber-950"
+                      title={`Call ${entry.teamName} (Lane ${entry.laneIndex}) to ring`}
+                    >
+                      {callingTeamId === entry.teamId ? 'Calling…' : `Call ${entry.teamName} (L${entry.laneIndex})`}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {ringCallNotice && (
+            <div role="status" className="flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+              <span>✓ {ringCallNotice}</span>
+              <button type="button" onClick={() => setRingCallNotice(null)} className="text-emerald-700 hover:text-emerald-950 dark:text-emerald-300" aria-label="Dismiss ring call notice">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
           {viewHeat ? (
             <ScoringSection
@@ -365,7 +520,18 @@ export function SessionPage() {
               onToggleElim={toggleElim}
               onReset={resetPending}
               onSubmit={submit}
-              onOverridePoints={(teamId, points, reason) => changePending((current) => overridePoints(current, teamId, points, reason))}
+              onOverridePoints={(teamId, points, reason) => {
+                changePending((current) => {
+                  const updated = overridePoints(current, teamId, points, reason);
+                  if (reason !== undefined) {
+                    return updated.map((p) => (p.teamId === teamId ? { ...p, refereeNote: reason } : p));
+                  }
+                  return updated;
+                });
+                if (activeRace && points !== undefined && reason?.trim()) {
+                  setCorrectionReasons((cur) => (cur[activeRace.id]?.trim() ? cur : { ...cur, [activeRace.id]: reason.trim() }));
+                }
+              }}
               onUndo={canUndo ? undo : undefined}
               undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
               allowReasons
@@ -378,6 +544,7 @@ export function SessionPage() {
               onRefresh={reload}
               correctionReason={activeRace ? correctionReasons[activeRace.id] ?? '' : ''}
               onCorrectionReason={(reason) => { if (activeRace) setCorrectionReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
+              competitionId={competition.id}
             />
           ) : (
             <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>
@@ -535,6 +702,13 @@ function ScoreAdjustmentsPanel({
   const [adjustReason, setAdjustReason] = useState<string>('');
 
   const [hcTargetTeamId, setHcTargetTeamId] = useState<number>(defaultTeamId);
+  const [cardsEnabled, toggleCardsEnabled] = useCardsEnabled(session.competitionId);
+  const [cardTeamId, setCardTeamId] = useState<number>(defaultTeamId);
+  const [cardsTick, setCardsTick] = useState(0);
+  const storedCards = useMemo(() => {
+    void cardsTick;
+    return cardsEnabled ? getStoredCards(session.competitionId) : {};
+  }, [session.competitionId, cardsEnabled, cardsTick]);
 
   const [reviewTeamId, setReviewTeamId] = useState<number>(defaultTeamId);
   const [reviewNote, setReviewNote] = useState<string>('');
@@ -542,6 +716,11 @@ function ScoreAdjustmentsPanel({
 
   const [raceNameDraft, setRaceNameDraft] = useState<string>('');
   const [announceRaceUpdate, setAnnounceRaceUpdate] = useState<boolean>(true);
+  const uncompletedRacesText = useMemo(
+    () => races.filter((r) => !r.isComplete).map((r) => r.name).join('\n'),
+    [races],
+  );
+  const [remainingRacesDraft, setRemainingRacesDraft] = useState<string | null>(null);
 
   const underReviewTeamIds = useMemo(() => {
     const flagged = new Set<number>();
@@ -585,7 +764,7 @@ function ScoreAdjustmentsPanel({
     }
   }
 
-  async function submitPointDirective(teamId: number, directive: string, reason: string) {
+  async function submitPointDirective(teamId: number, directive: string, reason: string, explicitPoints?: number) {
     if (!targetRace) return;
     const existingByTeam = new Map(targetRace.results.map((r) => [r.teamId, r]));
     const places = entries.map((e, i) => {
@@ -596,6 +775,7 @@ function ScoreAdjustmentsPanel({
         place: existing ? (existing.eliminated ? 0 : existing.placing ?? i + 1) : i + 1,
         eliminated: existing?.eliminated ?? false,
         ...(existing?.status ? { status: existing.status } : {}),
+        ...(isTarget && explicitPoints !== undefined ? { points: explicitPoints } : {}),
         ...(isTarget ? { refereeNote: `${directive} ${reason}`.trim() } : {}),
       };
     });
@@ -616,7 +796,7 @@ function ScoreAdjustmentsPanel({
     }
     const formatted = formatPoints(pts);
     const reason = overrideReason.trim() || `Manual score override to ${formatted} pts`;
-    await submitPointDirective(overrideTeamId, `[pts:${formatted}]`, reason);
+    await submitPointDirective(overrideTeamId, `[pts:${formatted}]`, reason, pts);
     setOverrideReason('');
   }
 
@@ -740,6 +920,49 @@ function ScoreAdjustmentsPanel({
 
   return (
     <div className="mt-3 space-y-3 border-t border-slate-200 dark:border-slate-700 pt-3 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] px-3 py-2">
+        <label className="flex cursor-pointer items-center gap-2 font-semibold">
+          <input
+            type="checkbox"
+            aria-label="Use yellow & red cards in this competition"
+            checked={cardsEnabled}
+            onChange={(e) => toggleCardsEnabled(e.target.checked)}
+          />
+          <span>Use yellow &amp; red cards in this competition</span>
+        </label>
+        {cardsEnabled && entries.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <select
+              aria-label="Disciplinary card team"
+              className="input !min-h-0 !py-1 text-xs"
+              value={cardTeamId}
+              onChange={(e) => setCardTeamId(Number(e.target.value))}
+            >
+              {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
+            </select>
+            {(['none', 'yellow', 'red'] as const).map((opt) => {
+              const current = storedCards[cardTeamId] ?? 'none';
+              const active = current === opt;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  aria-pressed={active}
+                  className={`btn-ghost !py-1 !px-2 text-xs ${active ? 'ring-1 ring-[rgb(var(--mg-heading))] font-bold' : ''}`}
+                  onClick={() => {
+                    setStoredCard(session.competitionId, cardTeamId, opt === 'none' ? null : opt);
+                    setCardsTick((t) => t + 1);
+                  }}
+                >
+                  {opt === 'none' ? 'No card' : opt === 'yellow' ? '🟨 Yellow' : '🟥 Red'}
+                </button>
+              );
+            })}
+            {storedCards[cardTeamId] && <TeamCardBadge card={storedCards[cardTeamId]} />}
+          </div>
+        )}
+      </div>
+
       {entries.length > 0 && (
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-1">
@@ -945,6 +1168,42 @@ function ScoreAdjustmentsPanel({
           </button>
         </div>
       )}
+
+      <div className="space-y-1.5 border-t border-slate-200 dark:border-slate-700 pt-2">
+        <label className="flex flex-col gap-1">
+          <span className="font-semibold">Remaining uncompleted races (one per line)</span>
+          <textarea
+            aria-label="Remaining uncompleted races"
+            rows={3}
+            className="input text-xs font-mono"
+            value={remainingRacesDraft ?? uncompletedRacesText}
+            onChange={(e) => setRemainingRacesDraft(e.target.value)}
+          />
+        </label>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn-ghost !py-1.5 !px-2.5 text-xs"
+            onClick={async () => {
+              const text = remainingRacesDraft ?? uncompletedRacesText;
+              const remaining = text.split('\n').map((s) => s.trim()).filter(Boolean);
+              const raceNames = races.flatMap((race) => race.isComplete ? [race.name] : remaining.length ? [remaining.shift()!] : []);
+              raceNames.push(...remaining);
+              try {
+                await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/races`, { raceNames });
+                setRemainingRacesDraft(null);
+                onError(null);
+                onChanged();
+              } catch (error) {
+                const message = (error as { response?: { data?: { message?: string } } }).response?.data?.message;
+                onError(message || 'Couldn’t update session races. Try again.');
+              }
+            }}
+          >
+            Save race line-up
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -961,16 +1220,18 @@ function HeatTabs({ session, heats, activeHeatId, onSelect }: {
         const complete = heatIsComplete(heat);
         const start = heatStartTime(session, heat, i);
         const racesDone = heat.races.filter((r) => r.isComplete).length;
+        const isActive = heat.id === activeHeatId;
         return (
           <button
             key={heat.id}
+            type="button"
             onClick={() => onSelect(heat.id)}
-            className={`px-3 py-2 rounded-lg whitespace-nowrap font-semibold text-xs transition min-w-[120px] ${
-              heat.id === activeHeatId
-                ? 'bg-brand-600 text-white shadow-soft'
+            className={`mg-chip flex-col !items-start !h-auto px-3 py-2 whitespace-nowrap font-semibold text-xs transition min-w-[120px] ${
+              isActive
+                ? 'mg-chip-active'
                 : complete
-                  ? 'bg-arena-finished/20 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
-                  : 'bg-white/70 dark:bg-slate-700 text-slate-700 dark:text-slate-100'
+                  ? '!border-[rgb(var(--mg-ok)/0.45)] !bg-[rgb(var(--mg-ok)/0.1)] !text-[rgb(var(--mg-ok))]'
+                  : ''
             }`}
           >
             <span className="block leading-tight">{heat.label ?? `Heat ${i + 1}`}</span>
@@ -1020,15 +1281,13 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
   }, [competition.id]);
 
   const decdTeamIds = useMemo(() => new Set((decForms ?? []).map((f) => f.teamId)), [decForms]);
-  const [showAll, setShowAll] = useState(false);
-  // Nothing is selected until the dec forms are in; then teams with a dec form (or all teams, if none
-  // has one). The trainer's own choice replaces that, but only while the teams and forms it was
-  // made against are unchanged.
+  const [showAll, setShowAll] = useState(true);
+  // Pre-select all active (non-withdrawn) section teams so teams without a declaration form yet are
+  // never silently dropped when generating the heat draw.
   const defaultSelection = useMemo(() => {
     if (decFormsLoading) return new Set<number>();
-    const defaults = sectionTeams.filter((t) => decdTeamIds.has(t.id)).map((t) => t.id);
-    return new Set(defaults.length > 0 ? defaults : sectionTeams.map((t) => t.id));
-  }, [decFormsLoading, sectionTeams, decdTeamIds]);
+    return new Set(sectionTeams.filter((t) => !t.isWithdrawn).map((t) => t.id));
+  }, [decFormsLoading, sectionTeams]);
   const [choice, setChoice] = useState<{ sectionTeams: typeof sectionTeams; decdTeamIds: Set<number>; selected: Set<number> } | null>(null);
   const selected = choice && choice.sectionTeams === sectionTeams && choice.decdTeamIds === decdTeamIds ? choice.selected : defaultSelection;
   function setSelected(next: Set<number> | ((current: Set<number>) => Set<number>)) {
@@ -1048,7 +1307,12 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
       .sort((a, b) => a.club.localeCompare(b.club));
   }, [sectionTeams, decdTeamIds, showAll]);
 
-  const [races, setRaces] = useState('Litter Lifter\nFlag\nBottle\nMug\nBall and Cone');
+  const defaultRaces = 'Litter Lifter\nFlag\nBottle\nMug\nBall and Cone';
+  const [races, setRaces] = useState(() => (
+    session.plannedRaces?.length
+      ? session.plannedRaces.join('\n')
+      : session.heats[0]?.races.map((r) => r.name).join('\n') || defaultRaces
+  ));
   const [lanes, setLanes] = useState<number>(session.lanesPerHeat ?? 6);
   const [replace, setReplace] = useState(true);
   const [busy, setBusy] = useState(false);

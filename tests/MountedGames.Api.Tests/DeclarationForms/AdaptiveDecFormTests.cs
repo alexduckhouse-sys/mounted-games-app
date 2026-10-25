@@ -673,4 +673,83 @@ public class AdaptiveDecFormTests : IClassFixture<ApiFactory>
         Assert.Null(DecFormConfig.Parse("not json"));
         Assert.Null(DecFormConfig.Parse(" "));
     }
+
+    [Fact]
+    public void RiderAgeEligibility_UsesFirstJanuaryOfCompetitionYear_AndFallsBackToSectionAgeGroup()
+    {
+        // Competition is on 15 August 2026, so eligibility date is 1 January 2026.
+        var compDate = new DateTime(2026, 8, 15, 0, 0, 0, DateTimeKind.Utc);
+
+        // Rider born 10 March 2014 turns 12 in March 2026, but was 11 on 1 January 2026 -> eligible for Under 12.
+        var eligibleRider = new RiderEntry
+        {
+            FullName = "Alice",
+            DateOfBirth = new DateTime(2014, 3, 10, 0, 0, 0, DateTimeKind.Utc),
+            AgeGroup = null,
+        };
+        Assert.Equal(11, DecFormRules.AgeYears(eligibleRider.DateOfBirth.Value, compDate));
+        Assert.Null(DecFormRules.CheckAgeEligibility(eligibleRider, compDate, sectionAgeGroup: "Under 12"));
+
+        // Rider born 31 December 2013 was already 12 on 1 January 2026 -> flagged for Under 12 via sectionAgeGroup fallback.
+        var overAgeRider = new RiderEntry
+        {
+            FullName = "Bob",
+            DateOfBirth = new DateTime(2013, 12, 31, 0, 0, 0, DateTimeKind.Utc),
+            AgeGroup = null,
+        };
+        Assert.Equal(12, DecFormRules.AgeYears(overAgeRider.DateOfBirth.Value, compDate));
+        var flag = DecFormRules.CheckAgeEligibility(overAgeRider, compDate, sectionAgeGroup: "Under 12");
+        Assert.NotNull(flag);
+        Assert.Contains("1 January 2026", flag);
+        Assert.Contains("Under 12", flag);
+    }
+    [Theory]
+    [InlineData(2032)]
+    [InlineData(2020)]
+    public async Task Submission_FlagsAgeAgainstSectionAndCompetitionYearWithoutRejecting(int competitionYear)
+    {
+        var setup = await NewSetupAsync();
+        await SetConfigAsync(setup.CompetitionId, Basic(c => c with { Dob = FieldRequirement.Optional, DobFormat = DobFormat.Full }));
+        await _f.InDbAsync(async db =>
+        {
+            (await db.Competitions.SingleAsync(c => c.Id == setup.CompetitionId)).StartDate = new DateTime(competitionYear, 8, 15);
+            (await db.CompetitionSections.SingleAsync(s => s.Id == setup.SectionId)).AgeGroup = "Under 12";
+            await db.SaveChangesAsync();
+        });
+
+        var response = await SubmitAsync(setup,
+            Rider("Example Eligible", dob: new DateTime(competitionYear - 12, 3, 10)),
+            Rider("Example Over Age", dob: new DateTime(competitionYear - 13, 12, 31)));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var riders = await _f.InDbAsync(db => db.RiderEntries.Where(r => r.DeclarationForm!.TeamId == setup.TeamId).ToListAsync());
+        Assert.Null(riders.Single(r => r.FullName == "Example Eligible").FlagsJson);
+        var flag = riders.Single(r => r.FullName == "Example Over Age").FlagsJson;
+        Assert.NotNull(flag);
+        Assert.Contains($"1 January {competitionYear}", flag);
+        Assert.Contains("Under 12", flag);
+    }
+
+    [Fact]
+    public async Task Submission_DoesNotSaveDisabledPassportToNewOrLinkedRoster()
+    {
+        var setup = await NewSetupAsync();
+        await SetConfigAsync(setup.CompetitionId, Basic(c => c with { PonyPassport = FieldRequirement.Off }));
+        var rider = Rider("Example Passport", passport: "TEST-DISABLED-PASSPORT");
+        var response = await (await _f.TrainerAsync()).PostAsJsonAsync(Forms, Form(setup.TeamId, rider) with { SaveToRoster = true });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var savedId = await _f.InDbAsync(async db =>
+        {
+            var entry = await db.RiderEntries.SingleAsync(r => r.DeclarationForm!.TeamId == setup.TeamId);
+            Assert.Null(entry.PonyPassportNumber);
+            Assert.NotNull(entry.SavedRiderId);
+            var saved = await db.SavedRiders.SingleAsync(r => r.Id == entry.SavedRiderId);
+            Assert.Null(saved.PonyPassportNumber);
+            return saved.Id;
+        });
+        response = await (await _f.TrainerAsync()).PostAsJsonAsync(Forms, Form(setup.TeamId, rider with { SavedRiderId = savedId }) with { SaveToRoster = true });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Null(await _f.InDbAsync(db => db.SavedRiders.Where(r => r.Id == savedId).Select(r => r.PonyPassportNumber).SingleAsync()));
+    }
+
 }

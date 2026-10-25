@@ -34,11 +34,17 @@
 .heat-title-meta-live { color: rgb(var(--mg-elim)); font-weight: 600; }
 .heat-title-meta-late { color: rgb(var(--mg-late-time)); font-weight: 600; }
 
-.heat-name {
-  position: absolute; left: 17px; bottom: 1px; max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.heat-name,
+.race-rules-btn.heat-name {
+  position: absolute; left: 17px; bottom: 1px;
+  width: auto; height: auto; max-width: 112px;
+  display: block; padding: 0; border: 0; border-radius: 0; background: transparent;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: inherit; text-align: left;
   transform-origin: 0 100%; transform: rotate(-55deg); color: rgb(var(--mg-ink));
 }
-.heat-name-running { color: rgb(var(--mg-red)); }
+.heat-name-running,
+.race-rules-btn.heat-name.heat-name-running { color: rgb(var(--mg-red)); }
 .heat-sep {
   position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: rgb(var(--mg-ink));
   transform-origin: 0 50%; transform: rotate(-55deg);

@@ -32,6 +32,11 @@ public sealed class CompetitionAccessAttribute(string argument, CompetitionResou
             context.Result = new BadRequestResult();
             return;
         }
+        if (ScorerLinkAccessAttribute.TryGetCurrent(context.HttpContext) is { } scorerLink
+            && resource == CompetitionResource.Competition && scorerLink.CompetitionId == id)
+        {
+            return;
+        }
         var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
         var competitions = db.Manageable(user);
         competitions = resource switch

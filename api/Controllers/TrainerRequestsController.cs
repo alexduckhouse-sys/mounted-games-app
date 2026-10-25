@@ -94,3 +94,125 @@ public class TrainerRequestsController(AppDbContext db, UserManager<AppUser> use
         return NoContent();
     }
 }
+
+[ApiController]
+[Route("api/admin/users")]
+[Authorize(Roles = Roles.Admin)]
+public class AdminUsersController(AppDbContext db, UserManager<AppUser> users) : ControllerBase
+{
+    private static readonly HashSet<string> AllowedRoles = new(StringComparer.Ordinal)
+    {
+        Roles.Admin,
+        Roles.Trainer,
+        Roles.Manager,
+        Roles.Member,
+    };
+
+    [HttpGet]
+    public async Task<ActionResult<IReadOnlyList<AdminUserDto>>> List([FromQuery] string? q = null, CancellationToken ct = default)
+    {
+        var query = db.Users.AsNoTracking().Include(u => u.Club).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLowerInvariant();
+            query = query.Where(u =>
+                u.FullName.ToLower().Contains(term)
+                || (u.Email != null && u.Email.ToLower().Contains(term))
+                || (u.Club != null && u.Club.Name.ToLower().Contains(term)));
+        }
+
+        var userRows = await query
+            .OrderBy(u => u.FullName)
+            .ThenBy(u => u.Email)
+            .Take(100)
+            .Select(u => new
+            {
+                u.Id,
+                u.FullName,
+                u.Email,
+                u.ClubId,
+                ClubName = u.Club == null ? null : u.Club.Name,
+                u.LockoutEnd,
+                u.CreatedAt,
+            })
+            .ToListAsync(ct);
+
+        var userIds = userRows.Select(u => u.Id).ToList();
+        var rolePairs = await (from ur in db.UserRoles
+                               join r in db.Roles on ur.RoleId equals r.Id
+                               where userIds.Contains(ur.UserId) && r.Name != null
+                               select new { ur.UserId, RoleName = r.Name! }).ToListAsync(ct);
+        var rolesByUser = rolePairs
+            .GroupBy(x => x.UserId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(x => x.RoleName).OrderBy(x => x).ToList());
+
+        var now = DateTimeOffset.UtcNow;
+        return userRows.Select(u => new AdminUserDto(
+            u.Id,
+            u.FullName,
+            u.Email,
+            u.ClubId,
+            u.ClubName,
+            rolesByUser.GetValueOrDefault(u.Id, Array.Empty<string>()),
+            u.LockoutEnd.HasValue && u.LockoutEnd.Value > now,
+            DateTime.SpecifyKind(u.CreatedAt, DateTimeKind.Utc))).ToList();
+    }
+
+    [HttpPost("{userId}/roles")]
+    public async Task<ActionResult<AdminUserDto>> SetRole(string userId, ToggleUserRoleRequest req, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(req.Role) || !AllowedRoles.Contains(req.Role))
+            return BadRequest(new { message = "Unsupported role." });
+
+        var user = await users.FindByIdAsync(userId);
+        if (user is null) return NotFound();
+
+        var currentRoles = await users.GetRolesAsync(user);
+        if (req.Grant && !currentRoles.Contains(req.Role))
+        {
+            var res = await users.AddToRoleAsync(user, req.Role);
+            if (!res.Succeeded) return Conflict(new { message = "Could not add role." });
+        }
+        else if (!req.Grant && currentRoles.Contains(req.Role))
+        {
+            var res = await users.RemoveFromRoleAsync(user, req.Role);
+            if (!res.Succeeded) return Conflict(new { message = "Could not remove role." });
+        }
+
+        var updatedRoles = (await users.GetRolesAsync(user)).OrderBy(r => r).ToList();
+        var clubName = user.ClubId.HasValue
+            ? await db.Clubs.AsNoTracking().Where(c => c.Id == user.ClubId.Value).Select(c => c.Name).FirstOrDefaultAsync(ct)
+            : null;
+        return new AdminUserDto(
+            user.Id,
+            user.FullName,
+            user.Email,
+            user.ClubId,
+            clubName,
+            updatedRoles,
+            user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTimeOffset.UtcNow,
+            DateTime.SpecifyKind(user.CreatedAt, DateTimeKind.Utc));
+    }
+
+    [HttpPost("{userId}/unlock")]
+    public async Task<IActionResult> Unlock(string userId)
+    {
+        var user = await users.FindByIdAsync(userId);
+        if (user is null) return NotFound();
+        await users.SetLockoutEndDateAsync(user, null);
+        await users.ResetAccessFailedCountAsync(user);
+        return NoContent();
+    }
+}
+
+public record AdminUserDto(
+    string Id,
+    string FullName,
+    string? Email,
+    int? ClubId,
+    string? ClubName,
+    IReadOnlyList<string> Roles,
+    bool IsLockedOut,
+    DateTime CreatedAt);
+
+public record ToggleUserRoleRequest(string Role, bool Grant);

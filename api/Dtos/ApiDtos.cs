@@ -386,7 +386,8 @@ public record RiderEntryDto(
     int? BirthYear = null, string? AgeGroup = null, decimal? WeightKg = null, string? PonyPassportNumber = null,
     int? PonyAge = null, string? MembershipNumber = null, string? EmergencyContactName = null,
     string? EmergencyContactPhone = null, string? MedicalNotes = null,
-    IReadOnlyDictionary<string, string?>? CustomValues = null, IReadOnlyList<string>? Flags = null);
+    IReadOnlyDictionary<string, string?>? CustomValues = null, IReadOnlyList<string>? Flags = null,
+    string? PonyOwnerFullName = null);
 
 /// <param name="AcceptTerms">The submitter ticked "I agree to the terms and conditions". A dec form is refused without it.</param>
 /// <param name="TrainerName">The coach's name as typed; it defaults to the submitter's account name.</param>
@@ -406,14 +407,16 @@ public record RiderEntryInput(
     bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false,
     decimal? PonyHeightHands = null,
     int? BirthYear = null, [StringLength(30)] string? AgeGroup = null, [Range(1, 400)] decimal? WeightKg = null,
-    [StringLength(60)] string? PonyPassportNumber = null, [Range(0, 60)] int? PonyAge = null,
+    [StringLength(80)] string? PonyPassportNumber = null, [Range(0, 60)] int? PonyAge = null,
     [StringLength(60)] string? MembershipNumber = null, [StringLength(120)] string? EmergencyContactName = null,
     [StringLength(40)] string? EmergencyContactPhone = null, [StringLength(1000)] string? MedicalNotes = null,
-    Dictionary<string, string?>? CustomValues = null);
+    Dictionary<string, string?>? CustomValues = null,
+    [StringLength(160)] string? PonyOwnerFullName = null);
 
 public record SavedRiderDto(
     int Id, int ClubId, string FullName, DateTime? DateOfBirth, string? HorseName, string? Notes,
-    bool UseInitialOnly = false, bool NoFilming = false, decimal? PonyHeightHands = null);
+    bool UseInitialOnly = false, bool NoFilming = false, decimal? PonyHeightHands = null,
+    string? PonyPassportNumber = null, string? PonyOwnerFullName = null);
 
 public record ChatMessageDto(
     int Id, int CompetitionId, string? UserId, string AuthorName,
@@ -466,6 +469,46 @@ public record IceServer(object Urls,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Credential = null);
 public record IceServersResponse(IReadOnlyList<IceServer> IceServers);
 public record WatchStreamResponse(string WatchId, string SdpOffer, int Generation, IReadOnlyList<IceServer> IceServers);
+
+public record StreamTelemetryRequest(
+    double? BatteryLevel = null,
+    bool? BatteryCharging = null,
+    double? Zoom = null,
+    double? MaxZoom = null,
+    int? Fps = null,
+    int? BitrateKbps = null,
+    [StringLength(24)] string? Signal = null,
+    bool? AudioMuted = null,
+    bool? WindFilter = null,
+    [StringLength(16)] string? QualityPreset = null,
+    [StringLength(16)] string? CaptureResolution = null);
+
+public record StreamTelemetryDto(
+    int StreamId,
+    string ArenaName,
+    double? BatteryLevel,
+    bool? BatteryCharging,
+    double? Zoom,
+    double? MaxZoom,
+    int? Fps,
+    int? BitrateKbps,
+    string? Signal,
+    bool? AudioMuted,
+    bool? WindFilter,
+    string? QualityPreset,
+    string? CaptureResolution,
+    DateTime UpdatedAt);
+
+public record StreamCommandRequest(
+    [Required, StringLength(40, MinimumLength = 1)] string Command,
+    [StringLength(120)] string? Value = null);
+
+public record StreamCommandDto(
+    int StreamId,
+    string ArenaName,
+    string Command,
+    string? Value,
+    DateTime IssuedAt);
 
 // ---- Stream overlays ----
 

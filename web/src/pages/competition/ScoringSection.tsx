@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, CloudOff, Printer, SlidersHorizontal, Trash2, Undo2 } from 'lucide-react';
 import { bibName, hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import { describePlacings, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
@@ -10,7 +10,7 @@ import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import {
   EliminationSheet, HcConfirm, HeatGrid, LaneView, NextLanesCard, RaceRules, ScoreOverrideSheet, ScoreRow, SummaryCard,
-  type ScoreOverrideValue,
+  getStoredCards, parseRefereeCard, useCardsEnabled, type RefereeCard, type ScoreOverrideValue,
 } from './ScoringParts';
 import { HeatPrintSheet } from './HeatPrintSheet';
 import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
@@ -56,6 +56,8 @@ interface ScoringProps {
   laneHatbands?: string[] | null;
   /** Reload the competition after a score correction is saved in the audit panel. */
   onRefresh?: () => void;
+  /** Current competition ID for persisting card indicators. */
+  competitionId?: number;
 }
 
 const NO_TEAMS: ReadonlySet<number> = new Set();
@@ -65,12 +67,26 @@ export function ScoringSection({
   onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason,
   onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, onOverridePoints,
   tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
+  competitionId,
 }: ScoringProps) {
   const [sheet, setSheet] = useState(false);
   const [overrideSheet, setOverrideSheet] = useState(false);
   const [hcFor, setHcFor] = useState<{ teamId: number; name: string; isHc: boolean } | null>(null);
   const [hcBusy, setHcBusy] = useState(false);
   const [auditRaceId, setAuditRaceId] = useState<number | null>(null);
+  const [cardEventTick, setCardEventTick] = useState(0);
+  const [cardsEnabled] = useCardsEnabled(competitionId);
+
+  useEffect(() => {
+    function onUpdate() { setCardEventTick((t) => t + 1); }
+    window.addEventListener('mg-cards-updated', onUpdate);
+    window.addEventListener('storage', onUpdate);
+    return () => {
+      window.removeEventListener('mg-cards-updated', onUpdate);
+      window.removeEventListener('storage', onUpdate);
+    };
+  }, []);
+
   const pendingByTeam = new Map(pending.map((p) => [p.teamId, p]));
   const queuedByRace = new Map(queued.map((q) => [q.raceId, q]));
   const activeQueued = activeRace ? queuedByRace.get(activeRace.id) : undefined;
@@ -79,11 +95,44 @@ export function ScoringSection({
   const names = useMemo(() => Object.fromEntries(heat.entries.map((e) => [e.teamId, e.teamName])), [heat.entries]);
   const isQualifier = heat.raceRoundStage === 1;
   const pointsFor = (place: number, eliminated: boolean) => pointsForPlace(heat, sessionBase, place, eliminated);
-  const activeOverrides: Record<number, ScoreOverrideValue> = {};
-  for (const place of pending) {
-    const points = manualPoints(place.refereeNote);
-    if (points !== undefined) activeOverrides[place.teamId] = { points, reason: place.refereeNote?.replace(/\[pts:[^\]]*\]/gi, '').trim() };
-  }
+  const activeOverrides = useMemo(() => {
+    const overrides: Record<number, ScoreOverrideValue> = {};
+    for (const place of pending) {
+      const points = manualPoints(place.refereeNote, place.points);
+      if (points !== undefined) overrides[place.teamId] = { points, reason: place.refereeNote?.replace(/\[pts:[^\]]*\]/gi, '').trim() };
+    }
+    return overrides;
+  }, [pending]);
+
+  const storedCards = useMemo(() => {
+    void cardEventTick;
+    return cardsEnabled ? getStoredCards(competitionId) : {};
+  }, [competitionId, cardEventTick, cardsEnabled]);
+  const cardsByTeam = useMemo(() => {
+    if (!cardsEnabled) return {};
+    const cards: Record<number, RefereeCard> = { ...storedCards };
+    for (const p of pending) {
+      const c = parseRefereeCard(p.refereeNote).card;
+      if (c) cards[p.teamId] = c;
+    }
+    for (const teamIdStr of Object.keys(activeOverrides)) {
+      const tid = Number(teamIdStr);
+      const c = parseRefereeCard(activeOverrides[tid]?.reason).card;
+      if (c) cards[tid] = c;
+    }
+    for (const teamIdStr of Object.keys(notes)) {
+      const tid = Number(teamIdStr);
+      const c = parseRefereeCard(notes[tid]).card;
+      if (c) cards[tid] = c;
+    }
+    for (const r of races) {
+      for (const res of r.results) {
+        const c = parseRefereeCard((res as { refereeNote?: string }).refereeNote).card;
+        if (c) cards[res.teamId] = c;
+      }
+    }
+    return cards;
+  }, [cardsEnabled, storedCards, pending, activeOverrides, notes, races]);
 
   // The announcer card sits after the latest finished race that isn't the one open for scoring.
   const summaryIdx = races.reduce((last, r, i) => (r.isComplete && i !== activeIdx ? i : last), -1);
@@ -214,6 +263,7 @@ export function ScoringSection({
                         points={racePoints}
                         heatTotal={priorTotal + racePoints}
                         overridePoints={ov?.points}
+                        card={cardsByTeam[e.teamId]}
                         onTap={() => onClickTeam(e.teamId)}
                         onSwipeEliminate={() => onToggleElim(e.teamId)}
                         onToggleElim={() => onToggleElim(e.teamId)}
@@ -225,7 +275,7 @@ export function ScoringSection({
 
                 {canScore && (
                   <p className="sc-hint">
-                    Tap in finishing order · Hold or swipe down to eliminate — Swipe a team down to eliminate it.
+                    Tap in finishing order · Hold or swipe down to eliminate.
                     {isQualifier && <> The first {qualifiers} home go through; the rest score 1 point each.</>}
                   </p>
                 )}
@@ -331,7 +381,7 @@ export function ScoringSection({
       )}
       {races.length > 0 && (
         <HeatGrid heat={heat} races={races} activeRaceId={activeRace?.id ?? null} activeIndex={laneIdx} rules={laneRules}
-          pending={pending} pointsFor={pointsFor} hcTeamIds={hcTeamIds} />
+          pending={pending} pointsFor={pointsFor} hcTeamIds={hcTeamIds} cardsByTeam={cardsByTeam} />
       )}
       <RaceRules races={races} />
       {races.length > 0 && <HeatPrintSheet heat={heat} races={races} rules={laneRules} hcTeamIds={hcTeamIds} tieRule={tieRule} hatbands={laneHatbands} />}
@@ -357,6 +407,7 @@ export function ScoringSection({
           onSetHc={canScore ? onSetHc : undefined}
           onSaveOverride={saveOverride}
           onClose={() => setOverrideSheet(false)}
+          competitionId={competitionId}
         />
       )}
       {hcFor && <HcConfirm teamName={hcFor.name} isHc={hcFor.isHc} busy={hcBusy} onConfirm={() => void confirmHc()} onCancel={() => setHcFor(null)} />}

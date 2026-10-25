@@ -159,7 +159,7 @@ export function DiagramEditor({ value, onChange }: Props) {
 
       {!activeSlot && !selected && (
         <p className="text-sm text-slate-500">
-          {model.items.length === 0 ? 'Tap a pole or a gap on the lane (or a button above) to start placing equipment.' : 'Tap an element to edit it, or a spot on the lane to add something.'}
+          {model.items.length === 0 ? 'Tap a pole or a gap to place equipment.' : 'Tap an element to edit it, or a slot to add equipment.'}
         </p>
       )}
 

@@ -25,9 +25,20 @@ public static partial class SectionNaming
         return PluralWord().IsMatch(text) ? text[..^1] : text;
     }
 
+    private static string StripTrailingTeams(string value)
+    {
+        var match = TrailingTeams().Match(value);
+        if (!match.Success) return value;
+        var baseAge = match.Groups[1].Value.Trim();
+        if (SingularTeamAge().IsMatch(baseAge)) baseAge = $"{baseAge}s";
+        var division = match.Groups[2].Value.Trim();
+        return division.Length > 0 ? $"{baseAge} {division}" : baseAge;
+    }
+
     private static string TeamAgeGroup(string ageGroup)
     {
-        var stripped = StripTeams().Replace((ageGroup ?? string.Empty).Trim(), string.Empty).Trim();
+        var withoutLeading = LeadingTeams().Replace((ageGroup ?? string.Empty).Trim(), string.Empty).Trim();
+        var stripped = StripTrailingTeams(withoutLeading).Trim();
         if (stripped.Length == 0 || stripped.Equals("Teams", StringComparison.OrdinalIgnoreCase) || stripped.Equals("Team", StringComparison.OrdinalIgnoreCase))
             return "Teams";
         return SingularTeamAge().IsMatch(stripped) ? $"{stripped}s" : stripped;
@@ -47,22 +58,45 @@ public static partial class SectionNaming
     /// <summary>
     /// The name to show for a section. A section with no known format or age group (older or test data)
     /// keeps the name it was saved with, so existing competitions read as the rule says without a data migration.
+    /// If the stored DisplayName carries a division/pool suffix beyond the base name (e.g. "Seniors A" or "Seniors teams A"),
+    /// that suffix is preserved as "Seniors A".
     /// </summary>
     public static string Of(CompetitionSection? section)
     {
         if (section is null) return string.Empty;
-        return section.Format is SectionFormat.Pairs or SectionFormat.Teams or SectionFormat.Individual
-            && !string.IsNullOrWhiteSpace(section.AgeGroup)
-            ? DisplayName(section.Format, section.AgeGroup)
-            : section.DisplayName;
+        if (section.Format is not (SectionFormat.Pairs or SectionFormat.Teams or SectionFormat.Individual)
+            || string.IsNullOrWhiteSpace(section.AgeGroup))
+            return section.DisplayName;
+
+        var baseName = DisplayName(section.Format, section.AgeGroup);
+        var stored = (section.DisplayName ?? string.Empty).Trim();
+        if (stored.Length > 0)
+        {
+            var normalizedStored = section.Format == SectionFormat.Teams
+                ? StripTrailingTeams(stored)
+                : stored;
+            if (normalizedStored.StartsWith(baseName + " ", StringComparison.OrdinalIgnoreCase))
+            {
+                var suffix = normalizedStored[(baseName.Length + 1)..].Trim();
+                if (DivisionSuffix().IsMatch(suffix))
+                    return $"{baseName} {suffix}";
+            }
+        }
+        return baseName;
     }
 
     // A last word of four or more letters ending in a single "s": Juniors, Seniors, Novices.
     [GeneratedRegex(@"(?:^|\s)[A-Za-z]{2,}[^s\W]s$", RegexOptions.IgnoreCase)]
     private static partial Regex PluralWord();
 
-    [GeneratedRegex(@"^teams?\s+|\s+teams?$", RegexOptions.IgnoreCase)]
-    private static partial Regex StripTeams();
+    [GeneratedRegex(@"^teams?\s+", RegexOptions.IgnoreCase)]
+    private static partial Regex LeadingTeams();
+
+    [GeneratedRegex(@"^(.+?)\s+teams?(?:\s+([A-Za-z0-9]+))?$", RegexOptions.IgnoreCase)]
+    private static partial Regex TrailingTeams();
+
+    [GeneratedRegex(@"^(?:(?:Pool|Div(?:ision)?|Group)\s+)?(?:[A-Za-z]|[0-9]{1,2})$", RegexOptions.IgnoreCase)]
+    private static partial Regex DivisionSuffix();
 
     [GeneratedRegex(@"\b(Junior|Senior|Novice)$", RegexOptions.IgnoreCase)]
     private static partial Regex SingularTeamAge();

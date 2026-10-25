@@ -114,6 +114,7 @@
 
 .mg-font, .skin { font-family: var(--mg-font); }
 .mg-display { font-family: var(--mg-font-display); }
+html[data-text-size="large"] { font-size: 108%; }
 body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-ink)); font-family: var(--mg-font); }
 .skin { color: rgb(var(--mg-ink)); }
 .skin a { text-decoration: none; }
@@ -175,6 +176,8 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 }
 .mg-tab[aria-current="page"] { color: rgb(var(--mg-heading)); font-weight: 700; }
 .mg-tab:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.mg-tab-compact { font-size: 10px; letter-spacing: 0; gap: 2px; }
+.mg-tab-compact .mg-tab-pill { width: 2.25rem; height: 1.625rem; }
 
 /* Badges and status pills */
 .mg-badge {

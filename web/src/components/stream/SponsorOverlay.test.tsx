@@ -1,5 +1,6 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as framerMotion from 'framer-motion';
 import { CompetitionContext, type CompetitionCtx } from '../../pages/competition/context';
 import { DEFAULT_OVERLAY } from '../../lib/overlays';
 import * as exposure from '../../lib/sponsorExposure';
@@ -8,6 +9,14 @@ import { competition, session, sponsor } from '../../test/factories';
 import { liveStream } from '../../test/streamFakes';
 import { SponsorOverlay } from './SponsorOverlay';
 import { StreamOverlays } from './StreamOverlays';
+
+vi.mock('framer-motion', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('framer-motion')>();
+  return {
+    ...actual,
+    useReducedMotion: vi.fn(() => false),
+  };
+});
 
 vi.mock('../../lib/sponsorExposure', () => ({ recordSponsorView: vi.fn(), recordSponsorSeconds: vi.fn() }));
 
@@ -135,5 +144,16 @@ describe('inside the stream overlays', () => {
     render(overlays(0));
     expect(screen.getByRole('complementary', { name: 'Headline sponsor' })).toBeInTheDocument();
     expect(exposure.recordSponsorView).not.toHaveBeenCalled();
+  });
+
+  it('respects reduced motion when rendering cards and bugs', () => {
+    vi.mocked(framerMotion.useReducedMotion).mockReturnValue(true);
+    const { unmount } = render(view(ctx(cards, onBreak)));
+    expect(screen.getByRole('complementary', { name: 'Headline sponsor' })).toBeInTheDocument();
+    unmount();
+
+    render(view(ctx([sponsor(5, { name: 'Logo Co', showOn: 8 })], racing)));
+    expect(screen.getByRole('complementary', { name: 'Sponsor' })).toBeInTheDocument();
+    vi.mocked(framerMotion.useReducedMotion).mockReturnValue(false);
   });
 });

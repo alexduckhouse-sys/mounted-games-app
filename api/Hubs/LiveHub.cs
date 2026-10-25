@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using MountedGames.Api.Data;
 using Microsoft.AspNetCore.SignalR;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Dtos;
@@ -9,6 +11,9 @@ public class LiveHub(ViewerRegistry viewers) : Hub
 {
     public Task<WatchStreamResponse> WatchStream(int competitionId, int streamId) =>
         viewers.WatchAsync(Context.ConnectionId, competitionId, streamId, Context.ConnectionAborted, AnonymousViewerIp());
+
+    public Task<WatchStreamResponse> WatchStreamTier(int competitionId, int streamId, string? preferredRid) =>
+        viewers.WatchAsync(Context.ConnectionId, competitionId, streamId, Context.ConnectionAborted, AnonymousViewerIp(), preferredRid);
 
     // Signed-in viewers are accountable already; anonymous ones are capped per address.
     private string? AnonymousViewerIp() =>
@@ -28,19 +33,20 @@ public class LiveHub(ViewerRegistry viewers) : Hub
     public async Task JoinCompetition(int competitionId)
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(competitionId));
-        // Admins also get trainers' private messages for this competition.
-        if (Context.User?.IsInRole(Roles.Admin) == true)
-            await Groups.AddToGroupAsync(Context.ConnectionId, AdminGroupName(competitionId));
+        // Membership records the subscription, not a role that could be revoked while the socket stays open.
+        if (Context.User?.Identity?.IsAuthenticated == true && Context.UserIdentifier is { } userId)
+            await Groups.AddToGroupAsync(Context.ConnectionId, UserGroupName(competitionId, userId));
     }
 
     public async Task LeaveCompetition(int competitionId)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(competitionId));
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, AdminGroupName(competitionId));
+        if (Context.UserIdentifier is { } userId)
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, UserGroupName(competitionId, userId));
     }
 
     public static string GroupName(int competitionId) => $"comp:{competitionId}";
-    public static string AdminGroupName(int competitionId) => $"comp:{competitionId}:admins";
+    public static string UserGroupName(int competitionId, string userId) => $"comp:{competitionId}:user:{userId}";
 }
 
 public interface ILiveBroadcaster
@@ -57,6 +63,8 @@ public interface ILiveBroadcaster
     Task OverlayUpdated(int competitionId, StreamOverlayDto overlay);
     Task ScoreCardControl(int competitionId, ScoreCardControlDto control);
     Task SponsorControl(int competitionId, SponsorControlDto control);
+    Task StreamTelemetry(int competitionId, StreamTelemetryDto telemetry);
+    Task StreamCommand(int competitionId, StreamCommandDto command);
 }
 
 public class LiveBroadcaster : ILiveBroadcaster
@@ -76,15 +84,35 @@ public class LiveBroadcaster : ILiveBroadcaster
     public Task SponsorControl(int competitionId, SponsorControlDto control)
         => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("sponsorControl", control);
 
+    public Task StreamTelemetry(int competitionId, StreamTelemetryDto telemetry)
+        => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("streamTelemetry", telemetry);
+
+    public Task StreamCommand(int competitionId, StreamCommandDto command)
+        => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("streamCommand", command);
+
     private readonly IHubContext<LiveHub> _hub;
-    public LiveBroadcaster(IHubContext<LiveHub> hub) => _hub = hub;
+    private readonly IServiceScopeFactory _scopes;
+    public LiveBroadcaster(IHubContext<LiveHub> hub, IServiceScopeFactory scopes)
+    {
+        _hub = hub;
+        _scopes = scopes;
+    }
 
     public Task ChatMessage(int competitionId, object message)
         => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("chatMessage", message);
 
     public async Task AdminOnlyChatMessage(int competitionId, string? authorUserId, object message, string? recipientUserId = null)
     {
-        await _hub.Clients.Group(LiveHub.AdminGroupName(competitionId)).SendAsync("chatMessage", message);
+        using var scope = _scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var adminIds = await (from membership in db.UserRoles
+                              join role in db.Roles on membership.RoleId equals role.Id
+                              where role.Name == Roles.Admin
+                              select membership.UserId).Distinct().ToListAsync();
+        var groups = adminIds.Where(id => id != authorUserId && id != recipientUserId)
+            .Select(id => LiveHub.UserGroupName(competitionId, id)).ToArray();
+        if (groups.Length > 0)
+            await _hub.Clients.Groups(groups).SendAsync("chatMessage", message);
         if (authorUserId is not null)
             await _hub.Clients.User(authorUserId).SendAsync("chatMessage", message);
         if (recipientUserId is not null && recipientUserId != authorUserId)

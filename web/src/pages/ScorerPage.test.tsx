@@ -2,11 +2,17 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axiosError, heat, race, result, session } from '../test/factories';
-import type { Heat, ScorerSession } from '../types';
-import { HEAT_SAVED } from '../offline/useScoreOutbox';
+import type { Heat, ScorerSession, StreamCommand } from '../types';
+import { HEAT_SAVED, updateOutbox } from '../offline/useScoreOutbox';
+import { createReplayBuffer } from '../live/replayBuffer';
+import { asMedia, FakeMediaStream } from '../test/streamFakes';
 import { ScorerPage } from './ScorerPage';
 
-const link = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+const link = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), request: vi.fn() }));
+vi.mock('../live/replayBuffer', async (original) => { const actual = await original<typeof import('../live/replayBuffer')>(); return { ...actual, createReplayBuffer: vi.fn(actual.createReplayBuffer) }; });
+const tripod = vi.hoisted(() => ({ handlers: {} as import('../live/useLiveHub').LiveHandlers, create: vi.fn() }));
+vi.mock('../live/useLiveHub', () => ({ useLiveHub: (_id: number, handlers: import('../live/useLiveHub').LiveHandlers) => { tripod.handlers = handlers; return { connected: true }; } }));
+vi.mock('../live/streamPublisher', async (original) => ({ ...await original<typeof import('../live/streamPublisher')>(), createStreamPublisher: tripod.create }));
 vi.mock('../offline/scorerLink', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../offline/scorerLink')>()),
   scorerApi: link,
@@ -53,7 +59,7 @@ beforeEach(() => {
   link.get.mockResolvedValue({ data: timetable() });
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false); // keep the outbox from sending during these tests
 });
-afterEach(() => { vi.useRealTimers(); window.history.replaceState(null, '', '/'); });
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); window.history.replaceState(null, '', '/'); });
 
 describe('ScorerPage', () => {
   it('asks for the link when the phone has none', () => {
@@ -304,4 +310,128 @@ describe('ScorerPage', () => {
     act(() => { window.dispatchEvent(new Event('online')); });
     await waitFor(() => expect(link.get.mock.calls.length).toBeGreaterThan(calls));
   });
+
+  it('shows the side-by-side Score clash banner when a queued score conflicts and resolves it in one tap', async () => {
+    const user = userEvent.setup();
+    updateOutbox(() => [{
+      saveId: 'c1',
+      competitionId: 5,
+      sessionId: 1,
+      heatId: 10,
+      raceId: 11,
+      label: 'Heat 1 · Bending',
+      places: [{ teamId: 2, place: 1, eliminated: false, points: 2 }, { teamId: 1, place: 2, eliminated: false, points: 1 }],
+      expected: [],
+      teamNames: { 1: 'Team 1', 2: 'Team 2' },
+      queuedAt: new Date().toISOString(),
+      state: 'conflict',
+      message: 'Results changed on another device.',
+    }]);
+    open();
+    expect(await screen.findByRole('alert', { name: 'Score clash' })).toBeInTheDocument();
+    expect(screen.getByText('Result A (Saved)')).toBeInTheDocument();
+    expect(screen.getByText('Result B (Submitted)')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Keep Result A' }));
+    expect(screen.queryByRole('alert', { name: 'Score clash' })).not.toBeInTheDocument();
+  });
+
+  it('shows the RemoteStreamControlBar when scope is 2 (Score + Stream) and sends remote camera and director cut commands', async () => {
+    const user = userEvent.setup();
+    link.get.mockImplementation(async (url: string) => {
+      if (url === '/scorer/session') return { data: timetable({ scope: 2 }) };
+      if (url === '/competitions/1/streams') {
+        return {
+          data: {
+            enabled: true,
+            streams: [
+              { id: 10, competitionId: 1, arenaName: 'Main', angleName: 'Main camera', status: 0, caption: null, audioMuted: false, hasAudio: true, startedAt: '2026-10-24T12:00:00Z', viewerCount: 14, generation: 1 },
+              { id: 11, competitionId: 1, arenaName: 'Main', angleName: 'Finish line', status: 0, caption: null, audioMuted: false, hasAudio: true, startedAt: '2026-10-24T12:00:00Z', viewerCount: 8, generation: 1 },
+            ],
+          },
+        };
+      }
+      return { data: {} };
+    });
+    link.post.mockResolvedValue({ data: {} });
+
+    open();
+    expect(await screen.findByRole('region', { name: 'Remote camera control' })).toBeInTheDocument();
+    expect(await screen.findByText(/LIVE · Main camera \(14 watching\)/)).toBeInTheDocument();
+
+    // Mute camera mic
+    await user.click(screen.getByRole('button', { name: 'Mute camera mic' }));
+    expect(link.post).toHaveBeenCalledWith('/competitions/1/streams/10/command', { command: 'mute', value: 'true' });
+
+    // Remote zoom 2x
+    await user.click(screen.getByRole('button', { name: 'Remote zoom 2x' }));
+    expect(link.post).toHaveBeenCalledWith('/competitions/1/streams/10/command', { command: 'setZoom', value: '2' });
+
+    // Stream quality 720p
+    await user.click(screen.getByRole('button', { name: 'Stream quality 720p' }));
+    expect(link.post).toHaveBeenCalledWith('/competitions/1/streams/10/command', { command: 'setQualityPreset', value: '720p' });
+
+    // Multi-camera director cut to Finish line
+    await user.click(screen.getByRole('button', { name: 'Cut to Finish line' }));
+    expect(link.post).toHaveBeenCalledWith('/competitions/1/streams/11/command', { command: 'selectAngle', value: '11' });
+
+    // Save 15s camera replay
+    await user.click(screen.getByRole('button', { name: 'Save 15s camera replay' }));
+    expect(link.post).toHaveBeenCalledWith('/competitions/1/streams/11/command', { command: 'saveReplay', value: '15' });
+  });
+
+  it('shows the TripodCameraBroadcaster without scoring controls when scope is 1 (Camera only)', async () => {
+    link.get.mockResolvedValue({ data: timetable({ scope: 1 }) });
+    open();
+    expect(await screen.findByRole('region', { name: 'Tripod camera broadcaster' })).toBeInTheDocument();
+    expect(screen.getByText(/Stream-only link/)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Scoring Bending' })).not.toBeInTheDocument();
+  });
+});
+
+
+describe('tripod remote commands', () => {
+  async function camera(withMedia = false) {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    const state = { state: 'live', media: withMedia ? asMedia(new FakeMediaStream()) : null, streamId: 10, viewerCount: 0, signal: 'good', audioMuted: false, hasAudio: false, error: null };
+    const dispose = vi.fn(); const unsubscribe = vi.fn();
+    const controls = { getSnapshot: () => state, subscribe: vi.fn((callback: () => void) => { callback(); return unsubscribe; }), dispose, mute: vi.fn(async () => {}), pause: vi.fn(async () => {}), switchCamera: vi.fn(async () => {}), setWindFilter: vi.fn(async () => {}), setZoom: vi.fn(async () => {}), setQualityPreset: vi.fn(async () => {}) };
+    tripod.create.mockReturnValue(controls);
+    vi.stubGlobal('RTCPeerConnection', class {}); Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {} });
+    link.get.mockResolvedValue({ data: timetable({ scope: 1 }) });
+    const view = open(); await screen.findByRole('region', { name: 'Tripod camera broadcaster' });
+    const send = async (command: string, value?: string, streamId = 10) => act(async () => { tripod.handlers.onStreamCommand?.({ streamId, arenaName: 'Main', command, value } as StreamCommand); });
+    return { state, controls, send, ...view };
+  }
+  it('routes commands only to the exact active camera and disposes it on unmount', async () => {
+    const view = await camera();
+    await view.send('mute', 'true', 11); expect(view.controls.mute).not.toHaveBeenCalled();
+    await view.send('mute', 'true'); expect(view.controls.mute).toHaveBeenCalledWith(true);
+    await view.send('pause', 'true'); expect(view.controls.pause).toHaveBeenCalledWith(true);
+    await view.send('flipCamera'); expect(view.controls.switchCamera).toHaveBeenCalledOnce();
+    await view.send('windFilter', 'true'); expect(view.controls.setWindFilter).toHaveBeenCalledWith(true);
+    await view.send('setZoom', '2'); expect(view.controls.setZoom).toHaveBeenCalledWith(2);
+    await view.send('setQualityPreset', '720p'); expect(view.controls.setQualityPreset).toHaveBeenCalledWith('720p');
+    await view.send('setQualityPreset', 'invalid'); expect(view.controls.setQualityPreset).toHaveBeenCalledTimes(1);
+    view.state.state = 'ended'; await view.send('mute', 'false'); expect(view.controls.mute).toHaveBeenCalledTimes(1);
+    view.unmount(); expect(view.controls.dispose).toHaveBeenCalledOnce();
+    await view.send('flipCamera'); expect(view.controls.switchCamera).toHaveBeenCalledOnce();
+  });
+  it('shows a failed remote camera command instead of rejecting silently', async () => {
+    const view = await camera(); view.controls.pause.mockRejectedValueOnce(new Error('Disconnected'));
+    await view.send('pause', 'true'); expect(await screen.findByRole('alert')).toHaveTextContent('camera command failed');
+  });
+  it('records and saves a requested tripod replay, using the scorer API for camera requests', async () => {
+    const buffer = { start: vi.fn(() => true), stop: vi.fn(), dispose: vi.fn(), recording: true, supported: true, chunkCount: () => 1,
+      markRaceBookmark: vi.fn(async () => null), saveClip: vi.fn(async () => null) };
+    vi.mocked(createReplayBuffer).mockReturnValueOnce(buffer);
+    const view = await camera(true); await waitFor(() => expect(buffer.start).toHaveBeenCalledWith(view.state.media));
+    await view.send('saveReplay', '15'); expect(buffer.saveClip).toHaveBeenCalledWith('Camera replay', expect.objectContaining({ durationSeconds: 15, signal: expect.any(AbortSignal) }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('No replay video');
+    link.request.mockResolvedValueOnce({ data: { accepted: true } });
+    const deps = tripod.create.mock.calls.at(-1)![1];
+    await expect(deps.request('POST', '/synthetic-camera-path', { zoom: 2 })).resolves.toEqual({ accepted: true });
+    expect(link.request).toHaveBeenCalledWith({ method: 'POST', url: '/synthetic-camera-path', data: { zoom: 2 } });
+    view.unmount(); expect(buffer.dispose).toHaveBeenCalledOnce();
+  });
+
 });

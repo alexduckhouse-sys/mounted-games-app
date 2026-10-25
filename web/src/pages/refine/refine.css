@@ -10,6 +10,7 @@ main:has(.rf-hd) { padding-top: 0; }
 }
 
 /* Header band: navy band matching .mg-band-header / .tt-strip, with title in --mg-font-display. */
+.rf-hd, .rf-head { margin-top: 0; }
 .rf-hd { border-image: conic-gradient(rgb(var(--mg-header-bg)) 0 0) fill 0 // 0 100vmax; background: rgb(var(--mg-header-bg)); color: rgb(var(--mg-header-ink)); padding: 2px 8px 12px 4px; margin-inline: -16px; border-bottom: 1px solid rgb(var(--mg-header-line)); }
 .rf-hd-top { display: flex; align-items: center; min-height: 24px; }
 .rf-ctx { flex: 1; min-width: 0; padding-left: 12px; font: 600 12px/1.2 var(--mg-font); letter-spacing: .05em; text-transform: uppercase; color: rgb(var(--mg-header-sub)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -89,7 +90,13 @@ details[open] > summary .rf-chev-down { transform: rotate(180deg); }
 /* Sticky footer: the screen's single primary action. --rf-foot-offset lifts it above the competition's bottom tabs. */
 .rf-foot { position: sticky; bottom: var(--rf-foot-offset, 0px); z-index: 20; display: flex; gap: 8px; align-items: center; margin-inline: -16px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); background: rgb(var(--mg-surface)); border-top: 1px solid rgb(var(--mg-line)); }
 .rf-foot-col { flex-direction: column; align-items: stretch; }
-.rf-foot.rf-above-tabs { --rf-foot-offset: 66px; padding-bottom: 12px; }
+.rf-foot.rf-above-tabs, .rf-foot-tabs { --rf-foot-offset: 66px; padding-bottom: 12px; }
+@media (min-width: 1024px) {
+  .rf-foot.rf-above-tabs, .rf-foot-tabs {
+    --rf-foot-offset: 0px;
+    bottom: 0;
+  }
+}
 
 /* Bottom sheet */
 .rf-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(var(--mg-overlay) / .55); animation: rf-fade 160ms var(--mg-ease-out); }

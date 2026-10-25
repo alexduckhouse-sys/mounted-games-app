@@ -20,11 +20,28 @@ describe('competitionIdFromPath', () => {
 });
 
 describe('hasGlobalTabs', () => {
-  it.each(['/', '/competitions', '/competitions/past', '/events', '/following', '/dashboard', '/teams', '/me/signups', '/shop', '/shop/'])('is true for %s', (path) => {
+  it.each([
+    '/',
+    '/competitions',
+    '/competitions/past',
+    '/events',
+    '/following',
+    '/me',
+    '/me/account',
+    '/me/members',
+    '/me/payouts',
+    '/me/catalogue',
+    '/me/orders',
+    '/dashboard',
+    '/teams',
+    '/me/signups',
+    '/shop',
+    '/shop/',
+  ])('is true for %s', (path) => {
     expect(hasGlobalTabs(path)).toBe(true);
   });
 
-  it.each(['/competitions/4', '/chat', '/me', '/admin', '/login', '/declarations', '/me/account'])('is false for %s', (path) => {
+  it.each(['/competitions/4', '/chat', '/admin', '/login', '/declarations'])('is false for %s', (path) => {
     expect(hasGlobalTabs(path)).toBe(false);
   });
 });

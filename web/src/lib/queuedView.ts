@@ -7,7 +7,9 @@ import { manualPoints } from './raceScoring';
 export function pointsForPlace(heat: Heat, sessionBase: number, place: number, eliminated: boolean): number {
   if (eliminated) return 0;
   if (heat.raceRoundStage === 1) return 1;
-  const base = heat.raceRoundStage === 2 ? heat.entries.length + 1 : sessionBase;
+  const letteredFinal = /^[A-Z] Final(?:\s*(?:[-·–]\s*)?(?:Part\s+)?\d+)?$/i.test(heat.label?.trim() ?? '');
+  const base = heat.raceRoundStage === 2 ? heat.entries.length + 1
+    : letteredFinal ? Math.min(sessionBase, Math.max(heat.entries.length, 1)) : sessionBase;
   return place < 1 || place > base ? 0 : base - place + 1;
 }
 
@@ -25,13 +27,22 @@ export function withQueuedResults(heat: Heat, queued: readonly QueuedScore[], se
       if (!q) return race;
       const results = q.places.map((p): ResultRow => {
         const sitOut = !p.eliminated && p.place === 0;
+        const tied = !p.eliminated && p.refereeNote?.toLowerCase().includes('[dead-heat]')
+          ? q.places.filter((other) => !other.eliminated && other.place === p.place).length : 1;
+        const placingPoints = tied > 1
+          ? Math.round(Array.from({ length: tied }, (_, index) => pointsForPlace(heat, sessionBase, p.place + index, false)).reduce((sum, value) => sum + value, 0) / tied * 2) / 2
+          : pointsForPlace(heat, sessionBase, p.place, p.eliminated);
+        const directive = manualPoints(p.refereeNote);
+        const adjustment = /\[adj:([+-]?[0-9]+(?:\.[0-9]+)?)\]/i.exec(p.refereeNote ?? '');
+        const points = directive ?? (adjustment ? Math.max(0, placingPoints + Number(adjustment[1]))
+          : p.eliminated ? 0 : manualPoints(undefined, p.points) ?? placingPoints);
         return {
           id: -p.teamId,
           teamId: p.teamId,
           teamName: q.teamNames[p.teamId] ?? `Team ${p.teamId}`,
           placing: p.eliminated || sitOut ? null : p.place,
           eliminated: p.eliminated,
-          points: sitOut ? 0 : manualPoints(p.refereeNote) ?? pointsForPlace(heat, sessionBase, p.place, p.eliminated),
+          points: sitOut ? 0 : points,
           ...(sitOut ? { isSitOut: true } : {}),
           ...(p.eliminated ? { status: p.status } : {}),
         };

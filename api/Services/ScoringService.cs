@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
@@ -22,16 +23,43 @@ public enum CombinedHeatScoringMode
     Combined = 1,
 }
 
-public sealed class ScoreConflictException(string message) : InvalidOperationException(message);
+public record ScoreClashDto(
+    int RaceId,
+    int HeatId,
+    int SessionId,
+    string RaceName,
+    int RaceOrder,
+    IReadOnlyList<ScorePlaceDto> ExistingPlaces,
+    IReadOnlyList<ScorePlaceDto> IncomingPlaces,
+    DateTime DetectedAt);
+
+public sealed class ScoreConflictException(
+    string message,
+    IReadOnlyList<ScorePlaceDto>? existingPlaces = null,
+    IReadOnlyList<ScorePlaceDto>? incomingPlaces = null) : InvalidOperationException(message)
+{
+    public IReadOnlyList<ScorePlaceDto>? ExistingPlaces { get; } = existingPlaces;
+    public IReadOnlyList<ScorePlaceDto>? IncomingPlaces { get; } = incomingPlaces;
+}
 public sealed class ScoreSignedOffException(string message) : InvalidOperationException(message);
 public sealed class ScoreValidationException(string message) : InvalidOperationException(message);
 
 public class ScoringService
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly ConcurrentDictionary<int, ScoreClashDto> ActiveClashes = new();
     private readonly AppDbContext _db;
     private readonly PushNotifier? _push;
     private readonly ILogger<ScoringService>? _log;
+
+    public static IReadOnlyList<ScoreClashDto> GetSessionClashes(int sessionId)
+        => ActiveClashes.Values.Where(c => c.SessionId == sessionId).OrderBy(c => c.RaceOrder).ThenBy(c => c.RaceId).ToList();
+
+    public static ScoreClashDto? GetRaceClash(int raceId)
+        => ActiveClashes.GetValueOrDefault(raceId);
+
+    public static void DismissClash(int raceId)
+        => ActiveClashes.TryRemove(raceId, out _);
 
     public ScoringService(AppDbContext db, PushNotifier? push = null, ILogger<ScoringService>? log = null)
     {
@@ -55,6 +83,19 @@ public class ScoringService
         if (eliminated) return 0;
         if (place < 1 || place > sessionBase) return 0;
         return sessionBase - place + 1;
+    }
+
+    /// <summary>
+    /// Splits the combined points of the places occupied by a dead heat (rounded to the nearest 0.5).
+    /// For example, two teams tied for 1st in a 5-team heat split 1st (5) and 2nd (4) for 4.5 points each.
+    /// </summary>
+    public double DeadHeatPointsForPlace(int place, int tiedCount, int sessionBase, bool eliminated)
+    {
+        if (eliminated || place < 1 || tiedCount <= 1) return PointsForPlace(place, sessionBase, eliminated);
+        var total = 0.0;
+        for (var i = 0; i < tiedCount; i++)
+            total += PointsForPlace(place + i, sessionBase, false);
+        return Math.Round((total / tiedCount) * 2, MidpointRounding.AwayFromZero) / 2.0;
     }
 
     public async Task<IReadOnlyList<Result>> ApplyRaceResultsAsync(
@@ -211,6 +252,7 @@ public class ScoringService
                 CreatedAt = now,
             });
             await _db.SaveChangesAsync(cancellationToken);
+            ActiveClashes.TryRemove(raceId, out _);
             return ToDto(raceId, state.Revision, false, null, null, Array.Empty<ScorePlaceDto>());
         }, cancellationToken);
 
@@ -365,6 +407,13 @@ public class ScoringService
             throw new ScoreValidationException("Submit one result for every team in the heat.");
         var sessionBase = await GetSessionBaseAsync(heat.SessionId);
         if (sessionBase < 1) sessionBase = heat.Entries.Count;
+        // A lettered Final heat ("A Final", "B Final", etc.) is scored on its own preserved field size,
+        // not the largest heat in the finals session.
+        if (FinalsTiers.ParseLabel(heat.Label) is not null)
+        {
+            var ownBase = LaneRotation.LanesInUse(heat.Entries.Count, heat.Session?.LanesPerHeat);
+            if (ownBase > 0) sessionBase = ownBase;
+        }
         // A race final is scored on its own field: last place in a final of 4 takes 2 points, a point more than
         // a team that only qualified and didn't make it through, whatever size the qualifiers were.
         if (heat.RaceRoundStage == RaceRoundStage.Final) sessionBase = heat.Entries.Count + 1;
@@ -420,8 +469,19 @@ public class ScoringService
         {
             if (sitOut.Contains(fp.TeamId)) return 0;
             var (effPlace, effBase) = EffectiveSectionScore(fp);
+            var isDeadHeatNote = !fp.Eliminated && fp.Place >= 1
+                && !string.IsNullOrWhiteSpace(fp.Note)
+                && fp.Note.Contains("[dead-heat]", StringComparison.OrdinalIgnoreCase);
+            var tiedCount = isDeadHeatNote
+                ? accepted.Count(other => !other.Eliminated && !sitOut.Contains(other.TeamId) && !hcTeamIds.Contains(other.TeamId) && other.Place == fp.Place
+                    && (!hasMultipleSections || combinedScoringMode != CombinedHeatScoringMode.BySection
+                        || isQualifier || heat.RaceRoundStage == RaceRoundStage.Final
+                        || teamSectionById.GetValueOrDefault(other.TeamId) == teamSectionById.GetValueOrDefault(fp.TeamId)))
+                : 1;
             double placing = fp.Eliminated || hcTeamIds.Contains(fp.TeamId) ? 0
-                : isQualifier ? 1 : PointsForPlace(effPlace, effBase, fp.Eliminated);
+                : isQualifier ? 1
+                : tiedCount > 1 ? DeadHeatPointsForPlace(effPlace, tiedCount, effBase, fp.Eliminated)
+                : PointsForPlace(effPlace, effBase, fp.Eliminated);
             if (!TryParsePointsDirective(fp.Note, out var overridePts, out var deltaPts))
                 return fp.Eliminated || hcTeamIds.Contains(fp.TeamId) ? 0 : fp.Points ?? placing;
             var points = overridePts ?? placing + deltaPts!.Value;
@@ -440,13 +500,39 @@ public class ScoringService
         if (replay is not null)
             return replay;
 
-        if (incomingCore.SequenceEqual(currentCore))
+        var samePlacingsAndPoints = incomingCore.Count == currentCore.Count
+            && incomingCore.Zip(currentCore).All(pair =>
+                pair.First.TeamId == pair.Second.TeamId
+                && pair.First.Place == pair.Second.Place
+                && pair.First.Eliminated == pair.Second.Eliminated
+                && pair.First.Status == pair.Second.Status
+                && Math.Abs(pair.First.Points - pair.Second.Points) < 1e-6);
+
+        if (incomingCore.SequenceEqual(currentCore)
+            || (samePlacingsAndPoints && expectedResults is { Count: 0 } && !expectedRevision.HasValue && string.IsNullOrWhiteSpace(reason)))
             return ToDto(raceId, state.Revision, state.IsSignedOff, state.SignedOffAt,
                 state.SignedOffByUserId, current, true);
         if (state.IsSignedOff)
             throw new ScoreSignedOffException("Signed-off results must be reopened before they can be edited.");
+
+        IReadOnlyList<ScorePlaceDto> IncomingSnapshot() => incomingCore
+            .Select(p => new ScorePlaceDto(p.TeamId, p.Place ?? 0, p.Eliminated, p.Points, sitOut.Contains(p.TeamId), p.Status, p.Note))
+            .OrderBy(r => r.Eliminated).ThenBy(r => r.Place).ThenBy(r => r.TeamId).ToList();
+
+        ScoreConflictException RecordClashAndThrow(string msg)
+        {
+            var incomingSnap = IncomingSnapshot();
+            if (current.Count > 0 && incomingSnap.Count > 0)
+            {
+                ActiveClashes[raceId] = new ScoreClashDto(
+                    raceId, heat.Id, heat.SessionId, race.Name, race.OrderIndex,
+                    current, incomingSnap, DateTime.UtcNow);
+            }
+            return new ScoreConflictException(msg, current, incomingSnap);
+        }
+
         if (expectedRevision.HasValue && state.Revision != expectedRevision.Value)
-            throw new ScoreConflictException("These results were changed on another device.");
+            throw RecordClashAndThrow("These results were changed on another device.");
         if (expectedResults is not null)
         {
             // What the scorer saw: places and why teams did not finish. The private note is not part of it (the
@@ -459,7 +545,7 @@ public class ScoringService
                 && (pair.First.Status is null
                     || ResultStatuses.Of(pair.First.Eliminated, pair.First.Status.Value) == pair.Second.Status));
             if (!unchanged)
-                throw new ScoreConflictException("These results were changed on another device.");
+                throw RecordClashAndThrow("These results were changed on another device.");
         }
         if (current.Count > 0 && string.IsNullOrWhiteSpace(reason))
             throw new ScoreValidationException("A reason is required when correcting results.");
@@ -513,6 +599,7 @@ public class ScoringService
             CreatedAt = now,
         });
         await _db.SaveChangesAsync(cancellationToken);
+        ActiveClashes.TryRemove(raceId, out _);
         if (fresh.Count > 0)
         {
             if (isQualifier && heat.RaceRoundId is not null)

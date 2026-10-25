@@ -40,6 +40,130 @@ export const POLE_LAST_X = 83;
 export const TOP_X = 100;
 export const BEYOND_X = 112;
 
+/**
+ * Real-world arena coordinates where Start/Finish = 0, Changeover (TOP) = 100,
+ * and the 5 poles P1..P5 are spaced 100% evenly apart (step Δx = 22):
+ * P1 = 22, P2 = 44, P3 = 66, P4 = 88 (before Changeover), P5 = 110 (beyond Changeover).
+ * Equipment at the top/beyond end sits beyond the Changeover line (108..116).
+ */
+export const POLE_X = [22, 44, 66, 88, 110] as const;
+export const POLE_LABELS = ['P1', 'P2', 'P3', 'P4', 'P5'] as const;
+export const PAD_R = 130;
+
+export const SLOT_COORDS: Record<string, { x: number; y: number }> = {
+  start: { x: 0, y: 0 },
+  start_left: { x: 0, y: -1 },
+  start_right: { x: 0, y: 1 },
+  gap0: { x: 11, y: 0 },
+  pole1: { x: 22, y: 0 },
+  pole1_left: { x: 22, y: -1 },
+  pole1_right: { x: 22, y: 1 },
+  gap1: { x: 33, y: 0 },
+  mid_1_2: { x: 33, y: 0 },
+  pole2: { x: 44, y: 0 },
+  pole2_left: { x: 44, y: -1 },
+  pole2_right: { x: 44, y: 1 },
+  gap2: { x: 55, y: 0 },
+  mid_2_3: { x: 55, y: 0 },
+  midline: { x: 55, y: 0 },
+  pole3: { x: 66, y: 0 },
+  pole3_left: { x: 66, y: -1 },
+  pole3_right: { x: 66, y: 1 },
+  gap3: { x: 77, y: 0 },
+  mid_3_4: { x: 77, y: 0 },
+  pole4: { x: 88, y: 0 },
+  pole4_left: { x: 88, y: -1 },
+  pole4_right: { x: 88, y: 1 },
+  gap4: { x: 94, y: 0 },
+  mid_4_top: { x: 94, y: 0 },
+  changeover: { x: 100, y: 0 },
+  gap5: { x: 104, y: 0 },
+  top: { x: 108, y: 0 },
+  top_left: { x: 108, y: -1 },
+  top_right: { x: 108, y: 1 },
+  pole5: { x: 110, y: 0 },
+  pole5_left: { x: 110, y: -1 },
+  pole5_right: { x: 110, y: 1 },
+  beyond: { x: 116, y: 0 },
+  beyond_left: { x: 116, y: -1 },
+  beyond_right: { x: 116, y: 1 },
+};
+
+const CANONICAL_SLOTS = ['start', 'gap0', 'pole1', 'gap1', 'pole2', 'gap2', 'pole3', 'gap3', 'pole4', 'gap4', 'top', 'pole5', 'beyond'] as const;
+
+export function inferCanonicalSlot(pos: DiagramPos & { t?: string }): string {
+  const isPole = pos.t === 'pole';
+  const rawAnchor = pos.anchor?.trim().toLowerCase();
+  if (rawAnchor && !pos.offset) {
+    const base = rawAnchor.replace(/_(left|right)$/, '');
+    if (base === 'finish') return 'top';
+    if (base === 'mid_1_2') return 'gap1';
+    if (base === 'mid_2_3' || base === 'midline') return isPole ? 'pole3' : 'gap2';
+    if (base === 'mid_3_4') return 'gap3';
+    if (base === 'mid_4_top' || base === 'changeover') return isPole ? 'pole5' : 'gap4';
+    if (base in SLOT_COORDS && (!isPole || base.startsWith('pole'))) return base;
+  }
+  const x = typeof pos.x === 'number' ? pos.x : 55;
+  if (isPole) {
+    const poleCandidates: [string, number[]][] = [
+      ['pole1', [17, 18, 22]],
+      ['pole2', [33, 34, 36, 39, 44]],
+      ['pole3', [50, 55, 61, 66]],
+      ['pole4', [67, 73, 83, 88]],
+      ['pole5', [91, 110]],
+    ];
+    let bestPole = 'pole1';
+    let bestDist = Infinity;
+    for (const [id, xs] of poleCandidates) {
+      for (const px of xs) {
+        const d = Math.abs(x - px);
+        if (d < bestDist) { bestDist = d; bestPole = id; }
+      }
+    }
+    return bestPole;
+  }
+  if (Math.abs(x - 0) <= 5) return 'start';
+  if (Math.abs(x - 11) <= 4) return 'gap0';
+  if (Math.abs(x - 17) <= 2 || Math.abs(x - 18) <= 2 || Math.abs(x - 22) <= 3) return 'pole1';
+  if (Math.abs(x - 33) <= 3) return 'gap1';
+  if (Math.abs(x - 36) <= 2 || Math.abs(x - 39) <= 2 || Math.abs(x - 44) <= 3) return 'pole2';
+  if (Math.abs(x - 50) <= 3 || Math.abs(x - 55) <= 3) return 'gap2';
+  if (Math.abs(x - 61) <= 2 || Math.abs(x - 66) <= 3) return 'pole3';
+  if (Math.abs(x - 77) <= 3) return 'gap3';
+  if (Math.abs(x - 91) <= 2) return 'pole5';
+  if (Math.abs(x - 73) <= 2 || Math.abs(x - 83) <= 2 || Math.abs(x - 88) <= 2) return 'pole4';
+  if (Math.abs(x - 94) <= 1) return 'gap4';
+  if (Math.abs(x - 96) <= 2 || x >= 112) return 'beyond';
+  if (x >= 99 && x <= 109) return 'top';
+  if (Math.abs(x - 110) <= 2) return 'pole5';
+  return snapToSlot(x, false).slot;
+}
+
+export function snapToSlot(x: number, isPole = false): { slot: string; x: number } {
+  const candidates = isPole ? ['pole1', 'pole2', 'pole3', 'pole4', 'pole5'] : CANONICAL_SLOTS;
+  let best: string = candidates[0];
+  let bestDist = Infinity;
+  for (const id of candidates) {
+    const coord = SLOT_COORDS[id];
+    const d = Math.abs(coord.x - x);
+    if (d < bestDist) {
+      bestDist = d;
+      best = id;
+    }
+  }
+  return { slot: best, x: SLOT_COORDS[best].x };
+}
+
+export function normalisePlacement(el: DiagramElement): DiagramElement {
+  if (el.t === 'midline' || el.t === 'lane') return el;
+  const pos = el as DiagramPos & { t: string };
+  const slot = inferCanonicalSlot(pos);
+  const coord = SLOT_COORDS[slot] ?? SLOT_COORDS.start;
+  const copy = { ...pos };
+  delete copy.offset;
+  return { ...copy, anchor: slot, x: coord.x } as DiagramElement;
+}
+
 type Positioned = Exclude<DiagramElement, { t: 'midline' } | { t: 'lane' }>;
 
 export function clampPoleCount(n: number): number {
@@ -129,7 +253,18 @@ function isPositioned(e: DiagramElement): e is Positioned {
  * to the standard five poles.
  */
 export function inferPoleCount(elements: DiagramElement[]): number {
-  const xs = elements.filter(isPositioned).map((e) => resolveX(e, elements));
+  const positioned = elements.filter(isPositioned);
+  if (positioned.some((e) => {
+    const pos = e as DiagramPos;
+    return pos.anchor?.toLowerCase() === 'pole5'
+      || (e.t === 'pole' && typeof pos.x === 'number' && ((pos.x >= 89 && pos.x <= 93) || pos.x >= 109));
+  })) {
+    return 5;
+  }
+  const xs = positioned.map((e) => resolveX(e, elements));
+  if (xs.length > 0 && xs.every((x) => [22, 44, 66, 88].some((px) => Math.abs(x - px) <= 1.5))) {
+    return 4;
+  }
   let best = STANDARD_POLE_COUNT;
   let bestScore = -1;
   for (const n of [STANDARD_POLE_COUNT, 4, 3, 6, 2, 7, 8]) {
@@ -150,6 +285,12 @@ export function toLaneModel(elements: DiagramElement[]): LaneModel {
   const lane = elements.find((e): e is { t: 'lane'; poles?: number } => e.t === 'lane');
   const poleCount = lane && typeof lane.poles === 'number' ? clampPoleCount(lane.poles) : inferPoleCount(elements);
   const slots = buildSlots(poleCount);
+  const hasFifthPoleCoord = poleCount === 5 && elements.some(
+    (e) => e.t === 'pole' && typeof e.x === 'number' && ((e.x >= 89 && e.x <= 93) || e.x >= 109),
+  );
+  const hasEvenPoleCoord = elements.some(
+    (e) => e.t === 'pole' && typeof e.x === 'number' && (Math.abs(e.x - 22) <= 1.5 || Math.abs(e.x - 110) <= 2),
+  );
   const items: LaneElement[] = [];
   for (const raw of elements) {
     if (!isPositioned(raw)) continue;
@@ -161,6 +302,15 @@ export function toLaneModel(elements: DiagramElement[]): LaneModel {
       if (named && (!kinds || kinds.includes(named.kind))) slot = named;
       else if (pos.anchor.toLowerCase() === 'finish') slot = slotById(slots, 'top');
       else if (pos.anchor.toLowerCase() === 'changeover' && !kinds) slot = slotById(slots, `gap${poleCount}`);
+    }
+    if (!slot && (hasFifthPoleCoord || hasEvenPoleCoord) && typeof pos.x === 'number') {
+      const idx = [17, 39, 61, 83, 91].findIndex((px) => Math.abs(pos.x! - px) <= 2);
+      const evenIdx = [22, 44, 66, 88, 110].findIndex((px) => Math.abs(pos.x! - px) <= 1.5);
+      if (evenIdx >= 0) slot = slotById(slots, `pole${evenIdx + 1}`);
+      else if (idx >= 0) slot = slotById(slots, `pole${idx + 1}`);
+      else if ((Math.abs(pos.x - 50) <= 2 || Math.abs(pos.x - 55) <= 2) && !kinds) slot = slotById(slots, 'gap2');
+      else if (Math.abs(pos.x - 108) <= 1 && !kinds) slot = slotById(slots, 'top');
+      else if (pos.x >= 114 && !kinds) slot = slotById(slots, 'beyond');
     }
     slot ??= nearestSlot(slots, resolveX(pos, elements), kinds);
     const el = { ...raw, ...(pos.on ? { on: sanitiseOn(pos.on) } : {}) } as Positioned;
@@ -272,7 +422,7 @@ export function fillPoles(model: LaneModel): LaneModel {
   const have = new Set(model.items.filter((i) => i.el.t === 'pole').map((i) => i.slot));
   const add: LaneElement[] = [];
   for (let k = 1; k <= model.poleCount; k++) {
-    if (!have.has(`pole${k}`)) add.push({ el: { t: 'pole', label: String(k) }, slot: `pole${k}` });
+    if (!have.has(`pole${k}`)) add.push({ el: { t: 'pole' }, slot: `pole${k}` });
   }
   return { ...model, items: [...model.items, ...add] };
 }

@@ -94,4 +94,55 @@ describe('passport check tab', () => {
     expect(await screen.findByText('No ponies have been declared yet.')).toBeInTheDocument();
     expect(screen.getByText('0 of 0 ponies checked')).toBeInTheDocument();
   });
+
+  it('saves a vet or official inspection, searches by passport or owner, and shows vaccine expired status', async () => {
+    get.mockResolvedValueOnce({ data: on() });
+    put.mockResolvedValueOnce({
+      data: {
+        ponyName: 'Bramble',
+        riders: ['Amy Archer'],
+        checkedAt: null,
+        checkedByName: 'Dr Sarah Jones',
+        passportCode: 'GBR-826001234',
+        ownerFullName: 'Sarah Clarke',
+        certified: false,
+        status: 'Expired',
+        lastFluVaccineDate: '2029-01-10',
+        fluValidUntil: '2030-01-10',
+        lastTetanusDate: '2029-01-10',
+        tetanusValidUntil: '2031-01-10',
+        inspectorRole: 'Vet',
+        officialNotes: 'Booster overdue',
+      },
+    });
+    render(<PassportCheckTab competitionId="12" />);
+
+    const inspectButtons = await screen.findAllByRole('button', { name: 'Vet / Official inspection' });
+    await userEvent.click(inspectButtons[0]);
+
+    await userEvent.type(screen.getByLabelText('Passport code'), 'GBR-826001234');
+    await userEvent.type(screen.getByLabelText('Owner full name'), 'Sarah Clarke');
+    await userEvent.selectOptions(screen.getByLabelText('Role'), 'Vet');
+    await userEvent.type(screen.getByLabelText('What the vet / official said'), 'Booster overdue');
+    await userEvent.click(screen.getByRole('button', { name: 'Save & certify' }));
+
+    await waitFor(() => expect(put).toHaveBeenCalledWith(
+      '/event-tools/competitions/12/passport-check/teams/1',
+      expect.objectContaining({
+        ponyName: 'Bramble',
+        checked: true,
+        passportCode: 'GBR-826001234',
+        ownerFullName: 'Sarah Clarke',
+        inspectorRole: 'Vet',
+        officialNotes: 'Booster overdue',
+      }),
+    ));
+    expect(await screen.findByText('Vaccine expired')).toBeInTheDocument();
+    expect(screen.getByText(/Passport: GBR-826001234 · Owner: Sarah Clarke/)).toBeInTheDocument();
+    expect(screen.getByText(/Vet Dr Sarah Jones: “Booster overdue”/)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Find a team or pony'), 'sarah clarke');
+    expect(screen.getByText('Oak A')).toBeInTheDocument();
+    expect(screen.queryByText('Ash A')).not.toBeInTheDocument();
+  });
 });

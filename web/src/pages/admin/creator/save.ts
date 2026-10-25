@@ -129,7 +129,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       if (session.scored) continue;
       const body = session.hasHeats
         ? { minutesPerHeat: minutes, arenaName: arena }
-        : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: session.races ?? [], scheduledStart: row?.start.toISOString(), durationMinutes: row && row.minutes > 0 ? row.minutes : undefined };
+        : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: session.races ?? [], scheduledStart: row?.start.toISOString(), durationMinutes: row && row.minutes > 0 ? row.minutes : undefined, orderIndex: orderOf(`s${p.key}`) };
       await step(`Saving ${p.name}…`, () => api.put(`${base}/sessions/${session.existingId}`, body));
     } else {
       await step(`Adding ${p.name}…`, () => api.post(`${base}/sessions`, {

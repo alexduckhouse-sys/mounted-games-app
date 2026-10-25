@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { StreamInvoke } from '../../live/streamRuntime';
-import type { CompetitionDetail, LiveStream, ChatMessage, Sponsor, StreamOverlay } from '../../types';
+import type { CompetitionDetail, LiveStream, ChatMessage, Sponsor, StreamCommand, StreamOverlay, StreamTelemetry } from '../../types';
 import type { OverlaySaveResult } from '../../hooks/useStreamOverlay';
 import type { QueuedScoreCard } from '../../lib/scoreCard';
 
@@ -8,6 +8,8 @@ export interface CompetitionCtx {
   competition: CompetitionDetail;
   reload: () => void;
   streams: LiveStream[];
+  streamTelemetry?: Record<number, StreamTelemetry>;
+  lastStreamCommand?: StreamCommand | null;
   streamingEnabled: boolean;
   /** True once the server has said whether streaming is set up; missing means assume it has. */
   streamingChecked?: boolean;

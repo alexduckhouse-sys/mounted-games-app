@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { Download } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { downloadCsv, toCsv } from '../../lib/csv';
 import { RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet, RefineStatus, type StatusTone } from '../refine/Refine';
 import { LoadError, TestReceipt } from './commerceUi';
 import { errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
@@ -204,26 +206,165 @@ function OrderGroup({ title, meta, orders, onOpen }: { title: string; meta?: str
   );
 }
 
+const STABLING_LINE_PATTERN = /stabl|hook[\s-]*up|shaving|haylage|bedding|bale|camping|pitch|corral|lorry/i;
+
 function SalesList({ sales }: { sales: SellerSale[] | null }) {
   if (sales == null) return <p role="status" className="rf-note">Loading sales…</p>;
-  if (sales.length === 0) return <p className="rf-note">You don’t have any event sales yet.</p>;
+
+  const realSales = sales.filter((sale) => !sale.isTestOrder);
+  const totalPaidMinor = realSales
+    .filter((s) => s.status === 2)
+    .reduce((sum, s) => sum + s.sellerTotalMinor, 0);
+  const totalPendingMinor = realSales
+    .filter((s) => s.status === 0 || s.status === 1)
+    .reduce((sum, s) => sum + s.sellerTotalMinor, 0);
+  const totalRefundedCancelledMinor = realSales
+    .filter((s) => s.status === 4 || s.status === 5)
+    .reduce((sum, s) => sum + s.sellerTotalMinor, 0);
+
+  let stablingMinor = 0;
+  let otherItemsMinor = 0;
+  for (const sale of realSales) {
+    if (sale.status !== 2) continue;
+    for (const line of sale.lines) {
+      if (STABLING_LINE_PATTERN.test(line.title)) {
+        stablingMinor += line.lineTotalMinor;
+      } else {
+        otherItemsMinor += line.lineTotalMinor;
+      }
+    }
+  }
+
+  function exportTreasurerCsv() {
+    if (sales === null) return;
+    const header = [
+      'Order ID',
+      'Date',
+      'Item',
+      'Category',
+      'Quantity',
+      'Status',
+      'Test order',
+      'Amount (GBP)',
+    ];
+    const rows: ReadonlyArray<unknown>[] = [];
+    for (const sale of sales) {
+      const statusText = STATUS[sale.status]?.text ?? String(sale.status);
+      if (sale.lines.length === 0) {
+        rows.push([
+          sale.orderId,
+          sale.createdAt,
+          'Order total',
+          'Other items',
+          1,
+          statusText,
+          sale.isTestOrder ? 'Yes' : 'No',
+          (sale.sellerTotalMinor / 100).toFixed(2),
+        ]);
+      } else {
+        for (const line of sale.lines) {
+          const category = STABLING_LINE_PATTERN.test(line.title) ? 'Stabling & Hook-up' : 'Other items';
+          rows.push([
+            sale.orderId,
+            sale.createdAt,
+            line.title,
+            category,
+            line.quantity,
+            statusText,
+            sale.isTestOrder ? 'Yes' : 'No',
+            (line.lineTotalMinor / 100).toFixed(2),
+          ]);
+        }
+      }
+    }
+    downloadCsv('treasurer-reconciliation.csv', toCsv(header, rows));
+  }
+
   return (
     <>
-      <RefineSection title="Sales" meta="Collection at the event" />
-      <RefineList label="Sales">
-        {sales.map((sale) => {
-          const status = STATUS[sale.status];
-          return (
-            <li key={sale.orderId} className="rf-row">
-              <span className="rf-grow">
-                <span className="rf-t1">Order #{sale.orderId}{sale.isTestOrder && ' · demo'}</span>
-                <span className="rf-t2">{sale.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</span>
-              </span>
-              <span className="text-right"><span className="rf-price block">{pounds(sale.sellerTotalMinor)}</span><RefineStatus tone={status.tone}>{status.text}</RefineStatus></span>
-            </li>
-          );
-        })}
-      </RefineList>
+      <section aria-label="Treasurer Reconciliation Summary" className="mg-card mt-3 flex flex-col gap-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="mg-display m-0 text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+              Treasurer Reconciliation Summary
+            </h2>
+            <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">
+              Paid and pending orders. Demo orders are excluded from totals. Categories are estimated from item names.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={exportTreasurerCsv}
+            className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden="true" /> Export Treasurer CSV
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-2.5">
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
+              Total Gross (Paid)
+            </span>
+            <strong className="mg-display mt-0.5 block text-lg font-bold tabular-nums text-[rgb(var(--mg-ok))]">
+              {pounds(totalPaidMinor)}
+            </strong>
+          </div>
+          <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-2.5">
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
+              Total Pending (Pay the organiser / Payment due)
+            </span>
+            <strong className="mg-display mt-0.5 block text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">
+              {pounds(totalPendingMinor)}
+            </strong>
+          </div>
+          <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-2.5">
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
+              Total Refunded / Cancelled
+            </span>
+            <strong className="mg-display mt-0.5 block text-lg font-bold tabular-nums text-[rgb(var(--mg-muted))]">
+              {pounds(totalRefundedCancelledMinor)}
+            </strong>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 border-t border-[rgb(var(--mg-rule-soft))] pt-2.5 text-xs">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-semibold text-[rgb(var(--mg-body))]">Stabling &amp; hook-up (paid)</span>
+            <strong className="mg-display text-sm font-bold tabular-nums text-[rgb(var(--mg-heading))]">
+              {pounds(stablingMinor)}
+            </strong>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-semibold text-[rgb(var(--mg-body))]">Other items (paid)</span>
+            <strong className="mg-display text-sm font-bold tabular-nums text-[rgb(var(--mg-heading))]">
+              {pounds(otherItemsMinor)}
+            </strong>
+          </div>
+        </div>
+      </section>
+
+      {sales.length === 0 ? (
+        <p className="rf-note">You don’t have any event sales yet.</p>
+      ) : (
+        <>
+          <RefineSection title="Sales" meta="Collect at the event" />
+          <RefineList label="Sales">
+            {sales.map((sale) => {
+              const status = STATUS[sale.status];
+              return (
+                <li key={sale.orderId} className="rf-row">
+                  <span className="rf-grow">
+                    <span className="rf-t1">Order #{sale.orderId}{sale.isTestOrder && ' · demo'}</span>
+                    <span className="rf-t2">{sale.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</span>
+                  </span>
+                  <span className="text-right"><span className="rf-price block">{pounds(sale.sellerTotalMinor)}</span><RefineStatus tone={status.tone}>{status.text}</RefineStatus></span>
+                </li>
+              );
+            })}
+          </RefineList>
+        </>
+      )}
     </>
   );
 }

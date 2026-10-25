@@ -49,9 +49,40 @@ public sealed class PassportCheckConfiguration : IEntityTypeConfiguration<Passpo
         e.Property(x => x.PonyKey).HasMaxLength(100).IsRequired();
         e.Property(x => x.CheckedByUserId).HasMaxLength(450);
         e.Property(x => x.CheckedByName).HasMaxLength(200);
+        e.Property(x => x.PassportCode).HasMaxLength(80);
+        e.Property(x => x.OwnerFullName).HasMaxLength(160);
+        e.Property(x => x.LastFluVaccineDate).HasMaxLength(16);
+        e.Property(x => x.FluValidUntil).HasMaxLength(16);
+        e.Property(x => x.LastTetanusDate).HasMaxLength(16);
+        e.Property(x => x.TetanusValidUntil).HasMaxLength(16);
+        e.Property(x => x.InspectorRole).HasMaxLength(40);
+        e.Property(x => x.OfficialNotes).HasMaxLength(500);
         e.HasIndex(x => new { x.TeamId, x.PonyKey }).IsUnique();
         e.HasIndex(x => x.CompetitionId);
         e.HasOne(x => x.Competition).WithMany().HasForeignKey(x => x.CompetitionId).OnDelete(DeleteBehavior.Cascade);
         e.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class CertifiedHorseConfiguration : IEntityTypeConfiguration<CertifiedHorse>
+{
+    public void Configure(EntityTypeBuilder<CertifiedHorse> e)
+    {
+        e.ToTable("CertifiedHorses");
+        e.Property(x => x.PassportCode).HasMaxLength(80);
+        e.Property(x => x.HorseName).HasMaxLength(160).IsRequired();
+        e.Property(x => x.HorseKey).HasMaxLength(160).IsRequired();
+        e.Property(x => x.OwnerFullName).HasMaxLength(160);
+        e.Property(x => x.OwnerKey).HasMaxLength(160);
+        e.Property(x => x.LastFluVaccineDate).HasMaxLength(16);
+        e.Property(x => x.FluValidUntil).HasMaxLength(16);
+        e.Property(x => x.LastTetanusDate).HasMaxLength(16);
+        e.Property(x => x.TetanusValidUntil).HasMaxLength(16);
+        e.Property(x => x.InspectorRole).HasMaxLength(40).IsRequired();
+        e.Property(x => x.InspectedByUserId).HasMaxLength(450);
+        e.Property(x => x.InspectedByName).HasMaxLength(160).IsRequired();
+        e.Property(x => x.OfficialNotes).HasMaxLength(500);
+        e.HasIndex(x => x.PassportCode);
+        e.HasIndex(x => new { x.HorseKey, x.OwnerKey });
     }
 }

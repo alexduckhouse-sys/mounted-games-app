@@ -545,13 +545,15 @@ describe('SessionPage', () => {
   });
 
   describe('Set up heats', () => {
-    const data = () => competition({ teams, sessions: [session(1, { status: 0, heats: [] })] });
+    const data = () => competition({ teams, sessions: [session(1, { status: 0, heats: [], plannedRaces: ['Sword', 'Bank', 'Hi-Lo'] })] });
 
-    it('starts with the teams that have a dec form selected, once the forms are in', async () => {
+    it('starts with all active section teams selected and visible even when only some have a dec form, and pre-fills planned races', async () => {
       mount(data(), [form(1), form(2)]);
       await userEvent.click(screen.getByRole('button', { name: /Set up heats/ }));
-      expect(await screen.findByText(/Teams \(2 selected\)/)).toBeInTheDocument();
+      expect(await screen.findByText(/Teams \(3 selected\)/)).toBeInTheDocument();
       expect(screen.getByText('2 dec forms in')).toBeInTheDocument();
+      expect(screen.getByLabelText(/Show teams without dec forms/)).toBeChecked();
+      expect(screen.getByLabelText(/Race names/)).toHaveValue('Sword\nBank\nHi-Lo');
     });
 
     it('selects every team when none has a dec form', async () => {
@@ -563,7 +565,7 @@ describe('SessionPage', () => {
     it('keeps the trainer own choices: None, then a single team', async () => {
       mount(data(), [form(1), form(2)]);
       await userEvent.click(screen.getByRole('button', { name: /Set up heats/ }));
-      await screen.findByText(/Teams \(2 selected\)/);
+      await screen.findByText(/Teams \(3 selected\)/);
       await userEvent.click(screen.getByRole('button', { name: 'None' }));
       expect(screen.getByText(/Teams \(0 selected\)/)).toBeInTheDocument();
       await userEvent.click(screen.getByRole('checkbox', { name: /Oak A/ }));
@@ -711,5 +713,18 @@ describe('SessionPage', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Cancel race' }));
       await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/1/sessions/1/races/1'));
     });
+  });
+  it('sends the full programme when editing remaining games and surfaces protected-race conflicts', async () => {
+    const data = scoringData(2);
+    data.sessions[0].heats[0].races[0] = race(1, { name: 'Bending', isComplete: true, results: [result(1, 1, { points: 2 }), result(2, 2, { points: 1 })] });
+    vi.mocked(api.put).mockResolvedValue({ data: {} });
+    mount(data);
+    await screen.findByText('Organiser tools');
+    expect(screen.getByRole('textbox', { name: 'Remaining uncompleted races' })).toHaveValue('Flag');
+    await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
+    expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', { raceNames: ['Bending', 'Flag'] });
+    vi.mocked(api.put).mockRejectedValueOnce({ response: { data: { message: 'Protected game cannot move.' } } });
+    await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
+    expect(await screen.findByText('Protected game cannot move.')).toBeVisible();
   });
 });

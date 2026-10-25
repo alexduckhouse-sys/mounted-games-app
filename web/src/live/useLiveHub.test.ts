@@ -167,7 +167,8 @@ describe('useLiveHub', () => {
   it('passes each event to the matching handler', async () => {
     const connection = next();
     const handlers: Required<LiveHandlers> = {
-      onStreamUpdated: vi.fn(), onStreamViewers: vi.fn(), onOverlayUpdated: vi.fn(), onScoreCardControl: vi.fn(), onSponsorControl: vi.fn(),
+      onStreamUpdated: vi.fn(), onStreamViewers: vi.fn(), onStreamTelemetry: vi.fn(), onStreamCommand: vi.fn(),
+      onOverlayUpdated: vi.fn(), onScoreCardControl: vi.fn(), onSponsorControl: vi.fn(),
       onReady: vi.fn(), onChatMessage: vi.fn(), onChatMessageDeleted: vi.fn(),
       onSessionUpdated: vi.fn(), onResultsUpdated: vi.fn(), onAnnouncement: vi.fn(),
     };
@@ -180,8 +181,12 @@ describe('useLiveHub', () => {
     connection.emit('announcement', { id: 5 });
     connection.emit('streamUpdated', { id: 6 });
     connection.emit('streamViewers', { streamId: 6, count: 12 });
+    connection.emit('streamTelemetry', { streamId: 6, arenaName: 'Main', updatedAt: '2026-10-24T12:00:00Z' });
+    connection.emit('streamCommand', { streamId: 6, arenaName: 'Main', command: 'setZoom', value: '2', issuedAt: '2026-10-24T12:00:00Z' });
     connection.emit('overlayUpdated', { revision: 7 });
     expect(handlers.onOverlayUpdated).toHaveBeenCalledWith({ revision: 7 });
+    expect(handlers.onStreamTelemetry).toHaveBeenCalledWith({ streamId: 6, arenaName: 'Main', updatedAt: '2026-10-24T12:00:00Z' });
+    expect(handlers.onStreamCommand).toHaveBeenCalledWith({ streamId: 6, arenaName: 'Main', command: 'setZoom', value: '2', issuedAt: '2026-10-24T12:00:00Z' });
     connection.emit('scoreCardControl', { action: 'skip' });
     expect(handlers.onScoreCardControl).toHaveBeenCalledWith({ action: 'skip' });
     connection.emit('sponsorControl', { action: 'skip' });

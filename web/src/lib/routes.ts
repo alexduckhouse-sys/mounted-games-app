@@ -7,7 +7,18 @@ export function competitionIdFromPath(pathname: string): number | null {
 /** Pages that belong to no competition and show the Events, Following, Me tabs. */
 /** `/events` always shows the list; `/` only does unless a competition is remembered. */
 export const GLOBAL_EVENTS = ['/', '/events', '/competitions', '/competitions/past'];
-export const GLOBAL_ME = ['/dashboard', '/teams', '/me/signups', '/shop'];
+export const GLOBAL_ME = [
+  '/me',
+  '/me/account',
+  '/me/members',
+  '/me/payouts',
+  '/me/catalogue',
+  '/me/orders',
+  '/dashboard',
+  '/teams',
+  '/me/signups',
+  '/shop',
+];
 
 /** The path without a trailing slash (the root stays "/"). */
 export function globalTabsPath(pathname: string): string {

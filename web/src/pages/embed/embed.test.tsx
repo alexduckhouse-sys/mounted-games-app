@@ -9,15 +9,17 @@ const section = (id: number, displayName: string, extra: Partial<CompetitionSect
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
 const entries = [1, 2].map((id) => ({ id, teamId: id, teamName: `Team ${id}`, laneIndex: id }));
+// Keep the shared timetable on one day even when tests run near midnight.
+const todayNoon = new Date(new Date().setHours(12, 0, 0, 0)).toISOString();
 const detail = competition({
   name: 'Spring Games',
   sections: [section(5, 'Teams Seniors', { finalistCount: 1 }), section(6, 'Teams Juniors')],
   teams: [team(1), team(2)],
   sessions: [
-    session(1, { orderIndex: 1, status: 1, scheduledStart: new Date().toISOString(), heats: [
+    session(1, { orderIndex: 1, status: 1, scheduledStart: todayNoon, heats: [
       heat(1, { label: 'Heat 1', entries, races: [race(1, { isComplete: true, results: [result(1, 1, { points: 2 }), result(2, 2, { points: 1 })] })] }),
     ] }),
-    session(2, { id: 2, orderIndex: 2, kind: 1, isBreak: true, name: 'Lunch', scheduledStart: new Date().toISOString(), competitionSectionId: null, sectionName: null }),
+    session(2, { id: 2, orderIndex: 2, kind: 1, isBreak: true, name: 'Lunch', scheduledStart: todayNoon, competitionSectionId: null, sectionName: null }),
   ],
 });
 
@@ -133,7 +135,8 @@ describe('embedded timetable', () => {
   });
 
   it('offers the whole day when earlier sessions are hidden and filters by age group', async () => {
-    const finishedAt = new Date().toISOString();
+    // Keep all three half-hour sessions on one day even when the suite runs near midnight.
+    const finishedAt = new Date(new Date().setHours(12, 0, 0, 0)).toISOString();
     const day = competition({ ...detail, sessions: [
       session(1, { orderIndex: 1, status: 2, scheduledStart: finishedAt, heats: [heat(1, { finishedAt, scheduledStart: finishedAt })] }),
       session(2, { orderIndex: 2, status: 2, scheduledStart: finishedAt, heats: [heat(2, { finishedAt, scheduledStart: finishedAt })] }),

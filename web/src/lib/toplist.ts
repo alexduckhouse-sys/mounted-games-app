@@ -109,6 +109,36 @@ const isRace = (session: Session) => (session.kind ?? (session.isBreak ? 1 : 0))
 const isFinal = (session: Session, heat: Heat) => heat.raceRoundStage === 2 || /\bfinals?\b/i.test(heat.label ?? '') || /\bfinals?\b/i.test(session.name);
 const heatDone = (heat: Heat) => !!heat.finishedAt || (heat.races.length > 0 && heat.races.every((race) => race.isComplete));
 
+/**
+ * Fingerprint of a section's race scores and heat assignments. Clock changes (`startedAt`/`finishedAt`) leave this unchanged.
+ * Include every race session: teams may also score in combined or differently labelled sessions.
+ */
+export function sectionScoreVersion(sessions: Session[], sectionId: number | null | undefined): string {
+  if (sectionId == null) return '';
+  const parts: string[] = [];
+  const raceSessions = sessions
+    .filter(isRace)
+    .slice()
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+  for (const session of raceSessions) {
+    const heats = session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+    for (const heat of heats) {
+      const entryIds = heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex).map((e) => e.teamId).join(',');
+      parts.push(`h:${heat.id}:${heat.label ?? ''}:${heat.raceRoundStage ?? 0}:[${entryIds}]`);
+      const races = heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+      for (const race of races) {
+        const res = race.results
+          .slice()
+          .sort((a, b) => a.teamId - b.teamId)
+          .map((r) => `${r.teamId}=${r.placing ?? ''}/${r.points}/${r.eliminated ? 1 : 0}/${r.status ?? ''}/${r.isSitOut ? 1 : 0}`)
+          .join(',');
+        parts.push(`r:${race.id}:${race.isComplete ? 1 : 0}:[${res}]`);
+      }
+    }
+  }
+  return parts.join('|');
+}
+
 /** "1st", "2nd", "3rd", "11th", "22nd". */
 export function ordinal(n: number): string {
   const teen = n % 100 >= 11 && n % 100 <= 13;
@@ -150,11 +180,12 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
     }
   });
 
-  const finalGroups = buildFinalGroups(sessions, sectionId);
   // Once finals exist the final a team is in (A, then B, then C) decides its place before points do.
   const tier = (row: StandingRow) => row.finalTier ?? Number.MAX_SAFE_INTEGER;
   const level = (a: StandingRow, b: StandingRow) => tier(a) === tier(b) && a.totalPoints === b.totalPoints;
   const ordered = [...standings].sort((a, b) => tier(a) - tier(b) || b.totalPoints - a.totalPoints);
+  const standingRank = new Map(ordered.map((row, idx) => [row.teamId, (row as { place?: number }).place ?? idx + 1]));
+  const finalGroups = buildFinalGroups(sessions, sectionId, standingRank);
   const rows: ToplistRow[] = ordered.map((row) => {
     const position = ordered.findIndex((other) => level(other, row)) + 1;
     const joint = ordered.filter((other) => level(other, row)).length > 1;
@@ -168,7 +199,9 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   const scored = rows.some((row) => row.points > 0);
   let cutAfter: number | null = null;
   let runoff: Toplist['runoff'] = null;
-  const places = finalistCount ?? 0;
+  const hasFinals = finalGroups.length > 0 || ordered.some((row) => row.finalTier != null);
+  const defaultPlaces = !hasFinals ? (heatSessions.find((s) => (s.lanesPerHeat ?? 0) > 0)?.lanesPerHeat ?? 6) : 0;
+  const places = finalistCount === 0 ? 0 : (finalistCount ?? defaultPlaces);
   if (scored && places > 0 && rows.length > places) {
     const linePoints = rows[places - 1].points;
     const tied = rows.filter((row) => row.points === linePoints);
@@ -232,11 +265,11 @@ function assignPointsNeeded(
       const orderedRaces = [...heat.races].sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id);
       orderedRaces.forEach((race, raceIndex) => {
         if (race.isComplete) return;
-        const entrants = entries.filter((entry, drawnIndex) => !withdrawnIds.has(entry.teamId)
+        const entrants = entries.filter((entry, drawnIndex) => !withdrawnIds.has(entry.teamId) && !hcTeamIds.has(entry.teamId)
           && !sitsOut(drawnIndex + 1, raceIndex, entries.length, session.lanesPerHeat, session.laneRotationMode)
           && !race.results.some((result) => result.teamId === entry.teamId && result.isSitOut))
-          // HC still consumes a real finishing slot, but cannot displace a finalist.
-          .map((entry) => hcTeamIds.has(entry.teamId) ? -1 : rowIndex.get(entry.teamId) ?? -1);
+          // The API skips HC placings. HC still counts in the session base above.
+          .map((entry) => rowIndex.get(entry.teamId) ?? -1);
         if (entrants.length) races.push({ entrants, slots: entrants.map((_, index) => heat.raceRoundStage === 1 ? 1 : base - index) });
       });
     }
@@ -286,7 +319,7 @@ function assignPointsNeeded(
 
       function assign(position: number): SearchResult {
         if (--workLeft < 0) return 'unavailable';
-        // Unranked/HC entrants are last. They absorb all remaining slots in any order.
+        // Unranked entrants are last. They absorb all remaining slots in any order.
         if (position === entrants.length || entrants[position] < 0) return visit(index + 1);
         const entrant = entrants[position];
         const choices = available.map((slot, slotIndex) => ({ slot, slotIndex }));
@@ -388,8 +421,9 @@ function buildByGame(heatSessions: Session[], hcTeamIds: Set<number>): GameStand
 const finalWording = /\bfinals?\b/i;
 
 /** One group per final heat that has results: teams by the points they scored in it, tied teams sharing a place. */
-function buildFinalGroups(sessions: Session[], sectionId: number): FinalGroup[] {
+function buildFinalGroups(sessions: Session[], sectionId: number, standingRank?: Map<number, number>): FinalGroup[] {
   const groups: FinalGroup[] = [];
+  const rankOf = (teamId: number) => standingRank?.get(teamId) ?? Number.MAX_SAFE_INTEGER;
   const ordered = sessions
     .filter((session) => session.competitionSectionId === sectionId && isRace(session))
     .sort((a, b) => a.orderIndex - b.orderIndex);
@@ -404,7 +438,9 @@ function buildFinalGroups(sessions: Session[], sectionId: number): FinalGroup[] 
         scored.set(result.teamId, { teamName: result.teamName, points: (known?.points ?? 0) + result.points });
       }
       const unscored = heat.entries.filter((entry) => !scored.has(entry.teamId));
-      const ranked = [...scored].map(([teamId, value]) => ({ teamId, ...value })).sort((a, b) => b.points - a.points || a.teamName.localeCompare(b.teamName));
+      const ranked = [...scored]
+        .map(([teamId, value]) => ({ teamId, ...value }))
+        .sort((a, b) => b.points - a.points || rankOf(a.teamId) - rankOf(b.teamId) || a.teamName.localeCompare(b.teamName));
       const rows: FinalRow[] = ranked.map((item) => ({
         teamId: item.teamId,
         teamName: item.teamName,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertTriangle, Lock, Megaphone, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -10,12 +10,8 @@ import { useDialogFocus } from '../../components/useDialogFocus';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { LiveVideo } from '../../components/stream/LiveVideo';
-import type { ChatMessage, CompetitionDetail, LiveStream, StandingRow } from '../../types';
+import type { ChatMessage, LiveStream } from '../../types';
 import './chat.css';
-import { computeTimings } from '../../lib/time';
-import { timetableRows } from '../../lib/timetableRows';
-import { buildToplist } from '../../lib/toplist';
-import { formatPoints } from '../../lib/formatPoints';
 import { confirmDialog } from '../../components/ConfirmDialog';
 
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
@@ -125,13 +121,14 @@ function ChatTabSession() {
   const visibleMessages = messages.filter((message) => message.type !== 1 && message.tag !== BANNER_TAG && (subTab === 'messages' ? message.adminOnly && (canPost || mineOrForMe(message)) : !message.adminOnly));
   const latest = visibleMessages.slice(desktop ? 0 : -3).reverse();
   const activeStreams = streams.filter((stream) => stream.status !== 2);
-  const liveNow = competition.sessions.some((session) => session.status === 1) || activeStreams.length > 0;
+  const liveNow = activeStreams.length > 0;
   const effectiveMode = canModerate ? mode : 'announcement';
   const canCompose = subTab === 'announcements' ? canModerate : (canMessageOrganisers && privateMessagingAvailable) || (isAdmin && replyTo !== null);
-  const channelTabs = <div role="tablist" aria-label="Chat channels" className="flex gap-2">
+  const showChannelSwitcher = canPost || (canMessageOrganisers && privateMessagingAvailable);
+  const channelTabs = showChannelSwitcher ? <div role="tablist" aria-label="Chat channels" className="flex gap-2">
     <button type="button" role="tab" className="mg-btn mg-btn-secondary !min-h-11 aria-selected:!bg-[rgb(var(--mg-tint))]" aria-selected={subTab === 'announcements'} onClick={() => { setSubTab('announcements'); setReplyTo(null); setBody(''); }}>Announcements</button>
     <button type="button" role="tab" className="mg-btn mg-btn-secondary !min-h-11 aria-selected:!bg-[rgb(var(--mg-tint))]" aria-selected={subTab === 'messages'} onClick={() => { setSubTab('messages'); setBody(''); }}>Message Organisers</button>
-  </div>;
+  </div> : null;
   const closeAnnouncements = useCallback(() => setAllOpen(false), []);
   const dismissActionError = useCallback(() => setActionError(null), []);
 
@@ -253,13 +250,7 @@ function ChatTabSession() {
           <div className="live-col live-col-rail">
             <div className="mg-section-head live-stream-head"><h2>Stream</h2></div>
         <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
-      <StreamCompanionPanel competition={competition} announcements={
-          <>
-            {messagesError && <p role="alert">{messagesError}</p>}
-            {messagesLoading ? <p role="status">Loading announcements…</p> : <AnnouncementList messages={latest} staff={canPost} canModerate={canModerate} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} />}
-            {canCompose && <a href="#chat-composer" className="mg-text-link">Write a message</a>}
-          </>
-        } />
+        {activeStreams.length > 0 && <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={null} competitionName={competition.name} publicLayout />}
           </div>
           <div className="live-col live-col-main">
       <section className="live-announcements" aria-labelledby="announcements-title">
@@ -317,13 +308,6 @@ function ChatTabSession() {
           <div className="live-col live-col-main">
             <div className="mg-section-head live-stream-head"><h2>Stream</h2></div>
       <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
-      <StreamCompanionPanel competition={competition} announcements={
-          <>
-            {messagesError && <p role="alert">{messagesError}</p>}
-            {messagesLoading ? <p role="status">Loading announcements…</p> : <AnnouncementList messages={latest} staff={canPost} canModerate={canModerate} onDelete={removeMessage} onBlock={blockMessageAuthor} onReply={isAdmin ? startReply : undefined} />}
-            {canCompose && <a href="#chat-composer" className="mg-text-link">Write a message</a>}
-          </>
-        } />
           </div>
           <div className="live-col live-col-rail">
       <section className="live-announcements" aria-labelledby="announcements-title">
@@ -399,114 +383,6 @@ function AnnouncementList({ messages, staff, canModerate, onDelete, onBlock, onR
     </AnimatePresence>
     {messages.length === 0 && <p className="live-empty">Nothing posted yet.</p>}
   </div>;
-}
-
-type CompanionView = 'scores' | 'timetable' | 'toplist' | 'announcements';
-
-function StreamCompanionPanel({ competition, announcements }: { competition: CompetitionDetail; announcements: ReactNode }) {
-  const [view, setView] = useState<CompanionView>('scores');
-  const timetable = timetableRows(competition.sessions, computeTimings(competition.sessions), true);
-  const liveRow = timetable.find((row) => row.status === 'live' && (row.session.kind ?? (row.session.isBreak ? 1 : 0)) === 0 && row.heat);
-  const liveSession = liveRow?.session;
-  const activeHeat = liveRow?.heat;
-
-  return (
-    <section aria-label="Stream companion" className="flex flex-col gap-2">
-      <div role="tablist" aria-label="Stream companion view" className="mg-seg flex flex-wrap gap-1">
-        {([
-          ['scores', 'Live heat scores'],
-          ['timetable', 'Timetable'],
-          ['toplist', 'Toplist'],
-          ['announcements', 'Announcements & chat'],
-        ] as const).map(([key, label]) => (
-          <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}>
-            {label}
-          </button>
-        ))}
-      </div>
-      {view === 'scores' && (
-        <div role="tabpanel" aria-label="Live heat scores" className="mg-card p-3 text-sm">
-          {activeHeat && liveSession ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <strong>{liveSession.name} · {activeHeat.label || `Heat ${activeHeat.orderIndex}`}</strong>
-                <Link to={`/competitions/${competition.id}/session/${liveSession.id}`} className="mg-text-link text-xs">Full heat scores</Link>
-              </div>
-              <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-                {[...activeHeat.entries].sort((a, b) => a.laneIndex - b.laneIndex).map((entry) => {
-                  const pts = activeHeat.races.filter((r) => r.isComplete).flatMap((r) => r.results).filter((res) => res.teamId === entry.teamId).reduce((sum, res) => sum + res.points, 0);
-                  return (
-                    <li key={entry.id} className="flex items-center justify-between py-1.5">
-                      <span>Lane {entry.laneIndex} · <strong>{entry.teamName}</strong></span>
-                      <span className="font-bold tabular-nums">{formatPoints(pts)} pts</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ) : (
-            <p className="m-0 text-[rgb(var(--mg-muted))]">No heat is running right now.</p>
-          )}
-        </div>
-      )}
-      {view === 'timetable' && (
-        <div role="tabpanel" aria-label="Timetable" className="mg-card p-3 text-sm">
-          {timetable.length > 0 ? (
-            <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-              {timetable.map((row) => (
-                <li key={row.key} className="flex items-center justify-between gap-2 py-1.5">
-                  <Link to={`/competitions/${competition.id}/session/${row.session.id}`} className="font-semibold">{row.session.name}{row.heat && ` · ${row.heat.label || `Heat ${row.heatIndex + 1}`}`}</Link>
-                  <span className="text-xs text-[rgb(var(--mg-muted))]">{row.effective ? row.effective.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'Time to be confirmed'}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="m-0 text-[rgb(var(--mg-muted))]">No sessions scheduled yet.</p>
-          )}
-        </div>
-      )}
-      {view === 'toplist' && (
-        <div role="tabpanel" aria-label="Toplist" className="mg-card p-3 text-sm">
-          <StreamToplist competition={competition} />
-        </div>
-      )}
-      {view === 'announcements' && <div role="tabpanel" aria-label="Announcements & chat">{announcements}</div>}
-
-    </section>
-  );
-}
-
-function StreamToplist({ competition }: { competition: CompetitionDetail }) {
-  const [chosenSection, setChosenSection] = useState<number | null>(null);
-  const section = competition.sections.find((item) => item.id === chosenSection) ?? competition.sections[0];
-  const sectionId = section?.id;
-  const [retry, setRetry] = useState(0);
-  const [result, setResult] = useState<{ sectionId: number; rows: StandingRow[]; error: boolean } | null>(null);
-  useEffect(() => {
-    if (sectionId == null) return;
-    const controller = new AbortController();
-    api.get<StandingRow[]>(`/competitions/${competition.id}/standings`, { params: { sectionId }, signal: controller.signal })
-      .then(({ data }) => { if (!controller.signal.aborted) setResult({ sectionId, rows: data, error: false }); })
-      .catch(() => { if (!controller.signal.aborted) setResult({ sectionId, rows: [], error: true }); });
-    return () => controller.abort();
-  }, [competition.id, competition.sessions, sectionId, retry]);
-  const current = result?.sectionId === sectionId ? result : null;
-  const list = buildToplist(current?.rows ?? [], competition.sessions, competition.teams, sectionId ?? -1, section?.finalistCount);
-  return <>
-    {section && <label className="flex items-center gap-2">Age group
-      <select aria-label="Toplist age group" value={section.id} onChange={(event) => setChosenSection(Number(event.target.value))}>
-        {competition.sections.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}
-      </select>
-    </label>}
-    {!section ? <p>No age groups yet.</p> : !current ? <p role="status">Loading standings…</p> : current.error ?
-      <div role="alert"><p>Couldn’t load standings.</p><button type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div> : list.rows.length === 0 ? <p>No standings yet.</p> :
-      <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-        {list.rows.map((row) => <li key={row.teamId} className="flex items-center justify-between py-1.5">
-          <span>{list.started ? `${row.position}. ` : ''}<strong>{row.teamName}</strong>{row.withdrawn && ' (withdrawn)'}</span>
-          <span className="font-bold tabular-nums">{formatPoints(row.points)} pts</span>
-        </li>)}
-      </ol>}
-  </>;
 }
 
 function AnnouncementRow({ message, staff, canModerate, onDelete, onBlock, onReply, reduceMotion }: {

@@ -4,7 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { competition, heat, race, result, session, standing, team } from '../../test/factories';
-import type { Heat, Session, StandingRow } from '../../types';
+import type { CompetitionDetail, Heat, Session, StandingRow } from '../../types';
 import { ScoringTab } from './ScoringTab';
 
 const state = vi.hoisted(() => ({ value: null as unknown, get: vi.fn(), manage: false }));
@@ -272,7 +272,7 @@ describe('the totals list', () => {
     renderTab();
     const totals = await screen.findByRole('region', { name: 'Totals' });
     expect(within(totals).getAllByText('Joint 2nd · run-off')).toHaveLength(2);
-    expect(within(totals).getByText('5 needed to make the final (normal finishes)')).toBeVisible();
+    expect(within(totals).getByText('6 needed to make the final (normal finishes)')).toBeVisible();
     expect(within(totals).getByRole('separator', { name: 'Final cut-off' })).toBeVisible();
     expect(within(totals).getByText('Hors concours')).toBeVisible();
     expect(within(totals).getByText('Guest')).toBeVisible();
@@ -311,7 +311,6 @@ describe('embedded in the timetable', () => {
     expect(screen.getByRole('button', { name: /Create finals/ })).toBeVisible();
     const sectionTabs = screen.getByRole('group', { name: 'Section view' });
     expect(within(sectionTabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Draw / Heats', 'Heat Scores', 'Toplist']);
-    expect(screen.getByRole('region', { name: 'Draw and starting lanes' })).toBeVisible();
     await user.click(within(sectionTabs).getByRole('button', { name: 'Heat Scores' }));
     expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeVisible();
     await user.click(within(screen.getByRole('group', { name: 'Section view' })).getByRole('button', { name: 'Draw / Heats' }));
@@ -337,5 +336,63 @@ describe('embedded in the timetable', () => {
     await user.click(screen.getByRole('button', { name: 'Draw / Heats' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
     expect(screen.queryByRole('heading', { level: 1, name: /Heat 1 scores/ })).toBeNull();
+  });
+});
+
+describe('personalisation, instant optimistic standings and section score fingerprint', () => {
+  it('defaults to the followed team age group or mg.prefs.defaultAgeGroup when ?section is omitted', async () => {
+    localStorage.setItem('mg.favourites.v1', JSON.stringify([{ competitionId: 1, teamId: 8 }]));
+    const { unmount } = renderTab('/', { toplistOnly: true });
+    expect(screen.getByRole('combobox', { name: 'Age group' })).toHaveTextContent('Under 14');
+    unmount();
+
+    localStorage.removeItem('mg.favourites.v1');
+    localStorage.setItem('mg.prefs.defaultAgeGroup', 'Under 14');
+    renderTab('/', { toplistOnly: true });
+    expect(screen.getByRole('combobox', { name: 'Age group' })).toHaveTextContent('Under 14');
+  });
+
+  it('persists the chosen toplist view tab in localStorage and restores it on mount', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderTab();
+    await screen.findByRole('region', { name: 'Finals' });
+    await user.click(screen.getByRole('button', { name: 'By session' }));
+    expect(localStorage.getItem('mg.prefs.toplistView')).toBe('sessions');
+    unmount();
+
+    renderTab();
+    expect(await screen.findByRole('region', { name: 'Points by session' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'By session' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps official standings during live refresh and invalidates combined-session and HC changes', async () => {
+    setCompetition([qualifier]);
+    const view = renderTab('/?section=9', { toplistOnly: true });
+    await screen.findByRole('region', { name: 'Totals' });
+    expect(state.get).toHaveBeenCalledTimes(1);
+    const original = state.value as { competition: CompetitionDetail; reload: typeof reload };
+    const redraw = () => view.rerender(<MemoryRouter initialEntries={['/?section=9']}><CompactPageBarProvider><Probe /><ScoringTab toplistOnly /></CompactPageBarProvider></MemoryRouter>);
+    state.value = { ...original, competition: { ...original.competition, sessions: [{ ...qualifier, startedAt: '2026-06-01T10:05:00Z' }] } };
+    redraw();
+    expect(state.get).toHaveBeenCalledTimes(1);
+
+    let resolveStandings!: (v: unknown) => void;
+    state.get.mockReturnValueOnce(new Promise((resolve) => { resolveStandings = resolve; }));
+    const combined = session(5, { competitionSectionId: null, heats: [heat(5, { entries: entries([1, 8]), races: [scored(5, [1, 1, 30])] })] });
+    state.value = { ...original, competition: { ...original.competition, sessions: [qualifier, combined] } };
+    redraw();
+    expect(state.get).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Showing saved standings while results refresh.')).toBeVisible();
+    expect(rowNames(screen.getByRole('region', { name: 'Totals' }))[0]).toContain('Team 3');
+    resolveStandings({ data: [standing(1, 40), standing(3, 7), standing(2, 4)], headers: {} });
+    await waitFor(() => expect(rowNames(screen.getByRole('region', { name: 'Totals' }))[0]).toContain('Team 1'));
+    expect(screen.queryByText('Showing saved standings while results refresh.')).toBeNull();
+
+    state.get.mockResolvedValueOnce({ data: [standing(3, 7), standing(2, 4)], headers: {} });
+    const beforeHc = state.value as typeof original;
+    state.value = { ...beforeHc, competition: { ...beforeHc.competition, teams: beforeHc.competition.teams.map((item) => item.id === 1 ? { ...item, isHorsConcours: true } : item) } };
+    redraw();
+    await waitFor(() => expect(state.get).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(rowNames(screen.getByRole('region', { name: 'Totals' }))[0]).toContain('Team 3'));
   });
 });

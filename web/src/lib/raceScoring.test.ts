@@ -281,14 +281,15 @@ describe('manual score overrides', () => {
     const next = overridePoints([], 3, 2.5, 'Synthetic correction');
     writeScoringDraft(scoringDraftKey(91, 92), next);
     const saved = readScoringDraft(scoringDraftKey(91, 92));
-    expect(saved).toEqual([{ teamId: 3, place: 1, eliminated: false, refereeNote: '[pts:2.5] Synthetic correction' }]);
-    expect(manualPoints(saved![0].refereeNote)).toBe(2.5);
+    expect(saved).toEqual([{ teamId: 3, place: 1, eliminated: false, points: 2.5, refereeNote: '[pts:2.5] Synthetic correction' }]);
+    expect(manualPoints(saved![0].refereeNote, saved![0].points)).toBe(2.5);
     expect(overridePoints(saved!, 3, undefined)[0].refereeNote).toBe('Synthetic correction');
+    expect(overridePoints(saved!, 3, undefined)[0].points).toBeUndefined();
   });
 
   it('updates a placed team without duplicating it and replaces a previous adjustment', () => {
     const list = [{ teamId: 1, place: 1, eliminated: false, refereeNote: '[adj:-1] Synthetic reason' }];
-    expect(overridePoints(list, 1, 4)).toEqual([{ ...list[0], refereeNote: '[pts:4] Synthetic reason' }]);
+    expect(overridePoints(list, 1, 4)).toEqual([{ ...list[0], points: 4, refereeNote: '[pts:4] Synthetic reason' }]);
     expect(overridePoints([], 1, undefined)).toEqual([]);
     expect(manualPoints('[pts:2.25]')).toBeUndefined();
     expect(manualPoints('No directive')).toBeUndefined();

@@ -217,4 +217,50 @@ public class RiderSwapTests : IClassFixture<ApiFactory>
         Assert.False(replacement.IsReserve);
         Assert.True(riders.Single(r => r.Id == captainId).IsReserve);
     }
+
+    [Fact]
+    public async Task PonyOnlyReplacement_ClearsOldPonyIdentityButPreservesRiderAndPrivacy()
+    {
+        var f = await BuildAsync(locked: false);
+        var savedId = await _f.WithDbAsync(async db =>
+        {
+            var rider = await db.RiderEntries.SingleAsync(r => r.Id == f.CaptainId);
+            var team = await db.Teams.SingleAsync(t => t.Id == f.TeamId);
+            var saved = new SavedRider { ClubId = team.ClubId, FullName = "Example Rider", HorseName = "Example Old Pony" };
+            db.SavedRiders.Add(saved);
+            await db.SaveChangesAsync();
+            rider.SavedRiderId = saved.Id;
+            rider.HorseName = saved.HorseName;
+            rider.PonyHeightHands = 13.2m;
+            rider.PonyPassportNumber = "TEST-PONY-ONLY";
+            rider.PonyOwnerFullName = "Example Owner";
+            rider.PonyAge = 10;
+            rider.UseInitialOnly = true;
+            rider.NoFilming = true;
+            rider.MedicalNotes = "Example rider note";
+            await db.SaveChangesAsync();
+            return saved.Id;
+        });
+
+        var response = await (await _f.AdminAsync()).PostAsJsonAsync(SwapUrl(f),
+            new SwapRiderRequest(f.CaptainId, 0, "[Emergency: | Example New Pony] Approved replacement", false, "pony-only"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var riders = await RidersAsync(f.FormId);
+        Assert.Equal(3, riders.Count);
+        var rider = riders.Single(r => r.Id == f.CaptainId);
+        Assert.Equal("Example New Pony", rider.HorseName);
+        Assert.Null(rider.PonyHeightHands);
+        Assert.Null(rider.PonyPassportNumber);
+        Assert.Null(rider.PonyOwnerFullName);
+        Assert.Null(rider.PonyAge);
+        Assert.Null(rider.SavedRiderId);
+        Assert.True(rider.UseInitialOnly);
+        Assert.True(rider.NoFilming);
+        Assert.True(rider.IsCaptain);
+        Assert.False(rider.IsReserve);
+        Assert.Equal(0, rider.OrderIndex);
+        Assert.Equal("Example rider note", rider.MedicalNotes);
+        Assert.Equal("Example Old Pony", await _f.WithDbAsync(db => db.SavedRiders.Where(r => r.Id == savedId).Select(r => r.HorseName).SingleAsync()));
+    }
 }

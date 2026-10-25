@@ -84,6 +84,12 @@ describe('scorerApi', () => {
     expect(config.timeout).toBe(15_000);
   });
 
+  it('verifies an explicitly supplied token without replacing it with the saved link', () => {
+    writeScorerToken('mgs_old');
+    const config = run({ method: 'get', headers: new AxiosHeaders({ 'X-Scorer-Token': 'mgs_new' }) });
+    expect(config.headers.get('X-Scorer-Token')).toBe('mgs_new');
+  });
+
   it('sends no header when the phone has no token, and leaves other timeouts alone', () => {
     const config = run({ method: 'post', timeout: 5000 });
     expect(config.headers.get('X-Scorer-Token')).toBeUndefined();
@@ -93,9 +99,10 @@ describe('scorerApi', () => {
 
 describe('parseScorerSession', () => {
   it('accepts a timetable and drops half-formed sessions', () => {
-    const parsed = parseScorerSession({ ...valid, sessions: [session(1), null, { id: 9 }] });
+    const parsed = parseScorerSession({ ...valid, scope: 2, sessions: [session(1), null, { id: 9 }] });
     expect(parsed?.sessions.map((s) => s.id)).toEqual([1]);
     expect(parsed?.competitionName).toBe('Spring Games');
+    expect(parsed?.scope).toBe(2);
   });
 
   it('fills in a missing name or expiry', () => {

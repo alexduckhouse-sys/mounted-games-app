@@ -45,6 +45,7 @@ export function ShopPage() {
           <span className="sr-only">Search the shop</span>
           <input type="search" placeholder={tab === 'tack' ? 'Saddle, bending poles, 13.2…' : 'Event name'} value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
+        <p className="text-xs text-[rgb(var(--mg-muted))]">Community noticeboard — purchases are agreed directly between buyer and seller.</p>
       </div>
       {tab === 'tack' ? <ShopClassifieds query={query} floatingSell intro="" /> : <EventShopLinks query={query} />}
     </div>

@@ -96,6 +96,11 @@ public class FinalsStandingsTests : IClassFixture<ApiFactory>
     [InlineData("B Final", 1)]
     [InlineData("c final", 2)]
     [InlineData("  D Final ", 3)]
+    [InlineData("A Final Part 1", 0)]
+    [InlineData("A Final Part 2", 0)]
+    [InlineData("B Final Part 1", 1)]
+    [InlineData("A Final 1", 0)]
+    [InlineData("C Final - Part 2", 2)]
     public void ParseLabel_ReadsLetteredFinals(string label, int tier)
         => Assert.Equal(tier, FinalsTiers.ParseLabel(label));
 

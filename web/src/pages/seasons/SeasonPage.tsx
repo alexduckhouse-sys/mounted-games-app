@@ -145,7 +145,7 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
       </label>
       <label className="rf-fld"><span className="sr-only">Format</span><SelectField disabled={formats.length < 2} aria-label="Format" title="Season format" value={activeFormat} onChange={(event) => { setSelectedFormat(Number(event.target.value) as typeof activeFormat); setSelectedDivision('all'); }}>{(formats.length ? formats : [activeFormat]).map((format) => <option key={format} value={format}>{SectionFormatLabel[format]}</option>)}</SelectField></label>
     </div>
-    {stale && <p className="mg-notice sv-msg">A result or points rule has changed since publication. The table stays on the published version until the organiser publishes again.</p>}
+    {stale && <p className="mg-notice sv-msg">Results or rules changed since publication. Republish to update the table.</p>}
     {!visibleStandings.length ? <div className="sv-empty"><h2>No standings yet</h2><p>Results will appear after the first round is published.</p></div> : <>
       <div className="rf-table-wrap"><table className="rf-table sv-table">
         <caption className="sr-only">Season standings</caption>

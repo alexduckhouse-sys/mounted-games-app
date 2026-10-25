@@ -337,16 +337,75 @@ interface ItemSheetProps {
   onChoose?: () => void;
 }
 
+const STABLING_PRESETS: { label: string; title: string; category: CommerceItemCategory; description: string; defaultPrice: string }[] = [
+  {
+    label: 'Weekend Stabling',
+    title: 'Weekend Stabling',
+    category: 2,
+    description: 'Temporary event stable box for the weekend. Collect stable allocation from the secretary on arrival.',
+    defaultPrice: '65.00',
+  },
+  {
+    label: 'Electric Hook-Up',
+    title: 'Electric Hook-Up',
+    category: 2,
+    description: '16A lorry or caravan electric hook-up pitch for the event weekend.',
+    defaultPrice: '45.00',
+  },
+  {
+    label: 'Shavings Bale',
+    title: 'Shavings Bale',
+    category: 2,
+    description: 'Dust-extracted wood shavings bale for event stabling. Collect at the stable compound.',
+    defaultPrice: '10.00',
+  },
+  {
+    label: 'Haylage Bale',
+    title: 'Haylage Bale',
+    category: 2,
+    description: 'Small bale of haylage for event stabling. Collect at the stable compound.',
+    defaultPrice: '12.00',
+  },
+];
+
 function ItemSheet({ title, form, setForm, busy, error, onClose, onSubmit, primaryLabel, onChoose }: ItemSheetProps) {
   return (
     <RefineSheet title={title} onClose={onClose}>
       <form className="flex flex-col gap-3" onSubmit={onSubmit} noValidate>
+        {onChoose && (
+          <div className="flex flex-col gap-1.5" role="group" aria-label="Quick presets">
+            <span className="text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
+              1-tap stabling &amp; hook-up presets
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {STABLING_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      title: preset.title,
+                      category: preset.category,
+                      description: preset.description,
+                      price: form.price.trim() || preset.defaultPrice,
+                    })
+                  }
+                  className="mg-chip !min-h-8 !px-2.5 !py-1 text-xs font-semibold"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <label className="rf-fld">Name<input maxLength={200} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
         <div className="grid grid-cols-2 gap-2.5">
           <label className="rf-fld">Price (£)<NumberField decimal min={0} step="0.01" placeholder="12.00" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></label>
           <label className="rf-fld">Category
             <SelectField value={form.category} onChange={(event) => setForm({ ...form, category: Number(event.target.value) as CommerceItemCategory })}>
-              {([0, 1, 2, 3] as CommerceItemCategory[]).map((category) => <option key={category} value={category}>{CATEGORY_LABEL[category]}</option>)}
+              {([0, 1, 2, 3] as CommerceItemCategory[]).map((category) => <option key={category} value={category}>{category === 2 ? 'Camping & stabling' : CATEGORY_LABEL[category]}</option>)}
             </SelectField>
           </label>
         </div>

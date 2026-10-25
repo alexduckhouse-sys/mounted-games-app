@@ -74,8 +74,48 @@ public record PassportCheckTeamDto(
     IReadOnlyList<PassportCheckPonyDto> Ponies);
 
 /// <summary>A pony on the team's declaration, the riders on it, and when its passport was checked (null if not yet).</summary>
-public record PassportCheckPonyDto(string PonyName, IReadOnlyList<string> Riders, DateTime? CheckedAt, string? CheckedByName);
+public record PassportCheckPonyDto(
+    string PonyName,
+    IReadOnlyList<string> Riders,
+    DateTime? CheckedAt,
+    string? CheckedByName,
+    string? PassportCode = null,
+    string? OwnerFullName = null,
+    bool Certified = false,
+    string Status = "Unchecked",
+    string? LastFluVaccineDate = null,
+    string? FluValidUntil = null,
+    string? LastTetanusDate = null,
+    string? TetanusValidUntil = null,
+    string? InspectorRole = null,
+    string? OfficialNotes = null);
 
 public record SavePassportCheckSettingsRequest(bool Enabled);
 
-public record SetPassportCheckRequest([Required, MaxLength(100)] string PonyName, bool Checked);
+public record SetPassportCheckRequest(
+    [Required, MaxLength(100)] string PonyName,
+    bool Checked,
+    [MaxLength(80)] string? PassportCode = null,
+    [MaxLength(160)] string? OwnerFullName = null,
+    [MaxLength(16)] string? LastFluVaccineDate = null,
+    [MaxLength(16)] string? FluValidUntil = null,
+    [MaxLength(16)] string? LastTetanusDate = null,
+    [MaxLength(16)] string? TetanusValidUntil = null,
+    [MaxLength(40)] string? InspectorRole = null,
+    [MaxLength(500)] string? OfficialNotes = null);
+
+public record CertifiedHorseLookupDto(
+    bool Found,
+    bool Certified,
+    string Status,
+    string? PassportCode,
+    string? HorseName,
+    string? OwnerFullName,
+    string? LastFluVaccineDate,
+    string? FluValidUntil,
+    string? LastTetanusDate,
+    string? TetanusValidUntil,
+    string? InspectorRole,
+    string? InspectedByName,
+    DateTime? InspectedAt,
+    string? OfficialNotes);

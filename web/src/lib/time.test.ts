@@ -304,3 +304,26 @@ describe('computeTimings', () => {
     });
   });
 });
+
+
+describe('manual shifts mirror calendar timing', () => {
+  it('replaces inherited delay with the manual shift and keeps other arenas independent', () => {
+    const sessions = [
+      session(1, { arenaName: 'Arena A', scheduledStart: at(0), startedAt: at(10), heats: [heat(1)] }),
+      session(2, { arenaName: 'Arena A', scheduledStart: at(75), notes: '[shift:+15]', heats: [heat(2), heat(3, { scheduledStart: at(135) })] }),
+      session(3, { arenaName: 'Arena B', scheduledStart: at(60), heats: [heat(4)] }),
+    ];
+    const timings = computeTimings(sessions);
+    expect(timeOf(timings.get(2)!.heats[0].effective)).toBe(ms(75));
+    expect(timeOf(timings.get(2)!.heats[1].effective)).toBe(ms(135));
+    expect(timeOf(timings.get(3)!.heats[0].effective)).toBe(ms(60));
+  });
+
+  it('does not let a negative manual shift overlap the previous heat', () => {
+    const timings = computeTimings([
+      session(1, { scheduledStart: at(0), heats: [heat(1, { durationMinutes: 60 })] }),
+      session(2, { scheduledStart: at(45), notes: '[shift:-15]', heats: [heat(2)] }),
+    ]);
+    expect(timeOf(timings.get(2)!.heats[0].effective)).toBe(ms(60));
+  });
+});
