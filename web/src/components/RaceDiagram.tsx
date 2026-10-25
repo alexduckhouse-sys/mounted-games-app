@@ -1,7 +1,18 @@
 import type { RefObject } from 'react';
 import type { DiagramElement, DiagramPos, ConeKind, ItemKind } from '../types';
 import { LANE, CENTRE_Y, pctToPx } from './diagramGeometry';
-import { contentsSummary, parseDiagram, placeElements, toLaneModel, type LaneModel, type PlacedElement, type Slot } from './diagramSlots';
+import {
+  PAD_R,
+  POLE_LABELS,
+  POLE_X,
+  contentsSummary,
+  parseDiagram,
+  placeElements,
+  toLaneModel,
+  type LaneModel,
+  type PlacedElement,
+  type Slot,
+} from './diagramSlots';
 
 interface Props {
   diagramJson?: string | null;
@@ -33,6 +44,32 @@ export function RaceDiagram({ diagramJson, height = 140, className }: Props) {
 const MAX_STACK = 3;
 const CHILD_GAP = 22;
 
+const SLOT_RENDER_X: Record<string, number> = {
+  start: 0,
+  gap0: 11,
+  pole1: 22,
+  gap1: 33,
+  pole2: 44,
+  gap2: 55,
+  pole3: 66,
+  gap3: 77,
+  pole4: 88,
+  gap4: 94,
+  gap5: 104,
+  top: 108,
+  pole5: 110,
+  beyond: 116,
+};
+
+function resolveRenderX(p: PlacedElement, model: LaneModel): number {
+  const rawX = (p.el as DiagramPos).x;
+  if (p.slot.id === 'pole3' && model.midline && (rawX === 50 || rawX === 55)) return 55;
+  if (p.slot.id in SLOT_RENDER_X && (model.poleCount === 4 || model.poleCount === 5 || p.slot.id === 'top' || p.slot.id === 'pole5' || p.slot.id === 'beyond')) {
+    return SLOT_RENDER_X[p.slot.id];
+  }
+  return p.x;
+}
+
 export function LaneCanvas({
   model, height, className, ariaLabel, editing,
 }: {
@@ -44,16 +81,19 @@ export function LaneCanvas({
 }) {
   const { slots, placed } = placeElements(model);
   const laneWidth = LANE.topLineX - LANE.left;
+  const beyondRight = LANE.topLineX + PAD_R;
+  const svgWidth = beyondRight + 40;
   const active = editing?.activeSlotId ? slots.find((s) => s.id === editing.activeSlotId) : undefined;
+  const landmarks = POLE_LABELS.map((label, i) => ({ label, x: POLE_X[i] }));
 
   // Elements sharing a slot spread across the lane's height so none hides another.
   const bySlot = new Map<string, PlacedElement[]>();
-  for (const p of placed) if (p.el.t !== 'pole') bySlot.set(p.slot.id, [...(bySlot.get(p.slot.id) ?? []), p]);
+  for (const p of placed) bySlot.set(p.slot.id, [...(bySlot.get(p.slot.id) ?? []), p]);
 
   return (
     <svg
       ref={editing?.svgRef}
-      viewBox="0 0 800 240"
+      viewBox={`0 0 ${svgWidth} 240`}
       xmlns="http://www.w3.org/2000/svg"
       role="img"
       aria-label={ariaLabel}
@@ -64,17 +104,23 @@ export function LaneCanvas({
       onPointerUp={editing?.onUp}
       onPointerCancel={editing?.onUp}
     >
-      <rect x="0" y="0" width="800" height="240" fill="#fef3c7" />
+      <rect x="0" y="0" width={svgWidth} height="240" fill="#fef3c7" />
       <rect x={LANE.left - 10} y={LANE.top - 10} width={laneWidth + 20} height={LANE.bottom - LANE.top + 20}
             fill="#fde68a" rx="6" />
-      <rect x={LANE.topLineX} y={LANE.top - 10} width={LANE.beyondRight - LANE.topLineX} height={LANE.bottom - LANE.top + 20}
-            fill="#fef3c7" rx="6" />
+      <rect x={LANE.topLineX} y={LANE.top - 10} width={beyondRight - LANE.topLineX} height={LANE.bottom - LANE.top + 20}
+            fill="#fde68a" opacity="0.55" rx="6" />
 
       <line x1={LANE.left} y1={LANE.top} x2={LANE.topLineX} y2={LANE.top} stroke="#92400e" strokeWidth="1.5" />
       <line x1={LANE.left} y1={LANE.bottom} x2={LANE.topLineX} y2={LANE.bottom} stroke="#92400e" strokeWidth="1.5" />
+      <line x1={LANE.topLineX} y1={LANE.top} x2={beyondRight} y2={LANE.top} stroke="#92400e" strokeWidth="1.2" strokeDasharray="4 4" opacity="0.6" />
+      <line x1={LANE.topLineX} y1={LANE.bottom} x2={beyondRight} y2={LANE.bottom} stroke="#92400e" strokeWidth="1.2" strokeDasharray="4 4" opacity="0.6" />
+
+      {landmarks.map((m) => (
+        <PoleLandmark key={m.label} label={m.label} x={pctToPx(m.x)} />
+      ))}
 
       {active && (
-        <rect data-testid="active-slot" x={pctToPx(active.x) - 22} y={LANE.top - 10} width="44" height={LANE.bottom - LANE.top + 20}
+        <rect data-testid="active-slot" x={pctToPx(active.id in SLOT_RENDER_X ? SLOT_RENDER_X[active.id] : active.x) - 22} y={LANE.top - 10} width="44" height={LANE.bottom - LANE.top + 20}
               fill="#0ea5e9" opacity="0.18" stroke="#0284c7" strokeWidth="2" strokeDasharray="5 4" rx="6" />
       )}
       {editing && slots.map((s) => <SlotMarker key={s.id} slot={s} />)}
@@ -89,27 +135,27 @@ export function LaneCanvas({
 
       <line x1={LANE.topLineX} y1={LANE.top - 8} x2={LANE.topLineX} y2={LANE.bottom + 8} stroke="#dc2626" strokeWidth="4" />
       <text x={LANE.topLineX} y={LANE.top - 16} textAnchor="middle" fontSize="16" fontWeight="800" fill="#991b1b">TOP</text>
-      <text x={(LANE.topLineX + LANE.beyondRight) / 2} y={LANE.bottom + 22} textAnchor="middle" fontSize="11" fill="#92400e" fontStyle="italic">
+      <text x={(LANE.topLineX + beyondRight) / 2} y={LANE.bottom + 22} textAnchor="middle" fontSize="11" fill="#92400e" fontStyle="italic">
         beyond
       </text>
 
       {model.midline && (
         <>
-          <line x1={pctToPx(50)} y1={LANE.top - 4} x2={pctToPx(50)} y2={LANE.bottom + 4}
+          <line x1={pctToPx(55)} y1={LANE.top - 4} x2={pctToPx(55)} y2={LANE.bottom + 4}
                 stroke="#475569" strokeWidth="1.5" strokeDasharray="6 6" />
-          <text x={pctToPx(50)} y={LANE.top - 16} textAnchor="middle" fontSize="12" fill="#334155">midline</text>
+          <text x={pctToPx(55)} y={LANE.top - 16} textAnchor="middle" fontSize="12" fill="#334155">midline</text>
         </>
       )}
 
       {placed.map((p) => {
         const group = bySlot.get(p.slot.id) ?? [];
         const at = group.indexOf(p);
-        const y = p.el.t === 'pole' ? LANE.bottom + 4 : CENTRE_Y + (at - (group.length - 1) / 2) * 36;
+        const y = CENTRE_Y + (at - (group.length - 1) / 2) * 36;
         return (
           <DiagramNode
             key={p.index}
             el={p.el}
-            x={pctToPx(p.x)}
+            x={pctToPx(resolveRenderX(p, model))}
             y={y}
             index={p.index}
             selected={editing?.selectedIndex === p.index}
@@ -121,8 +167,20 @@ export function LaneCanvas({
   );
 }
 
+function PoleLandmark({ label, x }: { label: string; x: number }) {
+  return (
+    <g data-testid={`pole-landmark-${label}`}>
+      <line x1={x} y1={LANE.top - 4} x2={x} y2={LANE.top + 6} stroke="#b45309" strokeWidth="1.5" opacity="0.7" />
+      <line x1={x} y1={LANE.bottom - 6} x2={x} y2={LANE.bottom + 4} stroke="#b45309" strokeWidth="1.5" opacity="0.7" />
+      <line x1={x} y1={LANE.top + 6} x2={x} y2={LANE.bottom - 6} stroke="#b45309" strokeWidth="1" strokeDasharray="3 5" opacity="0.35" />
+      <rect x={x - 12} y={LANE.top - 22} width="24" height="14" rx="4" fill="#fef3c7" stroke="#d97706" strokeWidth="1" />
+      <text x={x} y={LANE.top - 12} textAnchor="middle" fontSize="10" fontWeight="700" fill="#92400e">{label}</text>
+    </g>
+  );
+}
+
 function SlotMarker({ slot }: { slot: Slot }) {
-  const x = pctToPx(slot.x);
+  const x = pctToPx(slot.id in SLOT_RENDER_X ? SLOT_RENDER_X[slot.id] : slot.x);
   if (slot.kind === 'pole') {
     return <line x1={x} y1={LANE.top + 6} x2={x} y2={LANE.bottom - 6} stroke="#b45309" strokeWidth="1.5" strokeDasharray="3 5" opacity="0.7" />;
   }
@@ -144,7 +202,7 @@ function DiagramNode({
 }: NodeProps & { index: number; selected: boolean; onDown?: LaneEditing['onElementDown'] }) {
   if (el.t === 'midline' || el.t === 'lane') return null;
   const label = (el as DiagramPos).label;
-  const labelY = el.t === 'pole' ? y + 30 : y + 28;
+  const labelY = y + 28;
   const children = ((el as DiagramPos).on ?? []).filter((c) => c.t !== 'midline' && c.t !== 'lane');
   const shown = children.slice(0, MAX_STACK);
   const summary = contentsSummary(el);

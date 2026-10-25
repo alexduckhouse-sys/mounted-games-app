@@ -37,7 +37,7 @@ public static class RequestLimits
     /// </summary>
     public static IServiceCollection AddRequestLimits(this IServiceCollection services, IConfiguration configuration)
     {
-        var authPermits = configuration.GetValue("RateLimits:AuthPerMinute", 10);
+        var authPermits = configuration.GetValue("RateLimits:AuthPerMinute", 5);
         var writePermits = configuration.GetValue("RateLimits:WritesPerMinute", 60);
         // Volunteers at one venue often share an address, so scorer-link saves get a roomier per-IP allowance.
         var scorerPermits = configuration.GetValue("RateLimits:ScorerWritesPerMinute", 240);

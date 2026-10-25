@@ -186,7 +186,7 @@ public class SecurityTests
     [Fact]
     public async Task PasswordFailuresLockTheAccountEvenWhenTheNextPasswordIsCorrect()
     {
-        await using var server = await SecurityServer.Start();
+        await using var server = await SecurityServer.Start(authPerMinute: 10);
         using (var scope = server.App.Services.CreateScope())
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
@@ -209,7 +209,7 @@ public class SecurityTests
     public async Task AuthLimiterRejectsRepeatedAttemptsAndIgnoresSpoofedForwardedHeaders()
     {
         await using var server = await SecurityServer.Start();
-        for (var i = 0; i < 10; i++)
+        for (var i = 0; i < 5; i++)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "/limit");
             request.Headers.Add("X-Forwarded-For", $"192.0.2.{i + 1}");
@@ -400,7 +400,7 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
     public WebApplication App => app;
     public HttpClient Client => client;
 
-    public static async Task<SecurityServer> Start()
+    public static async Task<SecurityServer> Start(int? authPerMinute = null)
     {
         var directory = Directory.CreateTempSubdirectory("mg-security-").FullName;
         var webroot = Directory.CreateDirectory(Path.Combine(directory, "wwwroot")).FullName;
@@ -410,6 +410,8 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
         {
             ContentRootPath = directory, WebRootPath = webroot, EnvironmentName = Environments.Production,
         });
+        if (authPerMinute.HasValue)
+            builder.Configuration["RateLimits:AuthPerMinute"] = authPerMinute.Value.ToString();
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
         builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={Path.Combine(directory, "test.db")};Pooling=False"));

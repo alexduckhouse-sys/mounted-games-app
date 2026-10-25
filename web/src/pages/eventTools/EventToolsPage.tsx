@@ -83,7 +83,7 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
       {success && <div role="status" className="tools-success"><CheckCircle2 className="h-5 w-5" aria-hidden="true" />{success}</div>}
       <RefineSection title="Import teams from CSV" />
       <h2 id="import-title" className="sr-only">Import teams from CSV</h2>
-      <RefineNote>Use the columns <strong>club</strong>, <strong>suffix</strong> and <strong>section</strong>. Nothing is added until you review the preview.</RefineNote>
+      <RefineNote>Columns: <strong>club</strong>, <strong>suffix</strong>, <strong>section</strong>.</RefineNote>
       <RefineList as="div">
         <button type="button" className="rf-row" onClick={() => fileRef.current?.click()}>
           <Upload className="h-5 w-5 rf-chev" aria-hidden="true" /><span className="rf-grow rf-t1">Choose CSV file</span><Chevron />
@@ -142,7 +142,7 @@ export function DuplicateEventPanel({ competition }: { competition: CompetitionF
       {success && <div role="status" className="tools-success"><CheckCircle2 className="h-5 w-5" aria-hidden="true" />{success}</div>}
       <RefineSection title="Duplicate event setup" />
       <h2 id="duplicate-title" className="sr-only">Duplicate event setup</h2>
-      <RefineNote>Sections, teams, sessions, heats and races are copied. Results, declarations, payments and team claim details stay with the original event.</RefineNote>
+      <RefineNote>Copies sections, teams, sessions, heats and races without results or payments.</RefineNote>
       <form className="tools-form" onSubmit={cloneCompetition}><fieldset disabled={busy} className="tools-fields"><legend className="sr-only">New event details</legend>
         <label className="rf-fld">New competition name<input value={cloneName} onChange={(event) => setCloneName(event.target.value)} maxLength={200} required /></label>
         <label className="rf-fld">Starts<input type="datetime-local" value={cloneStart} onChange={(event) => setCloneStart(event.target.value)} required /></label>

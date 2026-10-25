@@ -32,7 +32,7 @@ export function SeasonsPage() {
 
   if (creating) {
     return <RefinePage>
-      <RefineHeader back="/seasons" backLabel="Back to seasons" context="Seasons" title="Create a season" subtitle="Set the division and points once. You can add event rounds after the season is created." />
+      <RefineHeader back="/seasons" backLabel="Back to seasons" context="Seasons" title="Create a season" subtitle="Set division and points. Rounds can be added later." />
       <SeasonSettingsForm key={user?.id} create label="Create season" onCancel={() => setParams({})} onSave={async (settings) => {
         const { data } = await api.post<SeasonView>('/seasons', settings);
         navigate(`/seasons/${data.id}`);

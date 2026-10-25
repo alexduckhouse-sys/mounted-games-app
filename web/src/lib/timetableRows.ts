@@ -1,6 +1,6 @@
 import type { Heat, Session } from '../types';
 import { displaySectionName } from './section.ts';
-import type { HeatTiming, SessionTiming } from './time';
+import { formatDelayDuration, type HeatTiming, type SessionTiming } from './time.ts';
 
 export type TimetableStatus = 'on-time' | 'late' | 'live' | 'finished';
 export const TIMETABLE_COLOURS = { 'on-time': '#2E8B4F', late: '#C08308', live: '#2563EB', finished: '#A3A39B' } as const;
@@ -14,11 +14,11 @@ export function timetableStatus(finished: boolean, live: boolean, scheduled: Dat
   return { status: finished ? 'finished' : live ? 'live' : delayMinutes > 0 ? 'late' : 'on-time', delayMinutes };
 }
 
-/** The words on a row's status pill: "On now", "+8 min", "On time" or "Finished". */
+/** The words on a row's status pill: "On now", "+8 min", "+1h 34m", "On time" or "Finished". */
 export function statusLabel(status: TimetableStatus, delayMinutes: number): string {
   if (status === 'finished') return 'Finished';
   if (status === 'live') return 'On now';
-  return status === 'late' ? `+${delayMinutes} min` : 'On time';
+  return status === 'late' ? `+${formatDelayDuration(delayMinutes)}` : 'On time';
 }
 
 export interface TimetableRow {
@@ -90,9 +90,9 @@ export function isGroupFinished(rows: { status: TimetableStatus }[]): boolean {
   return rows.length > 0 && rows.every((row) => row.status === 'finished');
 }
 
-/** The longest delay, in minutes, among a group's unfinished rows (0 when nothing is running late). */
+/** The longest delay, in minutes, among a group's unfinished, non-live rows (0 when nothing is running late). */
 export function groupMaxDelay(rows: { status: TimetableStatus; delayMinutes: number }[]): number {
-  return Math.max(0, ...rows.filter((row) => row.status !== 'finished').map((row) => row.delayMinutes));
+  return Math.max(0, ...rows.filter((row) => row.status !== 'finished' && row.status !== 'live').map((row) => row.delayMinutes));
 }
 
 /** "Seniors Session 1": the age group (without "Teams") plus its session number. */

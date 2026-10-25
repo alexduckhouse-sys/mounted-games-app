@@ -65,6 +65,8 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const [slowAttempt, setSlowAttempt] = useState(-1);
   /** How current `data` is, so a staler service-worker fallback never replaces it. */
   const dataAt = useRef(initial ? Date.parse(initial.savedAt) : 0);
+  const hasConnectedOnce = useRef(false);
+  const fetchFailed = useRef(false);
   const { setCurrent, setVenue } = useCurrentCompetition();
   const { pathname } = useLocation();
 
@@ -76,6 +78,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const [retrying, setRetrying] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    fetchFailed.current = false;
     const controller = new AbortController();
     const slowTimer = setTimeout(() => setSlowAttempt(attempt), 2_000);
     api.get<CompetitionDetail>(`/competitions/${competitionId}`, { signal: controller.signal })
@@ -83,6 +86,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         if (cancelled) return;
         const fallback = serviceWorkerSavedAt(r.headers);
         if (fallback === null) {
+          fetchFailed.current = false;
           setFailures(0);
           dataAt.current = Date.now();
           setData(r.data);
@@ -91,6 +95,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
           setUpdatedAt(new Date());
           return;
         }
+        fetchFailed.current = true;
         setFailures((n) => n + 1);
         const fallbackAt = fallback === 'unknown' ? 0 : fallback.getTime();
         if (dataAt.current > 0 && dataAt.current >= fallbackAt) return; // ours is newer: keep showing it
@@ -102,6 +107,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       })
       .catch(() => {
         if (cancelled) return;
+        fetchFailed.current = true;
         setFailedAttempt(attempt);
         setFailures((n) => n + 1);
       })
@@ -169,6 +175,8 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const latestData = useRef(data);
   useEffect(() => { latestData.current = data; }, [data]);
   const [scoreCards, setScoreCards] = useState<QueuedScoreCard[]>([]);
+  const [streamTelemetry, setStreamTelemetry] = useState<Record<number, import('../types').StreamTelemetry>>({});
+  const [lastStreamCommand, setLastStreamCommand] = useState<import('../types').StreamCommand | null>(null);
   const [streamMessages, setStreamMessages] = useState<{ message: ChatMessage; receivedAt: number }[]>([]);
   const addStreamMessage = (value: unknown) => {
     const message = value as ChatMessage;
@@ -204,9 +212,18 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   }, [data, announcements, now, setItems]);
 
   const { connected, invoke, reconnect } = useLiveHub(competitionId, {
-    onReady: () => { load(); setReady((value) => value + 1); },
+    onReady: () => {
+      if (!hasConnectedOnce.current) {
+        hasConnectedOnce.current = true;
+        if (!fetchFailed.current) return;
+      }
+      load();
+      setReady((value) => value + 1);
+    },
     onStreamUpdated: streamState.onStreamUpdated,
     onStreamViewers: streamState.onStreamViewers,
+    onStreamTelemetry: (t) => setStreamTelemetry((cur) => ({ ...cur, [t.streamId]: t })),
+    onStreamCommand: (c) => setLastStreamCommand(c),
     onOverlayUpdated: overlayState.onOverlayUpdated,
     onSponsorControl: sponsorFeed.onSponsorControl,
     onScoreCardControl: (raw) => {
@@ -313,7 +330,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing) && shouldNoticeSavedCopy(savedAt, !refreshing || savedAt === '', new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS);
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamTelemetry, lastStreamCommand, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
       <div className="flex flex-col gap-4">
         <div className="pt-4 empty:hidden -mb-4 has-[+.rf-page]:mb-0"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />

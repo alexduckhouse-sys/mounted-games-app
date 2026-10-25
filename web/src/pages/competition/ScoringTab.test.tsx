@@ -311,7 +311,6 @@ describe('embedded in the timetable', () => {
     expect(screen.getByRole('button', { name: /Create finals/ })).toBeVisible();
     const sectionTabs = screen.getByRole('group', { name: 'Section view' });
     expect(within(sectionTabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Draw / Heats', 'Heat Scores', 'Toplist']);
-    expect(screen.getByRole('region', { name: 'Draw and starting lanes' })).toBeVisible();
     await user.click(within(sectionTabs).getByRole('button', { name: 'Heat Scores' }));
     expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeVisible();
     await user.click(within(screen.getByRole('group', { name: 'Section view' })).getByRole('button', { name: 'Draw / Heats' }));
@@ -337,5 +336,99 @@ describe('embedded in the timetable', () => {
     await user.click(screen.getByRole('button', { name: 'Draw / Heats' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
     expect(screen.queryByRole('heading', { level: 1, name: /Heat 1 scores/ })).toBeNull();
+  });
+});
+
+describe('personalisation, instant optimistic standings and section score fingerprint', () => {
+  it('defaults to the followed team age group or mg.prefs.defaultAgeGroup when ?section is omitted', async () => {
+    localStorage.setItem('mg.favourites.v1', JSON.stringify([{ competitionId: 1, teamId: 8 }]));
+    const { unmount } = renderTab('/', { toplistOnly: true });
+    expect(screen.getByRole('combobox', { name: 'Age group' })).toHaveTextContent('Under 14');
+    unmount();
+
+    localStorage.removeItem('mg.favourites.v1');
+    localStorage.setItem('mg.prefs.defaultAgeGroup', 'Under 14');
+    renderTab('/', { toplistOnly: true });
+    expect(screen.getByRole('combobox', { name: 'Age group' })).toHaveTextContent('Under 14');
+  });
+
+  it('persists the chosen toplist view tab in localStorage and restores it on mount', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderTab();
+    await screen.findByRole('region', { name: 'Finals' });
+    await user.click(screen.getByRole('button', { name: 'By session' }));
+    expect(localStorage.getItem('mg.prefs.toplistView')).toBe('sessions');
+    unmount();
+
+    renderTab();
+    expect(await screen.findByRole('region', { name: 'Points by session' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'By session' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('does not re-fetch /standings on clock updates or scores in another age group, and updates in 0ms when this section scores', async () => {
+    setCompetition([qualifier]);
+    const view = renderTab('/?section=9', { toplistOnly: true });
+    await screen.findByRole('region', { name: 'Totals' });
+    expect(state.get).toHaveBeenCalledTimes(1);
+
+    // Clock update on section 9 and score in section 10: neither changes section 9's score fingerprint.
+    const clockStarted: Session = { ...qualifier, startedAt: '2026-06-01T10:05:00Z' };
+    const otherSectionScored: Session = session(5, {
+      competitionSectionId: 10,
+      name: 'Under 14 heats',
+      heats: [heat(5, { sessionId: 5, entries: entries([8]), races: [scored(5, [8, 1, 5])] })],
+    });
+    setCompetition([clockStarted, otherSectionScored]);
+    view.rerender(<MemoryRouter initialEntries={['/?section=9']}><CompactPageBarProvider><Probe /><ScoringTab toplistOnly /></CompactPageBarProvider></MemoryRouter>);
+    expect(state.get).toHaveBeenCalledTimes(1);
+
+    // Live score update in section 9 while the background /standings request is still in flight:
+    let resolveStandings!: (v: unknown) => void;
+    state.get.mockReturnValueOnce(new Promise((r) => { resolveStandings = r; }));
+    const updatedQualifier: Session = session(1, {
+      competitionSectionId: 9,
+      name: 'Under 12 heats',
+      status: 2,
+      heats: [heat(1, { sessionId: 1, label: 'Heat 1', entries: entries([1, 2, 3]), races: [scored(1, [1, 1, 3], [2, 2, 2], [3, 3, 1]), scored(2, [2, 1, 10], [1, 2, 2], [3, 3, 1])] })],
+    });
+    setCompetition([updatedQualifier]);
+    view.rerender(<MemoryRouter initialEntries={['/?section=9']}><CompactPageBarProvider><Probe /><ScoringTab toplistOnly /></CompactPageBarProvider></MemoryRouter>);
+
+    // Team 2 now has 2 + 10 = 12 pts and moves to 1st immediately (0ms, before resolveStandings is called).
+    const totals = screen.getByRole('region', { name: 'Totals' });
+    expect(rowNames(totals)[0]).toContain('Team 2');
+    expect(rowNames(totals)[0]).toContain('12');
+    resolveStandings({ data: [standing(2, 12), standing(1, 5), standing(3, 2)], headers: {} });
+  });
+
+  it('shows QR Access, PA Commentator, and TV Kiosk links for organisers and opens the QR Code Access Hub', async () => {
+    state.manage = true;
+    state.get.mockImplementation((url: string, config?: { params?: { sectionId?: number } }) => {
+      if (url.endsWith('/scorer-links')) {
+        return Promise.resolve({
+          data: { arenas: ['Main Arena'], defaultExpiresAt: '2026-11-02T00:00:00Z', links: [] },
+        });
+      }
+      return Promise.resolve({ data: config?.params?.sectionId === 9 ? standings : otherStandings, headers: {} });
+    });
+    const user = userEvent.setup();
+    renderTab('/?section=9', { toplistOnly: true });
+    await screen.findByRole('region', { name: 'Finals' });
+
+    const quickBar = screen.getByRole('region', { name: 'Organiser quick actions' });
+    expect(within(quickBar).getByRole('link', { name: /PA Commentator/ })).toHaveAttribute('href', '/competitions/1/commentary?section=9');
+    expect(within(quickBar).getByRole('link', { name: /TV Kiosk/ })).toHaveAttribute('href', '/competitions/1/tv?section=9');
+
+    await user.click(within(quickBar).getByRole('button', { name: /QR Access/ }));
+    const modal = await screen.findByRole('dialog', { name: 'QR Code Access Hub' });
+    expect(within(modal).getByRole('tab', { name: /Volunteer & Scorer QR Links/ })).toHaveAttribute('aria-selected', 'true');
+
+    await user.click(within(modal).getByRole('tab', { name: /Screens, PA & Spectator QR Codes/ }));
+    expect(within(modal).getByText('PA Commentator Desk')).toBeInTheDocument();
+    expect(within(modal).getByText('TV Kiosk Display')).toBeInTheDocument();
+    expect(within(modal).getByRole('link', { name: /Print QR Posters Sheet/ })).toHaveAttribute('href', '/event-tools/1/print/posters');
+
+    await user.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
+    expect(screen.queryByRole('dialog', { name: 'QR Code Access Hub' })).toBeNull();
   });
 });

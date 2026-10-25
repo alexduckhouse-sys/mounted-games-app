@@ -57,14 +57,12 @@ function Harness({ activeIdx = 1, heatOverride = h, queued = [], onSelectRace = 
 const rowNames = () => within(screen.getByRole('region', { name: /^Scoring/ })).getAllByRole('listitem').map((li) => li.textContent ?? '');
 
 describe('the race stack', () => {
-  it('opens the current race, collapses the finished one to a line and lists the next race’s lanes', () => {
+  it('renders only the active race with the top race switcher bar and no stacked race cards', () => {
     render(<Harness />);
-    const finished = screen.getByRole('button', { name: /^1\. Race 1/ });
-    expect(finished).toHaveTextContent('1st Bravo · 2nd Charlie · Alpha out');
     expect(screen.getByRole('region', { name: 'Scoring Race 2' })).toBeInTheDocument();
-    const upcoming = screen.getByRole('region', { name: 'Race 3, coming up' });
-    // Race 3 is two rotations on from the draw: Charlie (drawn 2) is in lane 1.
-    expect(upcoming.textContent).toMatch(/Lane 1: Charlie/);
+    expect(screen.getByText('Race 2 of 3 · Scoring')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^1\. Race 1/ })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Race 3, coming up' })).toBeNull();
   });
 
   it('lists the open race in lane order with the bib colour under each name', () => {
@@ -92,18 +90,18 @@ describe('the race stack', () => {
 
   it('says the swipe hint once, not in every row, and has no tap-to-place text', () => {
     render(<Harness />);
-    expect(screen.getAllByText(/Swipe a team down to eliminate it/)).toHaveLength(1);
+    expect(screen.getAllByText(/Hold or swipe down to eliminate/)).toHaveLength(1);
+    expect(screen.queryByText(/Swipe a team down to eliminate it/)).toBeNull();
     expect(screen.queryByText(/swipe ↓ elim/i)).toBeNull();
     expect(screen.queryByText(/Tap a team to assign/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /^More/ })).toBeNull();
   });
 
-  it('shows queued saves as done with a not-sent tag', () => {
+  it('shows queued saves on the active race with a not-sent notice', () => {
     const queued: QueuedScore = { saveId: 'q', raceId: 2, competitionId: 1, sessionId: 1, label: 'x', teamNames: { 2: 'Bravo' }, places: [{ teamId: 2, place: 1, eliminated: false }], expected: [], queuedAt: '', state: 'waiting' };
-    render(<Harness activeIdx={2} queued={[queued]} />);
-    const line = screen.getByRole('button', { name: /^2\. Race 2/ });
-    expect(line).toHaveTextContent('1st Bravo');
-    expect(line).toHaveTextContent('Not sent');
+    render(<Harness activeIdx={1} queued={[queued]} />);
+    expect(screen.getByText('Race 2 of 3 · Scored')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Not sent yet: 1st Bravo');
   });
 
   it('greys a team with no lane and puts it last', () => {
@@ -117,14 +115,21 @@ describe('the race stack', () => {
     expect(screen.getByRole('button', { name: /^Alpha, lane S/ })).toBeDisabled();
   });
 
-  it('lists the lane view after the races on a phone, and opens the race rules on click', async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-    expect(screen.getByRole('region', { name: 'Lane view' })).toBeInTheDocument();
+  it('hides the heat table during active scoring and shows it when all races in the heat are complete', () => {
+    const { rerender } = render(<Harness />);
+    expect(screen.queryByRole('region', { name: 'Lane view' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Heat table' })).toBeNull();
+
+    const completedHeat: Heat = heat(1, {
+      entries,
+      races: [
+        done,
+        race(2, { name: 'Race 2', isComplete: true, results: [result(2, 1, { points: 3 })] }),
+        race(3, { name: 'Race 3', isComplete: true, results: [result(2, 1, { points: 3 })] }),
+      ],
+    });
+    rerender(<Harness heatOverride={completedHeat} activeIdx={2} />);
     expect(screen.getByRole('region', { name: 'Heat table' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Race rules' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Race rules and arena setup' }));
-    expect(screen.getByRole('region', { name: 'Race rules' })).toHaveTextContent('Rules for Race 2');
   });
 });
 
@@ -220,16 +225,22 @@ describe('the elimination sheet', () => {
 });
 
 describe('hors concours', () => {
-  it('has no HC button without the handler', () => {
+  it('has no inline HC button on rows', () => {
     render(<Harness />);
     expect(screen.queryByRole('button', { name: /hors concours/i })).toBeNull();
   });
 
-  it('asks first and says what it means, then marks the team', async () => {
+  it('marks a team hors concours via the Score override sheet and asks for confirmation', async () => {
     const user = userEvent.setup();
     const onSetHc = vi.fn().mockResolvedValue(undefined);
     render(<Harness onSetHc={onSetHc} />);
-    await user.click(screen.getByRole('button', { name: 'Mark Bravo hors concours' }));
+    await user.click(screen.getByRole('button', { name: 'Score override' }));
+    const sheet = screen.getByRole('dialog', { name: 'Score override' });
+    await user.click(within(sheet).getByRole('button', { name: /Bravo/ }));
+    await user.click(within(sheet).getByRole('radio', { name: /Hors concours/ }));
+    await user.click(within(sheet).getByRole('button', { name: 'Save override' }));
+    await user.click(within(sheet).getByRole('button', { name: 'Close' }));
+
     const dialog = screen.getByRole('dialog', { name: 'Hors concours' });
     expect(dialog).toHaveTextContent('Competes but doesn’t score; removed from standings and finals seeding.');
     expect(onSetHc).not.toHaveBeenCalled();
@@ -238,15 +249,29 @@ describe('hors concours', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('can be cancelled, shows an HC tag, and is reversible the same way', async () => {
+  it('can be cancelled, shows an HC tag, and is reversible via the Score override sheet', async () => {
     const user = userEvent.setup();
     const onSetHc = vi.fn().mockResolvedValue(undefined);
     render(<Harness onSetHc={onSetHc} hcTeamIds={new Set([2])} />);
     expect(within(screen.getByRole('region', { name: /^Scoring/ })).getAllByText('HC').length).toBeGreaterThan(0);
-    await user.click(screen.getByRole('button', { name: 'Bring Bravo back into scoring' }));
+
+    await user.click(screen.getByRole('button', { name: 'Score override' }));
+    const sheet = screen.getByRole('dialog', { name: 'Score override' });
+    await user.click(within(sheet).getByRole('button', { name: /Bravo/ }));
+    await user.click(within(sheet).getByRole('radio', { name: /Automatic/ }));
+    await user.click(within(sheet).getByRole('button', { name: 'Done' }));
+    await user.click(within(sheet).getByRole('button', { name: 'Close' }));
+
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onSetHc).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Bring Bravo back into scoring' }));
+
+    await user.click(screen.getByRole('button', { name: 'Score override' }));
+    const sheet2 = screen.getByRole('dialog', { name: 'Score override' });
+    await user.click(within(sheet2).getByRole('button', { name: /Bravo/ }));
+    await user.click(within(sheet2).getByRole('radio', { name: /Automatic/ }));
+    await user.click(within(sheet2).getByRole('button', { name: 'Done' }));
+    await user.click(within(sheet2).getByRole('button', { name: 'Close' }));
+
     await user.click(screen.getByRole('button', { name: 'Bring back' }));
     expect(onSetHc).toHaveBeenCalledWith(2, false);
   });
@@ -261,37 +286,40 @@ describe('hors concours', () => {
 });
 
 describe('eliminating without a swipe', () => {
-  it('has an Out button that toggles and a Back in button', async () => {
-    const user = userEvent.setup();
+  it('has no inline Out button and eliminates on hold or Delete key', () => {
     render(<Harness />);
-    await user.click(screen.getByRole('button', { name: 'Eliminate Bravo' }));
+    expect(screen.queryByRole('button', { name: 'Eliminate Bravo' })).toBeNull();
+    const bravoBtn = screen.getByRole('button', { name: /^Bravo, lane/ });
+    fireEvent.keyDown(bravoBtn, { key: 'Delete' });
     expect(within(screen.getByRole('region', { name: /^Scoring/ })).getByLabelText('Eliminated')).toBeInTheDocument();
   });
 });
 
 describe('team colours and hatbands', () => {
-  it('paints each row in the team’s own colour and keeps the colour name', () => {
+  it('keeps row background clean unless a hatband is set, while showing the bib colour swatch and left bar', () => {
     render(<Harness />);
     const alpha = screen.getByRole('button', { name: /^Alpha, lane/ }).closest('li') as HTMLElement;
-    expect(alpha.style.boxShadow).toContain('inset');
+    expect(alpha.style.background).toBe('');
     expect(alpha).toHaveTextContent('Red bib');
     const charlie = screen.getByRole('button', { name: /^Charlie, lane/ }).closest('li') as HTMLElement;
     expect(charlie.style.background).toBe('');
   });
 
-  it('shows the hatband colour for each lane, in the rows and the lane view, and nothing without them', () => {
+  it('shows the hatband colour for each lane in the rows and tints the row when hatbands are set', () => {
     const { unmount } = render(<Harness hatbands={['Red', 'Blue', 'Green']} />);
     // Race 2 moves up one lane: Alpha has lane 1.
-    expect(within(screen.getByRole('button', { name: /^Alpha, lane/ })).getByText('Red hatband')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Lane view' })).getByText('Blue hatband')).toBeInTheDocument();
+    const alphaBtn = screen.getByRole('button', { name: /^Alpha, lane/ });
+    expect(within(alphaBtn).getByText('Red hatband')).toBeInTheDocument();
+    const alphaRow = alphaBtn.closest('li') as HTMLElement;
+    expect(alphaRow.style.boxShadow).toContain('inset');
     unmount();
     render(<Harness hatbands={null} />);
     expect(screen.queryByText(/hatband/)).toBeNull();
   });
 
-  it('toggles the score history and correction panel for completed races', async () => {
+  it('toggles the score history and correction panel when the active race is completed', async () => {
     const user = userEvent.setup();
-    render(<Harness />);
+    render(<Harness activeIdx={0} />);
     const toggle = screen.getByRole('button', { name: 'Score history & correction' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await user.click(toggle);
@@ -355,10 +383,34 @@ describe('race switcher bar, press-and-hold, and score override sheet', () => {
     await user.click(screen.getByRole('button', { name: 'Score override' }));
     const sheetAgain = screen.getByRole('dialog', { name: 'Score override' });
     await user.click(within(sheetAgain).getByRole('button', { name: /Bravo/ }));
-    await user.click(within(sheetAgain).getByRole('radio', { name: /Automatic/ }));
-    await user.click(within(sheetAgain).getByRole('button', { name: 'Remove override' }));
+    await user.click(within(sheetAgain).getByRole('button', { name: /Split dead heat/ }));
+    await user.click(within(sheetAgain).getByRole('button', { name: 'Save override' }));
     await user.click(within(sheetAgain).getByRole('button', { name: 'Close' }));
+    expect(bravoRow).toHaveTextContent('2.5 pts · manual');
+
+    await user.click(screen.getByRole('button', { name: 'Score override' }));
+    const sheetClear = screen.getByRole('dialog', { name: 'Score override' });
+    await user.click(within(sheetClear).getByRole('button', { name: /Bravo/ }));
+    await user.click(within(sheetClear).getByRole('radio', { name: /Automatic/ }));
+    await user.click(within(sheetClear).getByRole('button', { name: 'Remove override' }));
+    await user.click(within(sheetClear).getByRole('button', { name: 'Close' }));
     expect(bravoRow).not.toHaveTextContent('Manual');
+  });
+
+  it('triggers light haptic feedback on tap unless disabled in preferences', async () => {
+    const user = userEvent.setup();
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true, writable: true });
+    localStorage.removeItem('mg.prefs.scorerHaptics');
+    render(<Harness />);
+    await user.click(screen.getByRole('button', { name: /^Bravo, lane/ }));
+    expect(vibrate).toHaveBeenCalledWith(15);
+
+    vibrate.mockClear();
+    localStorage.setItem('mg.prefs.scorerHaptics', '0');
+    await user.click(screen.getByRole('button', { name: /^Alpha, lane/ }));
+    expect(vibrate).not.toHaveBeenCalled();
+    localStorage.removeItem('mg.prefs.scorerHaptics');
   });
 });
 

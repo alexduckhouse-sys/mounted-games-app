@@ -211,7 +211,7 @@ function StatusSheetView({ competitionId, sheet, onClose, onDone }: {
         <label className="rf-fld">{next === 0 ? 'Note (optional)' : next === 2 ? 'Reason (optional)' : 'Reason'}
           <textarea className="ops-note-input" value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
         </label>
-        <span className="rf-t2">Only organisers see the reason. It isn’t shown on public pages.</span>
+        <span className="rf-t2">Visible to organisers only.</span>
         {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
         <div className="rf-actions">
           <button type="button" className="rf-btn" onClick={onClose}>Cancel</button>

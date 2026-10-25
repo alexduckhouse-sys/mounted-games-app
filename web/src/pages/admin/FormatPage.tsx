@@ -18,8 +18,10 @@ import { PartHead } from './LaptopParts';
 import { RaceListDialog } from './RaceListDialog';
 import { NumberField } from '../../components/NumberField';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { usePageWidth } from '../../components/pageWidthState';
 import { DecFormConfigEditor } from './DecFormConfig';
 import { ScorerLinksCard } from '../competition/ScorerLinksCard';
+import { useCardsEnabled } from '../competition/ScoringParts';
 
 const DEFAULT_MINUTES = 10;
 const MAIN_ARENA = 'Main arena';
@@ -41,6 +43,7 @@ const hasScores = (s: Session) => s.status !== 0 || s.heats.some((h) => h.races.
  * in the creator, not here. Breaks and briefings are kept on the timetable and survive generating it.
  */
 export function FormatPage() {
+  usePageWidth('wide');
   const { id } = useParams<{ id: string }>();
   const editingId = id ? parseInt(id, 10) : null;
   const { canOrganise } = useAuth();
@@ -52,6 +55,7 @@ export function FormatPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
+  const [cardsEnabled, toggleCardsEnabled] = useCardsEnabled(editingId ?? undefined);
 
   const reload = useCallback(async () => {
     if (!editingId) return;
@@ -224,14 +228,28 @@ export function FormatPage() {
     ...raceSessions.map((s) => {
       const exact = s.heats.length > 0 && !!s.scheduledStart;
       const row = planOf.get(s.id);
-      const start = exact ? new Date(s.scheduledStart!) : row && row.minutes > 0 ? row.start : null;
-      return { key: `s${s.id}`, start, title: s.name, sub: [s.arenaName?.trim() || MAIN_ARENA, heatsText(s)].join(' · '), minutes: exact ? null : row?.minutes ?? 0, exact };
+      const start = exact
+        ? new Date(s.scheduledStart!)
+        : row && row.minutes > 0
+          ? row.start
+          : s.scheduledStart
+            ? new Date(s.scheduledStart)
+            : null;
+      return {
+        key: `s${s.id}`,
+        start,
+        orderIndex: s.orderIndex,
+        title: s.name,
+        sub: [s.arenaName?.trim() || MAIN_ARENA, heatsText(s)].join(' · '),
+        minutes: exact ? null : (row && row.minutes > 0 ? row.minutes : s.durationMinutes ?? 0),
+        exact,
+      };
     }),
     ...fixedItems.map((b) => ({
-      key: `b${b.id}`, start: b.scheduledStart ? new Date(b.scheduledStart) : null, title: b.name,
+      key: `b${b.id}`, start: b.scheduledStart ? new Date(b.scheduledStart) : null, orderIndex: b.orderIndex, title: b.name,
       sub: [b.kind === SessionKind.Briefing ? 'Briefing' : 'Break', b.arenaName?.trim() || 'All arenas'].join(' · '), minutes: b.durationMinutes ?? 0, exact: true,
     })),
-  ].sort((a, b) => (a.start?.getTime() ?? Infinity) - (b.start?.getTime() ?? Infinity));
+  ].sort((a, b) => (a.start?.getTime() ?? Infinity) - (b.start?.getTime() ?? Infinity) || a.orderIndex - b.orderIndex);
 
   const editingSession = raceSessions.find((s) => s.id === editing) ?? null;
   const editingSection = editingSession ? sectionOf(editingSession) : undefined;
@@ -388,11 +406,23 @@ export function FormatPage() {
             <Link to={`/competitions/${competition.id}/declarations`} className="mg-small-btn">Dec forms</Link>
             <Link to={`/competitions/${competition.id}/details`} className="mg-small-btn">Equipment list</Link>
           </div>
+          <div className="mg-card flex items-center justify-between gap-3 px-4 py-3 text-sm">
+            <label className="flex cursor-pointer items-center gap-2.5 font-semibold text-[rgb(var(--mg-heading))]">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={cardsEnabled}
+                onChange={(e) => toggleCardsEnabled(e.target.checked)}
+              />
+              <span>Disciplinary cards (Yellow / Red)</span>
+            </label>
+            <span className="text-xs text-[rgb(var(--mg-muted))]">{cardsEnabled ? 'Shown on scoreboards' : 'Off'}</span>
+          </div>
           <ScorerLinksCard competitionId={competition.id} canWrite={canOrganise(competition)} />
         </div>
       </div>
 
-      <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
+      <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-end gap-3 px-3 py-4 sm:px-4">
           <button type="button" onClick={() => void generate()} disabled={busy} className="mg-btn mg-btn-primary !min-h-[50px] !rounded-[10px] !px-[18px] !text-base">{busy ? 'Working…' : 'Generate timetable'}</button>
         </div>

@@ -104,29 +104,40 @@ public class RiderSwapService(AppDbContext db)
                 if (string.IsNullOrWhiteSpace(repRider) && string.IsNullOrWhiteSpace(repHorse))
                     throw new EntryValidationException("Provide a replacement rider name or replacement pony name for an emergency replacement.");
 
-                var seatOrder = outRider.OrderIndex;
-                var wasCaptain = outRider.IsCaptain;
-                outRider.IsReserve = true;
-                outRider.IsCaptain = false;
-                outRider.OrderIndex = form.Riders.Count > 0 ? form.Riders.Max(r => r.OrderIndex) + 1 : 5;
-
-                inRider = new RiderEntry
+                if (string.IsNullOrWhiteSpace(repRider) && !string.IsNullOrWhiteSpace(repHorse))
                 {
-                    DeclarationFormId = form.Id,
-                    FullName = !string.IsNullOrWhiteSpace(repRider) ? repRider : outRider.FullName,
-                    DateOfBirth = string.IsNullOrWhiteSpace(repRider) ? outRider.DateOfBirth : null,
-                    HorseName = !string.IsNullOrWhiteSpace(repHorse) ? repHorse : outRider.HorseName,
-                    PonyHeightHands = string.IsNullOrWhiteSpace(repHorse) ? outRider.PonyHeightHands : null,
-                    BibColour = outRider.BibColour,
-                    IsCaptain = wasCaptain,
-                    IsReserve = false,
-                    IsGuestRider = !string.IsNullOrWhiteSpace(repRider),
-                    OrderIndex = seatOrder,
-                    UseInitialOnly = outRider.UseInitialOnly,
-                    NoFilming = outRider.NoFilming,
-                };
-                form.Riders.Add(inRider);
-                await db.SaveChangesAsync(ct);
+                    // Pony-only swap: the rider keeps their place in the team on the replacement pony.
+                    outRider.HorseName = repHorse;
+                    outRider.PonyHeightHands = null;
+                    inRider = outRider;
+                    await db.SaveChangesAsync(ct);
+                }
+                else
+                {
+                    var seatOrder = outRider.OrderIndex;
+                    var wasCaptain = outRider.IsCaptain;
+                    outRider.IsReserve = true;
+                    outRider.IsCaptain = false;
+                    outRider.OrderIndex = form.Riders.Count > 0 ? form.Riders.Max(r => r.OrderIndex) + 1 : 5;
+
+                    inRider = new RiderEntry
+                    {
+                        DeclarationFormId = form.Id,
+                        FullName = !string.IsNullOrWhiteSpace(repRider) ? repRider : outRider.FullName,
+                        DateOfBirth = string.IsNullOrWhiteSpace(repRider) ? outRider.DateOfBirth : null,
+                        HorseName = !string.IsNullOrWhiteSpace(repHorse) ? repHorse : outRider.HorseName,
+                        PonyHeightHands = string.IsNullOrWhiteSpace(repHorse) ? outRider.PonyHeightHands : null,
+                        BibColour = outRider.BibColour,
+                        IsCaptain = wasCaptain,
+                        IsReserve = false,
+                        IsGuestRider = !string.IsNullOrWhiteSpace(repRider),
+                        OrderIndex = seatOrder,
+                        UseInitialOnly = outRider.UseInitialOnly,
+                        NoFilming = outRider.NoFilming,
+                    };
+                    form.Riders.Add(inRider);
+                    await db.SaveChangesAsync(ct);
+                }
             }
             else
             {

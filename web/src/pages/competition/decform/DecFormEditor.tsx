@@ -256,6 +256,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             addLabel={editing ? 'Save' : reserve ? 'Add reserve' : 'Add rider'}
             ready={riderReady(form, reserve, undefined, config)}
             config={config}
+            competitionId={competition.id}
             onChange={(patch) => setForm((cur) => ({ ...cur, ...patch }))}
             onPick={(pick) => {
               const original = saved.find((s) => s.id === pick.id) ?? {
@@ -282,7 +283,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
         )}
       </div>
 
-      <div className="flex flex-col gap-2 lg:sticky lg:bottom-[calc(68px+env(safe-area-inset-bottom))] lg:z-10 lg:-mx-4 lg:flex-row lg:items-center lg:gap-6 lg:border-t lg:border-[rgb(var(--mg-rule))] lg:bg-[rgb(var(--mg-surface))] lg:px-4 lg:py-3.5">
+      <div className="flex flex-col gap-2 lg:sticky lg:bottom-0 lg:z-10 lg:-mx-4 lg:flex-row lg:items-center lg:gap-6 lg:border-t lg:border-[rgb(var(--mg-rule))] lg:bg-[rgb(var(--mg-surface))] lg:px-4 lg:py-3.5">
         <label className="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-4 text-base font-medium lg:order-2 lg:min-h-11 lg:border-0 lg:px-0 lg:text-[15px]">
           <input type="checkbox" className="h-[22px] w-[22px] shrink-0 cursor-pointer accent-[rgb(var(--mg-button))]" checked={agreed}
             onChange={(e) => { setAgreed(e.target.checked); setSubmitted(false); }} />

@@ -29,11 +29,16 @@ describe('publisher negotiation and controls', () => {
     expect(getUserMedia).not.toHaveBeenCalled();
     const changed = vi.fn(); const unsubscribe = p.subscribe(changed);
     await start();
-    expect(getUserMedia).toHaveBeenCalledWith({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: 'environment' }, audio: { echoCancellation: true, noiseSuppression: true } });
+    expect(getUserMedia).toHaveBeenCalledWith({ video: { width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30 }, facingMode: 'environment' }, audio: { echoCancellation: true, noiseSuppression: true } });
     expect(await p.devices()).toEqual([{ kind: 'videoinput', deviceId: 'usb' }]);
+    expect(await p.audioDevices()).toEqual([{ kind: 'audioinput' }]);
     const peer = FakePeer.instances[0];
     expect(peer.configuration).toEqual({ iceServers: [{ urls: 'stun:example.test' }], bundlePolicy: 'max-bundle' });
-    expect(peer.addTransceiver.mock.calls[0][1].sendEncodings).toEqual([{ rid: 'f', maxBitrate: 1500000 }, { rid: 'h', scaleResolutionDownBy: 2, maxBitrate: 500000 }, { rid: 'q', scaleResolutionDownBy: 4, maxBitrate: 150000 }]);
+    expect(peer.addTransceiver.mock.calls[0][1].sendEncodings).toEqual([
+      { rid: 'f', maxBitrate: 2000000, maxFramerate: 30 },
+      { rid: 'h', scaleResolutionDownBy: 1.5, maxBitrate: 850000, maxFramerate: 30 },
+      { rid: 'q', scaleResolutionDownBy: 2, maxBitrate: 350000, maxFramerate: 30 },
+    ]);
     expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', { sdpOffer: 'publisher offer', videoMid: '0', audioMid: '1', arenaName: 'Main Arena', angleName: 'Main camera', takeOver: false });
     expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams/1/ready', { attempt: 1 });
     expect(p.getSnapshot().state).toBe('live'); expect(d.wakeLock).toHaveBeenCalled();
@@ -87,16 +92,20 @@ describe('publisher negotiation and controls', () => {
 });
 
 describe.each(['pause', 'mute'] as const)('%s optimistic controls', (control) => {
-  it('restores the previous setting and audio when the current request fails', async () => {
+  it('restores pause on failure while keeping mute active for privacy when a PATCH fails', async () => {
     const { publisher: p, start, request } = setup(); await start();
     const pending = deferred<unknown>(); request.mockReturnValueOnce(pending.promise);
     const change = p[control](true);
     const rejected = expect(change).rejects.toThrow('offline');
     expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(false);
     pending.reject(new Error('offline')); await rejected;
-    expect(p.getSnapshot().state).toBe('live');
-    expect(p.getSnapshot().audioMuted).toBe(false);
-    expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(true);
+    if (control === 'pause') {
+      expect(p.getSnapshot().state).toBe('live');
+      expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(true);
+    } else {
+      expect(p.getSnapshot().audioMuted).toBe(true);
+      expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(false);
+    }
     p.dispose();
   });
 
@@ -219,7 +228,7 @@ describe('publisher recovery', () => {
     const normal = request.getMockImplementation()!;
     request.mockImplementation(async (method, path) => { if (path.endsWith('heartbeat')) throw statusError(409); return normal(method, path); });
     await vi.advanceTimersByTimeAsync(15000);
-    expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams/1/heartbeat');
+    expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams/1/heartbeat', expect.objectContaining({ audioMuted: false, qualityPreset: '720p' }));
     expect(request).toHaveBeenLastCalledWith('PATCH', '/competitions/1/streams/1', expect.any(Object));
     expect(request).toHaveBeenCalledWith('POST', '/competitions/1/streams', expect.objectContaining({ takeOver: false })); p.dispose();
   });
@@ -412,6 +421,95 @@ describe('publisher camera switching and early controls', () => {
     const second = p.switchCamera('usb');
     swap.resolve(); await first; await second;
     expect(p.getSnapshot().media!.getVideoTracks()).toHaveLength(1);
+    p.dispose();
+  });
+  it('supports switching audio input, wind filter toggle, hardware zoom, quality presets, and 720p capture fallback', async () => {
+    const { publisher: p, start, getUserMedia } = setup();
+    let firstTry = true;
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+      if (firstTry && constraints.video && typeof constraints.video === 'object' && (constraints.video.width as { ideal?: number })?.ideal === 3840) {
+        firstTry = false;
+        throw new Error('OverconstrainedError');
+      }
+      const vTrack = Object.assign(new FakeTrack(), {
+        getSettings: () => ({ height: 2160 }),
+        getCapabilities: () => ({ zoom: { max: 4 } }),
+        applyConstraints: vi.fn(async () => {}),
+      });
+      return asMedia(new FakeMediaStream([
+        ...(constraints.video ? [vTrack] : []),
+        ...(constraints.audio ? [new FakeTrack('audio')] : []),
+      ]));
+    });
+    await start();
+    expect(p.getSnapshot().captureResolution).toBe('4K');
+    expect(p.getSnapshot().maxZoom).toBe(4);
+    await p.setZoom(2.5);
+    expect(p.getSnapshot().zoom).toBe(2.5);
+    p.setWindFilter(false);
+    expect(p.getSnapshot().windFilter).toBe(false);
+    p.setWindFilter(true);
+    expect(p.getSnapshot().windFilter).toBe(true);
+    const sender = FakePeer.instances[0].transceivers[0].sender as unknown as {
+      getParameters: () => { degradationPreference?: string; encodings: Array<{ rid?: string; maxBitrate?: number; scaleResolutionDownBy?: number; maxFramerate?: number }> };
+      setParameters: ReturnType<typeof vi.fn>;
+    };
+    const encodingsState: Array<{ rid?: string; maxBitrate?: number; scaleResolutionDownBy?: number; maxFramerate?: number }> = [{ rid: 'f' }, { rid: 'h' }, { rid: 'q' }, {}];
+    const paramsObj = { encodings: encodingsState, degradationPreference: undefined as string | undefined };
+    sender.getParameters = () => paramsObj;
+    sender.setParameters = vi.fn(async () => {});
+    expect((p.getSnapshot().media!.getVideoTracks()[0] as unknown as { contentHint?: string }).contentHint).toBe('motion');
+    await p.setQualityPreset('360p');
+    expect(p.getSnapshot().qualityPreset).toBe('360p');
+    expect(paramsObj.degradationPreference).toBe('maintain-framerate');
+    expect(sender.setParameters).toHaveBeenCalled();
+    await p.setQualityPreset('480p');
+    expect(p.getSnapshot().qualityPreset).toBe('480p');
+    await p.setQualityPreset('auto');
+    expect(p.getSnapshot().qualityPreset).toBe('auto');
+    await p.setQualityPreset('1080p');
+    expect(p.getSnapshot().qualityPreset).toBe('1080p');
+    await p.setQualityPreset('720p');
+    expect(p.getSnapshot().qualityPreset).toBe('720p');
+    await p.switchAudio('ext-mic');
+    expect(getUserMedia).toHaveBeenLastCalledWith({ video: false, audio: { echoCancellation: true, noiseSuppression: true, deviceId: { exact: 'ext-mic' } } });
+
+    // Switch audio with 1440p and 1080p resolution labels & error handling
+    let heightToReport = 1440;
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+      const vTrack = Object.assign(new FakeTrack(), {
+        getSettings: () => ({ height: heightToReport }),
+      });
+      return asMedia(new FakeMediaStream([
+        ...(constraints.video ? [vTrack] : []),
+        ...(constraints.audio ? [new FakeTrack('audio')] : []),
+      ]));
+    });
+    await p.switchCamera('cam-1440');
+    expect(p.getSnapshot().captureResolution).toBe('1440p');
+    heightToReport = 1080;
+    await p.switchCamera('cam-1080');
+    expect(p.getSnapshot().captureResolution).toBe('1080p');
+
+    // Audio replaceTrack failure releases track
+    FakePeer.instances[0].transceivers[1].sender.replaceTrack.mockRejectedValueOnce(new Error('mic error'));
+    await expect(p.switchAudio('bad-mic')).rejects.toThrow('mic error');
+
+    // Candidate-pair RTT monitoring, ICE failed recovery, and manual reconnect()
+    FakePeer.instances[0].getStats.mockResolvedValueOnce(new Map<string, { type: string }>([
+      ['video', { type: 'outbound-rtp', kind: 'video', packetsSent: 500, bytesSent: 2_000_000, framesPerSecond: 29.8, qualityLimitationReason: 'none' } as unknown as { type: string }],
+      ['pair', { type: 'candidate-pair', state: 'succeeded', currentRoundTripTime: 0.45 } as unknown as { type: string }],
+    ]));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(p.getSnapshot().rttMs).toBe(450);
+    expect(p.getSnapshot().signal).toBe('fair');
+
+    FakePeer.instances[0].ice('failed');
+    await flush();
+    expect(FakePeer.instances).toHaveLength(2);
+    p.reconnect();
+    await flush();
+    expect(FakePeer.instances).toHaveLength(3);
     p.dispose();
   });
 });

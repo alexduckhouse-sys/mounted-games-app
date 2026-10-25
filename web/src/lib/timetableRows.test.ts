@@ -41,6 +41,8 @@ describe('statusLabel', () => {
   it.each<[TimetableStatus, number, string]>([
     ['live', 0, 'On now'],
     ['late', 8, '+8 min'],
+    ['late', 60, '+1h'],
+    ['late', 94, '+1h 34m'],
     ['on-time', 0, 'On time'],
     ['finished', 12, 'Finished'],
   ])('says %s (%i) as %j', (status, delay, label) => {
@@ -188,8 +190,9 @@ describe('isGroupFinished and groupMaxDelay', () => {
     expect(isGroupFinished([])).toBe(false);
   });
 
-  it('takes the longest delay of the unfinished rows only', () => {
+  it('takes the longest delay of the unfinished, non-live rows only', () => {
     expect(groupMaxDelay([row('finished', 9), row('live', 4), row('late', 6)])).toBe(6);
+    expect(groupMaxDelay([row('finished', 9), row('live', 12)])).toBe(0);
     expect(groupMaxDelay([row('finished', 9)])).toBe(0);
     expect(groupMaxDelay([])).toBe(0);
   });

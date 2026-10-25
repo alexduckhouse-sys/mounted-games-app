@@ -1,9 +1,11 @@
+/* eslint-disable react-refresh/only-export-components */
 import { motion, type PanInfo } from 'framer-motion';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
 import { dotColour, teamBoxStyle } from '../../lib/teamColours';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
+import { RaceSelect } from '../../components/RacePicker';
 import { ELIM_REASONS, OTHER_REASON, noteFor, reasonKeyOf, statusFor } from '../../lib/elimReasons';
 import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import type { NextLanes } from '../../lib/nextRoundLanes';
@@ -12,7 +14,7 @@ import type { RaceSummary } from '../../lib/raceSummary';
 import { statusLetter, statusLabel } from '../../lib/resultStatus';
 import { ordinal } from '../../lib/toplist';
 import type { Heat, HeatEntry, Race } from '../../types';
-import { displayLaneFor, type LaneRules } from './laneRules';
+import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import './heat.css';
 import './scoring.css';
 import { formatPoints } from '../../lib/formatPoints';
@@ -22,10 +24,156 @@ export interface ScoreOverrideValue {
   reason?: string;
 }
 
-/** One team in the race being scored. A tap places it, a hold or swipe down eliminates it; the Out and HC buttons are for everyone who can't swipe. */
+export type RefereeCard = 'yellow' | 'red' | null;
+
+/** Whether disciplinary cards (Yellow / Red) are enabled for this competition. Defaults to false unless enabled by an admin. */
+export function isCardsEnabled(competitionId?: number | null): boolean {
+  if (!competitionId) return false;
+  try {
+    return localStorage.getItem(`mg.cardsEnabled.${competitionId}`) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Enables or disables disciplinary cards (Yellow / Red) for a competition and notifies listeners. */
+export function setCardsEnabled(competitionId: number | null | undefined, enabled: boolean): void {
+  if (!competitionId) return;
+  try {
+    localStorage.setItem(`mg.cardsEnabled.${competitionId}`, enabled ? '1' : '0');
+    window.dispatchEvent(new CustomEvent('mg:cards-config-changed', { detail: { competitionId, enabled } }));
+    window.dispatchEvent(new CustomEvent('mg-cards-updated', { detail: { competitionId } }));
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+/** Reactive hook for reading and updating whether disciplinary cards are enabled for a competition. */
+export function useCardsEnabled(competitionId?: number | null): [boolean, (enabled: boolean) => void] {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    function onChange() { setTick((t) => t + 1); }
+    window.addEventListener('mg:cards-config-changed', onChange);
+    window.addEventListener('mg-cards-updated', onChange);
+    window.addEventListener('storage', onChange);
+    return () => {
+      window.removeEventListener('mg:cards-config-changed', onChange);
+      window.removeEventListener('mg-cards-updated', onChange);
+      window.removeEventListener('storage', onChange);
+    };
+  }, []);
+  const enabled = isCardsEnabled(competitionId);
+  const update = (next: boolean) => setCardsEnabled(competitionId, next);
+  return [enabled, update];
+}
+
+export function TeamCardBadge({ card }: { card?: RefereeCard }) {
+  if (card === 'yellow') {
+    return <span role="img" aria-label="Yellow card" title="Yellow card" className="ml-1 inline-block select-none text-xs">🟨</span>;
+  }
+  if (card === 'red') {
+    return <span role="img" aria-label="Red card" title="Red card" className="ml-1 inline-block select-none text-xs">🟥</span>;
+  }
+  return null;
+}
+
+/** Checks if a referee note starts with [YC] or [RC] and returns the card type plus clean note. */
+export function parseRefereeCard(note: string | null | undefined): { card: RefereeCard; cleanNote: string } {
+  if (!note) return { card: null, cleanNote: '' };
+  const match = /^\s*\[(YC|RC)\]\s*(.*)$/i.exec(note);
+  if (match) {
+    const card: RefereeCard = match[1].toUpperCase() === 'YC' ? 'yellow' : 'red';
+    return { card, cleanNote: match[2].trim() };
+  }
+  return { card: null, cleanNote: note.trim() };
+}
+
+/** Formats a referee note with the [YC] or [RC] prefix when a card is selected. */
+export function formatRefereeCardNote(card: RefereeCard, cleanNote: string): string {
+  const clean = cleanNote.replace(/^\s*\[(YC|RC)\]\s*/i, '').trim();
+  if (card === 'yellow') return clean ? `[YC] ${clean}` : '[YC]';
+  if (card === 'red') return clean ? `[RC] ${clean}` : '[RC]';
+  return clean;
+}
+
+/** Reads stored cards from localStorage for immediate client-side badging. */
+export function getStoredCards(competitionId?: number | null): Record<number, 'yellow' | 'red'> {
+  if (!competitionId) return {};
+  try {
+    const raw = localStorage.getItem(`mg.cards.${competitionId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Saves or clears a team's card in localStorage and dispatches an event. */
+export function setStoredCard(competitionId: number | null | undefined, teamId: number, card: RefereeCard): void {
+  if (!competitionId) return;
+  try {
+    const cards = getStoredCards(competitionId);
+    if (card) {
+      cards[teamId] = card;
+    } else {
+      delete cards[teamId];
+    }
+    localStorage.setItem(`mg.cards.${competitionId}`, JSON.stringify(cards));
+    window.dispatchEvent(new CustomEvent('mg-cards-updated', { detail: { competitionId, teamId, card } }));
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+/** Plays a subtle two-tone audio chime and short haptic pulse for urgent scorer/organiser alerts. */
+export function playAlertChime(): void {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.vibrate && localStorage.getItem('mg.prefs.scorerHaptics') !== '0') {
+      navigator.vibrate([80, 40, 120]);
+    }
+  } catch {
+    // Ignore vibration errors.
+  }
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, now); // D5
+    gain1.gain.setValueAtTime(0.12, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.15);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, now + 0.1); // A5
+    gain2.gain.setValueAtTime(0.15, now + 0.1);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.1);
+    osc2.stop(now + 0.35);
+
+    setTimeout(() => {
+      ctx.close().catch(() => {});
+    }, 450);
+  } catch {
+    // Graceful no-op in test environments without audio support.
+  }
+}
+
+/** One team in the race being scored. A tap places it (or restores an eliminated team); a press-and-hold or swipe down eliminates it. */
 export function ScoreRow({
-  entry, lane, hatband, state, sitting, hc, canScore, canMarkHc, points = 0, heatTotal = 0, overridePoints,
-  onTap, onSwipeEliminate, onToggleElim, onHc,
+  entry, lane, hatband, state, sitting, hc, canScore, points = 0, heatTotal = 0, overridePoints,
+  card,
+  onTap, onSwipeEliminate, onToggleElim,
 }: {
   entry: HeatEntry;
   lane: string;
@@ -34,14 +182,15 @@ export function ScoreRow({
   sitting: boolean;
   hc: boolean;
   canScore: boolean;
-  canMarkHc: boolean;
+  canMarkHc?: boolean;
   points?: number;
   heatTotal?: number;
   overridePoints?: number;
+  card?: RefereeCard;
   onTap: () => void;
   onSwipeEliminate: () => void;
   onToggleElim: () => void;
-  onHc: () => void;
+  onHc?: () => void;
 }) {
   const eliminated = state?.eliminated ?? false;
   const placed = Boolean(state?.place && !eliminated);
@@ -91,7 +240,16 @@ export function ScoreRow({
       dragged.current = false;
       return;
     }
-    if (!disabled) onTap();
+    if (!disabled) {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.vibrate && localStorage.getItem('mg.prefs.scorerHaptics') !== '0') {
+          navigator.vibrate(15);
+        }
+      } catch {
+        // Ignore storage or vibration errors.
+      }
+      onTap();
+    }
   }
 
   const badge = sitting ? (
@@ -118,8 +276,8 @@ export function ScoreRow({
   ) : null;
 
   const rowStyle = {
-    ...teamBoxStyle(entry.bibColour),
-    ...(eliminated ? { borderColor: '#E8B4BA' } : entry.bibColour ? { borderColor: dotColour(entry.bibColour) } : {}),
+    ...(hatband ? teamBoxStyle(hatband) : {}),
+    ...(eliminated ? { borderColor: '#E8B4BA' } : {}),
   };
 
   return (
@@ -154,7 +312,11 @@ export function ScoreRow({
         <span className="sc-lane" title={`Lane ${lane}`}>{sitting ? lane : `L${lane}`}</span>
         <span className="sc-who">
           <span className="sc-name-row">
-            <span className="sc-name">{entry.teamName} {hc && <span className="sc-tag sc-tag-hc">HC</span>}</span>
+            <span className="sc-name">
+              {entry.teamName}
+              <TeamCardBadge card={card} />
+              {hc && <span className="sc-tag sc-tag-hc">HC</span>}
+            </span>
             {overridePoints != null && !hc && <span className="sc-tag sc-tag-manual">Manual</span>}
           </span>
           <span className="sc-meta-row">
@@ -165,16 +327,6 @@ export function ScoreRow({
         </span>
         {badge}
       </motion.button>
-      {canScore && !sitting && (
-        <button type="button" className="sc-mini" aria-pressed={eliminated} aria-label={eliminated ? `Bring ${entry.teamName} back in` : `Eliminate ${entry.teamName}`} onClick={onToggleElim}>
-          {eliminated ? 'Back in' : 'Out'}
-        </button>
-      )}
-      {canMarkHc && (
-        <button type="button" className="sc-mini" aria-pressed={hc} aria-label={hc ? `Bring ${entry.teamName} back into scoring` : `Mark ${entry.teamName} hors concours`} onClick={onHc}>
-          HC
-        </button>
-      )}
     </li>
   );
 }
@@ -187,9 +339,11 @@ function Overlay({ label, onClose, children }: { label: string; onClose: () => v
   );
 }
 
-/** Bottom sheet to override a team's score (Automatic, Set points, or Hors concours). */
+/** Bottom sheet to override a team's score (Automatic, Set points, or Hors concours) and run mid-session race controls. */
 export function ScoreOverrideSheet({
   raceName, entries, lanesByTeam, pendingByTeam, pointsFor, overrides, hcTeamIds, onSetHc, onSaveOverride, onClose,
+  isRaceComplete, onClearRaceScore, competitionId,
+  onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner,
 }: {
   raceName: string;
   entries: HeatEntry[];
@@ -201,11 +355,24 @@ export function ScoreOverrideSheet({
   onSetHc?: (teamId: number, hc: boolean) => Promise<void> | void;
   onSaveOverride: (teamId: number, value: ScoreOverrideValue | null) => void;
   onClose: () => void;
+  isRaceComplete?: boolean;
+  onClearRaceScore?: () => Promise<void> | void;
+  competitionId?: number;
+  onAddRace?: (raceName: string) => Promise<void> | void;
+  onRenameRace?: (newName: string) => Promise<void> | void;
+  onRerunRace?: () => Promise<void> | void;
+  runoffTeams?: Array<{ id: number; name: string }>;
+  onPickRunoffWinner?: (teamId: number) => Promise<void> | void;
 }) {
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
   const [mode, setMode] = useState<'auto' | 'set' | 'hc'>('auto');
   const [pts, setPts] = useState<number>(0);
   const [reason, setReason] = useState<string>('');
+  const [card, setCard] = useState<RefereeCard>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [cardsEnabled] = useCardsEnabled(competitionId);
+  const [runoffTeamId, setRunoffTeamId] = useState<number | null>(runoffTeams?.[0]?.id ?? null);
 
   const selectedEntry = entries.find((e) => e.teamId === selectedTeamId) ?? null;
 
@@ -221,22 +388,33 @@ export function ScoreOverrideSheet({
     const ov = overrides[entry.teamId];
     const st = pendingByTeam.get(entry.teamId);
     const defaultPts = ov ? ov.points : st?.place && !st.eliminated ? pointsFor(st.place, false) : 0;
+    const note = ov?.reason ?? st?.refereeNote ?? '';
+    const parsed = parseRefereeCard(note);
+    const storedCards = getStoredCards(competitionId);
+    const effectiveCard = cardsEnabled ? (parsed.card ?? storedCards[entry.teamId] ?? null) : null;
+
     setSelectedTeamId(entry.teamId);
     setMode(isHc ? 'hc' : ov ? 'set' : 'auto');
     setPts(defaultPts);
-    setReason(ov?.reason ?? '');
+    setCard(effectiveCard);
+    setReason(parsed.cleanNote);
   }
 
   async function saveTeam() {
     if (!selectedEntry) return;
     const teamId = selectedEntry.teamId;
     const wasHc = hcTeamIds.has(teamId);
+    if (cardsEnabled) {
+      setStoredCard(competitionId, teamId, card);
+    }
+    const finalReason = cardsEnabled ? formatRefereeCardNote(card, reason) : reason.trim();
+
     if (mode === 'hc') {
       onSaveOverride(teamId, null);
       if (onSetHc && !wasHc) await onSetHc(teamId, true);
     } else if (mode === 'set') {
       if (onSetHc && wasHc) await onSetHc(teamId, false);
-      onSaveOverride(teamId, { points: pts, reason: reason.trim() || undefined });
+      onSaveOverride(teamId, { points: pts, reason: finalReason || undefined });
     } else {
       if (onSetHc && wasHc) await onSetHc(teamId, false);
       onSaveOverride(teamId, null);
@@ -261,17 +439,132 @@ export function ScoreOverrideSheet({
             {entries.map((e) => {
               const isHc = hcTeamIds.has(e.teamId);
               const ov = overrides[e.teamId];
+              const st = pendingByTeam.get(e.teamId);
+              const teamCard = cardsEnabled
+                ? (parseRefereeCard(ov?.reason ?? st?.refereeNote).card ?? getStoredCards(competitionId)[e.teamId] ?? null)
+                : null;
               const statusText = isHc ? 'HC' : ov ? `${formatPoints(ov.points)} pts · manual` : autoStatus(e.teamId);
               return (
                 <button key={e.id} type="button" className="sc-ov-team-btn" onClick={() => pickTeam(e)}>
                   <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: dotColour(e.bibColour) }} aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate font-bold">{e.teamName}</span>
+                  <span className="min-w-0 flex-1 truncate font-bold">
+                    {e.teamName}
+                    <TeamCardBadge card={teamCard} />
+                  </span>
                   <span className="text-sm font-semibold text-[rgb(var(--mg-muted))]">{statusText}</span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-[rgb(var(--mg-muted))]" aria-hidden="true" />
                 </button>
               );
             })}
           </div>
+          {onClearRaceScore && isRaceComplete && (
+            <div className="border-t border-[rgb(var(--mg-rule-soft))] pt-3">
+              {!confirmClear ? (
+                <button
+                  type="button"
+                  className="mg-btn mg-btn-secondary w-full text-red-700"
+                  onClick={() => setConfirmClear(true)}
+                >
+                  Clear race score
+                </button>
+              ) : (
+                <div className="space-y-2 rounded-lg border border-red-300 bg-red-50/70 p-2.5">
+                  <p className="text-xs font-semibold text-red-900">
+                    Reset all placings and points for {raceName}?
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="mg-btn mg-btn-danger flex-1"
+                      disabled={clearing}
+                      onClick={async () => {
+                        setClearing(true);
+                        try {
+                          await onClearRaceScore();
+                        } finally {
+                          setClearing(false);
+                          setConfirmClear(false);
+                        }
+                      }}
+                    >
+                      {clearing ? 'Clearing…' : 'Confirm clear score'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mg-btn mg-btn-secondary"
+                      disabled={clearing}
+                      onClick={() => setConfirmClear(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {(onRenameRace || onAddRace || onRerunRace || (onPickRunoffWinner && runoffTeams && runoffTeams.length > 0)) && (
+            <div className="space-y-3 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">Race controls</span>
+              {onRenameRace && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-[rgb(var(--mg-heading))]">Change this race ({raceName})</span>
+                  <RaceSelect
+                    label="New race name"
+                    submitLabel="Change race"
+                    placeholder="Search replacement race…"
+                    autoReset
+                    onSelect={(nextName) => { void onRenameRace(nextName); }}
+                  />
+                </div>
+              )}
+              {onAddRace && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-[rgb(var(--mg-heading))]">Add a race to this session</span>
+                  <RaceSelect
+                    label="Race to add"
+                    submitLabel="Add race"
+                    placeholder="Search race to add…"
+                    autoReset
+                    onSelect={(nextName) => { void onAddRace(nextName); }}
+                  />
+                </div>
+              )}
+              {onRerunRace && (
+                <button
+                  type="button"
+                  className="mg-btn mg-btn-secondary !min-h-10 w-full !text-xs"
+                  onClick={() => { void onRerunRace(); }}
+                >
+                  Re-run stopped race ({raceName} · Re-run)
+                </button>
+              )}
+              {onPickRunoffWinner && runoffTeams && runoffTeams.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-[rgb(var(--mg-heading))]">Record run-off winner</span>
+                  <div className="flex gap-2">
+                    <select
+                      aria-label="Run-off winning team"
+                      className="mg-field !min-h-10 flex-1 px-2 text-sm"
+                      value={runoffTeamId ?? ''}
+                      onChange={(e) => setRunoffTeamId(e.target.value ? Number(e.target.value) : null)}
+                    >
+                      {runoffTeams.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="mg-btn mg-btn-secondary !min-h-10 !px-3 !text-xs"
+                      disabled={!runoffTeamId}
+                      onClick={() => { if (runoffTeamId) void onPickRunoffWinner(runoffTeamId); }}
+                    >
+                      Save winner
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -280,10 +573,44 @@ export function ScoreOverrideSheet({
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </button>
             <div className="min-w-0 flex-1">
-              <h3 className="sc-title">{selectedEntry.teamName}</h3>
+              <h3 className="sc-title">
+                {selectedEntry.teamName}
+                {cardsEnabled && <TeamCardBadge card={card} />}
+              </h3>
               <p className="sc-sub">Lane {lanesByTeam[selectedEntry.teamId] ?? selectedEntry.laneIndex} · {autoStatus(selectedEntry.teamId)}</p>
             </div>
           </div>
+
+          {cardsEnabled && (
+            <div className="space-y-1.5" role="group" aria-label="Referee card">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
+                Referee card
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  className={`mg-btn text-xs !py-1 !px-2.5 ${card === null ? 'mg-btn-primary' : 'mg-btn-secondary'}`}
+                  onClick={() => setCard(null)}
+                >
+                  No card
+                </button>
+                <button
+                  type="button"
+                  className={`mg-btn text-xs !py-1 !px-2.5 ${card === 'yellow' ? 'border-amber-500 bg-amber-400 font-bold text-amber-950 shadow-xs' : 'mg-btn-secondary'}`}
+                  onClick={() => setCard('yellow')}
+                >
+                  🟨 Yellow card
+                </button>
+                <button
+                  type="button"
+                  className={`mg-btn text-xs !py-1 !px-2.5 ${card === 'red' ? 'border-red-600 bg-red-600 font-bold text-white shadow-xs' : 'mg-btn-secondary'}`}
+                  onClick={() => setCard('red')}
+                >
+                  🟥 Red card
+                </button>
+              </div>
+            </div>
+          )}
 
           <div role="radiogroup" aria-label="How this team scores" className="flex flex-col gap-2">
             <button
@@ -326,16 +653,35 @@ export function ScoreOverrideSheet({
             )}
           </div>
 
-          {mode === 'set' && (
-            <div className="sc-ov-stepper">
-              <span className="font-semibold">Points this race</span>
-              <span className="flex items-center gap-2">
-                <button type="button" className="sc-ov-step-btn" aria-label="Half a point fewer" onClick={() => setPts((p) => Math.max(0, p - 0.5))}>−</button>
-                <span aria-live="polite" className="min-w-10 text-center font-[var(--mg-font-display)] text-2xl font-bold text-[rgb(var(--mg-heading))]">{formatPoints(pts)}</span>
-                <button type="button" className="sc-ov-step-btn" aria-label="Half a point more" onClick={() => setPts((p) => Math.min(30, p + 0.5))}>+</button>
-              </span>
-            </div>
-          )}
+          {mode === 'set' && (() => {
+            const st = pendingByTeam.get(selectedEntry.teamId);
+            const basePlace = st?.place && !st.eliminated ? st.place : 1;
+            const splitPts = (pointsFor(basePlace, false) + pointsFor(basePlace + 1, false)) / 2;
+            return (
+              <div className="space-y-2">
+                <div className="sc-ov-stepper">
+                  <span className="font-semibold">Points this race</span>
+                  <span className="flex items-center gap-2">
+                    <button type="button" className="sc-ov-step-btn" aria-label="Half a point fewer" onClick={() => setPts((p) => Math.max(0, p - 0.5))}>−</button>
+                    <span aria-live="polite" className="min-w-10 text-center font-[var(--mg-font-display)] text-2xl font-bold text-[rgb(var(--mg-heading))]">{formatPoints(pts)}</span>
+                    <button type="button" className="sc-ov-step-btn" aria-label="Half a point more" onClick={() => setPts((p) => Math.min(30, p + 0.5))}>+</button>
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    className="sc-mini"
+                    onClick={() => {
+                      setPts(splitPts);
+                      if (!reason.trim()) setReason('Dead heat');
+                    }}
+                  >
+                    Split dead heat ({formatPoints(splitPts)} pts)
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           {mode !== 'auto' && (
             <label className="flex flex-col gap-1 text-sm font-semibold">
@@ -499,7 +845,7 @@ export function NextLanesCard({ lanes }: { lanes: NextLanes }) {
 }
 
 /** The heat's scores in the same look as the public heat table. Rows are in lane order for the race being scored. */
-export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pending, pointsFor, hcTeamIds }: {
+export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pending, pointsFor, hcTeamIds, cardsByTeam }: {
   heat: Heat;
   races: Race[];
   activeRaceId: number | null;
@@ -508,31 +854,67 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
   pending: PendingPlace[];
   pointsFor: (place: number, eliminated: boolean) => number;
   hcTeamIds: ReadonlySet<number>;
+  cardsByTeam?: Record<number, RefereeCard>;
 }) {
   const teams = inLaneOrder(heat, activeIndex, rules);
-  const minWidth = 12 + 116 + races.length * 23 + 44;
+  const manyRaces = races.length >= 6;
+  const minWidth = manyRaces ? undefined : 12 + 100 + races.length * 22 + 40;
+  const activeRace = races.find((r) => r.id === activeRaceId) ?? null;
+  const allDone = races.length > 0 && races.every((r) => r.isComplete);
+  const metaText = activeRace
+    ? `Race ${activeIndex + 1} of ${races.length} · ${activeRace.name}`
+    : allDone
+      ? 'Final result'
+      : `${races.filter((r) => r.isComplete).length} of ${races.length} races scored`;
 
-  function cellFor(race: Race, teamId: number): ReactNode {
+  function pointsInRace(race: Race, raceIdx: number, entry: HeatEntry): number {
+    if (sitsOutOf(heat, entry, raceIdx, rules) || hcTeamIds.has(entry.teamId)) return 0;
     if (race.id === activeRaceId) {
-      const p = pending.find((x) => x.teamId === teamId);
-      if (p) return p.eliminated
-        ? <span className="heat-elim">{statusLetter(true, p.status) ?? 'E'}</span>
-        : <>{p.place} ({pointsFor(p.place, false)})</>;
+      const p = pending.find((x) => x.teamId === entry.teamId);
+      if (p) {
+        if (p.eliminated) return 0;
+        if (p.points !== undefined) return p.points;
+        return p.place > 0 ? pointsFor(p.place, false) : 0;
+      }
     }
-    const r = race.results.find((x) => x.teamId === teamId);
-    if (!r) return <span className="heat-dash">–</span>;
-    if (r.isSitOut) return <span className="heat-dash">S</span>;
-    if (r.eliminated) return <span className="heat-elim">{statusLetter(true, r.status)}</span>;
-    return <>{formatPoints(r.points)}</>;
+    return race.results.find((x) => x.teamId === entry.teamId)?.points ?? 0;
+  }
+
+  function cellFor(race: Race, raceIdx: number, entry: HeatEntry): ReactNode {
+    if (race.id === activeRaceId) {
+      if (sitsOutOf(heat, entry, raceIdx, rules)) return <span className="heat-dash sitout">S</span>;
+      const p = pending.find((x) => x.teamId === entry.teamId);
+      if (p) {
+        if (p.eliminated) return <span className="heat-elim">{statusLetter(true, p.status) ?? 'E'}</span>;
+        if (p.place > 0) {
+          const pts = hcTeamIds.has(entry.teamId) ? 0 : p.points !== undefined ? p.points : pointsFor(p.place, false);
+          return <>{formatPoints(pts)}</>;
+        }
+      }
+    }
+    const r = race.results.find((x) => x.teamId === entry.teamId);
+    if (r) {
+      if (r.isSitOut) return <span className="heat-dash sitout">S</span>;
+      if (r.eliminated) return <span className="heat-elim">{statusLetter(true, r.status)}</span>;
+      return <>{formatPoints(r.points)}</>;
+    }
+    if (sitsOutOf(heat, entry, raceIdx, rules)) return <span className="heat-dash sitout">S</span>;
+    return <span className="heat-dash">–</span>;
   }
 
   return (
     <section aria-label="Heat table" className="sc-card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="heat-grid" style={{ minWidth }}>
+        <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`} style={{ minWidth }}>
           <thead>
             <tr>
-              <th scope="col" className="heat-team-head"><span>Team</span></th>
+              <th scope="col" className="heat-team-head">
+                <div className="heat-title">
+                  <span className="heat-title-name">{heat.label || 'Heat'}</span>
+                  <span className={`heat-title-meta ${activeRace ? 'heat-title-meta-live' : ''}`}>{metaText}</span>
+                </div>
+                <span>Team</span>
+              </th>
               {races.map((r, i) => (
                 <th key={r.id} scope="col" className="heat-race" title={r.name}>
                   {i > 0 && <span aria-hidden="true" className="heat-sep" />}
@@ -544,12 +926,24 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
           </thead>
           <tbody>
             {teams.map((t) => {
-              const total = races.reduce((sum, r) => sum + (r.results.find((x) => x.teamId === t.teamId)?.points ?? 0), 0);
+              const total = races.reduce((sum, r, idx) => sum + pointsInRace(r, idx, t), 0);
+              const card = cardsByTeam?.[t.teamId];
+              const lane = displayLaneFor(heat, t, activeIndex, rules);
               return (
                 <tr key={t.teamId}>
-                  <th scope="row" className="heat-team" title={t.teamName}>{t.teamName}{hcTeamIds.has(t.teamId) ? ' (HC)' : ''}</th>
-                  {races.map((r, i) => <td key={r.id} className={`heat-cell ${i === 0 ? 'heat-cell-first' : ''}`}>{cellFor(r, t.teamId)}</td>)}
-                  <td className="heat-total">{total}</td>
+                  <th scope="row" className="heat-team" title={t.teamName}>
+                    <div className="heat-team-link">
+                      <span className={`heat-team-name${t.teamName.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
+                        <span aria-hidden="true" className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle" style={{ background: dotColour(t.bibColour) }} />
+                        {t.teamName}
+                        <TeamCardBadge card={card} />
+                        {hcTeamIds.has(t.teamId) ? ' (HC)' : ''}
+                      </span>
+                      <span className="heat-team-lane">{lane === 'S' ? 'Sit out' : `Lane ${lane}`}</span>
+                    </div>
+                  </th>
+                  {races.map((r, i) => <td key={r.id} className={`heat-cell ${i === 0 ? 'heat-cell-first' : ''}`}>{cellFor(r, i, t)}</td>)}
+                  <td className="heat-total">{formatPoints(total)}</td>
                 </tr>
               );
             })}
@@ -590,5 +984,151 @@ export function RaceRules({ races }: { races: Race[] }) {
         </section>
       )}
     </>
+  );
+}
+
+export interface ScoreClashPlace {
+  teamId: number;
+  place: number;
+  eliminated: boolean;
+  points?: number;
+  status?: number | null;
+}
+
+export interface ScoreClashItem {
+  raceId: number;
+  raceName: string;
+  raceOrder?: number;
+  heatId?: number;
+  sessionId?: number;
+  existingPlaces: ScoreClashPlace[];
+  incomingPlaces: ScoreClashPlace[];
+}
+
+function formatClashPlace(p: ScoreClashPlace): string {
+  if (p.eliminated) {
+    const letter = statusLetter(true, p.status ?? undefined);
+    return letter === 'E' || !letter ? 'OUT' : letter;
+  }
+  return p.place > 0 ? ordinal(p.place) : '–';
+}
+
+function sortClashPlaces(places: ScoreClashPlace[]): ScoreClashPlace[] {
+  return [...places].sort((a, b) => {
+    if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
+    const pa = a.place > 0 ? a.place : 99;
+    const pb = b.place > 0 ? b.place : 99;
+    return pa - pb || a.teamId - b.teamId;
+  });
+}
+
+export function ScoreClashBanner({
+  clashes,
+  teamNamesById,
+  onResolve,
+}: {
+  clashes: ScoreClashItem[];
+  teamNamesById: Readonly<Record<number, string>>;
+  onResolve: (clash: ScoreClashItem, useIncoming: boolean) => Promise<void> | void;
+}) {
+  const [busyRaceId, setBusyRaceId] = useState<number | null>(null);
+  const prevClashesLength = useRef(0);
+
+  useEffect(() => {
+    if (clashes.length > prevClashesLength.current) {
+      playAlertChime();
+    }
+    prevClashesLength.current = clashes.length;
+  }, [clashes.length]);
+
+  if (clashes.length === 0) return null;
+
+  async function handlePick(clash: ScoreClashItem, useIncoming: boolean) {
+    setBusyRaceId(clash.raceId);
+    try {
+      await onResolve(clash, useIncoming);
+    } finally {
+      setBusyRaceId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-2.5" role="alert" aria-label="Score clash">
+      {clashes.map((clash) => {
+        const busy = busyRaceId === clash.raceId;
+        const sideA = sortClashPlaces(clash.existingPlaces);
+        const sideB = sortClashPlaces(clash.incomingPlaces);
+        return (
+          <section
+            key={clash.raceId}
+            className="rounded-xl border-2 border-amber-500 bg-amber-50/95 p-3 text-amber-950 shadow-sm"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-bold">
+                Score clash · {clash.raceOrder ? `Race ${clash.raceOrder}: ` : ''}{clash.raceName}
+              </h3>
+              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-900">
+                Choose result
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-amber-900">
+              Two scorers submitted different placings. Tap the right result to apply it.
+            </p>
+            <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="flex flex-col justify-between rounded-lg border border-amber-300 bg-white p-2.5">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wide text-stone-600">
+                    Result A (Saved)
+                  </div>
+                  <ol className="mt-1.5 space-y-1 text-xs">
+                    {sideA.map((p) => (
+                      <li key={p.teamId} className="flex items-center justify-between gap-2">
+                        <span className="truncate font-semibold text-stone-900">
+                          {teamNamesById[p.teamId] ?? `Team ${p.teamId}`}
+                        </span>
+                        <span className="shrink-0 font-bold text-stone-700">{formatClashPlace(p)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handlePick(clash, false)}
+                  className="mg-btn mg-btn-secondary mt-2.5 min-h-10 w-full text-xs font-bold"
+                >
+                  Keep Result A
+                </button>
+              </div>
+              <div className="flex flex-col justify-between rounded-lg border border-amber-400 bg-white p-2.5">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wide text-amber-800">
+                    Result B (Submitted)
+                  </div>
+                  <ol className="mt-1.5 space-y-1 text-xs">
+                    {sideB.map((p) => (
+                      <li key={p.teamId} className="flex items-center justify-between gap-2">
+                        <span className="truncate font-semibold text-stone-900">
+                          {teamNamesById[p.teamId] ?? `Team ${p.teamId}`}
+                        </span>
+                        <span className="shrink-0 font-bold text-amber-900">{formatClashPlace(p)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handlePick(clash, true)}
+                  className="mg-btn mg-btn-primary mt-2.5 min-h-10 w-full text-xs font-bold"
+                >
+                  Use Result B
+                </button>
+              </div>
+            </div>
+          </section>
+        );
+      })}
+    </div>
   );
 }

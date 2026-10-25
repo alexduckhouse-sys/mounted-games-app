@@ -28,6 +28,8 @@ const MembersPage = lazy(() => import('./pages/MembersPage').then((module) => ({
 const PayoutsPage = lazy(() => import('./pages/PayoutsPage').then((module) => ({ default: module.PayoutsPage })));
 const CompetitionsPage = lazy(() => import('./pages/CompetitionsPage').then((module) => ({ default: module.CompetitionsPage })));
 const ScoringTab = lazy(() => import('./pages/competition/ScoringTab').then((module) => ({ default: module.ScoringTab })));
+const TvKioskPage = lazy(() => import('./pages/competition/TvKioskPage').then((module) => ({ default: module.TvKioskPage })));
+const CommentaryDeskPage = lazy(() => import('./pages/competition/CommentaryDeskPage').then((module) => ({ default: module.CommentaryDeskPage })));
 const SessionPage = lazy(() => import('./pages/competition/SessionPage').then((module) => ({ default: module.SessionPage })));
 const TeamsTab = lazy(() => import('./pages/competition/TeamsTab').then((module) => ({ default: module.TeamsTab })));
 const CompetitionTeamPage = lazy(() => import('./pages/competition/CompetitionTeamPage').then((module) => ({ default: module.CompetitionTeamPage })));
@@ -35,6 +37,7 @@ const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab')
 const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').then((module) => ({ default: module.BroadcastPage })));
 const ProducePage = lazy(() => import('./pages/competition/ProducePage').then((module) => ({ default: module.ProducePage })));
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
+const ContactOrganisersPage = lazy(() => import('./pages/competition/ContactOrganisersPage').then((module) => ({ default: module.ContactOrganisersPage })));
 const EntryPage = lazy(() => import('./pages/competition/EntryPage').then((module) => ({ default: module.EntryPage })));
 const SectionEntryPage = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.SectionEntryPage })));
 const DetailsTab = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.DetailsTab })));
@@ -48,6 +51,7 @@ const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').t
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
 const RulesPage = lazy(() => import('./pages/admin/RulesPage').then((module) => ({ default: module.RulesPage })));
 const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
+const WeatherPage = lazy(() => import('./pages/competition/WeatherPage').then((module) => ({ default: module.WeatherPage })));
 const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').then((module) => ({ default: module.OperationsPage })));
 const RulebooksPage = lazy(() => import('./pages/operations/RulebooksPage').then((module) => ({ default: module.RulebooksPage })));
 const ShopPage = lazy(() => import('./pages/ShopPage').then((module) => ({ default: module.ShopPage })));
@@ -60,7 +64,7 @@ const SeasonPage = lazy(() => import('./pages/seasons/SeasonPage').then((module)
 const TeamProfilePage = lazy(() => import('./pages/seasons/TeamProfilePage'));
 const StatsPage = lazy(() => import('./pages/stats/StatsPage').then((module) => ({ default: module.StatsPage })));
 const EventToolsPage = lazy(() => import('./pages/eventTools/EventToolsPage'));
-const PrintEventPage = lazy(() => import('./pages/eventTools/PrintEventPage'));
+const PrintEventPage = lazy(() => import('./pages/operations/PrintEventPage'));
 const ScorerPage = lazy(() => import('./pages/ScorerPage').then((module) => ({ default: module.ScorerPage })));
 const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage').then((module) => ({ default: module.UnsubscribePage })));
 const ConfirmEmailPage = lazy(() => import('./pages/ConfirmEmailPage').then((module) => ({ default: module.ConfirmEmailPage })));
@@ -106,9 +110,13 @@ export default function App() {
                 <Route path="enter/:sectionId" element={<SectionEntryPage />} />
                 <Route path="scoring" element={<AfterDrawOnly><ScoringTab /></AfterDrawOnly>} />
                 <Route path="toplists" element={<AfterDrawOnly><ScoringTab key="toplists" toplistOnly /></AfterDrawOnly>} />
+                <Route path="tv" element={<TvKioskPage />} />
+                <Route path="commentary" element={<CommentaryDeskPage />} />
                 <Route path="session/:sessionId" element={<AfterDrawOnly><SessionPage /></AfterDrawOnly>} />
                 <Route path="arena" element={<ArenaPage />} />
+                <Route path="weather" element={<WeatherPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
+                <Route path="timetable" element={<Navigate to=".." replace />} />
                 <Route path="teams" element={<TeamsTab />} />
                 <Route path="teams/:teamId" element={<CompetitionTeamPage />} />
                 <Route path="following" element={<FollowingTab />} />
@@ -120,6 +128,7 @@ export default function App() {
                 <Route path="broadcast" element={<ProtectedRoute roles={['Admin', 'Trainer']}><BroadcastPage /></ProtectedRoute>} />
                 <Route path="produce" element={<ProtectedRoute roles={['Admin', 'Trainer']}><ProducePage /></ProtectedRoute>} />
                 <Route path="chat" element={<AfterDrawOnly><ChatTab /></AfterDrawOnly>} />
+                <Route path="contact" element={<ContactOrganisersPage />} />
                 <Route path="details" element={<DetailsTab />} />
                 <Route path="sponsors" element={<SponsorsPage />} />
                 <Route path="live" element={<Navigate to="../chat" replace />} />
@@ -159,6 +168,10 @@ export default function App() {
                 <ProtectedRoute roles={['Admin']}><RulesPage /></ProtectedRoute>
               } />
               <Route path="privacy" element={<PrivacyPage />} />
+              <Route path="terms" element={<PrivacyPage />} />
+              <Route path="refunds" element={<PrivacyPage />} />
+              <Route path="cookies" element={<PrivacyPage />} />
+              <Route path="safeguarding" element={<PrivacyPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="unsubscribe" element={<UnsubscribePage />} />
               <Route path="confirm-email" element={<ConfirmEmailPage />} />

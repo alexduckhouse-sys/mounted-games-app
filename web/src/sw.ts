@@ -21,7 +21,7 @@ registerRoute(
   ({ url, request }) => url.origin === self.location.origin && canCachePublicApi(url.pathname, request.method) && !isEmbedRequest(request.headers),
   new NetworkFirst({
     cacheName: 'mg-public-api-v2',
-    networkTimeoutSeconds: 3,
+    networkTimeoutSeconds: 4,
     plugins: [
       {
         cacheWillUpdate: async ({ response }: { response: Response }) => stampPublicResponse(response),

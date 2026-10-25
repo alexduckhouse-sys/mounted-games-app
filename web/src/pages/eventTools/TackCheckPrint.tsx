@@ -31,9 +31,9 @@ export function TackCheckForms({ data }: { data: PrintableTackCheck }) {
       <tbody>{section.teams.flatMap((team) => {
         const label = `${team.teamName}${team.isHorsConcours ? ' (HC)' : ''}${team.withdrawn ? ' (withdrawn)' : ''}`;
         const blanks = section.sectors.map((name) => <td key={name} />);
-        if (team.riders.length === 0) return [<tr key={team.teamId}><td>{label}<br /><span className="event-print-note">{team.clubName}</span></td><td colSpan={2}>No declaration yet</td>{blanks}<td /></tr>];
+        if (team.riders.length === 0) return [<tr key={team.teamId}><td>{label}</td><td colSpan={2}>No declaration yet</td>{blanks}<td /></tr>];
         return team.riders.map((rider, index) => <tr key={`${team.teamId}:${index}`}>
-          {index === 0 && <td rowSpan={team.riders.length}>{label}<br /><span className="event-print-note">{team.clubName}</span></td>}
+          {index === 0 && <td rowSpan={team.riders.length}>{label}</td>}
           <td>{rider.name}{rider.isReserve ? ' (reserve)' : ''}</td><td>{rider.pony ?? ''}</td>{blanks}<td />
         </tr>);
       })}</tbody>

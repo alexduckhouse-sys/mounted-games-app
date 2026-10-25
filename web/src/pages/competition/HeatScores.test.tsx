@@ -263,3 +263,58 @@ it('pre-fills S for a team scheduled to sit out an unscored race and links team 
   const row3 = screen.getByRole('row', { name: /Team 3/ });
   expect(within(row3).getByText('Sat out this race')).toBeInTheDocument();
 });
+
+it('hides the CF column on a Final heat when no points are carried forward', () => {
+  const qualHeat = heat(40, {
+    sessionId: 20,
+    orderIndex: 0,
+    label: 'Heat 1',
+    entries: [{ id: 1, teamId: 1, teamName: 'Oak A', laneIndex: 1 }],
+    races: [
+      race(70, {
+        name: 'Bending',
+        isComplete: true,
+        results: [{ id: 1, teamId: 1, teamName: 'Oak A', placing: null, eliminated: true, points: 0 }],
+      }),
+    ],
+  });
+  const qualSession = session(20, { competitionSectionId: 1, sectionName: 'Teams Seniors', status: 2, heats: [qualHeat] });
+  const aFinalHeat = heat(41, {
+    sessionId: 21,
+    orderIndex: 0,
+    label: 'A Final',
+    entries: [{ id: 2, teamId: 1, teamName: 'Oak A', laneIndex: 1 }],
+    races: [race(71, { name: 'Flag', isComplete: false, results: [] })],
+  });
+  const finalSession = session(21, { competitionSectionId: 1, sectionName: 'Teams Seniors', status: 1, heats: [aFinalHeat] });
+  state.competition = competition({ id: 1, name: 'Autumn Games', startDate: '2026-10-16', sessions: [qualSession, finalSession] });
+
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={finalSession} heats={[aFinalHeat]} activeHeatId={41} /></MemoryRouter></CompactPageBarProvider>);
+
+  expect(screen.queryByRole('columnheader', { name: /CF/ })).toBeNull();
+});
+
+it('applies compact many-race styling and two-line wrapping when a heat has 6 or more races', () => {
+  const manyRaces = [1, 2, 3, 4, 5, 6, 7].map((i) => race(80 + i, { name: `Race ${i}`, orderIndex: i - 1 }));
+  const shownHeat = heat(50, {
+    sessionId: 30,
+    orderIndex: 0,
+    label: 'Heat 1',
+    entries: [
+      { id: 1, teamId: 1, teamName: 'Northamptonshire Valiant Riders', laneIndex: 1 },
+      { id: 2, teamId: 2, teamName: 'Oak A', laneIndex: 2 },
+    ],
+    races: manyRaces,
+  });
+  const shownSession = session(30, { sectionName: 'Teams Seniors', status: 1, heats: [shownHeat] });
+  state.competition = competition({ id: 1, name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
+
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[shownHeat]} activeHeatId={50} /></MemoryRouter></CompactPageBarProvider>);
+
+  const table = screen.getByRole('table');
+  expect(table).toHaveClass('heat-grid', 'heat-grid-many');
+  expect(table.style.minWidth).toBe('');
+  expect(screen.getByRole('columnheader', { name: 'Pts' })).toBeVisible();
+  const teamSpan = screen.getByText('Northamptonshire Valiant Riders');
+  expect(teamSpan).toHaveClass('heat-team-name', 'heat-team-name-long');
+});

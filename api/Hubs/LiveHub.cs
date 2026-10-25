@@ -10,6 +10,9 @@ public class LiveHub(ViewerRegistry viewers) : Hub
     public Task<WatchStreamResponse> WatchStream(int competitionId, int streamId) =>
         viewers.WatchAsync(Context.ConnectionId, competitionId, streamId, Context.ConnectionAborted, AnonymousViewerIp());
 
+    public Task<WatchStreamResponse> WatchStreamTier(int competitionId, int streamId, string? preferredRid) =>
+        viewers.WatchAsync(Context.ConnectionId, competitionId, streamId, Context.ConnectionAborted, AnonymousViewerIp(), preferredRid);
+
     // Signed-in viewers are accountable already; anonymous ones are capped per address.
     private string? AnonymousViewerIp() =>
         Context.User?.Identity?.IsAuthenticated == true ? null : Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString();
@@ -57,6 +60,8 @@ public interface ILiveBroadcaster
     Task OverlayUpdated(int competitionId, StreamOverlayDto overlay);
     Task ScoreCardControl(int competitionId, ScoreCardControlDto control);
     Task SponsorControl(int competitionId, SponsorControlDto control);
+    Task StreamTelemetry(int competitionId, StreamTelemetryDto telemetry);
+    Task StreamCommand(int competitionId, StreamCommandDto command);
 }
 
 public class LiveBroadcaster : ILiveBroadcaster
@@ -75,6 +80,12 @@ public class LiveBroadcaster : ILiveBroadcaster
 
     public Task SponsorControl(int competitionId, SponsorControlDto control)
         => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("sponsorControl", control);
+
+    public Task StreamTelemetry(int competitionId, StreamTelemetryDto telemetry)
+        => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("streamTelemetry", telemetry);
+
+    public Task StreamCommand(int competitionId, StreamCommandDto command)
+        => _hub.Clients.Group(LiveHub.GroupName(competitionId)).SendAsync("streamCommand", command);
 
     private readonly IHubContext<LiveHub> _hub;
     public LiveBroadcaster(IHubContext<LiveHub> hub) => _hub = hub;

@@ -667,4 +667,122 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         var r = await admin.PutAsJsonAsync(Url(a, "/999999/heat-assignments"), new UpdateHeatAssignmentsRequest(Array.Empty<HeatAssignmentEntry>()));
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
+
+    [Fact]
+    public async Task UpdateHeatAssignments_WithPreserveCompletedScores_KeepsCompletedRaceResults()
+    {
+        var (a, h1, _, _) = await ScoredTwoHeatSessionAsync();
+        var admin = await _f.AdminAsync();
+        var req = new UpdateHeatAssignmentsRequest(new[]
+        {
+            new HeatAssignmentEntry("Heat 1", new[] { a.TeamIds[0], a.TeamIds[1], a.TeamIds[2] }),
+            new HeatAssignmentEntry("Heat 2", new[] { a.TeamIds[3] }),
+        });
+
+        var r = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/heat-assignments?preserveCompletedScores=true"), req);
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var byId = (await r.ReadAsync<SessionDto>()).Heats.ToDictionary(h => h.Id);
+        Assert.Equal(3, byId[h1].Entries.Count);
+        Assert.True(byId[h1].Races.Single().IsComplete);
+        Assert.Equal(2, byId[h1].Races.Single().Results.Count);
+    }
+
+    [Fact]
+    public async Task UpdateSessionRaces_ReplacesUncompletedRaces_AndKeepsCompletedRaces()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var heat = await (await admin.PostAsJsonAsync(Url(a, $"/{a.SessionId}/heats"),
+            new CreateHeatRequest("Heat 1", 1, new[] { a.TeamIds[0], a.TeamIds[1] }, new[] { "Bending", "Sack" }))).ReadAsync<HeatDto>();
+        await _f.WithDbAsync(async db =>
+        {
+            var r1 = await db.Races.SingleAsync(r => r.Id == heat.Races[0].Id);
+            r1.IsComplete = true;
+            await db.SaveChangesAsync();
+        });
+
+        var res = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/races"), new { raceNames = new[] { "Bending", "Mug", "Flag" } });
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var updated = await res.ReadAsync<SessionDto>();
+        var races = updated.Heats.Single(h => h.Id == heat.Id).Races.OrderBy(r => r.OrderIndex).ToList();
+        Assert.Equal(new[] { "Bending", "Mug", "Flag" }, races.Select(r => r.Name));
+        Assert.True(races[0].IsComplete);
+        Assert.False(races[1].IsComplete);
+        Assert.False(races[2].IsComplete);
+    }
+
+    [Fact]
+    public async Task ShiftSessionTimes_ShiftsUncompletedSessionsByDeltaMinutes()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var start = new DateTime(2030, 6, 1, 10, 0, 0, DateTimeKind.Utc);
+        await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}"), new UpdateSessionRequest("Session A", "Arena 1", start));
+
+        var res = await admin.PostAsJsonAsync(Url(a, "/shift-times"), new { deltaMinutes = 15, arenaName = "Arena 1" });
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var sessions = await res.ReadAsync<List<SessionDto>>();
+        Assert.Equal(start.AddMinutes(15), sessions.Single(s => s.Id == a.SessionId).ScheduledStart);
+    }
+
+    [Fact]
+    public async Task PauseAndResumeTimetable_RecordsPauseTag_AndConvertsElapsedPauseIntoShift()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var start = new DateTime(2030, 6, 1, 10, 0, 0, DateTimeKind.Utc);
+        await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}"), new UpdateSessionRequest("Session A", "Arena 1", start));
+
+        var pauseRes = await admin.PostAsJsonAsync(Url(a, "/pause"), new { arenaName = "Arena 1" });
+        Assert.Equal(HttpStatusCode.OK, pauseRes.StatusCode);
+        var pausedSession = (await pauseRes.ReadAsync<List<SessionDto>>()).Single(s => s.Id == a.SessionId);
+        Assert.Contains("[paused:", pausedSession.Notes);
+
+        // Backdate the pause timestamp to 12 minutes ago so resume converts it into a +12m shift.
+        var twelveMinsAgoMs = DateTimeOffset.UtcNow.AddMinutes(-12).ToUnixTimeMilliseconds();
+        await _f.WithDbAsync(async db =>
+        {
+            var s = await db.Sessions.SingleAsync(x => x.Id == a.SessionId);
+            s.Notes = $"[paused:{twelveMinsAgoMs}]";
+            await db.SaveChangesAsync();
+        });
+
+        var resumeRes = await admin.PostAsJsonAsync(Url(a, "/resume"), new { arenaName = "Arena 1" });
+        Assert.Equal(HttpStatusCode.OK, resumeRes.StatusCode);
+        var resumed = (await resumeRes.ReadAsync<List<SessionDto>>()).Single(s => s.Id == a.SessionId);
+        Assert.DoesNotContain("[paused:", resumed.Notes ?? string.Empty);
+        Assert.Contains("[shift:+12]", resumed.Notes);
+        Assert.Equal(start.AddMinutes(12), resumed.ScheduledStart);
+    }
+
+    [Fact]
+    public async Task GetPacePrediction_ReturnsLearnedMinutesPerRaceAndMultiplier()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var heat = await (await admin.PostAsJsonAsync(Url(a, $"/{a.SessionId}/heats"),
+            new CreateHeatRequest("Heat 1", 1, new[] { a.TeamIds[0], a.TeamIds[1] }, new[] { "R1", "R2", "R3", "R4", "R5" }))).ReadAsync<HeatDto>();
+
+        var t0 = new DateTime(2030, 6, 1, 9, 0, 0, DateTimeKind.Utc);
+        await _f.WithDbAsync(async db =>
+        {
+            var h = await db.Heats.Include(x => x.Races).SingleAsync(x => x.Id == heat.Id);
+            h.DurationMinutes = 30;
+            h.StartedAt = t0;
+            h.FinishedAt = t0.AddMinutes(25);
+            foreach (var r in h.Races) r.IsComplete = true;
+            await db.SaveChangesAsync();
+        });
+
+        var res = await _f.CreateClient().GetAsync(Url(a, "/pace-prediction"));
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var dto = await res.ReadAsync<MountedGames.Api.Controllers.PacePredictionDto>();
+        Assert.Equal(5.0, dto.AvgMinutesPerRace);
+        Assert.Equal(25, dto.RecommendedMinutesPer5RaceHeat);
+        Assert.Equal(1, dto.SampleHeats);
+        Assert.InRange(dto.Multiplier, 0.8, 0.9);
+    }
 }

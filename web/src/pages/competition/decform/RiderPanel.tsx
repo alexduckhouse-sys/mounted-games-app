@@ -1,12 +1,13 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { X } from 'lucide-react';
+import { api } from '../../../api';
 import { Field } from '../../auth/Field';
 import { NumberField } from '../../../components/NumberField';
 import { riderIssues, type DecRider } from '../../../lib/decForm';
 import {
   asked, breach, breachWarning, limitText, NUMBER_FIELD, OPTIONAL, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers, type Requirement,
 } from '../../../lib/decFormConfig';
-import type { SavedRider } from '../../../types';
+import type { CertifiedHorseLookup, SavedRider } from '../../../types';
 
 interface Props {
   title: string;
@@ -23,6 +24,7 @@ interface Props {
   onClose: () => void;
   /** What this competition's dec form asks. The standard form when omitted. */
   config?: DecFormConfig;
+  competitionId?: number;
 }
 
 const wide = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches;
@@ -36,11 +38,47 @@ const labelOf = (text: string, requirement: Requirement) =>
  * the classes decide where it sits. Pick a saved rider to fill every field, or type a new one.
  * It asks only what the competition's dec form setup asks for.
  */
-export function RiderPanel({ title, reserve, editing, form, choices, addLabel, ready, onChange, onPick, onCommit, onClose, config = STANDARD_CONFIG }: Props) {
+export function RiderPanel({ title, reserve, editing, form, choices, addLabel, ready, onChange, onPick, onCommit, onClose, config = STANDARD_CONFIG, competitionId }: Props) {
   const nameRef = useRef<HTMLInputElement>(null);
+  const [certLookup, setCertLookup] = useState<CertifiedHorseLookup | null>(null);
   const slotKey = `${title}|${editing}`;
   // On a laptop the cursor goes straight to the name; on a phone that would only throw the keyboard up.
   useEffect(() => { if (wide()) nameRef.current?.focus(); }, [slotKey]);
+
+  const passportQuery = form.extra.ponyPassport.trim();
+  const ponyQuery = form.pony.trim();
+  const ownerQuery = (form.ponyOwnerFullName ?? '').trim();
+  const canLookup = !reserve && (passportQuery !== '' || (ponyQuery !== '' && ownerQuery !== ''));
+
+  useEffect(() => {
+    if (!canLookup) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (!api?.get) return;
+      Promise.resolve(
+        api.get<CertifiedHorseLookup>('/event-tools/certified-horses/lookup', {
+          params: {
+            passportCode: passportQuery || undefined,
+            ponyName: ponyQuery || undefined,
+            ownerFullName: ownerQuery || undefined,
+            competitionId,
+          },
+        }),
+      )
+        .then((res) => {
+          if (!cancelled && res?.data) setCertLookup(res.data);
+        })
+        .catch(() => {
+          if (!cancelled) setCertLookup(null);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [canLookup, passportQuery, ponyQuery, ownerQuery, competitionId]);
+
+  const activeCertLookup = canLookup ? certLookup : null;
 
   function keys(event: KeyboardEvent) {
     if (event.key === 'Escape') onClose();
@@ -137,14 +175,54 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
               )}
             </Field>
           )}
-          {!reserve && asked(config.ponyPassport) && (
-            <Field label={labelOf('Pony passport or ID number', config.ponyPassport)}>
+          {!reserve && (
+            <Field label={asked(config.ponyPassport) ? labelOf('Pony passport or ID number', config.ponyPassport) : 'Equine ID / UELN code'}>
               {({ id }) => (
                 <div className="mg-field">
-                  <input id={id} value={extra.ponyPassport} maxLength={60} autoComplete="off" onChange={(e) => setExtra({ ponyPassport: e.target.value })} />
+                  <input id={id} value={extra.ponyPassport} maxLength={80} placeholder="e.g. GBR-826001234 (optional)" autoComplete="off" onChange={(e) => setExtra({ ponyPassport: e.target.value })} />
                 </div>
               )}
             </Field>
+          )}
+          {!reserve && (
+            <Field label="Pony owner’s full name">
+              {({ id }) => (
+                <div className="mg-field">
+                  <input id={id} value={form.ponyOwnerFullName ?? ''} maxLength={160} placeholder="Owner's full name (optional)" autoComplete="off" onChange={(e) => onChange({ ponyOwnerFullName: e.target.value })} />
+                </div>
+              )}
+            </Field>
+          )}
+          {!reserve && activeCertLookup?.found && (
+            <div role="status" className="col-span-2 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface-muted))]/40 px-3 py-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                {activeCertLookup.status === 'Certified' && (
+                  <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-700 dark:text-emerald-300">
+                    Certified ✓
+                  </span>
+                )}
+                {activeCertLookup.status === 'Expired' && (
+                  <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-700 dark:text-amber-300">
+                    Vaccine expired
+                  </span>
+                )}
+                {activeCertLookup.status === 'TooRecent' && (
+                  <span className="inline-flex items-center rounded-full bg-rose-500/15 px-2 py-0.5 font-semibold text-rose-700 dark:text-rose-300">
+                    &lt;7d rule
+                  </span>
+                )}
+                <span className="text-[rgb(var(--mg-body))]">
+                  {activeCertLookup.status === 'Expired'
+                    ? `Last vaccine: ${activeCertLookup.lastFluVaccineDate ?? '—'} (expired) · Needs re-check`
+                    : `Last vaccine: ${activeCertLookup.lastFluVaccineDate ?? '—'}${activeCertLookup.lastTetanusDate ? ` · Last tetanus: ${activeCertLookup.lastTetanusDate}` : ''}`}
+                </span>
+              </div>
+              {activeCertLookup.officialNotes && (
+                <p className="mt-1 text-[rgb(var(--mg-muted))]">
+                  {activeCertLookup.inspectorRole ?? 'Official'}{activeCertLookup.inspectedByName ? ` ${activeCertLookup.inspectedByName}` : ''}: “{activeCertLookup.officialNotes}”
+                </p>
+              )}
+            </div>
           )}
           {!reserve && asked(config.ponyAge) && (
             <Field label={labelOf('Pony’s age (years)', config.ponyAge)} error={issues.invalid.ponyAge}>

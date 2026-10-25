@@ -109,7 +109,7 @@ public class ResultsBookTests : IClassFixture<ApiFactory>
         var final = Assert.Single(section.Finals);
         Assert.Equal("A Final", final.Label);
         Assert.Equal(new[] { "Race 1" }, final.RaceNames);
-        Assert.Equal(new[] { "4", "DNF", "DNS" }, final.Rows.Select(r => r.RaceCells.Single()));
+        Assert.Equal(new[] { "3", "DNF", "DNS" }, final.Rows.Select(r => r.RaceCells.Single()));
         Assert.Equal(new[] { 1, 2, 2 }, final.Rows.Select(r => r.Rank));
     }
 

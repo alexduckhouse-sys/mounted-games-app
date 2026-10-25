@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Heat, Session } from '../types';
 import { heat as baseHeat, race, result, session as baseSession, standing, team as baseTeam } from '../test/factories';
-import { buildToplist, ordinal, toplistNote, type ToplistRow } from './toplist';
+import { buildToplist, ordinal, sectionScoreVersion, synthesizeStandings, toplistNote, type ToplistRow } from './toplist';
 
 const SECTION = 9;
 const entries = (teamIds: number[]): Heat['entries'] => teamIds.map((teamId, lane) => ({ id: teamId, teamId, teamName: `Team ${teamId}`, laneIndex: lane }));
@@ -563,4 +563,116 @@ it('handles changed opponents across sessions, using complete allocations in eac
   expect(minimum).toBe(4);
   const list = buildToplist(initial.map((value, i) => standing(i + 1, value)), sessions, [], SECTION, 2);
   expect(list.rows.find((item) => item.teamId === 3)).toMatchObject({ needed: minimum });
+});
+
+describe('sectionScoreVersion', () => {
+  it('returns empty for a null section and ignores clock changes and other sections', () => {
+    expect(sectionScoreVersion([], null)).toBe('');
+    const s1 = session(1, [heat(1, [1, 2], [race(1, { startedAt: '2026-06-01T10:00:00Z' })])]);
+    const s1ClockStopped = session(1, [heat(1, [1, 2], [race(1, { startedAt: '2026-06-01T10:00:00Z', finishedAt: '2026-06-01T10:03:00Z' })], { startedAt: '2026-06-01T10:00:00Z' })], { startedAt: '2026-06-01T10:00:00Z' });
+    const otherSection = session(2, [heat(2, [8, 9], [scored(2, [8, 5], [9, 3])])], { competitionSectionId: SECTION + 1 });
+
+    const v0 = sectionScoreVersion([s1], SECTION);
+    expect(sectionScoreVersion([s1ClockStopped, otherSection], SECTION)).toBe(v0);
+
+    const s1Scored = session(1, [heat(1, [1, 2], [scored(1, [1, 5], [2, 3])])]);
+    expect(sectionScoreVersion([s1Scored], SECTION)).not.toBe(v0);
+  });
+});
+
+describe('synthesizeStandings', () => {
+  it('returns baseRows when the section has no race results yet', () => {
+    const base = [standing(1, 4)];
+    const empty = session(1, [heat(1, [1, 2], [race(1)])]);
+    expect(synthesizeStandings([empty], [team(1), team(2)], SECTION, base)).toBe(base);
+  });
+
+  it('computes points, wins, eliminations, final tiers and countback while preserving tack bonus and excluding HC', () => {
+    const s1 = session(1, [
+      heat(1, [1, 2, 3, 99], [
+        race(1, {
+          isComplete: true,
+          results: [
+            result(1, 1, { points: 4 }),
+            result(2, 2, { points: 3 }),
+            result(3, null, { points: 0, eliminated: true, status: 1 }),
+            result(99, 3, { points: 2 }),
+          ],
+        }),
+        race(2, {
+          isComplete: true,
+          results: [
+            result(2, 1, { points: 4 }),
+            result(1, 2, { points: 3 }),
+            result(3, null, { points: 0, eliminated: true, status: 2 }),
+          ],
+        }),
+      ]),
+    ]);
+    const finals = session(2, [
+      heat(2, [1, 2], [scored(3, [2, 2], [1, 2])], { label: 'A Final', raceRoundStage: 2 }),
+      heat(3, [3], [scored(4, [3, 6])], { label: 'B Final', raceRoundStage: 2 }),
+    ], { orderIndex: 2 });
+
+    const teams = [
+      team(1, { displayName: 'Alpha', clubName: 'Oak' }),
+      team(2, { displayName: 'Bravo', clubName: 'Elm' }),
+      team(3, { displayName: 'Charlie', isWithdrawn: true }),
+      team(99, { displayName: 'Guest HC', isHorsConcours: true }),
+    ];
+    const base = [{ ...standing(1, 0), bonusPoints: 2 }];
+
+    const rows = synthesizeStandings([s1, finals], teams, SECTION, base);
+    expect(rows.map((r) => [r.teamId, r.totalPoints, r.finalTier, r.wins, r.eliminations, r.withdrawn, r.bonusPoints])).toEqual([
+      [1, 11, 0, 2, 0, false, 2],
+      [2, 9, 0, 2, 0, false, 0],
+      [3, 6, 1, 1, 1, true, 0],
+    ]);
+  });
+
+  it('uses countback when baseRows does not separate tied teams, or preserves baseRows tie order when present', () => {
+    const s1 = session(1, [
+      heat(1, [1, 2], [
+        race(1, { isComplete: true, results: [result(1, 2, { points: 3 }), result(2, 1, { points: 4 })] }),
+        race(2, { isComplete: true, results: [result(1, 2, { points: 3 }), result(2, 3, { points: 2 })] }),
+      ]),
+    ]);
+    // Without baseRows: Team 2 (one 1st) beats Team 1 (zero 1sts) on countback at 6 pts each.
+    expect(synthesizeStandings([s1], [team(1), team(2)], SECTION).map((r) => r.teamId)).toEqual([2, 1]);
+    // With baseRows ordering Team 1 before Team 2 (e.g. manual tie order): preserves [1, 2].
+    expect(synthesizeStandings([s1], [team(1), team(2)], SECTION, [standing(1, 6), standing(2, 6)]).map((r) => r.teamId)).toEqual([1, 2]);
+    // Identical points and identical countback falls back to teamId order:
+    const exactTie = session(1, [heat(1, [2, 1], [scored(1, [2, 5], [1, 5])])]);
+    expect(synthesizeStandings([exactTie], [team(2), team(1)], SECTION).map((r) => r.teamId)).toEqual([1, 2]);
+  });
+});
+
+describe('projected qualifying cut-off and finals tie-breaking', () => {
+  it('projects the cut-off line using lanesPerHeat (default 6) before finals exist when finalistCount is null', () => {
+    const standings = Array.from({ length: 8 }, (_, i) => standing(i + 1, 10 - i));
+    const sessions = [session(1, [heat(1, [1, 2, 3, 4, 5, 6], [scored(1, [1, 6])])], { lanesPerHeat: 5 })];
+    const list = buildToplist(standings, sessions, [], SECTION, null);
+    expect(list.cutAfter).toBe(4);
+  });
+
+  it('breaks ties in buildFinalGroups using the overall standing rank before teamName localeCompare', () => {
+    // Team 1 ("Zebra") is ranked ahead of Team 2 ("Alpha") in overall standings.
+    const standings = [
+      { ...standing(1, 15), teamName: 'Zebra' },
+      { ...standing(2, 15), teamName: 'Alpha' },
+    ];
+    const finals = session(2, [
+      heat(2, [1, 2], [
+        race(2, {
+          isComplete: true,
+          results: [
+            result(1, 1, { teamName: 'Zebra', points: 5 }),
+            result(2, 1, { teamName: 'Alpha', points: 5 }),
+          ],
+        }),
+      ], { label: 'A Final', raceRoundStage: 2 }),
+    ]);
+    const list = buildToplist(standings, [finals], [], SECTION, null);
+    expect(list.finals[0].rows.map((r) => r.teamName)).toEqual(['Zebra', 'Alpha']);
+  });
 });

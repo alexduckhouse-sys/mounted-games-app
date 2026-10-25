@@ -47,7 +47,7 @@ public class ScoringController : ControllerBase
                 User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
                 correctionReason, cancellationToken);
         }
-        catch (ScoreConflictException ex) { return await ScoreConflict(race, ex.Message); }
+        catch (ScoreConflictException ex) { return await ScoreConflict(race, ex.Message, ex.ExistingPlaces, ex.IncomingPlaces); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
         catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
         catch (Exception ex) when (IsScoringConcurrency(ex))
@@ -55,7 +55,7 @@ public class ScoringController : ControllerBase
 
         var dto = await HeatDtoAsync(race.HeatId);
         var competitionId = race.Heat!.Session!.CompetitionId;
-        await _live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto });
+        await _live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto, clashResolved = raceId });
         await BroadcastRaceFinalAsync(raceId, competitionId);
         return dto;
     }
@@ -148,6 +148,75 @@ public class ScoringController : ControllerBase
         { return Conflict(new { message = "These results were changed on another device." }); }
     }
 
+    [HttpGet("api/sessions/{sessionId:int}/clashes")]
+    [CompetitionAccess("sessionId", CompetitionResource.Session)]
+    public ActionResult<IReadOnlyList<ScoreClashDto>> GetSessionClashes(int sessionId)
+        => Ok(ScoringService.GetSessionClashes(sessionId));
+
+    [HttpPost("api/races/{raceId:int}/clash/resolve")]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
+    public async Task<ActionResult<HeatDto>> ResolveScoreClash(
+        int raceId, ResolveScoreClashRequest req, CancellationToken cancellationToken)
+    {
+        var race = await _db.Races
+            .Include(r => r.Heat).ThenInclude(h => h!.Session)
+            .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken);
+        if (race is null) return NotFound();
+
+        if (req.UseIncoming)
+        {
+            var clash = ScoringService.GetRaceClash(raceId);
+            var places = req.Places
+                ?? clash?.IncomingPlaces.Select(p => new FinishingPlaceDto(p.TeamId, p.Place, p.Eliminated, p.Status, p.RefereeNote, p.Points)).ToList();
+            if (places is null || places.Count == 0)
+                return BadRequest(new { message = "Places are required to apply the submitted result." });
+            try
+            {
+                await _scoring.ApplyLegacyAsync(raceId, places, expected: null,
+                    User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
+                    "Score clash resolved", cancellationToken);
+            }
+            catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+            catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
+        }
+        else
+        {
+            ScoringService.DismissClash(raceId);
+        }
+
+        var dto = await HeatDtoAsync(race.HeatId);
+        var competitionId = race.Heat!.Session!.CompetitionId;
+        await _live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto, clashResolved = raceId });
+        if (req.UseIncoming)
+            await BroadcastRaceFinalAsync(raceId, competitionId);
+        return dto;
+    }
+
+    [HttpDelete("api/races/{raceId:int}/score")]
+    [CompetitionAccess("raceId", CompetitionResource.Race)]
+    public async Task<ActionResult<HeatDto>> ClearRaceScore(
+        int raceId, [FromQuery] string? reason = null, CancellationToken cancellationToken = default)
+    {
+        var race = await _db.Races
+            .Include(r => r.Heat).ThenInclude(h => h!.Session)
+            .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken);
+        if (race is null) return NotFound();
+        try
+        {
+            var actor = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            await _scoring.ClearRaceForRerunAsync(raceId, actor, reason ?? "Score cleared.", cancellationToken);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+        catch (Exception ex) when (IsScoringConcurrency(ex))
+        { return Conflict(new { message = "These results were changed on another device." }); }
+
+        var dto = await HeatDtoAsync(race.HeatId);
+        var competitionId = race.Heat!.Session!.CompetitionId;
+        await _live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto, clashResolved = raceId });
+        return dto;
+    }
+
     private async Task<HeatDto> HeatDtoAsync(int heatId)
     {
         var heat = await _db.Heats
@@ -157,16 +226,37 @@ public class ScoringController : ControllerBase
         return heat.ToDto();
     }
 
-    private async Task<ActionResult<HeatDto>> ScoreConflict(Race race, string message)
+    private async Task<ActionResult<HeatDto>> ScoreConflict(
+        Race race, string message,
+        IReadOnlyList<ScorePlaceDto>? existingPlaces = null,
+        IReadOnlyList<ScorePlaceDto>? incomingPlaces = null)
     {
         // The failed transaction can leave losing results tracked. Always build
         // the conflict snapshot from the committed database winner.
         _db.ChangeTracker.Clear();
+        var heat = await HeatDtoAsync(race.HeatId);
+        ScoreClashDto? clash = null;
+        if (incomingPlaces is { Count: > 0 })
+        {
+            var existing = existingPlaces ?? heat.Races.FirstOrDefault(r => r.Id == race.Id)?.Results
+                .Select(r => new ScorePlaceDto(r.TeamId, r.Placing ?? 0, r.Eliminated, r.Points, r.IsSitOut, r.Status, null))
+                .ToList() ?? [];
+            clash = new ScoreClashDto(
+                race.Id, race.HeatId, race.Heat!.SessionId, race.Name, race.OrderIndex,
+                existing, incomingPlaces, DateTime.UtcNow);
+            await _live.ResultsUpdated(race.Heat.Session!.CompetitionId, new
+            {
+                sessionId = race.Heat.SessionId,
+                heat,
+                clash,
+            });
+        }
         return Conflict(new
         {
             message,
             sessionId = race.Heat!.SessionId,
-            heat = await HeatDtoAsync(race.HeatId),
+            heat,
+            clash,
         });
     }
 
@@ -290,3 +380,5 @@ public class ScoringController : ControllerBase
         return exception.InnerException is not null && IsScoringConcurrency(exception.InnerException);
     }
 }
+
+public record ResolveScoreClashRequest(bool UseIncoming, IReadOnlyList<FinishingPlaceDto>? Places = null);

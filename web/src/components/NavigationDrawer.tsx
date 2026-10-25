@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
-import { ArrowLeftRight, X, Settings, History, SlidersHorizontal, CloudSun, Star, BookOpen, ShoppingBag, ChevronRight, BarChart3, Trophy } from 'lucide-react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, BarChart3, Trophy, QrCode } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useLiteMode } from '../lite/LiteModeContext';
@@ -11,6 +11,7 @@ import { useNavExtras } from './NavExtrasContext';
 import { WeatherBadge } from './WeatherBadge';
 import { useAgeGroups } from './AgeGroupsContext';
 import { useCompetitionMeta } from './competitionMeta';
+import { QrPermissionScannerModal } from './QrPermissionScannerModal';
 
 const WEATHER_KEY = 'mg.showWeather';
 const itemClass = (active: boolean) => `flex min-h-12 w-full items-center gap-3 rounded-[10px] px-3 text-left text-base !no-underline hover:!no-underline ${active
@@ -26,7 +27,9 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   const { meta } = useCompetitionMeta();
   const ageGroups = useAgeGroups();
   const location = useLocation();
+  const navigate = useNavigate();
   const { lite } = useLiteMode();
+  const [qrOpen, setQrOpen] = useState(false);
   const showWeather = (() => { try { return localStorage.getItem(WEATHER_KEY) === '1'; } catch { return false; } })();
   // The Seasons link goes straight to the season when the followed competition is in one, or the season list otherwise.
   const [seasonLinks, setSeasonLinks] = useState<{ competitionId: number; seasons: { id: string }[] } | null>(null);
@@ -54,7 +57,6 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   const links = [
     { to: current ? `${base}/following` : '/following', label: 'Following', icon: Star, end: true },
     { to: current ? `${base}/shop` : '/shop', label: 'Event shop', icon: ShoppingBag, end: true },
-    { to: current ? `${base}/rulebooks` : '/events', label: 'Rulebooks', icon: BookOpen, end: true },
   ];
   // Account and club links (teams, dec forms, signups, shop, sign out) live on the profile page now.
   const accountLinks = [
@@ -76,12 +78,6 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="flex flex-1 flex-col gap-5 p-4">
-          {!user && (
-            <div className="flex flex-col gap-2 rounded-xl bg-[rgb(var(--mg-tint))] p-3">
-              <NavLink to="/login" onClick={onClose} className="mg-btn mg-btn-primary !min-h-12 !text-base">Sign in</NavLink>
-              <p className="text-center text-[13px] text-[rgb(var(--mg-muted))]">For trainers, organisers and stewards</p>
-            </div>
-          )}
           {user && (
             <Link to="/me" onClick={onClose} className="flex min-h-14 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 !no-underline hover:!no-underline">
               <span aria-hidden="true" className="mg-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-base font-bold leading-none text-[rgb(var(--mg-surface))]">{initialsOf(user.fullName, user.email)}</span>
@@ -93,7 +89,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
             </Link>
           )}
 
-          {showWeather && !lite && <div className="flex min-h-12 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2"><CloudSun className="h-5 w-5 shrink-0 text-[rgb(var(--mg-muted))]" /><span className="font-medium">Weather</span><span className="ml-auto"><WeatherBadge /></span></div>}
+          {(current != null || showWeather) && !lite && <Link to={current ? `${base}/weather` : '/events'} onClick={onClose} className="flex min-h-12 items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2 !no-underline hover:bg-[rgb(var(--mg-tint))]"><CloudSun className="h-5 w-5 shrink-0 text-[rgb(var(--mg-muted))]" /><span className="font-medium text-[rgb(var(--mg-ink))]">Weather</span><span className="ml-auto"><WeatherBadge /></span></Link>}
 
           {current && ageGroups.competitionId === current.id && ageGroups.groups.length > 0 && (
             <nav aria-label="Age groups" className="flex flex-col gap-2.5">
@@ -120,11 +116,12 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
           <div className="h-px bg-[rgb(var(--mg-rule-soft))]" />
 
           <div className="flex flex-col">
-            <NavLink to="/events" end onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ArrowLeftRight className={iconClass(isActive)} />Events</>}</NavLink>
+            <NavLink to="/events" end onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><CalendarDays className={iconClass(isActive)} />Events</>}</NavLink>
             {current && <NavLink to="/shop" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShoppingBag className={iconClass(isActive)} />Tack &amp; kit shop</>}</NavLink>}
             <NavLink to={seasonsTo} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>
             <NavLink to="/competitions/past" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
             <NavLink to="/stats" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><BarChart3 className={iconClass(isActive)} />Rider and team stats</>}</NavLink>
+            <button type="button" onClick={() => setQrOpen(true)} className={itemClass(false)}><QrCode className={iconClass(false)} />Scan QR code</button>
             <NavLink to="/settings" onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><SlidersHorizontal className={iconClass(isActive)} />Settings</>}</NavLink>
           </div>
 
@@ -134,8 +131,23 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
               {extras.map((item) => <NavLink key={item.to} to={item.to} end={item.end} onClick={onClose} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}</NavLink>)}
             </nav>
           )}
+
+          {!user && (
+            <div className="mt-auto border-t border-[rgb(var(--mg-rule-soft))] pt-3">
+              <NavLink to="/login" onClick={onClose} className="mg-btn mg-btn-primary w-full !min-h-12 !text-base">Sign in</NavLink>
+            </div>
+          )}
         </div>
 
+        <QrPermissionScannerModal
+          open={qrOpen}
+          onClose={() => setQrOpen(false)}
+          onNavigate={(to) => {
+            setQrOpen(false);
+            onClose();
+            navigate(to);
+          }}
+        />
       </div>
     </dialog>
   );

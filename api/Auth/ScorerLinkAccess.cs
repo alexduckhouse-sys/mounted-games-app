@@ -65,9 +65,63 @@ public sealed class ScorerTokenGuard(IConfiguration configuration, TimeProvider 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class ScorerLinkAccessAttribute : Attribute, IAsyncAuthorizationFilter
 {
-    private const string ItemKey = "MountedGames.ScorerLink";
+    public const string ItemKey = "MountedGames.ScorerLink";
 
     public static ScorerLink Current(HttpContext context) => (ScorerLink)context.Items[ItemKey]!;
+    public static ScorerLink? TryGetCurrent(HttpContext context) => context.Items.TryGetValue(ItemKey, out var v) ? v as ScorerLink : null;
+
+    /// <summary>
+    /// Authenticates a camera (<c>Scope == 1</c>) or score-and-stream (<c>Scope == 2</c>) scorer token
+    /// exclusively for <c>/api/competitions/{competitionId}/streams</c> and <c>/overlays</c> endpoints.
+    /// Score-only links (<c>Scope == 0</c>) are never accepted here.
+    /// </summary>
+    public static async Task<ScorerLink?> TryAuthenticateStreamLinkAsync(HttpContext http)
+    {
+        if (TryGetCurrent(http) is { } cached) return cached;
+        var token = http.Request.Headers[ScorerLinkTokens.Header].ToString().Trim();
+        if (token.Length == 0 || !ScorerLinkTokens.LooksValid(token)) return null;
+
+        var path = http.Request.Path.Value ?? "";
+        var isStreamRoute = path.StartsWith("/api/competitions/", StringComparison.OrdinalIgnoreCase)
+            && (path.Contains("/streams", StringComparison.OrdinalIgnoreCase)
+                || path.Contains("/overlays", StringComparison.OrdinalIgnoreCase));
+        if (!isStreamRoute) return null;
+
+        if (!http.Request.RouteValues.TryGetValue("competitionId", out var compVal)
+            || !int.TryParse(compVal?.ToString(), out var competitionId))
+            return null;
+
+        var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var guard = http.RequestServices.GetService<ScorerTokenGuard>();
+        if (guard?.IsBlocked(ip) == true) return null;
+
+        var db = http.RequestServices.GetRequiredService<AppDbContext>();
+        var hash = ScorerLinkTokens.Hash(token);
+        var link = await db.ScorerLinks.AsNoTracking().FirstOrDefaultAsync(l => l.TokenHash == hash, http.RequestAborted);
+        if (link is null)
+        {
+            guard?.RecordFailure(ip);
+            return null;
+        }
+
+        var now = http.RequestServices.GetService<TimeProvider>()?.GetUtcNow().UtcDateTime ?? DateTime.UtcNow;
+        if (link.RevokedAt is not null || link.ExpiresAt <= now || link.CompetitionId != competitionId)
+            return null;
+
+        if (link.Scope is not (ScorerLink.ScopeCamera or ScorerLink.ScopeScoreAndStream))
+            return null;
+
+        http.Items[ItemKey] = link;
+        var claims = new[]
+        {
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, $"scorer-link:{link.Id}"),
+            new System.Security.Claims.Claim("ScorerLinkCompetitionId", link.CompetitionId.ToString()),
+            new System.Security.Claims.Claim("ScorerLinkScope", link.Scope.ToString()),
+            new System.Security.Claims.Claim("ScorerLinkArena", link.ArenaName),
+        };
+        http.User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(claims, "ScorerLink"));
+        return link;
+    }
 
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  isNoticeablyOld, lastUpdatedText, LIVE_SAVED_COPY_NOTICE_AFTER_MS, readSavedCopy, SAVED_COPY_NOTICE_AFTER_MS, savedCopyKeys,
-  serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy,
+  isFreshSavedCopy, isNoticeablyOld, lastUpdatedText, LITE_FRESH_COPY_WINDOW_MS, LIVE_SAVED_COPY_NOTICE_AFTER_MS, readSavedCopy,
+  SAVED_COPY_NOTICE_AFTER_MS, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy,
 } from './savedCopies';
 
 describe('saved copy notice thresholds', () => {
@@ -11,6 +11,19 @@ describe('saved copy notice thresholds', () => {
   it('uses 30 minutes in general and 10 for live event pages', () => {
     expect(SAVED_COPY_NOTICE_AFTER_MS).toBe(30 * 60_000);
     expect(LIVE_SAVED_COPY_NOTICE_AFTER_MS).toBe(10 * 60_000);
+    expect(LITE_FRESH_COPY_WINDOW_MS).toBe(2 * 60_000);
+  });
+
+  it('treats a saved copy as fresh only in Lite Mode within the fresh window', () => {
+    expect(isFreshSavedCopy(ago(1), false, now)).toBe(false);
+    expect(isFreshSavedCopy(ago(1), true, now)).toBe(true);
+    expect(isFreshSavedCopy(ago(2), true, now)).toBe(true);
+    expect(isFreshSavedCopy(ago(3), true, now)).toBe(false);
+    expect(isFreshSavedCopy(null, true, now)).toBe(false);
+    expect(isFreshSavedCopy(new Date(now.getTime() + 5_000), true, now)).toBe(false);
+    document.documentElement.dataset.lite = 'true';
+    expect(isFreshSavedCopy(new Date())).toBe(true);
+    delete document.documentElement.dataset.lite;
   });
 
   it('is old only once past the threshold', () => {

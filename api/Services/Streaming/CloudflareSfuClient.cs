@@ -11,7 +11,7 @@ public sealed class SfuException() : Exception("The streaming service is unavail
 public interface ISfuClient
 {
     Task<SfuSession> PublishAsync(PublishRequest request, CancellationToken ct = default);
-    Task<SfuSession> WatchAsync(string publisherSessionId, bool hasAudio, bool simulcast, CancellationToken ct = default);
+    Task<SfuSession> WatchAsync(string publisherSessionId, bool hasAudio, bool simulcast, CancellationToken ct = default, string? preferredRid = null);
     Task AnswerAsync(string sessionId, string sdp, CancellationToken ct = default);
     Task CloseAsync(string? sessionId, IReadOnlyList<string> mids);
     Task<IReadOnlyList<IceServer>> IceServersAsync(CancellationToken ct = default);
@@ -36,13 +36,14 @@ public sealed class CloudflareSfuClient(IHttpClientFactory clients, IOptions<Str
             string.IsNullOrWhiteSpace(request.AudioMid) ? [request.VideoMid] : [request.VideoMid, request.AudioMid], "answer", ct);
     }
 
-    public Task<SfuSession> WatchAsync(string publisherSessionId, bool hasAudio, bool simulcast, CancellationToken ct = default)
+    public Task<SfuSession> WatchAsync(string publisherSessionId, bool hasAudio, bool simulcast, CancellationToken ct = default, string? preferredRid = null)
     {
+        var rid = preferredRid is "f" or "h" or "q" ? preferredRid : "f";
         var video = new Dictionary<string, object>
         {
             ["location"] = "remote", ["sessionId"] = publisherSessionId, ["trackName"] = "video"
         };
-        if (simulcast) video["simulcast"] = new { preferredRid = "f", priorityOrdering = "asciibetical", ridNotAvailable = "asciibetical" };
+        if (simulcast) video["simulcast"] = new { preferredRid = rid, priorityOrdering = "asciibetical", ridNotAvailable = "asciibetical" };
         var tracks = new List<object> { video };
         if (hasAudio) tracks.Add(new { location = "remote", sessionId = publisherSessionId, trackName = "audio" });
         return CreateAsync(new { tracks }, [], "offer", ct);

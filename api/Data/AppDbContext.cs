@@ -213,6 +213,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             e.Property(r => r.FullName).HasMaxLength(200).IsRequired();
             e.Property(r => r.PonyHeightHands).HasPrecision(4, 1);
+            e.Property(r => r.PonyPassportNumber).HasMaxLength(80);
+            e.Property(r => r.PonyOwnerFullName).HasMaxLength(160);
             e.HasOne(r => r.Club)
                 .WithMany(c => c.SavedRiders)
                 .HasForeignKey(r => r.ClubId)
@@ -346,7 +348,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.Property(r => r.PonyHeightHands).HasPrecision(4, 1);
             e.Property(r => r.WeightKg).HasPrecision(5, 1);
             e.Property(r => r.AgeGroup).HasMaxLength(30);
-            e.Property(r => r.PonyPassportNumber).HasMaxLength(60);
+            e.Property(r => r.PonyPassportNumber).HasMaxLength(80);
+            e.Property(r => r.PonyOwnerFullName).HasMaxLength(160);
             e.Property(r => r.MembershipNumber).HasMaxLength(60);
             e.Property(r => r.EmergencyContactName).HasMaxLength(120);
             e.Property(r => r.EmergencyContactPhone).HasMaxLength(40);

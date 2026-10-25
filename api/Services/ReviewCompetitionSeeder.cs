@@ -78,7 +78,20 @@ public static class ReviewCompetitionSeeder
                         db.Set<EventCommerceSettings>().Add(new EventCommerceSettings { CompetitionId = existingId.Value, IsDemo = true });
                         await db.SaveChangesAsync();
                     }
-                    continue;
+                    var isDemo = await db.Set<EventCommerceSettings>().AnyAsync(x => x.CompetitionId == existingId.Value && x.IsDemo);
+                    var hasSplitSections = isDemo
+                        && (await db.CompetitionSections.Where(s => s.CompetitionId == existingId.Value)
+                            .Select(s => new { s.Format, s.AgeGroup }).ToListAsync())
+                            .GroupBy(s => (s.Format, s.AgeGroup.Trim().ToLowerInvariant()))
+                            .Any(g => g.Count() > 1);
+                    if (hasSplitSections && !await db.Set<SeasonRound>().AnyAsync(r => r.CompetitionId == existingId.Value))
+                    {
+                        await DeleteCompetitionGraphAsync(db, new List<int> { existingId.Value });
+                    }
+                    else
+                    {
+                        continue;
+                    }
                 }
                 var day = DateTime.SpecifyKind(todayUtc.Date.AddDays(offset), DateTimeKind.Utc);
                 var clubName = $"{name} Club";
@@ -106,127 +119,114 @@ public static class ReviewCompetitionSeeder
                 {
                     var ageGroup = ageGroups[ageIndex];
                     // Varied shape: 4-16 teams per age group, 6-10 races per heat, up to 6 teams
-                    // per heat. Larger age groups (12+) are split into two sections, A and B.
+                    // per heat. Larger age groups stay one single section with multiple balanced heats.
                     var profile = (eventIndex * ageGroups.Length + ageIndex) % TeamCounts.Length;
                     var teamCount = TeamCounts[profile];
                     var raceCount = RaceCounts[profile];
-                    var sectionSizes = teamCount >= 12
-                        ? new[] { (teamCount + 1) / 2, teamCount / 2 }
-                        : new[] { teamCount };
-                    var teamNumber = 0;
-                    for (var sectionIndex = 0; sectionIndex < sectionSizes.Length; sectionIndex++)
+                    var sectionName = SectionNaming.DisplayName(SectionFormat.Teams, ageGroup);
+                    var section = new CompetitionSection
                     {
-                        var sectionName = sectionSizes.Length == 1
-                            ? $"{ageGroup} teams"
-                            : $"{ageGroup} teams {(char)('A' + sectionIndex)}";
-                        var section = new CompetitionSection
+                        Competition = competition,
+                        Format = SectionFormat.Teams,
+                        AgeGroup = ageGroup,
+                        DisplayName = sectionName,
+                        // Priced so the test payment page can be shown; no money is ever taken.
+                        PriceMinor = DemoEntryPriceMinor,
+                    };
+                    competition.Sections.Add(section);
+                    var teams = Enumerable.Range(1, teamCount).Select(teamNumber => new Team
+                    {
+                        Competition = competition,
+                        Section = section,
+                        Club = club,
+                        DisplayName = $"{name.Replace("Demo ", "")} {ageGroup} {teamNumber}",
+                        Suffix = teamNumber.ToString(),
+                        BibColour = BibColours[(teamNumber - 1) % BibColours.Length],
+                    }).ToArray();
+                    foreach (var team in teams) competition.Teams.Add(team);
+
+                    for (var round = 0; round < 2; round++)
+                    {
+                        var finished = offset < 0 || (offset == 0 && sessionOrder == 0);
+                        var running = offset == 0 && sessionOrder == 1;
+                        var arenaName = round == 0 ? "Demo main arena" : "Demo final arena";
+                        // Heats: balanced groups of at most 6. Finals: one heat of the top 6.
+                        var groups = round == 0
+                            ? SplitBalanced(teams, LanesPerHeat)
+                            : new List<Team[]> { teams.Take(LanesPerHeat).ToArray() };
+                        var duration = groups.Count * MinutesPerHeat;
+                        DateTime start;
+                        if (!anchored) start = day.AddHours(9).AddMinutes(sessionOrder * 80);
+                        else
+                        {
+                            // Each arena runs its sessions in order: finished, then running, then the upcoming
+                            // ones from the next free slot (never before now).
+                            if (!arenaFree.TryGetValue(arenaName, out var free)) free = RoundUpTo5Minutes(now!.Value);
+                            if (finished) start = runningStart.AddMinutes(-duration);
+                            else if (running) start = runningStart;
+                            else start = free;
+                            if (!finished) arenaFree[arenaName] = new[] { free, start.AddMinutes(duration + ChangeoverMinutes) }.Max();
+                            if (start.AddMinutes(duration) > latestEnd) latestEnd = start.AddMinutes(duration);
+                        }
+                        var session = new Session
                         {
                             Competition = competition,
-                            Format = SectionFormat.Teams,
-                            AgeGroup = ageGroup,
-                            DisplayName = sectionName,
-                            // Priced so the test payment page can be shown; no money is ever taken.
-                            PriceMinor = DemoEntryPriceMinor,
+                            Section = section,
+                            Name = $"{sectionName} {(round == 0 ? "heats" : "finals")}",
+                            ArenaName = arenaName,
+                            ScheduledStart = start,
+                            OrderIndex = ++sessionOrder,
+                            MinutesPerHeat = MinutesPerHeat,
+                            LanesPerHeat = LanesPerHeat,
+                            Status = finished ? SessionStatus.Finished : running ? SessionStatus.InArena : SessionStatus.Upcoming,
+                            StartedAt = finished || running ? start : null,
+                            FinishedAt = finished ? start.AddMinutes(anchored ? duration : 70) : null,
                         };
-                        competition.Sections.Add(section);
-                        var teams = Enumerable.Range(1, sectionSizes[sectionIndex]).Select(_ =>
+                        competition.Sessions.Add(session);
+                        for (var heatNumber = 0; heatNumber < groups.Count; heatNumber++)
                         {
-                            teamNumber++;
-                            return new Team
+                            var entrants = groups[heatNumber];
+                            var heat = new Heat
                             {
-                                Competition = competition,
-                                Section = section,
-                                Club = club,
-                                DisplayName = $"{name.Replace("Demo ", "")} {ageGroup} {teamNumber}",
-                                Suffix = teamNumber.ToString(),
-                                BibColour = BibColours[(teamNumber - 1) % BibColours.Length],
+                                Session = session,
+                                Label = round == 0 ? $"Heat {heatNumber + 1}" : "Final",
+                                OrderIndex = heatNumber + 1,
+                                DurationMinutes = MinutesPerHeat,
+                                ScheduledStart = start.AddMinutes(heatNumber * MinutesPerHeat),
+                                StartedAt = finished || running ? start.AddMinutes(heatNumber * MinutesPerHeat) : null,
+                                FinishedAt = finished ? start.AddMinutes((heatNumber + 1) * MinutesPerHeat) : null,
                             };
-                        }).ToArray();
-                        foreach (var team in teams) competition.Teams.Add(team);
-
-                        for (var round = 0; round < 2; round++)
-                        {
-                            var finished = offset < 0 || (offset == 0 && sessionOrder == 0);
-                            var running = offset == 0 && sessionOrder == 1;
-                            var arenaName = round == 0 ? "Demo main arena" : "Demo final arena";
-                            // Heats: balanced groups of at most 6. Finals: one heat of the top 6.
-                            var groups = round == 0
-                                ? SplitBalanced(teams, LanesPerHeat)
-                                : new List<Team[]> { teams.Take(LanesPerHeat).ToArray() };
-                            var duration = groups.Count * MinutesPerHeat;
-                            DateTime start;
-                            if (!anchored) start = day.AddHours(9).AddMinutes(sessionOrder * 80);
-                            else
+                            session.Heats.Add(heat);
+                            for (var lane = 0; lane < entrants.Length; lane++)
+                                heat.Entries.Add(new HeatEntry { Heat = heat, Team = entrants[lane], LaneIndex = lane + 1 });
+                            var raceNames = RaceNames.Take(raceCount).ToArray();
+                            for (var raceNumber = 0; raceNumber < raceNames.Length; raceNumber++)
                             {
-                                // Each arena runs its sessions in order: finished, then running, then the upcoming
-                                // ones from the next free slot (never before now).
-                                if (!arenaFree.TryGetValue(arenaName, out var free)) free = RoundUpTo5Minutes(now!.Value);
-                                if (finished) start = runningStart.AddMinutes(-duration);
-                                else if (running) start = runningStart;
-                                else start = free;
-                                if (!finished) arenaFree[arenaName] = new[] { free, start.AddMinutes(duration + ChangeoverMinutes) }.Max();
-                                if (start.AddMinutes(duration) > latestEnd) latestEnd = start.AddMinutes(duration);
-                            }
-                            var session = new Session
-                            {
-                                Competition = competition,
-                                Section = section,
-                                Name = $"{sectionName} {(round == 0 ? "heats" : "finals")}",
-                                ArenaName = arenaName,
-                                ScheduledStart = start,
-                                OrderIndex = ++sessionOrder,
-                                MinutesPerHeat = MinutesPerHeat,
-                                LanesPerHeat = LanesPerHeat,
-                                Status = finished ? SessionStatus.Finished : running ? SessionStatus.InArena : SessionStatus.Upcoming,
-                                StartedAt = finished || running ? start : null,
-                                FinishedAt = finished ? start.AddMinutes(anchored ? duration : 70) : null,
-                            };
-                            competition.Sessions.Add(session);
-                            for (var heatNumber = 0; heatNumber < groups.Count; heatNumber++)
-                            {
-                                var entrants = groups[heatNumber];
-                                var heat = new Heat
+                                // A running session is halfway: the first half of every heat's races are scored.
+                                var complete = finished || (running && raceNumber < raceNames.Length / 2);
+                                var raceStart = start.AddMinutes(heatNumber * MinutesPerHeat + raceNumber * 4);
+                                var race = new Race
                                 {
-                                    Session = session,
-                                    Label = round == 0 ? $"Heat {heatNumber + 1}" : "Final",
-                                    OrderIndex = heatNumber + 1,
-                                    DurationMinutes = MinutesPerHeat,
-                                    ScheduledStart = start.AddMinutes(heatNumber * MinutesPerHeat),
-                                    StartedAt = finished || running ? start.AddMinutes(heatNumber * MinutesPerHeat) : null,
-                                    FinishedAt = finished ? start.AddMinutes((heatNumber + 1) * MinutesPerHeat) : null,
+                                    Heat = heat,
+                                    Name = raceNames[raceNumber],
+                                    OrderIndex = raceNumber + 1,
+                                    IsComplete = complete,
+                                    StartedAt = complete ? raceStart : null,
+                                    FinishedAt = complete ? raceStart.AddMinutes(3) : null,
                                 };
-                                session.Heats.Add(heat);
-                                for (var lane = 0; lane < entrants.Length; lane++)
-                                    heat.Entries.Add(new HeatEntry { Heat = heat, Team = entrants[lane], LaneIndex = lane + 1 });
-                                var raceNames = RaceNames.Take(raceCount).ToArray();
-                                for (var raceNumber = 0; raceNumber < raceNames.Length; raceNumber++)
+                                heat.Races.Add(race);
+                                if (complete)
                                 {
-                                    // A running session is halfway: the first half of every heat's races are scored.
-                                    var complete = finished || (running && raceNumber < raceNames.Length / 2);
-                                    var raceStart = start.AddMinutes(heatNumber * MinutesPerHeat + raceNumber * 4);
-                                    var race = new Race
-                                    {
-                                        Heat = heat,
-                                        Name = raceNames[raceNumber],
-                                        OrderIndex = raceNumber + 1,
-                                        IsComplete = complete,
-                                        StartedAt = complete ? raceStart : null,
-                                        FinishedAt = complete ? raceStart.AddMinutes(3) : null,
-                                    };
-                                    heat.Races.Add(race);
-                                    if (complete)
-                                    {
-                                        // Deterministic but uneven results: earlier lanes are slightly
-                                        // stronger, with noise so the top list has a real spread.
-                                        var rng = new Random(eventIndex * 10_000 + ageIndex * 1_000 + sectionIndex * 500 + round * 100 + heatNumber * 20 + raceNumber);
-                                        var ranked = entrants
-                                            .Select((team, lane) => (team, score: rng.NextDouble() * 3 - lane * 0.4))
-                                            .OrderByDescending(x => x.score)
-                                            .Select(x => x.team)
-                                            .ToArray();
-                                        for (var place = 0; place < ranked.Length; place++)
-                                            race.Results.Add(new Result { Race = race, Team = ranked[place], Placing = place + 1, Points = ranked.Length - place, RecordedAt = raceStart.AddMinutes(3) });
-                                    }
+                                    // Deterministic but uneven results: earlier lanes are slightly
+                                    // stronger, with noise so the top list has a real spread.
+                                    var rng = new Random(eventIndex * 10_000 + ageIndex * 1_000 + round * 100 + heatNumber * 20 + raceNumber);
+                                    var ranked = entrants
+                                        .Select((team, lane) => (team, score: rng.NextDouble() * 3 - lane * 0.4))
+                                        .OrderByDescending(x => x.score)
+                                        .Select(x => x.team)
+                                        .ToArray();
+                                    for (var place = 0; place < ranked.Length; place++)
+                                        race.Results.Add(new Result { Race = race, Team = ranked[place], Placing = place + 1, Points = ranked.Length - place, RecordedAt = raceStart.AddMinutes(3) });
                                 }
                             }
                         }

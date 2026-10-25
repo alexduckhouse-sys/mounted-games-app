@@ -8,6 +8,7 @@ using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Calendar;
 using MountedGames.Api.Services.Operations;
 
 namespace MountedGames.Api.Controllers;
@@ -358,7 +359,9 @@ public class SessionsController : ControllerBase
     [HttpPut("{id:int}/heat-assignments")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
-    public async Task<ActionResult<SessionDto>> UpdateHeatAssignments(int competitionId, int id, UpdateHeatAssignmentsRequest req)
+    public async Task<ActionResult<SessionDto>> UpdateHeatAssignments(
+        int competitionId, int id, UpdateHeatAssignmentsRequest req,
+        [FromQuery] bool preserveCompletedScores = false)
     {
         var s = await _db.Sessions
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
@@ -418,13 +421,17 @@ public class SessionsController : ControllerBase
             _db.HeatEntries.RemoveRange(heat.Entries);
             foreach (var race in heat.Races)
             {
+                if (preserveCompletedScores && race.IsComplete)
+                    continue;
                 _db.Results.RemoveRange(race.Results);
                 race.IsComplete = false;
                 race.StartedAt = null;
                 race.FinishedAt = null;
             }
-            heat.StartedAt = null;
-            heat.FinishedAt = null;
+            if (!preserveCompletedScores || !heat.Races.Any(r => r.IsComplete))
+                heat.StartedAt = null;
+            if (!preserveCompletedScores || heat.Races.Any(r => !r.IsComplete))
+                heat.FinishedAt = null;
             var lane = 1;
             foreach (var tid in teamIds)
             {
@@ -995,6 +1002,285 @@ public class SessionsController : ControllerBase
         return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
     }
 
+    /// <summary>Updates the uncompleted races across all heats in a session, preserving any already-completed races in place.</summary>
+    [HttpPut("{id:int}/races")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> UpdateSessionRaces(
+        int competitionId, int id, UpdateSessionRacesRequest req)
+    {
+        var s = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+
+        var names = (req.RaceNames ?? Array.Empty<string>())
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => r.Trim())
+            .ToList();
+        var anyCompleted = s.Heats.Any(h => h.Races.Any(r => r.IsComplete));
+        if (names.Count == 0 && !anyCompleted)
+            return BadRequest(new { message = "At least one race name is required." });
+
+        foreach (var heat in s.Heats.OrderBy(h => h.OrderIndex).ToList())
+        {
+            var ordered = heat.Races.OrderBy(r => r.OrderIndex).ThenBy(r => r.Id).ToList();
+            var completed = ordered.Where(r => r.IsComplete).ToList();
+            var uncompleted = ordered.Where(r => !r.IsComplete).ToList();
+
+            var uncompletedNames = names;
+            if (completed.Count > 0 && names.Count >= completed.Count
+                && completed.Select(r => r.Name).Zip(names.Take(completed.Count))
+                    .All(pair => string.Equals(pair.First, pair.Second, StringComparison.OrdinalIgnoreCase)))
+            {
+                uncompletedNames = names.Skip(completed.Count).ToList();
+            }
+
+            foreach (var r in uncompleted)
+            {
+                _db.Results.RemoveRange(r.Results);
+                _db.Races.Remove(r);
+            }
+
+            var order = 1;
+            foreach (var c in completed)
+                c.OrderIndex = order++;
+
+            foreach (var rName in uncompletedNames)
+            {
+                _db.Races.Add(new Race
+                {
+                    HeatId = heat.Id,
+                    Name = rName,
+                    OrderIndex = order++,
+                });
+            }
+
+            if (uncompletedNames.Count > 0)
+                heat.FinishedAt = null;
+        }
+
+        if (s.Heats.Count == 0)
+        {
+            s.PlannedRaces = PlannedRaceList.Write(names);
+        }
+        else
+        {
+            var firstHeatCompleted = s.Heats.OrderBy(h => h.OrderIndex).First().Races
+                .Where(r => r.IsComplete).OrderBy(r => r.OrderIndex).Select(r => r.Name).ToList();
+            var combined = firstHeatCompleted.Count > 0 && names.Count >= firstHeatCompleted.Count
+                && firstHeatCompleted.Zip(names.Take(firstHeatCompleted.Count))
+                    .All(pair => string.Equals(pair.First, pair.Second, StringComparison.OrdinalIgnoreCase))
+                ? names
+                : firstHeatCompleted.Concat(names).ToList();
+            s.PlannedRaces = PlannedRaceList.Write(combined);
+        }
+
+        if (s.Status == SessionStatus.Finished && names.Count > 0)
+        {
+            s.Status = SessionStatus.InArena;
+            s.FinishedAt = null;
+        }
+
+        await _db.SaveChangesAsync();
+        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+        var dto = reloaded.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    /// <summary>Shifts ScheduledStart on all uncompleted sessions (and their uncompleted heats) by DeltaMinutes.</summary>
+    [HttpPost("shift-times")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<IEnumerable<SessionDto>>> ShiftSessionTimes(
+        int competitionId, ShiftSessionTimesRequest req)
+    {
+        if (req.DeltaMinutes == 0 || Math.Abs(req.DeltaMinutes) > 720)
+            return BadRequest(new { message = "Shift must be between -720 and 720 minutes (non-zero)." });
+
+        var sessions = await SessionsWithDetail()
+            .Where(s => s.CompetitionId == competitionId)
+            .OrderBy(s => s.OrderIndex)
+            .ToListAsync();
+
+        var delta = TimeSpan.FromMinutes(req.DeltaMinutes);
+        var targetSessions = sessions.Where(s =>
+            s.Status != SessionStatus.Finished
+            && (string.IsNullOrWhiteSpace(req.ArenaName)
+                || string.Equals(s.ArenaName?.Trim(), req.ArenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        foreach (var s in targetSessions)
+        {
+            if (s.ScheduledStart.HasValue)
+            {
+                s.ScheduledStart = s.ScheduledStart.Value.Add(delta);
+                s.Notes = ApplyShiftNote(s.Notes, req.DeltaMinutes);
+            }
+            foreach (var h in s.Heats.Where(h => !h.FinishedAt.HasValue && h.ScheduledStart.HasValue))
+                h.ScheduledStart = h.ScheduledStart!.Value.Add(delta);
+        }
+
+        await _db.SaveChangesAsync();
+        foreach (var s in targetSessions)
+            await _live.SessionUpdated(competitionId, s.ToDto());
+
+        return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+    }
+
+    /// <summary>Marks uncompleted sessions in the competition (or optional arena) as paused at the current UTC timestamp.</summary>
+    [HttpPost("pause")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<IEnumerable<SessionDto>>> PauseTimetable(
+        int competitionId, PauseTimetableRequest? req = null)
+    {
+        var sessions = await SessionsWithDetail()
+            .Where(s => s.CompetitionId == competitionId)
+            .OrderBy(s => s.OrderIndex)
+            .ToListAsync();
+
+        var arenaName = req?.ArenaName;
+        var targetSessions = sessions.Where(s =>
+            s.Status != SessionStatus.Finished
+            && (string.IsNullOrWhiteSpace(arenaName)
+                || string.Equals(s.ArenaName?.Trim(), arenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        foreach (var s in targetSessions)
+        {
+            s.Notes = ApplyPauseNote(s.Notes, nowMs);
+        }
+
+        await _db.SaveChangesAsync();
+        foreach (var s in targetSessions)
+            await _live.SessionUpdated(competitionId, s.ToDto());
+
+        return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+    }
+
+    /// <summary>Resumes paused sessions in the competition (or optional arena), converting elapsed pause time into a permanent shift.</summary>
+    [HttpPost("resume")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<IEnumerable<SessionDto>>> ResumeTimetable(
+        int competitionId, ResumeTimetableRequest? req = null)
+    {
+        var sessions = await SessionsWithDetail()
+            .Where(s => s.CompetitionId == competitionId)
+            .OrderBy(s => s.OrderIndex)
+            .ToListAsync();
+
+        var arenaName = req?.ArenaName;
+        var targetSessions = sessions.Where(s =>
+            s.Status != SessionStatus.Finished
+            && (string.IsNullOrWhiteSpace(arenaName)
+                || string.Equals(s.ArenaName?.Trim(), arenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var updatedSessions = new List<Session>();
+        foreach (var s in targetSessions)
+        {
+            var pausedMs = ParsePauseNoteMs(s.Notes);
+            if (!pausedMs.HasValue) continue;
+
+            var cleanedNotes = RemovePauseNote(s.Notes);
+            s.Notes = cleanedNotes;
+            var elapsedMs = Math.Max(0, nowMs - pausedMs.Value);
+            var deltaMinutes = elapsedMs >= 30_000 ? Math.Max(1, (int)Math.Round(elapsedMs / 60_000.0)) : 0;
+            if (deltaMinutes > 0)
+            {
+                var delta = TimeSpan.FromMinutes(deltaMinutes);
+                if (s.ScheduledStart.HasValue)
+                {
+                    s.ScheduledStart = s.ScheduledStart.Value.Add(delta);
+                    s.Notes = ApplyShiftNote(s.Notes, deltaMinutes);
+                }
+                foreach (var h in s.Heats.Where(h => !h.FinishedAt.HasValue && h.ScheduledStart.HasValue))
+                    h.ScheduledStart = h.ScheduledStart!.Value.Add(delta);
+            }
+            updatedSessions.Add(s);
+        }
+
+        await _db.SaveChangesAsync();
+        foreach (var s in updatedSessions)
+            await _live.SessionUpdated(competitionId, s.ToDto());
+
+        return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+    }
+
+    /// <summary>Returns the learned minutes-per-race pace and duration multiplier for the competition.</summary>
+    [HttpGet("pace-prediction")]
+    [AllowAnonymous]
+    public async Task<ActionResult<PacePredictionDto>> GetPacePrediction(int competitionId)
+    {
+        var comp = await _db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == competitionId);
+        if (comp is null) return NotFound();
+
+        var sessions = await _db.Sessions
+            .AsNoTracking()
+            .Where(s => s.CompetitionId == competitionId)
+            .Include(s => s.Heats).ThenInclude(h => h.Races)
+            .OrderBy(s => s.OrderIndex)
+            .ToListAsync();
+
+        double? historicalAvg = null;
+        var initial = TimetableTimes.PredictPace(sessions);
+        if (initial.AvgMinutesPerRace is null && !string.IsNullOrEmpty(comp.CreatedByUserId))
+        {
+            var pastSessions = await _db.Sessions
+                .AsNoTracking()
+                .Where(s => s.CompetitionId != competitionId && s.Competition != null && s.Competition.CreatedByUserId == comp.CreatedByUserId)
+                .Include(s => s.Heats).ThenInclude(h => h.Races)
+                .ToListAsync();
+            var pastPace = TimetableTimes.PredictPace(pastSessions);
+            historicalAvg = pastPace.AvgMinutesPerRace;
+        }
+
+        var pace = TimetableTimes.PredictPace(sessions, historicalAvg);
+        return new PacePredictionDto(
+            pace.AvgMinutesPerRace,
+            pace.RecommendedMinutesPer5RaceHeat,
+            pace.Multiplier,
+            pace.SampleHeats);
+    }
+
+    private static string ApplyPauseNote(string? notes, long timestampMs)
+    {
+        var cleaned = RemovePauseNote(notes);
+        var tag = $"[paused:{timestampMs}]";
+        return string.IsNullOrWhiteSpace(cleaned) ? tag : $"{cleaned} {tag}";
+    }
+
+    private static long? ParsePauseNoteMs(string? notes)
+    {
+        if (string.IsNullOrEmpty(notes)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(notes, @"\[paused:(\d+)\]");
+        return match.Success && long.TryParse(match.Groups[1].Value, out var ms) ? ms : null;
+    }
+
+    private static string? RemovePauseNote(string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes)) return null;
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(notes, @"\s*\[paused:\d+\]\s*", " ").Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+    }
+
+    private static string? ApplyShiftNote(string? notes, int deltaMinutes)
+    {
+        var raw = notes ?? string.Empty;
+        var match = System.Text.RegularExpressions.Regex.Match(raw, @"\[shift:([+-]?\d+)\]");
+        var current = match.Success && int.TryParse(match.Groups[1].Value, out var parsed) ? parsed : 0;
+        var total = current + deltaMinutes;
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(raw, @"\s*\[shift:[+-]?\d+\]\s*", " ").Trim();
+        if (total == 0)
+            return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+        var tag = $"[shift:{(total > 0 ? "+" : "")}{total}]";
+        return string.IsNullOrWhiteSpace(cleaned) ? tag : $"{cleaned} {tag}";
+    }
+
     private static CombinedHeatScoringMode ParseScoringMode(string? raw)
         => string.Equals(raw?.Trim(), "Combined", StringComparison.OrdinalIgnoreCase) || raw?.Trim() == "1"
             ? CombinedHeatScoringMode.Combined
@@ -1006,3 +1292,8 @@ public record SetUnderReviewRequest(bool UnderReview, string? Note = null);
 public record CombineHeatRequest(int? SourceSessionId = null, IReadOnlyList<int>? TeamIds = null, string? ScoringMode = "BySection", int? TargetHeatId = null, bool RemoveSourceSession = false);
 public record SetCombinedScoringRequest(string ScoringMode);
 public record HoldCompetitionRequest(string? ResumeTime = null, int? DelayMinutes = null, string? ArenaName = null, bool PostAnnouncement = true);
+public record UpdateSessionRacesRequest(IReadOnlyList<string> RaceNames);
+public record ShiftSessionTimesRequest(int DeltaMinutes, string? ArenaName = null);
+public record PauseTimetableRequest(string? ArenaName = null);
+public record ResumeTimetableRequest(string? ArenaName = null);
+public record PacePredictionDto(double? AvgMinutesPerRace, int? RecommendedMinutesPer5RaceHeat, double Multiplier, int SampleHeats);

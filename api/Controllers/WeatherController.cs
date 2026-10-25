@@ -130,7 +130,7 @@ public class WeatherController : ControllerBase
         {
             var client = _http.CreateClient("weather");
             var iso = date.ToString("yyyy-MM-dd");
-            var url = $"https://api.open-meteo.com/v1/forecast?latitude={WeatherCache.Format(lat)}&longitude={WeatherCache.Format(lon)}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&start_date={iso}&end_date={iso}&timezone=auto";
+            var url = $"https://api.open-meteo.com/v1/forecast?latitude={WeatherCache.Format(lat)}&longitude={WeatherCache.Format(lon)}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&hourly=temperature_2m,weather_code,precipitation_probability,precipitation,wind_speed_10m,is_day&start_date={iso}&end_date={iso}&timezone=auto";
             try
             {
                 using var resp = await client.GetAsync(url);

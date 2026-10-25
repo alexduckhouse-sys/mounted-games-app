@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeStoredAuth } from '../api';
-import { useLiveHub, type LiveHandlers } from './useLiveHub';
+import { LITE_HUB_COALESCE_MS, useLiveHub, type LiveHandlers } from './useLiveHub';
 
 const auth = vi.hoisted(() => ({ token: null as string | null }));
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ token: auth.token }) }));
@@ -167,7 +167,8 @@ describe('useLiveHub', () => {
   it('passes each event to the matching handler', async () => {
     const connection = next();
     const handlers: Required<LiveHandlers> = {
-      onStreamUpdated: vi.fn(), onStreamViewers: vi.fn(), onOverlayUpdated: vi.fn(), onScoreCardControl: vi.fn(), onSponsorControl: vi.fn(),
+      onStreamUpdated: vi.fn(), onStreamViewers: vi.fn(), onStreamTelemetry: vi.fn(), onStreamCommand: vi.fn(),
+      onOverlayUpdated: vi.fn(), onScoreCardControl: vi.fn(), onSponsorControl: vi.fn(),
       onReady: vi.fn(), onChatMessage: vi.fn(), onChatMessageDeleted: vi.fn(),
       onSessionUpdated: vi.fn(), onResultsUpdated: vi.fn(), onAnnouncement: vi.fn(),
     };
@@ -180,8 +181,12 @@ describe('useLiveHub', () => {
     connection.emit('announcement', { id: 5 });
     connection.emit('streamUpdated', { id: 6 });
     connection.emit('streamViewers', { streamId: 6, count: 12 });
+    connection.emit('streamTelemetry', { streamId: 6, arenaName: 'Main', updatedAt: '2026-10-24T12:00:00Z' });
+    connection.emit('streamCommand', { streamId: 6, arenaName: 'Main', command: 'setZoom', value: '2', issuedAt: '2026-10-24T12:00:00Z' });
     connection.emit('overlayUpdated', { revision: 7 });
     expect(handlers.onOverlayUpdated).toHaveBeenCalledWith({ revision: 7 });
+    expect(handlers.onStreamTelemetry).toHaveBeenCalledWith({ streamId: 6, arenaName: 'Main', updatedAt: '2026-10-24T12:00:00Z' });
+    expect(handlers.onStreamCommand).toHaveBeenCalledWith({ streamId: 6, arenaName: 'Main', command: 'setZoom', value: '2', issuedAt: '2026-10-24T12:00:00Z' });
     connection.emit('scoreCardControl', { action: 'skip' });
     expect(handlers.onScoreCardControl).toHaveBeenCalledWith({ action: 'skip' });
     connection.emit('sponsorControl', { action: 'skip' });
@@ -292,6 +297,54 @@ describe('useLiveHub', () => {
       await vi.advanceTimersByTimeAsync(60_000);
       expect(connection.start).not.toHaveBeenCalled();
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('coalesces bursty scoring, session and telemetry events in Lite Mode and cancels pending timers on unmount', async () => {
+    vi.useFakeTimers();
+    document.documentElement.dataset.lite = 'true';
+    try {
+      const connection = next();
+      const onSessionUpdated = vi.fn();
+      const onResultsUpdated = vi.fn();
+      const onStreamViewers = vi.fn();
+      const onStreamTelemetry = vi.fn();
+      const { unmount } = renderHook(() => useLiveHub(1, { onSessionUpdated, onResultsUpdated, onStreamViewers, onStreamTelemetry }));
+      await flush();
+
+      connection.emit('sessionUpdated', { id: 1, name: 'v1' });
+      connection.emit('sessionUpdated', { id: 1, name: 'v2' });
+      connection.emit('resultsUpdated', { sessionId: 1, raceId: 10 });
+      connection.emit('resultsUpdated', { sessionId: 1, raceId: 11 });
+      connection.emit('streamViewers', { streamId: 6, count: 5 });
+      connection.emit('streamViewers', { streamId: 6, count: 9 });
+      connection.emit('streamTelemetry', { streamId: 6, arenaName: 'A', updatedAt: 't1' });
+      connection.emit('streamTelemetry', { streamId: 6, arenaName: 'A', updatedAt: 't2' });
+
+      expect(onSessionUpdated).not.toHaveBeenCalled();
+      expect(onResultsUpdated).not.toHaveBeenCalled();
+      expect(onStreamViewers).not.toHaveBeenCalled();
+      expect(onStreamTelemetry).not.toHaveBeenCalled();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(LITE_HUB_COALESCE_MS); });
+
+      expect(onSessionUpdated).toHaveBeenCalledTimes(1);
+      expect(onSessionUpdated).toHaveBeenCalledWith({ id: 1, name: 'v2' });
+      expect(onResultsUpdated).toHaveBeenCalledTimes(1);
+      expect(onResultsUpdated).toHaveBeenCalledWith({ sessionId: 1, raceId: 11 });
+      expect(onStreamViewers).toHaveBeenCalledTimes(1);
+      expect(onStreamViewers).toHaveBeenCalledWith({ streamId: 6, count: 9 });
+      expect(onStreamTelemetry).toHaveBeenCalledTimes(1);
+      expect(onStreamTelemetry).toHaveBeenCalledWith({ streamId: 6, arenaName: 'A', updatedAt: 't2' });
+
+      // Queue another burst, then unmount before the coalesce window elapses.
+      connection.emit('resultsUpdated', { sessionId: 1, raceId: 12 });
+      unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(LITE_HUB_COALESCE_MS * 2); });
+      expect(onResultsUpdated).toHaveBeenCalledTimes(1);
+    } finally {
+      delete document.documentElement.dataset.lite;
       vi.useRealTimers();
     }
   });

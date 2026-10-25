@@ -1,16 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, CloudOff, Printer, SlidersHorizontal, Trash2, Undo2 } from 'lucide-react';
-import { bibName, hatbandFor, inLaneOrder } from '../../lib/laneOrder';
-import { describePlacings, placingsOf, type QueuedScore } from '../../offline/scoreOutbox';
+import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
+import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
 import type { NextLanes } from '../../lib/nextRoundLanes';
 import { manualPoints, type PendingPlace } from '../../lib/raceScoring';
 import { pointsForPlace } from '../../lib/queuedView';
 import { summariseRace } from '../../lib/raceSummary';
+import { getSortByLaneOrder, PREFS_CHANGED_EVENT } from '../../lib/userPrefs';
 import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import {
-  EliminationSheet, HcConfirm, HeatGrid, LaneView, NextLanesCard, RaceRules, ScoreOverrideSheet, ScoreRow, SummaryCard,
-  type ScoreOverrideValue,
+  EliminationSheet, HcConfirm, HeatGrid, NextLanesCard, ScoreOverrideSheet, ScoreRow, SummaryCard,
+  getStoredCards, parseRefereeCard, useCardsEnabled, type RefereeCard, type ScoreOverrideValue,
 } from './ScoringParts';
 import { HeatPrintSheet } from './HeatPrintSheet';
 import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
@@ -56,6 +57,14 @@ interface ScoringProps {
   laneHatbands?: string[] | null;
   /** Reload the competition after a score correction is saved in the audit panel. */
   onRefresh?: () => void;
+  /** Current competition ID for persisting card indicators. */
+  competitionId?: number;
+  /** Optional mid-session race controls surfaced inside the score override sheet. */
+  onAddRace?: (raceName: string) => Promise<void> | void;
+  onRenameRace?: (newName: string) => Promise<void> | void;
+  onRerunRace?: () => Promise<void> | void;
+  runoffTeams?: Array<{ id: number; name: string }>;
+  onPickRunoffWinner?: (teamId: number) => Promise<void> | void;
 }
 
 const NO_TEAMS: ReadonlySet<number> = new Set();
@@ -65,12 +74,29 @@ export function ScoringSection({
   onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason,
   onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, onOverridePoints,
   tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
+  competitionId, onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner,
 }: ScoringProps) {
   const [sheet, setSheet] = useState(false);
   const [overrideSheet, setOverrideSheet] = useState(false);
   const [hcFor, setHcFor] = useState<{ teamId: number; name: string; isHc: boolean } | null>(null);
   const [hcBusy, setHcBusy] = useState(false);
   const [auditRaceId, setAuditRaceId] = useState<number | null>(null);
+  const [cardEventTick, setCardEventTick] = useState(0);
+  const [sortByLane, setSortByLane] = useState(() => getSortByLaneOrder());
+  const [cardsEnabled] = useCardsEnabled(competitionId);
+
+  useEffect(() => {
+    function onUpdate() { setCardEventTick((t) => t + 1); }
+    function onPrefs() { setSortByLane(getSortByLaneOrder()); }
+    window.addEventListener('mg-cards-updated', onUpdate);
+    window.addEventListener(PREFS_CHANGED_EVENT, onPrefs);
+    window.addEventListener('storage', () => { onUpdate(); onPrefs(); });
+    return () => {
+      window.removeEventListener('mg-cards-updated', onUpdate);
+      window.removeEventListener(PREFS_CHANGED_EVENT, onPrefs);
+    };
+  }, []);
+
   const pendingByTeam = new Map(pending.map((p) => [p.teamId, p]));
   const queuedByRace = new Map(queued.map((q) => [q.raceId, q]));
   const activeQueued = activeRace ? queuedByRace.get(activeRace.id) : undefined;
@@ -79,11 +105,44 @@ export function ScoringSection({
   const names = useMemo(() => Object.fromEntries(heat.entries.map((e) => [e.teamId, e.teamName])), [heat.entries]);
   const isQualifier = heat.raceRoundStage === 1;
   const pointsFor = (place: number, eliminated: boolean) => pointsForPlace(heat, sessionBase, place, eliminated);
-  const activeOverrides: Record<number, ScoreOverrideValue> = {};
-  for (const place of pending) {
-    const points = manualPoints(place.refereeNote);
-    if (points !== undefined) activeOverrides[place.teamId] = { points, reason: place.refereeNote?.replace(/\[pts:[^\]]*\]/gi, '').trim() };
-  }
+  const activeOverrides = useMemo(() => {
+    const overrides: Record<number, ScoreOverrideValue> = {};
+    for (const place of pending) {
+      const points = manualPoints(place.refereeNote, place.points);
+      if (points !== undefined) overrides[place.teamId] = { points, reason: place.refereeNote?.replace(/\[pts:[^\]]*\]/gi, '').trim() };
+    }
+    return overrides;
+  }, [pending]);
+
+  const storedCards = useMemo(() => {
+    void cardEventTick;
+    return cardsEnabled ? getStoredCards(competitionId) : {};
+  }, [competitionId, cardEventTick, cardsEnabled]);
+  const cardsByTeam = useMemo(() => {
+    if (!cardsEnabled) return {};
+    const cards: Record<number, RefereeCard> = { ...storedCards };
+    for (const p of pending) {
+      const c = parseRefereeCard(p.refereeNote).card;
+      if (c) cards[p.teamId] = c;
+    }
+    for (const teamIdStr of Object.keys(activeOverrides)) {
+      const tid = Number(teamIdStr);
+      const c = parseRefereeCard(activeOverrides[tid]?.reason).card;
+      if (c) cards[tid] = c;
+    }
+    for (const teamIdStr of Object.keys(notes)) {
+      const tid = Number(teamIdStr);
+      const c = parseRefereeCard(notes[tid]).card;
+      if (c) cards[tid] = c;
+    }
+    for (const r of races) {
+      for (const res of r.results) {
+        const c = parseRefereeCard((res as { refereeNote?: string }).refereeNote).card;
+        if (c) cards[res.teamId] = c;
+      }
+    }
+    return cards;
+  }, [cardsEnabled, storedCards, pending, activeOverrides, notes, races]);
 
   // The announcer card sits after the latest finished race that isn't the one open for scoring.
   const summaryIdx = races.reduce((last, r, i) => (r.isComplete && i !== activeIdx ? i : last), -1);
@@ -108,7 +167,12 @@ export function ScoringSection({
     try { await onSetHc(hcFor.teamId, !hcFor.isHc); } finally { setHcBusy(false); setHcFor(null); }
   }
 
-  const rows = activeRace ? inLaneOrder(heat, laneIdx, laneRules) : [];
+  const rows = useMemo(() => {
+    if (!activeRace) return [];
+    if (sortByLane) return inLaneOrder(heat, laneIdx, laneRules);
+    return [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex);
+  }, [activeRace, sortByLane, heat, laneIdx, laneRules]);
+
   const racingRows = rows.filter((e) => !sitsOutOf(heat, e, laneIdx, laneRules));
   const lanesByTeam = Object.fromEntries(rows.map((e) => [e.teamId, displayLaneFor(heat, e, laneIdx, laneRules)]));
 
@@ -121,219 +185,210 @@ export function ScoringSection({
     else if ((st?.place && !st.eliminated) || hasOv) placedCount += 1;
   }
   const doneCount = placedCount + elimCount;
+  const allComplete = races.length > 0 && races.every((r) => r.isComplete || queuedByRace.has(r.id));
+  const activeDone = Boolean(activeRace && (activeRace.isComplete || activeQueued));
+  const auditOpen = Boolean(activeRace && auditRaceId === activeRace.id);
 
   return (
     <section className="space-y-3">
-      <div className="sc-layout">
-        <aside className="sc-lanes">
-          {races.length > 0 && <LaneView heat={heat} raceIndex={laneIdx} raceName={races[laneIdx]?.name ?? ''} rules={laneRules} hatbands={laneHatbands} />}
-        </aside>
-
-        <div className="sc-main">
-          {races.length === 0 && <p className="sc-card sc-pad sc-sub">No races in this heat yet.</p>}
-          {races.map((race, i) => {
-            const queuedHere = queuedByRace.get(race.id);
-            const isActive = race.id === activeRace?.id;
-            const done = race.isComplete || Boolean(queuedHere);
-            const card = isActive ? (
-              <section key={race.id} className="sc-card sc-open sc-pad" aria-label={`Scoring ${race.name}`}>
-                <div className="sc-race-bar">
-                  <button
-                    type="button"
-                    className="sc-race-nav"
-                    aria-label="Previous race"
-                    disabled={i === 0}
-                    onClick={() => { if (i > 0) onSelectRace(races[i - 1].id); }}
-                  >
-                    <ChevronLeft className="h-6 w-6" aria-hidden="true" />
-                  </button>
-                  <div className="sc-race-bar-center">
-                    <span className={`sc-race-bar-status ${done ? 'sc-race-bar-status-done' : ''}`}>
-                      Race {i + 1} of {races.length} · {done ? 'Scored' : 'Scoring'}
-                    </span>
-                    <h3 className="sc-race-bar-name">{race.name}</h3>
-                  </div>
-                  <button
-                    type="button"
-                    className="sc-race-nav"
-                    aria-label="Next race"
-                    disabled={i === races.length - 1}
-                    onClick={() => { if (i < races.length - 1) onSelectRace(races[i + 1].id); }}
-                  >
-                    <ChevronRight className="h-6 w-6" aria-hidden="true" />
-                  </button>
-                </div>
-
-                {activeQueued && (
-                  <p role="status" className="mg-notice mt-2">
-                    <CloudOff className="mr-1 inline h-4 w-4" aria-hidden="true" />
-                    Not sent yet: {describePlacings(activeQueued.places, activeQueued.teamNames)}. To change them, score the race again.
-                  </p>
-                )}
-
-                <ul className="sc-rows">
-                  {rows.map((e) => {
-                    const lane = displayLaneFor(heat, e, laneIdx, laneRules);
-                    const sitting = sitsOutOf(heat, e, laneIdx, laneRules);
-                    const state = pendingByTeam.get(e.teamId);
-                    const isHc = hcTeamIds.has(e.teamId);
-                    const ov = activeOverrides[e.teamId];
-                    const priorTotal = races.reduce(
-                      (sum, r) => (r.id === race.id ? sum : sum + (r.results.find((x) => x.teamId === e.teamId)?.points ?? 0)),
-                      0,
-                    );
-                    const savedResult = activeRace.results.find((result) => result.teamId === e.teamId);
-                    // Scorer links cannot read private directives. Keep the actual saved score visible
-                    // while its placing is unchanged, including half-point awards.
-                    const unchangedScore = state?.refereeNote === undefined && savedResult
-                      && savedResult.eliminated === state?.eliminated
-                      && (savedResult.placing ?? 0) === (state?.place ?? 0)
-                      ? savedResult.points : undefined;
-                    const racePoints = sitting || isHc
-                      ? 0
-                      : ov != null
-                        ? ov.points
-                        : unchangedScore !== undefined
-                          ? unchangedScore
-                          : state?.eliminated
-                          ? 0
-                          : state?.place
-                            ? pointsFor(state.place, false)
-                            : 0;
-                    return (
-                      <ScoreRow
-                        key={e.id}
-                        entry={e}
-                        lane={lane}
-                        hatband={hatbandFor(laneHatbands, lane)}
-                        state={state}
-                        sitting={sitting}
-                        hc={isHc}
-                        canScore={canScore}
-                        canMarkHc={canScore && Boolean(onSetHc)}
-                        points={racePoints}
-                        heatTotal={priorTotal + racePoints}
-                        overridePoints={ov?.points}
-                        onTap={() => onClickTeam(e.teamId)}
-                        onSwipeEliminate={() => onToggleElim(e.teamId)}
-                        onToggleElim={() => onToggleElim(e.teamId)}
-                        onHc={() => setHcFor({ teamId: e.teamId, name: e.teamName, isHc })}
-                      />
-                    );
-                  })}
-                </ul>
-
-                {canScore && (
-                  <p className="sc-hint">
-                    Tap in finishing order · Hold or swipe down to eliminate — Swipe a team down to eliminate it.
-                    {isQualifier && <> The first {qualifiers} home go through; the rest score 1 point each.</>}
-                  </p>
-                )}
-
-                {canScore && (race.results.length > 0 || activeQueued) && (
-                  <label className="mt-3 flex flex-col gap-1 text-sm font-semibold">
-                    Reason for correction
-                    <textarea className="input min-h-20" maxLength={1000} value={correctionReason} onChange={(event) => onCorrectionReason(event.target.value)} placeholder="What changed, and why?" />
-                  </label>
-                )}
-
-                {canScore && (
-                  <div className="sc-bottom">
-                    <div className="sc-toolbar">
-                      <div className="sc-progress">
-                        <span className="sc-prog-count">
-                          {doneCount} <span className="sc-prog-total">of {racingRows.length}</span>
-                        </span>
-                        {racingRows.length > 0 && (
-                          <div className="sc-seg-bar" aria-hidden="true">
-                            {racingRows.map((e, segIdx) => (
-                              <span
-                                key={e.id}
-                                className={`sc-seg ${segIdx < placedCount ? 'sc-seg-placed' : segIdx < doneCount ? 'sc-seg-elim' : ''}`}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        className="sc-tool-btn"
-                        aria-label="Score override"
-                        onClick={() => setOverrideSheet(true)}
-                      >
-                        <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
-                      </button>
-                      <button type="button" className="mg-btn mg-btn-secondary" disabled={!onUndo} onClick={onUndo}>
-                        <Undo2 className="h-4 w-4" aria-hidden="true" /> {undoLabel}
-                      </button>
-                      <button type="button" className="mg-btn mg-btn-secondary" onClick={handleReset}>
-                        <Trash2 className="h-4 w-4" aria-hidden="true" /> Clear
-                      </button>
-                    </div>
-                    <div className="sc-actions">
-                      <button type="button" className="mg-btn mg-btn-primary sc-submit-btn" onClick={complete}>Race complete</button>
-                    </div>
-                  </div>
-                )}
-              </section>
-            ) : done ? (
-              <button key={race.id} type="button" className="sc-done" onClick={() => onSelectRace(race.id)}>
-                <span className="sc-done-name">{i + 1}. {race.name}</span>
-                <span className="sc-done-result">
-                  {queuedHere ? describePlacings(queuedHere.places, queuedHere.teamNames)
-                    : describePlacings(placingsOf(race.results.filter((r) => !r.isSitOut)), names)}
-                </span>
-                {queuedHere && <span className="sc-tag"><CloudOff className="mr-1 h-3 w-3" aria-hidden="true" />Not sent</span>}
+      <div className="sc-main">
+        {races.length === 0 && <p className="sc-card sc-pad sc-sub">No races in this heat yet.</p>}
+        {activeRace && (
+          <section key={activeRace.id} className="sc-card sc-open sc-pad" aria-label={`Scoring ${activeRace.name}`}>
+            <div className="sc-race-bar">
+              <button
+                type="button"
+                className="sc-race-nav"
+                aria-label="Previous race"
+                disabled={activeIdx <= 0}
+                onClick={() => { if (activeIdx > 0) onSelectRace(races[activeIdx - 1].id); }}
+              >
+                <ChevronLeft className="h-6 w-6" aria-hidden="true" />
               </button>
-            ) : (
-              <section key={race.id} className="sc-next" aria-label={`${race.name}, coming up`}>
-                <button type="button" className="sc-done-name" onClick={() => onSelectRace(race.id)}>{i + 1}. {race.name}</button>
-                <div className="sc-chips">
-                  {inLaneOrder(heat, i, laneRules).map((e) => (
-                    <span key={e.id}>Lane {displayLaneFor(heat, e, i, laneRules)}: {e.teamName}<span className="sr-only"> {bibName(e.bibColour)}</span></span>
-                  ))}
-                </div>
-              </section>
-            );
-            const auditOpen = auditRaceId === race.id;
-            return (
-              <div key={race.id} className="contents">
-                {card}
-                {canScore && race.isComplete && (
-                  <div className="sc-card sc-pad">
-                    <button
-                      type="button"
-                      className="mg-btn mg-btn-secondary text-xs"
-                      aria-expanded={auditOpen}
-                      onClick={() => setAuditRaceId(auditOpen ? null : race.id)}
-                    >
-                      Score history &amp; correction
-                    </button>
-                    {auditOpen && (
-                      <div className="mt-3">
-                        <ScoreAuditPanel raceId={race.id} onChanged={onRefresh} />
+              <div className="sc-race-bar-center">
+                <span className={`sc-race-bar-status ${activeDone ? 'sc-race-bar-status-done' : ''}`}>
+                  Race {activeIdx + 1} of {races.length} · {activeDone ? 'Scored' : 'Scoring'}
+                </span>
+                <h3 className="sc-race-bar-name">{activeRace.name}</h3>
+              </div>
+              <button
+                type="button"
+                className="sc-race-nav"
+                aria-label="Next race"
+                disabled={activeIdx >= races.length - 1}
+                onClick={() => { if (activeIdx < races.length - 1) onSelectRace(races[activeIdx + 1].id); }}
+              >
+                <ChevronRight className="h-6 w-6" aria-hidden="true" />
+              </button>
+            </div>
+
+            {activeQueued && (
+              <p role="status" className="mg-notice mt-2">
+                <CloudOff className="mr-1 inline h-4 w-4" aria-hidden="true" />
+                Not sent yet: {describePlacings(activeQueued.places, activeQueued.teamNames)}. To change them, score the race again.
+              </p>
+            )}
+
+            <ul className="sc-rows">
+              {rows.map((e) => {
+                const lane = displayLaneFor(heat, e, laneIdx, laneRules);
+                const sitting = sitsOutOf(heat, e, laneIdx, laneRules);
+                const state = pendingByTeam.get(e.teamId);
+                const isHc = hcTeamIds.has(e.teamId);
+                const ov = activeOverrides[e.teamId];
+                const priorTotal = races.reduce(
+                  (sum, r) => (r.id === activeRace.id ? sum : sum + (r.results.find((x) => x.teamId === e.teamId)?.points ?? 0)),
+                  0,
+                );
+                const savedResult = activeRace.results.find((result) => result.teamId === e.teamId);
+                // Scorer links cannot read private directives. Keep the actual saved score visible
+                // while its placing is unchanged, including half-point awards.
+                const unchangedScore = state?.refereeNote === undefined && savedResult
+                  && savedResult.eliminated === state?.eliminated
+                  && (savedResult.placing ?? 0) === (state?.place ?? 0)
+                  ? savedResult.points : undefined;
+                const racePoints = sitting || isHc
+                  ? 0
+                  : ov != null
+                    ? ov.points
+                    : unchangedScore !== undefined
+                      ? unchangedScore
+                      : state?.eliminated
+                      ? 0
+                      : state?.place
+                        ? pointsFor(state.place, false)
+                        : 0;
+                return (
+                  <ScoreRow
+                    key={e.id}
+                    entry={e}
+                    lane={lane}
+                    hatband={hatbandFor(laneHatbands, lane)}
+                    state={state}
+                    sitting={sitting}
+                    hc={isHc}
+                    canScore={canScore}
+                    points={racePoints}
+                    heatTotal={priorTotal + racePoints}
+                    overridePoints={ov?.points}
+                    card={cardsByTeam[e.teamId]}
+                    onTap={() => onClickTeam(e.teamId)}
+                    onSwipeEliminate={() => onToggleElim(e.teamId)}
+                    onToggleElim={() => onToggleElim(e.teamId)}
+                  />
+                );
+              })}
+            </ul>
+
+            {canScore && (
+              <p className="sc-hint">
+                Tap in finishing order · Hold or swipe down to eliminate.
+                {isQualifier && <> The first {qualifiers} home go through; the rest score 1 point each.</>}
+              </p>
+            )}
+
+            {canScore && (activeRace.results.length > 0 || activeQueued) && (
+              <label className="mt-3 flex flex-col gap-1 text-sm font-semibold">
+                Reason for correction
+                <textarea className="input min-h-20" maxLength={1000} value={correctionReason} onChange={(event) => onCorrectionReason(event.target.value)} placeholder="What changed, and why?" />
+              </label>
+            )}
+
+            {canScore && (
+              <div className="sc-bottom">
+                <div className="sc-toolbar">
+                  <div className="sc-progress">
+                    <span className="sc-prog-count">
+                      {doneCount} <span className="sc-prog-total">of {racingRows.length}</span>
+                    </span>
+                    {racingRows.length > 0 && (
+                      <div className="sc-seg-bar" aria-hidden="true">
+                        {racingRows.map((e, segIdx) => (
+                          <span
+                            key={e.id}
+                            className={`sc-seg ${segIdx < placedCount ? 'sc-seg-placed' : segIdx < doneCount ? 'sc-seg-elim' : ''}`}
+                          />
+                        ))}
                       </div>
                     )}
                   </div>
-                )}
-                {summary && i === summaryIdx && <SummaryCard summary={summary} raceNumber={i + 1} />}
+                  <button
+                    type="button"
+                    className="sc-tool-btn"
+                    aria-label="Score override"
+                    onClick={() => setOverrideSheet(true)}
+                  >
+                    <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="sc-tool-btn"
+                    aria-label={undoLabel}
+                    disabled={!onUndo}
+                    onClick={onUndo}
+                  >
+                    <Undo2 className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="sc-tool-btn"
+                    aria-label="Clear"
+                    onClick={handleReset}
+                  >
+                    <Trash2 className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="sc-actions">
+                  <button type="button" className="mg-btn mg-btn-primary sc-submit-btn" onClick={complete}>Race complete</button>
+                </div>
               </div>
-            );
-          })}
-          {nextLanes && <NextLanesCard lanes={nextLanes} />}
-        </div>
+            )}
+          </section>
+        )}
+
+        {canScore && activeRace?.isComplete && (
+          <div className="sc-card sc-pad">
+            <button
+              type="button"
+              className="mg-btn mg-btn-secondary text-xs"
+              aria-expanded={auditOpen}
+              onClick={() => setAuditRaceId(auditOpen ? null : activeRace.id)}
+            >
+              Score history &amp; correction
+            </button>
+            {auditOpen && (
+              <div className="mt-3">
+                <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {summary && summaryIdx >= 0 && <SummaryCard summary={summary} raceNumber={summaryIdx + 1} />}
+        {nextLanes && <NextLanesCard lanes={nextLanes} />}
       </div>
 
-      {races.length > 0 && (
-        <div className="flex justify-end">
-          <button type="button" className="mg-btn mg-btn-secondary" onClick={() => window.print()}><Printer className="h-4 w-4" aria-hidden="true" /> Print heat table</button>
-        </div>
+      {allComplete && races.length > 0 && (
+        <>
+          <div className="flex justify-end">
+            <button type="button" className="mg-btn mg-btn-secondary" onClick={() => window.print()}>
+              <Printer className="h-4 w-4" aria-hidden="true" /> Print heat table
+            </button>
+          </div>
+          <HeatGrid
+            heat={heat}
+            races={races}
+            activeRaceId={activeRace?.id ?? null}
+            activeIndex={laneIdx}
+            rules={laneRules}
+            pending={pending}
+            pointsFor={pointsFor}
+            hcTeamIds={hcTeamIds}
+            cardsByTeam={cardsByTeam}
+          />
+        </>
       )}
-      {races.length > 0 && (
-        <HeatGrid heat={heat} races={races} activeRaceId={activeRace?.id ?? null} activeIndex={laneIdx} rules={laneRules}
-          pending={pending} pointsFor={pointsFor} hcTeamIds={hcTeamIds} />
-      )}
-      <RaceRules races={races} />
+
       {races.length > 0 && <HeatPrintSheet heat={heat} races={races} rules={laneRules} hcTeamIds={hcTeamIds} tieRule={tieRule} hatbands={laneHatbands} />}
 
       {sheet && (
@@ -354,9 +409,18 @@ export function ScoringSection({
           pointsFor={pointsFor}
           overrides={activeOverrides}
           hcTeamIds={hcTeamIds}
-          onSetHc={canScore ? onSetHc : undefined}
+          onSetHc={canScore && onSetHc ? (teamId, hc) => {
+            const name = names[teamId] ?? `Team ${teamId}`;
+            setHcFor({ teamId, name, isHc: !hc });
+          } : undefined}
           onSaveOverride={saveOverride}
           onClose={() => setOverrideSheet(false)}
+          competitionId={competitionId}
+          onAddRace={onAddRace}
+          onRenameRace={onRenameRace}
+          onRerunRace={onRerunRace}
+          runoffTeams={runoffTeams}
+          onPickRunoffWinner={onPickRunoffWinner}
         />
       )}
       {hcFor && <HcConfirm teamName={hcFor.name} isHc={hcFor.isHc} busy={hcBusy} onConfirm={() => void confirmHc()} onCancel={() => setHcFor(null)} />}

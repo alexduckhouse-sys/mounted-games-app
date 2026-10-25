@@ -10,6 +10,8 @@ export interface Placing {
   teamId: number;
   place: number;
   eliminated: boolean;
+  /** Manual points override (supports .5 increments for dead heats and judge overrides). */
+  points?: number;
   /** Why the team did not finish: 1 E, 2 DNS, 3 DNF, 4 R. Left out means eliminated. */
   status?: number;
   /** A private note for staff. Left out keeps the saved note. */

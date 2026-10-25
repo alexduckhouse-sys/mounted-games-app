@@ -170,10 +170,87 @@ it('wires the viewer, changes cameras, passes announcements and uses captions or
   const { rerender, unmount } = render(<MemoryRouter><LiveVideo {...p} streams={list} messages={[{ message: chat(1), receivedAt: Date.now() }]} /></MemoryRouter>); await settle();
   expect(screen.getByText('The final')).toBeVisible();
   act(() => FakePeer.instances[0].track()); await tick(2000); expect(screen.queryByText('Connecting…')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Audio only' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sync live' }));
   fireEvent.click(screen.getByRole('button', { name: 'Finish line' })); await settle();
   expect(p.invoke).toHaveBeenCalledWith('StopWatching', 1); expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
   expect(screen.getByText('Live from')).toBeVisible();
   rerender(<MemoryRouter><LiveVideo {...p} ready={2} streams={list.map((s) => ({ ...s, generation: 2 }))} /></MemoryRouter>); await settle();
   FakePeer.instances.at(-1)!.getStats.mockResolvedValue(new Map()); await tick(10000); expect(screen.getByText('Reconnecting…')).toBeVisible();
   unmount(); expect(p.invoke).toHaveBeenCalledWith('StopWatching', 2);
+});
+
+it('supports viewer quality switching, audio-only mode, sync live, picture-in-picture, and instant -15s replay on StreamPlayer', async () => {
+  const onQuality = vi.fn();
+  const onAudioOnly = vi.fn();
+  const onSyncLive = vi.fn();
+  const requestPip = vi.fn(async () => {});
+  const exitPip = vi.fn(async () => {});
+  const releaseWake = vi.fn(async () => {});
+  Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: vi.fn(async () => ({ release: releaseWake })) } });
+  Object.defineProperty(HTMLVideoElement.prototype, 'requestPictureInPicture', { configurable: true, value: requestPip });
+  Object.defineProperty(document, 'exitPictureInPicture', { configurable: true, value: exitPip });
+  Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: null });
+  const media = asMedia(new FakeMediaStream());
+  const { unmount } = render(<StreamPlayer media={media} stream={liveStream()} label="Heat 1" quality="f" onQuality={onQuality} onAudioOnly={onAudioOnly} onSyncLive={onSyncLive} />);
+  await settle();
+  await tick(2000);
+  fireEvent.click(screen.getByRole('button', { name: 'Quality 540p' }));
+  expect(onQuality).toHaveBeenCalledWith('h');
+  fireEvent.click(screen.getByRole('button', { name: 'Audio only' }));
+  expect(onAudioOnly).toHaveBeenCalledWith(true);
+  expect(screen.getByText(/Video paused to save mobile data/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Sync live' }));
+  expect(onSyncLive).toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
+  expect(requestPip).toHaveBeenCalled();
+  Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: document.querySelector('video') });
+  fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
+  expect(exitPip).toHaveBeenCalled();
+  Object.defineProperty(document, 'pictureInPictureElement', { configurable: true, value: null });
+  fireEvent.click(screen.getByRole('button', { name: 'Instant 15 second replay' }));
+  unmount();
+  expect(releaseWake).toHaveBeenCalled();
+});
+
+it('automatically cuts to a new camera angle on selectAngle command unless the viewer manually pinned an angle', async () => {
+  vi.stubGlobal('RTCPeerConnection', fakePeerConstructor); vi.stubGlobal('MediaStream', fakeStreamConstructor);
+  const p = props();
+  const list = [
+    liveStream({ id: 1, arenaName: 'Main Arena', angleName: 'Main camera' }),
+    liveStream({ id: 2, arenaName: 'Main Arena', angleName: 'Finish line' }),
+    liveStream({ id: 3, arenaName: 'Second Arena', angleName: 'Wide' }),
+  ];
+  const { rerender } = render(<MemoryRouter><LiveVideo {...p} streams={list} lastCommand={null} /></MemoryRouter>);
+  await settle();
+  expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 1);
+
+  // Director cuts to Finish line (id: 2)
+  rerender(<MemoryRouter><LiveVideo {...p} streams={list} lastCommand={{ streamId: 1, arenaName: 'Main Arena', command: 'selectAngle', value: '2', issuedAt: '2026-10-24T12:00:00Z' }} /></MemoryRouter>);
+  await settle();
+  expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
+
+  // Viewer manually pins Main camera (id: 1)
+  vi.mocked(p.invoke).mockClear();
+  fireEvent.click(screen.getByRole('button', { name: 'Main camera' }));
+  await settle();
+  expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 1);
+  expect(screen.getByRole('button', { name: 'Auto-follow director' })).toBeVisible();
+
+  // Director cut is ignored while pinned
+  vi.mocked(p.invoke).mockClear();
+  rerender(<MemoryRouter><LiveVideo {...p} streams={list} lastCommand={{ streamId: 1, arenaName: 'Main Arena', command: 'selectAngle', value: '2', issuedAt: '2026-10-24T12:01:00Z' }} /></MemoryRouter>);
+  await settle();
+  expect(p.invoke).not.toHaveBeenCalledWith('WatchStream', 1, 2);
+
+  // Viewer re-enables Auto-follow director or switches arena
+  vi.mocked(p.invoke).mockClear();
+  fireEvent.click(screen.getByRole('button', { name: 'Auto-follow director' }));
+  await settle();
+  expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
+
+  vi.mocked(p.invoke).mockClear();
+  fireEvent.click(screen.getByRole('button', { name: 'Second Arena' }));
+  await settle();
+  expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 3);
 });

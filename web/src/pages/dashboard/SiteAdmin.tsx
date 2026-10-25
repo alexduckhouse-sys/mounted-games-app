@@ -13,6 +13,16 @@ import { EmailOptInExportSection } from '../admin/EmailOptInExportSection';
 import { MoreMenu, PartHead, type MenuItem } from '../admin/LaptopParts';
 
 interface IpBlock { id: number; ipAddress: string; reason?: string | null; createdAt: string }
+interface AdminUser {
+  id: string;
+  fullName: string;
+  email?: string | null;
+  clubId?: number | null;
+  clubName?: string | null;
+  roles: string[];
+  isLockedOut: boolean;
+  createdAt: string;
+}
 
 const STAGE_CLASS: Record<Stage, string> = {
   draft: 'bg-[rgb(var(--mg-done-bg))] text-[rgb(var(--mg-body))]',
@@ -26,7 +36,7 @@ const STAGE_CLASS: Record<Stage, string> = {
 const ROW_GRID = 'grid items-center gap-x-4 sm:grid-cols-[minmax(0,1fr)_120px_64px_192px]';
 
 /** Everything that used to live at /admin: competitions, trainer requests, blocked addresses, the email export, rules and clubs. */
-export function SiteAdmin() {
+export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests?: boolean } = {}) {
   const { canEdit, hasRole } = useAuth();
   const navigate = useNavigate();
   const [comps, setComps] = useState<CompetitionSummary[]>([]);
@@ -38,7 +48,74 @@ export function SiteAdmin() {
   const [blockBusy, setBlockBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [showAllComps, setShowAllComps] = useState(false);
+  const [usersOpen, setUsersOpen] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [newClubName, setNewClubName] = useState('');
+  const [newClubRegion, setNewClubRegion] = useState('');
+  const [editingClubId, setEditingClubId] = useState<number | null>(null);
+  const [editingClubName, setEditingClubName] = useState('');
   const now = useMemo(() => new Date(), []);
+
+  function loadUsers(q = userSearch) {
+    api
+      .get<AdminUser[]>('/admin/users', { params: q.trim() ? { q: q.trim() } : undefined })
+      .then((r) => setAdminUsers(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setAdminUsers([]));
+  }
+
+  async function toggleUserRole(userId: string, role: string, grant: boolean) {
+    try {
+      await api.post(`/admin/users/${encodeURIComponent(userId)}/roles`, { role, grant });
+      loadUsers();
+    } catch {
+      setNotice('Couldn’t update user role.');
+    }
+  }
+
+  async function unlockUser(userId: string) {
+    try {
+      await api.post(`/admin/users/${encodeURIComponent(userId)}/unlock`);
+      loadUsers();
+    } catch {
+      setNotice('Couldn’t unlock user.');
+    }
+  }
+
+  async function addClub() {
+    const name = newClubName.trim();
+    if (!name) return;
+    try {
+      await api.post('/clubs', { name, region: newClubRegion.trim() || 'Custom' });
+      setNewClubName('');
+      setNewClubRegion('');
+      load();
+    } catch {
+      setNotice('Couldn’t add club.');
+    }
+  }
+
+  async function saveClubRename(id: number) {
+    const name = editingClubName.trim();
+    if (!name) return;
+    try {
+      await api.put(`/clubs/${id}`, { name });
+      setEditingClubId(null);
+      setEditingClubName('');
+      load();
+    } catch {
+      setNotice('Couldn’t rename club.');
+    }
+  }
+
+  async function deleteClub(id: number) {
+    try {
+      await api.delete(`/clubs/${id}`);
+      load();
+    } catch {
+      setNotice('Club is in use and cannot be deleted.');
+    }
+  }
 
   function load() {
     api.get<CompetitionSummary[]>('/competitions', { params: { includeArchived: true } }).then((r) => setComps(Array.isArray(r.data) ? r.data : [])).catch(() => setComps([]));
@@ -172,7 +249,7 @@ export function SiteAdmin() {
         </div>
       </section>
 
-      {hasRole('Admin') && <TrainerRequestsSection />}
+      {hasRole('Admin') && !hideTrainerRequests && <TrainerRequestsSection />}
 
       <section aria-labelledby="ad-ips" className="flex flex-col gap-[18px]">
         <PartHead id="ad-ips" title="Blocked addresses" />
@@ -219,9 +296,111 @@ export function SiteAdmin() {
 
       {hasRole('Admin') && <EmailOptInExportSection />}
 
+      {hasRole('Admin') && (
+        <section aria-labelledby="ad-users" className="flex flex-col gap-[18px]">
+          <PartHead id="ad-users" title="Users" />
+          <div className="mg-card space-y-3 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="search"
+                aria-label="Search users"
+                placeholder="Search by name, email or club…"
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="input min-h-10 flex-1 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setUsersOpen(true);
+                  loadUsers(userSearch);
+                }}
+                className="mg-btn mg-btn-secondary !min-h-10 !text-sm"
+              >
+                {usersOpen ? 'Search users' : 'Load users'}
+              </button>
+            </div>
+            {usersOpen && (
+              <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+                {adminUsers.length === 0 && (
+                  <li className="py-2 text-sm text-[rgb(var(--mg-muted))]">No users found.</li>
+                )}
+                {adminUsers.map((u) => (
+                  <li key={u.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{u.fullName}</p>
+                      <p className="truncate text-xs text-[rgb(var(--mg-muted))]">
+                        {[u.email, u.clubName].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(['Admin', 'Trainer', 'Manager'] as const).map((role) => {
+                        const active = u.roles.includes(role);
+                        return (
+                          <button
+                            key={role}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => void toggleUserRole(u.id, role, !active)}
+                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              active
+                                ? 'bg-[rgb(var(--mg-button))] text-white'
+                                : 'bg-[rgb(var(--mg-subtle))] text-[rgb(var(--mg-body))]'
+                            }`}
+                          >
+                            {role}
+                          </button>
+                        );
+                      })}
+                      {u.isLockedOut && (
+                        <button
+                          type="button"
+                          onClick={() => void unlockUser(u.id)}
+                          className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900"
+                        >
+                          Unlock
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
       <section aria-labelledby="ad-clubs" className="flex flex-col gap-[18px]">
         <PartHead id="ad-clubs" title="Clubs" meta={clubs.length} />
         <div className="mg-card space-y-3 p-4">
+          {hasRole('Admin') && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-[rgb(var(--mg-rule-soft))] pb-3">
+              <input
+                type="text"
+                aria-label="New club name"
+                placeholder="New club name"
+                value={newClubName}
+                onChange={(e) => setNewClubName(e.target.value)}
+                className="input min-h-10 flex-1 text-sm"
+              />
+              <input
+                type="text"
+                aria-label="New club region"
+                placeholder="Region (optional)"
+                value={newClubRegion}
+                onChange={(e) => setNewClubRegion(e.target.value)}
+                className="input min-h-10 w-40 text-sm"
+              />
+              <button
+                type="button"
+                disabled={!newClubName.trim()}
+                onClick={() => void addClub()}
+                className="mg-btn mg-btn-secondary !min-h-10 !text-sm"
+              >
+                Add club
+              </button>
+            </div>
+          )}
           {clubsByRegion.length === 0 && <p className="text-sm text-[rgb(var(--mg-muted))]">No clubs yet.</p>}
           {clubsByRegion.map(([region, list]) => (
             <div key={region}>
@@ -230,10 +409,49 @@ export function SiteAdmin() {
                 {list.map((c) => (
                   <li key={c.id} className="flex items-center gap-2 rounded-lg bg-[rgb(var(--mg-subtle))] p-2">
                     <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ background: bibAccent(c.bibColour) }} />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{c.name}</p>
-                      <p className="truncate text-xs text-[rgb(var(--mg-muted))]">Bibs: {bibLabel(c.bibColour)}</p>
-                    </div>
+                    {editingClubId === c.id ? (
+                      <div className="flex flex-1 items-center gap-1.5">
+                        <input
+                          type="text"
+                          aria-label={`Edit name for ${c.name}`}
+                          value={editingClubName}
+                          onChange={(e) => setEditingClubName(e.target.value)}
+                          className="input !min-h-8 flex-1 text-xs"
+                        />
+                        <button type="button" onClick={() => void saveClubRename(c.id)} className="mg-small-btn text-xs">Save</button>
+                        <button type="button" onClick={() => setEditingClubId(null)} className="mg-small-btn text-xs">Cancel</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{c.name}</p>
+                          <p className="truncate text-xs text-[rgb(var(--mg-muted))]">Bibs: {bibLabel(c.bibColour)}</p>
+                        </div>
+                        {hasRole('Admin') && (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              aria-label={`Rename ${c.name}`}
+                              onClick={() => {
+                                setEditingClubId(c.id);
+                                setEditingClubName(c.name);
+                              }}
+                              className="mg-small-btn text-xs"
+                            >
+                              Rename
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Delete ${c.name}`}
+                              onClick={() => void deleteClub(c.id)}
+                              className="mg-small-btn text-xs text-rose-700"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>

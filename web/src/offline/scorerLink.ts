@@ -54,6 +54,7 @@ export function parseScorerSession(data: unknown): ScorerSession | null {
     competitionId: s.competitionId,
     competitionName: typeof s.competitionName === 'string' ? s.competitionName : '',
     arenaName: s.arenaName,
+    ...(s.scope === 0 || s.scope === 1 || s.scope === 2 ? { scope: s.scope } : {}),
     expiresAt: typeof s.expiresAt === 'string' ? s.expiresAt : '',
     sessions: s.sessions.filter((x) => !!x && Array.isArray(x.heats)),
   };

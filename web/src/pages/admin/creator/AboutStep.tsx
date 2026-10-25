@@ -27,6 +27,18 @@ export function AboutStep({ draft, change, problems, clear }: StepProps<CreatorD
         </Field>
       </div>
       <TextBox label="Organiser" value={draft.organiserName} onChange={(organiserName) => change({ organiserName })} />
+      <label className="mg-card flex min-h-12 cursor-pointer items-center gap-3 px-4 py-3 text-[15px] font-medium text-[rgb(var(--mg-heading))]">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-[rgb(var(--mg-heading))]"
+          checked={!!draft.cardsEnabled}
+          onChange={(e) => change({ cardsEnabled: e.target.checked })}
+        />
+        <span className="flex flex-col gap-0.5">
+          <span className="font-semibold">Use yellow &amp; red cards in this competition</span>
+          <span className="text-xs font-normal text-[rgb(var(--mg-muted))]">Lets scorers and referees record yellow or red disciplinary cards inside manual score overrides.</span>
+        </span>
+      </label>
     </section>
   );
 }

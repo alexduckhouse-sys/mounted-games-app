@@ -10,6 +10,8 @@ export interface PendingPlace {
   status?: number;
   /** A private note for staff. Left out to keep the note already saved; an empty string clears it. */
   refereeNote?: string;
+  /** Manual points override (whole or .5 half points). */
+  points?: number;
 }
 
 /** Store manual points in the same private directive the scoring API and offline outbox accept. */
@@ -19,14 +21,20 @@ export function overridePoints(list: PendingPlace[], teamId: number, points: num
   const note = (existing?.refereeNote ?? '').replace(/\[(?:pts|adj):[^\]]*\]/gi, '').trim();
   const refereeNote = points === undefined ? note : `[pts:${points}] ${reason?.trim() || note || 'Manual score override'}`;
   const place = existing?.place || Math.max(0, ...list.map((p) => p.place)) + 1;
-  const replacement: PendingPlace = points === undefined
-    ? { ...existing!, refereeNote }
-    : { teamId, place, eliminated: false, refereeNote };
-  if (points !== undefined && existing?.eliminated) return [...list.filter((p) => p.teamId !== teamId), replacement];
-  return existing ? list.map((p) => p.teamId === teamId ? replacement : p) : [...list, replacement];
+  if (points === undefined) {
+    const cleared: PendingPlace = { ...existing!, refereeNote };
+    delete cleared.points;
+    return list.map((p) => (p.teamId === teamId ? cleared : p));
+  }
+  const replacement: PendingPlace = { teamId, place, eliminated: false, points, refereeNote };
+  if (existing?.eliminated) return [...list.filter((p) => p.teamId !== teamId), replacement];
+  return existing ? list.map((p) => (p.teamId === teamId ? replacement : p)) : [...list, replacement];
 }
 
-export function manualPoints(note?: string): number | undefined {
+export function manualPoints(note?: string, explicitPoints?: number): number | undefined {
+  if (explicitPoints !== undefined && Number.isFinite(explicitPoints) && Number.isInteger(explicitPoints * 2)) {
+    return explicitPoints;
+  }
   const value = /\[pts:(\d+(?:\.\d+)?)\]/i.exec(note ?? '')?.[1];
   const points = value === undefined ? undefined : Number(value);
   return points !== undefined && Number.isFinite(points) && Number.isInteger(points * 2) ? points : undefined;
@@ -61,7 +69,9 @@ export function tapTeam(list: PendingPlace[], teamId: number, qualifierCap: numb
 
 /** Eliminating a team resets manual points while retaining its plain-language note. */
 function withoutManualPoints(p: PendingPlace): PendingPlace {
-  return p.refereeNote === undefined ? p : { ...p, refereeNote: p.refereeNote.replace(/\[(?:pts|adj):[^\]]*\]/gi, '').trim() };
+  const rest: PendingPlace = { ...p };
+  delete rest.points;
+  return rest.refereeNote === undefined ? rest : { ...rest, refereeNote: rest.refereeNote.replace(/\[(?:pts|adj):[^\]]*\]/gi, '').trim() };
 }
 
 /** Swipe a team out, or bring it back. A team brought back goes to the end of the order. */
@@ -99,13 +109,18 @@ export function placesFromResults(race: Race, notes: Readonly<Record<number, str
   return race.results
     .filter((r) => !r.isSitOut)
     .sort((a, b) => (a.placing ?? 999) - (b.placing ?? 999))
-    .map((r, i): PendingPlace => ({
-      teamId: r.teamId,
-      place: r.eliminated ? 0 : r.placing ?? i + 1,
-      eliminated: r.eliminated,
-      ...(r.eliminated ? { status: effectiveStatus(true, r.status) } : {}),
-      ...(notes[r.teamId] ? { refereeNote: notes[r.teamId] } : {}),
-    }));
+    .map((r, i): PendingPlace => {
+      const note = notes[r.teamId];
+      const pts = manualPoints(note) ?? (!r.eliminated && typeof r.points === 'number' && !Number.isInteger(r.points) ? r.points : undefined);
+      return {
+        teamId: r.teamId,
+        place: r.eliminated ? 0 : r.placing ?? i + 1,
+        eliminated: r.eliminated,
+        ...(r.eliminated ? { status: effectiveStatus(true, r.status) } : {}),
+        ...(note ? { refereeNote: note } : {}),
+        ...(pts !== undefined ? { points: pts } : {}),
+      };
+    });
 }
 
 /** Where a race's unsaved placings are kept on this phone, so a reload doesn't lose them. */
@@ -118,7 +133,8 @@ function isPendingPlace(value: unknown): value is PendingPlace {
   return typeof p === 'object' && p !== null
     && Number.isInteger(p.teamId) && Number.isInteger(p.place) && typeof p.eliminated === 'boolean'
     && (p.status === undefined || Number.isInteger(p.status))
-    && (p.refereeNote === undefined || typeof p.refereeNote === 'string');
+    && (p.refereeNote === undefined || typeof p.refereeNote === 'string')
+    && (p.points === undefined || (typeof p.points === 'number' && Number.isFinite(p.points) && Number.isInteger(p.points * 2)));
 }
 
 /** The saved draft under `key`, or null when there is none or it can't be read. */

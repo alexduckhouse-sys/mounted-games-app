@@ -1,6 +1,7 @@
-import type { IceServer, LiveStream, PublishRequest, PublishResponse, UpdateStreamRequest } from '../types';
+import type { IceServer, LiveStream, PublishRequest, PublishResponse, StreamQualityPreset, UpdateStreamRequest } from '../types';
 import { responseStatus, responseTitle, streamClock, streamRequest, type StreamClock } from './streamRuntime';
 
+export type { StreamQualityPreset } from '../types';
 export type PublisherState = 'idle' | 'starting' | 'live' | 'paused' | 'reconnecting' | 'ended' | 'error';
 export interface PublisherSnapshot {
   state: PublisherState;
@@ -11,6 +12,15 @@ export interface PublisherSnapshot {
   audioMuted: boolean;
   hasAudio: boolean;
   error: string | null;
+  zoom?: number;
+  maxZoom?: number;
+  windFilter?: boolean;
+  audioLevel?: number;
+  fps?: number;
+  bitrateKbps?: number;
+  rttMs?: number;
+  qualityPreset?: StreamQualityPreset;
+  captureResolution?: string;
 }
 export interface PublisherDependencies extends StreamClock {
   getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
@@ -20,9 +30,9 @@ export interface PublisherDependencies extends StreamClock {
   wakeLock: () => Promise<{ release: () => Promise<void> }>;
   visibility: { hidden: () => boolean; listen: (callback: () => void) => () => void };
 }
-export function browserPublisherDependencies(): PublisherDependencies {
+export function browserPublisherDependencies(customRequest: typeof streamRequest = streamRequest): PublisherDependencies {
   return {
-    ...streamClock, request: streamRequest, PeerConnection: RTCPeerConnection,
+    ...streamClock, request: customRequest, PeerConnection: RTCPeerConnection,
     getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
     enumerateDevices: () => navigator.mediaDevices.enumerateDevices(),
     wakeLock: () => navigator.wakeLock.request('screen'),
@@ -35,20 +45,41 @@ export function browserPublisherDependencies(): PublisherDependencies {
     },
   };
 }
-const encodings: RTCRtpEncodingParameters[] = [
-  { rid: 'f', maxBitrate: 1_500_000 },
-  { rid: 'h', scaleResolutionDownBy: 2, maxBitrate: 500_000 },
-  { rid: 'q', scaleResolutionDownBy: 4, maxBitrate: 150_000 },
+export const encodings: RTCRtpEncodingParameters[] = [
+  { rid: 'f', maxBitrate: 2_000_000, maxFramerate: 30 },
+  { rid: 'h', scaleResolutionDownBy: 1.5, maxBitrate: 850_000, maxFramerate: 30 },
+  { rid: 'q', scaleResolutionDownBy: 2, maxBitrate: 350_000, maxFramerate: 30 },
 ];
+
+function detectResolutionLabel(track?: MediaStreamTrack): string {
+  const settings = (track as MediaStreamTrack & { getSettings?: () => MediaTrackSettings })?.getSettings?.();
+  const h = settings?.height ?? 0;
+  if (h >= 2000) return '4K';
+  if (h >= 1400) return '1440p';
+  if (h >= 1000) return '1080p';
+  return '720p';
+}
+
+function detectMaxZoom(track?: MediaStreamTrack): number {
+  const caps = (track as unknown as { getCapabilities?: () => { zoom?: { max?: number } } })?.getCapabilities?.();
+  const max = caps?.zoom?.max;
+  return typeof max === 'number' && max > 1 ? Math.min(max, 6) : 3;
+}
 
 /** One operator-owned camera and publisher. No React or global browser state is used here. */
 export function createStreamPublisher(competitionId: number, d: PublisherDependencies) {
   const base = `/competitions/${competitionId}/streams`;
-  let snapshot: PublisherSnapshot = { state: 'idle', media: null, streamId: null, viewerCount: 0, signal: 'good', audioMuted: false, hasAudio: false, error: null };
+  let snapshot: Required<PublisherSnapshot> = {
+    state: 'idle', media: null, streamId: null, viewerCount: 0, signal: 'good',
+    audioMuted: false, hasAudio: false, error: null,
+    zoom: 1, maxZoom: 3, windFilter: true, audioLevel: 0, fps: 30, bitrateKbps: 0, rttMs: 0,
+    qualityPreset: '720p', captureResolution: '1080p',
+  };
   const listeners = new Set<() => void>();
-  const update = (patch: Partial<PublisherSnapshot>) => { snapshot = { ...snapshot, ...patch }; listeners.forEach((fn) => fn()); };
+  const update = (patch: Partial<PublisherSnapshot>) => { snapshot = { ...snapshot, ...patch } as Required<PublisherSnapshot>; listeners.forEach((fn) => fn()); };
   let pc: RTCPeerConnection | undefined;
   let videoSender: RTCRtpSender | undefined;
+  let audioSender: RTCRtpSender | undefined;
   let alive = true;
   let running = false;
   let busy = false;
@@ -62,10 +93,11 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
   let angleName = '';
   let paused = false;
   let pauseRevision = 0;
-  let muteRevision = 0;
   let caption: string | null = null;
   let facingMode = 'environment';
   let deviceId: string | undefined;
+  let audioDeviceId: string | undefined;
+  let windFilterEnabled = true;
   let cancelRetry: (() => void) | undefined;
   let heartbeatEpoch = 0;
   let cancelHeartbeat: (() => void) | undefined;
@@ -75,14 +107,78 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
   let wake: { release: () => Promise<void> } | undefined;
   let hiddenAt: number | undefined;
   const releaseMedia = (media: MediaStream) => media.getTracks().forEach((track) => track.stop());
-  const videoConstraints = (): MediaTrackConstraints => ({ width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode }) });
+  const videoConstraints = (idealWidth = 3840, idealHeight = 2160): MediaTrackConstraints => ({
+    width: { ideal: idealWidth }, height: { ideal: idealHeight }, frameRate: { ideal: 30 },
+    ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode }),
+  });
+  const audioConstraints = (): MediaTrackConstraints => ({
+    echoCancellation: true, noiseSuppression: true,
+    ...(audioDeviceId ? { deviceId: { exact: audioDeviceId } } : {}),
+  });
   function applyAudio() { snapshot.media?.getAudioTracks().forEach((track) => { track.enabled = !snapshot.audioMuted && !paused; }); }
+  function prepareVideoTrack(track: MediaStreamTrack) {
+    try { (track as MediaStreamTrack & { contentHint?: string }).contentHint = 'motion'; } catch { /* ignore */ }
+  }
+  async function applySenderParameters(preset: StreamQualityPreset) {
+    const sender = videoSender as (RTCRtpSender & {
+      getParameters?: () => RTCRtpSendParameters;
+      setParameters?: (p: RTCRtpSendParameters) => Promise<void>;
+    }) | undefined;
+    if (!sender?.getParameters || !sender?.setParameters) return;
+    try {
+      const params = sender.getParameters();
+      (params as RTCRtpSendParameters & { degradationPreference?: string }).degradationPreference = 'maintain-framerate';
+      for (const enc of params.encodings) {
+        if (preset === '360p') {
+          enc.maxBitrate = 380_000;
+          enc.scaleResolutionDownBy = 3;
+          enc.maxFramerate = 30;
+        } else if (preset === '480p') {
+          if (enc.rid === 'q') { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 2; }
+          else { enc.maxBitrate = 900_000; enc.scaleResolutionDownBy = 1.5; }
+          enc.maxFramerate = 30;
+        } else if (preset === '720p') {
+          if (enc.rid === 'f') { enc.maxBitrate = 1_500_000; enc.scaleResolutionDownBy = 1.5; }
+          else if (enc.rid === 'h') { enc.maxBitrate = 850_000; enc.scaleResolutionDownBy = 2; }
+          else if (enc.rid === 'q') { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 3; }
+          else { enc.maxBitrate = 2_500_000; enc.scaleResolutionDownBy = 1; }
+          enc.maxFramerate = 30;
+        } else if (preset === 'auto') {
+          if (enc.rid === 'f') { enc.maxBitrate = 2_200_000; enc.scaleResolutionDownBy = 1; }
+          else if (enc.rid === 'h') { enc.maxBitrate = 850_000; enc.scaleResolutionDownBy = 1.5; }
+          else if (enc.rid === 'q') { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 2; }
+          else { enc.maxBitrate = 2_200_000; enc.scaleResolutionDownBy = 1; }
+          enc.maxFramerate = 30;
+        } else {
+          if (enc.rid === 'f') { enc.maxBitrate = 2_500_000; enc.scaleResolutionDownBy = 1; }
+          else if (enc.rid === 'h') { enc.maxBitrate = 850_000; enc.scaleResolutionDownBy = 1.5; }
+          else { enc.maxBitrate = 350_000; enc.scaleResolutionDownBy = 2; }
+          enc.maxFramerate = 30;
+        }
+      }
+      await sender.setParameters(params);
+    } catch { /* Browser may reject runtime encoding parameter edits. */ }
+  }
   async function capture(sound = true) {
     const ticket = ++captureEpoch;
-    const media = await d.getUserMedia({ video: videoConstraints(), audio: sound ? { echoCancellation: true, noiseSuppression: true } : false });
+    let media: MediaStream;
+    try {
+      media = await d.getUserMedia({ video: videoConstraints(), audio: sound ? audioConstraints() : false });
+    } catch {
+      media = await d.getUserMedia({ video: videoConstraints(1280, 720), audio: sound ? audioConstraints() : false });
+    }
     if (!alive || ticket !== captureEpoch) { releaseMedia(media); return; }
     if (snapshot.media) releaseMedia(snapshot.media);
-    update({ media, hasAudio: media.getAudioTracks().length > 0, audioMuted: !sound });
+    const vTrack = media.getVideoTracks()[0];
+    prepareVideoTrack(vTrack);
+    update({
+      media,
+      hasAudio: media.getAudioTracks().length > 0,
+      audioMuted: !sound,
+      zoom: 1,
+      maxZoom: detectMaxZoom(vTrack),
+      captureResolution: detectResolutionLabel(vTrack),
+    });
     applyAudio();
   }
   async function acquireWake() {
@@ -98,15 +194,18 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     if (d.visibility.hidden()) { hiddenAt = d.now(); return; }
     if (!running) return;
     void acquireWake();
-    if (hiddenAt !== undefined && d.now() - hiddenAt > 20_000) recover();
+    const trackEnded = snapshot.media?.getTracks().some((t) => t.readyState === 'ended') ?? false;
+    const peerBroken = pc?.connectionState === 'failed' || pc?.connectionState === 'disconnected';
+    if (trackEnded || peerBroken || (hiddenAt !== undefined && d.now() - hiddenAt > 20_000)) recover();
     hiddenAt = undefined;
   });
   function closePeer() {
     videoSender = undefined;
+    audioSender = undefined;
     cancelConnect?.(); cancelConnect = undefined;
     cancelDisconnect?.(); cancelDisconnect = undefined;
     cancelStats?.(); cancelStats = undefined;
-    if (pc) { pc.onconnectionstatechange = null; pc.close(); pc = undefined; }
+    if (pc) { pc.onconnectionstatechange = null; pc.oniceconnectionstatechange = null; pc.close(); pc = undefined; }
   }
   function retry() {
     if (!running || cancelRetry) return;
@@ -124,7 +223,17 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     const id = snapshot.streamId;
     cancelHeartbeat = d.schedule(() => {
       if (!running || owner !== heartbeatEpoch) return;
-      void d.request('POST', `${base}/${id}/heartbeat`).catch((error: unknown) => {
+      void d.request('POST', `${base}/${id}/heartbeat`, {
+        audioMuted: snapshot.audioMuted,
+        zoom: snapshot.zoom,
+        maxZoom: snapshot.maxZoom,
+        fps: snapshot.fps,
+        bitrateKbps: snapshot.bitrateKbps,
+        signal: snapshot.signal,
+        windFilter: snapshot.windFilter,
+        qualityPreset: snapshot.qualityPreset,
+        captureResolution: snapshot.captureResolution,
+      }).catch((error: unknown) => {
         const status = responseStatus(error);
         if (running && owner === heartbeatEpoch && snapshot.streamId === id && (status === 409 || status === 404)) {
           update({ streamId: null }); recover();
@@ -142,19 +251,28 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       try {
         const stats = await peer.getStats();
         if (pc !== peer || !running) return;
-        let packets = 0, bytes = 0;
+        let packets = 0, bytes = 0, fps = snapshot.fps, rttMs = snapshot.rttMs;
         let limited = false;
         stats.forEach((report) => {
           if (report.type === 'outbound-rtp' && report.kind === 'video') {
             packets += report.packetsSent ?? 0;
             bytes += report.bytesSent ?? 0;
+            if (typeof report.framesPerSecond === 'number') fps = Math.round(report.framesPerSecond);
             limited ||= report.qualityLimitationReason === 'bandwidth' || report.qualityLimitationReason === 'cpu';
+          } else if (report.type === 'candidate-pair' && report.state === 'succeeded' && typeof report.currentRoundTripTime === 'number') {
+            rttMs = Math.round(report.currentRoundTripTime * 1000);
+            if (report.currentRoundTripTime > 0.4) limited = true;
           }
         });
         const now = d.now();
         if (packets > lastPackets) { lastPackets = packets; lastProgress = now; }
         const bitrate = (bytes - lastBytes) * 8000 / Math.max(1, now - lastAt);
-        update({ signal: bitrate < 150_000 ? 'poor' : limited || bitrate < 500_000 ? 'fair' : 'good' });
+        update({
+          signal: bitrate < 150_000 ? 'poor' : limited || bitrate < 500_000 ? 'fair' : 'good',
+          fps,
+          bitrateKbps: Math.max(0, Math.round(bitrate / 1000)),
+          rttMs,
+        });
         lastBytes = bytes; lastAt = now;
         if (now - lastProgress >= 15_000) { recover(); return; }
       } catch { /* A transient stats failure must not end a broadcast. */ }
@@ -182,12 +300,16 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       const peer = new d.PeerConnection({ iceServers, bundlePolicy: 'max-bundle' });
       pc = peer;
       const media = snapshot.media!;
+      const vTrack = media.getVideoTracks()[0];
+      prepareVideoTrack(vTrack);
       let video: RTCRtpTransceiver;
-      try { video = peer.addTransceiver(media.getVideoTracks()[0], { direction: 'sendonly', streams: [media], sendEncodings: encodings }); }
-      catch { video = peer.addTransceiver(media.getVideoTracks()[0], { direction: 'sendonly', streams: [media] }); }
+      try { video = peer.addTransceiver(vTrack, { direction: 'sendonly', streams: [media], sendEncodings: encodings }); }
+      catch { video = peer.addTransceiver(vTrack, { direction: 'sendonly', streams: [media] }); }
       videoSender = video.sender;
+      void applySenderParameters(snapshot.qualityPreset);
       const audioTrack = media.getAudioTracks()[0];
       const audio = audioTrack ? peer.addTransceiver(audioTrack, { direction: 'sendonly', streams: [media] }) : undefined;
+      audioSender = audio?.sender;
       await peer.setLocalDescription(await peer.createOffer());
       if (!current()) return;
       const body: PublishRequest = { sdpOffer: peer.localDescription!.sdp, videoMid: video.mid!, audioMid: audio?.mid };
@@ -233,6 +355,9 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
         if (peer.connectionState === 'failed') recover();
         else if (peer.connectionState === 'disconnected') cancelDisconnect = d.schedule(recover, 5000);
       };
+      peer.oniceconnectionstatechange = () => {
+        if (peer.iceConnectionState === 'failed') recover();
+      };
       heartbeat(); monitor(peer);
       void acquireWake();
     } catch (error) {
@@ -276,6 +401,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; },
     capture,
     devices: async () => (await d.enumerateDevices()).filter((device) => device.kind === 'videoinput'),
+    audioDevices: async () => (await d.enumerateDevices()).filter((device) => device.kind === 'audioinput'),
     /** takeOver replaces a stream already live on the same arena and camera position. */
     async start(arena: string, angle: string, takeOver = false) {
       if (running || busy || !alive) return;
@@ -291,34 +417,59 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       const media = await d.getUserMedia({ video: videoConstraints(), audio: false });
       if (!alive || ticket !== captureEpoch) { releaseMedia(media); return; }
       const track = media.getVideoTracks()[0];
+      prepareVideoTrack(track);
       try { await videoSender?.replaceTrack(track); }
       catch (error) { releaseMedia(media); throw error; }
       if (!alive || ticket !== captureEpoch) { releaseMedia(media); return; }
       const preview = snapshot.media!;
       preview.getVideoTracks().forEach((old) => { preview.removeTrack(old); old.stop(); });
       preview.addTrack(track);
-      update({ media: preview });
+      update({ media: preview, zoom: 1, maxZoom: detectMaxZoom(track), captureResolution: detectResolutionLabel(track) });
+    },
+    async switchAudio(id?: string) {
+      audioDeviceId = id;
+      const preview = snapshot.media!;
+      ++captureEpoch;
+      const media = await d.getUserMedia({ video: false, audio: audioConstraints() });
+      const track = media.getAudioTracks()[0];
+      try { await audioSender?.replaceTrack(track); }
+      catch (error) { releaseMedia(media); throw error; }
+      preview.getAudioTracks().forEach((old) => { preview.removeTrack(old); old.stop(); });
+      preview.addTrack(track);
+      update({ media: preview, hasAudio: true });
+      applyAudio();
+    },
+    setWindFilter(enabled: boolean) {
+      windFilterEnabled = enabled;
+      update({ windFilter: windFilterEnabled });
+    },
+    async setZoom(zoom: number) {
+      const clamped = Math.max(0.5, Math.min(snapshot.maxZoom, zoom));
+      update({ zoom: clamped });
+      const track = snapshot.media?.getVideoTracks()[0] as (MediaStreamTrack & {
+        applyConstraints?: (c: MediaTrackConstraints) => Promise<void>;
+      }) | undefined;
+      try {
+        await track?.applyConstraints?.({ advanced: [{ zoom: clamped } as MediaTrackConstraintSet] });
+      } catch { /* Hardware zoom constraints are optional across mobile browsers. */ }
+    },
+    async setQualityPreset(preset: StreamQualityPreset) {
+      update({ qualityPreset: preset });
+      await applySenderParameters(preset);
     },
     async mute(muted: boolean) {
       if (!muted && !snapshot.hasAudio && snapshot.media) {
         const ticket = epoch;
-        const audio = await d.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true } });
+        const audio = await d.getUserMedia({ video: false, audio: audioConstraints() });
         if (!alive || ticket !== epoch) { releaseMedia(audio); return; }
         audio.getAudioTracks().forEach((track) => snapshot.media!.addTrack(track));
         update({ hasAudio: true, audioMuted: false }); applyAudio(); recover();
         return;
       }
-      const previous = snapshot.audioMuted;
-      const ticket = epoch, streamId = snapshot.streamId, peer = pc, revision = ++muteRevision;
+      // Privacy invariant: muting the microphone disables the track locally immediately and never
+      // re-enables it if the network PATCH drops on spotty 4G; the next heartbeat syncs the server.
       update({ audioMuted: muted }); applyAudio();
-      try { await patch({ audioMuted: muted }); }
-      catch (error) {
-        // A stopped/replaced publisher or a newer control owns the state now.
-        if (alive && running && ticket === epoch && streamId === snapshot.streamId && peer === pc && revision === muteRevision) {
-          update({ audioMuted: previous }); applyAudio();
-        }
-        throw error;
-      }
+      await patch({ audioMuted: muted });
     },
     async pause(value: boolean) {
       const previous = paused;
@@ -334,6 +485,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     },
     async caption(value: string) { await patch({ caption: value }); caption = value || null; },
     viewers(count: number) { update({ viewerCount: count }); },
+    reconnect() { recover(); },
     stop,
     dispose() { alive = false; unlisten(); void stop().catch(() => {}); listeners.clear(); },
   };

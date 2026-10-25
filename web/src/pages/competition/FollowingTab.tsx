@@ -7,7 +7,7 @@ import { usePageHeader } from '../../components/CompactPageBarContext';
 import { useFavourites } from '../../hooks/useFavourites';
 import { arenaNames, arenaToShow, followedHeats, heatName, nextHeats, type FollowedHeat } from '../../lib/following';
 import { displaySectionName } from '../../lib/section';
-import { formatTime } from '../../lib/time';
+import { formatShiftDelta, formatTime } from '../../lib/time';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { sessionOrdinals } from '../../lib/timetableRows';
 import { useCompetition } from './context';
@@ -106,7 +106,7 @@ export function FollowingTab() {
     {missing.map((teamId) => <p key={teamId} className="mg-notice">A followed team is no longer listed at this event. <button className="mg-text-link !min-h-11" onClick={() => toggle({ competitionId: competition.id, teamId })}>Remove saved team</button></p>)}
 
     {choosing && <section className="mg-card space-y-3 p-4" aria-label="Choose teams">
-      {teams.length === 0 && <p>Star a team to see its next heats and results here. Stars are saved on this device, and no sign-in is needed.</p>}
+      {teams.length === 0 && <p>Star a team to see its next heats and results. Saved on this device — no sign-in is needed.</p>}
       <label className="block font-semibold">Find a team<input type="search" className="input mt-1" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Team, club or age group" /></label>
       {!filtered.length && <p className="mg-meta">{competition.teams.length ? 'No teams match that search.' : 'Teams haven’t been added to this event yet.'}</p>}
       {shownClubs.length > 0 && <ul aria-label="Clubs" className="divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule-soft))] px-3">
@@ -149,7 +149,7 @@ export function FollowingTab() {
                   <strong className="truncate text-[15px] font-semibold">{score.team.displayName}</strong>
                   <span className="text-xs text-[rgb(var(--mg-muted))]">Lane {score.lane}</span>
                   {live && <span className="text-[10px] font-bold tracking-[0.06em] text-[rgb(var(--mg-red))]">{isStale ? 'WAS IN ARENA' : onNowText(row)}</span>}
-                  {late && <span className="text-xs text-[rgb(var(--mg-late-time))]">+{row.delayMinutes} · <s>{formatTime(row.scheduled)}</s></span>}
+                  {late && <span className="text-xs text-[rgb(var(--mg-late-time))]">{row.delayMinutes >= 60 ? formatShiftDelta(row.delayMinutes) : `+${row.delayMinutes}`} · <s>{formatTime(row.scheduled)}</s></span>}
                 </span>
                 <span className="mg-line-sub">{where(row)}</span>
               </span>
@@ -157,7 +157,7 @@ export function FollowingTab() {
             </Link>
           </li>;
         }))}</ol>}
-        {upcoming.length > 0 && <p className="mg-meta px-1">Heat times are estimates. Check the timetable and listen for the collecting ring call.</p>}
+        {upcoming.length > 0 && <p className="mg-meta px-1">Times are estimates — listen for collecting ring calls.</p>}
       </section>
       <section aria-labelledby="latest-results-title" className="mg-sec">
         <div className="mg-sec-head"><h2 id="latest-results-title">Latest results</h2><Link to="../toplists">Toplists</Link></div>
@@ -170,7 +170,7 @@ export function FollowingTab() {
             </span>
             <span className="flex flex-col items-end gap-0.5"><span className="mg-line-time">{formatPoints(score.points)} pts</span><span className="text-[11px] text-[rgb(var(--mg-muted))]">{score.racesRun} {score.racesRun === 1 ? 'race' : 'races'}</span></span>
           </Link>))}</div>}
-        <p className="mg-meta px-1">These are heat totals. Final standings and any corrections appear in the toplists.</p>
+        <p className="mg-meta px-1">Heat totals only. Full standings are in Toplists.</p>
       </section>
     </>}
   </div>;

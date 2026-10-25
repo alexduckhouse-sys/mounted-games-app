@@ -290,6 +290,7 @@ public class DeclarationFormsController : ControllerBase
                 AgeGroup = kept.AgeGroup,
                 WeightKg = kept.WeightKg,
                 PonyPassportNumber = kept.PonyPassportNumber,
+                PonyOwnerFullName = kept.PonyOwnerFullName,
                 PonyAge = kept.PonyAge,
                 MembershipNumber = kept.MembershipNumber,
                 EmergencyContactName = kept.EmergencyContactName,
@@ -302,8 +303,8 @@ public class DeclarationFormsController : ControllerBase
                 IsReserve = r.IsReserve,
                 IsGuestRider = r.IsGuestRider,
                 OrderIndex = r.OrderIndex == 0 ? order : r.OrderIndex,
-                UseInitialOnly = r.UseInitialOnly,
-                NoFilming = r.NoFilming
+                UseInitialOnly = kept.UseInitialOnly,
+                NoFilming = kept.NoFilming
             });
             order++;
         }
@@ -326,6 +327,21 @@ public class DeclarationFormsController : ControllerBase
                         && !string.IsNullOrWhiteSpace(linked.HorseName)
                         && !string.IsNullOrWhiteSpace(horseName)
                         && !string.Equals(linked.HorseName.Trim(), horseName, StringComparison.OrdinalIgnoreCase);
+                    if (linked is not null && !changedHorse)
+                    {
+                        var savedPassport = kept.PonyPassportNumber ?? (string.IsNullOrWhiteSpace(r.PonyPassportNumber) ? null : r.PonyPassportNumber.Trim());
+                        var savedOwner = kept.PonyOwnerFullName;
+                        if (savedPassport is not null && linked.PonyPassportNumber != savedPassport)
+                        {
+                            linked.PonyPassportNumber = savedPassport;
+                            linked.UpdatedAt = DateTime.UtcNow;
+                        }
+                        if (savedOwner is not null && linked.PonyOwnerFullName != savedOwner)
+                        {
+                            linked.PonyOwnerFullName = savedOwner;
+                            linked.UpdatedAt = DateTime.UtcNow;
+                        }
+                    }
                     if (!changedHorse) continue;
                 }
 
@@ -338,6 +354,9 @@ public class DeclarationFormsController : ControllerBase
                             StringComparison.OrdinalIgnoreCase)
                         || (r.SavedRiderId is null && string.IsNullOrWhiteSpace(s.HorseName))));
 
+                var rosterPassport = kept.PonyPassportNumber ?? (r.IsReserve || string.IsNullOrWhiteSpace(r.PonyPassportNumber) ? null : r.PonyPassportNumber.Trim());
+                var rosterOwner = kept.PonyOwnerFullName;
+
                 if (existing is null)
                 {
                     var added = new SavedRider
@@ -348,8 +367,10 @@ public class DeclarationFormsController : ControllerBase
                         DateOfBirth = rosterDob,
                         HorseName = horseName,
                         PonyHeightHands = kept.PonyHeightHands,
-                        UseInitialOnly = r.UseInitialOnly,
-                        NoFilming = r.NoFilming
+                        PonyPassportNumber = rosterPassport,
+                        PonyOwnerFullName = rosterOwner,
+                        UseInitialOnly = kept.UseInitialOnly,
+                        NoFilming = kept.NoFilming
                     };
                     _db.SavedRiders.Add(added);
                     clubRiders.Add(added);
@@ -360,8 +381,10 @@ public class DeclarationFormsController : ControllerBase
                     existing.DateOfBirth ??= rosterDob;
                     existing.HorseName ??= horseName;
                     existing.PonyHeightHands ??= kept.PonyHeightHands;
-                    existing.UseInitialOnly = r.UseInitialOnly;
-                    existing.NoFilming = r.NoFilming;
+                    existing.PonyPassportNumber = rosterPassport ?? existing.PonyPassportNumber;
+                    existing.PonyOwnerFullName = rosterOwner ?? existing.PonyOwnerFullName;
+                    existing.UseInitialOnly = kept.UseInitialOnly;
+                    existing.NoFilming = kept.NoFilming;
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
                 // Link a first saved entry, while retaining an explicitly selected rider's identity.

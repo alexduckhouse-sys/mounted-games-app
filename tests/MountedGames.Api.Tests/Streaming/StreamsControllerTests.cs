@@ -311,4 +311,93 @@ public class StreamsControllerTests : IClassFixture<StreamingApiFactory>
             Assert.Equal("Fake payment instructions", stored.PaymentDestination);
         }
     }
+
+    [Fact]
+    public async Task HeartbeatTelemetry_AndCommandEndpoint_BroadcastEvents_AndAllowScopedStreamLinks()
+    {
+        using var admin = await _f.AdminAsync();
+        var competition = await _f.SeedCompetitionAsync();
+        var attempt = await _f.StartAsync(admin, competition, "Main Arena");
+        await using var hub = await _f.ConnectAsync(competition);
+
+        var telemetries = new List<JsonElement>();
+        var commands = new List<JsonElement>();
+        hub.On<JsonElement>("streamTelemetry", payload => telemetries.Add(payload));
+        hub.On<JsonElement>("streamCommand", payload => commands.Add(payload));
+
+        // Heartbeat with telemetry body updates AudioMuted and broadcasts streamTelemetry
+        var hbResp = await admin.PostAsJsonAsync(Path(competition, attempt.StreamId, "/heartbeat"), new StreamTelemetryRequest(
+            BatteryLevel: 0.82,
+            BatteryCharging: true,
+            Zoom: 2.0,
+            MaxZoom: 4.0,
+            Fps: 30,
+            BitrateKbps: 2450,
+            Signal: "good",
+            AudioMuted: true,
+            WindFilter: true,
+            QualityPreset: "720p",
+            CaptureResolution: "3840x2160"));
+        Assert.Equal(HttpStatusCode.NoContent, hbResp.StatusCode);
+
+        var updatedStream = await _f.WithDbAsync(db => db.LiveStreams.AsNoTracking().SingleAsync(s => s.Id == attempt.StreamId));
+        Assert.True(updatedStream.AudioMuted);
+
+        // Invalid JSON in heartbeat returns 400
+        using var badHb = new HttpRequestMessage(HttpMethod.Post, Path(competition, attempt.StreamId, "/heartbeat"))
+        {
+            Content = new StringContent("{broken", System.Text.Encoding.UTF8, "application/json"),
+        };
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.SendAsync(badHb)).StatusCode);
+
+        // Scoped link (Scope = 2 ScoreAndStream) can call /ice-servers and /command, while Scope = 0 Score is rejected (401)
+        const string scoreOnlyToken = "mgs_score_only_token_123456";
+        const string streamControlToken = "mgs_stream_ctrl_token_123456";
+        var now = _f.Clock.GetUtcNow().UtcDateTime;
+        await _f.WithDbAsync(async db =>
+        {
+            db.ScorerLinks.Add(new ScorerLink
+            {
+                CompetitionId = competition,
+                Label = "Score Only",
+                ArenaName = "Main Arena",
+                Scope = 0,
+                TokenHash = ScorerLinkTokens.Hash(scoreOnlyToken),
+                CreatedByUserId = "admin",
+                CreatedAt = now,
+                ExpiresAt = now.AddDays(1),
+            });
+            db.ScorerLinks.Add(new ScorerLink
+            {
+                CompetitionId = competition,
+                Label = "Judge + Stream",
+                ArenaName = "Main Arena",
+                Scope = 2,
+                TokenHash = ScorerLinkTokens.Hash(streamControlToken),
+                CreatedByUserId = "admin",
+                CreatedAt = now,
+                ExpiresAt = now.AddDays(1),
+            });
+            await db.SaveChangesAsync();
+        });
+
+        using var scoreOnlyClient = _f.CreateClient();
+        scoreOnlyClient.DefaultRequestHeaders.Add(ScorerLinkTokens.Header, scoreOnlyToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await scoreOnlyClient.GetAsync(Path(competition, suffix: "/ice-servers"))).StatusCode);
+
+        using var streamLinkClient = _f.CreateClient();
+        streamLinkClient.DefaultRequestHeaders.Add(ScorerLinkTokens.Header, streamControlToken);
+        Assert.Equal(HttpStatusCode.OK, (await streamLinkClient.GetAsync(Path(competition, suffix: "/ice-servers"))).StatusCode);
+
+        // Valid commands (setZoom, selectAngle) return 204 NoContent
+        var zoomCmd = await streamLinkClient.PostAsJsonAsync(Path(competition, attempt.StreamId, "/command"), new StreamCommandRequest("setZoom", "2"));
+        Assert.Equal(HttpStatusCode.NoContent, zoomCmd.StatusCode);
+
+        var cutCmd = await streamLinkClient.PostAsJsonAsync(Path(competition, attempt.StreamId, "/command"), new StreamCommandRequest("selectAngle", attempt.StreamId.ToString()));
+        Assert.Equal(HttpStatusCode.NoContent, cutCmd.StatusCode);
+
+        // Unsupported command returns 400 BadRequest
+        var badCmd = await streamLinkClient.PostAsJsonAsync(Path(competition, attempt.StreamId, "/command"), new StreamCommandRequest("selfDestruct", "1"));
+        Assert.Equal(HttpStatusCode.BadRequest, badCmd.StatusCode);
+    }
 }

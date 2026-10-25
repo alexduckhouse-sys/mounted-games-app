@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useOverlay } from '../../hooks/useOverlay';
 import { useSponsorRotation } from '../../hooks/useSponsorRotation';
 import { useSponsors } from '../../hooks/useSponsors';
@@ -13,6 +14,7 @@ import { SponsorBadge } from '../SponsorBadge';
  * `track` is false for previews, which must not add to the counts.
  */
 export function SponsorOverlay({ arenaName, track = true }: { arenaName: string; track?: boolean }) {
+  const reduced = useReducedMotion();
   const { overlay } = useOverlay();
   const { competitionId, sponsors, sessions, skip } = useSponsors();
   const cards = sponsorsFor(sponsors, 'BreakStream');
@@ -43,14 +45,26 @@ export function SponsorOverlay({ arenaName, track = true }: { arenaName: string;
       <div className="absolute inset-x-3 bottom-14 flex justify-center">
         <aside key={sponsor.id} className="mg-ov-sponsor-card mg-stream-fade pointer-events-auto" aria-label={`${tier} sponsor`}>
           <span className="mg-ov-sponsor-tier">{tier === 'Supporter' ? tier : `${tier} sponsor`}</span>
-          <SponsorBadge sponsor={sponsor} large />
+          <motion.div
+            initial={reduced ? false : { y: 8, scale: 0.98 }}
+            animate={{ y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+          >
+            <SponsorBadge sponsor={sponsor} large />
+          </motion.div>
         </aside>
       </div>
     );
   }
   return (
     <aside key={sponsor.id} className="mg-ov-sponsor-bug mg-stream-fade pointer-events-auto absolute bottom-14 right-3" aria-label="Sponsor">
-      <SponsorBadge sponsor={sponsor} />
+      <motion.div
+        initial={reduced ? false : { opacity: 0, y: 8, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+      >
+        <SponsorBadge sponsor={sponsor} />
+      </motion.div>
     </aside>
   );
 }

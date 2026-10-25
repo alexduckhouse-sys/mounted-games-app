@@ -5,7 +5,7 @@ public sealed class StreamingOptions
     public CloudflareOptions Cloudflare { get; set; } = new();
     public int MaxLivePerCompetition { get; set; } = 9;
     public int MaxViewerSessions { get; set; } = 50;
-    public int MaxStreamDurationMinutes { get; set; } = 45;
+    public int MaxStreamDurationMinutes { get; set; } = 240;
     /// <summary>
     /// Most streams one address can hold open as an anonymous viewer at once; 0 (the default) turns the cap off.
     /// Browsers reach the hub directly, not through the website's keyed proxy, so on Vercel the address may be

@@ -19,6 +19,8 @@ export interface DecRider {
   pony: string;
   /** As typed, in hands: 13.2 is 13 hands 2 inches. */
   height: string;
+  /** Optional full name of the pony's owner, used to match vet/official equine certification. */
+  ponyOwnerFullName?: string;
   isCaptain: boolean;
   useInitialOnly: boolean;
   noFilming: boolean;
@@ -55,7 +57,7 @@ export const minRidersForSlots = (slots: readonly Slot[]): number => {
 };
 
 export function blankRider(): DecRider {
-  return { savedRiderId: null, fullName: '', dob: '', pony: '', height: '', isCaptain: false, useInitialOnly: false, noFilming: false, isGuestRider: false, extra: blankExtras() };
+  return { savedRiderId: null, fullName: '', dob: '', pony: '', height: '', ponyOwnerFullName: '', isCaptain: false, useInitialOnly: false, noFilming: false, isGuestRider: false, extra: blankExtras() };
 }
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -129,8 +131,13 @@ export function riderFromSaved(saved: SavedRider, reserve: boolean): DecRider {
     // The reserve doesn't have to ride, so a saved pony isn't copied across by default.
     pony: reserve ? '' : saved.horseName ?? '',
     height: reserve ? '' : heightText(saved.ponyHeightHands),
+    ponyOwnerFullName: reserve ? '' : saved.ponyOwnerFullName ?? '',
     useInitialOnly: saved.useInitialOnly ?? false,
     noFilming: saved.noFilming ?? false,
+    extra: {
+      ...blankExtras(),
+      ponyPassport: reserve ? '' : saved.ponyPassportNumber ?? '',
+    },
   };
 }
 
@@ -141,6 +148,7 @@ function riderFromEntry(entry: RiderEntry, config: DecFormConfig): DecRider {
     dob: dobText(entry.dateOfBirth),
     pony: entry.horseName ?? '',
     height: heightText(entry.ponyHeightHands),
+    ponyOwnerFullName: entry.ponyOwnerFullName ?? '',
     isCaptain: entry.isCaptain,
     useInitialOnly: entry.useInitialOnly ?? false,
     noFilming: entry.noFilming ?? false,
@@ -264,6 +272,7 @@ export function buildSubmitBody(fields: DecFormFields, slots: readonly Slot[], c
       useInitialOnly: rider.useInitialOnly,
       noFilming: rider.noFilming,
       orderIndex: index,
+      ponyOwnerFullName: reserve ? null : (rider.ponyOwnerFullName?.trim() || null),
       ...extrasBody(rider.extra, reserve, config),
     }];
   });

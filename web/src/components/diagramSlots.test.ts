@@ -89,8 +89,14 @@ describe('old JSON mapping', () => {
 
   it('infers four poles from a four-pole layout, five otherwise', () => {
     expect(inferPoleCount([{ t: 'pole', x: 17 }, { t: 'pole', x: 39 }, { t: 'pole', x: 61 }, { t: 'pole', x: 83 }])).toBe(4);
+    expect(inferPoleCount([{ t: 'pole', x: 17 }, { t: 'pole', x: 39 }, { t: 'pole', x: 61 }, { t: 'pole', x: 83 }, { t: 'pole', x: 91 }])).toBe(5);
+    expect(inferPoleCount([{ t: 'cone', anchor: 'pole5' }])).toBe(5);
     expect(inferPoleCount([{ t: 'pole', x: 17 }, { t: 'pole', x: 33 }, { t: 'pole', x: 50 }])).toBe(5);
     expect(inferPoleCount([])).toBe(5);
+    const fiveCoords = toLaneModel([
+      { t: 'pole', x: 17 }, { t: 'pole', x: 39 }, { t: 'cone', x: 50 }, { t: 'pole', x: 61 }, { t: 'pole', x: 83 }, { t: 'pole', x: 91 },
+    ]);
+    expect(fiveCoords.items.map((i) => i.slot)).toEqual(['pole1', 'pole2', 'gap2', 'pole3', 'pole4', 'pole5']);
   });
 
   it('drops junk in contents and tolerates bad input', () => {
@@ -208,7 +214,7 @@ describe('placing, moving and deleting', () => {
   it('puts a pole on every empty pole position', () => {
     const m = fillPoles(placeTool(empty(4), tool('pole'), 'pole2'));
     expect(m.items.filter((i) => i.el.t === 'pole').map((i) => i.slot).sort()).toEqual(['pole1', 'pole2', 'pole3', 'pole4']);
-    expect(m.items.find((i) => i.slot === 'pole3')!.el).toEqual({ t: 'pole', label: '3' });
+    expect(m.items.find((i) => i.slot === 'pole3')!.el).toEqual({ t: 'pole' });
   });
 });
 

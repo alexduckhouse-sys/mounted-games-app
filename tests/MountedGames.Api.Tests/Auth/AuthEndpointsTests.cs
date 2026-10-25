@@ -78,25 +78,129 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
     public async Task AdminKey_WithTitleAndEmail_SetsProfileAndPreservesOnMe_AndRejectsInvalidInputs()
     {
         var r = await Anon.PostAsJsonAsync("/api/auth/admin-key",
-            new AdminKeyRequest(ApiFactory.AdminKey, "  Chief Steward  ", "  Steward@Example.com  "));
+            new AdminKeyRequest(ApiFactory.AdminKey, "  Chief Steward  ", "  Steward@Example.com  ", "Passw0rd!x"));
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var auth = await r.ReadAsync<AuthResponse>();
         Assert.Equal("Chief Steward", auth.User.FullName);
         Assert.Equal("steward@example.com", auth.User.Email);
+        Assert.Contains(Roles.Admin, auth.User.Roles);
 
         var meClient = _f.WithToken(auth.Token);
         var me = await (await meClient.GetAsync("/api/auth/me")).ReadAsync<UserProfile>();
         Assert.Equal("Chief Steward", me.FullName);
         Assert.Equal("steward@example.com", me.Email);
 
+        // Second sign-in works directly from general login with email + password (no admin key needed).
+        var secondLogin = await Anon.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest("steward@example.com", "Passw0rd!x"));
+        Assert.Equal(HttpStatusCode.OK, secondLogin.StatusCode);
+        var secondAuth = await secondLogin.ReadAsync<AuthResponse>();
+        Assert.Contains(Roles.Admin, secondAuth.User.Roles);
+        Assert.Equal("Chief Steward", secondAuth.User.FullName);
+
+        // Someone else with the shared admin key cannot impersonate that email without knowing its password.
+        var impersonate = await Anon.PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, "Impostor", "steward@example.com", "WrongPass1!"));
+        Assert.Equal(HttpStatusCode.Unauthorized, impersonate.StatusCode);
+
+        // Signing in again via admin-key with the right password succeeds and updates the title.
+        var repeatAdminKey = await Anon.PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, "Head Steward", "steward@example.com", "Passw0rd!x"));
+        Assert.Equal(HttpStatusCode.OK, repeatAdminKey.StatusCode);
+        Assert.Equal("Head Steward", (await repeatAdminKey.ReadAsync<AuthResponse>()).User.FullName);
+
+        var missingPassword = await Anon.PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, "Chief Steward", "other-steward@example.com"));
+        Assert.Equal(HttpStatusCode.BadRequest, missingPassword.StatusCode);
+
+        var weakPassword = await Anon.PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, "Chief Steward", "other-steward@example.com", "weak"));
+        Assert.Equal(HttpStatusCode.BadRequest, weakPassword.StatusCode);
+
+        var sharedEmailRejected = await Anon.PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, "Chief Steward", "admin@mg.local", "Passw0rd!x"));
+        Assert.Equal(HttpStatusCode.BadRequest, sharedEmailRejected.StatusCode);
+
         var badEmail = await Anon.PostAsJsonAsync("/api/auth/admin-key",
-            new AdminKeyRequest(ApiFactory.AdminKey, "Chief Steward", "not-an-email"));
+            new AdminKeyRequest(ApiFactory.AdminKey, "Chief Steward", "not-an-email", "Passw0rd!x"));
         Assert.Equal(HttpStatusCode.BadRequest, badEmail.StatusCode);
 
         var longTitle = await Anon.PostAsJsonAsync("/api/auth/admin-key",
-            new AdminKeyRequest(ApiFactory.AdminKey, new string('T', 101), "steward@example.com"));
+            new AdminKeyRequest(ApiFactory.AdminKey, new string('T', 101), "steward@example.com", "Passw0rd!x"));
         Assert.Equal(HttpStatusCode.BadRequest, longTitle.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminKey_UpgradesExistingOrPasswordlessUser_WhenGivenValidKeyAndPassword()
+    {
+        var passwordlessEmail = $"{Unique()}@example.com";
+        await _f.InDbAsync(async db =>
+        {
+            db.Users.Add(new AppUser
+            {
+                UserName = passwordlessEmail,
+                NormalizedUserName = passwordlessEmail.ToUpperInvariant(),
+                Email = passwordlessEmail,
+                NormalizedEmail = passwordlessEmail.ToUpperInvariant(),
+                FullName = "Legacy Organiser",
+                SecurityStamp = Guid.NewGuid().ToString()
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var upgraded = await Anon.PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, "Organiser", passwordlessEmail, "Passw0rd!x"));
+        Assert.Equal(HttpStatusCode.OK, upgraded.StatusCode);
+        Assert.Contains(Roles.Admin, (await upgraded.ReadAsync<AuthResponse>()).User.Roles);
+        Assert.Equal(HttpStatusCode.OK, (await Anon.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest(passwordlessEmail, "Passw0rd!x"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task AccountsPerIp_CapsNewSignupsAndAdminKeyAccounts_AtFivePerIp()
+    {
+        using var factory = new AccountCapFactory();
+        var sameIp = factory.CreateClient();
+        sameIp.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "198.51.100.77");
+
+        for (var i = 0; i < 3; i++)
+        {
+            var s = await sameIp.PostAsJsonAsync("/api/auth/signup-trainer",
+                new SignupTrainerRequest(Unique(), "Passw0rd!x", null, "Cap Club"));
+            Assert.Equal(HttpStatusCode.OK, s.StatusCode);
+        }
+        for (var i = 0; i < 2; i++)
+        {
+            var a = await sameIp.PostAsJsonAsync("/api/auth/admin-key",
+                new AdminKeyRequest(ApiFactory.AdminKey, "Steward", $"{Unique()}@example.com", "Passw0rd!x"));
+            Assert.Equal(HttpStatusCode.OK, a.StatusCode);
+        }
+
+        // 6th account from the same IP is blocked on both signup-trainer and admin-key.
+        var sixthSignup = await sameIp.PostAsJsonAsync("/api/auth/signup-trainer",
+            new SignupTrainerRequest(Unique(), "Passw0rd!x", null, "Cap Club"));
+        Assert.Equal(HttpStatusCode.TooManyRequests, sixthSignup.StatusCode);
+
+        var sixthAdmin = await sameIp.PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, "Steward", $"{Unique()}@example.com", "Passw0rd!x"));
+        Assert.Equal(HttpStatusCode.TooManyRequests, sixthAdmin.StatusCode);
+
+        // Another IP can still create an account.
+        var otherIp = factory.CreateClient();
+        otherIp.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "198.51.100.78");
+        var allowed = await otherIp.PostAsJsonAsync("/api/auth/signup-trainer",
+            new SignupTrainerRequest(Unique(), "Passw0rd!x", null, "Cap Club"));
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+    }
+
+    private sealed class AccountCapFactory : ApiFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.UseSetting("RateLimits:AccountsPerIp", "5");
+        }
     }
 
     [Fact]

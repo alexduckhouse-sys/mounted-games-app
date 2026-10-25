@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -5,6 +6,7 @@ using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services;
 
 namespace MountedGames.Api.Controllers;
 
@@ -21,6 +23,44 @@ public class RaceTemplatesController : ControllerBase
     {
         var rows = await _db.RaceTemplates.OrderBy(r => r.Name).ToListAsync();
         return rows.Select(ToDto);
+    }
+
+    [HttpGet("names")]
+    [AllowAnonymous]
+    [ExcludeFromCodeCoverage]
+    public async Task<IReadOnlyList<string>> ListNames()
+    {
+        return await _db.RaceTemplates
+            .AsNoTracking()
+            .OrderBy(r => r.Name)
+            .Select(r => r.Name)
+            .ToListAsync();
+    }
+
+    [HttpGet("by-name/{name}")]
+    [AllowAnonymous]
+    [ExcludeFromCodeCoverage]
+    public async Task<ActionResult<BuiltInRaceMetadata.RaceTemplateDetailDto>> GetByName(string name)
+    {
+        var trimmed = (name ?? string.Empty).Trim();
+        if (trimmed.Length == 0) return NotFound();
+        var canonical = BuiltInRaceMetadata.ResolveCanonicalName(trimmed);
+        var lowered = trimmed.ToLower();
+        var canonicalLowered = canonical.ToLower();
+        var candidates = await _db.RaceTemplates
+            .AsNoTracking()
+            .Where(r => r.Name.ToLower() == lowered || r.Name.ToLower() == canonicalLowered)
+            .OrderBy(r => r.Id)
+            .ToListAsync();
+        var row = candidates.FirstOrDefault(r => r.Name == trimmed)
+            ?? candidates.FirstOrDefault(r => string.Equals(r.Name, trimmed, StringComparison.OrdinalIgnoreCase))
+            ?? candidates.FirstOrDefault(r => string.Equals(r.Name, canonical, StringComparison.OrdinalIgnoreCase))
+            ?? candidates.FirstOrDefault();
+        if (row is not null)
+            return BuiltInRaceMetadata.ToDetailDto(row);
+
+        var builtIn = BuiltInRaceMetadata.FromBuiltInSeed(trimmed);
+        return builtIn is not null ? builtIn : NotFound();
     }
 
     [HttpGet("{id:int}")]

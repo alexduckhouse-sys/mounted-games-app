@@ -38,7 +38,8 @@ public class DecFormConfigController(AppDbContext db) : ControllerBase
         if (config.Validate() is { } problem) return BadRequest(new { message = problem });
         var competition = await db.Competitions.FirstOrDefaultAsync(c => c.Id == competitionId);
         if (competition is null) return NotFound();
-        competition.DecFormConfigJson = config.Normalised().ToJson();
+        var pinnedClubId = DecFormConfig.Parse(competition.DecFormConfigJson)?.PayoutClubId;
+        competition.DecFormConfigJson = (config.Normalised() with { PayoutClubId = pinnedClubId ?? config.PayoutClubId }).ToJson();
         await db.SaveChangesAsync();
         return await DtoAsync(competitionId, competition.DecFormConfigJson);
     }

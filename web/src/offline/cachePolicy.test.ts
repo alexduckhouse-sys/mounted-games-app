@@ -1,7 +1,7 @@
 // @vitest-environment node
 // These helpers run in the service worker, which has native fetch types (jsdom's Blob does not mix with them).
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { canCachePublicApi, isEmbedRequest, markSavedResponse, NAVIGATION_DENYLIST, stampPublicResponse } from './cachePolicy';
+import { canCachePublicApi, isEmbedRequest, isFreshCachedResponse, LITE_CACHE_FRESH_MS, markSavedResponse, NAVIGATION_DENYLIST, stampPublicResponse } from './cachePolicy';
 
 describe('canCachePublicApi', () => {
   it.each([
@@ -10,6 +10,7 @@ describe('canCachePublicApi', () => {
     '/api/competitions/picker',
     '/api/competitions/12',
     '/api/competitions/12/standings',
+    '/api/competitions/12/first-view',
     '/api/race-templates',
     '/api/weather/at',
     '/api/weather/current/',
@@ -80,6 +81,30 @@ describe('markSavedResponse', () => {
 
   it('returns undefined when nothing was saved', () => {
     expect(markSavedResponse(undefined)).toBeUndefined();
+  });
+});
+
+describe('isFreshCachedResponse', () => {
+  const now = Date.parse('2026-06-01T10:02:00.000Z');
+
+  it('considers a stamped response fresh within the Lite Mode cache window', () => {
+    expect(LITE_CACHE_FRESH_MS).toBe(120_000);
+    const fresh = new Response('{}', { headers: { 'X-MG-Saved-At': '2026-06-01T10:00:30.000Z' } });
+    const boundary = new Response('{}', { headers: { 'X-MG-Saved-At': '2026-06-01T10:00:00.000Z' } });
+    const stale = new Response('{}', { headers: { 'X-MG-Saved-At': '2026-06-01T09:59:59.000Z' } });
+    expect(isFreshCachedResponse(fresh, LITE_CACHE_FRESH_MS, now)).toBe(true);
+    expect(isFreshCachedResponse(boundary, LITE_CACHE_FRESH_MS, now)).toBe(true);
+    expect(isFreshCachedResponse(stale, LITE_CACHE_FRESH_MS, now)).toBe(false);
+    expect(isFreshCachedResponse(new Response('{}', { headers: { 'X-MG-Saved-At': new Date().toISOString() } }))).toBe(true);
+  });
+
+  it('rejects missing, non-positive-window, undated or future-stamped responses', () => {
+    const valid = new Response('{}', { headers: { 'X-MG-Saved-At': '2026-06-01T10:01:00.000Z' } });
+    expect(isFreshCachedResponse(undefined, LITE_CACHE_FRESH_MS, now)).toBe(false);
+    expect(isFreshCachedResponse(valid, 0, now)).toBe(false);
+    expect(isFreshCachedResponse(new Response('{}'), LITE_CACHE_FRESH_MS, now)).toBe(false);
+    expect(isFreshCachedResponse(new Response('{}', { headers: { 'X-MG-Saved-At': 'not-a-date' } }), LITE_CACHE_FRESH_MS, now)).toBe(false);
+    expect(isFreshCachedResponse(new Response('{}', { headers: { 'X-MG-Saved-At': '2026-06-01T10:05:00.000Z' } }), LITE_CACHE_FRESH_MS, now)).toBe(false);
   });
 });
 

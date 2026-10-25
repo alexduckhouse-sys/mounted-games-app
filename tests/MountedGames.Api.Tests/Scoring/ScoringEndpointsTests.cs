@@ -506,4 +506,58 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
         var r = await admin.PutAsJsonAsync("/api/heats/999999/duration", new UpdateHeatDurationRequest(5));
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
+
+    // ---- score clash resolution & clear race score ----
+
+    [Fact]
+    public async Task SubmitResults_ClashIsRecorded_AndResolvedByOrganiser()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var admin = await _f.AdminAsync();
+        await Submit(admin, races[0], new[] { P(a.TeamIds[0], 1), P(a.TeamIds[1], 2) });
+
+        // Second scorer submits different placings believing the race is unscored.
+        var conflict = await Submit(admin, races[0],
+            new[] { P(a.TeamIds[1], 1), P(a.TeamIds[0], 2) },
+            expected: Array.Empty<FinishingPlaceDto>());
+
+        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+        using var doc = JsonDocument.Parse(await conflict.Content.ReadAsStringAsync());
+        Assert.True(doc.RootElement.TryGetProperty("clash", out var clashEl));
+        Assert.Equal(races[0], clashEl.GetProperty("raceId").GetInt32());
+
+        var clashesResp = await admin.GetAsync($"/api/sessions/{a.SessionId}/clashes");
+        Assert.Equal(HttpStatusCode.OK, clashesResp.StatusCode);
+        using var clashesDoc = JsonDocument.Parse(await clashesResp.Content.ReadAsStringAsync());
+        Assert.Contains(clashesDoc.RootElement.EnumerateArray(), c => c.GetProperty("raceId").GetInt32() == races[0]);
+
+        var resolveResp = await admin.PostAsJsonAsync(
+            $"/api/races/{races[0]}/clash/resolve",
+            new { useIncoming = true, places = new[] { P(a.TeamIds[1], 1), P(a.TeamIds[0], 2) } });
+        Assert.Equal(HttpStatusCode.OK, resolveResp.StatusCode);
+        var resolvedHeat = await resolveResp.ReadAsync<HeatDto>();
+        Assert.Equal(a.TeamIds[1], resolvedHeat.Races.Single().Results[0].TeamId);
+
+        var afterResp = await admin.GetAsync($"/api/sessions/{a.SessionId}/clashes");
+        using var afterDoc = JsonDocument.Parse(await afterResp.Content.ReadAsStringAsync());
+        Assert.DoesNotContain(afterDoc.RootElement.EnumerateArray(), c => c.GetProperty("raceId").GetInt32() == races[0]);
+    }
+
+    [Fact]
+    public async Task ClearRaceScore_ResetsRaceAndRemovesResults()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        var admin = await _f.AdminAsync();
+        await Submit(admin, races[0], new[] { P(a.TeamIds[0], 1), P(a.TeamIds[1], 2) });
+
+        var r = await admin.DeleteAsync($"/api/races/{races[0]}/score");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var heat = await r.ReadAsync<HeatDto>();
+        var race = heat.Races.Single();
+        Assert.False(race.IsComplete);
+        Assert.Empty(race.Results);
+    }
 }

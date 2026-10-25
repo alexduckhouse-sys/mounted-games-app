@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Ban, Calendar, ChevronRight, ClipboardList, Shield, Star } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { useCompactPageBar } from '../../components/CompactPageBarContext';
+import { useCompactPageBar, usePageHeader } from '../../components/CompactPageBarContext';
+import { usePageWidth } from '../../components/pageWidthState';
 import { useFavourites } from '../../hooks/useFavourites';
 import { bibAccent, bibLabel, parseBibAndFlag } from '../../lib/bib';
 import { heightText } from '../../lib/decForm';
@@ -28,6 +29,7 @@ const isRaceSession = (session: Session) => (session.kind ?? (session.isBreak ? 
 const isHeatDone = (heat: Heat) => !!heat.finishedAt || (heat.races.length > 0 && heat.races.every((r) => r.isComplete));
 
 export function CompetitionTeamPage() {
+  usePageWidth('wide');
   const { teamId } = useParams<{ teamId: string }>();
   const id = Number(teamId);
   const navigate = useNavigate();
@@ -198,24 +200,76 @@ export function CompetitionTeamPage() {
     return items;
   }, [competition.sessions, team]);
 
+  const teamStats = useMemo(() => {
+    if (!team) return null;
+    let scoredRaces = 0;
+    let totalPoints = 0;
+    let maxAvailablePoints = 0;
+    let placedFinishes = 0;
+    let totalPlace = 0;
+    let racesWon = 0;
+    const byRace = new Map<string, { name: string; runs: number; totalPoints: number; bestPlace: number | null }>();
+
+    const orderedSessions = competition.sessions.filter(isRaceSession).sort((a, b) => a.orderIndex - b.orderIndex);
+    for (const session of orderedSessions) {
+      const largestHeatSize = Math.max(1, ...session.heats.map((h) => h.entries.length), session.lanesPerHeat ?? 0);
+      for (const heat of session.heats) {
+        const heatMax = heat.raceRoundStage === 1 ? 1 : Math.max(heat.entries.length, largestHeatSize, 1);
+        for (const race of heat.races) {
+          if (!race.isComplete && race.results.length === 0) continue;
+          const res = race.results.find((item) => item.teamId === team.id && !item.isSitOut);
+          if (!res) continue;
+          const raceMax = Math.max(heatMax, ...race.results.map((r) => r.points), 1);
+          scoredRaces += 1;
+          totalPoints += res.points;
+          maxAvailablePoints += raceMax;
+          if (!res.eliminated && res.placing != null && res.placing > 0) {
+            placedFinishes += 1;
+            totalPlace += res.placing;
+            if (res.placing === 1) racesWon += 1;
+          }
+          const key = race.name.trim() || `Race ${race.orderIndex + 1}`;
+          const existing = byRace.get(key) ?? { name: key, runs: 0, totalPoints: 0, bestPlace: null };
+          existing.runs += 1;
+          existing.totalPoints += res.points;
+          if (!res.eliminated && res.placing != null && res.placing > 0) {
+            existing.bestPlace = existing.bestPlace == null ? res.placing : Math.min(existing.bestPlace, res.placing);
+          }
+          byRace.set(key, existing);
+        }
+      }
+    }
+
+    if (scoredRaces === 0) return null;
+    return {
+      scoredRaces,
+      avgPointsPerRace: totalPoints / scoredRaces,
+      avgPlace: placedFinishes > 0 ? totalPlace / placedFinishes : null,
+      racesWon,
+      pointQuota: maxAvailablePoints > 0 ? Math.round((totalPoints / maxAvailablePoints) * 100) : 0,
+      races: [...byRace.values()],
+    };
+  }, [competition.sessions, team]);
+
   useCompactPageBar({
     backTo: fallbackBackPath,
     title: team?.displayName ?? 'Team',
     subtitle: [sectionLabel, competition.name].filter(Boolean).join(' · '),
     badge: nextState?.kind === 'heat' && nextState.row.status === 'live' ? 'live' : nextState?.kind === 'done' ? 'finished' : 'next',
   });
+  usePageHeader({
+    title: team?.displayName ?? 'Team',
+    subtitle: [sectionLabel, competition.name].filter(Boolean).join(' · '),
+    backTo: `/competitions/${competition.id}/teams`,
+    backLabel: 'Teams',
+  });
 
   if (!team) {
     return (
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-3">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={goBack} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))] hover:underline">
-            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
-          </button>
-          <Link to={`/competitions/${competition.id}/teams`} className="text-sm font-semibold text-[rgb(var(--mg-muted))] hover:underline">
-            All teams
-          </Link>
-        </div>
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 pt-3">
+        <button type="button" onClick={goBack} className="sr-only">
+          <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
+        </button>
         <div className="mg-card p-4 text-sm text-[rgb(var(--mg-muted))]">Team not found in this competition.</div>
       </div>
     );
@@ -239,50 +293,45 @@ export function CompetitionTeamPage() {
   const trainerDisplay = decForm?.trainerName ?? decForm?.submittedByName ?? team.trainerName ?? null;
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={goBack} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))] hover:underline">
-            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
-          </button>
-          <Link to={`/competitions/${competition.id}/teams`} className="text-sm font-semibold text-[rgb(var(--mg-muted))] hover:underline">
-            All teams
-          </Link>
-        </div>
-        <div className="flex items-center gap-2">
-          {canDeclare && (
-            <Link to={`/competitions/${competition.id}/declarations?team=${team.id}`} className="mg-btn mg-btn-secondary !min-h-10 !px-3 !text-sm">
-              <ClipboardList aria-hidden="true" className="h-4 w-4" />
-              {decForm ? 'Edit dec form' : 'Submit dec form'}
-            </Link>
-          )}
-          <button
-            type="button"
-            className="mg-icon-btn !h-10 !w-10"
-            aria-pressed={isFollowed}
-            aria-label={`${isFollowed ? 'Unfollow' : 'Follow'} ${team.displayName}`}
-            onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
-          >
-            <Star aria-hidden="true" className={`h-5 w-5 ${isFollowed ? 'fill-current' : ''}`} />
-          </button>
-        </div>
-      </div>
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 pt-3">
+      <button type="button" onClick={goBack} className="sr-only">
+        <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
+      </button>
 
       {/* Header card */}
       <section aria-label="Team summary" className="mg-card flex flex-col gap-3 p-4">
-        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[rgb(var(--mg-muted))]">
-          {sectionLabel && <span className="mg-tag">{sectionLabel}</span>}
-          {team.clubName && <span>{team.clubName}</span>}
-          {team.isHorsConcours && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-              <Ban aria-hidden="true" className="h-3 w-3" /> Hors Concours
-            </span>
-          )}
-          {team.isWithdrawn && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-              Withdrawn
-            </span>
-          )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[rgb(var(--mg-muted))]">
+            {sectionLabel && <span className="mg-tag">{sectionLabel}</span>}
+            {team.clubName && <span>{team.clubName}</span>}
+            {team.isHorsConcours && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                <Ban aria-hidden="true" className="h-3 w-3" /> Hors Concours
+              </span>
+            )}
+            {team.isWithdrawn && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                Withdrawn
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {canDeclare && (
+              <Link to={`/competitions/${competition.id}/declarations?team=${team.id}`} className="mg-btn mg-btn-secondary !min-h-10 !px-3 !text-sm">
+                <ClipboardList aria-hidden="true" className="h-4 w-4" />
+                {decForm ? 'Edit dec form' : 'Submit dec form'}
+              </Link>
+            )}
+            <button
+              type="button"
+              className="mg-icon-btn !h-10 !w-10"
+              aria-pressed={isFollowed}
+              aria-label={`${isFollowed ? 'Unfollow' : 'Follow'} ${team.displayName}`}
+              onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
+            >
+              <Star aria-hidden="true" className={`h-5 w-5 ${isFollowed ? 'fill-current' : ''}`} />
+            </button>
+          </div>
         </div>
 
         <h1 className="mg-h1 flex items-center gap-2.5">
@@ -486,6 +535,64 @@ export function CompetitionTeamPage() {
           {teamHeats.map((item) => (
             <HeatScores key={item.key} session={item.session} heats={item.heats} activeHeatId={item.activeHeatId} embedded />
           ))}
+        </section>
+      )}
+
+      {/* Team Stats */}
+      {teamStats && (
+        <section aria-label="Team stats" className="mg-card flex flex-col gap-3 p-4">
+          <h3 className="mg-display text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+            Team stats
+          </h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
+              <span className={eyebrow}>Average per race</span>
+              <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
+                {teamStats.avgPointsPerRace.toFixed(1)} pts
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
+              <span className={eyebrow}>Average place</span>
+              <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
+                {teamStats.avgPlace != null ? teamStats.avgPlace.toFixed(1) : '—'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
+              <span className={eyebrow}>Races won</span>
+              <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
+                {teamStats.racesWon} / {teamStats.scoredRaces}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
+              <span className={eyebrow}>Point quota</span>
+              <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
+                {teamStats.pointQuota}%
+              </span>
+            </div>
+          </div>
+
+          {teamStats.races.length > 0 && (
+            <div className="flex flex-col gap-1.5 pt-1">
+              <span className={eyebrow}>Per-race averages</span>
+              <ul className="overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))]">
+                {teamStats.races.map((r) => (
+                  <li key={r.name} className="flex min-h-10 items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 text-sm last:border-b-0">
+                    <span className="min-w-0 flex-1 truncate font-semibold text-[rgb(var(--mg-ink))]">{r.name}</span>
+                    <span className="shrink-0 text-xs text-[rgb(var(--mg-muted))]">{r.runs} {r.runs === 1 ? 'run' : 'runs'}</span>
+                    <span className="shrink-0 text-xs font-medium text-[rgb(var(--mg-body))]">
+                      Best {r.bestPlace != null ? ordinal(r.bestPlace) : '—'}
+                    </span>
+                    <span className="shrink-0 text-xs font-medium text-[rgb(var(--mg-muted))]">
+                      Avg {(r.totalPoints / r.runs).toFixed(1)} pts
+                    </span>
+                    <span className="mg-display w-12 shrink-0 text-right text-base font-bold tabular-nums text-[rgb(var(--mg-heading))]">
+                      {formatPoints(r.totalPoints)} pts
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
 

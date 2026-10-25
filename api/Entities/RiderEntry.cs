@@ -36,6 +36,7 @@ public class RiderEntry
     /// <summary>Rider weight in kilograms; the form may show stone and pounds, but this is the stored unit.</summary>
     public decimal? WeightKg { get; set; }
     public string? PonyPassportNumber { get; set; }
+    public string? PonyOwnerFullName { get; set; }
     /// <summary>The pony's age in years.</summary>
     public int? PonyAge { get; set; }
     public string? MembershipNumber { get; set; }

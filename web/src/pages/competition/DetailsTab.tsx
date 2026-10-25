@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   CalendarDays, MapPin, MapPinned, Info, Layers, Users, Trophy,
-  Hammer, Check, ChevronDown, ChevronLeft, ChevronUp, Sparkles,
+  Hammer, Check, ChevronDown, ChevronUp, Sparkles,
   CalendarPlus, ClipboardList, Share2, QrCode as QrCodeIcon,
 } from 'lucide-react';
 import { useCompetition } from './context';
@@ -132,6 +132,7 @@ export function DetailsTab() {
           {linkRow('../teams', 'Teams')}
           {linkRow('../declarations', 'Dec forms')}
           {linkRow('../shop', 'Event shop')}
+          {linkRow('../shop', 'Book stabling, hook-up & shavings')}
           {linkRow('../rulebooks', 'Rulebooks & game rules')}
           {linkRow('../arena', 'Arena setup & race diagrams')}
           <li>
@@ -352,6 +353,11 @@ function SectionSignupCard({
           : full ? 'Full' : max ? `${seatsLeft} of ${max} places left` : `${takenSeats} entered · no limit`}
         {known && <span className="sr-only">. {takenSeats} in{max ? `, ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left` : `, ${signups.length} signup${signups.length === 1 ? '' : 's'}`}</span>}
       </span>
+      {section.format === 1 && (section.priceMinor ?? 0) > 0 && (
+        <span className="text-xs font-semibold text-[rgb(var(--mg-heading))]">
+          Solo rider? Enter Looking for a Pair Partner ({priceLabel(Math.floor((section.priceMinor ?? 0) / 2))} · 50% share)
+        </span>
+      )}
       {signupsLocked ? (
         <p className="rf-note !p-0 italic">Entries closed.</p>
       ) : full ? (
@@ -402,18 +408,59 @@ function MatchmakingBoard({ competitionId, section }: { competitionId: number; s
     catch { setNotice('Could not send the pair-up request. Check your entries and try again.'); }
     finally { setBusy(false); }
   }
-  return seekers.length > 0 ? <div className="mt-2 flex flex-col gap-2 text-sm">
-    {seekers.filter((e) => e.lookingForPair && !e.teamId).map((e) => <div key={e.signupId}><span>Looking for a Pair: {e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}</span>{own && own.id !== e.signupId && <button type="button" className="mg-btn mg-btn-secondary !min-h-11" disabled={busy} onClick={() => void requestPair(e.signupId)}>Request pair-up with {e.fullName}</button>}</div>)}
-    {seekers.filter((e) => e.lookingForGuestRiders).map((e) => <p key={e.signupId}>Looking for Guest Riders: {e.teamName || e.fullName}</p>)}
-    {seekers.filter((e) => e.waitingForGuestSpot && !e.teamId).map((e) => <p key={e.signupId}>Waiting for a Guest Ride Spot: {e.fullName}</p>)}
-    {notice && <p role="status">{notice}</p>}
-  </div> : null;
+  return seekers.length > 0 ? (
+    <div className="mt-2 flex flex-col gap-2 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-2.5 text-sm">
+      <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-heading))]">
+        <Users className="h-3.5 w-3.5" aria-hidden="true" />
+        <span>Pair Partner &amp; Guest Rider Matchmaker</span>
+      </div>
+      {seekers.filter((e) => e.lookingForPair && !e.teamId).map((e) => (
+        <div key={e.signupId} className="flex flex-col gap-1.5 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-2">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <span className="inline-flex items-center rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-bold text-[rgb(var(--mg-heading))]">
+              Looking for a Pair Partner (50% share)
+            </span>
+            <span className="font-semibold text-[rgb(var(--mg-ink))]">
+              {e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}
+            </span>
+          </div>
+          {own && own.id !== e.signupId && (
+            <button type="button" className="mg-btn mg-btn-secondary !min-h-11" disabled={busy} onClick={() => void requestPair(e.signupId)}>
+              Request pair-up with {e.fullName}
+            </button>
+          )}
+        </div>
+      ))}
+      {seekers.filter((e) => e.lookingForGuestRiders).map((e) => (
+        <div key={e.signupId} className="flex flex-wrap items-center justify-between gap-1.5 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-2">
+          <span className="inline-flex items-center rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-bold text-[rgb(var(--mg-heading))]">
+            Guest rider spot available
+          </span>
+          <span className="font-semibold text-[rgb(var(--mg-ink))]">
+            {e.teamName || e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}
+          </span>
+        </div>
+      ))}
+      {seekers.filter((e) => e.waitingForGuestSpot && !e.teamId).map((e) => (
+        <div key={e.signupId} className="flex flex-wrap items-center justify-between gap-1.5 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-2">
+          <span className="inline-flex items-center rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-bold text-[rgb(var(--mg-heading))]">
+            Guest rider spot wanted
+          </span>
+          <span className="font-semibold text-[rgb(var(--mg-ink))]">
+            {e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}
+          </span>
+        </div>
+      ))}
+      {notice && <p role="status" className="m-0 text-xs font-semibold text-[rgb(var(--mg-ok))]">{notice}</p>}
+    </div>
+  ) : null;
 }
 
 /**
  * Dedicated page for filling in a competition section entry (`/competitions/:id/enter/:sectionId`).
  */
 export function SectionEntryPage() {
+  usePageWidth('wide');
   const { sectionId } = useParams<{ sectionId: string }>();
   const { competition } = useCompetition();
   const { canOrganise } = useAuth();
@@ -438,9 +485,6 @@ export function SectionEntryPage() {
   if (!section) {
     return (
       <div className="rf-page mx-auto flex w-full max-w-2xl flex-col gap-3 pb-6 pt-3">
-        <Link to={backTarget} className="mg-text-link !min-h-11 self-start">
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to {competition.name}
-        </Link>
         <p role="alert" className="mg-notice">Section not found.</p>
       </div>
     );
@@ -541,10 +585,6 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
 
   return (
     <div className="rf-page mx-auto flex w-full max-w-2xl flex-col gap-3 pb-6 pt-3">
-      <Link to={backTarget} className="mg-text-link !min-h-11 self-start">
-        <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to {competition.name}
-      </Link>
-
       <div className="mg-card flex flex-col gap-2.5 p-4 sm:p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div>
@@ -584,9 +624,55 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
           </div>
           <label className="rf-fld">Phone<input type="tel" autoComplete="tel" placeholder="Phone (optional)" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
           <EntryEmailFields value={entryEmail} onChange={setEntryEmail} />
-          {section.format === 1 && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={lookingForPair} onChange={(e) => setLookingForPair(e.target.checked)} />Looking for a Pair (Pay 50%)</label>}
-          {section.format === 2 && !enteringWholeTeam && !isWaitlist && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={waitingForGuestSpot} onChange={(e) => setWaitingForGuestSpot(e.target.checked)} />Wait for a Guest Ride Spot (Free)</label>}
-          {enteringWholeTeam && <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={lookingForGuestRiders} onChange={(e) => setLookingForGuestRiders(e.target.checked)} />Looking for Guest Riders</label>}
+          {section.format === 1 && (
+            <div className="flex flex-col gap-2 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-3">
+              <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
+                <input type="checkbox" checked={lookingForPair} onChange={(e) => setLookingForPair(e.target.checked)} />
+                Looking for a Pair Partner (50% share — pay 50% deposit)
+              </label>
+              {pairSeeking && (
+                <div className="flex flex-col gap-1 rounded border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] p-2.5 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="inline-flex items-center rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 font-bold text-[rgb(var(--mg-heading))]">
+                      Looking for a Pair Partner (50% share)
+                    </span>
+                    <span className="font-bold text-[rgb(var(--mg-heading))]">
+                      Your 50% individual share: {priceLabel(effectivePriceMinor)} <span className="font-normal text-[rgb(var(--mg-muted))]">(Full pair fee: {priceLabel(section.priceMinor ?? 0)})</span>
+                    </span>
+                  </div>
+                  <p className="m-0 text-[rgb(var(--mg-body))]">
+                    Enter solo at 50% of the pair fee. Your entry is listed on the Pair Partner Matchmaker so another solo rider can pair up with you.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          {section.format === 2 && !enteringWholeTeam && !isWaitlist && (
+            <div className="flex flex-col gap-1.5">
+              <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
+                <input type="checkbox" checked={waitingForGuestSpot} onChange={(e) => setWaitingForGuestSpot(e.target.checked)} />
+                Wait for a Guest Ride Spot (Free)
+              </label>
+              {guestWaiting && (
+                <p className="m-0 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-2.5 py-1.5 text-xs text-[rgb(var(--mg-body))]">
+                  <strong className="text-[rgb(var(--mg-heading))]">Guest rider spot wanted:</strong> Free waiting list entry so teams looking for guest riders can invite you.
+                </p>
+              )}
+            </div>
+          )}
+          {enteringWholeTeam && (
+            <div className="flex flex-col gap-1.5">
+              <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
+                <input type="checkbox" checked={lookingForGuestRiders} onChange={(e) => setLookingForGuestRiders(e.target.checked)} />
+                Looking for Guest Riders
+              </label>
+              {lookingForGuestRiders && (
+                <p className="m-0 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-2.5 py-1.5 text-xs text-[rgb(var(--mg-body))]">
+                  <strong className="text-[rgb(var(--mg-heading))]">Guest rider spot available:</strong> Lists your team on the Matchmaker so solo riders waiting for a guest spot can join.
+                </p>
+              )}
+            </div>
+          )}
           {canEnterWholeTeam && (
             <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
               <input type="checkbox" checked={wholeTeam} onChange={(e) => setWholeTeam(e.target.checked)} />
@@ -611,6 +697,9 @@ function SectionEntryForm({ section, backTarget }: { section: CompetitionSection
           {!guestWaiting && !isWaitlist && <fieldset className="flex flex-col gap-2"><legend className="font-semibold">Stabling (optional)</legend>
             <label className="rf-fld">Number of stables<NumberField min={0} max={100} value={stablesCount} onChange={(e) => setStablesCount(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} /></label>
             {stablesCount > 0 && <label className="rf-fld">Stabling club or team<input value={stablingClubOrTeam} maxLength={200} onChange={(e) => setStablingClubOrTeam(e.target.value)} placeholder="Use your club or team name" /></label>}
+            <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">
+              Need electric hook-up, shavings or haylage bales? <Link to={`/competitions/${competition.id}/shop`} className="font-semibold text-[rgb(var(--mg-heading))] hover:underline">Book in the Event Shop →</Link>
+            </p>
           </fieldset>}
           {effectivePriceMinor > 0 && !isDemo && <div className="mg-notice"><strong>Pay by Bank Transfer (BACS)</strong><p>Transfer {priceLabel(effectivePriceMinor)} {competition.paymentDestination ? `to ${competition.paymentDestination}` : 'using the organiser’s payment details'}. Use your name or team name as the reference. The organiser confirms when payment arrives.</p></div>}
           <RiderPrivacyFields termsText={competition.termsText} value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />

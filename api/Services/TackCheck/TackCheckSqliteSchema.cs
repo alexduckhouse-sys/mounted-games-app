@@ -61,6 +61,14 @@ public static class TackCheckSqliteSchema
                 "CheckedAt" TEXT NOT NULL,
                 "CheckedByUserId" TEXT NULL,
                 "CheckedByName" TEXT NULL,
+                "PassportCode" TEXT NULL,
+                "OwnerFullName" TEXT NULL,
+                "LastFluVaccineDate" TEXT NULL,
+                "FluValidUntil" TEXT NULL,
+                "LastTetanusDate" TEXT NULL,
+                "TetanusValidUntil" TEXT NULL,
+                "InspectorRole" TEXT NULL,
+                "OfficialNotes" TEXT NULL,
                 CONSTRAINT "FK_PassportChecks_Competitions_CompetitionId" FOREIGN KEY ("CompetitionId")
                     REFERENCES "Competitions" ("Id") ON DELETE CASCADE,
                 CONSTRAINT "FK_PassportChecks_Teams_TeamId" FOREIGN KEY ("TeamId")
@@ -68,7 +76,38 @@ public static class TackCheckSqliteSchema
             );
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_PassportChecks_TeamId_PonyKey" ON "PassportChecks" ("TeamId", "PonyKey");
             CREATE INDEX IF NOT EXISTS "IX_PassportChecks_CompetitionId" ON "PassportChecks" ("CompetitionId");
+
+            CREATE TABLE IF NOT EXISTS "CertifiedHorses" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_CertifiedHorses" PRIMARY KEY AUTOINCREMENT,
+                "PassportCode" TEXT NULL,
+                "HorseName" TEXT NOT NULL,
+                "HorseKey" TEXT NOT NULL,
+                "OwnerFullName" TEXT NULL,
+                "OwnerKey" TEXT NULL,
+                "LastFluVaccineDate" TEXT NULL,
+                "FluValidUntil" TEXT NULL,
+                "LastTetanusDate" TEXT NULL,
+                "TetanusValidUntil" TEXT NULL,
+                "InspectorRole" TEXT NOT NULL DEFAULT 'Official',
+                "InspectedByUserId" TEXT NULL,
+                "InspectedByName" TEXT NOT NULL,
+                "InspectedAt" TEXT NOT NULL,
+                "OfficialNotes" TEXT NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_CertifiedHorses_PassportCode" ON "CertifiedHorses" ("PassportCode");
+            CREATE INDEX IF NOT EXISTS "IX_CertifiedHorses_HorseKey_OwnerKey" ON "CertifiedHorses" ("HorseKey", "OwnerKey");
             """);
         await DbInitializer.EnsureColumnAsync(db, "TackCheckMarks", "RiderScoresJson", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "PassportChecks", "PassportCode", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "PassportChecks", "OwnerFullName", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "PassportChecks", "LastFluVaccineDate", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "PassportChecks", "FluValidUntil", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "PassportChecks", "LastTetanusDate", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "PassportChecks", "TetanusValidUntil", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "PassportChecks", "InspectorRole", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "PassportChecks", "OfficialNotes", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "RiderEntries", "PonyOwnerFullName", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "SavedRiders", "PonyPassportNumber", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "SavedRiders", "PonyOwnerFullName", "TEXT NULL");
     }
 }

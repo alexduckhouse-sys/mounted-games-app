@@ -72,4 +72,44 @@ public class ClubsController : ControllerBase
         await _db.SaveChangesAsync();
         return club.ToDto();
     }
+
+    [HttpPut("{id:int}")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<ClubDto>> Update(int id, UpdateClubRequest req)
+    {
+        var club = await _db.Clubs.FindAsync(id);
+        if (club is null) return NotFound();
+        if (req.Name is not null)
+        {
+            var name = req.Name.Trim();
+            if (name.Length == 0) return BadRequest(new { message = "Name is required." });
+            if (await _db.Clubs.AnyAsync(c => c.Id != id && c.Name == name))
+                return Conflict(new { message = "A club with that name already exists." });
+            club.Name = name;
+        }
+        if (req.Region is not null)
+            club.Region = string.IsNullOrWhiteSpace(req.Region) ? "Custom" : req.Region.Trim();
+        if (req.BibColour is not null)
+            club.BibColour = string.IsNullOrWhiteSpace(req.BibColour) ? null : req.BibColour.Trim();
+        await _db.SaveChangesAsync();
+        return club.ToDto();
+    }
+
+    [HttpDelete("{id:int}")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var club = await _db.Clubs.FindAsync(id);
+        if (club is null) return NotFound();
+        var inUse = await _db.Teams.AnyAsync(t => t.ClubId == id)
+            || await _db.Users.AnyAsync(u => u.ClubId == id)
+            || await _db.SavedRiders.AnyAsync(r => r.ClubId == id);
+        if (inUse)
+            return Conflict(new { message = "This club has teams, riders or members and cannot be deleted." });
+        _db.Clubs.Remove(club);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
 }
+
+public record UpdateClubRequest(string? Name = null, string? Region = null, string? BibColour = null);

@@ -345,13 +345,13 @@ function BankStep({ data, region, bank, problems, changing, setField, change }: 
           </div>
           <button type="button" className="mg-btn mg-btn-secondary !min-h-11 !px-4" onClick={change}>Change</button>
         </div>
-        <Hint>For your safety we only keep the last four digits.</Hint>
+        <Hint>Sort code and last 4 digits only — share full payment details on your entry page or invoice.</Hint>
       </>
     );
   }
   return (
     <>
-      <Hint>Where entry fees are paid out. We check the numbers, keep only the last four digits and never show the full number again.</Hint>
+      <Hint>Sort code and last 4 digits only — share full payment details on your entry page or invoice. We check the numbers, keep only the last four digits and never show the full number again.</Hint>
       <TextField label="Name on the account" value={bank.accountHolder} error={problems.accountHolder} onChange={(v) => setField('accountHolder', v)} />
       {region === 0 ? (
         <>

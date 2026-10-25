@@ -14,19 +14,27 @@ export interface ConnectionLike extends EventTarget {
   saveData?: boolean;
   effectiveType?: string;
   rtt?: number;
+  downlink?: number;
 }
 
 export function getConnection(): ConnectionLike | undefined {
   return (navigator as Navigator & { connection?: ConnectionLike }).connection ?? undefined;
 }
 
+/** True when the browser or OS explicitly asked for reduced data usage (`navigator.connection.saveData`). */
+export function isNetworkSaveData(connection: ConnectionLike | undefined = getConnection()): boolean {
+  return connection?.saveData === true;
+}
+
 /** What the connection says: Data Saver, a slow connection, or nothing (also when the browser can't tell). */
 export function connectionReason(connection: ConnectionLike | undefined = getConnection()): AutoReason | null {
   if (!connection) return null;
   if (connection.saveData === true) return 'data-saver';
-  const { effectiveType, rtt } = connection;
+  const { effectiveType, rtt, downlink } = connection;
   if (effectiveType === 'slow-2g' || effectiveType === '2g') return 'slow-connection';
   if (effectiveType === '3g' && typeof rtt === 'number' && rtt > 600) return 'slow-connection';
+  if (typeof downlink === 'number' && downlink > 0 && downlink < 0.5) return 'slow-connection';
+  if (typeof rtt === 'number' && rtt > 1200) return 'slow-connection';
   return null;
 }
 
@@ -34,6 +42,12 @@ export function resolveLite(setting: LiteSetting, auto: AutoReason | null): { li
   if (setting === 'on') return { lite: true, reason: 'chosen' };
   if (setting === 'off') return { lite: false, reason: null };
   return { lite: auto !== null, reason: auto };
+}
+
+/** True when lite mode is active via the page dataset attribute or the saved setting and current connection. */
+export function isLiteModeActive(connection: ConnectionLike | undefined = getConnection()): boolean {
+  return document.documentElement.dataset.lite === 'true'
+    || resolveLite(readSetting(), connectionReason(connection)).lite;
 }
 
 export function readSetting(): LiteSetting {

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Plus, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, Plus, Search, Trash2, X } from 'lucide-react';
 import { Dropdown } from '../../components/Dropdown';
 import { SCOPE_LABEL, defaultRaceList, type RaceScope } from '../../lib/defaultRaces';
 
@@ -15,7 +15,9 @@ export function RaceListDialog({ title, races, format, ageGroup, templates, onSa
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const customInputRef = useRef<HTMLInputElement>(null);
   const [list, setList] = useState(races);
+  const [search, setSearch] = useState('');
   const [custom, setCustom] = useState('');
   useEffect(() => {
     const dialog = ref.current;
@@ -30,9 +32,22 @@ export function RaceListDialog({ title, races, format, ageGroup, templates, onSa
     return next;
   });
   const add = (name: string) => {
+    if (name === '__custom__') {
+      customInputRef.current?.focus();
+      return;
+    }
     const trimmed = name.trim();
     if (trimmed) setList((current) => [...current, trimmed]);
   };
+
+  const filteredTemplates = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const matching = q ? templates.filter((name) => name.toLowerCase().includes(q)) : templates;
+    return [
+      ...matching.map((name) => ({ value: name, label: name })),
+      { value: '__custom__', label: '+ Custom race…' },
+    ];
+  }, [templates, search]);
 
   return (
     <dialog ref={ref} onCancel={onClose} aria-label={title}
@@ -60,13 +75,18 @@ export function RaceListDialog({ title, races, format, ageGroup, templates, onSa
           ))}
         </ol>
         <div className="flex flex-col gap-2">
-          <Dropdown label="Add a race from the library" value="" options={templates.map((name) => ({ value: name, label: name }))} onChange={add}
+          <label className="mg-field !min-h-11">
+            <Search className="h-4 w-4 shrink-0 text-[rgb(var(--mg-muted))]" aria-hidden="true" />
+            <span className="sr-only">Search race library</span>
+            <input type="search" value={search} placeholder="Search races…" onChange={(e) => setSearch(e.target.value)} />
+          </label>
+          <Dropdown label="Add a race from the library" value="" options={filteredTemplates} onChange={add}
             buttonClassName="flex min-h-12 w-full items-center gap-2 rounded-[10px] border-[1.5px] border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-3 text-left text-[15px] font-semibold text-[rgb(var(--mg-heading))]">
             <Plus className="h-4 w-4" aria-hidden="true" />Add a race from the library
           </Dropdown>
           <div className="flex gap-2">
             <label className="mg-field !min-h-12 flex-1"><span className="sr-only">Race name</span>
-              <input value={custom} placeholder="Or type a race name" onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(custom); setCustom(''); } }} />
+              <input ref={customInputRef} value={custom} placeholder="Or type a race name" onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(custom); setCustom(''); } }} />
             </label>
             <button type="button" className="mg-btn mg-btn-secondary !min-h-12 !px-4" disabled={!custom.trim()} onClick={() => { add(custom); setCustom(''); }}>Add</button>
           </div>

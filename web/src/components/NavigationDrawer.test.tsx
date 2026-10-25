@@ -88,21 +88,20 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(document.body.style.overflow).toBe('auto');
   });
 
-  it('sends the extra competition links to the events list when no competition is followed', () => {
+  it('sends the extra competition links to general pages when no competition is followed', () => {
     mount();
     expect(links('Main navigation')).toEqual([
-      ['Following', '/following'], ['Event shop', '/shop'], ['Rulebooks', '/events'],
+      ['Following', '/following'], ['Event shop', '/shop'],
     ]);
   });
 
-  it('invites a visitor to sign in', () => {
+  it('invites a visitor to sign in at the bottom of the menu without a role caption', () => {
     mount();
     const signIn = screen.getByRole('link', { name: 'Sign in' });
     expect(signIn).toHaveAttribute('href', '/login');
     expect(signIn).toHaveClass('mg-btn-primary');
-    // It leads the menu as a button rather than sitting in the list of links.
-    expect(screen.getByRole('navigation', { name: 'Main navigation' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-    expect(screen.getByText('For trainers, organisers and stewards')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Main navigation' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('For trainers, organisers and stewards')).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Account and management' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Notifications/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
@@ -166,7 +165,7 @@ describe('NavigationDrawer: following a competition', () => {
   it('links to the competition’s extra pages (omitting duplicate bottom-tab links)', async () => {
     mount({ competition: true });
     expect(links('Main navigation')).toEqual([
-      ['Following', '/competitions/4/following'], ['Event shop', '/competitions/4/shop'], ['Rulebooks', '/competitions/4/rulebooks'],
+      ['Following', '/competitions/4/following'], ['Event shop', '/competitions/4/shop'],
     ]);
     const communityShop = screen.getByRole('link', { name: 'Tack & kit shop' });
     expect(communityShop).toHaveAttribute('href', '/shop');
@@ -183,9 +182,9 @@ describe('NavigationDrawer: following a competition', () => {
   });
 
   it('does not highlight anything when no competition is followed', () => {
-    mount({ path: '/events' });
+    mount({ path: '/following' });
     const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
-    expect(nav.getByRole('link', { name: 'Rulebooks' }).className).not.toMatch(/font-semibold/);
+    expect(nav.getByRole('link', { name: 'Following' }).className).not.toMatch(/font-semibold/);
   });
 });
 
@@ -274,21 +273,48 @@ describe('NavigationDrawer: signed in', () => {
   });
 });
 
-describe('NavigationDrawer: settings and weather', () => {
+describe('NavigationDrawer: settings, QR scanner and weather', () => {
   it('links to the Settings page and highlights it when active', () => {
     mount({ path: '/settings' });
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('hides the weather row by default', () => {
+  it('opens the QR permission scanner above Settings and navigates on valid key', async () => {
+    mount();
+    const scanBtn = screen.getByRole('button', { name: 'Scan QR code' });
+    const settingsLink = screen.getByRole('link', { name: 'Settings' });
+    expect(scanBtn.compareDocumentPosition(settingsLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await userEvent.click(scanBtn);
+    expect(screen.getByRole('dialog', { name: 'Scan permission QR code' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close QR scanner' }));
+    expect(screen.queryByRole('dialog', { name: 'Scan permission QR code' })).not.toBeInTheDocument();
+
+    await userEvent.click(scanBtn);
+    fireEvent.change(screen.getByLabelText('Permission link or key'), {
+      target: { value: '/competitions/4/broadcast?pair=pair_secret_1234567890' },
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/4/broadcast?pair=pair_secret_1234567890');
+  });
+
+  it('hides the weather row by default when no competition is followed', () => {
     mount();
     expect(screen.queryByText('Weather', { selector: 'span.font-medium' })).not.toBeInTheDocument();
   });
 
-  it('shows the weather when it was switched on before', () => {
+  it('shows the weather when it was switched on before or when following a competition', async () => {
     localStorage.setItem('mg.showWeather', '1');
-    mount();
+    const first = mount();
     expect(screen.getByText('Weather', { selector: 'span.font-medium' })).toBeInTheDocument();
+    first.unmount();
+
+    localStorage.removeItem('mg.showWeather');
+    mount({ competition: true });
+    const weatherLink = screen.getByRole('link', { name: /Weather/ });
+    expect(weatherLink).toHaveAttribute('href', '/competitions/4/weather');
   });
 
   it('still works when storage is blocked', () => {

@@ -530,4 +530,50 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
         var combinedSession = await combineResp.Content.ReadFromJsonAsync<SessionDto>();
         Assert.Contains("[scoring:combined]", combinedSession!.Notes);
     }
+
+    [Fact]
+    public async Task ApplyRaceResults_LetteredFinalHeat_UsesOwnHeatEntryCountInsteadOfLargestSessionHeat()
+    {
+        var a = await _f.CreateArenaAsync(10);
+        var (_, aFinalRaces) = await _f.AddHeatAsync(a.SessionId, a.TeamIds.Take(6), "A Final", 1);
+        var (_, bFinalRaces) = await _f.AddHeatAsync(a.SessionId, a.TeamIds.Skip(6).Take(4), "B Final Part 1", 2);
+        using var scope = _f.Services.CreateScope();
+        var svc = Service(scope);
+
+        var aResults = await svc.ApplyRaceResultsAsync(aFinalRaces[0],
+            a.TeamIds.Take(6).Select((id, idx) => new FinishingPlace(id, idx + 1, false)).ToArray(), null);
+        var bResults = await svc.ApplyRaceResultsAsync(bFinalRaces[0],
+            a.TeamIds.Skip(6).Take(4).Select((id, idx) => new FinishingPlace(id, idx + 1, false)).ToArray(), null);
+
+        Assert.Equal(new[] { 6.0, 5.0, 4.0, 3.0, 2.0, 1.0 }, aResults.Select(r => r.Points));
+        // B Final has 4 teams so 1st place scores 4 points, not 6.
+        Assert.Equal(new[] { 4.0, 3.0, 2.0, 1.0 }, bResults.Select(r => r.Points));
+    }
+
+    [Fact]
+    public async Task DeadHeatPointsForPlace_SplitsTiedPlaces_AndSupportsDeadHeatDirective()
+    {
+        var a = await _f.CreateArenaAsync(4);
+        var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
+        using var scope = _f.Services.CreateScope();
+        var svc = Service(scope);
+
+        Assert.Equal(4.5, svc.DeadHeatPointsForPlace(1, 2, 5, false));
+        Assert.Equal(2.5, svc.DeadHeatPointsForPlace(2, 2, 4, false));
+
+        var results = await svc.ApplyRaceResultsAsync(races[0],
+            new[]
+            {
+                new FinishingPlace(a.TeamIds[0], 1, false, Note: "[dead-heat] Dead heat for 1st"),
+                new FinishingPlace(a.TeamIds[1], 1, false, Note: "[dead-heat] Dead heat for 1st"),
+                new FinishingPlace(a.TeamIds[2], 3, false),
+                new FinishingPlace(a.TeamIds[3], 4, false),
+            }, null);
+
+        var byTeam = results.ToDictionary(r => r.TeamId, r => r.Points);
+        Assert.Equal(3.5, byTeam[a.TeamIds[0]]);
+        Assert.Equal(3.5, byTeam[a.TeamIds[1]]);
+        Assert.Equal(2.0, byTeam[a.TeamIds[2]]);
+        Assert.Equal(1.0, byTeam[a.TeamIds[3]]);
+    }
 }

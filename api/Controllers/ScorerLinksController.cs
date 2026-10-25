@@ -58,7 +58,7 @@ public class ScorerLinksController(AppDbContext db, TimeProvider time) : Control
         var token = ScorerLinkTokens.Generate();
         var link = new ScorerLink
         {
-            CompetitionId = competitionId, Label = label, ArenaName = arena,
+            CompetitionId = competitionId, Label = label, ArenaName = arena, Scope = req.Scope,
             TokenHash = ScorerLinkTokens.Hash(token), CreatedByUserId = UserId, CreatedAt = now, ExpiresAt = expiresAt,
         };
         db.ScorerLinks.Add(link);
@@ -97,5 +97,5 @@ public class ScorerLinksController(AppDbContext db, TimeProvider time) : Control
     }
 
     private static ScorerLinkDto ToDto(ScorerLink l) =>
-        new(l.Id, l.Label, l.ArenaName, l.CreatedAt, l.ExpiresAt, l.LastUsedAt, l.RevokedAt);
+        new(l.Id, l.Label, l.ArenaName, l.CreatedAt, l.ExpiresAt, l.LastUsedAt, l.RevokedAt, l.Scope);
 }

@@ -108,6 +108,146 @@ const isRace = (session: Session) => (session.kind ?? (session.isBreak ? 1 : 0))
 /** Same rule as the timetable: a final heat, or a session or heat named "final". */
 const isFinal = (session: Session, heat: Heat) => heat.raceRoundStage === 2 || /\bfinals?\b/i.test(heat.label ?? '') || /\bfinals?\b/i.test(session.name);
 const heatDone = (heat: Heat) => !!heat.finishedAt || (heat.races.length > 0 && heat.races.every((race) => race.isComplete));
+const letteredFinal = /^([A-Za-z]) Final$/i;
+
+/**
+ * Fingerprint of a section's race scores and heat assignments. Clock changes (`startedAt`/`finishedAt`)
+ * and changes in other age groups leave this unchanged so spectators don't re-fetch `/standings`.
+ */
+export function sectionScoreVersion(sessions: Session[], sectionId: number | null | undefined): string {
+  if (sectionId == null) return '';
+  const parts: string[] = [];
+  const raceSessions = sessions
+    .filter((s) => s.competitionSectionId === sectionId && isRace(s))
+    .slice()
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+  for (const session of raceSessions) {
+    const heats = session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+    for (const heat of heats) {
+      const entryIds = heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex).map((e) => e.teamId).join(',');
+      parts.push(`h:${heat.id}:${heat.label ?? ''}:${heat.raceRoundStage ?? 0}:[${entryIds}]`);
+      const races = heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+      for (const race of races) {
+        const res = race.results
+          .slice()
+          .sort((a, b) => a.teamId - b.teamId)
+          .map((r) => `${r.teamId}=${r.placing ?? ''}/${r.points}/${r.eliminated ? 1 : 0}/${r.status ?? ''}/${r.isSitOut ? 1 : 0}`)
+          .join(',');
+        parts.push(`r:${race.id}:${race.isComplete ? 1 : 0}:[${res}]`);
+      }
+    }
+  }
+  return parts.join('|');
+}
+
+/**
+ * Synthesizes or updates `StandingRow[]` directly from `sessions` and `teams` for `sectionId`,
+ * preserving any known `bonusPoints` and tie-break order from `baseRows`.
+ */
+export function synthesizeStandings(sessions: Session[], teams: Team[], sectionId: number, baseRows: StandingRow[] = []): StandingRow[] {
+  const raceSessions = sessions
+    .filter((s) => s.competitionSectionId === sectionId && isRace(s))
+    .slice()
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+  const hasResults = raceSessions.some((s) => s.heats.some((h) => h.races.some((r) => r.results.length > 0)));
+  if (!hasResults) return baseRows;
+
+  const hcIds = new Set(teams.filter((t) => t.competitionSectionId === sectionId && t.isHorsConcours).map((t) => t.id));
+  const baseByTeam = new Map(baseRows.map((row, idx) => [row.teamId, { row, idx }]));
+  const teamById = new Map(teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).map((t) => [t.id, t]));
+
+  const tierByTeam = new Map<number, number>();
+  let hasLetteredFinals = false;
+  const stats = new Map<number, { teamName: string; points: number; racesRun: number; wins: number; eliminations: number; placings: number[] }>();
+
+  const ensureStat = (teamId: number, fallbackName: string) => {
+    let cur = stats.get(teamId);
+    if (!cur) {
+      const name = teamById.get(teamId)?.displayName ?? baseByTeam.get(teamId)?.row.teamName ?? fallbackName;
+      cur = { teamName: name, points: 0, racesRun: 0, wins: 0, eliminations: 0, placings: [] };
+      stats.set(teamId, cur);
+    }
+    return cur;
+  };
+
+  for (const t of teamById.values()) ensureStat(t.id, t.displayName);
+  for (const b of baseRows) if (!hcIds.has(b.teamId)) ensureStat(b.teamId, b.teamName);
+
+  for (const session of raceSessions) {
+    for (const heat of session.heats) {
+      const match = letteredFinal.exec(heat.label?.trim() ?? '');
+      const heatTier = match ? match[1].toUpperCase().charCodeAt(0) - 65 : null;
+      if (heatTier !== null) hasLetteredFinals = true;
+      for (const entry of heat.entries) {
+        if (hcIds.has(entry.teamId)) continue;
+        ensureStat(entry.teamId, entry.teamName);
+        if (heatTier !== null) {
+          const prev = tierByTeam.get(entry.teamId);
+          if (prev === undefined || heatTier < prev) tierByTeam.set(entry.teamId, heatTier);
+        }
+      }
+      for (const race of heat.races) {
+        for (const result of race.results) {
+          if (hcIds.has(result.teamId)) continue;
+          const st = ensureStat(result.teamId, result.teamName);
+          st.points += result.points;
+          st.racesRun += 1;
+          if (!result.eliminated && result.placing === 1) st.wins += 1;
+          if (result.eliminated && (result.status ?? 1) === 1) st.eliminations += 1;
+          if (!result.eliminated && result.placing != null && result.placing > 0) {
+            while (st.placings.length < result.placing) st.placings.push(0);
+            st.placings[result.placing - 1] += 1;
+          }
+        }
+      }
+    }
+  }
+
+  const out: { row: StandingRow; placings: number[]; baseIdx: number }[] = [];
+  for (const [teamId, st] of stats) {
+    const team = teamById.get(teamId);
+    const base = baseByTeam.get(teamId);
+    const bonusPoints = base?.row.bonusPoints ?? 0;
+    const finalTier = hasLetteredFinals ? (tierByTeam.get(teamId) ?? null) : (base?.row.finalTier ?? null);
+    const withdrawn = team?.isWithdrawn === true || base?.row.withdrawn === true;
+    out.push({
+      row: {
+        teamId,
+        teamName: st.teamName,
+        clubName: team?.clubName ?? base?.row.clubName ?? '',
+        bibColour: team?.bibColour ?? base?.row.bibColour ?? null,
+        totalPoints: st.points + bonusPoints,
+        racesRun: st.racesRun,
+        wins: st.wins,
+        eliminations: st.eliminations,
+        finalTier,
+        withdrawn,
+        bonusPoints,
+      },
+      placings: st.placings,
+      baseIdx: base?.idx ?? Number.MAX_SAFE_INTEGER,
+    });
+  }
+
+  out.sort((a, b) => {
+    const tierA = a.row.finalTier ?? Number.MAX_SAFE_INTEGER;
+    const tierB = b.row.finalTier ?? Number.MAX_SAFE_INTEGER;
+    if (tierA !== tierB) return tierA - tierB;
+    if (b.row.totalPoints !== a.row.totalPoints) return b.row.totalPoints - a.row.totalPoints;
+    if (a.baseIdx !== Number.MAX_SAFE_INTEGER && b.baseIdx !== Number.MAX_SAFE_INTEGER && a.baseIdx !== b.baseIdx) {
+      return a.baseIdx - b.baseIdx;
+    }
+    const maxLen = Math.max(a.placings.length, b.placings.length);
+    for (let i = 0; i < maxLen; i++) {
+      const ca = a.placings[i] ?? 0;
+      const cb = b.placings[i] ?? 0;
+      if (cb !== ca) return cb - ca;
+    }
+    return a.row.teamId - b.row.teamId;
+  });
+
+  return out.map((item) => item.row);
+}
 
 /** "1st", "2nd", "3rd", "11th", "22nd". */
 export function ordinal(n: number): string {
@@ -150,11 +290,12 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
     }
   });
 
-  const finalGroups = buildFinalGroups(sessions, sectionId);
   // Once finals exist the final a team is in (A, then B, then C) decides its place before points do.
   const tier = (row: StandingRow) => row.finalTier ?? Number.MAX_SAFE_INTEGER;
   const level = (a: StandingRow, b: StandingRow) => tier(a) === tier(b) && a.totalPoints === b.totalPoints;
   const ordered = [...standings].sort((a, b) => tier(a) - tier(b) || b.totalPoints - a.totalPoints);
+  const standingRank = new Map(ordered.map((row, idx) => [row.teamId, (row as { place?: number }).place ?? idx + 1]));
+  const finalGroups = buildFinalGroups(sessions, sectionId, standingRank);
   const rows: ToplistRow[] = ordered.map((row) => {
     const position = ordered.findIndex((other) => level(other, row)) + 1;
     const joint = ordered.filter((other) => level(other, row)).length > 1;
@@ -168,7 +309,9 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   const scored = rows.some((row) => row.points > 0);
   let cutAfter: number | null = null;
   let runoff: Toplist['runoff'] = null;
-  const places = finalistCount ?? 0;
+  const hasFinals = finalGroups.length > 0 || ordered.some((row) => row.finalTier != null);
+  const defaultPlaces = !hasFinals ? (heatSessions.find((s) => (s.lanesPerHeat ?? 0) > 0)?.lanesPerHeat ?? 6) : 0;
+  const places = finalistCount === 0 ? 0 : (finalistCount ?? defaultPlaces);
   if (scored && places > 0 && rows.length > places) {
     const linePoints = rows[places - 1].points;
     const tied = rows.filter((row) => row.points === linePoints);
@@ -388,8 +531,9 @@ function buildByGame(heatSessions: Session[], hcTeamIds: Set<number>): GameStand
 const finalWording = /\bfinals?\b/i;
 
 /** One group per final heat that has results: teams by the points they scored in it, tied teams sharing a place. */
-function buildFinalGroups(sessions: Session[], sectionId: number): FinalGroup[] {
+function buildFinalGroups(sessions: Session[], sectionId: number, standingRank?: Map<number, number>): FinalGroup[] {
   const groups: FinalGroup[] = [];
+  const rankOf = (teamId: number) => standingRank?.get(teamId) ?? Number.MAX_SAFE_INTEGER;
   const ordered = sessions
     .filter((session) => session.competitionSectionId === sectionId && isRace(session))
     .sort((a, b) => a.orderIndex - b.orderIndex);
@@ -404,7 +548,9 @@ function buildFinalGroups(sessions: Session[], sectionId: number): FinalGroup[] 
         scored.set(result.teamId, { teamName: result.teamName, points: (known?.points ?? 0) + result.points });
       }
       const unscored = heat.entries.filter((entry) => !scored.has(entry.teamId));
-      const ranked = [...scored].map(([teamId, value]) => ({ teamId, ...value })).sort((a, b) => b.points - a.points || a.teamName.localeCompare(b.teamName));
+      const ranked = [...scored]
+        .map(([teamId, value]) => ({ teamId, ...value }))
+        .sort((a, b) => b.points - a.points || rankOf(a.teamId) - rankOf(b.teamId) || a.teamName.localeCompare(b.teamName));
       const rows: FinalRow[] = ranked.map((item) => ({
         teamId: item.teamId,
         teamName: item.teamName,

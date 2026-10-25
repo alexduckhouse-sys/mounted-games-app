@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { api } from '../../api';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { FAVOURITES_KEY } from '../../lib/favourites';
 import { competition, heat, race, session } from '../../test/factories';
@@ -47,21 +48,25 @@ it('shows a late row with its delay and the planned time struck through', () => 
   const { container } = renderBoard();
   const late = container.querySelector('.tt-late')!;
   expect(late).toHaveTextContent('Heat 2');
-  expect(late.querySelector('.tt-planned')).toHaveTextContent(/^\+6 · 11:00/);
+  expect(late.querySelector('.tt-planned')).toHaveTextContent(/^\+6m · 11:00/);
   expect(late.querySelector('.tt-planned s')).toHaveTextContent(/11:00/);
+  expect(late.querySelector('.tt-time')).toHaveClass('tt-time-late');
+  expect(late.querySelector('.tt-shift-card')).toBeNull();
   // Screen readers get the planned time, the new time and the status in words.
   expect(late).toHaveTextContent(/Planned 11:00.*, now 11:06/);
   expect(late).toHaveTextContent('+6 min');
   expect(screen.getAllByText('Main Arena · 6 min late').length).toBeGreaterThan(0);
 });
 
-it('marks the running heat "ON NOW" without a planned-time note', () => {
+it('marks the running heat "ON NOW" without a planned-time note or late summary on the live session', () => {
   const { container } = renderBoard();
   const live = container.querySelector('.tt-live')!;
   expect(live).toHaveTextContent('Heat 1');
   expect(within(live as HTMLElement).getByText('ON NOW')).toBeInTheDocument();
   expect(live.querySelector('.tt-planned')).toBeNull();
-  expect(screen.getByText('Main Arena · 6 min late')).toBeVisible();
+  expect(live.querySelector('.tt-time')).not.toHaveClass('tt-time-late');
+  expect(screen.getByText('Main Arena · 1 heat')).toBeVisible();
+  expect(screen.queryByText('Main Arena · 6 min late')).toBeNull();
 });
 
 it('uses the count in the group summary when nothing is late', () => {
@@ -199,10 +204,17 @@ it('defaults the header title to Timetable and leaves the time out until loaded'
   expect(JSON.parse(screen.getByTestId('header').textContent!)).toMatchObject({ title: 'Timetable', subtitle: 'Spring Games' });
 });
 
-it('still renders the bandExtra, lead and footer slots', () => {
+it('renders the bandExtra and lead slots, places Status colours above Show full timetable, and reveals footer inside Show full timetable', () => {
   renderBoard(<TimetableBoard bandExtra={<p>age chips</p>} lead={<p>toplist lead</p>} footer={<p>page footer</p>} />);
   expect(screen.getByText('age chips')).toBeVisible();
   expect(screen.getByText('toplist lead')).toBeVisible();
+  expect(screen.queryByText('page footer')).toBeNull();
+
+  const legend = screen.getByRole('list', { name: 'Status colours' });
+  const toggle = screen.getByRole('button', { name: 'Show full timetable' });
+  expect(toggle.compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+
+  fireEvent.click(toggle);
   expect(screen.getByText('page footer')).toBeVisible();
 });
 
@@ -287,48 +299,45 @@ it('shows ON NOW · Race X of Y when a live heat has races, highlights followed 
   expect(headings).toEqual(['Under 12 · Session 1', 'Under 15 · Session 1']);
 });
 
-it('filters the timetable down to one team’s heats and shows their lane when heats have teams', () => {
+it('filters the timetable by age group (section) when the competition has multiple sections', () => {
   setCompetition({
+    sections: [
+      { id: 10, competitionId: 1, format: 2, ageGroup: 'Under 12', displayName: 'Teams Under 12' },
+      { id: 20, competitionId: 1, format: 2, ageGroup: 'Under 15', displayName: 'Teams Under 15' },
+    ],
     sessions: [
       session(1, {
+        competitionSectionId: 10,
+        sectionName: 'Teams Under 12',
         arenaName: 'Main Arena',
         scheduledStart: `${day}T10:00:00`,
-        heats: [
-          heat(11, {
-            sessionId: 1,
-            orderIndex: 0,
-            label: 'Heat 1',
-            entries: [
-              { id: 1, teamId: 101, teamName: 'Cheshire A', laneIndex: 0 },
-              { id: 2, teamId: 102, teamName: 'Oakley B', laneIndex: 2 },
-            ],
-          }),
-          heat(12, {
-            sessionId: 1,
-            orderIndex: 1,
-            label: 'Heat 2',
-            entries: [
-              { id: 3, teamId: 103, teamName: 'Romney C', laneIndex: 1 },
-            ],
-          }),
-        ],
+        heats: [heat(11, { sessionId: 1, orderIndex: 0, label: 'U12 Heat 1' })],
+      }),
+      session(2, {
+        competitionSectionId: 20,
+        sectionName: 'Teams Under 15',
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T10:30:00`,
+        heats: [heat(22, { sessionId: 2, orderIndex: 0, label: 'U15 Heat 1' })],
       }),
     ],
   });
   renderBoard();
-  const select = screen.getByRole('combobox', { name: 'Team' });
-  fireEvent.click(select);
-  expect(within(screen.getByRole('listbox', { name: 'Team' })).getAllByRole('option').map((o) => o.textContent))
-    .toEqual(['All teams', 'Cheshire A', 'Oakley B', 'Romney C']);
+  expect(screen.queryByRole('combobox', { name: 'Team' })).toBeNull();
+  expect(screen.queryByRole('searchbox', { name: 'Search timetable' })).toBeNull();
 
-  fireEvent.click(screen.getByRole('option', { name: 'Oakley B' }));
-  expect(screen.getByText('Heat 1')).toBeVisible();
-  expect(screen.getByText('Lane 3')).toBeVisible();
-  expect(screen.queryByText('Heat 2')).toBeNull();
+  const select = screen.getByRole('combobox', { name: 'Age group' });
+  fireEvent.click(select);
+  expect(within(screen.getByRole('listbox', { name: 'Age group' })).getAllByRole('option').map((o) => o.textContent))
+    .toEqual(['All age groups', 'Under 12', 'Under 15']);
+
+  fireEvent.click(screen.getByRole('option', { name: 'Under 15' }));
+  expect(screen.getByText('U15 Heat 1')).toBeVisible();
+  expect(screen.queryByText('U12 Heat 1')).toBeNull();
 
   fireEvent.click(select);
-  fireEvent.click(screen.getByRole('option', { name: 'All teams' }));
-  expect(screen.getByText('Heat 2')).toBeVisible();
+  fireEvent.click(screen.getByRole('option', { name: 'All age groups' }));
+  expect(screen.getByText('U12 Heat 1')).toBeVisible();
 });
 
 it('hides the arena selector when viewing a specific section', () => {
@@ -342,40 +351,162 @@ it('hides the arena selector when viewing a specific section', () => {
   expect(screen.queryByRole('combobox', { name: 'Arena' })).toBeNull();
 });
 
-it('toggles the lanes dropdown on a heat row to reveal lane numbers and team links', () => {
+it('links heat rows directly to the heat without a lanes dropdown and shows a single shift note and coloured time on moved upcoming sessions', () => {
+  const tomorrow = dayKey(new Date(Date.now() + 86_400_000));
   setCompetition({
+    endDate: tomorrow,
     sessions: [
       session(1, {
+        status: 1,
         arenaName: 'Main Arena',
         scheduledStart: `${day}T10:00:00`,
+        startedAt: `${day}T10:15:00`,
         heats: [
           heat(11, {
             sessionId: 1,
             orderIndex: 0,
             label: 'Heat 1',
             entries: [
-              { id: 1, teamId: 101, teamName: 'Cheshire A', laneIndex: 0 },
-              { id: 2, teamId: 102, teamName: 'Oakley B', laneIndex: 2 },
+              { id: 1, teamId: 101, teamName: 'Cheshire A', laneIndex: 1 },
+              { id: 2, teamId: 102, teamName: 'Oakley B', laneIndex: 3 },
             ],
+          }),
+          heat(12, {
+            sessionId: 1,
+            orderIndex: 1,
+            label: 'Heat 2',
+          }),
+        ],
+      }),
+      session(2, {
+        status: 0,
+        orderIndex: 2,
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T11:00:00`,
+        heats: [
+          heat(21, {
+            sessionId: 2,
+            orderIndex: 0,
+            label: 'Upcoming Late Heat',
+          }),
+        ],
+      }),
+      session(3, {
+        status: 0,
+        orderIndex: 3,
+        arenaName: 'Arena Two',
+        scheduledStart: `${day}T10:45:00`,
+        notes: '[shift:-15]',
+        heats: [
+          heat(31, {
+            sessionId: 3,
+            orderIndex: 0,
+            label: 'Early Heat 3',
           }),
         ],
       }),
     ],
   });
+  const { container } = renderBoard();
+  expect(screen.queryByRole('button', { name: /Lanes for/i })).toBeNull();
+  expect(screen.getByRole('link', { name: /Heat 1/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=11');
+  expect(container.querySelector('.tt-strip')).toHaveClass('tt-strip-stacked');
+  expect(container.querySelectorAll('.tt-shift-card')).toHaveLength(0);
+
+  // Live session rows do not show how late they are running.
+  const liveRow = screen.getByRole('link', { name: /Heat 1/ });
+  const sameSessionRow = screen.getByRole('link', { name: /Heat 2/ });
+  expect(liveRow.querySelector('.tt-planned')).toBeNull();
+  expect(sameSessionRow.querySelector('.tt-planned')).toBeNull();
+
+  // Subsequent session in the same arena shows how late it is running and colours the time.
+  const upcomingLateRow = screen.getByRole('link', { name: /Upcoming Late Heat/ });
+  expect(upcomingLateRow.querySelector('.tt-planned')).toHaveTextContent(/^\+15m · 10:00|^\+15m · 11:00/);
+  expect(upcomingLateRow.querySelector('.tt-time')).toHaveClass('tt-time-late');
+
+  // Early-shifted session shows negative shift and colours the time green.
+  const earlyRow = screen.getByRole('link', { name: /Early Heat 3/ });
+  expect(earlyRow.querySelector('.tt-planned')).toHaveTextContent(/^-15m · 11:00/);
+  expect(earlyRow.querySelector('.tt-time')).toHaveClass('tt-time-early');
+
+  // Switching to Day 2 in a 2-day, 2-arena competition keeps the Arena selector available.
+  const [, day2Btn] = within(screen.getByRole('group', { name: 'Choose day' })).getAllByRole('button');
+  fireEvent.click(day2Btn);
+  expect(screen.getByRole('combobox', { name: 'Arena' })).toBeInTheDocument();
+});
+
+it('formats delays of an hour or more as hours and minutes, and lets organisers pause, resume, apply custom delays, and see pace', async () => {
+  const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
+  auth.organise = true;
+  const completedRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true }));
+  setCompetition({
+    sessions: [
+      session(1, {
+        status: 2,
+        orderIndex: 1,
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T09:00:00`,
+        startedAt: `${day}T09:00:00`,
+        heats: [
+          heat(11, {
+            sessionId: 1,
+            orderIndex: 0,
+            label: 'Finished Heat 1',
+            durationMinutes: 30,
+            startedAt: `${day}T09:00:00`,
+            finishedAt: `${day}T09:20:00`,
+            races: completedRaces,
+          }),
+        ],
+      }),
+      session(2, {
+        status: 0,
+        orderIndex: 2,
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T11:34:00`,
+        notes: '[shift:+94]',
+        heats: [
+          heat(21, {
+            sessionId: 2,
+            orderIndex: 0,
+            label: 'Very Late Heat',
+          }),
+        ],
+      }),
+    ],
+  });
+
+  const { unmount } = renderBoard();
+  const lateRow = screen.getByRole('link', { name: /Very Late Heat/ });
+  expect(lateRow.querySelector('.tt-planned')).toHaveTextContent('+1h 34m · 10:00');
+  expect(lateRow).toHaveTextContent('+1h 34m');
+  expect(screen.getByText('Main Arena · 1h 34m late')).toBeInTheDocument();
+  expect(screen.getByText('Pace: ~4.0m/race')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/pause', { arenaName: undefined }));
+
+  const input = screen.getByRole('spinbutton', { name: 'Custom delay minutes' });
+  fireEvent.change(input, { target: { value: '95' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: 95, arenaName: undefined }));
+  unmount();
+
+  // When a session has a [paused:...] tag, the button switches to Continue and posts to /resume.
+  setCompetition({
+    sessions: [
+      session(2, {
+        status: 0,
+        orderIndex: 2,
+        arenaName: 'Main Arena',
+        scheduledStart: `${day}T10:00:00`,
+        notes: '[paused:1700000000000]',
+        heats: [heat(21, { sessionId: 2, orderIndex: 0, label: 'Paused Heat' })],
+      }),
+    ],
+  });
   renderBoard();
-  const toggle = screen.getByRole('button', { name: 'Lanes for Heat 1' });
-  expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByRole('list', { name: 'Lanes for Heat 1' })).toBeNull();
-
-  fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  const lanesList = screen.getByRole('list', { name: 'Lanes for Heat 1' });
-  expect(within(lanesList).getByText('Lane 1')).toBeVisible();
-  expect(within(lanesList).getByText('Lane 3')).toBeVisible();
-  expect(within(lanesList).getByRole('link', { name: 'Cheshire A' })).toHaveAttribute('href', '/competitions/1/teams/101');
-  expect(within(lanesList).getByRole('link', { name: 'Oakley B' })).toHaveAttribute('href', '/competitions/1/teams/102');
-
-  fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByRole('list', { name: 'Lanes for Heat 1' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/resume', { arenaName: undefined }));
+  postSpy.mockRestore();
 });

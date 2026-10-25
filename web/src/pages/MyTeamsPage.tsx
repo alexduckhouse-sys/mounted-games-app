@@ -56,6 +56,33 @@ export function MyTeamsPage() {
     return out;
   }, [teams, comps]);
 
+  const clashByTeamId = useMemo(() => {
+    const out = new Map<number, string>();
+    for (let i = 0; i < teams.length; i++) {
+      for (let j = i + 1; j < teams.length; j++) {
+        const a = teams[i];
+        const b = teams[j];
+        if (a.competitionId !== b.competitionId) continue;
+        const rowsA = (rowsByTeam.get(a.id) ?? []).filter((r) => r.status !== 'over');
+        const rowsB = (rowsByTeam.get(b.id) ?? []).filter((r) => r.status !== 'over');
+        const overlaps = rowsA.some((ra) =>
+          rowsB.some((rb) => {
+            if (ra.heatId === rb.heatId) return false;
+            if (ra.status === 'live' && rb.status === 'live') return true;
+            const ta = (ra.effective ?? ra.scheduled)?.getTime();
+            const tb = (rb.effective ?? rb.scheduled)?.getTime();
+            return ta != null && tb != null && Math.abs(ta - tb) < 20 * 60_000;
+          }),
+        );
+        if (overlaps) {
+          out.set(a.id, b.displayName);
+          out.set(b.id, a.displayName);
+        }
+      }
+    }
+    return out;
+  }, [teams, rowsByTeam]);
+
   const club = user?.clubName || teams.find((t) => t.relationship === 'manager' || t.relationship === 'trainer')?.clubName;
   usePageHeader({
     title: 'My teams',
@@ -72,6 +99,7 @@ export function MyTeamsPage() {
         const next = nextHeatRow(rows);
         const form = forms.find((f) => f.teamId === team.id);
         const section = displaySectionName(team.sectionName);
+        const clashWith = clashByTeamId.get(team.id);
         if (team.id !== expandedId) {
           return (
             <button key={team.id} type="button" aria-expanded="false" onClick={() => setOpenId(team.id)}
@@ -80,7 +108,11 @@ export function MyTeamsPage() {
                 <strong className="mg-display truncate text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">{team.displayName}</strong>
                 <span className="truncate text-xs text-[rgb(var(--mg-muted))]">{[section, next ? `next ${heatTime(next)}, ${next.label}${next.arenaName ? ` · ${next.arenaName}` : ''}` : 'no heats yet'].join(' · ')}</span>
               </span>
-              <span className="flex items-center gap-1.5"><RelationshipTag team={team} /><FormChip team={team} form={form} /></span>
+              <span className="flex items-center gap-1.5">
+                {clashWith && <span className="mg-tag shrink-0 !bg-amber-100 !text-amber-900" title={`Clashes with ${clashWith}`}>Schedule clash</span>}
+                <RelationshipTag team={team} />
+                <FormChip team={team} form={form} />
+              </span>
               <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
             </button>
           );
@@ -92,6 +124,7 @@ export function MyTeamsPage() {
                 <strong className="mg-display truncate text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">{team.displayName}</strong>
                 <span className="truncate text-xs text-[rgb(var(--mg-muted))]">{[section, ridersText(form), comps.get(team.competitionId)?.name].filter(Boolean).join(' · ')}</span>
               </Link>
+              {clashWith && <span className="mg-tag shrink-0 !bg-amber-100 !text-amber-900" title={`Clashes with ${clashWith}`}>Schedule clash</span>}
               <RelationshipTag team={team} />
               <FormChip team={team} form={form} />
               <button type="button" onClick={() => setOpenId(null)} aria-expanded="true" aria-label={`Hide details for ${team.displayName}`} className="flex h-11 w-9 shrink-0 items-center justify-center text-[rgb(var(--mg-faint))]"><ChevronDown className="h-4 w-4 rotate-180" aria-hidden="true" /></button>

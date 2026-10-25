@@ -77,6 +77,9 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
     sections: sections.length > 0 ? sections : [defaultSection()],
     breaks,
     laneHatbands: c.laneHatbands ?? [],
+    cardsEnabled: (() => {
+      try { return localStorage.getItem(`mg.cardsEnabled.${c.id}`) === '1'; } catch { return false; }
+    })(),
   };
 }
 

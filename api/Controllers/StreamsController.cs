@@ -59,6 +59,12 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
         using var lease = await locks.AcquireAsync(competitionId, ct);
         var arena = request.ArenaName.Trim();
         var angle = request.AngleName.Trim();
+        if (ScorerLinkAccessAttribute.TryGetCurrent(HttpContext) is { } scorerLink
+            && !string.Equals(scorerLink.ArenaName, "All arenas", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(scorerLink.ArenaName, arena, StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "This link can only stream its assigned arena." });
+        }
         var active = db.LiveStreams.Where(s => s.CompetitionId == competitionId && s.Status != LiveStreamStatus.Ended);
         var arenaKey = arena.ToLower();
         var angleKey = angle.ToLower();
@@ -190,18 +196,68 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
         return dto;
     }
 
+    private static readonly HashSet<string> AllowedCommands = new(StringComparer.Ordinal)
+    {
+        "setZoom", "mute", "pause", "flipCamera", "windFilter", "saveReplay", "setQualityPreset", "selectAngle"
+    };
+
     [HttpPost("{streamId:int}/heartbeat")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<IActionResult> Heartbeat(int competitionId, int streamId, CancellationToken ct)
     {
         if (!_options.Enabled) return Disabled();
+        StreamTelemetryRequest? telemetry = null;
+        if (Request.ContentType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            try { telemetry = await Request.ReadFromJsonAsync<StreamTelemetryRequest>(cancellationToken: ct); }
+            catch (JsonException) { return BadRequest(); }
+        }
         using var lease = await locks.AcquireAsync(competitionId, ct);
         var stream = await FindAsync(competitionId, streamId, ct);
         if (stream is null) return NotFound();
         if (stream.Status == LiveStreamStatus.Ended) return ConflictProblem("This stream has ended.");
         stream.LastHeartbeatAt = Now;
+        var muteChanged = false;
+        if (telemetry?.AudioMuted is { } muted && stream.AudioMuted != muted)
+        {
+            stream.AudioMuted = muted;
+            muteChanged = true;
+        }
         await db.SaveChangesAsync(ct);
+        if (muteChanged)
+        {
+            var dto = stream.ToDto(await viewers.TotalAsync(streamId));
+            await live.StreamUpdated(competitionId, dto);
+        }
+        if (telemetry is not null)
+        {
+            await live.StreamTelemetry(competitionId, new StreamTelemetryDto(
+                stream.Id, stream.ArenaName,
+                telemetry.BatteryLevel, telemetry.BatteryCharging,
+                telemetry.Zoom, telemetry.MaxZoom,
+                telemetry.Fps, telemetry.BitrateKbps,
+                telemetry.Signal, telemetry.AudioMuted ?? stream.AudioMuted,
+                telemetry.WindFilter, telemetry.QualityPreset, telemetry.CaptureResolution,
+                Now));
+        }
+        return NoContent();
+    }
+
+    [HttpPost("{streamId:int}/command")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<IActionResult> Command(int competitionId, int streamId, StreamCommandRequest request, CancellationToken ct)
+    {
+        if (!_options.Enabled) return Disabled();
+        if (!AllowedCommands.Contains(request.Command))
+            ModelState.AddModelError(nameof(request.Command), "Unsupported stream command.");
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+        var stream = await FindAsync(competitionId, streamId, ct);
+        if (stream is null) return NotFound();
+        if (stream.Status == LiveStreamStatus.Ended) return ConflictProblem("This stream has ended.");
+        await live.StreamCommand(competitionId, new StreamCommandDto(
+            stream.Id, stream.ArenaName, request.Command, request.Value, Now));
         return NoContent();
     }
 

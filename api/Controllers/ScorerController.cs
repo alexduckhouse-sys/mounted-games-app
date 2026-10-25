@@ -42,13 +42,14 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
             .ThenBy(s => s.Id)
             .Select(s => s.ToDto())
             .ToList();
-        return new ScorerSessionDto(link.Label, competition.Id, competition.Name, link.ArenaName, link.ExpiresAt, ordered);
+        return new ScorerSessionDto(link.Label, competition.Id, competition.Name, link.ArenaName, link.ExpiresAt, ordered, link.Scope);
     }
 
     [EnableRateLimiting(RequestLimits.ScorerReadPolicy)]
     [HttpGet("api/scorer/races/{raceId:int}/score")]
     public async Task<ActionResult<RaceScoreDto>> GetScore(int raceId, CancellationToken ct)
     {
+        if (Link.Scope == ScorerLink.ScopeCamera) return StatusCode(StatusCodes.Status403Forbidden, new { message = "This link is for the tripod camera only." });
         if (!await InScopeAsync(raceId, ct)) return NotFound();
         try
         {
@@ -63,6 +64,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     [HttpPut("api/scorer/races/{raceId:int}/score")]
     public async Task<ActionResult<RaceScoreDto>> UpdateScore(int raceId, UpdateRaceScoreRequest request, CancellationToken ct)
     {
+        if (Link.Scope == ScorerLink.ScopeCamera) return StatusCode(StatusCodes.Status403Forbidden, new { message = "This link is for the tripod camera only." });
         if (!await InScopeAsync(raceId, ct)) return NotFound();
         if (request.Places?.Any(p => p.RefereeNote is { Length: > 1000 }) == true)
             return BadRequest(new { message = "Note must be 1000 characters or fewer." });
@@ -89,6 +91,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     [HttpPost("api/scorer/races/{raceId:int}/results")]
     public async Task<ActionResult<HeatDto>> SubmitResults(int raceId, SubmitRaceResultsRequest req, CancellationToken ct)
     {
+        if (Link.Scope == ScorerLink.ScopeCamera) return StatusCode(StatusCodes.Status403Forbidden, new { message = "This link is for the tripod camera only." });
         if (!await InScopeAsync(raceId, ct)) return NotFound();
         var race = await db.Races.Include(r => r.Heat).ThenInclude(h => h!.Session)
             .FirstOrDefaultAsync(r => r.Id == raceId, ct);

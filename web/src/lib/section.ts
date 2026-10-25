@@ -10,6 +10,7 @@ export const FORMAT_PLURAL: Record<SectionFormatNumber, string> = { 1: 'Pairs', 
 // A last word of four or more letters ending in a single "s": Juniors, Seniors, Novices.
 const PLURAL_WORD = /(?:^|\s)[A-Za-z]{2,}[^sS\W]s$/i;
 const SINGULAR_TEAM_AGE = /\b(Junior|Senior|Novice)$/i;
+const TRAILING_TEAMS = /^(.+?)\s+teams?(?:\s+([A-Z0-9]+))?$/i;
 
 /** "Juniors" becomes "Junior"; anything else, such as "Under 12" or "Open", is kept as typed. */
 export function singularAgeGroup(ageGroup: string): string {
@@ -17,8 +18,17 @@ export function singularAgeGroup(ageGroup: string): string {
   return PLURAL_WORD.test(text) ? text.slice(0, -1) : text;
 }
 
+export function stripTrailingTeams(value: string): string {
+  const match = TRAILING_TEAMS.exec(value.trim());
+  if (!match) return value.trim();
+  const rawBase = match[1].trim();
+  const base = SINGULAR_TEAM_AGE.test(rawBase) ? `${rawBase}s` : rawBase;
+  return match[2] ? `${base} ${match[2].trim()}` : base;
+}
+
 function teamAgeGroup(ageGroup: string): string {
-  const stripped = ageGroup.trim().replace(/^teams?\s+|\s+teams?$/i, '').trim();
+  const withoutLeading = ageGroup.trim().replace(/^teams?\s+/i, '').trim();
+  const stripped = stripTrailingTeams(withoutLeading);
   if (!stripped || /^teams?$/i.test(stripped)) return 'Teams';
   return SINGULAR_TEAM_AGE.test(stripped) ? `${stripped}s` : stripped;
 }
@@ -36,12 +46,11 @@ export function sectionDisplayName(format: number, ageGroup: string): string {
 const LEADING_FORMAT: ReadonlyArray<[RegExp, SectionFormatNumber]> = [
   [/^teams?\s+(.+)$/i, 2], [/^pairs?\s+(.+)$/i, 1], [/^individuals?\s+(.+)$/i, 3],
 ];
-const TRAILING_TEAMS = /^(.+)\s+teams?$/i;
 
 /**
  * How to show a stored name. Older names put the format first ("Teams Under 12", "Individual Juniors") or appended
- * "Teams" ("Senior Teams", "Under 12 Teams"); teams show just the age group ("Under 12", "Seniors") while pairs and
- * individuals keep their format ("Junior Individuals"). Anything else is shown as it is.
+ * "Teams" ("Senior Teams", "Under 12 Teams", "Seniors teams A"); teams show just the age group ("Under 12", "Seniors", "Seniors A")
+ * while pairs and individuals keep their format ("Junior Individuals"). Anything else is shown as it is.
  */
 export function displaySectionName(name: string | null | undefined): string {
   const text = (name ?? '').replace(/\s+/g, ' ').trim();
@@ -49,7 +58,6 @@ export function displaySectionName(name: string | null | undefined): string {
     const match = pattern.exec(text);
     if (match) return sectionDisplayName(format, match[1]);
   }
-  const trailingTeams = TRAILING_TEAMS.exec(text);
-  if (trailingTeams) return sectionDisplayName(2, trailingTeams[1]);
+  if (TRAILING_TEAMS.test(text)) return sectionDisplayName(2, text);
   return text;
 }

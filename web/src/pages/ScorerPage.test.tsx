@@ -1,9 +1,9 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axiosError, heat, race, result, session } from '../test/factories';
 import type { Heat, ScorerSession } from '../types';
-import { HEAT_SAVED } from '../offline/useScoreOutbox';
+import { HEAT_SAVED, updateOutbox } from '../offline/useScoreOutbox';
 import { ScorerPage } from './ScorerPage';
 
 const link = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
@@ -105,7 +105,8 @@ describe('ScorerPage', () => {
     })] })] }) });
     open();
     await opened('Flag');
-    await user.click(screen.getByRole('button', { name: /1\. Bending/ }));
+    await user.click(screen.getByRole('button', { name: 'Previous race' }));
+    await opened('Bending');
     // The saved placings are there to correct.
     expect(placed()).toBe(3);
 
@@ -124,8 +125,7 @@ describe('ScorerPage', () => {
       races: [race(11, { name: 'Bending', isComplete: true, results: [result(1, 1), result(2, 2), result(3, 3)] })],
     })] })] }) });
     open();
-    await screen.findByRole('button', { name: /1\. Bending/ });
-    await user.click(screen.getByRole('button', { name: /1\. Bending/ }));
+    await opened('Bending');
     await user.click(screen.getByRole('button', { name: /Clear/ }));
     expect(placed()).toBe(0);
   });
@@ -150,7 +150,7 @@ describe('ScorerPage', () => {
     open();
     await opened('Bending');
     await tapTeams(user, ['Team 1']);
-    await user.click(screen.getByRole('button', { name: 'Eliminate Team 2' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Team 2, lane/ }), { key: 'Delete' });
     await user.click(screen.getByRole('button', { name: 'Race complete' }));
     const sheet = await screen.findByRole('dialog', { name: 'Why were teams eliminated?' });
     await user.click(within(sheet).getByRole('button', { name: 'Did not start' }));
@@ -294,7 +294,7 @@ describe('ScorerPage', () => {
     act(() => { window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: { sessionId: 1, heat: newer } })); });
     act(() => { window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: {} })); });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /^1\. Bending.*1st Team 1/ })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Scoring Flag' })).toBeInTheDocument());
   });
 
   it('reloads when the phone comes back online or the page is shown again', async () => {
@@ -303,5 +303,81 @@ describe('ScorerPage', () => {
     const calls = link.get.mock.calls.length;
     act(() => { window.dispatchEvent(new Event('online')); });
     await waitFor(() => expect(link.get.mock.calls.length).toBeGreaterThan(calls));
+  });
+
+  it('shows the side-by-side Score clash banner when a queued score conflicts and resolves it in one tap', async () => {
+    const user = userEvent.setup();
+    updateOutbox(() => [{
+      saveId: 'c1',
+      competitionId: 5,
+      sessionId: 1,
+      heatId: 10,
+      raceId: 11,
+      label: 'Heat 1 · Bending',
+      places: [{ teamId: 2, place: 1, eliminated: false, points: 2 }, { teamId: 1, place: 2, eliminated: false, points: 1 }],
+      expected: [],
+      teamNames: { 1: 'Team 1', 2: 'Team 2' },
+      queuedAt: new Date().toISOString(),
+      state: 'conflict',
+      message: 'Results changed on another device.',
+    }]);
+    open();
+    expect(await screen.findByRole('alert', { name: 'Score clash' })).toBeInTheDocument();
+    expect(screen.getByText('Result A (Saved)')).toBeInTheDocument();
+    expect(screen.getByText('Result B (Submitted)')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Keep Result A' }));
+    expect(screen.queryByRole('alert', { name: 'Score clash' })).not.toBeInTheDocument();
+  });
+
+  it('shows the RemoteStreamControlBar when scope is 2 (Score + Stream) and sends remote camera and director cut commands', async () => {
+    const user = userEvent.setup();
+    link.get.mockImplementation(async (url: string) => {
+      if (url === '/scorer/session') return { data: timetable({ scope: 2 }) };
+      if (url === '/competitions/1/streams') {
+        return {
+          data: {
+            enabled: true,
+            streams: [
+              { id: 10, competitionId: 1, arenaName: 'Main', angleName: 'Main camera', status: 0, caption: null, audioMuted: false, hasAudio: true, startedAt: '2026-10-24T12:00:00Z', viewerCount: 14, generation: 1 },
+              { id: 11, competitionId: 1, arenaName: 'Main', angleName: 'Finish line', status: 0, caption: null, audioMuted: false, hasAudio: true, startedAt: '2026-10-24T12:00:00Z', viewerCount: 8, generation: 1 },
+            ],
+          },
+        };
+      }
+      return { data: {} };
+    });
+    link.post.mockResolvedValue({ data: {} });
+
+    open();
+    expect(await screen.findByRole('region', { name: 'Remote camera control' })).toBeInTheDocument();
+    expect(await screen.findByText(/LIVE · Main camera \(14 watching\)/)).toBeInTheDocument();
+
+    // Mute camera mic
+    await user.click(screen.getByRole('button', { name: 'Mute camera mic' }));
+    expect(link.post).toHaveBeenCalledWith('/competitions/1/streams/10/command', { command: 'mute', value: 'true' });
+
+    // Remote zoom 2x
+    await user.click(screen.getByRole('button', { name: 'Remote zoom 2x' }));
+    expect(link.post).toHaveBeenCalledWith('/competitions/1/streams/10/command', { command: 'setZoom', value: '2' });
+
+    // Stream quality 720p
+    await user.click(screen.getByRole('button', { name: 'Stream quality 720p' }));
+    expect(link.post).toHaveBeenCalledWith('/competitions/1/streams/10/command', { command: 'setQualityPreset', value: '720p' });
+
+    // Multi-camera director cut to Finish line
+    await user.click(screen.getByRole('button', { name: 'Cut to Finish line' }));
+    expect(link.post).toHaveBeenCalledWith('/competitions/1/streams/11/command', { command: 'selectAngle', value: '11' });
+
+    // Save 15s camera replay
+    await user.click(screen.getByRole('button', { name: 'Save 15s camera replay' }));
+    expect(link.post).toHaveBeenCalledWith('/competitions/1/streams/11/command', { command: 'saveReplay', value: '15' });
+  });
+
+  it('shows the TripodCameraBroadcaster without scoring controls when scope is 1 (Camera only)', async () => {
+    link.get.mockResolvedValue({ data: timetable({ scope: 1 }) });
+    open();
+    expect(await screen.findByRole('region', { name: 'Tripod camera broadcaster' })).toBeInTheDocument();
+    expect(screen.getByText(/Stream-only link/)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Scoring Bending' })).not.toBeInTheDocument();
   });
 });

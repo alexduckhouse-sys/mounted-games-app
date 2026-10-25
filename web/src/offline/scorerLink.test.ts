@@ -93,9 +93,10 @@ describe('scorerApi', () => {
 
 describe('parseScorerSession', () => {
   it('accepts a timetable and drops half-formed sessions', () => {
-    const parsed = parseScorerSession({ ...valid, sessions: [session(1), null, { id: 9 }] });
+    const parsed = parseScorerSession({ ...valid, scope: 2, sessions: [session(1), null, { id: 9 }] });
     expect(parsed?.sessions.map((s) => s.id)).toEqual([1]);
     expect(parsed?.competitionName).toBe('Spring Games');
+    expect(parsed?.scope).toBe(2);
   });
 
   it('fills in a missing name or expiry', () => {

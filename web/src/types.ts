@@ -550,7 +550,41 @@ export interface TackLeaderboardSection {
 
 export interface TackLeaderboard { sections: TackLeaderboardSection[] }
 
-export interface PassportCheckPony { ponyName: string; riders: string[]; checkedAt: string | null; checkedByName: string | null }
+export type EquineVaccineStatus = 'Certified' | 'Expired' | 'TooRecent' | 'Unchecked';
+
+export interface PassportCheckPony {
+  ponyName: string;
+  riders: string[];
+  checkedAt: string | null;
+  checkedByName: string | null;
+  passportCode?: string | null;
+  ownerFullName?: string | null;
+  certified?: boolean;
+  status?: EquineVaccineStatus;
+  lastFluVaccineDate?: string | null;
+  fluValidUntil?: string | null;
+  lastTetanusDate?: string | null;
+  tetanusValidUntil?: string | null;
+  inspectorRole?: string | null;
+  officialNotes?: string | null;
+}
+
+export interface CertifiedHorseLookup {
+  found: boolean;
+  certified: boolean;
+  status: EquineVaccineStatus;
+  passportCode?: string | null;
+  horseName?: string | null;
+  ownerFullName?: string | null;
+  lastFluVaccineDate?: string | null;
+  fluValidUntil?: string | null;
+  lastTetanusDate?: string | null;
+  tetanusValidUntil?: string | null;
+  inspectorRole?: string | null;
+  inspectedByName?: string | null;
+  inspectedAt?: string | null;
+  officialNotes?: string | null;
+}
 
 export interface PassportCheckTeam {
   teamId: number;
@@ -608,6 +642,7 @@ export interface RiderEntry {
   ageGroup?: string | null;
   weightKg?: number | null;
   ponyPassportNumber?: string | null;
+  ponyOwnerFullName?: string | null;
   ponyAge?: number | null;
   membershipNumber?: string | null;
   emergencyContactName?: string | null;
@@ -673,6 +708,8 @@ export interface SavedRider {
   useInitialOnly?: boolean;
   noFilming?: boolean;
   ponyHeightHands?: number | null;
+  ponyPassportNumber?: string | null;
+  ponyOwnerFullName?: string | null;
 }
 
 export interface TrainerNote {
@@ -814,6 +851,14 @@ export interface StreamOverlay {
   updatedAt: string | null;
 }
 
+/** 0 = Score only, 1 = Tripod camera only, 2 = Score + Stream controller. */
+export type ScorerLinkScope = 0 | 1 | 2;
+export const ScorerLinkScope = {
+  Score: 0 as ScorerLinkScope,
+  Camera: 1 as ScorerLinkScope,
+  ScoreAndStream: 2 as ScorerLinkScope,
+};
+
 /** A scorer link as the organiser sees it (`/competitions/{id}/scorer-links`). The token is never part of it. */
 export interface ScorerLink {
   id: number;
@@ -823,6 +868,7 @@ export interface ScorerLink {
   expiresAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
+  scope?: ScorerLinkScope;
 }
 export interface ScorerLinkList { arenas: string[]; defaultExpiresAt: string; links: ScorerLink[] }
 /** The reply to creating a link. `token` and `path` are shown once and never returned again. */
@@ -835,6 +881,35 @@ export interface ScorerSession {
   arenaName: string;
   expiresAt: string;
   sessions: Session[];
+  scope?: ScorerLinkScope;
+}
+
+export type StreamQualityRid = 'f' | 'h' | 'q';
+export type StreamQualityPreset = 'auto' | '360p' | '480p' | '720p' | '1080p';
+
+export interface StreamTelemetry {
+  streamId: number;
+  arenaName: string;
+  batteryLevel?: number | null;
+  batteryCharging?: boolean | null;
+  zoom?: number | null;
+  maxZoom?: number | null;
+  fps?: number | null;
+  bitrateKbps?: number | null;
+  signal?: string | null;
+  audioMuted?: boolean | null;
+  windFilter?: boolean | null;
+  qualityPreset?: StreamQualityPreset | string | null;
+  captureResolution?: string | null;
+  updatedAt: string;
+}
+
+export interface StreamCommand {
+  streamId: number;
+  arenaName: string;
+  command: 'setZoom' | 'mute' | 'pause' | 'flipCamera' | 'windFilter' | 'saveReplay' | 'setQualityPreset' | 'selectAngle';
+  value?: string | null;
+  issuedAt: string;
 }
 
 /** 0 headline, 1 major, 2 supporter. */

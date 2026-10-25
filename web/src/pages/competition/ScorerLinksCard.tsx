@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api';
 import { QrCode } from '../../components/QrCode';
 import { scorerLinkUrl } from '../../offline/scorerLink';
-import type { CreatedScorerLink, ScorerLink, ScorerLinkList } from '../../types';
+import type { CreatedScorerLink, ScorerLink, ScorerLinkList, ScorerLinkScope } from '../../types';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { apiMessage } from '../operations/types';
 import { SelectField } from '../../components/SelectField';
@@ -46,6 +46,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
   const [retry, setRetry] = useState(0);
   const [label, setLabel] = useState('');
   const [arena, setArena] = useState('');
+  const [scope, setScope] = useState<ScorerLinkScope>(0);
   const [expires, setExpires] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -83,6 +84,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
       const { data } = await api.post<CreatedScorerLink>(`/competitions/${competitionId}/scorer-links`, {
         label: label.trim(),
         arenaName: chosenArena,
+        ...(scope ? { scope } : {}),
         ...(expires ? { expiresAt: new Date(expires).toISOString() } : {}),
       });
       changeLinks((links) => [data.link, ...links]);
@@ -134,7 +136,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
       {list && (
         <>
           <RefineNote>
-            Lets a volunteer enter scores in every arena of this competition from their phone without an account. The arena label is for your reference.
+            Phone scoring links — no account needed.
           </RefineNote>
 
           {mayEdit && (list.arenas.length === 0
@@ -149,6 +151,13 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
                     {list.arenas.map((name) => <option key={name} value={name}>{name}</option>)}
                   </SelectField>
                 </label>
+                <label className="rf-fld">Link permissions
+                  <SelectField value={String(scope)} onChange={(event) => setScope(Number(event.target.value) as ScorerLinkScope)}>
+                    <option value="0">Scorer (enter race results)</option>
+                    <option value="2">Scorer + stream controller (score + remote camera &amp; replays)</option>
+                    <option value="1">Tripod camera (broadcast arena video only)</option>
+                  </SelectField>
+                </label>
                 <label className="rf-fld">Stops working at (optional)
                   <input
                     type="datetime-local"
@@ -157,7 +166,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
                     onChange={(event) => setExpires(event.target.value)}
                   />
                 </label>
-                <p className="mg-meta">Otherwise it works until {when(list.defaultExpiresAt)}, the end of the day after the event.</p>
+                <p className="mg-meta">Defaults to {when(list.defaultExpiresAt)}.</p>
                 <div><button type="submit" className="mg-btn mg-btn-primary" disabled={busy || !label.trim()}>Make scorer link</button></div>
               </form>
             ))}
@@ -181,7 +190,11 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
               return (
                 <li key={link.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
                   <span className="min-w-0">
-                    <span className="block font-medium">{link.label} · {link.arenaName}</span>
+                    <span className="block font-medium">
+                      {link.label} · {link.arenaName}
+                      {link.scope === 1 && <span className="mg-badge mg-badge-outline ml-2">Tripod camera</span>}
+                      {link.scope === 2 && <span className="mg-badge mg-badge-outline ml-2">Scorer + stream</span>}
+                    </span>
                     <span className="mg-meta block">
                       {status === 'revoked' ? `Withdrawn ${when(link.revokedAt)}`
                         : status === 'expired' ? `Expired ${when(link.expiresAt)}`

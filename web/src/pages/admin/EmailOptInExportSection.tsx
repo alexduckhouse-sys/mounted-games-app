@@ -89,8 +89,7 @@ export function EmailOptInExportSection() {
       </div>
       {statusUnavailable && <p role="status" className="m-0 text-sm">Could not check email settings. Reload the page to try again.</p>}
       <p className="m-0 text-sm text-[rgb(var(--mg-body))]">
-        People who ticked the box to hear when new competitions open. The list only holds those who have not unsubscribed.
-        It contains personal data: keep it in your mailing tool and delete the file afterwards.
+        Active subscribers for new-competition emails. Contains personal data — delete the file after use.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="mg-btn mg-btn-secondary !min-h-11 !px-3.5 text-sm" onClick={() => void download()} disabled={busy}>

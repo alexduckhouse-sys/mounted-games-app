@@ -129,6 +129,7 @@ public class CompetitionsController : ControllerBase
     public async Task<IEnumerable<CompetitionSummary>> List([FromQuery] bool includeArchived = false)
     {
         var q = _db.Competitions
+            .AsNoTracking()
             .Include(c => c.Sections)
             .Include(c => c.Teams)
             .Include(c => c.Sessions).ThenInclude(s => s.Heats)
@@ -158,19 +159,13 @@ public class CompetitionsController : ControllerBase
         if (c is null) return NotFound();
         var signupCounts = await ActiveSignupCountsAsync(id);
 
-        return new CompetitionDetail(
-            c.Id, c.Name, c.Location, c.Description,
-            c.Latitude, c.Longitude,
-            c.What3Words, c.AppleMapsUrl,
-            c.StartDate, c.EndDate,
-            c.IsActive, c.IsArchived,
+        return c.ToDto(
             c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
             c.Teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
-            c.StreamUrl, c.OrganiserName, c.PaymentDestination,
-            c.SignupsLocked, c.Icon, c.CreatedByUserId,
-            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText,
-            PayoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId), LaneHatbands: PlannedRaceList.Read(c.LaneHatbands));
+            isDemo: await IsDemoCompetitionAsync(c.Id),
+            payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson),
+            includePaymentDetails: User.Identity?.IsAuthenticated == true);
     }
 
     /// <summary>
@@ -202,19 +197,13 @@ public class CompetitionsController : ControllerBase
             .ToListAsync();
         var signupCounts = await ActiveSignupCountsAsync(id);
 
-        return new CompetitionDetail(
-            c.Id, c.Name, c.Location, c.Description,
-            c.Latitude, c.Longitude,
-            c.What3Words, c.AppleMapsUrl,
-            c.StartDate, c.EndDate,
-            c.IsActive, c.IsArchived,
+        return c.ToDto(
             c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
             teams.OrderBy(t => t.DisplayName).Select(t => t.ToDto()).ToList(),
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
-            c.StreamUrl, c.OrganiserName, c.PaymentDestination,
-            c.SignupsLocked, c.Icon, c.CreatedByUserId,
-            IsDemo: await IsDemoCompetitionAsync(c.Id), TermsText: c.TermsText,
-            PayoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId), LaneHatbands: PlannedRaceList.Read(c.LaneHatbands));
+            isDemo: await IsDemoCompetitionAsync(c.Id),
+            payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson),
+            includePaymentDetails: User.Identity?.IsAuthenticated == true);
     }
 
     internal sealed record SessionOutline(int Id, string? ArenaName, SessionStatus Status, int OrderIndex);
@@ -268,6 +257,7 @@ public class CompetitionsController : ControllerBase
             lat ??= gLat;
             lon ??= gLon;
         }
+        var creatorClubId = await _db.ClubIdOfAsync(User);
         var c = new Competition
         {
             Name = req.Name,
@@ -282,8 +272,8 @@ public class CompetitionsController : ControllerBase
             OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
             TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim(),
-            // New competitions start with the basic dec form; older ones with no setup keep the standard form.
-            DecFormConfigJson = MountedGames.Api.Services.DecForms.DecFormConfig.Basic.ToJson(),
+            // New competitions start with the basic dec form and pin the creator's club for payouts; older ones with no setup keep the standard form.
+            DecFormConfigJson = (MountedGames.Api.Services.DecForms.DecFormConfig.Basic with { PayoutClubId = creatorClubId }).ToJson(),
             LaneHatbands = PlannedRaceList.Write(req.LaneHatbands),
             StartDate = req.StartDate,
             EndDate = req.EndDate,
@@ -545,7 +535,7 @@ public class CompetitionsController : ControllerBase
         }
         if (boundaries.Count == 0) return new { tied = false };
         string? runoffRace = sectionId.HasValue
-            ? await _db.CompetitionSections.Where(s => s.Id == sectionId.Value && s.CompetitionId == id).Select(s => s.RunoffRaceName).FirstOrDefaultAsync()
+            ? await _db.CompetitionSections.AsNoTracking().Where(s => s.Id == sectionId.Value && s.CompetitionId == id).Select(s => s.RunoffRaceName).FirstOrDefaultAsync()
             : null;
         // The first tied cut is reported at the top level, as before; every tied cut is in `boundaries`.
         var first = boundaries[0];

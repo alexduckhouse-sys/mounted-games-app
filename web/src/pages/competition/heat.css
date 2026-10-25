@@ -34,11 +34,17 @@
 .heat-title-meta-live { color: rgb(var(--mg-elim)); font-weight: 600; }
 .heat-title-meta-late { color: rgb(var(--mg-late-time)); font-weight: 600; }
 
-.heat-name {
-  position: absolute; left: 17px; bottom: 1px; max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.heat-name,
+.race-rules-btn.heat-name {
+  position: absolute; left: 17px; bottom: 1px;
+  width: auto; height: auto; max-width: 112px;
+  display: block; padding: 0; border: 0; border-radius: 0; background: transparent;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: inherit; text-align: left;
   transform-origin: 0 100%; transform: rotate(-55deg); color: rgb(var(--mg-ink));
 }
-.heat-name-running { color: rgb(var(--mg-red)); }
+.heat-name-running,
+.race-rules-btn.heat-name.heat-name-running { color: rgb(var(--mg-red)); }
 .heat-sep {
   position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: rgb(var(--mg-ink));
   transform-origin: 0 50%; transform: rotate(-55deg);
@@ -48,14 +54,20 @@
 .heat-grid tbody tr.heat-row-fav { background: rgb(var(--mg-tint)); box-shadow: inset 3px 0 0 #C08308; }
 .heat-grid tbody td.heat-rank-cell { padding-left: 12px; text-align: left; font: 700 17px/1 var(--mg-font-display); color: rgb(var(--mg-muted)); }
 .heat-team {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; text-align: left;
-  font: 600 14px/1.2 var(--mg-font); color: rgb(var(--mg-ink));
+  overflow: hidden; padding: 2px 4px 2px 2px; text-align: left;
+  font: 600 13.5px/1.15 var(--mg-font); color: rgb(var(--mg-ink));
 }
 .heat-team-link {
   display: flex; flex-direction: column; min-width: 0; color: inherit; text-decoration: none;
 }
 .heat-team-link:hover .heat-team-name { text-decoration: underline; }
-.heat-team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heat-team-name {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; text-overflow: ellipsis; white-space: normal; word-break: break-word;
+}
+.heat-team-name-long {
+  font-size: 12px; line-height: 1.1;
+}
 .heat-team-lane { font: 500 11px/1.1 'Barlow', sans-serif; color: rgb(var(--mg-muted)); }
 .heat-grid tbody th.heat-team:first-child { padding-left: 12px; }
 .heat-cell {
@@ -74,3 +86,15 @@
   color: rgb(var(--mg-body)); font: 700 10px/1 'Barlow Condensed', sans-serif; letter-spacing: .02em;
 }
 .heat-elim { color: rgb(var(--mg-elim)); }
+
+.heat-grid.heat-grid-many .heat-rank { width: 22px; padding-left: 6px; }
+.heat-grid.heat-grid-many tbody td.heat-rank-cell { padding-left: 6px; font-size: 14px; }
+.heat-grid.heat-grid-many thead th.heat-team-head { padding: 7px 2px 8px 8px; }
+.heat-grid.heat-grid-many tbody th.heat-team:first-child { padding-left: 8px; }
+.heat-grid.heat-grid-many .heat-race { width: 19px; }
+.heat-grid.heat-grid-many .heat-cf-head { width: 24px; }
+.heat-grid.heat-grid-many .heat-pts { width: 36px; }
+.heat-grid.heat-grid-many .heat-cell { font-size: 14px; }
+.heat-grid.heat-grid-many td.heat-total { font-size: 17px; }
+.heat-grid.heat-grid-many .heat-name,
+.heat-grid.heat-grid-many .race-rules-btn.heat-name { left: 14px; font-size: 11px; }

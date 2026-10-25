@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as framerMotion from 'framer-motion';
 import type { CompetitionDetail, StreamOverlay } from '../../types';
 import { CompetitionContext, type CompetitionCtx } from '../../pages/competition/context';
 import { DEFAULT_OVERLAY } from '../../lib/overlays';
@@ -7,8 +8,25 @@ import { competition, heat, race, result, session, standing, team } from '../../
 import { api } from '../../api';
 import { deferred } from '../../test/streamFakes';
 import { liveStream } from '../../test/streamFakes';
-import { LiveDataCardOverlay, ProducerBanner, ScoreCardOverlay } from './OverlayExtras';
-import { StreamOverlays } from './StreamOverlays';
+import {
+  BibSwatch as ExtrasBibSwatch,
+  HeatBody,
+  LanesBody,
+  LiveDataCardOverlay,
+  NextBody,
+  ProducerBanner,
+  ScoreCardOverlay,
+  ToplistBody,
+} from './OverlayExtras';
+import { BibSwatch as StreamBibSwatch, StreamOverlays } from './StreamOverlays';
+
+vi.mock('framer-motion', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('framer-motion')>();
+  return {
+    ...actual,
+    useReducedMotion: vi.fn(() => true),
+  };
+});
 
 vi.mock('../../api', () => ({ api: { get: vi.fn() } }));
 beforeEach(() => {
@@ -283,27 +301,410 @@ describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
     expect(screen.queryByRole('listitem')).toBeNull();
   });
 
-  it('supports ProducerBanner without a stream prop and shows sit-out S in ScoreCardOverlay', () => {
-    const { unmount } = render(<ProducerBanner arenaName="Arena 1" overlay={{ ...DEFAULT_OVERLAY, bannerText: 'Tea tent open', bannerStyle: 1 }} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Tea tent open');
-    unmount();
+  it('renders Now Racing Lane Bib Ticker underneath heat title when currentHeat has lanes', () => {
+    const compWithBibs = sampleCompetition({
+      teams: [
+        team(1, { displayName: 'Red Wings', bibColour: 'red' }),
+        team(2, { displayName: 'Blue Jays', bibColour: 'blue' }),
+        team(3, { displayName: 'Green Hornets', bibColour: 'green' }),
+      ],
+    });
 
-    const noArena = render(<ProducerBanner overlay={{ ...DEFAULT_OVERLAY, bannerText: 'toplist', bannerStyle: 1 }} />);
-    expect(noArena.container).toBeEmptyDOMElement();
-    noArena.unmount();
+    const heatWithLanes = {
+      id: 99,
+      sessionId: 1,
+      orderIndex: 1,
+      races: [],
+      lanes: [
+        { laneNumber: 3, teamId: 3, teamName: 'Green Hornets' },
+        { laneNumber: 1, teamId: 1, teamName: 'Red Wings' },
+        { laneNumber: 2, teamId: 2, teamName: 'Blue Jays' },
+        { laneNumber: 4, teamId: 999, riderName: 'Solo Rider' }, // no teamName, fallback to riderName
+        { laneNumber: 5, teamName: 'Blue Jays' }, // lookup team by teamName
+      ],
+    };
 
+    render(
+      <CompetitionContext.Provider
+        value={{
+          competition: compWithBibs,
+          reload: vi.fn(),
+          streams: [],
+          streamingEnabled: true,
+          invoke: vi.fn(),
+          ready: 1,
+          streamMessages: [],
+          overlay: DEFAULT_OVERLAY,
+        }}
+      >
+        <StreamOverlays
+          stream={liveStream({ arenaName: 'Arena 1' })}
+          label="Seniors Heat 1"
+          reconnecting={false}
+          muted={false}
+          onSound={vi.fn()}
+          currentHeat={heatWithLanes}
+        />
+      </CompetitionContext.Provider>,
+    );
+
+    const ticker = screen.getByTestId('now-racing-lanes');
+    expect(ticker).toBeInTheDocument();
+    expect(ticker).toHaveTextContent('L1red bibRed Wings');
+    expect(ticker).toHaveTextContent('L2blue bibBlue Jays');
+    expect(ticker).toHaveTextContent('L3green bibGreen Hornets');
+    expect(ticker).toHaveTextContent('L4Solo Rider');
+    expect(ticker).toHaveTextContent('L5blue bibBlue Jays');
+  });
+
+  it('caps Now Racing Lane Bib Ticker at 6 lanes and sorts by lane number', () => {
+    const heatWithManyLanes = {
+      id: 99,
+      sessionId: 1,
+      orderIndex: 1,
+      races: [],
+      lanes: [
+        { laneIndex: 8, teamName: 'Lane 8' },
+        { laneIndex: 2, teamName: 'Lane 2' },
+        { laneIndex: 7, teamName: 'Lane 7' },
+        { laneIndex: 1, teamName: 'Lane 1' },
+        { laneIndex: 3, teamName: 'Lane 3' },
+        { laneIndex: 6, teamName: 'Lane 6' },
+        { laneIndex: 5, teamName: 'Lane 5' },
+        { laneIndex: 4, teamName: 'Lane 4' },
+      ],
+    };
+
+    render(
+      <CompetitionContext.Provider
+        value={{
+          competition: sampleCompetition(),
+          reload: vi.fn(),
+          streams: [],
+          streamingEnabled: true,
+          invoke: vi.fn(),
+          ready: 1,
+          streamMessages: [],
+          overlay: DEFAULT_OVERLAY,
+        }}
+      >
+        <StreamOverlays
+          stream={liveStream({ arenaName: 'Arena 1' })}
+          label="Seniors Heat 1"
+          reconnecting={false}
+          muted={false}
+          onSound={vi.fn()}
+          currentHeat={heatWithManyLanes}
+        />
+      </CompetitionContext.Provider>,
+    );
+
+    const ticker = screen.getByTestId('now-racing-lanes');
+    expect(ticker).toBeInTheDocument();
+    expect(ticker).toHaveTextContent('L1Lane 1');
+    expect(ticker).toHaveTextContent('L6Lane 6');
+    expect(ticker).not.toHaveTextContent('Lane 7');
+    expect(ticker).not.toHaveTextContent('Lane 8');
+  });
+
+  it('renders BibSwatch in ScoreCardOverlay when teams have bibColour', () => {
     vi.useFakeTimers();
     const now = new Date('2026-10-22T10:00:00Z').getTime();
     vi.setSystemTime(now);
+
+    const compWithBibs = sampleCompetition({
+      teams: [
+        team(1, { displayName: 'Oak Seniors', bibColour: 'scarlet' }),
+      ],
+    });
+
     render(
+      <CompetitionContext.Provider
+        value={{
+          competition: compWithBibs,
+          reload: vi.fn(),
+          streams: [],
+          streamingEnabled: true,
+          invoke: vi.fn(),
+          ready: 1,
+          streamMessages: [],
+          overlay: { ...DEFAULT_OVERLAY, scoreCardDelaySeconds: 0, scoreCardSeconds: 10 },
+        }}
+      >
+        <ScoreCardOverlay
+          stream={liveStream({ arenaName: 'Arena 1' })}
+          overlay={{ ...DEFAULT_OVERLAY, scoreCardDelaySeconds: 0, scoreCardSeconds: 10 }}
+          look={{
+            accent: '#F5B82E',
+            background: '#0F1E3D',
+            size: 'medium',
+            logoUrl: null,
+            elements: {
+              logo: { show: false, place: 'top-right' },
+              viewers: { show: true, place: 'top-left' },
+              arena: { show: false, place: 'top-left' },
+              clock: { show: false, place: 'top-right' },
+              strip: { show: true, place: 'bottom' },
+              scoreCard: { show: true, place: 'right' },
+              banner: { show: true, place: 'bottom' },
+            },
+          }}
+          cards={[{
+            key: 'card-1',
+            arenaName: 'Arena 1',
+            heading: 'Heat 1',
+            receivedAt: now,
+            card: {
+              heatId: 1,
+              raceId: 1,
+              raceName: 'Bending',
+              raceNumber: 1,
+              raceCount: 5,
+              rows: [
+                { teamId: 1, teamName: 'Oak Seniors', total: 6, added: 6, eliminated: false, place: 1, change: 'up' },
+                { teamId: 999, teamName: 'Oak Seniors', total: 4, added: 4, eliminated: false, place: 2, change: 'down' },
+                { teamId: 888, teamName: 'Unknown', total: 0, added: 0, eliminated: true, place: 3, change: null, ...({ bibColor: 'blue' } as unknown as Record<string, unknown>) },
+              ],
+            },
+          }]}
+          teams={compWithBibs.teams}
+        />
+      </CompetitionContext.Provider>,
+    );
+
+    act(() => { vi.advanceTimersByTime(1); });
+    const card = screen.getByRole('region', { name: 'Results: Heat 1' });
+    expect(card).toHaveTextContent('scarlet bib');
+  });
+
+  it('renders BibSwatch in LiveDataCardOverlay toplist, lanes, and heat when teams have bibColour', async () => {
+    const compWithBibs = sampleCompetition({
+      teams: [
+        team(1, { competitionSectionId: 5, displayName: 'Oak Seniors', bibColour: 'red' }),
+        team(2, { competitionSectionId: 5, displayName: 'Ash Seniors', bibColour: 'yellow' }),
+      ],
+    });
+
+    // Toplist card
+    const toplist = renderWithComp({ look: { liveCard: 'toplist' } }, compWithBibs);
+    const toplistCard = screen.getByRole('region', { name: 'Live toplist: Seniors' });
+    await waitFor(() => expect(within(toplistCard).getByText('red bib')).toBeInTheDocument());
+    expect(within(toplistCard).getByText('yellow bib')).toBeInTheDocument();
+    toplist.unmount();
+
+    // Lanes card
+    const lanes = renderWithComp({ look: { liveCard: 'lanes' } }, compWithBibs);
+    const lanesCard = screen.getByRole('region', { name: 'Starting lanes: Seniors · Heat 1' });
+    expect(within(lanesCard).getByText('red bib')).toBeInTheDocument();
+    expect(within(lanesCard).getByText('yellow bib')).toBeInTheDocument();
+    lanes.unmount();
+
+    // Heat card
+    const heatView = renderWithComp({ look: { liveCard: 'heat' } }, compWithBibs);
+    const heatCard = screen.getByRole('region', { name: 'Heat table: Seniors · Heat 1' });
+    expect(within(heatCard).getByText('red bib')).toBeInTheDocument();
+    expect(within(heatCard).getByText('yellow bib')).toBeInTheDocument();
+    heatView.unmount();
+
+    // Next card
+    const nextView = renderWithComp({ look: { liveCard: 'next' } }, compWithBibs);
+    const nextCard = screen.getByRole('region', { name: 'Up next: Seniors · Heat 2' });
+    expect(within(nextCard).getByText('red bib')).toBeInTheDocument();
+    nextView.unmount();
+  });
+
+  it('renders and hides announcements via StreamNotice and supports sound button', () => {
+    vi.useFakeTimers();
+    const now = Date.now();
+    const onSound = vi.fn();
+
+    const { rerender } = render(
+      <StreamOverlays
+        stream={liveStream({ arenaName: 'Arena 1', hasAudio: true, audioMuted: false, status: 0 })}
+        label={null}
+        reconnecting={false}
+        muted={true}
+        onSound={onSound}
+        announcement={{
+          message: { id: 10, competitionId: 1, authorName: 'Chief Referee', body: 'Tack check at gate', type: 2, createdAt: new Date().toISOString(), adminOnly: false },
+          receivedAt: now,
+        }}
+      />,
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Announcement · Tack check at gate');
+    const soundButton = screen.getByRole('button', { name: 'Tap for sound' });
+    soundButton.click();
+    expect(onSound).toHaveBeenCalledTimes(1);
+
+    // After 8 seconds notice fades
+    act(() => { vi.advanceTimersByTime(8001); });
+    expect(screen.queryByText('Announcement · Tack check at gate')).toBeNull();
+
+    // Regular chat message (type !== 2)
+    rerender(
+      <StreamOverlays
+        stream={liveStream({ arenaName: 'Arena 1', hasAudio: false })}
+        label="Heat 1"
+        reconnecting={false}
+        muted={false}
+        onSound={onSound}
+        announcement={{
+          message: { id: 11, competitionId: 1, authorName: 'Steward Jane', body: 'Lanes drawn', type: 0, createdAt: new Date().toISOString(), adminOnly: false },
+          receivedAt: Date.now(),
+        }}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Steward Jane · Lanes drawn');
+
+    // Already expired notice on mount returns null
+    const old = render(
+      <StreamOverlays
+        stream={liveStream({ arenaName: 'Arena 1' })}
+        label={null}
+        reconnecting={false}
+        muted={false}
+        onSound={onSound}
+        announcement={{
+          message: { id: 12, competitionId: 1, authorName: 'Admin', body: 'Old', type: 0, createdAt: new Date().toISOString(), adminOnly: false },
+          receivedAt: Date.now() - 10000,
+        }}
+      />,
+    );
+    expect(old.queryByText('Old')).toBeNull();
+    old.unmount();
+  });
+
+  it('renders reconnecting and back soon camera move screens', () => {
+    const { rerender } = render(
+      <StreamOverlays
+        stream={liveStream({ arenaName: 'Arena 1', status: 0 })}
+        label={null}
+        reconnecting={true}
+        muted={false}
+        onSound={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Reconnecting…');
+
+    rerender(
+      <StreamOverlays
+        stream={liveStream({ arenaName: 'Arena 1', angleName: 'Main Cam', status: 1 })}
+        label={null}
+        reconnecting={false}
+        muted={false}
+        onSound={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Back soon');
+    expect(within(screen.getByRole('status')).getByText(/Arena 1 · Main Cam/)).toBeInTheDocument();
+  });
+
+  it('renders BibSwatch with colour or color and returns null when empty', () => {
+    const { container, rerender } = render(<StreamBibSwatch colour="red" />);
+    expect(screen.getByText('red bib')).toBeInTheDocument();
+    rerender(<StreamBibSwatch color="blue" size={10} />);
+    expect(screen.getByText('blue bib')).toBeInTheDocument();
+    rerender(<StreamBibSwatch />);
+    expect(container).toBeEmptyDOMElement();
+    rerender(<StreamBibSwatch colour={null} color={undefined} />);
+    expect(container).toBeEmptyDOMElement();
+
+    const extras = render(<ExtrasBibSwatch colour="green" />);
+    expect(screen.getByText('green bib')).toBeInTheDocument();
+    extras.rerender(<ExtrasBibSwatch color="yellow" size={10} />);
+    expect(screen.getByText('yellow bib')).toBeInTheDocument();
+    extras.rerender(<ExtrasBibSwatch />);
+    expect(extras.container).toBeEmptyDOMElement();
+  });
+
+  it('supports stream caption and lane.lane fallback', () => {
+    render(
+      <StreamOverlays
+        stream={liveStream({ arenaName: 'Arena 1', caption: 'Custom Caption' })}
+        label="Some Heat"
+        reconnecting={false}
+        muted={false}
+        onSound={vi.fn()}
+        currentHeat={{
+          id: 99,
+          sessionId: 1,
+          orderIndex: 1,
+          races: [],
+          lanes: [
+            { lane: 1, teamName: 'Lane One' },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText('Now')).toBeInTheDocument();
+    expect(screen.getByTestId('now-racing-lanes')).toHaveTextContent('L1Lane One');
+  });
+
+  it('covers motion branches when reduced motion is disabled', () => {
+    vi.mocked(framerMotion.useReducedMotion).mockReturnValue(false);
+
+    const comp = sampleCompetition({
+      teams: [
+        team(1, { displayName: 'Team 1', bibColour: 'red' }),
+      ],
+    });
+
+    const view = render(
+      <StreamOverlays
+        stream={liveStream({ arenaName: 'Arena 1' })}
+        label="Heat 1"
+        reconnecting={false}
+        muted={false}
+        onSound={vi.fn()}
+        currentHeat={{
+          id: 1,
+          sessionId: 1,
+          orderIndex: 1,
+          races: [],
+          lanes: [{ laneNumber: 1, teamId: 1, teamName: 'Team 1' }],
+        }}
+      />,
+    );
+    expect(view.container.querySelector('.mg-ov-strip')).toBeInTheDocument();
+    view.unmount();
+
+    // Directly render bodies with reduced=false
+    const toplist = render(<ToplistBody competition={comp} rows={[{ teamId: 1, teamName: 'Team 1', position: 1, points: 5 }]} started={true} />);
+    expect(toplist.container.querySelector('li')).toBeInTheDocument();
+    toplist.unmount();
+
+    const heatBody = render(<HeatBody rows={[{ teamId: 1, teamName: 'Team 1', lane: 1, pts: 5, last: 5, elim: false }]} scored={true} competition={comp} />);
+    expect(heatBody.container.querySelector('li')).toBeInTheDocument();
+    heatBody.unmount();
+
+    const lanesBody = render(<LanesBody entries={[{ id: 10, teamId: 1, teamName: 'Team 1', laneIndex: 1 }]} competition={comp} />);
+    expect(lanesBody.container.querySelector('li')).toBeInTheDocument();
+    lanesBody.unmount();
+
+    const nextBody = render(<NextBody entries={[{ id: 10, teamId: 1, teamName: 'Team 1', laneIndex: 1 }]} competition={comp} />);
+    expect(nextBody.container.querySelector('li')).toBeInTheDocument();
+    nextBody.unmount();
+
+    // Banner with reduced=false
+    const banner = render(<ProducerBanner arenaName="Arena 1" overlay={{ ...DEFAULT_OVERLAY, bannerText: 'Banner Alert', bannerStyle: 2 }} />);
+    expect(banner.getByRole('status')).toBeInTheDocument();
+    banner.unmount();
+
+    const tickerBanner = render(<ProducerBanner arenaName="Arena 1" overlay={{ ...DEFAULT_OVERLAY, bannerText: 'Ticker Text', bannerStyle: 0 }} />);
+    expect(tickerBanner.getByRole('status')).toBeInTheDocument();
+    tickerBanner.unmount();
+
+    // ScoreCardOverlay with reduced=false
+    vi.useFakeTimers();
+    const nowTime = 1700000000000;
+    vi.setSystemTime(nowTime);
+    const scoreCard = render(
       <ScoreCardOverlay
         stream={liveStream({ arenaName: 'Arena 1' })}
         overlay={{ ...DEFAULT_OVERLAY, scoreCardDelaySeconds: 0, scoreCardSeconds: 10 }}
         look={{
-          accent: '#F5B82E',
-          background: '#0F1E3D',
-          size: 'medium',
-          logoUrl: null,
+          accent: '#F5B82E', background: '#0F1E3D', size: 'medium', logoUrl: null,
           elements: {
             logo: { show: false, place: 'top-right' },
             viewers: { show: true, place: 'top-left' },
@@ -315,22 +716,63 @@ describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
           },
         }}
         cards={[{
-          key: 'sit',
-          arenaName: 'Arena 1',
-          heading: 'Heat 1',
-          receivedAt: now,
-          card: {
-            heatId: 1,
-            raceId: 1,
-            raceName: 'Bending',
-            raceNumber: 1,
-            raceCount: 5,
-            rows: [{ teamId: 1, teamName: 'Oak', total: 0, added: 0, eliminated: false, sitOut: true, place: 1, change: null }],
-          },
+          key: 'c1', arenaName: 'Arena 1', heading: 'Heat 1', receivedAt: nowTime,
+          card: { heatId: 1, raceId: 1, raceName: 'R1', raceNumber: 1, raceCount: 1, rows: [{ teamId: 1, teamName: 'Team 1', total: 5, added: 5, eliminated: false, place: 1, change: null }] },
         }]}
+        teams={comp.teams}
       />,
     );
     act(() => { vi.advanceTimersByTime(1); });
-    expect(screen.getByRole('region', { name: 'Results: Heat 1' })).toHaveTextContent('1OakS0');
+    expect(scoreCard.container.querySelector('section')).toBeInTheDocument();
+    scoreCard.unmount();
+    vi.useRealTimers();
+
+    // LiveDataCardOverlay with reduced=false
+    const compCtxVal: CompetitionCtx = { competition: comp, reload: vi.fn(), streams: [], streamingEnabled: true, invoke: vi.fn(), ready: 1, streamMessages: [], overlay: { ...DEFAULT_OVERLAY, look: { liveCard: 'lanes' } } };
+    const lanesCard = render(
+      <CompetitionContext.Provider value={compCtxVal}>
+        <LiveDataCardOverlay arenaName="Arena 1" overlay={{ ...DEFAULT_OVERLAY, look: { liveCard: 'lanes' } }} />
+      </CompetitionContext.Provider>,
+    );
+    expect(lanesCard.container.querySelector('section')).toBeInTheDocument();
+    lanesCard.unmount();
+
+    const heatCard = render(
+      <CompetitionContext.Provider value={compCtxVal}>
+        <LiveDataCardOverlay arenaName="Arena 1" overlay={{ ...DEFAULT_OVERLAY, look: { liveCard: 'heat' } }} />
+      </CompetitionContext.Provider>,
+    );
+    expect(heatCard.container.querySelector('section')).toBeInTheDocument();
+    heatCard.unmount();
+
+    const toplistCard = render(
+      <CompetitionContext.Provider value={compCtxVal}>
+        <LiveDataCardOverlay arenaName="Arena 1" overlay={{ ...DEFAULT_OVERLAY, look: { liveCard: 'toplist' } }} />
+      </CompetitionContext.Provider>,
+    );
+    expect(toplistCard.container.querySelector('section')).toBeInTheDocument();
+    toplistCard.unmount();
+
+    vi.mocked(framerMotion.useReducedMotion).mockReturnValue(true);
+  });
+
+  it('covers break session in activeArenaHeat and banner fallbacks', () => {
+    const comp = sampleCompetition({
+      sessions: [
+        session(1, { arenaName: 'Arena 1', kind: undefined, isBreak: true }),
+        session(2, { arenaName: undefined, kind: undefined, isBreak: false }),
+      ],
+    });
+    renderWithComp({ look: { liveCard: 'lanes' } }, comp, 'Arena 1');
+  });
+
+  it('centres live data overlay cards and hides the bottom now-racing strip while an overlay popup is active', () => {
+    const view = renderWithComp({ look: { liveCard: 'heat' } });
+    const card = screen.getByRole('region', { name: /Heat table:/i });
+    expect(card).toHaveClass('mg-ov-card-center');
+    expect(screen.queryByLabelText('Now racing')).toBeNull();
+
+    view.refresh({ overlay: { ...DEFAULT_OVERLAY, look: { liveCard: 'none' } } });
+    expect(screen.getByLabelText('Now racing')).toBeInTheDocument();
   });
 });

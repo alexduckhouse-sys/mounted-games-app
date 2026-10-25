@@ -23,6 +23,11 @@ describe('placingsOf', () => {
   it('keeps why a team did not finish', () => {
     expect(placingsOf([result(3, null, { eliminated: true, status: 2 })])).toEqual([{ teamId: 3, place: 0, eliminated: true, status: 2 }]);
   });
+
+  it('preserves explicit points on queued placings', () => {
+    const withPoints = queued(1, { places: [{ teamId: 1, place: 1, eliminated: false, points: 2.5, refereeNote: '[pts:2.5] Dead heat' }] });
+    expect(enqueue([], withPoints)[0].places[0].points).toBe(2.5);
+  });
 });
 
 describe('enqueue', () => {

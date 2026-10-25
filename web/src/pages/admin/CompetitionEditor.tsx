@@ -19,6 +19,7 @@ import { StepNav } from './creator/StepNav';
 import { StructureStep } from './creator/StructureStep';
 import { WhenWhereStep } from './creator/WhenWhereStep';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { usePageWidth } from '../../components/pageWidthState';
 
 /** The competition creator: one stepped form for making a competition and for changing one that exists. */
 
@@ -39,6 +40,7 @@ function clockTime(iso: string): string {
 }
 
 export function CompetitionEditor() {
+  usePageWidth('wide');
   const navigate = useNavigate();
   const { canOrganise, user, hasRole } = useAuth();
   const { id } = useParams<{ id: string }>();
@@ -207,7 +209,7 @@ export function CompetitionEditor() {
         </div>
       </div>
 
-      <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
+      <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-3 py-3 sm:px-4">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm font-medium text-[rgb(var(--mg-muted))]">
               {!mayOrganise && <span>Only admins and trainers can save changes.</span>}

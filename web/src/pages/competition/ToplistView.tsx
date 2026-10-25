@@ -125,7 +125,7 @@ export function ToplistView({
   };
 
   const tabBar = tabs.length > 1 && (
-    <div className={standalone ? 'mg-band py-2' : undefined}>
+    <div className={standalone ? 'mg-band-header pb-2.5 pt-1' : undefined}>
       <div className="mg-seg" role="group" aria-label="Toplist view">
         {tabs.map(([id, label]) => <button key={id} type="button" aria-pressed={view === id} onClick={() => setChosen(id)}>{label}</button>)}
       </div>

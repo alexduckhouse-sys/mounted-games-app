@@ -673,4 +673,34 @@ public class AdaptiveDecFormTests : IClassFixture<ApiFactory>
         Assert.Null(DecFormConfig.Parse("not json"));
         Assert.Null(DecFormConfig.Parse(" "));
     }
+
+    [Fact]
+    public void RiderAgeEligibility_UsesFirstJanuaryOfCompetitionYear_AndFallsBackToSectionAgeGroup()
+    {
+        // Competition is on 15 August 2026, so eligibility date is 1 January 2026.
+        var compDate = new DateTime(2026, 8, 15, 0, 0, 0, DateTimeKind.Utc);
+
+        // Rider born 10 March 2014 turns 12 in March 2026, but was 11 on 1 January 2026 -> eligible for Under 12.
+        var eligibleRider = new RiderEntry
+        {
+            FullName = "Alice",
+            DateOfBirth = new DateTime(2014, 3, 10, 0, 0, 0, DateTimeKind.Utc),
+            AgeGroup = null,
+        };
+        Assert.Equal(11, DecFormRules.AgeYears(eligibleRider.DateOfBirth.Value, compDate));
+        Assert.Null(DecFormRules.CheckAgeEligibility(eligibleRider, compDate, sectionAgeGroup: "Under 12"));
+
+        // Rider born 31 December 2013 was already 12 on 1 January 2026 -> flagged for Under 12 via sectionAgeGroup fallback.
+        var overAgeRider = new RiderEntry
+        {
+            FullName = "Bob",
+            DateOfBirth = new DateTime(2013, 12, 31, 0, 0, 0, DateTimeKind.Utc),
+            AgeGroup = null,
+        };
+        Assert.Equal(12, DecFormRules.AgeYears(overAgeRider.DateOfBirth.Value, compDate));
+        var flag = DecFormRules.CheckAgeEligibility(overAgeRider, compDate, sectionAgeGroup: "Under 12");
+        Assert.NotNull(flag);
+        Assert.Contains("1 January 2026", flag);
+        Assert.Contains("Under 12", flag);
+    }
 }

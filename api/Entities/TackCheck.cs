@@ -83,4 +83,37 @@ public class PassportCheck
     public DateTime CheckedAt { get; set; } = DateTime.UtcNow;
     public string? CheckedByUserId { get; set; }
     public string? CheckedByName { get; set; }
+
+    public string? PassportCode { get; set; }
+    public string? OwnerFullName { get; set; }
+    public string? LastFluVaccineDate { get; set; }
+    public string? FluValidUntil { get; set; }
+    public string? LastTetanusDate { get; set; }
+    public string? TetanusValidUntil { get; set; }
+    public string? InspectorRole { get; set; }
+    public string? OfficialNotes { get; set; }
+}
+
+/// <summary>
+/// Cross-competition equine passport and vaccination record inspected by a vet or official.
+/// Matched by normalised <see cref="PassportCode"/> (when present) or by (<see cref="HorseKey"/>, <see cref="OwnerKey"/>).
+/// Certification automatically expires when <see cref="FluValidUntil"/> or <see cref="TetanusValidUntil"/> is in the past.
+/// </summary>
+public class CertifiedHorse
+{
+    public int Id { get; set; }
+    public string? PassportCode { get; set; }
+    public string HorseName { get; set; } = string.Empty;
+    public string HorseKey { get; set; } = string.Empty;
+    public string? OwnerFullName { get; set; }
+    public string? OwnerKey { get; set; }
+    public string? LastFluVaccineDate { get; set; }
+    public string? FluValidUntil { get; set; }
+    public string? LastTetanusDate { get; set; }
+    public string? TetanusValidUntil { get; set; }
+    public string InspectorRole { get; set; } = "Official";
+    public string? InspectedByUserId { get; set; }
+    public string InspectedByName { get; set; } = string.Empty;
+    public DateTime InspectedAt { get; set; } = DateTime.UtcNow;
+    public string? OfficialNotes { get; set; }
 }

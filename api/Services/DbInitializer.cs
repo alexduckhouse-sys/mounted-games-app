@@ -385,6 +385,9 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "RiderEntries", "AgeGroup", "TEXT NULL");
         await EnsureColumnAsync(db, "RiderEntries", "WeightKg", "TEXT NULL");
         await EnsureColumnAsync(db, "RiderEntries", "PonyPassportNumber", "TEXT NULL");
+        await EnsureColumnAsync(db, "RiderEntries", "PonyOwnerFullName", "TEXT NULL");
+        await EnsureColumnAsync(db, "SavedRiders", "PonyPassportNumber", "TEXT NULL");
+        await EnsureColumnAsync(db, "SavedRiders", "PonyOwnerFullName", "TEXT NULL");
         await EnsureColumnAsync(db, "RiderEntries", "PonyAge", "INTEGER NULL");
         await EnsureColumnAsync(db, "RiderEntries", "MembershipNumber", "TEXT NULL");
         await EnsureColumnAsync(db, "RiderEntries", "EmergencyContactName", "TEXT NULL");
@@ -401,6 +404,7 @@ public static class DbInitializer
                 "CompetitionId" INTEGER NOT NULL,
                 "Label" TEXT NOT NULL,
                 "ArenaName" TEXT NOT NULL,
+                "Scope" INTEGER NOT NULL DEFAULT 0,
                 "TokenHash" TEXT NOT NULL,
                 "CreatedByUserId" TEXT NOT NULL,
                 "CreatedAt" TEXT NOT NULL,
@@ -413,6 +417,7 @@ public static class DbInitializer
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_ScorerLinks_TokenHash" ON "ScorerLinks" ("TokenHash");
             CREATE INDEX IF NOT EXISTS "IX_ScorerLinks_CompetitionId" ON "ScorerLinks" ("CompetitionId");
             """);
+        await EnsureColumnAsync(db, "ScorerLinks", "Scope", "INTEGER NOT NULL DEFAULT 0");
 
         await Commerce.CommerceSqliteSchema.EnsureAsync(db);
 
@@ -703,7 +708,7 @@ public static class DbInitializer
 
             var raceNames = new[]
             {
-                "Bending", "Litter Lifter", "Five Flag", "Stepping Stones",
+                "Bending", "Litter", "Five Flag", "Stepping Stones",
                 "Tack Shop", "Bottle", "Big Sack", "Two Flag",
             };
             var heat1 = new Heat

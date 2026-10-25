@@ -19,13 +19,21 @@ public sealed class FinalsTiers
     private readonly Dictionary<int, int> _tierByTeam;
     private FinalsTiers(Dictionary<int, int> tierByTeam) => _tierByTeam = tierByTeam;
 
-    /// <summary>0 for the A Final, 1 for the B Final, and so on; null for a label that isn't a lettered final.</summary>
+    /// <summary>0 for the A Final, 1 for the B Final, and so on (including multi-part finals like "A Final Part 1"); null for a label that isn't a lettered final.</summary>
     public static int? ParseLabel(string? label)
     {
         var text = label?.Trim();
-        if (text is not { Length: 7 } || !text.EndsWith(" Final", StringComparison.OrdinalIgnoreCase)) return null;
+        if (text is not { Length: >= 7 }) return null;
         var letter = char.ToUpperInvariant(text[0]);
-        return letter is >= 'A' and <= 'Z' ? letter - 'A' : null;
+        if (letter is < 'A' or > 'Z') return null;
+        if (!text.AsSpan(1).StartsWith(" Final", StringComparison.OrdinalIgnoreCase)) return null;
+        if (text.Length == 7) return letter - 'A';
+        var suffix = text[7..].Trim();
+        if (suffix.StartsWith('-') || suffix.StartsWith('·') || suffix.StartsWith('–'))
+            suffix = suffix[1..].TrimStart();
+        if (suffix.StartsWith("Part ", StringComparison.OrdinalIgnoreCase))
+            suffix = suffix[5..].TrimStart();
+        return suffix.Length > 0 && suffix.All(char.IsAsciiDigit) ? letter - 'A' : null;
     }
 
     /// <summary>Reads the tiers from the heats of the race sessions given (heats must have their entries loaded).</summary>
