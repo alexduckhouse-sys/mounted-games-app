@@ -1214,6 +1214,134 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("CompetitionSections");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.CustomEmail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Audience")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BlocksJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("HtmlBody")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Sent")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Skipped")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("TextBody")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Total")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("CustomEmails");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.CustomEmailImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Bytes")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UploadedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("UsedByEmailId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsedByEmailId");
+
+                    b.ToTable("CustomEmailImages");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.CustomEmailRecipient", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ClaimToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CustomEmailId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("OptInId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomEmailId", "Status");
+
+                    b.ToTable("CustomEmailRecipients");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.DeclarationForm", b =>
                 {
                     b.Property<int>("Id")
@@ -3752,6 +3880,17 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Competition");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.CustomEmailRecipient", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.CustomEmail", "CustomEmail")
+                        .WithMany("Recipients")
+                        .HasForeignKey("CustomEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CustomEmail");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.DeclarationForm", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.AppUser", "SubmittedBy")
@@ -4469,6 +4608,11 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Signups");
 
                     b.Navigation("Teams");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.CustomEmail", b =>
+                {
+                    b.Navigation("Recipients");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.DeclarationForm", b =>

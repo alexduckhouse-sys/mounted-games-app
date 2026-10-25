@@ -148,6 +148,7 @@ builder.Services.AddSingleton<MountedGames.Api.Services.Email.ResendEmailSender>
 builder.Services.AddSingleton<MountedGames.Api.Services.Email.IEmailSender, MountedGames.Api.Services.Email.ConfiguredEmailSender>();
 builder.Services.AddScoped<MountedGames.Api.Services.Email.SignupConfirmationService>();
 builder.Services.AddScoped<MountedGames.Api.Services.Email.EmailOptInService>();
+builder.Services.AddScoped<MountedGames.Api.Services.Email.CustomEmailService>();
 builder.Services.AddSingleton<MountedGames.Api.Services.Email.EmailConfirmationTokens>();
 builder.Services.AddScoped<MountedGames.Api.Services.Email.AccountEmailService>();
 builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountIpRecorder>();
