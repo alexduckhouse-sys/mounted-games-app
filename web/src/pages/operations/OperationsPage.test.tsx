@@ -168,7 +168,7 @@ describe('OperationsPage', () => {
     expect(screen.getByRole('heading', { name: 'To sort' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Manage' })).toBeInTheDocument();
     expect(screen.getByText('Pairs overlaps Open')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Dec forms missing/ })).toHaveAttribute('href', '/competitions/7/declarations');
+    expect(screen.getByRole('link', { name: /Dec forms missing/ })).toHaveAttribute('href', '/competitions/7/entries');
     expect(screen.getByRole('button', { name: /Equipment to check/ })).toHaveTextContent('1');
     // Zero counts are hidden.
     expect(screen.queryByText('Entries not paid')).not.toBeInTheDocument();
@@ -185,7 +185,7 @@ describe('OperationsPage', () => {
     expect(screen.getByRole('link', { name: 'Event details' })).toHaveAttribute('href', '/competitions/7/event-details');
     expect(screen.getByRole('link', { name: 'Sections and races' })).toHaveAttribute('href', '/competitions/7/sections');
     expect(screen.getByRole('link', { name: 'Sponsors and sharing' })).toHaveAttribute('href', '/competitions/7/sponsors');
-    expect(screen.getByRole('button', { name: /Entries and dec forms/ })).toContainElement(screen.getAllByRole('img', { name: 'Has jobs to sort' })[0]);
+    expect(screen.getByRole('link', { name: /Entries and dec forms/ })).toContainElement(screen.getAllByRole('img', { name: 'Has jobs to sort' })[0]);
     expect(screen.getByRole('link', { name: 'Event details' }).querySelector('[role="img"]')).toBeNull();
     await user.click(screen.getAllByRole('button').find((button) => button.textContent === 'Equipment')!);
     expect(await screen.findByRole('checkbox', { name: /4 × Pole/i })).toBeInTheDocument();
