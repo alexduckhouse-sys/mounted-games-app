@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -108,6 +109,7 @@ public sealed class CustomEmailsController(AppDbContext db, CustomEmailService e
     /// </summary>
     [HttpGet("api/email-images/{id:guid}")]
     [AllowAnonymous]
+    [EnableRateLimiting("public-read")]
     public async Task<IActionResult> Image(Guid id, CancellationToken ct)
     {
         var image = await db.CustomEmailImages.AsNoTracking().Where(i => i.Id == id).Select(i => new { i.Bytes, i.ContentType }).FirstOrDefaultAsync(ct);
