@@ -435,7 +435,8 @@ public class CompetitionsController : ControllerBase
         var display = string.IsNullOrWhiteSpace(req.AgeGroup)
             ? (string.IsNullOrWhiteSpace(req.DisplayName) ? SectionNaming.FormatPlural(req.Format) : req.DisplayName!)
             : SectionNaming.DisplayName(req.Format, req.AgeGroup);
-        if (req.UsesRaceFinals && !req.HasFinal || req.UsesRaceFinals && (req.CarryPointsIntoFinal || req.DoublePointsInFinal))
+        // Carry defaults to on in the request, so it can't be refused here: heat, heat, final stores and ignores it.
+        if (req.UsesRaceFinals && (!req.HasFinal || req.DoublePointsInFinal))
             return BadRequest(new { message = FinalOptionsRaceFinalsMessage });
         var section = new CompetitionSection
         {
@@ -651,12 +652,14 @@ public class CompetitionsController : ControllerBase
         TieBreakRule Rule, TieSettlement SettledBy, bool Settled);
 
     /// <summary>Active, non-HC teams in finals order: points, then the age group's tie-break or the organiser's order.</summary>
-    private async Task<(TieBreaker Ties, List<TieFacts> Ranked, Dictionary<int, string> Names)> RankForFinalsAsync(int competitionId, int? sectionId)
+    private async Task<(TieBreaker Ties, List<TieFacts> Ranked, Dictionary<int, string> Names)> RankForFinalsAsync(int competitionId, int? sectionId, bool forFinal = false)
     {
         var teamsQ = _db.Teams.AsNoTracking()
             .Include(t => t.Results)
             .Where(t => t.CompetitionId == competitionId && !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active);
         if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
+        // Making finals for every age group at once leaves out the ones set up with no final.
+        if (forFinal) teamsQ = teamsQ.Where(t => t.Section!.UsesRaceFinals || t.Section.HasFinal);
         var teams = await teamsQ.ToListAsync(HttpContext.RequestAborted);
         var ties = await TieBreaker.LoadAsync(_db, competitionId, HttpContext.RequestAborted);
         // Tack check bonus points count here as they do in the standings, so finals are seeded from the table people see.
@@ -739,7 +742,7 @@ public class CompetitionsController : ControllerBase
             return BadRequest("Section not found in this competition.");
         if (await NoFinalErrorAsync(id, req.CompetitionSectionId) is { } noFinal) return noFinal;
 
-        var (_, ranked, _) = await RankForFinalsAsync(id, req.CompetitionSectionId);
+        var (_, ranked, _) = await RankForFinalsAsync(id, req.CompetitionSectionId, forFinal: true);
         var top = ranked.Take(req.TopN).Select(x => x.TeamId).ToList();
 
         if (top.Count == 0) return BadRequest("No teams with results to seed finals.");
@@ -950,7 +953,7 @@ public class CompetitionsController : ControllerBase
         if (heats.Any(h => h.Entries.Count > 0))
             return BadRequest(new { message = "Heats already have teams. Clear them first via heat assignments." });
 
-        var (_, ranked, _) = await RankForFinalsAsync(id, session.CompetitionSectionId);
+        var (_, ranked, _) = await RankForFinalsAsync(id, session.CompetitionSectionId, forFinal: true);
         var ordered = ranked.Select(x => x.TeamId).ToList();
         if (ordered.Count == 0) return BadRequest(new { message = "No teams with results to seed finals." });
 

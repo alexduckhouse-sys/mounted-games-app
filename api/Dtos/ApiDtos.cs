@@ -132,7 +132,7 @@ public record CreateSectionRequest(SectionFormat Format, string AgeGroup, string
     string? RunoffRaceName = null, bool UsesRaceFinals = false, int PriceMinor = 0,
     int? MaxParticipants = null, [Range(1, 50)] int? FinalistCount = null,
     [EnumDataType(typeof(TieBreakRule))] TieBreakRule TieBreakRule = TieBreakRule.Countback,
-    bool HasFinal = true, bool CarryPointsIntoFinal = false, bool DoublePointsInFinal = false);
+    bool HasFinal = true, bool CarryPointsIntoFinal = true, bool DoublePointsInFinal = false);
 /// <param name="TieBreakRule">Omitted leaves the rule as it is.</param>
 /// <param name="HasFinal">Omitted leaves it as it is. Can't be turned off once the section has a final.</param>
 /// <param name="CarryPointsIntoFinal">Omitted leaves it as it is. Can be changed at any time: it only changes how standings add up.</param>

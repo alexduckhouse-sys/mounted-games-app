@@ -332,7 +332,7 @@ public class FinalScoringOptionsTests : IClassFixture<ApiFactory>
     // ---- section endpoints ----
 
     [Fact]
-    public async Task NewSections_DefaultToAFinalThatIsScoredOnItsOwnAtSinglePoints()
+    public async Task NewSections_DefaultToAFinalThatCarriesPointsAtSinglePoints()
     {
         var competitionId = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
         var trainer = await _f.TrainerAsync();
@@ -340,7 +340,44 @@ public class FinalScoringOptionsTests : IClassFixture<ApiFactory>
         var response = await trainer.PostAsJsonAsync($"/api/competitions/{competitionId}/sections", new CreateSectionRequest(SectionFormat.Teams, "Under 14", null));
         var section = await response.ReadAsync<CompetitionSectionDto>();
 
-        Assert.Equal((true, false, false), (section.HasFinal, section.CarryPointsIntoFinal, section.DoublePointsInFinal));
+        Assert.Equal((true, true, false), (section.HasFinal, section.CarryPointsIntoFinal, section.DoublePointsInFinal));
+    }
+
+    [Fact]
+    public async Task MakingFinalsForEveryAgeGroupLeavesOutOnesWithNoFinal()
+    {
+        var withFinal = await ArrangeAsync(carry: true, doubled: false, scoreFinal: false);
+        var without = await ArrangeAsync(carry: true, doubled: false, hasFinal: false, scoreFinal: false);
+        // Put both age groups in one competition.
+        await _f.InDbAsync(async db =>
+        {
+            foreach (var t in db.Teams.Where(t => t.CompetitionId == without.CompetitionId)) t.CompetitionId = withFinal.CompetitionId;
+            var section = await db.CompetitionSections.SingleAsync(x => x.Id == without.SectionId);
+            section.CompetitionId = withFinal.CompetitionId;
+            foreach (var session in db.Sessions.Where(x => x.CompetitionId == without.CompetitionId)) session.CompetitionId = withFinal.CompetitionId;
+            await db.SaveChangesAsync();
+        });
+        var trainer = await _f.TrainerAsync();
+
+        var response = await trainer.PostAsJsonAsync($"/api/competitions/{withFinal.CompetitionId}/finals",
+            new { topN = 20, lanesPerHeat = 20, raceNames = new[] { "Created final" } });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var teamIds = await _f.WithDbAsync(db => db.HeatEntries.Where(e => e.Heat!.Label == "A Final" && e.Heat.Races.Any(r => r.Name == "Created final"))
+            .Select(e => e.TeamId).ToListAsync());
+        Assert.All(without.Teams, id => Assert.DoesNotContain(id, teamIds));
+        Assert.Contains(withFinal.Teams[0], teamIds);
+    }
+
+    [Fact]
+    public async Task DuplicatingAnEventCopiesTheSwitches()
+    {
+        var s = await ArrangeAsync(carry: false, doubled: true, hasFinal: false, scoreFinal: false);
+        var trainer = await _f.TrainerAsync();
+        var clone = await (await trainer.PostAsJsonAsync($"/api/event-tools/competitions/{s.CompetitionId}/clone",
+            new CloneCompetitionRequest("Copy", new DateTime(2040, 1, 1, 9, 0, 0, DateTimeKind.Utc), null))).ReadAsync<CloneCompetitionResultDto>();
+        var copied = await _f.WithDbAsync(db => db.CompetitionSections.SingleAsync(x => x.CompetitionId == clone.CompetitionId));
+        Assert.Equal((false, false, true), (copied.HasFinal, copied.CarryPointsIntoFinal, copied.DoublePointsInFinal));
     }
 
     [Fact]
@@ -372,8 +409,6 @@ public class FinalScoringOptionsTests : IClassFixture<ApiFactory>
         var url = $"/api/competitions/{competitionId}/sections";
         Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(url,
             new CreateSectionRequest(SectionFormat.Teams, "A", null, UsesRaceFinals: true, HasFinal: false))).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(url,
-            new CreateSectionRequest(SectionFormat.Teams, "B", null, UsesRaceFinals: true, CarryPointsIntoFinal: true))).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await trainer.PostAsJsonAsync(url,
             new CreateSectionRequest(SectionFormat.Teams, "C", null, UsesRaceFinals: true, DoublePointsInFinal: true))).StatusCode);
         var ok = await (await trainer.PostAsJsonAsync(url, new CreateSectionRequest(SectionFormat.Teams, "D", null, UsesRaceFinals: true))).ReadAsync<CompetitionSectionDto>();

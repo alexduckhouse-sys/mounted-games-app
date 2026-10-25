@@ -186,6 +186,6 @@
   - `StandingRow.FinalPoints` and `EarlierPoints` give the split for finalists (null otherwise); `TotalPoints` is what the row is ranked on.
 - Finals seeding (`RankForFinalsAsync`, `FinalsBoundary`) is unchanged: it ranks on all points scored before the final.
 - The organiser's tie order (`PUT /finals/tie-order`) now takes its "level on points" totals from the standings, so a tie inside a no-carry final is ordered on the final's points.
-- Existing sections are migrated with `CarryPointsIntoFinal = true` so published standings don't change; only sections created afterwards default to off.
+- Existing sections are migrated with `CarryPointsIntoFinal = true` so published standings don't change. The entity default is off, but `CreateSectionRequest` defaults `CarryPointsIntoFinal` to **true** for now (today's behaviour) until the Sections page gets the switch, which the web agent adds after merge; then the request default can become off. Duplicating an event copies the three switches. Creating finals for every age group at once (no section id) leaves out sections with no final.
 - Not changed: the live "needed to win" projections on the toplist page still add a team's earlier session points to what it can still score (`web/src/lib/toplist.ts`); they start from the API's total, so they are right for carry and need a follow-up for no-carry finals.
 - Files: `api/Services/SectionScoring.cs`, `StandingsService.cs`, `ScoringService.cs`, `api/Controllers/CompetitionsController.cs`, migration `AddFinalScoringOptions`.
