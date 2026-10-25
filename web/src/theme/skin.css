@@ -489,6 +489,12 @@ span[data-grow] { display: inline-block; }
 }
 @media (prefers-reduced-motion: reduce) { .mg-follow-burst { display: none; } }
 
+/* The saved tick: a green disc pops up mid-screen, its tick draws in, and it fades. Taps go straight through. */
+.mg-saved-tick { position: fixed; z-index: 120; left: 50%; top: 42%; translate: -50% -50%; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 22px 14px; border-radius: 20px; background: rgb(var(--mg-surface) / .94); box-shadow: 0 12px 40px rgb(0 0 0 / .22); pointer-events: none; }
+.mg-saved-tick-disc { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: rgb(var(--mg-ok)); }
+.mg-saved-tick-disc path { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.mg-saved-tick-label { max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 16px/1.2 var(--mg-font); color: rgb(var(--mg-heading)); }
+
 /* Sponsors: a strip under a page, the full page, and the cards over the live video. */
 .mg-sponsors { padding: 12px; border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); box-shadow: var(--mg-shadow-sm); }
 .mg-sponsors-title { margin: 0 0 8px; font: 700 12px/1 var(--mg-font); letter-spacing: .08em; text-transform: uppercase; color: rgb(var(--mg-muted)); }

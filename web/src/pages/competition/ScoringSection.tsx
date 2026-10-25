@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSavedTick } from '../../components/SavedTick';
 import { ChevronLeft, ChevronRight, CloudOff, Printer, SlidersHorizontal, Trash2, Undo2 } from 'lucide-react';
 import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
@@ -35,8 +36,9 @@ interface ScoringProps {
   onClickTeam: (teamId: number) => void;
   onToggleElim: (teamId: number) => void;
   onReset: () => void;
-  /** Save the race. The elimination sheet passes the placings with the reasons added; otherwise it is the placings on screen. */
-  onSubmit: (places?: PendingPlace[]) => void;
+  /** Save the race. The elimination sheet passes the placings with the reasons added; otherwise it is the placings on screen.
+   * Returns false when the save was refused (the page shows why), so the saved tick doesn't play. */
+  onSubmit: (places?: PendingPlace[]) => boolean | void;
   correctionReason: string;
   onCorrectionReason: (reason: string) => void;
   /** Take back the last action. Off (undefined) when there is nothing to undo. */
@@ -152,9 +154,17 @@ export function ScoringSection({
     ? summariseRace({ heat, races, raceIndex: summaryIdx, hcTeamIds, rule: tieRule, qualifiers, notes })
     : null;
 
+  // A green tick pops up over the page as a race is saved; the page has already moved on to the next race.
+  const savedTick = useSavedTick();
+  function save(places?: PendingPlace[]) {
+    const name = activeRace?.name;
+    const saved = places ? onSubmit(places) : onSubmit();
+    if (saved !== false && name) savedTick.show(name);
+  }
+
   function complete() {
     if (allowReasons && pending.some((p) => p.eliminated && !p.refereeNote?.trim())) setSheet(true);
-    else onSubmit();
+    else save();
   }
 
   function handleReset() { onReset(); }
@@ -392,10 +402,11 @@ export function ScoringSection({
           places={pending}
           names={names}
           onCancel={() => setSheet(false)}
-          onSkip={() => { setSheet(false); onSubmit(); }}
-          onSave={(places) => { setSheet(false); onSubmit(places); }}
+          onSkip={() => { setSheet(false); save(); }}
+          onSave={(places) => { setSheet(false); save(places); }}
         />
       )}
+      {savedTick.node}
       {overrideSheet && activeRace && (
         <ScoreOverrideSheet
           key={`${heat.id}:${activeRace.id}`}

@@ -29,7 +29,7 @@ interface Extra {
   heatOverride?: Heat;
   queued?: QueuedScore[];
   onSelectRace?: (id: number) => void;
-  onSubmit?: (places?: PendingPlace[]) => void;
+  onSubmit?: (places?: PendingPlace[]) => boolean | void;
   allowReasons?: boolean;
   onSetHc?: (teamId: number, hc: boolean) => Promise<void>;
   hcTeamIds?: ReadonlySet<number>;
@@ -153,6 +153,19 @@ describe('Undo', () => {
     rerender(<Harness onUndo={undo} />);
     await user.click(screen.getByRole('button', { name: /Undo/ }));
     expect(undo).toHaveBeenCalled();
+  });
+});
+
+describe('the saved tick', () => {
+  it('pops up after a race is saved, but not when the save is refused', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn<(places?: PendingPlace[]) => boolean>(() => false);
+    render(<Harness onSubmit={onSubmit} initial={[{ teamId: 2, place: 1, eliminated: false }]} />);
+    await user.click(screen.getByRole('button', { name: 'Race complete' }));
+    expect(screen.queryByText('Race 2 saved')).toBeNull();
+    onSubmit.mockReturnValue(true);
+    await user.click(screen.getByRole('button', { name: 'Race complete' }));
+    expect(screen.getByText('Race 2 saved')).toBeInTheDocument();
   });
 });
 

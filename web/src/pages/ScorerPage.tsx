@@ -684,12 +684,13 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
     change(toggleEliminated(shown, teamId));
   }
 
-  function submit(places: PendingPlace[] = shown) {
-    if (!activeRace || !heat) return;
+  /** Queues the race's result; false when it can't be saved yet (the error says why). */
+  function submit(places: PendingPlace[] = shown): boolean {
+    if (!activeRace || !heat) return false;
     const reason = reasons[activeRace.id]?.trim();
     if ((activeRace.results.length > 0 || outbox.some((item) => item.raceId === activeRace.id)) && !reason) {
       setSaveError('Add a reason for this correction before saving.');
-      return;
+      return false;
     }
     const item: QueuedScore = {
       saveId: crypto.randomUUID(),
@@ -707,7 +708,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
     };
     const queuedBefore = outbox.find((q) => q.raceId === activeRace.id) ?? null;
     const nextOutbox = enqueue(outbox, item);
-    if (!updateOutbox((list) => enqueue(list, item))) { setSaveError(OUTBOX_STORAGE_ERROR); return; }
+    if (!updateOutbox((list) => enqueue(list, item))) { setSaveError(OUTBOX_STORAGE_ERROR); return false; }
     setSaveError(null);
     setUndoStack((stack) => pushUndo(dropDrafts(stack, activeRace.id), { kind: 'save', raceId: activeRace.id, sent: item, queuedBefore, draft: places }));
     setPending([]);
@@ -739,6 +740,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
     const next = nextRaceToScore(heats, session.raceOrderAlternating === true, { heatId: heat.id, raceId: activeRace.id }, queuedIds);
     if (next) { setChosenHeatId(next.heatId); setChosenRaceId(next.raceId); }
+    return true;
   }
 
   // Undo takes back the last action on the open race, or else the last save.

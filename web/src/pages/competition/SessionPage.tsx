@@ -376,12 +376,13 @@ export function SessionPage() {
 
   // Results go into this phone's outbox and send when there's signal, so the
   // scorer can move straight on to the next race. `places` carries the reasons when the sheet asked for them.
-  function submit(places: PendingPlace[] = pending) {
-    if (!activeRace || !activeHeat || !session) return;
+  /** Queues the race's result; false when it can't be saved yet (the error says why). */
+  function submit(places: PendingPlace[] = pending): boolean {
+    if (!activeRace || !activeHeat || !session) return false;
     const reason = correctionReasons[activeRace.id]?.trim();
     if ((activeRace.results.length > 0 || outbox.some((item) => item.raceId === activeRace.id)) && !reason) {
       setSaveError('Add a reason for this correction before saving.');
-      return;
+      return false;
     }
     const heatIndex = orderedHeats.findIndex((h) => h.id === activeHeat.id);
     const item: QueuedScore = {
@@ -400,7 +401,7 @@ export function SessionPage() {
     const queuedBefore = outbox.find((q) => q.raceId === activeRace.id) ?? null;
     const nextOutbox = enqueue(outbox, item);
     const stored = updateOutbox((list) => enqueue(list, item));
-    if (!stored) { setSaveError(OUTBOX_STORAGE_ERROR); return; }
+    if (!stored) { setSaveError(OUTBOX_STORAGE_ERROR); return false; }
     setSaveError(null);
     setUndoStack((stack) => pushUndo(dropDrafts(stack, activeRace.id), { kind: 'save', raceId: activeRace.id, sent: item, queuedBefore, draft: places }));
     if (scoringDraftKey) writeScoringDraft(scoringDraftKey, []);
@@ -442,6 +443,7 @@ export function SessionPage() {
       }
       setActiveRaceId(next.raceId);
     }
+    return true;
   }
 
   // Undo takes back the last action: a placing, a swipe or Clear on the open race, or else the last save.
