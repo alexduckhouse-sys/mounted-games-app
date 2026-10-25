@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { MotionConfig } from 'framer-motion';
 import { CurrentCompetitionProvider, useCurrentCompetition } from './CurrentCompetitionContext';
 import { RememberCompetitionDialog } from './RememberCompetitionDialog';
 
@@ -14,9 +15,17 @@ function Controls() {
     </>
   );
 }
-const mount = () => render(<CurrentCompetitionProvider><Controls /><RememberCompetitionDialog /></CurrentCompetitionProvider>);
+// Motion is stilled, as in lite mode, except where a test covers the slide away.
+const mount = (motion = false) => render(<MotionConfig reducedMotion={motion ? 'never' : 'always'}><CurrentCompetitionProvider><Controls /><RememberCompetitionDialog /></CurrentCompetitionProvider></MotionConfig>);
 
 describe('RememberCompetitionDialog', () => {
+  it('slides away before the answer is kept when motion is on', async () => {
+    mount(true);
+    await userEvent.click(screen.getByRole('button', { name: 'Remember' }));
+    expect(screen.getByRole('dialog')).toHaveClass('is-closing');
+    await waitFor(() => expect(screen.getByTestId('choice')).toHaveTextContent('remember'));
+  });
+
   it('opens as a modal asking whether to keep the competition', () => {
     mount();
     const dialog = screen.getByRole('dialog', { name: 'Remember this competition?' });
