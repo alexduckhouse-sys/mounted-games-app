@@ -93,7 +93,7 @@ describe('OperationsPage', () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
 
-    expect(await screen.findByText('Oak A needs a declaration')).toBeInTheDocument();
+    expect(await screen.findByText('Dec forms missing')).toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Equipment' }));
     await user.click(screen.getByRole('checkbox', { name: /4 × Pole/i }));
@@ -128,8 +128,7 @@ describe('OperationsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Save checklist' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('The checklist changed on another device');
 
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
-    await user.click(screen.getByRole('button', { name: /Recheck/ }));
+    await user.click(screen.getByRole('button', { name: 'Recheck' }));
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 
@@ -139,15 +138,14 @@ describe('OperationsPage', () => {
     await user.click(screen.getByRole('tab', { name: 'Equipment' }));
     await screen.findByRole('checkbox', { name: /4 × Pole/i });
     vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
-    await user.click(screen.getByRole('button', { name: /Recheck/ }));
+    await user.click(screen.getByRole('button', { name: 'Recheck' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t refresh the readiness checks');
   });
 
   it('previews and applies a deterministic draw', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await screen.findByText('Oak A needs a declaration');
+    await screen.findByText('Dec forms missing');
 
     await user.click(screen.getByRole('tab', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
@@ -161,39 +159,55 @@ describe('OperationsPage', () => {
     ));
     expect(reload).toHaveBeenCalled();
   });
-  it('groups readiness rows by priority and keeps finished checks under Done', async () => {
+  it('lists only the jobs to sort, then the set-up areas, with no subtitle or filler', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { ...readiness, sessionOverlaps: [{ firstSessionId: 1, firstSessionName: 'Pairs', secondSessionId: 2, secondSessionName: 'Open', arena: 'Arena 1', startsAt: '2031-05-04T09:30:00Z', endsAt: '2031-05-04T10:00:00Z' }] } });
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: 'Blocking publish' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Before the day' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Preparations' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'To sort' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Manage' })).toBeInTheDocument();
     expect(screen.getByText('Pairs overlaps Open')).toBeInTheDocument();
-    expect(screen.getByText(/Not ready to publish · checked/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Fix 1 clash' })).toHaveAttribute('href', '/competitions/7');
-    expect(screen.getByText('Checks are advisory. They don’t stop you publishing.')).toBeInTheDocument();
-    expect(screen.getByText('Done').closest('details')).not.toHaveAttribute('open');
-    expect(screen.getByText('No unpaid entries')).toBeInTheDocument();
-    expect(screen.queryByText(/export/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Dec forms missing/ })).toHaveAttribute('href', '/competitions/7/declarations');
+    expect(screen.getByRole('button', { name: /Equipment to check/ })).toHaveTextContent('1');
+    // Zero counts are hidden.
+    expect(screen.queryByText('Entries not paid')).not.toBeInTheDocument();
+    expect(screen.queryByText('Teams short of riders')).not.toBeInTheDocument();
+    expect(screen.queryByText(/to sort · checked|Not ready to publish|advisory|Before the day/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Fix/ })).not.toBeInTheDocument();
   });
 
-  it('offers no Fix button when nothing clashes', async () => {
+  it('links each set-up area to its page and marks the ones with jobs', async () => {
+    const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await screen.findByText('Oak A needs a declaration');
-    expect(screen.queryByRole('link', { name: /Fix/ })).not.toBeInTheDocument();
+    await screen.findByText('Dec forms missing');
+
+    expect(screen.getByRole('link', { name: 'Event details' })).toHaveAttribute('href', '/competitions/7/event-details');
+    expect(screen.getByRole('link', { name: 'Sections and races' })).toHaveAttribute('href', '/admin/competitions/7/format');
+    expect(screen.getByRole('link', { name: 'Sponsors and sharing' })).toHaveAttribute('href', '/competitions/7/sponsors');
+    expect(screen.getByRole('button', { name: /Entries and dec forms/ })).toContainElement(screen.getAllByRole('img', { name: 'Has jobs to sort' })[0]);
+    expect(screen.getByRole('link', { name: 'Event details' }).querySelector('[role="img"]')).toBeNull();
+    await user.click(screen.getAllByRole('button').find((button) => button.textContent === 'Equipment')!);
+    expect(await screen.findByRole('checkbox', { name: /4 × Pole/i })).toBeInTheDocument();
+  });
+
+  it('says so when there is nothing to sort and offers no Blocking publish section', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { ...readiness, missingDeclarations: [], equipmentChecklist: [] } });
+    render(<MemoryRouter><OperationsPage /></MemoryRouter>);
+    expect(await screen.findByText('Nothing to sort.')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Blocking publish' })).not.toBeInTheDocument();
   });
 
-  it('keeps the last known checks and shows Retry on the payments row when a refresh fails', async () => {
+  it('keeps the last known checks and shows Retry when a refresh fails', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await screen.findByText('Oak A needs a declaration');
+    await screen.findByText('Dec forms missing');
 
     vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
-    await user.click(screen.getByRole('button', { name: /Recheck/ }));
+    await user.click(screen.getByRole('button', { name: 'Recheck' }));
 
     expect(await screen.findByText(/Couldn’t refresh · last known/)).toBeInTheDocument();
-    expect(screen.getByText('Oak A needs a declaration')).toBeInTheDocument();
+    expect(screen.getByText('Dec forms missing')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(screen.queryByText(/Couldn’t refresh · last known/)).not.toBeInTheDocument());
@@ -206,14 +220,14 @@ describe('OperationsPage', () => {
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t refresh the readiness checks');
     await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('Oak A needs a declaration')).toBeInTheDocument();
+    expect(await screen.findByText('Dec forms missing')).toBeInTheDocument();
   });
 
   it('shows the draw as a lane-numbered preview with fairness, rounds and settings behind the overflow', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: wideDraw });
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await screen.findByText('Oak A needs a declaration');
+    await screen.findByText('Dec forms missing');
     await user.click(screen.getByRole('tab', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
 
@@ -235,7 +249,7 @@ describe('OperationsPage', () => {
     expect(screen.getByText(/Publishing is a separate step/)).toBeInTheDocument();
     // Settings are not on the page until the overflow opens them.
     expect(screen.queryByLabelText('Draw number')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
+    await user.click(screen.getByRole('button', { name: 'Draw settings' }));
     expect(screen.getByRole('dialog', { name: 'Draw settings' })).toBeInTheDocument();
     expect(screen.getByLabelText('Draw number')).toBeInTheDocument();
   });
@@ -244,7 +258,7 @@ describe('OperationsPage', () => {
     vi.mocked(api.post).mockResolvedValue({ data: wideDraw });
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await screen.findByText('Oak A needs a declaration');
+    await screen.findByText('Dec forms missing');
     await user.click(screen.getByRole('tab', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
     await user.click(await screen.findByRole('button', { name: 'New seed' }));
@@ -259,11 +273,11 @@ describe('OperationsPage', () => {
     vi.mocked(api.post).mockResolvedValue({ data: wideDraw });
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await screen.findByText('Oak A needs a declaration');
+    await screen.findByText('Dec forms missing');
     await user.click(screen.getByRole('tab', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
     await screen.findByRole('button', { name: 'Apply draw' });
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
+    await user.click(screen.getByRole('button', { name: 'Draw settings' }));
     await user.type(screen.getByLabelText('Draw number'), '5');
 
     expect(screen.queryByRole('button', { name: 'Apply draw' })).not.toBeInTheDocument();
@@ -273,7 +287,7 @@ describe('OperationsPage', () => {
   it('confirms an applied draw without an undo, and Discard clears the preview', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await screen.findByText('Oak A needs a declaration');
+    await screen.findByText('Dec forms missing');
     await user.click(screen.getByRole('tab', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
     await user.click(await screen.findByRole('button', { name: 'Apply draw' }));
@@ -288,7 +302,7 @@ describe('OperationsPage', () => {
   it('clears the preview and explains when the competition changed after it', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await screen.findByText('Oak A needs a declaration');
+    await screen.findByText('Dec forms missing');
     await user.click(screen.getByRole('tab', { name: 'Draw' }));
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
     await screen.findByRole('button', { name: 'Apply draw' });
@@ -299,36 +313,11 @@ describe('OperationsPage', () => {
     expect(screen.queryByRole('button', { name: 'Apply draw' })).not.toBeInTheDocument();
   });
 
-  it('shows the wide-screen desk with grouped issue rows and a single Blocks publish tag', async () => {
+  it('keeps the Equipment tab on wide screens', async () => {
     mockWideScreen(true);
-    vi.mocked(api.get).mockResolvedValue({ data: { ...readiness, sessionOverlaps: [{ firstSessionId: 1, firstSessionName: 'Pairs', secondSessionId: 2, secondSessionName: 'Open', arena: 'Arena 1', startsAt: '2031-05-04T09:30:00Z', endsAt: '2031-05-04T10:00:00Z' }] } });
-    const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-
-    expect(await screen.findByRole('heading', { name: 'To resolve' })).toBeInTheDocument();
-    expect(screen.getAllByText('Blocks publish')).toHaveLength(1);
-    expect(screen.getByRole('columnheader', { name: /Arena clashes · 1 · block publishing/ })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: /Missing declarations · 1/ })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Equipment' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Equipment' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Recheck now' })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('tab', { name: 'Declarations 1' }));
-    expect(screen.getByRole('tab', { name: 'Declarations 1' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByRole('columnheader', { name: /Arena clashes/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Open declarations for Oak A/ })).toHaveAttribute('href', '/competitions/7/declarations');
-  });
-
-  it('saves the equipment checklist from the wide-screen card', async () => {
-    mockWideScreen(true);
-    const user = userEvent.setup();
-    render(<MemoryRouter><OperationsPage /></MemoryRouter>);
-    await user.click(await screen.findByRole('checkbox', { name: /4 × Pole/i }));
-    await user.click(screen.getByRole('button', { name: 'Save checklist' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith(
-      '/competitions/7/operations/equipment-acknowledgements',
-      { acknowledgedKeys: ['Lane|Pole|4'], expectedFingerprint: 'equipment-v1' },
-    ));
+    expect(await screen.findByRole('tab', { name: 'Equipment' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'To sort' })).toBeInTheDocument();
   });
 
   it('opens the Scorers & team tab from ?tab=scorers or by clicking the tab', async () => {

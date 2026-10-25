@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
 import { usePageWidth } from '../../components/pageWidthState';
 import './refine.css';
 
@@ -47,6 +47,23 @@ function moveTabFocus(event: ReactKeyboardEvent<HTMLElement>) {
 }
 
 export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, title, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
+  const tabsRef = useRef<HTMLElement>(null);
+  const [moreTabs, setMoreTabs] = useState(false);
+  const activeTab = tabs?.findIndex((tab) => tab.active) ?? -1;
+  // A long tab strip scrolls sideways on a phone: keep the open tab in view and fade the edge while more tabs are hidden.
+  useEffect(() => {
+    const nav = tabsRef.current;
+    if (!nav) return;
+    const active = nav.children[activeTab] as HTMLElement | undefined;
+    if (active && (active.offsetLeft < nav.scrollLeft || active.offsetLeft + active.offsetWidth > nav.scrollLeft + nav.clientWidth)) {
+      nav.scrollTo?.({ left: Math.max(0, active.offsetLeft - 24) });
+    }
+    const update = () => setMoreTabs(nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 4);
+    update();
+    nav.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => { nav.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
+  }, [activeTab]);
   return (
     <header className="rf-hd">
       <div className="rf-hd-top">
@@ -59,7 +76,7 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
       {subtitle && <p className="rf-sub">{subtitle}</p>}
       {children}
       {tabs && tabs.length > 0 && (
-        <nav className="rf-tabs" aria-label={tabsLabel} role={tabsKind === 'tablist' ? 'tablist' : undefined} onKeyDown={tabsKind === 'tablist' ? moveTabFocus : undefined}>
+        <nav ref={tabsRef} className={`rf-tabs ${moreTabs ? 'rf-tabs-more' : ''}`} aria-label={tabsLabel} role={tabsKind === 'tablist' ? 'tablist' : undefined} onKeyDown={tabsKind === 'tablist' ? moveTabFocus : undefined}>
           {tabs.map((tab) => tabsKind === 'tablist' ? (
             <button key={tab.label} type="button" role="tab" aria-selected={tab.active} tabIndex={tab.active ? 0 : -1} className="rf-tab" onClick={tab.onSelect}>{tab.label}</button>
           ) : tab.to ? (
@@ -171,5 +188,50 @@ export function RefineSheet({ title, onClose, children }: SheetProps) {
         {children}
       </div>
     </>
+  );
+}
+
+export interface ChoiceOption<T extends string> { value: T; label: string }
+
+/** A settings row: the label on the left, the current choice on the right with a chevron. Opens a sheet on phones and a small list under the row on wide screens. */
+export function RefineChoiceRow<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: ChoiceOption<T>[]; onChange: (value: T) => void }) {
+  const [open, setOpen] = useState(false);
+  const [wide, setWide] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches);
+  const wrap = useRef<HTMLDivElement>(null);
+  const current = options.find((option) => option.value === value)?.label ?? '';
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia('(min-width: 1024px)');
+    const update = () => setWide(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (!open || !wide) return;
+    const away = (event: MouseEvent) => { if (!wrap.current?.contains(event.target as Node)) setOpen(false); };
+    const esc = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open, wide]);
+  const choose = (next: T) => { setOpen(false); if (next !== value) onChange(next); };
+  const list = (
+    <div role="listbox" aria-label={label} className="rf-choices">
+      {options.map((option) => (
+        <button key={option.value} type="button" role="option" aria-selected={option.value === value} className="rf-choice" onClick={() => choose(option.value)}>
+          <span>{option.label}</span>{option.value === value && <Check className="h-4 w-4" aria-hidden="true" />}
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <div ref={wrap} className="rf-choice-wrap">
+      <button type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${current}`} onClick={() => setOpen((v) => !v)}>
+        <span className="rf-grow rf-t1">{label}</span>
+        <span className="rf-choice-val">{current}</span>
+        <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
+      </button>
+      {open && (wide ? <div className="rf-pop">{list}</div> : <RefineSheet title={label} onClose={() => setOpen(false)}>{list}</RefineSheet>)}
+    </div>
   );
 }

@@ -1,18 +1,17 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePageWidth } from '../../components/pageWidthState';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, RefreshCw } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
 import { CompetitionTeamCard } from '../competition/CompetitionTeamCard';
 import { ScorerLinksCard } from '../competition/ScorerLinksCard';
-import { Chevron, RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet } from '../refine/Refine';
+import { Chevron, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet } from '../refine/Refine';
 import { DrawResult, DrawSettingsForm } from './DrawPreviewView';
 import { EntriesPanel } from './EntriesPanel';
 import { EquipmentList } from './EquipmentList';
-import { ReadinessDesk } from './ReadinessDesk';
-import { buildIssueGroups, clock, drawSubtitle, plural, type IssueGroup } from './readiness';
+import { buildIssueGroups, clock, drawSubtitle, type IssueGroup } from './readiness';
 import type { CompetitionReadiness, DrawPreview } from './types';
 import { apiMessage } from './types';
 import { DuplicateEventPanel, PrintSheetsPanel, TeamImportPanel } from '../eventTools/EventToolsPage';
@@ -47,7 +46,7 @@ export function OperationsPage() {
 }
 
 type View = 'checks' | 'equipment' | 'draw' | 'entries' | 'scorers' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
-type Sheet = 'more' | 'draw' | null;
+type Sheet = 'draw' | null;
 
 const VALID_VIEWS = new Set<View>(['checks', 'equipment', 'draw', 'entries', 'scorers', 'tack', 'passport', 'import', 'print', 'results', 'duplicate']);
 
@@ -199,32 +198,28 @@ function OperationsPageContent() {
   function changeSeed(value: string) { setSeed(value); setPreview(null); setDrawMessage(null); }
 
   const groups = useMemo(() => (readiness ? buildIssueGroups(readiness, competition.id) : []), [readiness, competition.id]);
-  const shownView: View = wide && view === 'equipment' ? 'checks' : view;
+  const shownView: View = view;
   const back = `/competitions/${competition.id}`;
   const equipmentTotal = readiness?.equipmentChecklist.length ?? 0;
   const sectionName = (id: number) => competition.sections.find((section) => section.id === id)?.displayName ?? 'Section draw';
 
   const overflow = (
-    <button type="button" className="rf-ib" aria-label="More actions" aria-haspopup="dialog" onClick={() => setSheet(shownView === 'draw' ? 'draw' : 'more')}>
+    <button type="button" className="rf-ib" aria-label="Draw settings" aria-haspopup="dialog" onClick={() => setSheet('draw')}>
       <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
     </button>
   );
+  const recheck = (
+    <button type="button" className="rf-ib" aria-label={loadingReadiness ? 'Checking…' : 'Recheck'} onClick={() => void loadReadiness()} disabled={loadingReadiness}>
+      <RefreshCw className={`h-5 w-5 ${loadingReadiness ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
+    </button>
+  );
 
-  let title = 'Readiness';
+  let title = 'Preparations';
   let context = `Organiser · ${competition.name}`;
   let subtitle: string | undefined;
-  let actions: ReactNode = overflow;
+  let actions: ReactNode = recheck;
   if (shownView === 'checks') {
-    const issues = groups.reduce((sum, group) => sum + group.items.length, 0);
-    const time = clock(checkedAt);
-    if (readiness) {
-      subtitle = [
-        readiness.isReady ? 'Ready to publish' : 'Not ready to publish',
-        loadError ? `couldn’t refresh, last checked ${time}` : `checked ${time}`,
-        !readiness.isReady && issues > 0 && wide ? plural(issues, 'open job') : null,
-      ].filter(Boolean).join(' · ');
-    }
-    if (wide) actions = <button type="button" className="rf-btn" onClick={() => void loadReadiness()} disabled={loadingReadiness}>{loadingReadiness ? 'Checking…' : 'Recheck now'}</button>;
+    // The page has no subtitle: the rows say what is left.
   } else if (shownView === 'entries') {
     title = 'Entries';
     context = `Organiser · ${competition.name}`;
@@ -255,6 +250,7 @@ function OperationsPageContent() {
     if (readiness) subtitle = `${checkedEquipment.size} of ${equipmentTotal} items checked`;
   } else if (preview) {
     title = sectionName(preview.sectionId);
+    actions = overflow;
     context = 'Organiser · Draw preview';
     subtitle = drawSubtitle(preview);
   } else {
@@ -263,8 +259,8 @@ function OperationsPageContent() {
   }
 
   const tabs = [
-    { label: 'Readiness', active: shownView === 'checks', onSelect: () => setView('checks') },
-    ...(wide ? [] : [{ label: 'Equipment', active: shownView === 'equipment', onSelect: () => setView('equipment') }]),
+    { label: 'Preparations', active: shownView === 'checks', onSelect: () => setView('checks') },
+    { label: 'Equipment', active: shownView === 'equipment', onSelect: () => setView('equipment') },
     { label: 'Draw', active: shownView === 'draw', onSelect: () => setView('draw') },
     { label: 'Entries', active: shownView === 'entries', onSelect: () => setView('entries') },
     { label: 'Scorers & team', active: shownView === 'scorers', onSelect: () => setView('scorers') },
@@ -276,8 +272,6 @@ function OperationsPageContent() {
     ...(mayDuplicate ? [{ label: 'Duplicate event', active: shownView === 'duplicate', onSelect: () => setView('duplicate') }] : []),
   ];
 
-  const clashes = groups.find((group) => group.id === 'clashes')?.items.length ?? 0;
-  const showFix = shownView === 'checks' && !wide && clashes > 0;
   const showSave = shownView === 'equipment' && !!readiness && equipmentTotal > 0;
   const showDrawFoot = shownView === 'draw' && !!preview;
 
@@ -289,9 +283,9 @@ function OperationsPageContent() {
       {saveError && <p role="alert" className="mg-notice ops-alert">{saveError}</p>}
       {loadingReadiness && !readiness && <p role="status" className="rf-note">Checking competition details…</p>}
 
-      {shownView === 'checks' && readiness && (wide
-        ? <ReadinessDesk readiness={readiness} groups={groups} checkedEquipment={checkedEquipment} canWrite={canWrite} saving={savingChecklist} saved={checklistSaved} onToggle={toggleEquipment} onSave={() => void saveChecklist()} />
-        : <PhoneChecks readiness={readiness} groups={groups} checkedEquipment={checkedEquipment} refreshFailed={loadError !== null} checkedAt={checkedAt} retrying={loadingReadiness} onRetry={() => void loadReadiness()} onOpenEquipment={() => setView('equipment')} />)}
+      {shownView === 'checks' && readiness && (
+        <Preparations readiness={readiness} groups={groups} checkedEquipment={checkedEquipment} competitionId={competition.id} refreshFailed={loadError !== null} checkedAt={checkedAt} retrying={loadingReadiness} onRetry={() => void loadReadiness()} onOpen={setView} />
+      )}
 
       {shownView === 'equipment' && readiness && (
         <section aria-label="Equipment checklist">
@@ -326,12 +320,7 @@ function OperationsPageContent() {
         </section>
       )}
 
-      {showFix && (
-        <RefineFoot aboveTabs label="Fix clashes">
-          <Link className="rf-btn rf-btn-primary rf-wide" to={back}>Fix {plural(clashes, 'clash', 'clashes')}</Link>
-        </RefineFoot>
-      )}
-      {showSave && !wide && (
+      {showSave && (
         <RefineFoot aboveTabs label="Save checklist">
           <button type="button" className="rf-btn rf-btn-primary rf-grow" onClick={() => void saveChecklist()} disabled={savingChecklist || !canWrite}>{savingChecklist ? 'Saving…' : 'Save checklist'}</button>
           {checklistSaved && <span role="status" className="rf-t2">Checklist saved.</span>}
@@ -350,15 +339,6 @@ function OperationsPageContent() {
         </RefineFoot>
       )}
 
-      {sheet === 'more' && (
-        <RefineSheet title="More" onClose={() => setSheet(null)}>
-          <RefineList as="div">
-            <button type="button" className="rf-row" onClick={() => { setSheet(null); void loadReadiness(); }} disabled={loadingReadiness}>
-              <span className="rf-grow"><span className="rf-t1">Recheck</span><span className="rf-t2">Load the readiness checks again</span></span>
-            </button>
-          </RefineList>
-        </RefineSheet>
-      )}
       {sheet === 'draw' && (
         <RefineSheet title="Draw settings" onClose={() => setSheet(null)}>
           <DrawSettingsForm sections={competition.sections} sectionId={sectionId} seed={seed} previewing={previewing} onSection={changeSection} onSeed={changeSeed} onPreview={() => void previewDraw()} />
@@ -368,91 +348,86 @@ function OperationsPageContent() {
   );
 }
 
-function PhoneChecks({ readiness, groups, checkedEquipment, refreshFailed, checkedAt, retrying, onRetry, onOpenEquipment }: {
+interface PrepRow { key: string; count: number; title: string; to?: string; view?: View }
+
+function Chev() { return <Chevron />; }
+
+/** The Preparations list: what is left to sort (rows with a zero count are hidden), then the places each set-up area is managed. */
+function Preparations({ readiness, groups, checkedEquipment, competitionId, refreshFailed, checkedAt, retrying, onRetry, onOpen }: {
   readiness: CompetitionReadiness;
   groups: IssueGroup[];
   checkedEquipment: Set<string>;
+  competitionId: number;
   refreshFailed: boolean;
   checkedAt: Date | null;
   retrying: boolean;
   onRetry: () => void;
-  onOpenEquipment: () => void;
+  onOpen: (view: View) => void;
 }) {
-  const total = readiness.equipmentChecklist.length;
-  const checked = checkedEquipment.size;
-  const equipmentDone = total === 0 || checked >= total;
-  const blocking = groups.filter((group) => group.blocks && group.items.length > 0);
-  // A payments group that failed to refresh stays visible with Retry even when it has no known items.
-  const before = groups.filter((group) => !group.blocks && (group.items.length > 0 || (refreshFailed && group.id === 'payments')));
-  const done: string[] = [
-    ...groups.filter((group) => group.items.length === 0 && !(refreshFailed && group.id === 'payments')).map((group) => group.doneText),
-    ...(equipmentDone ? [total === 0 ? 'No equipment to check' : `Equipment checklist complete (${checked} of ${total})`] : []),
+  const base = `/competitions/${competitionId}`;
+  const clashes = groups.find((group) => group.id === 'clashes')?.items ?? [];
+  const unpaid = readiness.unpaidSignups.length;
+  const missing = readiness.missingDeclarations.length;
+  const short = readiness.incompleteTeams.length;
+  const equipmentDetails = readiness.equipmentIssues.length;
+  const equipmentToCheck = readiness.equipmentChecklist.filter((item) => !checkedEquipment.has(item.key)).length;
+  const toSort = ([
+    { key: 'unpaid', count: unpaid, title: 'Entries not paid', view: 'entries' },
+    { key: 'missing', count: missing, title: 'Dec forms missing', to: `${base}/declarations` },
+    { key: 'short', count: short, title: 'Teams short of riders', to: `${base}/teams` },
+    { key: 'details', count: equipmentDetails, title: 'Races missing equipment details', to: base },
+    { key: 'equipment', count: equipmentToCheck, title: 'Equipment to check', view: 'equipment' },
+  ] as PrepRow[]).filter((row) => row.count > 0);
+  const manage: Array<{ key: string; title: string; todo: boolean; to?: string; view?: View }> = [
+    { key: 'details', title: 'Event details', todo: false, to: `${base}/event-details` },
+    { key: 'sections', title: 'Sections and races', todo: false, to: `/admin/competitions/${competitionId}/format` },
+    { key: 'entries', title: 'Entries and dec forms', todo: unpaid + missing + short > 0, view: 'entries' },
+    { key: 'timetable', title: 'Timetable and draw', todo: clashes.length + equipmentDetails > 0, view: 'draw' },
+    { key: 'equipment', title: 'Equipment', todo: equipmentToCheck > 0, view: 'equipment' },
+    { key: 'sponsors', title: 'Sponsors and sharing', todo: false, to: `${base}/sponsors` },
   ];
+  const open = (target: { to?: string; view?: View }, children: ReactNode) => target.to
+    ? <Link to={target.to} className="rf-row">{children}</Link>
+    : <button type="button" className="rf-row" onClick={() => onOpen(target.view as View)}>{children}</button>;
   return (
-    <>
-      {blocking.length > 0 && <>
+    <div className="ops-prep">
+      {refreshFailed && (
+        <p role="status" className="rf-note ops-warn">
+          Couldn’t refresh{checkedAt ? ` · last known ${clock(checkedAt)}` : ''}{' '}
+          <button type="button" className="rf-btn rf-btn-text" onClick={onRetry} disabled={retrying}>Retry</button>
+        </p>
+      )}
+      {clashes.length > 0 && <>
         <RefineSection title="Blocking publish" />
-        <RefineList as="div">{blocking.map((group) => <IssueRow key={group.id} group={group} />)}</RefineList>
-      </>}
-      {(before.length > 0 || !equipmentDone) && <>
-        <RefineSection title="Before the day" />
         <RefineList as="div">
-          {before.map((group) => <IssueRow key={group.id} group={group} failed={refreshFailed && group.id === 'payments'} lastKnown={clock(checkedAt)} retrying={retrying} onRetry={onRetry} />)}
-          {!equipmentDone && (
-            <button type="button" className="rf-row" onClick={onOpenEquipment}>
-              <span className="rf-grow"><span className="rf-t1">Equipment checklist</span><span className="rf-t2">Check the arena equipment</span></span>
-              <span className="rf-num">{checked}<span className="ops-of">/{total}</span></span>
-              <Chevron />
-            </button>
-          )}
+          {clashes.map((item) => (
+            <Link key={item.key} to={item.to} className="rf-row">
+              <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className="rf-t2">{item.detail}</span></span>
+              <Chev />
+            </Link>
+          ))}
         </RefineList>
       </>}
-      {blocking.length === 0 && before.length === 0 && equipmentDone && <RefineNote>All checks are clear.</RefineNote>}
-      {done.length > 0 && (
-        <div className="ops-gap">
+      <RefineSection title="To sort" />
+      {toSort.length === 0
+        ? <RefineNote>Nothing to sort.</RefineNote>
+        : (
           <RefineList as="div">
-            <RefineDisclosure title="Done" trailing={<span className="rf-t2">{done.length}</span>}>
-              <ul className="ops-done">{done.map((text) => <li key={text} className="rf-row ops-lane">{text}</li>)}</ul>
-            </RefineDisclosure>
+            {toSort.map((row) => <Fragment key={row.key}>{open(row, <>
+              <span className="rf-num ops-count">{row.count}</span>
+              <span className="rf-grow rf-t1">{row.title}</span>
+              <Chev />
+            </>)}</Fragment>)}
           </RefineList>
-        </div>
-      )}
-      <RefineNote>Checks are advisory. They don’t stop you publishing.</RefineNote>
-    </>
-  );
-}
-
-/** One category: a collapsible row with the count on the right, opening to the individual jobs. Red is kept for blockers. */
-function IssueRow({ group, failed = false, lastKnown = '', retrying = false, onRetry }: {
-  group: IssueGroup;
-  failed?: boolean;
-  lastKnown?: string;
-  retrying?: boolean;
-  onRetry?: () => void;
-}) {
-  const count = group.items.length;
-  const number = <span className={`rf-num ${group.blocks ? 'ops-num-bad' : ''}`}>{count}</span>;
-  const items = group.items.map((item) => (
-    <Link key={item.key} to={item.to} className="rf-row ops-item-row">
-      <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className="rf-t2">{item.detail}</span></span>
-      <Chevron />
-    </Link>
-  ));
-  if (failed) {
-    return (
-      <div>
-        <div className="rf-row">
-          <span className="rf-grow"><span className="rf-t1">{group.title}</span><span className="rf-t2 ops-warn">Couldn’t refresh{lastKnown ? ` · last known ${lastKnown}` : ''}</span></span>
-          {number}
-          <button type="button" className="rf-btn rf-btn-text" onClick={onRetry} disabled={retrying}>Retry</button>
-        </div>
-        {items}
-      </div>
-    );
-  }
-  return (
-    <RefineDisclosure defaultOpen={group.blocks || count <= 3} title={group.title} sub={group.hint} trailing={number}>
-      {items}
-    </RefineDisclosure>
+        )}
+      <RefineSection title="Manage" />
+      <RefineList as="div">
+        {manage.map((area) => <Fragment key={area.key}>{open(area, <>
+          <span className="rf-grow rf-t1">{area.title}</span>
+          {area.todo && <span className="ops-dot" role="img" aria-label="Has jobs to sort" />}
+          <Chev />
+        </>)}</Fragment>)}
+      </RefineList>
+    </div>
   );
 }
