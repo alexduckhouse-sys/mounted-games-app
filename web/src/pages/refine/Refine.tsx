@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
@@ -194,6 +194,34 @@ export function RefineSheet({ title, onClose, children }: SheetProps) {
 
 export interface ChoiceOption<T extends string> { value: T; label: string }
 
+interface Place { top: number; right: number; max: number }
+
+/** Where a floating panel goes: under the right end of the row it opens from. */
+function placeUnder(element: HTMLElement | null): Place | null {
+  const rect = element?.getBoundingClientRect();
+  if (!rect) return null;
+  return { top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right + 12), max: Math.max(160, window.innerHeight - rect.bottom - 16) };
+}
+
+/** A small panel fixed under a row. It closes on Escape, on a click outside it and its row, and on resize. */
+function FloatingPanel({ anchor, place, onClose, children }: { anchor: RefObject<HTMLElement | null>; place: Place; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; });
+  useEffect(() => {
+    const away = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!ref.current?.contains(target) && !anchor.current?.contains(target)) closeRef.current();
+    };
+    const esc = (event: KeyboardEvent) => { if (event.key === 'Escape') { closeRef.current(); anchor.current?.focus(); } };
+    const resize = () => closeRef.current();
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    window.addEventListener('resize', resize);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); window.removeEventListener('resize', resize); };
+  }, [anchor]);
+  return createPortal(<div ref={ref} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{children}</div>, document.body);
+}
 
 /**
  * A settings row: the label on the left, the current choice on the right with a chevron. Tapping it opens a small list
@@ -206,34 +234,18 @@ export function RefineChoiceRow<T extends string>({ label, value, options, onCha
   const [open, setOpen] = useState(false);
   const [typing, setTyping] = useState(false);
   const [custom, setCustom] = useState('');
-  const [place, setPlace] = useState<{ top: number; right: number; max: number } | null>(null);
+  const [place, setPlace] = useState<Place | null>(null);
   const rowRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
   const known = options.find((option) => option.value === value);
   const current = known?.label ?? (value || placeholder);
 
   const close = () => { setOpen(false); setTyping(false); };
   function toggle() {
     if (open) { close(); return; }
-    const rect = rowRef.current?.getBoundingClientRect();
-    if (rect) setPlace({ top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right + 12), max: Math.max(160, window.innerHeight - rect.bottom - 16) });
+    setPlace(placeUnder(rowRef.current));
     setCustom('');
     setOpen(true);
   }
-  useEffect(() => {
-    if (!open) return;
-    const away = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (!popRef.current?.contains(target) && !rowRef.current?.contains(target)) close();
-    };
-    const esc = (event: KeyboardEvent) => { if (event.key === 'Escape') { close(); rowRef.current?.focus(); } };
-    const away2 = () => close();
-    document.addEventListener('mousedown', away);
-    document.addEventListener('keydown', esc);
-    window.addEventListener('resize', away2);
-    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); window.removeEventListener('resize', away2); };
-  }, [open]);
-
   const choose = (next: T) => { close(); if (next !== value) onChange(next); };
   const submitCustom = () => { const text = custom.trim(); if (text) choose(text as T); };
 
@@ -259,9 +271,90 @@ export function RefineChoiceRow<T extends string>({ label, value, options, onCha
         <span className={`rf-choice-val ${known || value ? '' : 'rf-choice-empty'}`}>{current}</span>
         <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
       </button>
-      {open && place && createPortal(
-        <div ref={popRef} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{list}</div>,
-        document.body,
+      {open && place && <FloatingPanel anchor={rowRef} place={place} onClose={close}>{list}</FloatingPanel>}
+    </div>
+  );
+}
+
+const MONTH_FORMAT = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' });
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** "Fri 23 Oct, 18:00" for an ISO time, in the device's zone. */
+function dateTimeText(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * A settings row for a date and time: "Deadline … Fri 23 Oct, 18:00 ›". It opens a small panel with a month calendar
+ * (the event's days ringed, the chosen day filled) and the phone's own time box. Done saves; Remove clears it.
+ */
+export function RefineDateTimeRow({ label, value, onChange, eventDays = [], removable = true, disabled = false }: {
+  label: string; value: string | null; onChange: (iso: string | null) => void; eventDays?: Date[]; removable?: boolean; disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [place, setPlace] = useState<Place | null>(null);
+  const [day, setDay] = useState<Date | null>(null);
+  const [time, setTime] = useState('09:00');
+  const [month, setMonth] = useState(() => startOfDay(new Date()));
+  const rowRef = useRef<HTMLButtonElement>(null);
+  const text = dateTimeText(value);
+
+  function begin() {
+    if (open) { setOpen(false); return; }
+    const current = value ? new Date(value) : null;
+    const valid = current && !Number.isNaN(current.getTime()) ? current : null;
+    setDay(valid ? startOfDay(valid) : null);
+    setTime(valid ? `${pad2(valid.getHours())}:${pad2(valid.getMinutes())}` : '09:00');
+    setMonth(startOfDay(valid ?? eventDays[0] ?? new Date()));
+    setPlace(placeUnder(rowRef.current));
+    setOpen(true);
+  }
+  function done() {
+    if (!day || !/^\d{2}:\d{2}$/.test(time)) return;
+    const [h, m] = time.split(':').map(Number);
+    setOpen(false);
+    onChange(new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m).toISOString());
+  }
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const lead = (first.getDay() + 6) % 7;
+  const total = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const cells = [...Array.from({ length: lead }, () => null), ...Array.from({ length: total }, (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1))];
+  const shift = (by: number) => setMonth(new Date(month.getFullYear(), month.getMonth() + by, 1));
+
+  return (
+    <div className="rf-choice-wrap">
+      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="dialog" aria-expanded={open} aria-label={`${label}: ${text || 'Not set'}`} disabled={disabled} onClick={begin}>
+        <span className="rf-grow rf-t1">{label}</span>
+        <span className={`rf-choice-val ${text ? '' : 'rf-choice-empty'}`}>{text || 'Not set'}</span>
+        <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
+      </button>
+      {open && place && (
+        <FloatingPanel anchor={rowRef} place={place} onClose={() => setOpen(false)}>
+          <div role="dialog" aria-label={label} className="rf-cal">
+            <div className="rf-cal-head">
+              <button type="button" className="rf-ib" aria-label="Previous month" onClick={() => shift(-1)}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button>
+              <strong>{MONTH_FORMAT.format(month)}</strong>
+              <button type="button" className="rf-ib" aria-label="Next month" onClick={() => shift(1)}><ChevronRight className="h-5 w-5" aria-hidden="true" /></button>
+            </div>
+            <div className="rf-cal-grid" role="grid" aria-label={MONTH_FORMAT.format(month)}>
+              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i} className="rf-cal-dow" aria-hidden="true">{d}</span>)}
+              {cells.map((cell, i) => cell ? (
+                <button key={i} type="button" role="gridcell" aria-selected={day ? sameDay(cell, day) : false}
+                  aria-label={cell.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  className={`rf-cal-day ${eventDays.some((d) => sameDay(d, cell)) ? 'rf-cal-event' : ''}`} onClick={() => setDay(cell)}>{cell.getDate()}</button>
+              ) : <span key={i} />)}
+            </div>
+            <label className="rf-cal-time">Time<input type="time" value={time} onChange={(event) => setTime(event.target.value)} /></label>
+            <div className="rf-cal-actions">
+              {removable && value ? <button type="button" className="rf-link-danger" onClick={() => { setOpen(false); onChange(null); }}>Remove</button> : <span />}
+              <button type="button" className="rf-btn rf-btn-primary" disabled={!day || !time} onClick={done}>Done</button>
+            </div>
+          </div>
+        </FloatingPanel>
       )}
     </div>
   );

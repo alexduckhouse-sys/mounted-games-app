@@ -372,8 +372,8 @@ function Preparations({ readiness, groups, checkedEquipment, competitionId, refr
   const equipmentDetails = readiness.equipmentIssues.length;
   const equipmentToCheck = readiness.equipmentChecklist.filter((item) => !checkedEquipment.has(item.key)).length;
   const toSort = ([
-    { key: 'unpaid', count: unpaid, title: 'Entries not paid', view: 'entries' },
-    { key: 'missing', count: missing, title: 'Dec forms missing', to: `${base}/declarations` },
+    { key: 'unpaid', count: unpaid, title: 'Entries not paid', to: `${base}/entries` },
+    { key: 'missing', count: missing, title: 'Dec forms missing', to: `${base}/entries` },
     { key: 'short', count: short, title: 'Teams short of riders', to: `${base}/teams` },
     { key: 'details', count: equipmentDetails, title: 'Races missing equipment details', to: base },
     { key: 'equipment', count: equipmentToCheck, title: 'Equipment to check', view: 'equipment' },
@@ -381,7 +381,7 @@ function Preparations({ readiness, groups, checkedEquipment, competitionId, refr
   const manage: Array<{ key: string; title: string; todo: boolean; to?: string; view?: View }> = [
     { key: 'details', title: 'Event details', todo: false, to: `${base}/event-details` },
     { key: 'sections', title: 'Sections and races', todo: false, to: `${base}/sections` },
-    { key: 'entries', title: 'Entries and dec forms', todo: unpaid + missing + short > 0, view: 'entries' },
+    { key: 'entries', title: 'Entries and dec forms', todo: unpaid + missing + short > 0, to: `${base}/entries` },
     { key: 'timetable', title: 'Timetable and draw', todo: clashes.length + equipmentDetails > 0, to: `${base}/timetable-and-draw` },
     { key: 'equipment', title: 'Equipment', todo: equipmentToCheck > 0, view: 'equipment' },
     { key: 'sponsors', title: 'Sponsors and sharing', todo: false, to: `${base}/sponsors` },
