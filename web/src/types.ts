@@ -318,6 +318,12 @@ export interface CompetitionDetail {
   longitude?: number | null;
   what3Words?: string | null;
   appleMapsUrl?: string | null;
+  /** The venue's postcode. Not sent by the API yet; the Details page leaves the row out while it is missing. */
+  postcode?: string | null;
+  /** The governing body's number for the competition. Not sent by the API yet; hidden while missing. */
+  competitionNumber?: string | null;
+  /** Where entrants write to the organiser. Not sent by the API yet; hidden while missing. */
+  contactEmail?: string | null;
   startDate: string;
   endDate?: string | null;
   isActive: boolean;
