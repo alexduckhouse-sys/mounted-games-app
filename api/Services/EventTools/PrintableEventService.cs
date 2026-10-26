@@ -40,7 +40,7 @@ public sealed class PrintableEventService(AppDbContext db)
                     {
                         var result = r.Results.SingleOrDefault(y => y.TeamId == e.TeamId);
                         return new PrintableScoreCellDto(e.TeamId, e.Team!.DisplayName, result?.Placing, result?.Eliminated ?? false, result?.Points,
-                            e.LaneIndex, e.Team.BibDescription ?? e.Team.BibColour, result?.IsSitOut ?? false,
+                            e.LaneIndex, !string.IsNullOrWhiteSpace(e.BibColourOverride) ? e.BibColourOverride : (e.Team.BibDescription ?? e.Team.BibColour), result?.IsSitOut ?? false,
                             result is null ? ResultStatus.Finished : ResultStatuses.Of(result));
                     }).ToArray())).ToArray()))
             .ToArray();

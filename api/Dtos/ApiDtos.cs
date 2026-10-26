@@ -377,7 +377,9 @@ public record UpdateHeatDurationRequest(int? DurationMinutes);
 public record RaceClockRequest(DateTime? At);
 
 public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex,
-    string? RefereeCard = null, string? Flag = null, string? BibDescription = null);
+    string? RefereeCard = null, string? Flag = null, string? BibDescription = null, string? BibColourOverride = null);
+
+public record SetBibOverrideRequest(string? BibColourOverride);
 
 /// <summary>A result as everyone sees it. Status says why a team that did not finish (Eliminated is true) did not. The referee note is never here.</summary>
 public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, double Points, bool IsSitOut = false,
