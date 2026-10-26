@@ -7,7 +7,6 @@ import { AuthProvider } from '../auth/AuthContext';
 import type { ClubMember, ClubMembers } from '../types';
 import { MembersPage } from './MembersPage';
 import { NeedsYouProvider } from './profile/NeedsYouProvider';
-import { chooseOption, optionLabels } from '../test/select';
 
 import { autoConfirm } from '../test/confirm';
 vi.mock('../api', async (importOriginal) => ({
@@ -55,7 +54,8 @@ function mount(options: { roles?: string[]; clubId?: number | null } = {}) {
 
 const group = (name: string) => within(screen.getByRole('region', { name }));
 const waitingFor = async () => within(await screen.findByRole('region', { name: 'Waiting for you' }));
-const row = (name: string) => screen.getByRole('button', { name: new RegExp(name) });
+const more = (name: string) => screen.getByRole('button', { name: `More for ${name}` });
+const sheet = () => within(screen.getByRole('dialog'));
 
 beforeEach(() => {
   members = club();
@@ -76,28 +76,29 @@ beforeEach(() => {
 });
 
 describe('MembersPage: the list', () => {
-  it('shows the club, then everyone by role with a line for each trainer\'s teams', async () => {
+  it('shows everyone by role, with counts and a line for each trainer\'s teams', async () => {
     mount();
-    expect(await screen.findByRole('heading', { name: 'Members' })).toBeInTheDocument();
     expect(await screen.findByText('Jo Hughes')).toBeInTheDocument();
-    expect(screen.getAllByText('Stockport PC')).toHaveLength(1);
-    expect(group('Team managers').getByText('Alex Morgan')).toBeInTheDocument();
+    expect(group('Club managers').getByText('Alex Morgan')).toBeInTheDocument();
     expect(group('Trainers').getByText('Stockport A, Stockport B')).toBeInTheDocument();
     expect(group('Trainers').getByText('Stockport C')).toBeInTheDocument();
     expect(group('Members').getByText('Mel Dunn')).toBeInTheDocument();
-    expect(group('Members').getByText('2', { selector: 'span' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to my profile' })).toHaveAttribute('href', '/me');
+    expect(group('Members').getByText('2', { selector: 'small' })).toBeInTheDocument();
+    expect(group('Members').getByText('KH')).toBeInTheDocument();
   });
 
-  it('marks your own row "You" and does not let you open it', async () => {
-    const user = userEvent.setup();
+  it('marks your own row "You" and gives it no menu', async () => {
     mount();
     await screen.findByText('Jo Hughes');
-    const mine = row('Alex Morgan');
-    expect(within(mine).getByText('You')).toBeInTheDocument();
-    await user.click(mine);
-    expect(screen.queryByRole('group', { name: /Role for/ })).not.toBeInTheDocument();
-    expect(mine).not.toHaveAttribute('aria-expanded');
+    expect(group('Club managers').getByText('You')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'More for Alex Morgan' })).not.toBeInTheDocument();
+    expect(more('Jo Hughes')).toBeInTheDocument();
+  });
+
+  it('has no club picker for a club manager', async () => {
+    mount();
+    await screen.findByText('Jo Hughes');
+    expect(screen.queryByRole('combobox', { name: /Club/ })).not.toBeInTheDocument();
   });
 
   it('leaves out groups with nobody in them', async () => {
@@ -147,20 +148,22 @@ describe('MembersPage: the list', () => {
 });
 
 describe('MembersPage: waiting for you', () => {
-  it('lists the join requests with a count', async () => {
+  it('lists the join requests with a count, Approve as a pill and Decline as red text', async () => {
     mount();
     const waiting = await waitingFor();
     expect(await waiting.findByText('Sam Lee')).toBeInTheDocument();
     expect(waiting.getByText('Priya Shah')).toBeInTheDocument();
     expect(waiting.getAllByText('Wants to join as a trainer')).toHaveLength(2);
-    expect(waiting.getByText('2', { selector: 'span' })).toBeInTheDocument();
+    expect(waiting.getByText('2', { selector: 'small' })).toBeInTheDocument();
     expect(waiting.getByText('SL')).toBeInTheDocument();
+    expect(waiting.getByRole('button', { name: 'Approve Sam Lee' })).toHaveClass('kit-pill-fill');
+    expect(waiting.getByRole('button', { name: 'Decline Sam Lee' })).toHaveClass('kit-redtext');
   });
 
-  it('says when somebody asked to be a team manager', async () => {
+  it('says when somebody asked to be a club manager', async () => {
     members.pending = [{ ...request, requestedRole: 'Manager' }];
     mount({ roles: ['Admin'] });
-    expect(await screen.findByText('Wants to join as a team manager')).toBeInTheDocument();
+    expect(await screen.findByText('Wants to join as a club manager')).toBeInTheDocument();
   });
 
   it('approves one, then shows the club again so they appear in their group', async () => {
@@ -171,7 +174,7 @@ describe('MembersPage: waiting for you', () => {
     const user = userEvent.setup();
     mount();
     const waiting = await waitingFor();
-    await user.click((await waiting.findAllByRole('button', { name: 'Approve' }))[0]);
+    await user.click(await waiting.findByRole('button', { name: 'Approve Sam Lee' }));
     expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r1/approve');
     await waitFor(() => expect(group('Trainers').getByText('Sam Lee')).toBeInTheDocument());
     expect(group('Waiting for you').getAllByText('Priya Shah')).toHaveLength(1);
@@ -181,7 +184,7 @@ describe('MembersPage: waiting for you', () => {
   it('declines one', async () => {
     const user = userEvent.setup();
     mount();
-    await user.click((await (await waitingFor()).findAllByRole('button', { name: 'Decline' }))[1]);
+    await user.click(await (await waitingFor()).findByRole('button', { name: 'Decline Priya Shah' }));
     expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r2/decline');
   });
 
@@ -189,34 +192,31 @@ describe('MembersPage: waiting for you', () => {
     vi.mocked(api.post).mockRejectedValue(new Error('no'));
     const user = userEvent.setup();
     mount();
-    await user.click((await (await waitingFor()).findAllByRole('button', { name: 'Approve' }))[0]);
+    await user.click(await (await waitingFor()).findByRole('button', { name: 'Approve Sam Lee' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t update this request. Check your signal and try again.');
     expect(group('Waiting for you').getByText('Sam Lee')).toBeInTheDocument();
   });
 });
 
-describe('MembersPage: a person\'s row', () => {
-  it('opens inline with a three-way role switch and Remove from club', async () => {
+describe('MembersPage: a person\'s menu', () => {
+  it('opens a sheet that lists the roles with theirs ticked, and Remove from club in red', async () => {
     const user = userEvent.setup();
-    mount();
+    mount({ roles: ['Admin'] });
     await screen.findByText('Jo Hughes');
-    await user.click(row('Jo Hughes'));
-    const roles = screen.getByRole('group', { name: 'Role for Jo Hughes' });
-    expect(within(roles).getAllByRole('button').map((b) => b.textContent)).toEqual(['Team manager', 'Trainer', 'Member']);
-    expect(within(roles).getByRole('button', { name: 'Trainer' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Remove from club' })).toBeInTheDocument();
-    await user.click(row('Jo Hughes'));
-    expect(screen.queryByRole('group', { name: 'Role for Jo Hughes' })).not.toBeInTheDocument();
+    await user.click(more('Jo Hughes'));
+    expect(screen.getByRole('dialog', { name: 'Jo Hughes' })).toBeInTheDocument();
+    expect(sheet().getAllByRole('radio').map((r) => r.textContent)).toEqual(['Club manager', 'Trainer', 'Member']);
+    expect(sheet().getByRole('radio', { name: 'Trainer' })).toHaveAttribute('aria-checked', 'true');
+    expect(sheet().getByRole('radio', { name: 'Member' })).toHaveAttribute('aria-checked', 'false');
+    expect(sheet().getByRole('button', { name: 'Remove from club' })).toHaveClass('kit-redtext');
   });
 
-  it('opens one row at a time', async () => {
+  it('offers a club manager only Trainer and Member', async () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText('Jo Hughes');
-    await user.click(row('Jo Hughes'));
-    await user.click(row('Kerry Hall'));
-    expect(screen.queryByRole('group', { name: 'Role for Jo Hughes' })).not.toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Role for Kerry Hall' })).toBeInTheDocument();
+    await user.click(more('Jo Hughes'));
+    expect(sheet().getAllByRole('radio').map((r) => r.textContent)).toEqual(['Trainer', 'Member']);
   });
 
   it('moves a person to the group they are switched to', async () => {
@@ -224,29 +224,31 @@ describe('MembersPage: a person\'s row', () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText('Jo Hughes');
-    await user.click(row('Jo Hughes'));
-    await user.click(within(screen.getByRole('group', { name: 'Role for Jo Hughes' })).getByRole('button', { name: 'Member' }));
-    expect(api.put).toHaveBeenCalledWith('/clubs/7/members/jh/role', { role: 'Member' });
+    await user.click(more('Jo Hughes'));
+    await user.click(sheet().getByRole('radio', { name: 'Member' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/members/jh/role', { role: 'Member' }));
     await waitFor(() => expect(group('Members').getByText('Jo Hughes')).toBeInTheDocument());
     expect(group('Members').queryByText('Stockport A, Stockport B')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('does nothing when the role chosen is the one they have', async () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText('Jo Hughes');
-    await user.click(row('Jo Hughes'));
-    await user.click(within(screen.getByRole('group', { name: 'Role for Jo Hughes' })).getByRole('button', { name: 'Trainer' }));
+    await user.click(more('Jo Hughes'));
+    await user.click(sheet().getByRole('radio', { name: 'Trainer' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(api.put).not.toHaveBeenCalled();
   });
 
-  it('keeps a trainer a trainer and says an admin has to approve when they are put up as a team manager', async () => {
+  it('keeps a trainer a trainer and says an admin has to approve when they are put up as a club manager', async () => {
     vi.mocked(api.put).mockResolvedValue({ data: { role: 'Trainer', awaitingAdmin: true } });
     const user = userEvent.setup();
-    mount();
+    mount({ roles: ['Admin'] });
     await screen.findByText('Jo Hughes');
-    await user.click(row('Jo Hughes'));
-    await user.click(within(screen.getByRole('group', { name: 'Role for Jo Hughes' })).getByRole('button', { name: 'Team manager' }));
+    await user.click(more('Jo Hughes'));
+    await user.click(sheet().getByRole('radio', { name: 'Club manager' }));
     expect(await group('Trainers').findByText('Waiting for an admin to approve')).toBeInTheDocument();
     expect(group('Trainers').getByText('Jo Hughes')).toBeInTheDocument();
   });
@@ -256,8 +258,8 @@ describe('MembersPage: a person\'s row', () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText('Jo Hughes');
-    await user.click(row('Jo Hughes'));
-    await user.click(within(screen.getByRole('group', { name: 'Role for Jo Hughes' })).getByRole('button', { name: 'Member' }));
+    await user.click(more('Jo Hughes'));
+    await user.click(sheet().getByRole('radio', { name: 'Member' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Approve or decline their request first.');
     expect(group('Trainers').getByText('Jo Hughes')).toBeInTheDocument();
   });
@@ -267,8 +269,8 @@ describe('MembersPage: a person\'s row', () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText('Kerry Hall');
-    await user.click(row('Kerry Hall'));
-    await user.click(screen.getByRole('button', { name: 'Remove from club' }));
+    await user.click(more('Kerry Hall'));
+    await user.click(sheet().getByRole('button', { name: 'Remove from club' }));
     await waitFor(() => expect(asked).toHaveBeenCalledWith('Kerry Hall stops being a member of Stockport PC.'));
     expect(api.delete).toHaveBeenCalledWith('/clubs/7/members/kh');
     await waitFor(() => expect(screen.queryByText('Kerry Hall')).not.toBeInTheDocument());
@@ -280,10 +282,12 @@ describe('MembersPage: a person\'s row', () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText('Kerry Hall');
-    await user.click(row('Kerry Hall'));
-    await user.click(screen.getByRole('button', { name: 'Remove from club' }));
+    await user.click(more('Kerry Hall'));
+    await user.click(sheet().getByRole('button', { name: 'Remove from club' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(api.delete).not.toHaveBeenCalled();
-    expect(screen.getByText('Kerry Hall')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Kerry Hall' })).toBeInTheDocument();
+    expect(group('Members').getByText('Kerry Hall')).toBeInTheDocument();
   });
 
   it('says so when they cannot be removed', async () => {
@@ -291,57 +295,60 @@ describe('MembersPage: a person\'s row', () => {
     const user = userEvent.setup();
     mount();
     await screen.findByText('Kerry Hall');
-    await user.click(row('Kerry Hall'));
-    await user.click(screen.getByRole('button', { name: 'Remove from club' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t remove them. Check your signal and try again.');
-    expect(screen.getByText('Kerry Hall')).toBeInTheDocument();
+    await user.click(more('Kerry Hall'));
+    await user.click(sheet().getByRole('button', { name: 'Remove from club' }));
+    expect(await screen.findByText('Couldn’t remove them. Check your signal and try again.')).toBeInTheDocument();
+    expect(group('Members').getByText('Kerry Hall')).toBeInTheDocument();
   });
 
-  it('does not let a team manager open another team manager', async () => {
+  it('gives a club manager no menu for another club manager', async () => {
     members.members.push(person('b2', 'Bea Cole', 'Manager'));
     mount();
     await screen.findByText('Bea Cole');
-    expect(row('Bea Cole')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'More for Bea Cole' })).not.toBeInTheDocument();
   });
 });
 
 describe('MembersPage: an admin', () => {
+  const chooseClub = async (name: string) => {
+    await userEvent.click(await screen.findByRole('combobox', { name: /^Club/ }));
+    await userEvent.click(await screen.findByRole('option', { name }));
+  };
+
   it('chooses the club, and sees its people', async () => {
     mount({ roles: ['Admin'], clubId: null });
-    const select = await screen.findByLabelText('Club');
+    await screen.findByRole('combobox', { name: 'Club Choose a club' });
     expect(screen.queryByRole('region', { name: 'Trainers' })).not.toBeInTheDocument();
-    await waitFor(() => expect(optionLabels(select)).toHaveLength(3));
-    chooseOption(select, 'Wirral PC');
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/clubs'));
+    await chooseClub('Wirral PC');
     expect(await screen.findByText('Will Ash')).toBeInTheDocument();
-    expect(screen.getByText('Wirral PC', { selector: 'p' })).toBeInTheDocument();
-    chooseOption(select, '');
+    await chooseClub('Choose a club');
     expect(screen.queryByText('Will Ash')).not.toBeInTheDocument();
   });
 
-  it('opens team managers too', async () => {
+  it('opens club managers too', async () => {
     const user = userEvent.setup();
     mount({ roles: ['Admin'], clubId: null });
-    await screen.findByLabelText('Club');
-    await waitFor(() => expect(optionLabels(screen.getByLabelText('Club'))).toHaveLength(3));
-    chooseOption(screen.getByLabelText('Club'), 'Wirral PC');
-    await user.click(await screen.findByRole('button', { name: /Wendy Ross/ }));
-    expect(screen.getByRole('group', { name: 'Role for Wendy Ross' })).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/clubs'));
+    await chooseClub('Wirral PC');
+    await user.click(await screen.findByRole('button', { name: 'More for Wendy Ross' }));
+    expect(sheet().getAllByRole('radio').map((r) => r.textContent)).toEqual(['Club manager', 'Trainer', 'Member']);
   });
 
   it('lets an admin use the buttons straight away, with no edit mode to switch on', async () => {
     const user = userEvent.setup();
     mount({ roles: ['Admin'] });
     const waiting = await waitingFor();
-    expect((await waiting.findAllByRole('button', { name: 'Approve' }))[0]).toBeEnabled();
-    expect(waiting.getAllByRole('button', { name: 'Decline' })[0]).toBeEnabled();
-    await user.click(row('Jo Hughes'));
-    expect(within(screen.getByRole('group', { name: 'Role for Jo Hughes' })).getByRole('button', { name: 'Member' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Remove from club' })).toBeEnabled();
+    expect(await waiting.findByRole('button', { name: 'Approve Sam Lee' })).toBeEnabled();
+    expect(waiting.getByRole('button', { name: 'Decline Sam Lee' })).toBeEnabled();
+    await user.click(more('Jo Hughes'));
+    expect(sheet().getByRole('radio', { name: 'Member' })).toBeEnabled();
+    expect(sheet().getByRole('button', { name: 'Remove from club' })).toBeEnabled();
   });
 
   it('asks nothing until a club is chosen', async () => {
     mount({ roles: ['Admin'], clubId: null });
-    await screen.findByLabelText('Club');
+    await screen.findByRole('combobox', { name: /^Club/ });
     expect(api.get).not.toHaveBeenCalledWith(expect.stringMatching(/^\/clubs\/\d+\/members$/));
   });
 });

@@ -6,10 +6,10 @@ const person = (userId: string, role: ClubMember['role'], extra: Partial<ClubMem
   ({ userId, fullName: userId, role, teams: [], awaitingAdmin: false, ...extra });
 
 describe('groupMembers', () => {
-  it('puts team managers first, then trainers, then members, and leaves empty groups out', () => {
+  it('puts club managers first, then trainers, then members, and leaves empty groups out', () => {
     const groups = groupMembers([person('m1', 'Member'), person('t1', 'Trainer'), person('b1', 'Manager'), person('t2', 'Trainer')]);
     expect(groups.map((g) => [g.title, g.people.map((p) => p.userId)])).toEqual([
-      ['Team managers', ['b1']], ['Trainers', ['t1', 't2']], ['Members', ['m1']],
+      ['Club managers', ['b1']], ['Trainers', ['t1', 't2']], ['Members', ['m1']],
     ]);
     expect(groupMembers([person('t1', 'Trainer')]).map((g) => g.title)).toEqual(['Trainers']);
     expect(groupMembers([])).toEqual([]);
@@ -50,7 +50,7 @@ describe('canEditMember', () => {
 describe('wantsToJoinAs', () => {
   it('names the role that was asked for', () => {
     const base = { userId: 'u', fullName: 'U', email: null, clubName: null, requestedAt: '2026-10-20T09:00:00Z' };
-    expect(wantsToJoinAs({ ...base, requestedRole: 'Manager' })).toBe('a team manager');
+    expect(wantsToJoinAs({ ...base, requestedRole: 'Manager' })).toBe('a club manager');
     expect(wantsToJoinAs({ ...base, requestedRole: 'Trainer' })).toBe('a trainer');
     expect(wantsToJoinAs(base)).toBe('a trainer');
   });

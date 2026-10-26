@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ClubPayouts } from '../types';
 import {
-  bankLine, bankProblems, businessTypeLabel, digitsOnly, emptyBank, firstOpenStep, formFrom, formatIban, formatSortCode, friendlyDate,
-  isValidBic, maskedAccount, needsRegistrationNumber, normaliseAccountNumber, normaliseIban, normaliseSortCode, payoutsLine, regionLabel,
-  registrationLabel, scheduleLabel, stepOfField, stepProblems, validateDateOfBirth, validateDescriptor, validateEmail, validatePhone,
+  bankLine, bankProblems, digitsOnly, emptyBank, formFrom, formatIban, formatSortCode,
+  isValidBic, maskedAccount, needsRegistrationNumber, normaliseAccountNumber, normaliseIban, normaliseSortCode, payoutStatusLine, payoutsLine,
+  registrationLabel, stepProblems, validateDateOfBirth, validateDescriptor, validateEmail, validatePhone,
   validatePostcode, validateRegistrationNumber, validateVat, BULLETS,
 } from './payouts';
 
@@ -95,34 +95,29 @@ describe('field checks', () => {
   });
 });
 
-describe('labels and steps', () => {
-  it('names things', () => {
-    expect(businessTypeLabel(2)).toBe('Registered charity');
-    expect(businessTypeLabel(null)).toBe('');
-    expect(regionLabel(1)).toBe('Ireland or the EU');
-    expect(scheduleLabel(2)).toBe('After each event');
+describe('labels and the status line', () => {
+  it('knows which payees need a registration number', () => {
     expect(needsRegistrationNumber(2)).toBe(true);
     expect(needsRegistrationNumber(1)).toBe(false);
     expect(registrationLabel(2)).toBe('Charity number');
     expect(registrationLabel(3)).toBe('Company number');
   });
-  it('maps a field to its step', () => {
-    expect(stepOfField('businessType')).toBe(1);
-    expect(stepOfField('postcode')).toBe(2);
-    expect(stepOfField('personFullName')).toBe(3);
-    expect(stepOfField('iban')).toBe(4);
-    expect(stepOfField('bank')).toBe(4);
-    expect(stepOfField('statementDescriptor')).toBe(5);
+  it('says what is left, in order, and counts in words', () => {
+    const bank = saved().bank;
+    expect(payoutStatusLine({ status: 1, bank: null, missing: ['bank'] })).toEqual({ ready: false, text: 'One thing left: add the club’s bank account.' });
+    expect(payoutStatusLine({ status: 0, bank: null, missing: ['businessType', 'postcode', 'bank'] }).text)
+      .toBe('Three things left: add who gets paid, the legal name and address and the club’s bank account.');
+    expect(payoutStatusLine({ status: 1, bank, missing: ['personDateOfBirth', 'statementDescriptor'] }).text)
+      .toBe('Two things left: add the responsible person and the name on statements.');
+    expect(payoutStatusLine({ status: 1, bank, missing: [] })).toEqual({ ready: false, text: 'Nearly there. Finishing set-up…' });
+    expect(payoutStatusLine({ status: 1, bank, missing: ['somethingNew'] }).ready).toBe(false);
   });
-  it('opens on the right step', () => {
-    expect(firstOpenStep(saved({ status: 2 }))).toBe(6);
-    expect(firstOpenStep(saved({ status: 0 }))).toBe(1);
-    expect(firstOpenStep(saved({ missing: ['statementDescriptor', 'bank'] }))).toBe(4);
-    expect(firstOpenStep(saved({ missing: [] }))).toBe(6);
+  it('says where the money goes once it is ready', () => {
+    expect(payoutStatusLine({ status: 2, missing: [], bank: { accountHolder: 'x', bankName: null, sortCode: null, maskedAccount: `${BULLETS}1234`, ibanCountry: null } }))
+      .toEqual({ ready: true, text: 'Ready. Money from entries goes to account ending 1234.' });
+    expect(payoutStatusLine({ status: 2, missing: [], bank: null }).text).toBe('Ready. Money from entries goes to the club’s bank account.');
   });
-  it('formats dates and the editor line', () => {
-    expect(friendlyDate('1985-03-14')).toBe('14 March 1985');
-    expect(friendlyDate(null)).toBe('');
+  it('formats the editor line', () => {
     expect(payoutsLine({ clubName: 'Ashdown PC', maskedAccount: `${BULLETS}1234`, ready: true })).toBe(`Entry fees are paid out to Ashdown PC — ${BULLETS}1234 · Ready`);
     expect(payoutsLine({ clubName: 'Ashdown PC', maskedAccount: null, ready: false })).toBe("Ashdown PC hasn't finished setting up payouts yet.");
   });

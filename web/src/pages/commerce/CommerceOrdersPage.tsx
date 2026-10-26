@@ -1,32 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Download } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { usePageHeader } from '../../components/CompactPageBarContext';
+import { confirmDialog } from '../../components/ConfirmDialog';
+import { Sheet } from '../../components/Sheet';
 import { downloadCsv, toCsv } from '../../lib/csv';
-import { RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet, RefineStatus, type StatusTone } from '../refine/Refine';
+import { RefineFoot } from '../refine/Refine';
+import { Chip, type ChipTone } from '../clubShop/ui';
 import { LoadError, TestReceipt } from './commerceUi';
 import { errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
 import { OutcomeState } from './DemoPaymentFlow';
 import { DemoOrderCheckout } from './EventShopPage';
 import type { CommerceOrderStatus, DemoOrderPaymentResult, EventOrder, EventOrderLine, SellerSale, TestPayment } from './types';
 import './commerce.css';
+import '../../components/sitePages.css';
+import '../clubShop/clubShop.css';
 
-type View = 'purchases' | 'sales';
+type View = 'bought' | 'sold';
 
 /** The word shown for an order: what the buyer needs to do or what happened. Colour only reinforces it. */
-const STATUS: Record<CommerceOrderStatus, { text: string; tone: StatusTone }> = {
+const STATUS: Record<CommerceOrderStatus, { text: string; tone: ChipTone }> = {
   0: { text: 'Pay the organiser', tone: 'warn' },
   1: { text: 'Payment due', tone: 'warn' },
-  2: { text: 'Paid', tone: 'ok' },
+  2: { text: 'Paid', tone: 'good' },
   3: { text: 'Declined', tone: 'bad' },
-  4: { text: 'Cancelled', tone: 'mut' },
-  5: { text: 'Refunded', tone: 'mut' },
+  4: { text: 'Cancelled', tone: 'grey' },
+  5: { text: 'Refunded', tone: 'grey' },
 };
 
-const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const whenText = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-const lineCount = (lines: EventOrderLine[]) => lines.reduce((total, line) => total + line.quantity, 0);
+const linesText = (lines: EventOrderLine[]) => lines.map((line) => `${line.title} × ${line.quantity}`).join(', ');
+const eventName = (name: string | null | undefined) => name || 'Event order';
 
 export function CommerceOrdersPage() {
   const { user } = useAuth();
@@ -36,15 +42,15 @@ export function CommerceOrdersPage() {
 function CommerceOrdersContent() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
-  const [view, setView] = useState<View>('purchases');
+  const [view, setView] = useState<View>('bought');
   const [orders, setOrders] = useState<EventOrder[] | null>(null);
   const [sales, setSales] = useState<SellerSale[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [paying, setPaying] = useState(false);
-  const [refundOpen, setRefundOpen] = useState(false);
   const refundAttempts = useRef(new Map<number, string>());
   const openId = Number(params.get('order')) || null;
+  usePageHeader({ title: 'Orders and sales', plain: true, backTo: '/me', backLabel: 'Back to my profile' });
 
   const load = useCallback(() => {
     if (!user) return Promise.resolve();
@@ -66,26 +72,32 @@ function CommerceOrdersContent() {
 
   function open(id: number | null) {
     setPaying(false);
-    setRefundOpen(false);
     setParams(id == null ? {} : { order: String(id) }, { replace: false });
   }
 
-  const replaceOrder = (next: EventOrder) => setOrders((current) => current?.map((existing) => existing.id === next.id ? next : existing) ?? null);
+  // The answer to a payment or refund doesn't repeat the event's name, so keep the one already shown.
+  const replaceOrder = (next: EventOrder) => setOrders((current) => current?.map((existing) => existing.id === next.id
+    ? { ...next, competitionName: next.competitionName ?? existing.competitionName }
+    : existing) ?? null);
 
-  async function cancel(order: EventOrder) {
+  async function cancel(order: EventOrder): Promise<boolean> {
+    if (!(await confirmDialog({ title: 'Cancel this order?', message: `Order ${order.id} is cancelled and the items go back on sale.`, confirmLabel: 'Cancel order', cancelLabel: 'Keep order', destructive: true }))) return false;
     setBusyId(order.id);
     setError(null);
     try {
       await api.post(`/commerce/orders/${order.id}/cancel`);
       await load();
+      return true;
     } catch (requestError) {
       setError(errorMessage(requestError, 'Couldn’t cancel the order. Check your signal and try again.'));
+      return false;
     } finally {
       setBusyId(null);
     }
   }
 
-  async function refund(order: EventOrder) {
+  async function refund(order: EventOrder): Promise<boolean> {
+    if (!(await confirmDialog({ title: `Refund ${pounds(order.totalMinor)}?`, message: `Refunds the whole of order ${order.id}. It’s a demo, so no money moves. The order shows as Refunded.`, confirmLabel: `Refund ${pounds(order.totalMinor)}`, cancelLabel: 'Keep order', destructive: true }))) return false;
     const idempotencyKey = refundAttempts.current.get(order.id) ?? newIdempotencyKey(`demo-refund-${order.id}`);
     refundAttempts.current.set(order.id, idempotencyKey);
     setBusyId(order.id);
@@ -94,16 +106,16 @@ function CommerceOrdersContent() {
       const { data } = await api.post<DemoOrderPaymentResult>(`/commerce/orders/${order.id}/demo-refund`, { idempotencyKey, outcome: 0 });
       refundAttempts.current.delete(order.id);
       replaceOrder(data.order);
-      setRefundOpen(false);
+      return true;
     } catch (requestError) {
       setError(errorMessage(requestError, 'Couldn’t run the test refund. Check your signal and try again.'));
-      setRefundOpen(false);
+      return false;
     } finally {
       setBusyId(null);
     }
   }
 
-  if (!user) return <RefinePage><p className="rf-note py-6">Sign in to see your purchases and sales. <Link to="/login">Sign in</Link></p></RefinePage>;
+  if (!user) return <div className="skin cs-page"><p className="sp-note">Sign in to see your orders and sales. <Link to="/login">Sign in</Link></p></div>;
 
   const current = openId != null ? orders?.find((order) => order.id === openId) ?? null : null;
 
@@ -113,11 +125,11 @@ function CommerceOrdersContent() {
         order={current}
         onChanged={replaceOrder}
         variant="page"
-        context={`Order #${current.id} · ${pounds(current.totalMinor)}`}
+        context={`Order ${current.id} · ${pounds(current.totalMinor)}`}
         onBack={() => setPaying(false)}
         backLabel="Back to order"
         approvedTitle="Payment approved"
-        resultContext={`Order #${current.id}`}
+        resultContext={`Order ${current.id}`}
         renderResult={({ payment, retry }) => (
           <>
             <OutcomeState payment={payment} />
@@ -131,149 +143,87 @@ function CommerceOrdersContent() {
     );
   }
 
-  if (current) {
-    return (
-      <Receipt
-        order={current}
-        busy={busyId === current.id}
-        error={error}
-        onRetry={() => void load()}
-        onBack={() => open(null)}
-        onPay={() => setPaying(true)}
-        onCancel={() => void cancel(current)}
-        onRefund={() => setRefundOpen(true)}
-        refundOpen={refundOpen}
-        onRefundConfirm={() => void refund(current)}
-        onRefundClose={() => setRefundOpen(false)}
-      />
-    );
-  }
-
   const demoOrders = orders?.filter((order) => order.isTestOrder) ?? [];
   const realOrders = orders?.filter((order) => !order.isTestOrder) ?? [];
   return (
-    <RefinePage>
-      <RefineHeader
-        back="/events"
-        backLabel="Back to competitions"
-        context="Shop"
-        title="Your orders"
-        tabs={[
-          { label: 'Purchases', active: view === 'purchases', onSelect: () => setView('purchases') },
-          { label: 'Sales', active: view === 'sales', onSelect: () => setView('sales') },
-        ]}
-        tabsKind="tablist"
-        tabsLabel="Order view"
-      />
-      {error && <LoadError message={error} onRetry={() => void load()} />}
-      {view === 'purchases' ? (
-        orders == null ? <p role="status" className="rf-note">Loading purchases…</p>
-          : orders.length === 0 ? <p className="rf-note">You haven’t placed an event order yet.</p>
+    <div className="skin cs-page">
+      <h1 className="sr-only">Orders and sales</h1>
+      <div className="sp-seg" role="tablist" aria-label="Orders">
+        <button type="button" role="tab" aria-selected={view === 'bought'} onClick={() => setView('bought')}>Bought</button>
+        <button type="button" role="tab" aria-selected={view === 'sold'} onClick={() => setView('sold')}>Sold</button>
+      </div>
+      {error && <div className="cs-gap"><LoadError message={error} onRetry={() => void load()} /></div>}
+
+      {view === 'bought' ? (
+        orders == null ? <p role="status" className="sp-note">Loading your orders…</p>
+          : orders.length === 0 ? <p className="sp-note">You haven’t bought anything yet.</p>
             : (
               <>
-                {realOrders.length > 0 && <OrderGroup title="Orders" orders={realOrders} onOpen={open} />}
+                {realOrders.length > 0 && <OrderGroup title="Your orders" orders={realOrders} onOpen={open} />}
                 {demoOrders.length > 0 && <OrderGroup title="Demo orders" meta="Test payments only" orders={demoOrders} onOpen={open} />}
+                {realOrders.length > 0 && <p className="sp-note">Pay the organiser directly. They mark the order paid when the money arrives. Collect at the event.</p>}
               </>
             )
       ) : (
         <SalesList sales={sales} />
       )}
-    </RefinePage>
+
+      {current && (
+        <OrderSheet
+          order={current}
+          busy={busyId === current.id}
+          onClose={() => open(null)}
+          onPay={() => setPaying(true)}
+          onCancel={() => cancel(current)}
+          onRefund={() => refund(current)}
+        />
+      )}
+    </div>
   );
 }
 
 function OrderGroup({ title, meta, orders, onOpen }: { title: string; meta?: string; orders: EventOrder[]; onOpen: (id: number) => void }) {
   return (
-    <>
-      <RefineSection title={title} meta={meta} />
-      <RefineList label={title}>
+    <section aria-label={title}>
+      <h2 className="sp-sec">{title}{meta && <small>{meta}</small>}</h2>
+      <div className="sp-card">
         {orders.map((order) => {
           const status = STATUS[order.status];
           return (
-            <li key={order.id}>
-              <button type="button" className="rf-row" onClick={() => onOpen(order.id)}>
-                <span className="rf-grow">
-                  <span className="rf-t1">Order #{order.id}</span>
-                  <span className="rf-t2">{shortDate(order.createdAt)} · {lineCount(order.lines)} {lineCount(order.lines) === 1 ? 'item' : 'items'}</span>
-                </span>
-                <span className="text-right"><span className="rf-price block">{pounds(order.totalMinor)}</span><RefineStatus tone={status.tone}>{status.text}</RefineStatus></span>
-              </button>
-            </li>
+            <button key={order.id} type="button" className="sp-row" onClick={() => onOpen(order.id)}>
+              <span className="sp-grow">
+                <span className="sp-t1">{eventName(order.competitionName)}</span>
+                <span className="sp-t2">Order {order.id} · {shortDate(order.createdAt)} · {linesText(order.lines)}</span>
+              </span>
+              <span className="cs-right"><span className="sp-price !text-[18px]">{pounds(order.totalMinor)}</span><Chip tone={status.tone}>{status.text}</Chip></span>
+            </button>
           );
         })}
-      </RefineList>
-    </>
+      </div>
+    </section>
   );
 }
 
 const STABLING_LINE_PATTERN = /stabl|hook[\s-]*up|shaving|haylage|bedding|bale|camping|pitch|corral|lorry/i;
 
 function SalesList({ sales }: { sales: SellerSale[] | null }) {
-  if (sales == null) return <p role="status" className="rf-note">Loading sales…</p>;
+  if (sales == null) return <p role="status" className="sp-note">Loading your sales…</p>;
 
-  const realSales = sales.filter((sale) => !sale.isTestOrder);
-  const totalPaidMinor = realSales
-    .filter((s) => s.status === 2)
-    .reduce((sum, s) => sum + s.sellerTotalMinor, 0);
-  const totalPendingMinor = realSales
-    .filter((s) => s.status === 0 || s.status === 1)
-    .reduce((sum, s) => sum + s.sellerTotalMinor, 0);
-  const totalRefundedCancelledMinor = realSales
-    .filter((s) => s.status === 4 || s.status === 5)
-    .reduce((sum, s) => sum + s.sellerTotalMinor, 0);
-
-  let stablingMinor = 0;
-  let otherItemsMinor = 0;
-  for (const sale of realSales) {
-    if (sale.status !== 2) continue;
-    for (const line of sale.lines) {
-      if (STABLING_LINE_PATTERN.test(line.title)) {
-        stablingMinor += line.lineTotalMinor;
-      } else {
-        otherItemsMinor += line.lineTotalMinor;
-      }
-    }
-  }
+  // Demo orders move no money, so they stay out of the totals.
+  const real = sales.filter((sale) => !sale.isTestOrder);
+  const sum = (statuses: CommerceOrderStatus[]) => real.filter((s) => statuses.includes(s.status)).reduce((total, s) => total + s.sellerTotalMinor, 0);
 
   function exportTreasurerCsv() {
-    if (sales === null) return;
-    const header = [
-      'Order ID',
-      'Date',
-      'Item',
-      'Category',
-      'Quantity',
-      'Status',
-      'Test order',
-      'Amount (GBP)',
-    ];
+    const header = ['Order ID', 'Date', 'Item', 'Category', 'Quantity', 'Status', 'Test order', 'Amount (GBP)'];
     const rows: ReadonlyArray<unknown>[] = [];
-    for (const sale of sales) {
+    for (const sale of sales ?? []) {
       const statusText = STATUS[sale.status]?.text ?? String(sale.status);
       if (sale.lines.length === 0) {
-        rows.push([
-          sale.orderId,
-          sale.createdAt,
-          'Order total',
-          'Other items',
-          1,
-          statusText,
-          sale.isTestOrder ? 'Yes' : 'No',
-          (sale.sellerTotalMinor / 100).toFixed(2),
-        ]);
+        rows.push([sale.orderId, sale.createdAt, 'Order total', 'Other items', 1, statusText, sale.isTestOrder ? 'Yes' : 'No', (sale.sellerTotalMinor / 100).toFixed(2)]);
       } else {
         for (const line of sale.lines) {
           const category = STABLING_LINE_PATTERN.test(line.title) ? 'Stabling & Hook-up' : 'Other items';
-          rows.push([
-            sale.orderId,
-            sale.createdAt,
-            line.title,
-            category,
-            line.quantity,
-            statusText,
-            sale.isTestOrder ? 'Yes' : 'No',
-            (line.lineTotalMinor / 100).toFixed(2),
-          ]);
+          rows.push([sale.orderId, sale.createdAt, line.title, category, line.quantity, statusText, sale.isTestOrder ? 'Yes' : 'No', (line.lineTotalMinor / 100).toFixed(2)]);
         }
       }
     }
@@ -282,108 +232,49 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
 
   return (
     <>
-      <section aria-label="Treasurer Reconciliation Summary" className="mg-card mt-3 flex flex-col gap-3 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="mg-display m-0 text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-              Treasurer Reconciliation Summary
-            </h2>
-            <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">
-              Paid and pending orders. Demo orders are excluded from totals. Categories are estimated from item names.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={exportTreasurerCsv}
-            className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden="true" /> Export Treasurer CSV
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-2.5">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-              Total Gross (Paid)
-            </span>
-            <strong className="mg-display mt-0.5 block text-lg font-bold tabular-nums text-[rgb(var(--mg-ok))]">
-              {pounds(totalPaidMinor)}
-            </strong>
-          </div>
-          <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-2.5">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-              Total Pending (Pay the organiser / Payment due)
-            </span>
-            <strong className="mg-display mt-0.5 block text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-              {pounds(totalPendingMinor)}
-            </strong>
-          </div>
-          <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-2.5">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-              Total Refunded / Cancelled
-            </span>
-            <strong className="mg-display mt-0.5 block text-lg font-bold tabular-nums text-[rgb(var(--mg-muted))]">
-              {pounds(totalRefundedCancelledMinor)}
-            </strong>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 border-t border-[rgb(var(--mg-rule-soft))] pt-2.5 text-xs">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-semibold text-[rgb(var(--mg-body))]">Stabling &amp; hook-up (paid)</span>
-            <strong className="mg-display text-sm font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-              {pounds(stablingMinor)}
-            </strong>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-semibold text-[rgb(var(--mg-body))]">Other items (paid)</span>
-            <strong className="mg-display text-sm font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-              {pounds(otherItemsMinor)}
-            </strong>
-          </div>
-        </div>
-      </section>
+      <div className="cs-tiles">
+        <div className="cs-tile"><strong>{pounds(sum([2]))}</strong><span>Paid</span></div>
+        <div className="cs-tile"><strong>{pounds(sum([0, 1]))}</strong><span>Not paid yet</span></div>
+        <div className="cs-tile"><strong>{pounds(sum([5]))}</strong><span>Refunded</span></div>
+      </div>
 
       {sales.length === 0 ? (
-        <p className="rf-note">You don’t have any event sales yet.</p>
+        <p className="sp-note">You haven’t sold anything yet.</p>
       ) : (
         <>
-          <RefineSection title="Sales" meta="Collect at the event" />
-          <RefineList label="Sales">
+          <h2 className="sp-sec">Sales <small>Collect at the event</small></h2>
+          <div className="sp-card">
             {sales.map((sale) => {
               const status = STATUS[sale.status];
               return (
-                <li key={sale.orderId} className="rf-row">
-                  <span className="rf-grow">
-                    <span className="rf-t1">Order #{sale.orderId}{sale.isTestOrder && ' · demo'}</span>
-                    <span className="rf-t2">{sale.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</span>
+                <div key={sale.orderId} className="cs-row">
+                  <span className="sp-grow">
+                    <span className="sp-t1">{eventName(sale.competitionName)}</span>
+                    <span className="sp-t2">Order {sale.orderId}{sale.isTestOrder && ' · demo'} · {linesText(sale.lines)}</span>
                   </span>
-                  <span className="text-right"><span className="rf-price block">{pounds(sale.sellerTotalMinor)}</span><RefineStatus tone={status.tone}>{status.text}</RefineStatus></span>
-                </li>
+                  <span className="cs-right"><span className="sp-price !text-[18px]">{pounds(sale.sellerTotalMinor)}</span><Chip tone={status.tone}>{status.text}</Chip></span>
+                </div>
               );
             })}
-          </RefineList>
+          </div>
+          <div className="kit-acts cs-gap">
+            <button type="button" className="kit-pill cs-pill-s" onClick={exportTreasurerCsv}>Download for the treasurer (CSV)</button>
+          </div>
         </>
       )}
     </>
   );
 }
 
-interface ReceiptProps {
+/** One order in a sheet: the details, then what the buyer can do with it. */
+function OrderSheet({ order, busy, onClose, onPay, onCancel, onRefund }: {
   order: EventOrder;
   busy: boolean;
-  error: string | null;
-  refundOpen: boolean;
-  onRetry: () => void;
-  onBack: () => void;
+  onClose: () => void;
   onPay: () => void;
-  onCancel: () => void;
-  onRefund: () => void;
-  onRefundConfirm: () => void;
-  onRefundClose: () => void;
-}
-
-function Receipt({ order, busy, error, refundOpen, onRetry, onBack, onPay, onCancel, onRefund, onRefundConfirm, onRefundClose }: ReceiptProps) {
+  onCancel: () => Promise<boolean>;
+  onRefund: () => Promise<boolean>;
+}) {
   const status = STATUS[order.status];
   const payment: TestPayment | undefined = [...order.testPayments].reverse().find((candidate) => candidate.isTest);
   const canPay = order.isTestOrder && (order.status === 1 || order.status === 3);
@@ -391,54 +282,30 @@ function Receipt({ order, busy, error, refundOpen, onRetry, onBack, onPay, onCan
   const canRefund = order.isTestOrder && order.status === 2;
   const when = order.paidAt ?? order.refundedAt ?? order.cancelledAt ?? order.createdAt;
   return (
-    <RefinePage>
-      <RefineHeader onBack={onBack} backLabel="Back to orders" context="Orders" title={`Order #${order.id}`} demo={order.isTestOrder} />
-      {error && <LoadError message={error} onRetry={onRetry} />}
-      <div className="rf-list mt-3" style={{ padding: '6px 0' }}>
-        <div className="rf-sum"><span className="rf-mut">Status</span><RefineStatus tone={status.tone}>{status.text}</RefineStatus></div>
-        <div className="rf-sum"><span className="rf-mut">When</span><span>{whenText(when)}</span></div>
-        {payment && <div className="rf-sum"><span className="rf-mut">Reference</span><span className="break-all text-right text-sm">{payment.receiptReference}</span></div>}
-      </div>
-      <RefineSection title="Items" />
-      <RefineList label="Items">
-        {order.lines.map((line) => (
-          <li key={line.id} className="rf-row" style={{ minHeight: 48 }}>
-            <span className="rf-grow">{line.title} × {line.quantity}</span>
-            <span className="rf-price">{pounds(line.lineTotalMinor)}</span>
-          </li>
-        ))}
-      </RefineList>
-      <div className="rf-sum rf-sum-total -mx-4"><span>Total</span><span>{pounds(order.totalMinor)}</span></div>
-      {order.isTestOrder && payment && <TestReceipt payment={payment} />}
-      <RefineNote>
-        {order.isTestOrder ? 'A demo order: no money moved. ' : order.status === 0 ? 'Pay the organiser directly. They’ll update this order when the money arrives. ' : ''}
-        Collect at the event.
-      </RefineNote>
-      {(canCancel || canRefund) && (
-        <div className="rf-list mt-3">
-          <RefineDisclosure title="Order actions">
-            <div className="flex flex-col gap-2 px-4 pb-3">
-              {canCancel && <button type="button" className="rf-btn rf-wide" disabled={busy} onClick={onCancel}>Cancel order</button>}
-              {canRefund && <button type="button" className="rf-btn rf-wide" disabled={busy} onClick={onRefund}>Refund order…</button>}
-            </div>
-          </RefineDisclosure>
-        </div>
-      )}
-      {canPay && (
-        <RefineFoot>
-          <button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={onPay}>{order.status === 3 ? 'Retry demo payment' : 'Pay demo order'}</button>
-        </RefineFoot>
-      )}
-      {refundOpen && (
-        <RefineSheet title={`Refund ${pounds(order.totalMinor)}?`} onClose={onRefundClose}>
-          <p className="m-0 text-sm">Refunds the whole of order #{order.id}. It’s a demo, so no money moves. The order shows as Refunded.</p>
-          <div className="rf-actions">
-            <button type="button" className="rf-btn" onClick={onRefundClose}>Keep order</button>
-            <button type="button" className="rf-btn rf-btn-danger rf-grow" disabled={busy} onClick={onRefundConfirm}>Refund {pounds(order.totalMinor)}</button>
+    <Sheet title={`Order ${order.id}${order.isTestOrder ? ' (demo)' : ''}`} onClose={onClose}>
+      {({ close }) => (
+        <>
+          <dl className="cs-sheet-facts">
+            <div><dt>Event</dt><dd>{eventName(order.competitionName)}</dd></div>
+            <div><dt>Status</dt><dd>{status.text}</dd></div>
+            <div><dt>When</dt><dd>{whenText(when)}</dd></div>
+            {order.lines.map((line) => <div key={line.id}><dt>{line.title} × {line.quantity}</dt><dd>{pounds(line.lineTotalMinor)}</dd></div>)}
+            <div><dt>Total</dt><dd><strong>{pounds(order.totalMinor)}</strong></dd></div>
+          </dl>
+          {order.isTestOrder && payment && <TestReceipt payment={payment} />}
+          <p className="kit-sheet-text">
+            {order.isTestOrder ? 'A demo order: no money moved. ' : order.status === 0 ? 'Pay the organiser directly. They mark it paid when the money arrives. ' : ''}
+            Collect at the event.
+          </p>
+          <div className="kit-acts">
+            {canPay && <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(onPay)}>{order.status === 3 ? 'Retry demo payment' : 'Pay demo order'}</button>}
+            <button type="button" className={`kit-pill${canPay ? '' : ' kit-pill-fill'}`} onClick={() => close()}>Done</button>
+            {canCancel && <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void onCancel().then((done) => { if (done) close(); }); }}>Cancel order</button>}
+            {canRefund && <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void onRefund(); }}>Refund order…</button>}
           </div>
-        </RefineSheet>
+        </>
       )}
-    </RefinePage>
+    </Sheet>
   );
 }
 

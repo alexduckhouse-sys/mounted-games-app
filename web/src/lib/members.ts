@@ -2,13 +2,13 @@ import type { ClubMember, ClubRoleChange, MemberRole, TrainerRequest } from '../
 
 /** The three groups on the Members screen, most senior first. */
 export const MEMBER_GROUPS: { role: MemberRole; title: string }[] = [
-  { role: 'Manager', title: 'Team managers' },
+  { role: 'Manager', title: 'Club managers' },
   { role: 'Trainer', title: 'Trainers' },
   { role: 'Member', title: 'Members' },
 ];
 
 /** The three choices on a person's role switch. */
-export const ROLE_LABEL: Record<MemberRole, string> = { Manager: 'Team manager', Trainer: 'Trainer', Member: 'Member' };
+export const ROLE_LABEL: Record<MemberRole, string> = { Manager: 'Club manager', Trainer: 'Trainer', Member: 'Member' };
 
 /** Groups with nobody in them are left out. */
 export function groupMembers(members: readonly ClubMember[]): { role: MemberRole; title: string; people: ClubMember[] }[] {
@@ -23,7 +23,7 @@ export function memberSubline(member: ClubMember): string {
   return member.role === 'Member' ? '' : member.teams.join(', ');
 }
 
-/** You can't edit yourself, and only an admin changes a team manager. */
+/** You can't edit yourself, and only an admin changes a club manager. */
 export function canEditMember(member: ClubMember, myId: string | undefined, isAdmin: boolean): boolean {
   if (member.userId === myId) return false;
   return isAdmin || member.role !== 'Manager';
@@ -31,7 +31,7 @@ export function canEditMember(member: ClubMember, myId: string | undefined, isAd
 
 /** "Wants to join as {role}". */
 export function wantsToJoinAs(request: TrainerRequest): string {
-  return request.requestedRole === 'Manager' ? 'a team manager' : 'a trainer';
+  return request.requestedRole === 'Manager' ? 'a club manager' : 'a trainer';
 }
 
 /** The list after a role change came back: applied at once, or filed with the admins and left as it was. */
