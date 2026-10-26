@@ -91,11 +91,20 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(document.body.style.overflow).toBe('auto');
   });
 
-  it('sends the extra competition links to general pages when no competition is followed', () => {
+  it('shows the same General section as a competition menu, without the competition part', () => {
     mount();
-    expect(links('Main navigation')).toEqual([
-      ['Following', '/following'], ['Event shop', '/shop'],
+    expect(screen.queryByRole('navigation', { name: 'This competition' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Age groups' })).not.toBeInTheDocument();
+    const heading = screen.getByRole('heading', { name: 'General' });
+    expect(heading).toHaveClass('text-lg', 'font-bold');
+    expect(links('General')).toEqual([
+      ['Competitions', '/events'], ['Following', '/following'], ['Past competitions', '/competitions/past'], ['Seasons', '/seasons'],
+      ['Rider and team stats', '/stats'], ['Team profiles', '/team-profiles'], ['Tack and kit shop', '/shop'], ['Settings', '/settings'],
     ]);
+    // Every row, the QR scanner included, has an icon.
+    const rows = [...within(screen.getByRole('navigation', { name: 'General' })).getAllByRole('link'), screen.getByRole('button', { name: 'Scan a QR code' })];
+    expect(rows).toHaveLength(9);
+    for (const row of rows) expect(row.querySelector('svg')).not.toBeNull();
   });
 
   it('invites a visitor to sign in at the bottom of the menu without a role caption', () => {
@@ -104,7 +113,7 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(signIn).toHaveAttribute('href', '/login');
     expect(signIn).toHaveClass('mg-btn-primary');
     // Sign-in stays at the bottom, after the navigation links.
-    expect(screen.getByRole('navigation', { name: 'Main navigation' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'General' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: 'Account and management' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Notifications/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
@@ -180,7 +189,7 @@ describe('NavigationDrawer: following a competition', () => {
       ['Weather', '/competitions/4/weather'], ['Teams', '/competitions/4/teams'],
       ['Following', '/competitions/4/following'], ['Event shop', '/competitions/4/shop'],
     ]);
-    const communityShop = screen.getByRole('link', { name: 'Tack & kit shop' });
+    const communityShop = screen.getByRole('link', { name: 'Tack and kit shop' });
     expect(communityShop).toHaveAttribute('href', '/shop');
     await userEvent.click(communityShop);
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -194,10 +203,10 @@ describe('NavigationDrawer: following a competition', () => {
     expect(nav.getByRole('link', { name: 'Following' })).not.toHaveAttribute('aria-current');
   });
 
-  it('does not highlight anything when no competition is followed', () => {
+  it('highlights only the site page being viewed when no competition is followed', () => {
     mount({ path: '/events' });
-    const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
-    expect(nav.getAllByRole('link').some((link) => link.hasAttribute('aria-current'))).toBe(false);
+    const nav = within(screen.getByRole('navigation', { name: 'General' }));
+    expect(nav.getAllByRole('link').filter((link) => link.hasAttribute('aria-current')).map((link) => link.textContent)).toEqual(['Competitions']);
     expect(screen.queryByRole('link', { name: 'Rulebooks' })).not.toBeInTheDocument();
   });
 });
@@ -270,7 +279,7 @@ describe('NavigationDrawer: sections', () => {
     expect(competitionHeading).toHaveClass('text-lg', 'font-bold');
     expect(competitionHeading.className).not.toMatch(/uppercase/);
     expect(links('General').map(([label]) => label)).toEqual([
-      'Competitions', 'Tack & kit shop', 'Seasons', 'Past competitions', 'Rider and team stats', 'Settings',
+      'Competitions', 'Seasons', 'Past competitions', 'Rider and team stats', 'Tack and kit shop', 'Settings',
     ]);
     expect(screen.getByRole('button', { name: 'Scan a QR code' })).toBeInTheDocument();
   });
@@ -367,10 +376,10 @@ describe('NavigationDrawer: settings, QR scanner and weather', () => {
     expect(screen.queryByText('Weather', { selector: 'span.font-medium' })).not.toBeInTheDocument();
   });
 
-  it('shows the weather when it was switched on before or when following a competition', async () => {
+  it('shows the weather only while a competition is open, and not even when switched on without one', async () => {
     localStorage.setItem('mg.showWeather', '1');
     const first = mount();
-    expect(screen.getByText('Weather', { selector: 'span.font-medium' })).toBeInTheDocument();
+    expect(screen.queryByText('Weather', { selector: 'span.font-medium' })).not.toBeInTheDocument();
     first.unmount();
 
     localStorage.removeItem('mg.showWeather');

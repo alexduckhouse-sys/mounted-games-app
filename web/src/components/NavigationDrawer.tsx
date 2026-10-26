@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useExitDelay } from '../hooks/useExitDelay';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, ChevronDown, BarChart3, Trophy, QrCode, Users } from 'lucide-react';
+import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, ChevronDown, BarChart3, Trophy, QrCode, Users, IdCard } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useLiteMode } from '../lite/LiteModeContext';
@@ -58,13 +58,25 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   const base = current ? `/competitions/${current.id}` : '/events';
   const shown = meta && current && meta.id === current.id ? meta : null;
   const subtitle = shown ? [competitionDateText(shown.startDate, shown.endDate), shown.location?.trim()].filter(Boolean).join(' · ') : '';
+  // This competition: only shown while one is open.
   const links = [
-    ...(current ? [{ to: `${base}/teams`, label: 'Teams', icon: Users, end: true }] : []),
-    { to: current ? `${base}/following` : '/following', label: 'Following', icon: Star, end: true },
-    { to: current ? `${base}/shop` : '/shop', label: 'Event shop', icon: ShoppingBag, end: true },
+    { to: `${base}/teams`, label: 'Teams', icon: Users, end: true },
+    { to: `${base}/following`, label: 'Following', icon: Star, end: true },
+    { to: `${base}/shop`, label: 'Event shop', icon: ShoppingBag, end: true },
   ];
-  const weatherRow = (current != null || showWeather) && !lite && (
-    <Link to={current ? `${base}/weather` : '/events'} onClick={close} className={`${itemClass(false)} hover:!bg-[rgb(var(--mg-subtle))]`}>
+  // General: the same rows everywhere, in the same style; away from a competition Following sits in it and the competition section is gone.
+  const generalLinks = [
+    { to: '/events', label: 'Competitions', icon: CalendarDays, end: true },
+    ...(current ? [] : [{ to: '/following', label: 'Following', icon: Star, end: false }]),
+    ...(current
+      ? [{ to: seasonsTo, label: 'Seasons', icon: Trophy, end: false }, { to: '/competitions/past', label: 'Past competitions', icon: History, end: false }]
+      : [{ to: '/competitions/past', label: 'Past competitions', icon: History, end: false }, { to: seasonsTo, label: 'Seasons', icon: Trophy, end: false }]),
+    { to: '/stats', label: 'Rider and team stats', icon: BarChart3, end: false },
+    ...(current ? [] : [{ to: '/team-profiles', label: 'Team profiles', icon: IdCard, end: false }]),
+    { to: '/shop', label: 'Tack and kit shop', icon: ShoppingBag, end: false },
+  ];
+  const weatherRow = current != null && !lite && (
+    <Link to={`${base}/weather`} onClick={close} className={`${itemClass(false)} hover:!bg-[rgb(var(--mg-subtle))]`}>
       <CloudSun className={iconClass(false)} /><span className="font-medium text-[rgb(var(--mg-ink))]">Weather</span>{showWeather && <span className="ml-auto"><WeatherBadge /></span>}
     </Link>
   );
@@ -91,7 +103,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
         {groupList.length > 0 && <AgeGroupMenu groups={groupList} base={base} selectedSection={selectedSection} onPick={close} />}
 
         <div className="flex flex-1 flex-col gap-5 p-4">
-          {current ? (
+          {current && (
             <nav aria-label="This competition" className="flex flex-col">
               <h3 className={sectionHeading}>This competition</h3>
               {weatherRow}
@@ -103,26 +115,15 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
                 </NavLink>
               ))}
             </nav>
-          ) : (
-            <nav aria-label="Main navigation" className="flex flex-col">
-              {weatherRow}
-              {links.map((item) => (
-                <NavLink key={item.label} to={item.to} end={item.end} onClick={close} className={({ isActive }) => itemClass(isActive && current !== null)}>
-                  {({ isActive }) => <>
-                    <item.icon className={iconClass(isActive && current !== null)} />{item.label}
-                  </>}
-                </NavLink>
-              ))}
-            </nav>
           )}
 
           <nav aria-label="General" className="flex flex-col">
-            {current ? <h3 className={sectionHeading}>General</h3> : <div className="mb-2 h-px bg-[rgb(var(--mg-rule-soft))]" />}
-            <NavLink to="/events" end onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><CalendarDays className={iconClass(isActive)} />Competitions</>}</NavLink>
-            {current && <NavLink to="/shop" onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><ShoppingBag className={iconClass(isActive)} />Tack &amp; kit shop</>}</NavLink>}
-            <NavLink to={seasonsTo} onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><Trophy className={iconClass(isActive)} />Seasons</>}</NavLink>
-            <NavLink to="/competitions/past" onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><History className={iconClass(isActive)} />Past competitions</>}</NavLink>
-            <NavLink to="/stats" onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><BarChart3 className={iconClass(isActive)} />Rider and team stats</>}</NavLink>
+            <h3 className={sectionHeading}>General</h3>
+            {generalLinks.map((item) => (
+              <NavLink key={item.label} to={item.to} end={item.end} onClick={close} className={({ isActive }) => itemClass(isActive)}>
+                {({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}
+              </NavLink>
+            ))}
             <button type="button" onClick={() => setQrOpen(true)} className={itemClass(false)}><QrCode className={iconClass(false)} />Scan a QR code</button>
             <NavLink to="/settings" onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><SlidersHorizontal className={iconClass(isActive)} />Settings</>}</NavLink>
           </nav>
