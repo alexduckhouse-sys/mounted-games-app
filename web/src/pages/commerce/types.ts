@@ -43,6 +43,10 @@ export interface PublicCompetitionListing {
   stockQuantity: number | null;
   category: CommerceItemCategory;
   imageUrl: string | null;
+  /** What the item asks the buyer for once it is in the order, such as "Stable number". Not sent by the API yet; the shop leaves the question out while it is missing. */
+  detailPrompt?: string | null;
+  /** An example for the box, such as "e.g. B12". */
+  detailHint?: string | null;
 }
 
 export interface EventCommerceSettings {

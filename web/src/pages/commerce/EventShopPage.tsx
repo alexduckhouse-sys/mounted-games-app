@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin } from 'lucide-react';
 import { usePageHeader } from '../../components/CompactPageBarContext';
-import { PageGrid } from '../../components/PageGrid';
+import { RoundStepper } from '../../components/RoundStepper';
+import { feeText } from '../../lib/entryOptions';
 import { usePageWidth } from '../../components/pageWidthState';
-import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
-import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineQty, RefineStatus } from '../refine/Refine';
+import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineStatus } from '../refine/Refine';
 import { LoadError } from './commerceUi';
 import { CATEGORY_LABEL, errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
 import { DemoPaymentFlow, OutcomeState } from './DemoPaymentFlow';
 import type { CommerceItemCategory, DemoOrderPaymentResult, EventCommerceSettings, EventOrder, FakePaymentOutcome, PublicCompetitionListing, TestPayment } from './types';
 import './commerce.css';
+import '../../components/sitePages.css';
+import '../../components/eventPages.css';
 
 /** Camping and stabling first, then kit, tickets and the rest. */
 const SHOP_ORDER: CommerceItemCategory[] = [2, 0, 1, 3];
@@ -26,19 +27,20 @@ export function EventShopPage() {
   return <EventShopContent key={`${competition.id}:${user?.id ?? 'signed-out'}`} />;
 }
 
-type View = 'shop' | 'basket' | 'payment' | 'placed';
+type View = 'shop' | 'payment' | 'placed';
 
 const itemsText = (count: number) => `${count} ${count === 1 ? 'item' : 'items'}`;
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 function EventShopContent() {
-  usePageWidth('wide');
-  const desktop = useIsDesktop();
+  usePageWidth('narrow');
   const { competition } = useCompetition();
   const { user } = useAuth();
   const [listings, setListings] = useState<PublicCompetitionListing[] | null>(null);
   const [settings, setSettings] = useState<EventCommerceSettings | null>(null);
   const [basket, setBasket] = useState<Record<number, number>>({});
+  // What an item asks for once it is in the order (a stable number, a number plate), by listing.
+  const [details, setDetails] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [order, setOrder] = useState<EventOrder | null>(null);
@@ -72,16 +74,20 @@ function EventShopContent() {
     if (busy) return;
     orderAttempt.current = null;
     const clamped = Math.max(0, Math.min(listing.stockQuantity ?? 99, next));
-    const nextBasket = { ...basket, [listing.id]: clamped };
-    setBasket(nextBasket);
-    if (view === 'basket' && Object.values(nextBasket).every((quantity) => quantity === 0)) setView('shop');
+    setBasket({ ...basket, [listing.id]: clamped });
+  }
+
+  function changeDetail(listingId: number, value: string) {
+    orderAttempt.current = null;
+    setDetails((current) => ({ ...current, [listingId]: value }));
   }
 
   /** Places the order. A repeat of the same basket reuses its key, so the server returns the same order. */
   async function checkout() {
     if (!user || basketLines.length === 0) return;
+    const detailFor = (listing: PublicCompetitionListing) => (listing.detailPrompt ? details[listing.id]?.trim() ?? '' : '');
     const basketSignature = `${competition.id}|${basketLines
-      .map(({ listing, quantity }) => `${listing.id}:${quantity}`)
+      .map(({ listing, quantity }) => `${listing.id}:${quantity}:${detailFor(listing)}`)
       .sort()
       .join('|')}`;
     if (orderAttempt.current?.basketSignature !== basketSignature) {
@@ -92,7 +98,7 @@ function EventShopContent() {
     try {
       const { data } = await api.post<EventOrder>(`/commerce/competitions/${competition.id}/orders`, {
         idempotencyKey: orderAttempt.current.idempotencyKey,
-        items: basketLines.map(({ listing, quantity }) => ({ listingId: listing.id, quantity })),
+        items: basketLines.map(({ listing, quantity }) => ({ listingId: listing.id, quantity, ...(detailFor(listing) ? { detail: detailFor(listing) } : {}) })),
       });
       setOrder(data);
       if (data.isTestOrder) {
@@ -140,8 +146,8 @@ function EventShopContent() {
         }}
         variant="page"
         context={`${itemsText(order.lines.reduce((total, line) => total + line.quantity, 0) || basketCount)} · ${pounds(order.totalMinor)}`}
-        onBack={() => setView('basket')}
-        backLabel="Back to basket"
+        onBack={() => setView('shop')}
+        backLabel="Back to shop"
         approvedTitle="Order confirmed"
         resultContext={competition.name}
         renderResult={({ payment, retry }) => <ShopOutcome order={order} payment={payment} retry={retry} onShop={backToShop} />}
@@ -149,109 +155,60 @@ function EventShopContent() {
     );
   }
 
-  if (view === 'basket') {
-    return (
-      <RefinePage>
-        <RefineHeader onBack={() => setView('shop')} backLabel="Back to shop" context={competition.name} title="Basket" demo={isDemo} />
-        {error && <LoadError message={error} onRetry={() => void load()} />}
-        <RefineList label="Basket items">
-          {basketLines.map(({ listing, quantity }) => (
-            <li key={listing.id} className="rf-row">
-              <span className="rf-grow"><span className="rf-t1">{listing.title}</span><span className="rf-t2">{pounds(listing.priceMinor)} each</span></span>
-              <RefineQty name={listing.title} value={quantity} max={listing.stockQuantity ?? 99} disabled={busy} onChange={(next) => changeQuantity(listing, next)} />
-              <span className="rf-price w-16 text-right">{pounds(listing.priceMinor * quantity)}</span>
-            </li>
-          ))}
-        </RefineList>
-        <div className="rf-sum rf-sum-total -mx-4 mt-3"><span>Total</span><span>{pounds(estimatedTotal)}</span></div>
-        <RefineNote>Your total is confirmed when you place the order. {COLLECT_NOTE}</RefineNote>
-        <RefineFoot aboveTabs>
-          {user ? (
-            <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={busy || basketLines.length === 0} onClick={() => void checkout()}>
-              {busy ? 'Placing order…' : isDemo ? 'Continue to payment' : 'Place order'}
-            </button>
-          ) : (
-            <Link className="rf-btn rf-btn-primary rf-wide" to="/login">Sign in to order</Link>
-          )}
-        </RefineFoot>
-      </RefinePage>
-    );
-  }
-
   const groups = SHOP_ORDER
     .map((category) => ({ category, items: (listings ?? []).filter((listing) => listing.category === category) }))
     .filter((group) => group.items.length > 0);
-  const basketRail = (
-    <section className="mg-card flex flex-col gap-2 p-4" aria-label="Basket">
-      <h2 className="mg-display text-[22px] font-bold uppercase leading-none tracking-[0.03em] text-[rgb(var(--mg-heading))]">Basket</h2>
-      {basketLines.length === 0 ? <p className="m-0 text-sm text-[rgb(var(--mg-muted))]">Nothing in your basket yet. Use the + buttons to add items.</p> : (
-        <>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0">
-            {basketLines.map(({ listing, quantity }) => (
-              <li key={listing.id} className="flex items-baseline gap-2 text-sm">
-                <span className="min-w-0 flex-1 truncate">{listing.title} × {quantity}</span>
-                <span className="font-semibold">{pounds(listing.priceMinor * quantity)}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="flex items-baseline justify-between border-t border-[rgb(var(--mg-rule-soft))] pt-2 font-bold"><span>Total</span><span>{pounds(estimatedTotal)}</span></div>
-          <button type="button" className="mg-btn mg-btn-primary" onClick={() => setView('basket')}>View basket</button>
-        </>
-      )}
-    </section>
-  );
-  const products = (
-    <div className="flex flex-col gap-4">
+  const orderLabel = `Order: ${feeText(estimatedTotal)}`;
+  return (
+    <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-2 pt-3">
+      <ShopHeader />
+      <div className="sp-seg" role="navigation" aria-label="Shop switcher">
+        <Link to={`/competitions/${competition.id}/shop`} aria-current="page">Event shop</Link>
+        <Link to="/shop">Tack &amp; kit classifieds</Link>
+      </div>
+      {error && <div className="mt-3"><LoadError message={error} onRetry={() => void load()} /></div>}
+      {listings == null && !error && <p role="status" className="sp-note">Loading the shop…</p>}
+      {listings && listings.length === 0 && <p className="sp-note">There’s nothing in the event shop yet.</p>}
       {groups.map(({ category, items }) => (
-        <section key={category} className="mg-sec" aria-label={CATEGORY_LABEL[category]}>
-          <div className="mg-sec-head"><h2>{CATEGORY_LABEL[category]}</h2></div>
-          <ul className="mg-lines mg-lines-grid" aria-label={`${CATEGORY_LABEL[category]} for sale`}>
+        <section key={category} aria-label={CATEGORY_LABEL[category]}>
+          <h2 className="sp-sec">{CATEGORY_LABEL[category]}</h2>
+          <ul className="sp-card m-0 list-none p-0" aria-label={`${CATEGORY_LABEL[category]} for sale`}>
             {items.map((listing) => {
               const quantity = basket[listing.id] ?? 0;
               const soldOut = listing.stockQuantity === 0;
               const note = [listing.description, listing.stockQuantity != null && !soldOut ? `${listing.stockQuantity} left` : null].filter(Boolean).join(' · ');
               return (
-                <li key={listing.id} className={`grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2.5 py-2 pl-3 pr-2 ${quantity > 0 ? 'bg-[rgb(var(--mg-subtle))]' : ''}`}>
-                  <span className="flex min-w-0 flex-col gap-[3px]">
-                    <strong className="text-[15px] font-semibold">{listing.title}</strong>
-                    {note && <span className="text-xs text-[rgb(var(--mg-muted))]">{note}</span>}
-                    <span className="mg-display text-[17px] font-bold leading-none text-[rgb(var(--mg-heading))]">{pounds(listing.priceMinor)}</span>
-                  </span>
-                  {soldOut ? <RefineStatus tone="warn">Sold out</RefineStatus>
-                    : <RefineQty name={listing.title} value={quantity} max={listing.stockQuantity ?? 99} onChange={(next) => changeQuantity(listing, next)} />}
+                <li key={listing.id}>
+                  <div className="sp-row">
+                    <span className="sp-grow">
+                      <span className="sp-t1">{listing.title}</span>
+                      <span className="sp-t2">{feeText(listing.priceMinor)}{note ? ` · ${note}` : ''}</span>
+                    </span>
+                    {soldOut ? <RefineStatus tone="warn">Sold out</RefineStatus>
+                      : <RoundStepper name={listing.title} value={quantity} max={listing.stockQuantity ?? 99} disabled={busy} onChange={(next) => changeQuantity(listing, next)} />}
+                  </div>
+                  {quantity > 0 && listing.detailPrompt && (
+                    <div className="px-4 pb-3.5">
+                      <label className="rf-fld">{listing.detailPrompt}
+                        <input type="text" maxLength={80} placeholder={listing.detailHint ?? ''} value={details[listing.id] ?? ''} disabled={busy}
+                          onChange={(event) => changeDetail(listing.id, event.target.value)} />
+                      </label>
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ul>
         </section>
       ))}
-    </div>
-  );
-  return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-none">
-      <ShopHeader />
-      <div className="mg-seg self-start" role="navigation" aria-label="Shop switcher">
-        <Link to={`/competitions/${competition.id}/shop`} aria-current="page" className="mg-chip !min-h-10 !px-3.5 !text-sm !no-underline hover:!no-underline">Event shop</Link>
-        <Link to="/shop" className="mg-chip !min-h-10 !px-3.5 !text-sm !no-underline hover:!no-underline">Tack &amp; kit classifieds</Link>
-      </div>
-      <p className="m-0 flex items-start gap-2 rounded-lg bg-[rgb(var(--mg-tint))] px-3 py-2.5 text-[13px] leading-snug text-[rgb(var(--mg-heading))]">
-        <MapPin className="mt-px h-4 w-4 shrink-0" aria-hidden="true" />
-        <span className="flex-1">Listings approved by the organiser. {COLLECT_NOTE}</span>
-        <Link className="mg-text-link !min-h-0 shrink-0 !text-[13px]" to="/me/orders" aria-label="Your orders">Your orders</Link>
-      </p>
-      {error && <LoadError message={error} onRetry={() => void load()} />}
-      {listings == null && !error && <p role="status" className="mg-meta px-1">Loading the shop…</p>}
-      {listings && listings.length === 0 && <p className="mg-card p-4">There’s nothing in the event shop yet.</p>}
-      {desktop ? <PageGrid asideLabel="Your basket" aside={basketRail}>{products}</PageGrid> : products}
-      <p className="m-0 px-1 text-xs text-[rgb(var(--mg-muted))]">
-        MG App connects buyers with independent sellers; your purchase contract is directly with the seller listed on each item.
-      </p>
-      {!desktop && basketLines.length > 0 && (
-        <div role="region" aria-label="Basket summary" className="mg-basket-bar">
-          <span className="flex flex-1 flex-col gap-0.5"><span className="text-xs text-[rgb(var(--mg-header-sub))]">{itemsText(basketCount)}</span><strong className="mg-display text-[22px] font-bold leading-none">{pounds(estimatedTotal)}</strong></span>
-          <button type="button" className="inline-flex min-h-11 items-center rounded-lg bg-[rgb(var(--mg-red))] px-5 text-[15px] font-bold text-white" onClick={() => setView('basket')}>Review order</button>
-        </div>
-      )}
+      {basketLines.length > 0 && (user ? (
+        <button type="button" className="ev-bar" disabled={busy} onClick={() => void checkout()}>{busy ? 'Placing order…' : orderLabel}</button>
+      ) : (
+        <Link className="ev-bar" to="/login" state={{ from: `/competitions/${competition.id}/shop` }}>Sign in to order</Link>
+      ))}
+      {isDemo && basketLines.length > 0 && <p className="sp-note">This is a demo event. Next you will see a test payment page, and no money is taken.</p>}
+      {user && <div className="pt-1"><Link className="ev-text-btn" to="/me/orders">Your orders</Link></div>}
+      <p className="sp-note">MG App connects buyers with independent sellers; your purchase contract is directly with the seller listed on each item.</p>
     </div>
   );
 }
