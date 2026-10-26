@@ -4,11 +4,17 @@ import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { LiveVideo } from '../../components/stream/LiveVideo';
+import { useOverlayTiles } from '../../hooks/useOverlayTiles';
+import { useStreamAuto } from '../../hooks/useStreamAuto';
+import { useStreamAutomation } from '../../hooks/useStreamAutomation';
+import { DEFAULT_OVERLAY } from '../../lib/overlays';
 import { onAirStream } from '../../lib/streamControls';
 import type { LiveStream } from '../../types';
 import { RefineHeader, RefinePage, RefineNote, type RefineTab } from '../refine/Refine';
 import { useCompetition } from './context';
+import { AutoTab } from './streamControls/AutoTab';
 import { CameraTab } from './streamControls/CameraTab';
+import { OverlayTab } from './streamControls/OverlayTab';
 import './streamControls/streamControls.css';
 
 export type StreamControlsTab = 'overlay' | 'auto' | 'replay' | 'camera';
@@ -20,7 +26,7 @@ const TABS: { id: StreamControlsTab; label: string }[] = [
 ];
 
 export function StreamControlsPage() {
-  const { competition, streams, streamTelemetry, lastStreamCommand, invoke, ready, streamMessages } = useCompetition();
+  const { competition, streams, streamTelemetry, lastStreamCommand, invoke, ready, streamMessages, overlay: ctxOverlay, saveOverlay } = useCompetition();
   const { canOrganise } = useAuth();
   const [params, setParams] = useSearchParams();
   const [pickedId, setPickedId] = useState<number | null>(null);
@@ -29,6 +35,10 @@ export function StreamControlsPage() {
 
   const liveStreams = useMemo(() => streams.filter((stream) => stream.status !== 2), [streams]);
   const onAir = useMemo(() => onAirStream(liveStreams, lastStreamCommand, pickedId), [liveStreams, lastStreamCommand, pickedId]);
+  const overlay = ctxOverlay ?? DEFAULT_OVERLAY;
+  const { auto, setOn, setRule } = useStreamAuto(competition.id);
+  useStreamAutomation({ competition, overlay, saveOverlay, auto });
+  const tiles = useOverlayTiles({ competitionId: competition.id, overlay, saveOverlay, onAir, setAutoOn: setOn });
   const requested = params.get('tab');
   const tab: StreamControlsTab = TABS.some((t) => t.id === requested) ? (requested as StreamControlsTab) : 'overlay';
   const choose = useCallback((next: StreamControlsTab) => setParams({ tab: next }, { replace: true }), [setParams]);
@@ -76,12 +86,15 @@ export function StreamControlsPage() {
           </div>
         ) : <div className="sx-notlive" role="status">Not live</div>}
 
+        <div className="sx-chips">
+          <button type="button" className="sx-chip" aria-pressed={auto.on} onClick={() => setOn(!auto.on)}>{auto.on ? 'Auto on' : 'Auto off'}</button>
+        </div>
+
         <div role="tabpanel" aria-label={TABS.find((t) => t.id === tab)?.label}>
-          {tab === 'camera' ? (
-            <CameraTab competitionId={competition.id} streams={liveStreams} onAir={onAir} telemetry={streamTelemetry} defaultArena={defaultArena} onPick={pick} />
-          ) : (
-            <RefineNote>This tab is built in the next step of the stream controls work.</RefineNote>
-          )}
+          {tab === 'overlay' && <OverlayTab competition={competition} overlay={overlay} tiles={tiles} canChange={Boolean(saveOverlay)} />}
+          {tab === 'auto' && <AutoTab competition={competition} auto={auto} setOn={setOn} setRule={setRule} />}
+          {tab === 'replay' && <RefineNote>This tab is built in the next step of the stream controls work.</RefineNote>}
+          {tab === 'camera' && <CameraTab competitionId={competition.id} streams={liveStreams} onAir={onAir} telemetry={streamTelemetry} defaultArena={defaultArena} onPick={pick} />}
         </div>
       </div>
     </RefinePage>
