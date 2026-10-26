@@ -1,5 +1,4 @@
 import { Link, useLocation } from 'react-router-dom';
-import { TabMark } from './TabMark';
 import {
   ClipboardList,
   Clock,
@@ -192,14 +191,10 @@ export function BottomTabs({
   const totalCols = tabs.length + (me ? 1 : 0);
   const gridColsClass = GRID_COLS_CLASS[totalCols] ?? 'grid-cols-5';
   const compactClass = totalCols >= 6 ? ' mg-tab-compact' : '';
-  const activeTab = tabs.findIndex((tab) => tab.active);
-  // The Me tab sits after the others.
-  const activeIndex = activeTab >= 0 ? activeTab : me && onProfile ? tabs.length : -1;
 
   return (
     <nav aria-label="Competition" className="mg-tabs">
-      <div className={`relative mx-auto grid max-w-xl ${gridColsClass}`}>
-        <TabMark index={activeIndex} count={totalCols} compact={totalCols >= 6} />
+      <div className={`mx-auto grid max-w-xl ${gridColsClass}`}>
         {tabs.map((tab) => (
           <Link
             key={tab.label}
