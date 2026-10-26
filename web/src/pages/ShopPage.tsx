@@ -335,7 +335,7 @@ function PostRow({
         <span className="sp-price">{post.priceMinor != null ? priceLabel(post.priceMinor) : ''}</span>
       </button>
       {open && (
-        <div className="space-y-2 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] px-3 py-3">
+        <div className="mg-reveal space-y-2 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] px-3 py-3">
           {post.imageBase64 && <LazyImage src={post.imageBase64} alt={post.title} className="max-h-60 w-full rounded-md object-cover" />}
           <p className="whitespace-pre-wrap text-sm">{post.body}</p>
           {post.contactInfo && <p className="mg-meta">Contact: {post.contactInfo}</p>}

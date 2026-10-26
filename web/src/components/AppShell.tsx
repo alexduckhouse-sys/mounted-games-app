@@ -23,6 +23,7 @@ import { TrainerAccountNotice } from './TrainerAccountNotice';
 import { LiteChip } from '../lite/LiteChip';
 import { initialsOf } from '../lib/profile';
 import { useNeedsYou } from '../pages/profile/needsYou';
+import { usePageFade } from '../hooks/usePageFade';
 
 export function AppShell() {
   return <PageWidthProvider>{(width) => <Shell width={width} />}</PageWidthProvider>;
@@ -57,6 +58,8 @@ function Shell({ width }: { width: PageWidth }) {
 
   // Sticky bits further down the page sit under the header, whatever its height.
   const barRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  usePageFade(mainRef, location.pathname);
   useLayoutEffect(() => {
     const bar = barRef.current;
     if (!bar) {
@@ -129,7 +132,7 @@ function Shell({ width }: { width: PageWidth }) {
         {competitionId != null && <TopBarTicker />}
       </div>
       )}
-      <main className={publicPage
+      <main ref={mainRef} className={publicPage
         ? `skin mx-auto w-full ${cap} flex-1 px-4 ${filmingMode || /\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : tabsCompetitionId != null || globalTabs ? 'pb-28' : 'pb-10'}`
         : `skin mx-auto w-full ${cap} flex-1 px-4 py-3 sm:py-5`}>
         {storageError && <Notice role="status" className={publicPage ? 'mt-4' : 'mb-3'}>{storageError}</Notice>}

@@ -127,14 +127,14 @@ describe('CompetitionEditor: the steps', () => {
     expect(within(drawer).getByRole('button', { name: 'Races' })).toHaveAttribute('aria-current', 'step');
     expect(within(drawer).getByRole('button', { name: 'Review' })).toBeDisabled();
     await userEvent.click(within(drawer).getByRole('button', { name: 'When and where, done' }));
-    expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument()); // it slides out first
     expect(h2('When and where')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Steps' }));
     await userEvent.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: 'Steps' }));
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Steps' })).getAllByRole('button', { name: 'Close' })[1]);
-    expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument());
   });
 });
 
@@ -372,6 +372,21 @@ describe('CompetitionEditor: when and where', () => {
     expect(await screen.findByRole('img', { name: 'Location found' })).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/geocode', { params: { postcode: 'wa16 6qn', w3w: undefined } });
     expect(stored()).toMatchObject({ lat: '53.33', lon: '-2.38' });
+  });
+
+  it('keeps the competition number and contact email in the draft, and holds Next for an email that does not look right', async () => {
+    seed('when', { name: 'Spring Games' });
+    mount();
+    await userEvent.type(screen.getByLabelText(/Competition number/), '2026-041');
+    await userEvent.type(screen.getByLabelText(/Contact email/), 'entries@example');
+    expect(stored()).toMatchObject({ competitionNumber: '2026-041', contactEmail: 'entries@example' });
+    await userEvent.click(nextButton());
+    expect(await screen.findByText('That email address doesn’t look right.')).toBeInTheDocument();
+    expect(h2('When and where')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/Contact email/), '.org');
+    expect(screen.queryByText('That email address doesn’t look right.')).not.toBeInTheDocument();
+    await userEvent.click(nextButton());
+    expect(h2('Arenas')).toBeInTheDocument();
   });
 
   it('looks up a what3words address, and not the same thing twice', async () => {
@@ -923,6 +938,7 @@ describe('CompetitionEditor: creating', () => {
   it('creates the competition, its age groups, sessions with estimated starts, and breaks, then offers a timetable', async () => {
     seed('review', {
       organiserName: 'Cheshire PC', location: 'Tatton', description: 'Notes', paymentDestination: 'Bank', termsText: 'T', passportCheck: true,
+      postcode: ' wa16 6qn ', competitionNumber: ' 2026-041 ', contactEmail: ' entries@example.org ',
       sections: [
         { ...defaultSection(), ageGroup: 'Juniors', format: 3, priceGbp: '12.5', maxParticipants: '16', finalistCount: '6', runoffRaceName: '2 Flag', minutesPerRace: '5', maxTeamsPerHeat: '4', tieBreak: 2, sessions: [{ races: ['Bending', 'Bottle'] }, { races: null }] },
         { ...defaultSection(), ageGroup: 'Open', usesRaceFinals: true, arena: 'Arena 2' },
@@ -936,6 +952,7 @@ describe('CompetitionEditor: creating', () => {
 
     expect(api.post).toHaveBeenCalledWith('/competitions', expect.objectContaining({
       name: 'Spring Games', organiserName: 'Cheshire PC', location: 'Tatton', paymentDestination: 'Bank', termsText: 'T', description: 'Notes',
+      postcode: 'wa16 6qn', competitionNumber: '2026-041', contactEmail: 'entries@example.org',
       startDate: new Date('2026-10-24T09:00').toISOString(), endDate: new Date('2026-10-24T17:00').toISOString(),
       laneHatbands: ['Red', 'White', 'Blue', 'Yellow', 'Green', 'Black'],
     }));
@@ -1190,7 +1207,7 @@ describe('CompetitionEditor: editing', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(screen.getByText('Competition page')).toBeInTheDocument());
 
-    expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ name: 'Autumn Area', isActive: true, isArchived: false, organiserName: 'Cheshire PC' }));
+    expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ name: 'Autumn Area', isActive: true, isArchived: false, organiserName: 'Cheshire PC', postcode: '', competitionNumber: '', contactEmail: '' }));
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/21', expect.objectContaining({ priceMinor: 5000, maxParticipants: 12, finalistCount: 6, runoffRaceName: '2 Flag' }));
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/22', expect.objectContaining({ maxParticipants: 0 }));
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/21', expect.objectContaining({ hasFinal: true, carryPointsIntoFinal: false, doublePointsInFinal: false }));

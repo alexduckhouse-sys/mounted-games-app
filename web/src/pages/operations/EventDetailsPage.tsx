@@ -10,7 +10,7 @@ import { payoutsLine } from '../../lib/payouts';
 import { MAX_SECTOR_NAME, MAX_TACK_SECTORS, isScored, sectorProblem } from '../../lib/tackCheck';
 import type { CompetitionDetail, PassportCheckBoard, TackCheckBoard, TackCheckMode, TackCheckSection } from '../../types';
 import { useCompetition } from '../competition/context';
-import { RefineChoiceRow, RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
+import { RefineChoiceRow, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 import { apiMessage } from './types';
 import './operations.css';
 
@@ -132,7 +132,16 @@ export function EventDetailsPage() {
         </div>
         <div className="ops-fields">
           <TextField key={competition.location ?? ''} label="Venue" value={competition.location ?? ''} onSave={(value) => saveBasics('the venue', { location: value || null })} />
+          {/* Blank is sent as blank, not null: the API leaves a value alone on null and clears it on blank. */}
+          <TextField key={`pc-${competition.postcode ?? ''}`} label="Postcode" value={competition.postcode ?? ''} onSave={(value) => saveBasics('the postcode', { postcode: value })} />
         </div>
+
+        <RefineSection title="Entries" />
+        <div className="ops-fields">
+          <TextField key={`no-${competition.competitionNumber ?? ''}`} label="Competition number" value={competition.competitionNumber ?? ''} onSave={(value) => saveBasics('the competition number', { competitionNumber: value })} />
+          <TextField key={`em-${competition.contactEmail ?? ''}`} label="Contact email" value={competition.contactEmail ?? ''} onSave={(value) => saveBasics('the contact email', { contactEmail: value })} />
+        </div>
+        <RefineNote>The contact email shows on the event page, so entrants can write to you.</RefineNote>
 
         <RefineSection title="Payment" />
         <RefineList as="div">

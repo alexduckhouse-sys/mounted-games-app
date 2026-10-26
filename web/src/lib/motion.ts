@@ -83,3 +83,8 @@ export function rankMoves(before: number[], now: number[], cutAfter: number | nu
     return [{ id, climb: was - index, crossedIn: cutAfter !== null && was > cutAfter && index <= cutAfter }];
   });
 }
+
+/** A chat bubble that has just been sent or received pops up from its own side (set transform-origin to match). */
+export const BUBBLE_IN = { opacity: 0, y: 10, scale: 0.94 } as const;
+export const BUBBLE_SHOWN = { opacity: 1, y: 0, scale: 1 } as const;
+export const BUBBLE_SPRING = { type: 'spring', stiffness: 520, damping: 32 } as const;

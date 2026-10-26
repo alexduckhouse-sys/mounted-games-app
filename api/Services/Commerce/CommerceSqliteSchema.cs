@@ -5,7 +5,16 @@ namespace MountedGames.Api.Services.Commerce;
 
 public static class CommerceSqliteSchema
 {
-    public static Task EnsureAsync(AppDbContext db) => db.Database.ExecuteSqlRawAsync("""
+    public static async Task EnsureAsync(AppDbContext db)
+    {
+        await CreateTablesAsync(db);
+        // Added after the tables first shipped (AddDetailsAndShopFields).
+        await DbInitializer.EnsureColumnAsync(db, "CatalogueItem", "DetailPrompt", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "CatalogueItem", "DetailHint", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "EventOrderLine", "Detail", "TEXT NULL");
+    }
+
+    private static Task CreateTablesAsync(AppDbContext db) => db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS "CatalogueItem" (
             "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             "SellerUserId" TEXT NOT NULL,

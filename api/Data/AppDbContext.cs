@@ -232,6 +232,9 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             e.Property(c => c.Name).HasMaxLength(200).IsRequired();
             e.Property(c => c.Icon).HasMaxLength(24).HasDefaultValue("flag").IsRequired();
+            e.Property(c => c.Postcode).HasMaxLength(12);
+            e.Property(c => c.CompetitionNumber).HasMaxLength(40);
+            e.Property(c => c.ContactEmail).HasMaxLength(254);
             e.HasOne(c => c.CreatedBy)
                 .WithMany()
                 .HasForeignKey(c => c.CreatedByUserId)

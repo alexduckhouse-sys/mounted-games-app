@@ -94,3 +94,19 @@
 .sx-btn:disabled { opacity: .5; cursor: not-allowed; }
 .sx-btn:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 .sx-note { margin: 0; font: 500 13px/1.4 var(--mg-font); color: rgb(var(--mg-muted)); }
+
+/* Motion. Choices fade between states instead of snapping; buttons squeeze as they are pressed and spring back. */
+.sx-pill, .sx-btn, .sx-chip, .sx-addbar, .sx-tile, .sx-desk-tile, .sx-radio, .rp-ib, .rp-play, .rp-pill, .rp-zoom button {
+  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), border-width .18s var(--mg-ease-out),
+    color var(--mg-dur-fast) var(--mg-ease-out), box-shadow var(--mg-dur-fast) var(--mg-ease-out), filter var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
+}
+.sx-tile-pick, .sx-tile-chev { transition: color var(--mg-dur-fast) var(--mg-ease-out); }
+:is(.sx-pill, .sx-btn, .sx-chip, .sx-desk-tile, .rp-ib, .rp-play, .rp-pill, .rp-zoom button):active:not(:disabled) { --mg-press-t: 90ms; scale: .95; }
+.sx-addbar:active, .sx-tile:has(> button:active) { --mg-press-t: 90ms; scale: .985; }
+/* ON AIR stamps on when a camera goes live; a tile's settings and the replay editor unfold under what opened them. */
+.sx-onair { animation: mg-change-pop .42s var(--mg-ease-out); }
+.sx-settings, .rp { animation: mg-reveal .26s var(--mg-ease-out) backwards; }
+@media (prefers-reduced-motion: reduce) {
+  .sx-pill, .sx-btn, .sx-chip, .sx-addbar, .sx-tile, .sx-desk-tile, .sx-radio, .rp-ib, .rp-play, .rp-pill, .rp-zoom button, .sx-tile-pick, .sx-tile-chev { transition: none; }
+  .sx-onair, .sx-settings, .rp { animation: none; }
+}

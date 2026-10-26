@@ -13,6 +13,8 @@ public sealed class CatalogueItemConfiguration : IEntityTypeConfiguration<Catalo
         e.Property(x => x.Description).HasMaxLength(4000).IsRequired();
         e.Property(x => x.Currency).HasMaxLength(3).HasDefaultValue("GBP").IsRequired();
         e.Property(x => x.ImageUrl).HasMaxLength(2048);
+        e.Property(x => x.DetailPrompt).HasMaxLength(60);
+        e.Property(x => x.DetailHint).HasMaxLength(80);
         e.Property(x => x.Version).HasDefaultValue(1L).IsConcurrencyToken();
         e.HasOne(x => x.Seller).WithMany().HasForeignKey(x => x.SellerUserId).OnDelete(DeleteBehavior.Restrict);
         e.HasIndex(x => new { x.SellerUserId, x.IsActive });
@@ -64,6 +66,7 @@ public sealed class EventOrderLineConfiguration : IEntityTypeConfiguration<Event
     {
         e.Property(x => x.SellerUserId).HasMaxLength(450).IsRequired();
         e.Property(x => x.TitleSnapshot).HasMaxLength(200).IsRequired();
+        e.Property(x => x.Detail).HasMaxLength(80);
         e.Property(x => x.ReservedStockQuantity).HasDefaultValue(0);
         e.HasOne(x => x.Order).WithMany(x => x.Lines).HasForeignKey(x => x.EventOrderId).OnDelete(DeleteBehavior.Cascade);
         e.HasIndex(x => new { x.SellerUserId, x.EventOrderId });

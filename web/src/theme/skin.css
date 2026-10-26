@@ -706,3 +706,31 @@ html[data-lite="true"] .mg-seg > button[aria-pressed="true"] {
 .mg-btn-danger { background: rgb(var(--mg-elim)); border-color: rgb(var(--mg-elim)); color: #fff !important; }
 .mg-btn-danger:hover:not(:disabled) { filter: brightness(1.1); }
 
+
+/* Motion for the pop-up kit (kit.css) and the public site pages (sitePages.css, eventPages.css). Buttons squeeze a
+   little as they are pressed and spring back, like .mg-btn; scale keeps any transform a button already has. */
+.kit-pill, .kit-strip-act, .sp-pill, .sp-add, .sp-stepper button, .ev-bar, .ev-send, .ev-arrow, .ev-text-btn {
+  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out),
+    filter var(--mg-dur-fast) var(--mg-ease-out), opacity var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
+}
+:is(.kit-pill, .kit-strip-act, .sp-pill, .sp-add, .sp-stepper button, .ev-bar, .ev-send, .ev-arrow, .ev-text-btn):active:not(:disabled) { --mg-press-t: 90ms; scale: .96; }
+/* Rows and segmented tabs fade their colour rather than snapping. */
+a.sp-row, button.sp-row, .sp-listing-head, .sp-seg > * { transition: background-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), box-shadow var(--mg-dur-fast) var(--mg-ease-out); }
+/* An information or problem strip slides in rather than shoving the page down at once. */
+.kit-strip { animation: mg-strip-in .32s var(--mg-ease-out) backwards; }
+@keyframes mg-strip-in { from { opacity: 0; transform: translateY(-6px); } }
+/* Something opened in place (a shop listing, a hatband, a tile's settings) unfolds from the row above it. */
+.mg-reveal { animation: mg-reveal .24s var(--mg-ease-out) backwards; }
+@keyframes mg-reveal { from { opacity: 0; transform: translateY(-6px); } }
+/* Something just added to a list (an announcement just sent) rises into place. */
+.mg-arrive { animation: mg-arrive .4s cubic-bezier(.34, 1.4, .64, 1) backwards; }
+@keyframes mg-arrive { from { opacity: 0; transform: translateY(10px) scale(.97); } }
+/* A thin bar that fills smoothly inside a strip, for work under way (a replay being prepared). */
+.mg-progress { display: block; align-self: stretch; height: 4px; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, currentColor 18%, transparent); }
+.mg-progress > span { display: block; height: 100%; border-radius: inherit; background: currentColor; transform-origin: left center; transition: transform .35s var(--mg-ease-out); }
+/* A number that just changed (a stepper's value) pops. */
+.mg-num-pop { display: inline-block; animation: mg-change-pop .32s var(--mg-ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  .kit-pill, .kit-strip-act, .sp-pill, .sp-add, .sp-stepper button, .ev-bar, .ev-send, .ev-arrow, .ev-text-btn, a.sp-row, button.sp-row, .sp-listing-head, .sp-seg > *, .mg-progress > span { transition: none; }
+  .kit-strip, .mg-reveal, .mg-num-pop, .mg-arrive { animation: none; }
+}

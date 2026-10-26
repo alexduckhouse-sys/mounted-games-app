@@ -150,3 +150,35 @@
 .cw-rv { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; }
 .cw-rv-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 .cw-rv-chips > .cw-t1 { flex: none; min-width: 80px; font-size: 14px; }
+
+/* Motion. Each step slides in from the side it comes from (data-dir 1 is onwards, -1 is back). The fill is backwards
+   only, so no transform is left behind to unpin a fixed sheet inside the step. */
+.cw-step-in { animation: cw-step-in .34s var(--mg-ease-out) backwards; }
+.cw-step-in[data-dir="-1"] { animation-name: cw-step-back; }
+@keyframes cw-step-in { from { opacity: 0; transform: translateX(28px); } }
+@keyframes cw-step-back { from { opacity: 0; transform: translateX(-28px); } }
+/* The phone's step list slides in from the left over a fading dim, and back out on close (useExitDelay). */
+.cw-drawer nav { animation: cw-drawer-in .3s var(--mg-ease-out); }
+.cw-scrim { animation: mg-fade-in .4s ease-out; }
+.cw-drawer.is-closing nav { animation: cw-drawer-out .26s ease-in forwards; }
+.cw-drawer.is-closing .cw-scrim { animation: mg-fade-out .38s ease-in-out forwards; }
+@keyframes cw-drawer-in { from { transform: translateX(-100%); } }
+@keyframes cw-drawer-out { to { transform: translateX(-100%); } }
+/* A step turning done ticks green with a pop; a chosen tile's tick pops in. */
+.cw-step[data-done="true"] .cw-badge, .cw-tile[aria-pressed="true"] .cw-tick { animation: mg-change-pop .42s var(--mg-ease-out); }
+.cw-step, .cw-badge, .cw-tile, .cw-seg button, .cw-pick, .cw-palette button { transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), box-shadow var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1); }
+/* Buttons squeeze as they are pressed and spring back, like .mg-btn; big tiles and bars squeeze less. */
+.cw-btn, .cw-steps-btn, .cw-ib, .cw-stp button, .cw-addbar, .cw-addrow { transition: background-color var(--mg-dur-fast) var(--mg-ease-out), filter var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1); }
+:is(.cw-btn, .cw-steps-btn, .cw-ib, .cw-stp button, .cw-seg button, .cw-palette button):active:not(:disabled) { --mg-press-t: 90ms; scale: .96; }
+:is(.cw-tile, .cw-pick, .cw-addbar, .cw-addrow):active:not(:disabled) { --mg-press-t: 90ms; scale: .985; }
+/* A race being dragged lifts a little; the rows around it glide to make room (only while a drag is on, so the drop
+   itself doesn't replay the slide). */
+.cw-race { transition: box-shadow .2s var(--mg-ease-out), scale .2s var(--mg-ease-out); }
+.cw-race[data-lifted="true"] { scale: 1.015; }
+:has(> .cw-race[data-lifted="true"]) > .cw-race:not([data-lifted="true"]) { transition: transform .2s var(--mg-ease-out); }
+/* A hatband opened for editing unfolds under its row. */
+.cw-edit { animation: mg-reveal .24s var(--mg-ease-out) backwards; }
+@media (prefers-reduced-motion: reduce) {
+  .cw-step-in, .cw-drawer nav, .cw-scrim, .cw-step[data-done="true"] .cw-badge, .cw-tile[aria-pressed="true"] .cw-tick, .cw-edit { animation: none !important; }
+  .cw-step, .cw-badge, .cw-tile, .cw-seg button, .cw-pick, .cw-palette button, .cw-btn, .cw-steps-btn, .cw-ib, .cw-stp button, .cw-addbar, .cw-addrow, .cw-race { transition: none; }
+}

@@ -19,6 +19,26 @@ public record CompetitionPickerItem(
     string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false, bool EntriesOpen = false);
 public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore, IReadOnlyList<int>? Years = null, IReadOnlyList<string>? Locations = null);
 
+public static class CompetitionFields
+{
+    public const int PostcodeMax = 12;
+    public const int CompetitionNumberMax = 40;
+
+    /// <summary>Trimmed and upper-cased; blank becomes null.</summary>
+    public static string? Postcode(string? value)
+    {
+        var t = value?.Trim().ToUpperInvariant();
+        return string.IsNullOrEmpty(t) ? null : t;
+    }
+
+    /// <summary>Trimmed; blank becomes null.</summary>
+    public static string? Trimmed(string? value)
+    {
+        var t = value?.Trim();
+        return string.IsNullOrEmpty(t) ? null : t;
+    }
+}
+
 public static class CompetitionTerms
 {
     /// <summary>Plenty for a page or two of terms; stops the field being used as a file store.</summary>
@@ -51,21 +71,26 @@ public record CompetitionDetail(
     string? TermsText = null,
     PayoutsToDto? PayoutsTo = null,
     IReadOnlyList<string>? LaneHatbands = null,
-    bool UseRefereeCards = false);
+    bool UseRefereeCards = false,
+    string? Postcode = null,
+    string? CompetitionNumber = null,
+    string? ContactEmail = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
     double? Latitude, double? Longitude,
     string? What3Words, string? AppleMapsUrl,
     DateTime StartDate, DateTime? EndDate,
-    string? Postcode = null,
+    [MaxLength(CompetitionFields.PostcodeMax)] string? Postcode = null,
     string? StreamUrl = null,
     string? OrganiserName = null,
     string? PaymentDestination = null,
     [RegularExpression(CompetitionIcons.Pattern)] string? Icon = null,
     [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null,
     IReadOnlyList<string>? LaneHatbands = null,
-    bool UseRefereeCards = false);
+    bool UseRefereeCards = false,
+    [MaxLength(CompetitionFields.CompetitionNumberMax)] string? CompetitionNumber = null,
+    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -73,7 +98,7 @@ public record UpdateCompetitionRequest(
     string? What3Words, string? AppleMapsUrl,
     DateTime StartDate, DateTime? EndDate,
     bool IsActive, bool IsArchived,
-    string? Postcode = null,
+    [MaxLength(CompetitionFields.PostcodeMax)] string? Postcode = null,
     string? StreamUrl = null,
     string? OrganiserName = null,
     string? PaymentDestination = null,
@@ -81,7 +106,10 @@ public record UpdateCompetitionRequest(
     [MaxLength(CompetitionTerms.MaxLength)] string? TermsText = null,
     /// <summary>Null leaves the hatbands as they are; an empty list clears them.</summary>
     IReadOnlyList<string>? LaneHatbands = null,
-    bool? UseRefereeCards = null);
+    bool? UseRefereeCards = null,
+    /// <summary>On an update, null leaves these three as they are and a blank value clears them.</summary>
+    [MaxLength(CompetitionFields.CompetitionNumberMax)] string? CompetitionNumber = null,
+    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 

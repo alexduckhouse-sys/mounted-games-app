@@ -86,8 +86,12 @@ function SignupList() {
     try {
       const { data } = await api.post<ExtendedMySignup>(`/my/signups/${signupId}/withdraw`, {});
       setSignups((cur) => cur?.map((item) => (item.id === signupId ? { ...item, ...data } : item)) ?? null);
-    } catch {
-      setError('Couldn’t withdraw this entry. Check your signal and try again. If the draw has happened, it can’t be withdrawn.');
+    } catch (caught) {
+      // Once the draw has happened the API says so with a code; anything else is most likely the connection.
+      const data = (caught as { response?: { status?: number; data?: { code?: string; message?: string } } }).response?.data;
+      setError(data?.code === 'draw-happened'
+        ? data.message || 'You can’t withdraw once the draw has happened.'
+        : 'Couldn’t withdraw this entry. Check your signal and try again.');
     }
   }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, ChevronLeft } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Link, useParams } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useChatFeed } from './useChatFeed';
@@ -8,6 +9,8 @@ import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { problemMessage } from '../../lib/apiError';
+import { BUBBLE_IN, BUBBLE_SHOWN, BUBBLE_SPRING } from '../../lib/motion';
+import { useStillMotion } from '../../lite/useStillMotion';
 import { clockTime, markSeen, messageThreads, threadMessages } from '../../lib/announcements';
 import { accountKind, type AdminUser, type BlockedAccount } from '../admin/accountAccessTypes';
 import { RefineFoot, RefinePage } from '../refine/Refine';
@@ -26,6 +29,7 @@ function ThreadSession({ userId }: { userId: string }) {
   const { competition } = useCompetition();
   const feed = useChatFeed(competition.id, 'Couldn’t load the messages. Check your signal and try again.');
   const [body, setBody] = useState('');
+  const still = useStillMotion();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ text: string; retry?: () => void } | null>(null);
   const [blocked, setBlocked] = useState<boolean | null>(null);
@@ -129,11 +133,14 @@ function ThreadSession({ userId }: { userId: string }) {
         )}
 
         <ol className="ann-messages" aria-label={`Messages with ${name}`}>
+          {/* Messages there when the thread loads stay put; one sent or received after that pops up from its side. */}
           {thread.map((message) => (
-            <li key={message.id} className={`ann-bubble ${message.recipientUserId ? 'ann-bubble-out' : 'ann-bubble-in'}`}>
+            <motion.li key={message.id} className={`ann-bubble ${message.recipientUserId ? 'ann-bubble-out' : 'ann-bubble-in'}`}
+              initial={still || feed.loading ? false : BUBBLE_IN} animate={BUBBLE_SHOWN} transition={BUBBLE_SPRING}
+              style={{ transformOrigin: message.recipientUserId ? 'bottom right' : 'bottom left' }}>
               <span>{message.body}</span>
               <time dateTime={message.createdAt}>{clockTime(message.createdAt)}</time>
-            </li>
+            </motion.li>
           ))}
         </ol>
       </div>

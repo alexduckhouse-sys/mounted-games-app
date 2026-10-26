@@ -51,6 +51,44 @@ describe('EventDetailsPage', () => {
     expect(await screen.findByText('Organiser saved')).toBeInTheDocument();
   });
 
+  it('saves the postcode, competition number and contact email, and sends a blank to clear one', async () => {
+    const user = userEvent.setup();
+    Object.assign(competition, { postcode: 'GL19 3BE', competitionNumber: null, contactEmail: 'entries@example.org' });
+    try {
+      show();
+      await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+      expect(screen.getByLabelText('Postcode')).toHaveValue('GL19 3BE');
+      expect(screen.getByLabelText('Contact email')).toHaveValue('entries@example.org');
+      expect(screen.getByText('The contact email shows on the event page, so entrants can write to you.')).toBeInTheDocument();
+
+      await user.type(screen.getByLabelText('Competition number'), ' 2026-041 ');
+      await user.tab();
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ competitionNumber: '2026-041' })));
+      expect(await screen.findByText('Competition number saved')).toBeInTheDocument();
+
+      // The API leaves a value alone on null and clears it on blank, so clearing sends an empty string.
+      await user.clear(screen.getByLabelText('Contact email'));
+      await user.tab();
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ contactEmail: '' })));
+      await user.clear(screen.getByLabelText('Postcode'));
+      await user.type(screen.getByLabelText('Postcode'), 'sw1a 1aa');
+      await user.tab();
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ postcode: 'sw1a 1aa' })));
+    } finally {
+      for (const key of ['postcode', 'competitionNumber', 'contactEmail']) delete (competition as Record<string, unknown>)[key];
+    }
+  });
+
+  it('shows the API’s reason when the contact email is refused', async () => {
+    vi.mocked(api.put).mockRejectedValueOnce({ response: { data: { message: 'That contact email doesn’t look right. Check it, or leave it blank.' } } });
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    await user.type(screen.getByLabelText('Contact email'), 'nope');
+    await user.tab();
+    expect(await screen.findByRole('alert')).toHaveTextContent('That contact email doesn’t look right.');
+  });
+
   it('does not save an unchanged field, and refuses an empty name', async () => {
     const user = userEvent.setup();
     show();

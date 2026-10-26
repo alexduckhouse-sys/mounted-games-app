@@ -65,6 +65,10 @@ public class CatalogueItem
     public int? StockQuantity { get; set; }
     public CommerceItemCategory Category { get; set; }
     public string? ImageUrl { get; set; }
+    /// <summary>What the buyer is asked for with this item, such as "Stable number" (at most 60 characters). Null means nothing is asked.</summary>
+    public string? DetailPrompt { get; set; }
+    /// <summary>The hint shown inside that field (at most 80 characters).</summary>
+    public string? DetailHint { get; set; }
     public bool IsActive { get; set; } = true;
     public long Version { get; set; } = 1;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -134,6 +138,8 @@ public class EventOrderLine
     public int Quantity { get; set; }
     public int ReservedStockQuantity { get; set; }
     public int LineTotalMinor { get; set; }
+    /// <summary>What the buyer typed for the item's <see cref="CatalogueItem.DetailPrompt"/> (at most 80 characters). Null when nothing was asked.</summary>
+    public string? Detail { get; set; }
 }
 
 public class TestPaymentRecord

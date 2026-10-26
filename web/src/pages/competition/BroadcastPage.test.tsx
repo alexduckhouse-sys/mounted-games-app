@@ -135,6 +135,23 @@ it('offers to take over when the same arena and camera position is already live'
   fireEvent.click(screen.getByRole('button', { name: 'Take over and go live' })); await settle();
   expect(publisher.start).toHaveBeenCalledWith('Main Arena', 'Main camera', true);
 });
+it('names the person who is already streaming that angle, once the API says who', async () => {
+  state.streams = [{ id: 7, competitionId: 1, arenaName: 'Main Arena', angleName: 'Main camera', status: 0 }];
+  vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url.endsWith('/streams/publishers') ? [{ streamId: 7, startedByName: ' Jo Bloggs ' }, { streamId: 9, startedByName: null }] : [] }));
+  show(); fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle();
+  expect(screen.getByText(/Jo Bloggs is already streaming Main Arena · Main camera/)).toBeVisible();
+  expect(screen.queryByText(/Someone is already streaming/)).toBeNull();
+  expect(api.get).toHaveBeenCalledWith('/competitions/1/streams/publishers');
+});
+it('says someone when the API has no name for the streamer, or the lookup fails', async () => {
+  state.streams = [{ id: 7, competitionId: 1, arenaName: 'Main Arena', angleName: 'Main camera', status: 0 }];
+  vi.mocked(api.get).mockImplementation(async (url: string) => {
+    if (url.endsWith('/streams/publishers')) throw new Error('offline');
+    return { data: [] };
+  });
+  show(); fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle();
+  expect(screen.getByText(/Someone is already streaming Main Arena · Main camera/)).toBeVisible();
+});
 it('posts live banner announcements, clears banners, and switches overlays from the live camera screen', async () => {
   const { rerender } = show();
   fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle();

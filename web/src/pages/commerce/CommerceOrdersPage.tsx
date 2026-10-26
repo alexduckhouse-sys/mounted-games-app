@@ -6,7 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { downloadCsv, toCsv } from '../../lib/csv';
 import { RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet, RefineStatus, type StatusTone } from '../refine/Refine';
 import { LoadError, TestReceipt } from './commerceUi';
-import { errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
+import { errorMessage, newIdempotencyKey, orderLineText, pounds } from './commerceFormat';
 import { OutcomeState } from './DemoPaymentFlow';
 import { DemoOrderCheckout } from './EventShopPage';
 import type { CommerceOrderStatus, DemoOrderPaymentResult, EventOrder, EventOrderLine, SellerSale, TestPayment } from './types';
@@ -243,6 +243,7 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
       'Item',
       'Category',
       'Quantity',
+      'Detail',
       'Status',
       'Test order',
       'Amount (GBP)',
@@ -257,6 +258,7 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
           'Order total',
           'Other items',
           1,
+          '',
           statusText,
           sale.isTestOrder ? 'Yes' : 'No',
           (sale.sellerTotalMinor / 100).toFixed(2),
@@ -270,6 +272,7 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
             line.title,
             category,
             line.quantity,
+            line.detail ?? '',
             statusText,
             sale.isTestOrder ? 'Yes' : 'No',
             (line.lineTotalMinor / 100).toFixed(2),
@@ -356,7 +359,7 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
                 <li key={sale.orderId} className="rf-row">
                   <span className="rf-grow">
                     <span className="rf-t1">Order #{sale.orderId}{sale.isTestOrder && ' · demo'}</span>
-                    <span className="rf-t2">{sale.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</span>
+                    <span className="rf-t2">{sale.lines.map(orderLineText).join(', ')}</span>
                   </span>
                   <span className="text-right"><span className="rf-price block">{pounds(sale.sellerTotalMinor)}</span><RefineStatus tone={status.tone}>{status.text}</RefineStatus></span>
                 </li>
@@ -403,7 +406,7 @@ function Receipt({ order, busy, error, refundOpen, onRetry, onBack, onPay, onCan
       <RefineList label="Items">
         {order.lines.map((line) => (
           <li key={line.id} className="rf-row" style={{ minHeight: 48 }}>
-            <span className="rf-grow">{line.title} × {line.quantity}</span>
+            <span className="rf-grow">{orderLineText(line)}</span>
             <span className="rf-price">{pounds(line.lineTotalMinor)}</span>
           </li>
         ))}

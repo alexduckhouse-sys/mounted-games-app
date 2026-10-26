@@ -16,6 +16,13 @@ describe('draftFromCompetition', () => {
     expect(draftFromCompetition(competition({ id: 12 })).cardsEnabled).toBe(false);
   });
 
+  it('loads the postcode, competition number and contact email, and a copy keeps all but the number', () => {
+    const c = competition({ postcode: 'GL19 3BE', competitionNumber: '2026-041', contactEmail: 'entries@example.org' });
+    expect(draftFromCompetition(c)).toMatchObject({ postcode: 'GL19 3BE', competitionNumber: '2026-041', contactEmail: 'entries@example.org' });
+    expect(copyOfCompetition(c)).toMatchObject({ postcode: 'GL19 3BE', competitionNumber: '', contactEmail: 'entries@example.org' });
+    expect(draftFromCompetition(competition({ postcode: null }))).toMatchObject({ postcode: '', competitionNumber: '', contactEmail: '' });
+  });
+
   it('opens a competition with nothing planned: one session per age group, races left for later', () => {
     const d = draftFromCompetition(competition({
       name: 'Old', startDate: '2026-06-01T08:30:00', endDate: '2026-06-02T16:00:00', icon: undefined, organiserName: 'Pony Club', location: 'Field',

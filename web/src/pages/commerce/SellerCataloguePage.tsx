@@ -20,9 +20,12 @@ interface ItemForm {
   category: CommerceItemCategory;
   stock: string;
   imageUrl: string;
+  /** What the buyer is asked for with this item ("Stable number"), and the example shown in the box. */
+  detailPrompt: string;
+  detailHint: string;
 }
 
-const EMPTY_FORM: ItemForm = { title: '', description: '', price: '', category: 0, stock: '', imageUrl: '' };
+const EMPTY_FORM: ItemForm = { title: '', description: '', price: '', category: 0, stock: '', imageUrl: '', detailPrompt: '', detailHint: '' };
 const PICKER_PAGE_SIZE = 50;
 const MAX_PICKER_PAGES = 10_000;
 
@@ -138,6 +141,8 @@ function SellerCatalogueContent() {
       category: item.category,
       stock: item.stockQuantity?.toString() ?? '',
       imageUrl: item.imageUrl ?? '',
+      detailPrompt: item.detailPrompt ?? '',
+      detailHint: item.detailHint ?? '',
     });
     setFormError(null);
     setSheet('edit');
@@ -161,6 +166,9 @@ function SellerCatalogueContent() {
       stockQuantity: stock,
       category: form.category,
       imageUrl: form.imageUrl.trim() || null,
+      detailPrompt: form.detailPrompt.trim() || null,
+      // A hint with no question has nowhere to show.
+      detailHint: form.detailPrompt.trim() ? form.detailHint.trim() || null : null,
       isActive: editing?.isActive ?? true,
       expectedVersion: editing?.version,
     };
@@ -271,7 +279,7 @@ function SellerCatalogueContent() {
               <button type="button" className="rf-btn rf-wide" onClick={() => openEdit(active)}>Edit details</button>
               {active.isActive
                 ? <button type="button" className="rf-btn rf-wide" aria-label={`Archive ${active.title}`} disabled={busy} onClick={async () => { if (!(await confirmDialog({ title: 'Archive this item?', message: `${active.title} is hidden from your catalogue. You can restore it later.`, confirmLabel: 'Archive item', destructive: true }))) return; void run(() => api.delete(`/commerce/catalogue/${active.id}`), 'Couldn’t archive the item. Check your signal and try again.').then((result) => { if (result.ok) setSheet(null); }); }}>Archive item</button>
-                : <button type="button" className="rf-btn rf-wide" disabled={busy} onClick={() => void run(() => api.put(`/commerce/catalogue/${active.id}`, { title: active.title, description: active.description, priceMinor: active.priceMinor, stockQuantity: active.stockQuantity, category: active.category, imageUrl: active.imageUrl, isActive: true, expectedVersion: active.version }), 'Couldn’t restore the item. Refresh the catalogue and try again.').then((result) => { if (result.ok) setSheet(null); })}>Restore item</button>}
+                : <button type="button" className="rf-btn rf-wide" disabled={busy} onClick={() => void run(() => api.put(`/commerce/catalogue/${active.id}`, { title: active.title, description: active.description, priceMinor: active.priceMinor, stockQuantity: active.stockQuantity, category: active.category, imageUrl: active.imageUrl, detailPrompt: active.detailPrompt ?? null, detailHint: active.detailHint ?? null, isActive: true, expectedVersion: active.version }), 'Couldn’t restore the item. Refresh the catalogue and try again.').then((result) => { if (result.ok) setSheet(null); })}>Restore item</button>}
             </div>
           </RefineSheet>
         )}
@@ -416,6 +424,13 @@ function ItemSheet({ title, form, setForm, busy, error, onClose, onSubmit, prima
           <div className="mt-2 flex flex-col gap-3">
             <label className="rf-fld">Stock <span className="font-normal">Blank means unlimited</span><NumberField min={0} step={1} value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} /></label>
             <label className="rf-fld">Image link <span className="font-normal">Optional HTTPS link</span><input type="url" placeholder="https://…" value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} /></label>
+          </div>
+        </details>
+        <details open={form.detailPrompt.trim() !== ''}>
+          <summary className="rf-btn rf-btn-text" style={{ justifyContent: 'flex-start', padding: 0, listStyle: 'none' }}>+ Ask the buyer for something</summary>
+          <div className="mt-2 flex flex-col gap-3">
+            <label className="rf-fld">Ask the buyer for <span className="font-normal">Optional. Shown when they add this item, such as “Stable number”</span><input maxLength={60} value={form.detailPrompt} onChange={(event) => setForm({ ...form, detailPrompt: event.target.value })} /></label>
+            <label className="rf-fld">Hint <span className="font-normal">Optional example inside the box</span><input maxLength={80} placeholder="e.g. B12" value={form.detailHint} onChange={(event) => setForm({ ...form, detailHint: event.target.value })} /></label>
           </div>
         </details>
         {error && <Notice>{error}</Notice>}
