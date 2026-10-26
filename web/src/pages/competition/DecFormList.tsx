@@ -104,7 +104,7 @@ export function DecFormList({ forms, teams, sections, config, canDelete, onDelet
                     <ChevronDown aria-hidden="true" className={`sp-chev h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} strokeWidth={2.5} />
                   </button>
                   {isOpen && (
-                    <div id={panelId} className="px-4 pb-3.5">
+                    <div id={panelId} className="mg-reveal px-4 pb-3.5">
                       {form.entryTeamName && form.entryTeamName.trim().toLowerCase() !== form.teamName.trim().toLowerCase() && (
                         <p className="sp-t2 m-0 pb-1">Entered as {form.entryTeamName}</p>
                       )}

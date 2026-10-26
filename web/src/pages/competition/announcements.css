@@ -47,3 +47,10 @@
 .ann-input input { flex: 1; min-width: 0; height: 44px; box-sizing: border-box; padding: 0 16px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 999px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 400 16px/1 var(--mg-font); }
 .ann-input input:focus { outline: 0; border-color: rgb(var(--mg-heading)); }
 .ann-thread-page .rf-foot { padding-block: 8px; }
+
+/* Motion. Send buttons and pills squeeze as they are pressed; a new unread count pops in. */
+.ann-send, .ann-pill { transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), opacity var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1); }
+:is(.ann-send, .ann-pill):active:not(:disabled) { --mg-press-t: 90ms; scale: .94; }
+.ann-thread { transition: background-color var(--mg-dur-fast) var(--mg-ease-out); }
+.ann-unread { animation: mg-change-pop .42s var(--mg-ease-out); }
+@media (prefers-reduced-motion: reduce) { .ann-send, .ann-pill, .ann-thread { transition: none; } .ann-unread { animation: none; } }

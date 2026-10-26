@@ -163,7 +163,7 @@ export function SettingsPage() {
           <span className="sp-grow"><span className="sp-t1">Remind me before a heat</span><span className="sp-t2">While the app is open</span></span>
           <span className="sp-stepper" role="group" aria-label="Heat reminder">
             <button type="button" aria-label="5 minutes less" disabled={notifyLeadMins <= REMINDER_MIN} onClick={() => setNotifyMinutesBefore(stepReminder(notifyLeadMins, -1))}><Minus className="h-[18px] w-[18px]" aria-hidden="true" /></button>
-            <output aria-live="polite">{notifyLeadMins} min</output>
+            <output aria-live="polite"><span key={notifyLeadMins} className="mg-num-pop">{notifyLeadMins} min</span></output>
             <button type="button" aria-label="5 minutes more" disabled={notifyLeadMins >= REMINDER_MAX} onClick={() => setNotifyMinutesBefore(stepReminder(notifyLeadMins, 1))}><Plus className="h-[18px] w-[18px]" aria-hidden="true" /></button>
           </span>
         </div>

@@ -81,6 +81,9 @@ export function CompetitionEditor() {
   const steps = useMemo<StepId[]>(() => (isEdit ? STEP_IDS.filter((s) => s !== 'start') : [...STEP_IDS]), [isEdit]);
   const stepId: StepId = isEdit && STEP_IDS[draft.step] === 'start' ? 'about' : STEP_IDS[draft.step];
   const position = steps.indexOf(stepId);
+  // Which way the step slides in: from the right going on, from the left going back.
+  const [slide, setSlide] = useState({ at: position, dir: 1 });
+  if (slide.at !== position) setSlide({ at: position, dir: position > slide.at ? 1 : -1 });
   const [reached, setReached] = useState(() => (isEdit ? steps.length - 1 : Math.max(0, steps.indexOf(isEdit ? 'about' : STEP_IDS[stored?.step ?? 0]))));
 
   // The saved competition: needed in edit mode for what exists (teams, sessions) whether or not there is a local draft.
@@ -220,7 +223,7 @@ export function CompetitionEditor() {
           timetable={isEdit ? null : { available: createdId !== null, current: createdId !== null }} onTimetable={() => undefined} title={title} />
         <div className="cw-main">
           {createdId !== null ? (
-            <section aria-label="Competition created" className="flex flex-col">
+            <section aria-label="Competition created" className="cw-step-in flex flex-col">
               <StepHeading>Competition created</StepHeading>
               <div className="cw-card mt-3"><div className="cw-panel" style={{ alignItems: 'flex-start', gap: 10 }}>
                 <span className="mg-display text-[22px] font-bold leading-tight text-[rgb(var(--mg-heading))]">Want an example timetable?</span>
@@ -238,19 +241,21 @@ export function CompetitionEditor() {
                   Copied from {draft.copiedFrom}.{!draft.startDate || !draft.endDate ? ' Set the new dates on When and where.' : ''}
                 </p>
               )}
-              {stepId === 'start' && <StartStep draft={draft} replace={setDraft} />}
-              {stepId === 'about' && <AboutStep {...props} />}
-              {stepId === 'when' && <WhenWhereStep {...props} />}
-              {stepId === 'arenas' && <ArenasStep {...props} />}
-              {stepId === 'sections' && <SectionsStep {...props} />}
-              {stepId === 'structure' && <StructureStep {...props} templates={templates} teamCounts={teamCounts} />}
-              {stepId === 'races' && <RacesStep {...props} templates={templates} />}
-              {stepId === 'dec' && <DecFormStep competitionId={isEdit ? editingId : null} canChange={mayOrganise} />}
-              {stepId === 'payment' && <PaymentNotesStep {...props} payoutsTo={payoutsToShow} canSetUpPayouts={hasRole('Manager') || hasRole('Admin')} canSetPassportCheck={!isEdit} />}
-              {stepId === 'review' && (
-                <ReviewStep {...props} teamCounts={teamCounts} real={real} onEdit={go} isEdit={isEdit}
-                  payoutsText={payoutsToShow ? payoutsLine(payoutsToShow) : 'Payouts go to your club once it has set them up.'} />
-              )}
+              <div key={stepId} className="cw-step-in" data-dir={slide.dir}>
+                {stepId === 'start' && <StartStep draft={draft} replace={setDraft} />}
+                {stepId === 'about' && <AboutStep {...props} />}
+                {stepId === 'when' && <WhenWhereStep {...props} />}
+                {stepId === 'arenas' && <ArenasStep {...props} />}
+                {stepId === 'sections' && <SectionsStep {...props} />}
+                {stepId === 'structure' && <StructureStep {...props} templates={templates} teamCounts={teamCounts} />}
+                {stepId === 'races' && <RacesStep {...props} templates={templates} />}
+                {stepId === 'dec' && <DecFormStep competitionId={isEdit ? editingId : null} canChange={mayOrganise} />}
+                {stepId === 'payment' && <PaymentNotesStep {...props} payoutsTo={payoutsToShow} canSetUpPayouts={hasRole('Manager') || hasRole('Admin')} canSetPassportCheck={!isEdit} />}
+                {stepId === 'review' && (
+                  <ReviewStep {...props} teamCounts={teamCounts} real={real} onEdit={go} isEdit={isEdit}
+                    payoutsText={payoutsToShow ? payoutsLine(payoutsToShow) : 'Payouts go to your club once it has set them up.'} />
+                )}
+              </div>
             </>
           )}
         </div>

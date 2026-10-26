@@ -6,6 +6,8 @@ import type { TrainerRequest } from '../../types';
 import { PartHead } from './LaptopParts';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
+import { AnimatePresence } from 'framer-motion';
+import { LeavingRow } from '../../components/LeavingRow';
 
 export function TrainerRequestsSection() {
   const [requests, setRequests] = useState<TrainerRequest[]>([]);
@@ -76,8 +78,9 @@ export function TrainerRequestsSection() {
           {!error && requests.length === 0 && <p className="mg-card p-4 text-sm text-[rgb(var(--mg-muted))]">No trainer requests.</p>}
           {requests.length > 0 && (
             <ul className="mg-card mg-list">
+              <AnimatePresence initial={false}>
               {requests.map((request) => (
-                <li key={request.userId} className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-[40px_minmax(0,1fr)_192px]">
+                <LeavingRow key={request.userId} className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-[40px_minmax(0,1fr)_192px]">
                   <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full bg-[rgb(var(--mg-tint))] text-[15px] font-bold text-[rgb(var(--mg-heading))]">{initialsOf(request.fullName, request.email)}</span>
                   <div className="flex min-w-0 flex-col gap-[3px] break-words">
                     <strong className="text-base font-semibold">{request.fullName}</strong>
@@ -88,8 +91,9 @@ export function TrainerRequestsSection() {
                     <button type="button" className="mg-btn mg-btn-primary !min-h-11 !rounded-[10px]" disabled={busy || !!error} onClick={() => review(request, 'approve')}>Approve</button>
                     <button type="button" className="mg-btn mg-btn-secondary !min-h-11 !rounded-[10px]" disabled={busy || !!error} onClick={() => review(request, 'decline')}>Decline</button>
                   </div>
-                </li>
+                </LeavingRow>
               ))}
+              </AnimatePresence>
             </ul>
           )}
         </>

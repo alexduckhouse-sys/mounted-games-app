@@ -127,14 +127,14 @@ describe('CompetitionEditor: the steps', () => {
     expect(within(drawer).getByRole('button', { name: 'Races' })).toHaveAttribute('aria-current', 'step');
     expect(within(drawer).getByRole('button', { name: 'Review' })).toBeDisabled();
     await userEvent.click(within(drawer).getByRole('button', { name: 'When and where, done' }));
-    expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument()); // it slides out first
     expect(h2('When and where')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Steps' }));
     await userEvent.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: 'Steps' }));
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Steps' })).getAllByRole('button', { name: 'Close' })[1]);
-    expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Steps' })).not.toBeInTheDocument());
   });
 });
 

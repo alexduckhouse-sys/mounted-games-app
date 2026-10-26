@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useExitDelay } from '../../../hooks/useExitDelay';
 import { Check, Menu, X } from 'lucide-react';
 import { STEP_LABEL, type StepId } from '../../../lib/creatorDraft';
 
@@ -9,6 +10,29 @@ function StepButton({ id, index, current, done, open, onGo }: { id: StepId; inde
       <span className="cw-badge" aria-hidden="true">{done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : index + 1}</span>
       <span>{STEP_LABEL[id]}<span className="sr-only">{done ? ', done' : ''}</span></span>
     </button>
+  );
+}
+
+/** The step list on a phone: it slides in from the left over a dim, and slides back out before it goes. */
+function StepsDrawer({ title, onClose, children }: { title: string; onClose: () => void; children: (close: () => void) => ReactNode }) {
+  const { closing, close } = useExitDelay(onClose);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { closeRef.current?.focus(); }, []);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [close]);
+  return (
+    <div className={`cw-drawer${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Steps">
+      <nav aria-label="Steps, menu">
+        <div className="cw-drawer-head"><span>{title}</span>
+          <button ref={closeRef} type="button" aria-label="Close" onClick={() => close()}><X className="h-[18px] w-[18px]" aria-hidden="true" /></button>
+        </div>
+        {children(() => close())}
+      </nav>
+      <button type="button" className="cw-scrim" aria-label="Close" onClick={() => close()} />
+    </div>
   );
 }
 
@@ -30,14 +54,7 @@ export function StepNav({ steps, current, reached, locked = false, onGo, timetab
   title: string;
 }) {
   const [drawer, setDrawer] = useState(false);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!drawer) return;
-    closeRef.current?.focus();
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawer(false); };
-    document.addEventListener('keydown', esc);
-    return () => document.removeEventListener('keydown', esc);
-  }, [drawer]);
+  const hideDrawer = useCallback(() => setDrawer(false), []);
 
   const list = (afterGo?: () => void) => (
     <>
@@ -60,17 +77,7 @@ export function StepNav({ steps, current, reached, locked = false, onGo, timetab
         <Menu className="h-[18px] w-[18px]" aria-hidden="true" />Steps
       </button>
       <nav aria-label="Steps" className="cw-nav">{list()}</nav>
-      {drawer && (
-        <div className="cw-drawer" role="dialog" aria-label="Steps">
-          <nav aria-label="Steps, menu">
-            <div className="cw-drawer-head"><span>{title}</span>
-              <button ref={closeRef} type="button" aria-label="Close" onClick={() => setDrawer(false)}><X className="h-[18px] w-[18px]" aria-hidden="true" /></button>
-            </div>
-            {list(() => setDrawer(false))}
-          </nav>
-          <button type="button" className="cw-scrim" aria-label="Close" onClick={() => setDrawer(false)} />
-        </div>
-      )}
+      {drawer && <StepsDrawer title={title} onClose={hideDrawer}>{(close) => list(close)}</StepsDrawer>}
     </div>
   );
 }
