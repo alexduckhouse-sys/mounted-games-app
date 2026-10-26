@@ -297,7 +297,7 @@ describe('loading and failure states', () => {
     state.get.mockRejectedValueOnce(new Error('offline'));
     renderTab();
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Couldn’t load results');
+    expect(alert).toHaveTextContent('Couldn’t load the results. Check your signal and try again.');
     await user.click(within(alert).getByRole('button', { name: 'Try again' }));
     await showRow();
     expect(screen.queryByRole('alert')).toBeNull();

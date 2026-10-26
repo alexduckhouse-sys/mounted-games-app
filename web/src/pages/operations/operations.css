@@ -1,7 +1,6 @@
 /* Organiser tools (readiness, equipment, draw preview). Unified with the mg-* scoreboard and timetable design tokens. */
 
 /* Left for admin pages that still use the old class. */
-.ops-alert { margin: 12px 0 0; }
 /* Problem and information strips (the kit's Notice) sit a little below what is above them. */
 .rf-page > .kit-strip, .ops-cards > .kit-strip, .ops-prep > .kit-strip, section > .kit-strip { margin-top: 12px; }
 .ops-gap { margin-top: 12px; }

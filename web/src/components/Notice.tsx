@@ -17,6 +17,8 @@ export interface NoticeProps {
   dismissLabel?: string;
   /** Defaults to `alert` for problems and `status` for information. Pass `null` for a strip that shouldn't be announced. */
   role?: 'alert' | 'status' | null;
+  /** Anything that belongs under the message and its action: a field, a second choice. */
+  extra?: ReactNode;
   className?: string;
   id?: string;
   children: ReactNode;
@@ -27,7 +29,7 @@ export interface NoticeProps {
  * (saved copies, loading, closed entries, deadlines); a problem is amber and should say what to do next, with
  * "Try again" where a retry exists. Any action is a small outlined pill in the strip's own colour.
  */
-export function Notice({ tone = 'problem', icon, actionLabel, onAction, actionTo, actionDisabled, onDismiss, dismissLabel = 'Dismiss', role, className = '', id, children }: NoticeProps) {
+export function Notice({ tone = 'problem', icon, actionLabel, onAction, actionTo, actionDisabled, onDismiss, dismissLabel = 'Dismiss', role, extra, className = '', id, children }: NoticeProps) {
   const Icon = icon ?? (tone === 'info' ? Info : TriangleAlert);
   const live = role === undefined ? (tone === 'info' ? 'status' : 'alert') : role ?? undefined;
   return (
@@ -37,6 +39,7 @@ export function Notice({ tone = 'problem', icon, actionLabel, onAction, actionTo
         <span>{children}</span>
         {actionLabel && actionTo && <Link to={actionTo} className="kit-strip-act">{actionLabel}</Link>}
         {actionLabel && !actionTo && <button type="button" className="kit-strip-act" onClick={onAction} disabled={actionDisabled}>{actionLabel}</button>}
+        {extra}
       </div>
       {onDismiss && <button type="button" className="kit-strip-x" aria-label={dismissLabel} onClick={onDismiss}><X aria-hidden="true" /></button>}
     </div>

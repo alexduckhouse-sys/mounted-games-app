@@ -145,14 +145,14 @@ describe('CurrentCompetitionProvider: remembering', () => {
     vi.spyOn(Document.prototype, 'cookie', 'set').mockImplementation(() => {});
     const { result } = mount();
     act(() => { result.current.setCurrent(spring); result.current.setRememberChoice('remember'); });
-    expect(result.current.storageError).toBe('Your browser could not save this competition. You can still use it for this visit.');
+    expect(result.current.storageError).toBe('Your browser couldn’t save this competition. It still works for this visit.');
     expect(result.current.current).toEqual(spring);
   });
 
   it('says so when saving the choice throws', () => {
     vi.spyOn(Document.prototype, 'cookie', 'set').mockImplementation(() => { throw new Error('blocked'); });
     const { result } = mount();
-    expect(result.current.storageError).toBe('Your browser could not save this choice. You can still use the competition.');
+    expect(result.current.storageError).toBe('Your browser couldn’t save this choice. The competition still works.');
   });
 });
 

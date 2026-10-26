@@ -20,6 +20,7 @@ import { buildToplist, ordinal, sectionScoreVersion } from '../../lib/toplist';
 import { useLiveHub } from '../../live/useLiveHub';
 import type { Heat, Race, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
+import { Notice } from '../../components/Notice';
 import { HeatScores } from './HeatScores';
 
 type TvSlide = 'lanes' | 'heat' | 'latest' | 'standings';
@@ -262,7 +263,7 @@ export function TvKioskPage() {
 
   return (
     <div className="flex min-h-[82vh] flex-col justify-between gap-4 rounded-xl bg-[rgb(var(--mg-surface))] p-4 shadow-sm sm:p-6">
-      {standingsStale && <p role="status">{standings.length ? 'Showing saved standings while results refresh.' : 'Waiting for official standings.'}</p>}
+      {standingsStale && <Notice tone="info">{standings.length ? 'Showing saved standings while results refresh.' : 'Waiting for official standings.'}</Notice>}
       {/* Top TV Header & Controls */}
       <header className="flex flex-col gap-3 border-b-2 border-[rgb(var(--mg-heading))] pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

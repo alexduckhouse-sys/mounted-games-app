@@ -13,6 +13,9 @@ import { useConnectionStatus } from '../live/ConnectionStatusContext';
 import { isFocusPage, pollIntervalMs } from '../live/connectionStatus';
 import { useDownSince } from '../live/useDownSince';
 import { HEAT_SAVED } from '../offline/useScoreOutbox';
+import { Clock } from 'lucide-react';
+import { Notice } from '../components/Notice';
+import { PageProblem } from '../components/PageProblem';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
 import { applyResultsUpdate, replaceHeat, type ResultsUpdate } from '../lib/liveUpdates';
 import { applyScoreCardControl, parseScoreCardControl, queueScoreCard, type QueuedScoreCard } from '../lib/scoreCard';
@@ -327,14 +330,9 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   useEffect(() => () => setStatus(null), [setStatus]);
 
   if (error && !data) return (
-    <div className="mg-card mx-auto mt-6 flex max-w-xl flex-col gap-3 p-4" role="alert">
-      <p>Couldn’t load this competition. Check your connection or choose another event.</p>
-      <div className="flex flex-wrap gap-2">
-        <button className="mg-btn mg-btn-primary" onClick={load}>Try again</button>
-        <button type="button" className="mg-btn mg-btn-secondary" onClick={() => window.history.back()}>Go back</button>
-        <Link className="mg-btn mg-btn-secondary" to="/events">Choose another competition</Link>
-      </div>
-    </div>
+    <PageProblem title="Couldn’t load this competition" primaryLabel="Try again" onPrimary={load} secondaryLabel="Competitions" secondaryTo="/events">
+      Check your signal and try again, or pick another competition.
+    </PageProblem>
   );
   if (!data) {
     if (/\/(?:toplists|scoring)\/?$/.test(pathname)) return <ToplistSkeleton />;
@@ -351,15 +349,12 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         <AnnouncementPop message={onLiveTab ? null : popped} to={`/competitions/${data.id}/chat`} onDismiss={dismissPopped} />
         <div className="pt-4 empty:hidden -mb-4 has-[+.rf-page]:mb-0"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />
-        {partial && <p role="status" className="mg-notice mx-auto w-full max-w-xl">Loading the rest of the timetable…</p>}
+        {partial && <Notice tone="info" className="mx-auto w-full max-w-xl">Loading the rest of the timetable…</Notice>}
         {/* Connection trouble is shown by the pill in the header; this only explains a saved copy. */}
         {showSavedNotice && (
-          <div role="status" className="mg-notice mx-auto flex w-full max-w-xl flex-wrap items-center gap-2">
-            <p className="flex-1">
-              {`${lastUpdatedText(savedAt)}. ${refreshing ? 'Checking for changes…' : 'We’ll refresh when you’re back online.'}`}
-            </p>
-            <button className="mg-btn mg-btn-secondary !min-h-11" onClick={load}>Refresh</button>
-          </div>
+          <Notice tone="info" icon={Clock} className="mx-auto w-full max-w-xl" actionLabel="Refresh" onAction={load}>
+            {`${lastUpdatedText(savedAt)}. ${refreshing ? 'Checking for changes…' : 'We’ll refresh when you’re back online.'}`}
+          </Notice>
         )}
       </div>
     </CompetitionContext.Provider>

@@ -1,5 +1,8 @@
 import { usePageWidth } from '../../components/pageWidthState';
 import { NumberField } from '../../components/NumberField';
+import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useToast } from '../../components/Toast';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -165,7 +168,7 @@ function SessionScoring() {
   const decForms = useMemo(() => decFormsResult?.competitionId === competition.id ? decFormsResult.forms : [], [decFormsResult, competition.id]);
   const mayManage = canManage(competition);
   const [callingTeamId, setCallingTeamId] = useState<number | null>(null);
-  const [ringCallNotice, setRingCallNotice] = useState<string | null>(null);
+  const ringToast = useToast();
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
   useEffect(() => {
@@ -196,10 +199,9 @@ function SessionScoring() {
     try {
       await api.post(`/competitions/${competition.id}/chat`, { body, type: 1 });
       playAlertChime();
-      setRingCallNotice(`Ring call sent for ${entry.teamName}`);
-      window.setTimeout(() => setRingCallNotice(null), 4000);
+      ringToast.show('Ring call sent');
     } catch {
-      setSaveError('Couldn’t send ring call. Try again.');
+      setSaveError('Couldn’t send ring call. Check your signal and try again.');
     } finally {
       setCallingTeamId(null);
     }
@@ -389,8 +391,8 @@ function SessionScoring() {
       setSaveError(null);
       reload();
     } catch {
-      setSaveError('Couldn’t change hors concours. Try again.');
-      throw new Error('Couldn’t change hors concours. Try again.');
+      setSaveError('Couldn’t change hors concours. Check your signal and try again.');
+      throw new Error('Couldn’t change hors concours. Check your signal and try again.');
     }
   }
 
@@ -417,7 +419,7 @@ function SessionScoring() {
       reload();
     } catch {
       setCardOverrides({ at: competition, map: { ...cardOverridesNow, [teamId]: before } });
-      setSaveError('Couldn’t change the card. Try again.');
+      setSaveError('Couldn’t change the card. Check your signal and try again.');
     }
   }
 
@@ -634,13 +636,13 @@ function SessionScoring() {
       setSaveError(null);
       reload();
     } catch {
-      setSaveError('Couldn’t add team to this heat. Try again.');
+      setSaveError('Couldn’t add team to this heat. Check your signal and try again.');
     }
   }
 
   return (
     <div className="space-y-3 pt-3">
-      {saveError && <p role="alert" className="mg-notice">{saveError}</p>}
+      {saveError && <Notice>{saveError}</Notice>}
       <ScoreClashBanner clashes={clashes} teamNamesById={teamNamesById} onResolve={resolveClash} />
 
       {canManage(competition) ? (
@@ -700,19 +702,21 @@ function SessionScoring() {
           )}
 
           {view === 'score' && canOrganise(competition) && activeHeat && unassignedTeams.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/80 px-3 py-2 text-xs text-amber-950">
-              <span className="font-semibold">Unassigned teams ({unassignedTeams.length}):</span>
-              {unassignedTeams.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => void addUnassignedTeamToActiveHeat(t.id)}
-                  className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-white px-2.5 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100"
-                >
-                  + Add {t.displayName} to {activeHeat.label ?? 'this heat'}
-                </button>
-              ))}
-            </div>
+            <Notice role={null}>
+              <span className="font-semibold">Unassigned teams ({unassignedTeams.length}):</span>{' '}
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                {unassignedTeams.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => void addUnassignedTeamToActiveHeat(t.id)}
+                    className="kit-strip-act"
+                  >
+                    + Add {t.displayName} to {activeHeat.label ?? 'this heat'}
+                  </button>
+                ))}
+              </span>
+            </Notice>
           )}
 
           {view === 'score' && canOrganise(competition) &&
@@ -744,15 +748,6 @@ function SessionScoring() {
                 </div>
               </div>
             )}
-
-          {ringCallNotice && (
-            <div role="status" className="flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-              <span>✓ {ringCallNotice}</span>
-              <button type="button" onClick={() => setRingCallNotice(null)} className="text-emerald-700 hover:text-emerald-950 dark:text-emerald-300" aria-label="Dismiss ring call notice">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
 
           {view === 'score' && (viewHeat ? (
             <ScoringSection
@@ -814,7 +809,7 @@ function SessionScoring() {
                   });
                   reload();
                 } catch {
-                  setSaveError('Couldn’t add race. Try again.');
+                  setSaveError('Couldn’t add race. Check your signal and try again.');
                 }
               } : undefined}
               onRenameRace={canOrganise(competition) && activeRace ? async (newName) => {
@@ -825,7 +820,7 @@ function SessionScoring() {
                   });
                   reload();
                 } catch {
-                  setSaveError('Couldn’t change race. Try again.');
+                  setSaveError('Couldn’t change race. Check your signal and try again.');
                 }
               } : undefined}
               onRerunRace={canOrganise(competition) && activeRace ? async () => {
@@ -835,7 +830,7 @@ function SessionScoring() {
                   updateOutbox((list) => list.filter((q) => q.raceId !== activeRace.id));
                   reload();
                 } catch {
-                  setSaveError('Couldn’t clear race for re-run. Try again.');
+                  setSaveError('Couldn’t clear race for re-run. Check your signal and try again.');
                 }
               } : undefined}
             />
@@ -902,6 +897,8 @@ function SessionScoring() {
         />
       )}
 
+      {ringToast.node}
+
       <QrAccessModal
         open={showQrModal}
         onClose={() => setShowQrModal(false)}
@@ -949,40 +946,10 @@ function PostRaceCommentatorModal({
 
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Post-race commentator summary"
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="mg-card flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden bg-[rgb(var(--mg-surface))] shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* 1. Race Result Banner */}
-        <div className="flex items-start justify-between gap-3 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3.5">
-          <div>
-            <span className="block text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-ok))]">
-              Post-Race Commentator Summary
-            </span>
-            <h2 className="mg-display m-0 text-lg font-bold text-[rgb(var(--mg-heading))]">
-              Race complete: {recap.raceName} — {recap.summaryText}
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close post-race summary"
-            className="mg-btn mg-btn-secondary !min-h-9 !px-2.5"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        {/* Body: Heat Table + Section Toplist */}
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
-          {/* 2. Updated Heat Table */}
+    <Sheet title={`${recap.raceName} complete`} description={recap.summaryText} onClose={onClose} className="sc-recap-sheet">
+      {({ close }) => (
+        <>
+          {/* Updated heat table */}
           <section aria-label="Updated heat table" className="space-y-2">
             <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
               <Table2 className="h-4 w-4" aria-hidden="true" /> Updated Heat Table · {recap.heat.label || 'Heat'}
@@ -1005,9 +972,9 @@ function PostRaceCommentatorModal({
             />
           </section>
 
-          {/* 3. Official Section Toplist */}
+          {/* Official section toplist */}
           <section aria-label="Updated section toplist" className="space-y-2">
-            <p className="text-xs">Queued scores are not included in the official standings yet.</p>
+            <p className="m-0 text-xs">Queued scores are not included in the official standings yet.</p>
             <div className="flex items-center justify-between gap-2">
               <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
                 <Trophy className="h-4 w-4" aria-hidden="true" /> Official Section Toplist
@@ -1018,7 +985,7 @@ function PostRaceCommentatorModal({
             </div>
 
             {toplist.rows.length === 0 ? (
-              <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">Official standings are unavailable. Try refreshing when you have a connection.</p>
+              <Notice tone="info">Official standings are unavailable. Try refreshing when you have signal.</Notice>
             ) : (
               <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] list-none p-0">
                 {toplist.rows.map((row, idx) => (
@@ -1043,22 +1010,14 @@ function PostRaceCommentatorModal({
             )}
           </section>
 
-
-        </div>
-
-        {/* 4. 1-Tap Stream Overlay Buttons + Next race button */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-4 py-3">
+          {/* 1-tap stream overlay buttons */}
           <StreamControlStrip competitionId={competition.id} sectionId={sectionId} activeHeatId={recap.heat.id} compact />
-          <button
-            type="button"
-            onClick={onClose}
-            className="mg-btn mg-btn-primary !min-h-10 !px-4 text-sm font-bold"
-          >
-            Next race →
-          </button>
-        </div>
-      </div>
-    </div>
+          <div className="kit-acts">
+            <button type="button" className="kit-pill kit-pill-fill" onClick={() => close()}>Close</button>
+          </div>
+        </>
+      )}
+    </Sheet>
   );
 }
 
@@ -1077,17 +1036,19 @@ function LaneRotationControl({ session, onChanged }: { session: Session; onChang
     } catch { setError(true); }
   }
   return (
-    <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
-      <span>Lanes after each race</span>
-      <select
-        className="input min-h-10 py-1.5 text-xs"
-        value={session.laneRotationMode ?? LaneRotationMode.MoveUp}
-        onChange={(e) => void change(Number(e.target.value) as LaneRotationModeValue)}
-      >
-        {([0, 1, 2] as const).map((mode) => <option key={mode} value={mode}>{LANE_ROTATION_LABELS[mode]}</option>)}
-      </select>
-      {error && <span role="alert" className="text-rose-600">Not saved</span>}
-    </label>
+    <div className="flex flex-col gap-1.5">
+      <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+        <span>Lanes after each race</span>
+        <select
+          className="input min-h-10 py-1.5 text-xs"
+          value={session.laneRotationMode ?? LaneRotationMode.MoveUp}
+          onChange={(e) => void change(Number(e.target.value) as LaneRotationModeValue)}
+        >
+          {([0, 1, 2] as const).map((mode) => <option key={mode} value={mode}>{LANE_ROTATION_LABELS[mode]}</option>)}
+        </select>
+      </label>
+      {error && <Notice>Couldn’t save how lanes change. Check your signal and try again.</Notice>}
+    </div>
   );
 }
 
@@ -1106,13 +1067,15 @@ function QualifiersControl({ session, onChanged }: { session: Session; onChanged
     } catch { setError(true); }
   }
   return (
-    <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
-      <span>Through to the final</span>
-      <select className="input min-h-10 py-1.5 text-xs" value={qualifiersOf(session)} onChange={(e) => void change(Number(e.target.value))}>
-        {Array.from({ length: 10 }, (_, i) => i + 1).map((count) => <option key={count} value={count}>{count} from each</option>)}
-      </select>
-      {error && <span role="alert" className="text-rose-600">Not saved</span>}
-    </label>
+    <div className="flex flex-col gap-1.5">
+      <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+        <span>Through to the final</span>
+        <select className="input min-h-10 py-1.5 text-xs" value={qualifiersOf(session)} onChange={(e) => void change(Number(e.target.value))}>
+          {Array.from({ length: 10 }, (_, i) => i + 1).map((count) => <option key={count} value={count}>{count} from each</option>)}
+        </select>
+      </label>
+      {error && <Notice>Couldn’t save how many go through. Check your signal and try again.</Notice>}
+    </div>
   );
 }
 
@@ -1203,7 +1166,7 @@ function ScoreAdjustmentsPanel({
         onChanged();
       } catch {
         // The order on screen is only local until the server has it, and finals seeding reads the server's.
-        onError('Couldn’t save the run-off result. Try again.');
+        onError('Couldn’t save the run-off result. Check your signal and try again.');
       }
     }
   }
@@ -1228,7 +1191,7 @@ function ScoreAdjustmentsPanel({
       onError(null);
       onChanged();
     } catch {
-      onError('Couldn’t save score adjustment. Try again.');
+      onError('Couldn’t save score adjustment. Check your signal and try again.');
     }
   }
 
@@ -1273,7 +1236,7 @@ function ScoreAdjustmentsPanel({
       onError(null);
       onChanged();
     } catch {
-      onError('Couldn’t change hors concours. Try again.');
+      onError('Couldn’t change hors concours. Check your signal and try again.');
     }
   }
 
@@ -1291,7 +1254,7 @@ function ScoreAdjustmentsPanel({
       onError(null);
       onChanged();
     } catch {
-      onError('Couldn’t update Under Review status. Try again.');
+      onError('Couldn’t update Under Review status. Check your signal and try again.');
     }
   }
 
@@ -1305,7 +1268,7 @@ function ScoreAdjustmentsPanel({
       onError(null);
       onChanged();
     } catch {
-      onError('Couldn’t clear race for re-run. Try again.');
+      onError('Couldn’t clear race for re-run. Check your signal and try again.');
     }
   }
 
@@ -1337,7 +1300,7 @@ function ScoreAdjustmentsPanel({
       onError(null);
       onChanged();
     } catch {
-      onError('Couldn’t change race. Try again.');
+      onError('Couldn’t change race. Check your signal and try again.');
     }
   }
 
@@ -1359,7 +1322,7 @@ function ScoreAdjustmentsPanel({
       onError(null);
       onChanged();
     } catch {
-      onError('Couldn’t cancel race. Try again.');
+      onError('Couldn’t cancel race. Check your signal and try again.');
     }
   }
 
@@ -1627,7 +1590,7 @@ function ScoreAdjustmentsPanel({
                 onChanged();
               } catch (error) {
                 const message = (error as { response?: { data?: { message?: string } } }).response?.data?.message;
-                onError(message || 'Couldn’t update session races. Try again.');
+                onError(message || 'Couldn’t update session races. Check your signal and try again.');
               }
             }}
           >

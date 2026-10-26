@@ -252,7 +252,7 @@ describe('ScorerPage', () => {
   it('keeps the token (so queued scores can still report) when a link has been withdrawn', async () => {
     link.get.mockRejectedValue(axiosError({ status: 410 }));
     open();
-    expect(await screen.findByRole('alert')).toHaveTextContent('expired or been withdrawn');
+    expect(await screen.findByRole('alert')).toHaveTextContent('stopped working');
     expect(localStorage.getItem('mg.scorer.token')).toBe('mgs_token');
   });
 
@@ -291,7 +291,7 @@ describe('ScorerPage', () => {
 
     open('');
     expect(screen.getByText('Scoring as Sam')).toBeInTheDocument();
-    expect(await screen.findByText(/Last updated \d\d:\d\d\. No signal; scores you enter will send/)).toBeInTheDocument();
+    expect(await screen.findByText(/Last updated \d\d:\d\d\. No signal\. Scores you enter will send/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Try again/ }));
     await waitFor(() => expect(link.get).toHaveBeenCalledTimes(3));
   });
@@ -338,11 +338,11 @@ describe('ScorerPage', () => {
       message: 'Results changed on another device.',
     }]);
     open();
-    expect(await screen.findByRole('alert', { name: 'Score clash' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /Two results for/ })).toBeInTheDocument();
     expect(screen.getByText('Result A (Saved)')).toBeInTheDocument();
     expect(screen.getByText('Result B (Submitted)')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Keep Result A' }));
-    expect(screen.queryByRole('alert', { name: 'Score clash' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Keep result A' }));
+    expect(screen.queryByRole('dialog', { name: /Two results for/ })).not.toBeInTheDocument();
   });
 
   it('shows the RemoteStreamControlBar when scope is 2 (Score + Stream) and sends remote camera and director cut commands', async () => {
@@ -454,8 +454,8 @@ it('labels scoped scores honestly and keeps organiser and stream tools off a sco
   })] }) });
   open();
   await opened('Bending');
-  await userEvent.click(screen.getByRole('button', { name: 'Yes, show commentator facts' }));
-  const facts = screen.getByRole('region', { name: 'Live commentator facts' });
+  await userEvent.click(screen.getByRole('button', { name: 'Yes, show them' }));
+  const facts = await screen.findByRole('region', { name: 'Live commentator facts' });
   expect(facts).toHaveTextContent('Available scores: 3 pts');
   expect(facts).not.toHaveTextContent('Rank');
   expect(screen.queryByRole('region', { name: 'Live stream control strip' })).toBeNull();

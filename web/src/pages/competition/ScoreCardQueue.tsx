@@ -19,7 +19,7 @@ export function ScoreCardQueue({ competitionId, cards, onError }: { competitionI
       await api.post(`/competitions/${competitionId}/overlays/score-card`, { heatId: queued.card.heatId, raceId: queued.card.raceId, action, ...edit });
       if (action === 'edit') setEditing(null);
     } catch {
-      onError('Couldn’t reach the score card. Check your connection and try again.');
+      onError('Couldn’t reach the score card. Check your signal and try again.');
     } finally {
       setBusy(false);
     }

@@ -15,6 +15,7 @@ import { buildToplist, ordinal, sectionScoreVersion } from '../../lib/toplist';
 import { useLiveHub } from '../../live/useLiveHub';
 import type { DeclarationForm, Heat, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
+import { Notice } from '../../components/Notice';
 import { DeskOverlays } from './streamControls/DeskOverlays';
 
 type DeskMode = 'split' | 'lanes' | 'standings';
@@ -334,7 +335,7 @@ export function CommentaryDeskPage() {
 
   return (
     <div className="mx-auto flex w-full flex-col gap-4 py-3">
-      {standingsStale && <p role="status">{standings.length ? 'Showing saved standings while results refresh.' : 'Waiting for official standings.'}</p>}
+      {standingsStale && <Notice tone="info">{standings.length ? 'Showing saved standings while results refresh.' : 'Waiting for official standings.'}</Notice>}
       {/* Top Bar */}
       <header className="mg-card flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

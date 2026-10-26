@@ -358,8 +358,6 @@ a.mg-row:active, button.mg-row:active { background: rgb(var(--mg-tint) / .65); }
 .mg-dropdown-option + .mg-dropdown-option { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .mg-dropdown-option[data-active] { background: rgb(var(--mg-subtle)); }
 .mg-dropdown-option[aria-selected="true"] { font-weight: 700; color: rgb(var(--mg-heading)); }
-/* Left over from before the pop-up kit; new code uses <Notice> (components/Notice.tsx). Looks like the problem strip. */
-.mg-notice { border-radius: 12px; padding: 11px 12px; background: rgb(var(--mg-problem-bg)); color: rgb(var(--mg-problem-ink)); font: 600 13.5px/1.4 var(--mg-font); }
 
 /* Skeleton placeholders shown while a page's first copy is on its way. */
 .mg-skel { display: block; border-radius: 6px; background: rgb(var(--mg-tint)); background-image: linear-gradient(90deg, transparent, rgb(var(--mg-surface) / .55), transparent); background-size: 200% 100%; background-repeat: no-repeat; animation: mg-skel 1.4s ease-in-out infinite; }

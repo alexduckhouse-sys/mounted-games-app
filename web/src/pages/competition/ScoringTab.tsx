@@ -4,7 +4,7 @@ import { TimetableBoard } from './TimetableBoard';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Sparkles, X, AlertTriangle, Mic, Monitor, QrCode as QrCodeIcon } from 'lucide-react';
+import { ChevronDown, Sparkles, X, Mic, Monitor, QrCode as QrCodeIcon } from 'lucide-react';
 import { QrAccessModal } from '../../components/QrAccessModal';
 import { RaceListPicker } from '../../components/RacePicker';
 import { useCompetition } from './context';
@@ -21,6 +21,7 @@ import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../../offline/savedCopies';
 import { NumberField } from '../../components/NumberField';
+import { Notice } from '../../components/Notice';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
@@ -228,8 +229,8 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const notices = (
     <>
       {standingsLoading && !savedStandings && <ToplistRowsSkeleton />}
-      {standingsStale && <p role="status" className="text-sm text-[rgb(var(--mg-muted))]">Showing saved standings while results refresh.</p>}
-      {standingsError && <div role="alert" className="mg-card flex flex-col items-start gap-3 p-4"><p>Couldn’t load results. Check your connection and try again.</p><button className="mg-btn mg-btn-secondary" onClick={() => { if (sectionId != null) setStandingsBySection((prev) => { const next = { ...prev }; delete next[sectionId]; return next; }); setRetry((n) => n + 1); }}>Try again</button></div>}
+      {standingsStale && <Notice tone="info">Showing saved standings while results refresh.</Notice>}
+      {standingsError && <Notice actionLabel="Try again" onAction={() => { if (sectionId != null) setStandingsBySection((prev) => { const next = { ...prev }; delete next[sectionId]; return next; }); setRetry((n) => n + 1); }}>Couldn’t load the results. Check your signal and try again.</Notice>}
       {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No results yet.</p>}
     </>
   );
@@ -428,7 +429,7 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
       onCreated();
     } catch (e) {
       const m = (e as { response?: { data?: string } }).response?.data;
-      setErr(typeof m === 'string' ? m : 'Could not create finals.');
+      setErr(typeof m === 'string' ? m : 'Couldn’t create the finals. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
@@ -477,26 +478,13 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
           </div>
 
           {runoff && (
-            <div className="rounded-md bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 p-2 text-[12px]">
-              <div className="flex items-center gap-1.5 font-semibold mb-1">
-                <AlertTriangle className="w-4 h-4" /> Runoff needed
-              </div>
-              <p className="text-[11px]">
-                {runoff.tied.length} teams tied on {formatPoints(runoff.points)} pts at position {topN}, with only {runoff.seatsLeft}{' '}
-                {runoff.seatsLeft === 1 ? 'spot' : 'spots'} left. Run a tie-breaker first:
-              </p>
-              <ul className="mt-1 space-y-0.5">
-                {runoff.tied.map((t) => (
-                  <li key={t.teamId} className="flex items-center justify-between text-[11px]">
-                    <span className="truncate">{t.teamName}</span>
-                    <span className="font-mono">{formatPoints(t.totalPoints)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <Notice>
+              Runoff needed: {runoff.tied.length} teams tied on {formatPoints(runoff.points)} pts at position {topN}, with only {runoff.seatsLeft}{' '}
+              {runoff.seatsLeft === 1 ? 'spot' : 'spots'} left. Run a tie-breaker first: {runoff.tied.map((t) => `${t.teamName} (${formatPoints(t.totalPoints)})`).join(', ')}.
+            </Notice>
           )}
 
-          {err && <div className="text-xs text-rose-600">{err}</div>}
+          {err && <Notice>{err}</Notice>}
         </div>
         <div className="flex items-center gap-2 p-3 border-t border-slate-200 dark:border-slate-800">
           <button onClick={onClose} className="btn-ghost !py-1.5 !px-3 text-xs">Cancel</button>

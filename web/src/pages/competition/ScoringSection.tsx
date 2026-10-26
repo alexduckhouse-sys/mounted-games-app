@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSavedToast } from '../../components/SavedTick';
+import { Notice } from '../../components/Notice';
 import { ChevronLeft, ChevronRight, CloudOff, MoreHorizontal, Printer, Trash2, Undo2 } from 'lucide-react';
 import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
@@ -268,10 +269,9 @@ export function ScoringSection({
             </div>
 
             {activeQueued && (
-              <p role="status" className="mg-notice sc-notice">
-                <CloudOff className="mr-1 inline h-4 w-4" aria-hidden="true" />
+              <Notice tone="info" icon={CloudOff} className="sc-notice">
                 Not sent yet: {describePlacings(activeQueued.places, activeQueued.teamNames)}. It sends when there is signal.
-              </p>
+              </Notice>
             )}
 
             <ul className="sc-rows">

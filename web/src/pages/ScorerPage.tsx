@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, CloudOff, Eye, Film, Link2Off, Lock, Mic, MicOff, Pause, Play, QrCode, RefreshCw, Square, Table2, Trophy, Video, X } from 'lucide-react';
+import { Camera, CloudOff, Eye, Film, Lock, Mic, MicOff, Pause, Play, RefreshCw, Square, Table2, Trophy, Video } from 'lucide-react';
+import { Notice } from '../components/Notice';
+import { PageProblem } from '../components/PageProblem';
+import { Sheet } from '../components/Sheet';
 import { QrPermissionScannerModal } from '../components/QrPermissionScannerModal';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
 import { StreamControlStrip } from '../components/stream/StreamControlStrip';
@@ -44,7 +47,7 @@ const REFRESH_MS = 30_000;
 const MESSAGES: Record<Exclude<ScorerLoadFailure, 'offline'>, { title: string; body: string }> = {
   missing: { title: 'No scorer link on this phone', body: 'Open the link or scan the QR code the organiser gave you.' },
   invalid: { title: 'This link isn’t valid', body: 'It may have been copied wrongly. Ask the organiser to send it again.' },
-  withdrawn: { title: 'This link has expired or been withdrawn', body: 'Ask the organiser for a new one. Anything already saved on this phone will still try to send.' },
+  withdrawn: { title: 'This link has stopped working', body: 'Ask the organiser for a new one. Scores already saved on this phone will still send.' },
   other: { title: 'Something went wrong', body: 'The timetable couldn’t be loaded. Try again in a moment.' },
 };
 
@@ -139,35 +142,21 @@ export function ScorerPage() {
       {loading && !session && <p role="status" className="mg-card p-4">Loading the timetable…</p>}
 
       {failure === 'offline' && !(fromSavedCopy && session && !shouldNoticeSavedCopy(sessionAt, true, new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS)) && (
-        <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-          <CloudOff className="h-4 w-4 shrink-0" />
-          <p className="flex-1">
-            {fromSavedCopy && session
-              ? `${lastUpdatedText(sessionAt)}. No signal; scores you enter will send when you’re back online.`
-              : 'No signal, and nothing is saved on this phone yet. Try again when you’re back online.'}
-          </p>
-          <button type="button" className="btn-ghost min-h-11" onClick={() => void load()}><RefreshCw className="h-4 w-4" /> Try again</button>
-        </div>
+        <Notice icon={CloudOff} role="status" actionLabel="Try again" onAction={() => void load()}>
+          {fromSavedCopy && session
+            ? `${lastUpdatedText(sessionAt)}. No signal. Scores you enter will send when you’re back online.`
+            : 'No signal, and nothing is saved on this phone yet. Try again when you’re back online.'}
+        </Notice>
       )}
 
       {failure && failure !== 'offline' && (
-        <div role="alert" className="mg-card space-y-2 p-4">
-          <p className="flex items-center gap-2 font-semibold"><Link2Off className="h-5 w-5 shrink-0" /> {MESSAGES[failure].title}</p>
-          <p>{MESSAGES[failure].body}</p>
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            {failure === 'other' && <button type="button" className="btn-primary min-h-11" onClick={() => void load()}>Try again</button>}
-            {(failure === 'missing' || failure === 'invalid' || failure === 'withdrawn') && (
-              <button
-                type="button"
-                className="btn-primary min-h-11 flex items-center gap-2"
-                onClick={() => setQrOpen(true)}
-              >
-                <QrCode className="h-4 w-4" aria-hidden="true" />
-                Scan permission QR code
-              </button>
-            )}
-          </div>
-        </div>
+        <PageProblem
+          title={MESSAGES[failure].title}
+          primaryLabel={failure === 'other' ? 'Try again' : 'Scan the QR code'}
+          onPrimary={failure === 'other' ? () => void load() : () => setQrOpen(true)}
+        >
+          {MESSAGES[failure].body}
+        </PageProblem>
       )}
 
       {session && token && failure !== 'invalid' && failure !== 'missing' && failure !== 'withdrawn' && (
@@ -480,11 +469,11 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
         )}
       </div>
 
-      {snapshot.error && <p role="alert" className="mg-notice">{snapshot.error}</p>}
-      {commandError && <p role="alert">{commandError}</p>}
+      {snapshot.error && <Notice>{snapshot.error}</Notice>}
+      {commandError && <Notice>{commandError}</Notice>}
       <ReplayPreparation {...replayPreparation} />
       {snapshot.media && <p className="mg-meta">Replay history: {Math.floor(replayStatus.retainedSeconds / 60)}m {Math.floor(replayStatus.retainedSeconds % 60)}s (up to 30m)</p>}
-      {replayStatus.warning && <p role="status">{replayStatus.warning}</p>}
+      {replayStatus.warning && <Notice role="status">{replayStatus.warning}</Notice>}
       <SavedReplaysButton competitionId={session.competitionId} arenaName={session.arenaName} onSelectClip={setInspectingClip} />
       {inspectingClip && <ReplayInspector clip={inspectingClip} clips={getSavedReplays(session.competitionId)} onClose={() => setInspectingClip(null)} onSelectClip={setInspectingClip} />}
 
@@ -590,12 +579,13 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
         >
           <Lock className="h-8 w-8" />
           <p className="text-sm font-semibold">LIVE · {session.arenaName} · {angle}</p>
+          <p className="text-xs">Screen locked</p>
           <button
             type="button"
             className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50"
             onClick={() => setDimmed(false)}
           >
-            Double-tap or tap here to unlock screen
+            Double-tap to unlock.
           </button>
         </div>
       )}
@@ -831,7 +821,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
 
   return (
     <div className="space-y-3">
-      {saveError && <p role="alert" className="mg-notice">{saveError}</p>}
+      {saveError && <Notice>{saveError}</Notice>}
       <ScoreClashBanner clashes={clashes} teamNamesById={teamNamesById} onResolve={resolveClash} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -849,36 +839,19 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       </div>
 
       {commentatorChoice === null && (
-        <section
-          aria-label="Commentator scoring prompt"
-          className="mg-card flex flex-wrap items-center justify-between gap-3 border-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] p-3.5"
+        <Sheet
+          title="Show commentator facts while you score?"
+          description="You’ll see the scores this link can see, and a heat summary after each race."
+          onClose={() => saveCommentatorChoice('no')}
+          dismissible={false}
         >
-          <div className="min-w-0 flex-1">
-            <h2 className="m-0 flex items-center gap-1.5 text-sm font-bold text-[rgb(var(--mg-heading))]">
-              <Mic className="h-4 w-4 shrink-0" aria-hidden="true" />
-              Do you want to see commentator facts while scoring?
-            </h2>
-            <p className="mt-1 mb-0 text-xs text-[rgb(var(--mg-muted))]">
-              Shows the scores available to this link while you score, with a heat summary after each race.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => saveCommentatorChoice('yes')}
-              className="mg-btn mg-btn-primary !min-h-9 !px-3 text-xs font-bold"
-            >
-              Yes, show commentator facts
-            </button>
-            <button
-              type="button"
-              onClick={() => saveCommentatorChoice('no')}
-              className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
-            >
-              No, just score
-            </button>
-          </div>
-        </section>
+          {({ close }) => (
+            <div className="kit-acts">
+              <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(() => saveCommentatorChoice('yes'))}>Yes, show them</button>
+              <button type="button" className="kit-pill" onClick={() => close(() => saveCommentatorChoice('no'))}>No, just score</button>
+            </div>
+          )}
+        </Sheet>
       )}
 
       {sessions.length > 1 && (
@@ -979,88 +952,53 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       )}
 
       {postRaceRecap && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Post-race commentator summary"
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setPostRaceRecap(null)}
-        >
-          <div
-            className="mg-card flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden bg-[rgb(var(--mg-surface))] shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3.5">
-              <div>
-                <span className="block text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-ok))]">
-                  Post-Race Commentator Summary
-                </span>
-                <h2 className="mg-display m-0 text-lg font-bold text-[rgb(var(--mg-heading))]">
-                  Race complete: {postRaceRecap.raceName} — {postRaceRecap.summaryText}
-                </h2>
+        <Sheet title={`${postRaceRecap.raceName} complete`} description={postRaceRecap.summaryText} onClose={() => setPostRaceRecap(null)} className="sc-recap-sheet">
+          {({ close }) => (
+            <>
+        <section aria-label="Updated heat table" className="space-y-2">
+          <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+            <Table2 className="h-4 w-4" aria-hidden="true" /> Updated Heat Table · {postRaceRecap.heat.label || 'Heat'}
+          </h3>
+          <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] list-none p-0">
+            {postRaceRecap.heat.entries
+              .slice()
+              .map((entry) => ({
+                ...entry,
+                points: postRaceRecap.heat.races.reduce(
+                  (sum, r) => sum + (r.results.find((res) => res.teamId === entry.teamId)?.points ?? 0),
+                  0,
+                ),
+              }))
+              .sort((a, b) => b.points - a.points || a.laneIndex - b.laneIndex)
+              .map((row, idx) => (
+                <li key={row.teamId} className="flex items-center justify-between px-3 py-2 text-xs font-semibold">
+                  <span>{ordinal(idx + 1)} {row.teamName}</span>
+                  <span>{formatPoints(row.points)} pts</span>
+                </li>
+              ))}
+          </ol>
+        </section>
+
+        <section aria-label="Updated section toplist" className="space-y-2">
+          <p className="text-xs">These totals cover only the heats available to this link and include queued scores. They are not section standings.</p>
+          <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
+            <Trophy className="h-4 w-4" aria-hidden="true" /> Scores available to this link
+          </h3>
+          <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] list-none p-0">
+            {availableRows.map((row) => (
+              <li key={row.teamId} className="flex items-center justify-between px-3 py-2 text-xs font-semibold">
+                <span>{row.teamName}</span>
+                <span>{formatPoints(row.points)} pts</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+              <div className="kit-acts">
+                <button type="button" className="kit-pill kit-pill-fill" onClick={() => close()}>Close</button>
               </div>
-              <button
-                type="button"
-                onClick={() => setPostRaceRecap(null)}
-                aria-label="Close post-race summary"
-                className="mg-btn mg-btn-secondary !min-h-9 !px-2.5"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="flex-1 space-y-4 overflow-y-auto p-4">
-              <section aria-label="Updated heat table" className="space-y-2">
-                <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                  <Table2 className="h-4 w-4" aria-hidden="true" /> Updated Heat Table · {postRaceRecap.heat.label || 'Heat'}
-                </h3>
-                <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] list-none p-0">
-                  {postRaceRecap.heat.entries
-                    .slice()
-                    .map((entry) => ({
-                      ...entry,
-                      points: postRaceRecap.heat.races.reduce(
-                        (sum, r) => sum + (r.results.find((res) => res.teamId === entry.teamId)?.points ?? 0),
-                        0,
-                      ),
-                    }))
-                    .sort((a, b) => b.points - a.points || a.laneIndex - b.laneIndex)
-                    .map((row, idx) => (
-                      <li key={row.teamId} className="flex items-center justify-between px-3 py-2 text-xs font-semibold">
-                        <span>{ordinal(idx + 1)} {row.teamName}</span>
-                        <span>{formatPoints(row.points)} pts</span>
-                      </li>
-                    ))}
-                </ol>
-              </section>
-
-              <section aria-label="Updated section toplist" className="space-y-2">
-                <p className="text-xs">These totals cover only the heats available to this link and include queued scores. They are not section standings.</p>
-                <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                  <Trophy className="h-4 w-4" aria-hidden="true" /> Scores available to this link
-                </h3>
-                <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] list-none p-0">
-                  {availableRows.map((row) => (
-                    <li key={row.teamId} className="flex items-center justify-between px-3 py-2 text-xs font-semibold">
-                      <span>{row.teamName}</span>
-                      <span>{formatPoints(row.points)} pts</span>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            </div>
-
-            <div className="flex items-center justify-end border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-4 py-3">
-              <button
-                type="button"
-                onClick={() => setPostRaceRecap(null)}
-                className="mg-btn mg-btn-primary !min-h-10 !px-4 text-sm font-bold"
-              >
-                Next race →
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        </Sheet>
       )}
     </div>
   );
