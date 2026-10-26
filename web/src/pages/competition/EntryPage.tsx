@@ -1,100 +1,130 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { CalendarDays, Info, Lock, MapPin, Ticket } from 'lucide-react';
-import { api } from '../../api';
+import { useState } from 'react';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
-import { competitionDateText } from '../../lib/competitionDates';
-import { entryFeeText } from '../../lib/competitionPhase';
-import type { SectionSignup } from '../../types';
-import { Chevron, RefineList } from '../refine/Refine';
-import { useCompetition } from './context';
-import { EnterCompetition, EventShareRows } from './DetailsTab';
-import { useEntrySettings } from './entrySettings';
-import type { ReactNode } from 'react';
-import { PageGrid } from '../../components/PageGrid';
+import { usePageHeader } from '../../components/CompactPageBarContext';
+import { EntryStepper } from '../../components/EntryStepper';
 import { usePageWidth } from '../../components/pageWidthState';
+import { EntryRosette } from '../../components/Rosette';
+import { entryPhaseOnly } from '../../lib/competitionPhase';
+import { entryOptions, feeText, parseEntryKind, sectionFull, type EntryKind } from '../../lib/entryOptions';
+import { displaySectionName } from '../../lib/section';
+import { useCompetition } from './context';
+import { EntryForm, type EntrySent } from './EntryForm';
+import { useEntrySettings } from './entrySettings';
+import '../../components/sitePages.css';
+import '../../components/eventPages.css';
 
 /**
- * The whole of a new competition's public face while entries are open: what and when, then one card per age group
- * to enter. The timetable, toplists and live feed have nothing to show yet, so the tab bar leaves them out
- * (see `competitionPhase`). Also reachable at `/competitions/:id/enter` once the event has started.
+ * Entering a competition, in up to three steps that share one stepper so it can animate from step to step:
+ * what you are entering (`/enter`), your details (`/enter/:sectionId`) and, when there is a fee, paying
+ * (`/enter/:sectionId/pay`). Guest riders, the waiting list and free age groups have nothing to pay, so they stop
+ * after the details. It is also the public home of a competition while entries are the only thing to do.
  */
 export function EntryPage() {
-  usePageWidth('wide');
-  const { competition, reload } = useCompetition();
-  const { canOrganise } = useAuth();
+  usePageWidth('narrow');
+  const { competition } = useCompetition();
+  const { user, canOrganise } = useAuth();
+  const location = useLocation();
+  const [search] = useSearchParams();
+  const rest = (useParams()['*'] ?? '').split('/').filter(Boolean);
+  const [sectionPart, stepPart] = rest;
+  const section = sectionPart ? competition.sections.find((s) => s.id === Number(sectionPart)) ?? null : null;
+  const kind: EntryKind = parseEntryKind(search.get('type')) ?? (search.get('waitlist') === '1' ? 'waitlist' : 'standard');
+  const [sent, setSent] = useState<EntrySent | null>(null);
+  const entrySettings = useEntrySettings(competition);
   const mayOrganise = canOrganise(competition);
-  const [loaded, setLoaded] = useState<{ id: number; items: SectionSignup[] } | null>(null);
-  const allSignups = mayOrganise && loaded?.id === competition.id ? loaded.items : [];
+  const closed = entrySettings.closed && !mayOrganise;
+  // Where Back goes from the first step: where you came from, or the competition's front page.
+  const [cameFrom] = useState(() => (location.state as { from?: string } | null)?.from);
+  const home = Array.isArray(competition.sessions) && entryPhaseOnly(competition, mayOrganise)
+    ? `/competitions/${competition.id}`
+    : `/competitions/${competition.id}/details`;
+  const firstBack = cameFrom?.startsWith('/competitions/') ? cameFrom : home;
+  const atHome = !location.pathname.includes('/enter');
+  const base = `/competitions/${competition.id}/enter`;
+  const query = kind === 'standard' ? '' : `?type=${kind}`;
 
-  async function refreshSignups() {
-    if (!mayOrganise) return;
-    try {
-      const r = await api.get<SectionSignup[]>(`/competitions/${competition.id}/signups`);
-      setLoaded({ id: competition.id, items: r.data });
-    } catch { setLoaded({ id: competition.id, items: [] }); }
+  const option = section ? entryOptions(section, sectionFull(section)).find((o) => o.kind === kind) : undefined;
+  const pays = (option?.priceMinor ?? 1) > 0;
+  const labels = pays ? ['Section', 'Your details', 'Pay'] : ['Section', 'Your details'];
+  const current = sent ? labels.length + 1 : !section ? 1 : stepPart === 'pay' ? 3 : 2;
+
+  const backTo = sent || !section ? (atHome && !sent ? undefined : sent ? home : firstBack)
+    : stepPart === 'pay' ? `${base}/${section.id}${query}` : base;
+  usePageHeader({
+    title: 'Enter',
+    subtitle: section && !sent ? `${competition.name} · ${displaySectionName(section.displayName)}` : competition.name,
+    plain: true,
+    backTo,
+    backLabel: 'Back',
+  });
+
+  function chooseHref(sectionId: number, chosen: EntryKind) {
+    return `${base}/${sectionId}${chosen === 'standard' ? '' : `?type=${chosen}`}`;
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    if (mayOrganise) {
-      api.get<SectionSignup[]>(`/competitions/${competition.id}/signups`)
-        .then(({ data }) => { if (!cancelled) setLoaded({ id: competition.id, items: data }); })
-        .catch(() => { if (!cancelled) setLoaded({ id: competition.id, items: [] }); });
-    }
-    return () => { cancelled = true; };
-  }, [competition.id, mayOrganise]);
-
-  const { closed: entriesClosed } = useEntrySettings(competition);
-  const fee = entryFeeText(competition.sections);
-  const dates = competitionDateText(competition.startDate, competition.endDate, true);
-  const row = (icon: ReactNode, label: string, value: ReactNode) => (
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true">{icon}</span>
-      <div className="flex flex-col gap-0.5"><dt className="rf-t2 !font-bold uppercase tracking-[0.08em]">{label}</dt><dd className="m-0 break-words text-[15px]">{value}</dd></div>
-    </div>
-  );
+  let body;
+  if (sent && section) {
+    body = (
+      <div className="ev-card flex flex-col gap-2.5 p-5">
+        <h2 className="ev-title">Entry submitted</h2>
+        <p className="ev-body">{sent.text}</p>
+        {sent.enteredAs && (
+          <EntryRosette team={sent.enteredAs} section={displaySectionName(section.displayName)} year={new Date(competition.startDate).getFullYear()} />
+        )}
+        <div className="sp-acts mt-1.5"><Link to={home} className="sp-pill">Back to details</Link></div>
+      </div>
+    );
+  } else if (section && !user) {
+    body = (
+      <div className="sp-card flex flex-col gap-3 p-4">
+        <p className="ev-body">Sign in to enter this age group.</p>
+        <Link to="/login" state={{ from: `${location.pathname}${location.search}` }} className="ev-bar !mt-0">Sign in to enter</Link>
+      </div>
+    );
+  } else if (section) {
+    body = <EntryForm key={`${section.id}:${kind}`} competition={competition} section={section} kind={kind} step={stepPart === 'pay' ? 'pay' : 'details'} onSent={setSent} />;
+  } else if (sectionPart) {
+    body = <p role="alert" className="mg-notice">Section not found.</p>;
+  } else {
+    body = (
+      <>
+        <h2 className="ev-step-title">What are you entering?</h2>
+        {closed && <p role="status" className="mg-notice mb-3">Entries for this event are closed.</p>}
+        {competition.sections.length === 0 && <p className="sp-note">There are no age groups to enter yet.</p>}
+        {competition.sections.map((s) => (
+          <section key={s.id} aria-label={s.displayName}>
+            <h3 className="sp-sec">{displaySectionName(s.displayName)}</h3>
+            <div className="sp-card">
+              {closed ? (
+                <div className="sp-row"><span className="sp-grow"><span className="sp-t1 !text-[var(--mg-muted)]">Entries closed</span></span></div>
+              ) : entryOptions(s, sectionFull(s)).map((o) => (
+                <Link
+                  key={o.kind}
+                  className="sp-row"
+                  to={user ? chooseHref(s.id, o.kind) : '/login'}
+                  state={user ? { from: cameFrom } : { from: chooseHref(s.id, o.kind) }}
+                  onClick={() => setSent(null)}
+                >
+                  <span className="sp-grow"><span className="sp-t1">{o.label}</span>{o.sub && <span className="sp-t2">{o.sub}</span>}</span>
+                  <span className="ev-price">{feeText(o.priceMinor)}</span>
+                  <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+                </Link>
+              ))}
+            </div>
+          </section>
+        ))}
+        {atHome && <p className="sp-note">The timetable, toplists and live scores open once the teams are drawn.</p>}
+      </>
+    );
+  }
 
   return (
-    <div className="rf-page mx-auto w-full max-w-3xl pb-4 pt-3 lg:max-w-none">
-      <PageGrid railFirst className="!gap-2.5 lg:!gap-6" aside={(
-      <div className="mg-card flex flex-col gap-4 p-4">
-        <div>
-          <span className="mg-badge bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]">{entriesClosed ? 'Entries closed' : 'Entries open'}</span>
-          <h1 className="mg-display mt-2 text-2xl font-bold leading-[1.1] text-[rgb(var(--mg-heading))]">{competition.name}</h1>
-          {competition.organiserName && <p className="mg-meta mt-1">Organised by <span className="font-semibold">{competition.organiserName}</span></p>}
-          {competition.description && <p className="mg-lede mt-2 whitespace-pre-wrap">{competition.description}</p>}
-        </div>
-        <dl className="m-0 grid grid-cols-1 gap-3">
-          {dates && row(<CalendarDays className="h-4 w-4" />, 'Date', dates)}
-          {competition.location && row(<MapPin className="h-4 w-4" />, 'Venue', competition.location)}
-          {fee && row(<Ticket className="h-4 w-4" />, 'Entry fee', fee)}
-        </dl>
-      </div>
-      )} asideLabel="About this event">
-      <div className="flex flex-col gap-2.5">
-
-      {entriesClosed && (
-        <p role="status" className="mg-notice flex items-center gap-2"><Lock className="h-4 w-4 shrink-0" aria-hidden="true" /> Entries for this event are closed.</p>
-      )}
-
-      <EnterCompetition competition={competition} allSignups={allSignups} mayOrganise={mayOrganise} onChanged={() => { void refreshSignups(); reload(); }} />
-
-
-      <p className="rf-note !px-1">The timetable, toplists and live scores open once the teams are drawn.</p>
-
-      <RefineList label="More about this event">
-        <li>
-          <Link className="rf-row" to="details">
-            <Info className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-            <span className="rf-grow rf-t1">Venue, rules and shop</span>
-            <Chevron />
-          </Link>
-        </li>
-        <EventShareRows competitionId={competition.id} competitionName={competition.name} />
-      </RefineList>
-      </div>
-      </PageGrid>
+    <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-4 pt-3">
+      <h1 className="sr-only">Enter {competition.name}</h1>
+      <EntryStepper labels={labels} current={current} />
+      {body}
     </div>
   );
 }

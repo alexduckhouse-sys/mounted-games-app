@@ -8,7 +8,7 @@ import { competition, heat, session, team } from '../../test/factories';
 import type { CompetitionDetail, CompetitionSection } from '../../types';
 import { CompetitionContext, type CompetitionCtx } from './context';
 import { AfterDrawOnly, CompetitionHome } from './CompetitionHome';
-import { SectionEntryPage } from './DetailsTab';
+import { EntryPage } from './EntryPage';
 import { entryFeeText } from '../../lib/competitionPhase';
 
 vi.mock('../../api', async (importOriginal) => ({
@@ -40,7 +40,7 @@ function mount(roles: string[] | null, extra: Partial<CompetitionDetail> = {}, p
         <CompetitionContext.Provider value={ctx}>
           <Routes>
             <Route path="/competitions/:id" element={<CompetitionHome />} />
-            <Route path="/competitions/:id/enter/:sectionId" element={<SectionEntryPage />} />
+            <Route path="/competitions/:id/enter/*" element={<EntryPage />} />
             <Route path="/competitions/:id/toplists" element={<AfterDrawOnly><p>Toplists</p></AfterDrawOnly>} />
           </Routes>
         </CompetitionContext.Provider>
@@ -56,32 +56,28 @@ function asRole(role: string) {
 beforeEach(() => asRole('Member'));
 
 describe('the entry page', () => {
-  it('shows a signed-out visitor the event and a Sign in to enter button on every section', async () => {
+  it('opens a new competition on the first step of entering, with the stepper', async () => {
     mount(null);
-    expect(await screen.findByRole('heading', { name: 'TEST COMP1' }, { timeout: 5000 })).toBeInTheDocument();
-    expect(screen.getByText('Hartpury')).toBeInTheDocument();
-    expect(screen.getByText('From £15.00 to £25.00')).toBeInTheDocument();
-    const links = screen.getAllByRole('link', { name: 'Sign in to enter' });
-    expect(links).toHaveLength(2);
-    expect(links[0]).toHaveAttribute('href', '/login');
+    expect(await screen.findByRole('heading', { name: 'What are you entering?' }, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Entry steps' })).toBeInTheDocument();
     expect(screen.getByText(/open once the teams are drawn/)).toBeInTheDocument();
     expect(screen.queryByText('Timetable board')).not.toBeInTheDocument();
+    // Signed out, every choice goes to sign in first.
+    for (const link of screen.getAllByRole('link', { name: /^Pair/ })) expect(link).toHaveAttribute('href', '/login');
   });
 
-  it('lets a signed-in member join a section on its own entry page', async () => {
+  it('lets a signed-in member pick an age group and go on to their details', async () => {
     mount(['Member']);
-    const joins = await screen.findAllByRole('button', { name: /Join/ });
-    expect(joins).toHaveLength(2);
-    expect(screen.queryByRole('link', { name: 'Sign in to enter' })).not.toBeInTheDocument();
-    await userEvent.click(joins[0]);
-    expect(await screen.findByPlaceholderText('Your full name')).toBeInTheDocument();
+    const pairs = await screen.findAllByRole('link', { name: /^Pair/ });
+    expect(pairs).toHaveLength(2);
+    await userEvent.click(pairs[0]);
+    expect(await screen.findByLabelText('Your name')).toBeInTheDocument();
   });
 
-  it('shows Entries closed instead of a button', async () => {
+  it('says entries are closed instead of offering them', async () => {
     mount(['Member'], { signupsLocked: true });
-    expect(await screen.findAllByText('Entries closed.')).toHaveLength(2);
-    expect(screen.getByRole('status')).toHaveTextContent('Entries for this event are closed.');
-    expect(screen.queryByRole('button', { name: /Join/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent('Entries for this event are closed.');
+    expect(screen.queryByRole('link', { name: /^Pair/ })).not.toBeInTheDocument();
   });
 
   it('lets the public open toplists before the draw (BUG-32)', async () => {
@@ -99,19 +95,19 @@ describe('the entry page', () => {
     asRole('Admin');
     mount(['Admin']);
     expect(await screen.findByText('Timetable board')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'TEST COMP1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'What are you entering?' })).not.toBeInTheDocument();
   });
 
   it('keeps the entry page as home while teams are formed but no heats exist (BUG-32)', async () => {
     mount(null, { teams: [team(1)] });
-    expect(await screen.findByRole('heading', { name: 'TEST COMP1' }, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'What are you entering?' }, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.queryByText('Timetable board')).not.toBeInTheDocument();
   });
 
   it('returns to the timetable once a generated timetable has heats', async () => {
     mount(null, { sessions: [session(1, { heats: [heat(1)] })] });
     expect(await screen.findByText('Timetable board')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'TEST COMP1' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'What are you entering?' })).not.toBeInTheDocument());
   });
 });
 
@@ -128,10 +124,9 @@ describe('entryFeeText', () => {
   });
 });
 
-it('shows a passed server closing date on the entry page and section cards', async () => {
+it('shows a passed server closing date on the entry page', async () => {
   vi.mocked(api.get).mockImplementation(async (url) => ({ data: url === '/auth/me' ? { roles: ['Member'] } : url.endsWith('/entry-settings') ? { competitionId: 1, entriesCloseAt: '2020-01-01T00:00:00Z', entriesClosed: true } : [] }));
   mount(['Member']);
   expect(await screen.findByText('Entries for this event are closed.')).toBeInTheDocument();
-  expect(await screen.findAllByText('Entries closed.')).toHaveLength(2);
-  expect(screen.queryByRole('button', { name: /Join/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /^Pair/ })).not.toBeInTheDocument();
 });
