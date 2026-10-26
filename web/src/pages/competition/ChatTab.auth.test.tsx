@@ -82,7 +82,7 @@ describe('ChatTab and ContactOrganisersPage auth sessions', () => {
 
     expect(screen.getByText('Messaging the organisers isn’t available for this event yet.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Message the organisers…')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Message the organisers')).not.toBeInTheDocument();
     expect(state.post).not.toHaveBeenCalled();
   });
 
@@ -97,7 +97,7 @@ describe('ChatTab and ContactOrganisersPage auth sessions', () => {
     chatView.unmount();
 
     mountContact({ staffChatEnabled: true });
-    await userEvent.type(screen.getByPlaceholderText('Message the organisers…'), 'Please call collecting ring');
+    await userEvent.type(screen.getByPlaceholderText('Message the organisers'), 'Please call collecting ring');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(state.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'Please call collecting ring' });
@@ -110,7 +110,7 @@ describe('ChatTab and ContactOrganisersPage auth sessions', () => {
     state.post.mockResolvedValue({ data: chat(9, { body: 'Where is the ring?', type: 0, adminOnly: true, userId: 'fake-user' }) });
     mountContact({ staffChatEnabled: true });
 
-    await userEvent.type(screen.getByPlaceholderText('Message the organisers…'), 'Where is the ring?');
+    await userEvent.type(screen.getByPlaceholderText('Message the organisers'), 'Where is the ring?');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(state.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'Where is the ring?' });
@@ -137,18 +137,18 @@ describe('ChatTab and ContactOrganisersPage auth sessions', () => {
     state.post.mockResolvedValue({ data: chat(2, { body: 'By the lorries', type: 0, adminOnly: true, userId: 'fake-user', recipientUserId: 'asker-1' }) });
     mountContact({ staffChatEnabled: true });
 
-    await userEvent.click(await screen.findByRole('button', { name: /Reply privately/ }));
-    expect(screen.getByText(/Private reply to Sam Rider/)).toBeInTheDocument();
-    await userEvent.type(screen.getByPlaceholderText('Write a private reply…'), 'By the lorries');
+    await userEvent.click(await screen.findByRole('button', { name: /Sam Rider/ }));
+    expect(screen.getByText('Only you and Sam Rider see this')).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText('Reply'), 'By the lorries');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(state.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'By the lorries', replyToUserId: 'asker-1' });
     expect(state.post).not.toHaveBeenCalledWith('/competitions/1/chat/announcement', expect.anything());
-    await waitFor(() => expect(screen.queryByText(/Private reply to/)).not.toBeInTheDocument());
+    expect(await screen.findByText('By the lorries', { selector: '.ev-bub' })).toBeInTheDocument();
   });
 
   it('clears private messages and ignores the previous session response after sign-out', async () => {
-    const privateMessage = chat(1, { body: 'Private trainer message', type: 0, adminOnly: true });
+    const privateMessage = chat(1, { body: 'Private trainer message', type: 0, adminOnly: true, userId: 'trainer-1', authorName: 'Pat Trainer' });
     state.get.mockResolvedValueOnce({ data: [privateMessage] });
     const view = mountContact();
     expect(await screen.findByText('Private trainer message')).toBeInTheDocument();

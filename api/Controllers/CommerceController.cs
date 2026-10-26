@@ -276,7 +276,28 @@ public class CommerceController(AppDbContext db) : ControllerBase
             .OrderBy(x => x.Status)
             .ThenByDescending(x => x.UpdatedAt)
             .ToListAsync(cancellationToken);
-        return listings.Select(x => x.ToDto()).ToList();
+        var names = await NamesAsync(listings.Select(x => x.SellerUserId), cancellationToken);
+        return listings.Select(x => x.ToDto() with { SellerName = names.GetValueOrDefault(x.SellerUserId) }).ToList();
+    }
+
+    /// <summary>Event names for a set of competition ids, so a buyer or seller can see which event an order was for.</summary>
+    private async Task<Dictionary<int, string>> EventNamesAsync(IEnumerable<int> competitionIds, CancellationToken cancellationToken)
+    {
+        var ids = competitionIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+        return await db.Competitions
+            .Where(x => ids.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+    }
+
+    /// <summary>Full names for a set of user ids, so organiser screens can say who is selling or buying.</summary>
+    private async Task<Dictionary<string, string>> NamesAsync(IEnumerable<string> userIds, CancellationToken cancellationToken)
+    {
+        var ids = userIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+        return await db.Users
+            .Where(x => ids.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
     }
 
     [HttpPut("listings/{id:int}/approval")]
@@ -381,7 +402,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
             .Where(x => x.BuyerUserId == userId)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
-        return orders.Select(x => x.ToDto()).ToList();
+        var events = await EventNamesAsync(orders.Select(x => x.CompetitionId), cancellationToken);
+        return orders.Select(x => x.ToDto() with { CompetitionName = events.GetValueOrDefault(x.CompetitionId) }).ToList();
     }
 
     [HttpGet("orders/{id:int}")]
@@ -392,7 +414,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
         if (userId is null) return Unauthorized();
         var order = await _orders.LoadAsync(id, cancellationToken);
         if (order is null || order.BuyerUserId != userId) return NotFound();
-        return order.ToDto();
+        var events = await EventNamesAsync([order.CompetitionId], cancellationToken);
+        return order.ToDto() with { CompetitionName = events.GetValueOrDefault(order.CompetitionId) };
     }
 
     [HttpGet("sales/mine")]
@@ -406,6 +429,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
             .Where(x => x.Lines.Any(line => line.SellerUserId == userId))
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
+        var events = await EventNamesAsync(orders.Select(x => x.CompetitionId), cancellationToken);
         return orders.Select(order =>
         {
             var lines = order.Lines.Where(x => x.SellerUserId == userId).OrderBy(x => x.Id).ToList();
@@ -417,7 +441,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
                 order.Currency,
                 order.IsTestOrder,
                 lines.Select(x => x.ToDto()).ToList(),
-                order.CreatedAt);
+                order.CreatedAt,
+                events.GetValueOrDefault(order.CompetitionId));
         }).ToList();
     }
 
@@ -434,7 +459,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
             .Where(x => x.CompetitionId == competitionId)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
-        return orders.Select(x => x.ToDto()).ToList();
+        var names = await NamesAsync(orders.Select(x => x.BuyerUserId), cancellationToken);
+        return orders.Select(x => x.ToDto() with { BuyerName = names.GetValueOrDefault(x.BuyerUserId) }).ToList();
     }
 
     [HttpPost("orders/{id:int}/cancel")]

@@ -332,6 +332,48 @@ public class CommerceEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task OrganiserListsNameTheSellerAndBuyer_ButSellerAndBuyerListsDoNot()
+    {
+        var competitionId = await CompetitionAsync();
+        var (seller, sellerAuth) = await _f.SignupAsync();
+        var item = await CreateItemAsync(seller, "Named item");
+        await SubmitAsync(seller, competitionId, item.Id);
+        var admin = await _f.AdminAsync();
+        var manage = await (await admin.GetAsync($"/api/commerce/competitions/{competitionId}/listings/manage"))
+            .ReadAsync<List<CompetitionListingDto>>();
+        var mine = await (await seller.GetAsync("/api/commerce/listings/mine")).ReadAsync<List<CompetitionListingDto>>();
+        var listing = manage.Single(x => x.CatalogueItemId == item.Id);
+        var approved = await ApprovedListingAsync(seller, competitionId, "Orderable");
+        var (buyer, buyerAuth) = await _f.SignupAsync();
+        var order = await CreateOrderAsync(buyer, competitionId, "named", (approved.Id, 1));
+        var rows = await (await admin.GetAsync($"/api/commerce/competitions/{competitionId}/orders"))
+            .ReadAsync<List<EventOrderDto>>();
+
+        Assert.Equal(sellerAuth.User.FullName, listing.SellerName);
+        Assert.All(mine, x => Assert.Null(x.SellerName));
+        Assert.Equal(buyerAuth.User.FullName, rows.Single(x => x.Id == order.Id).BuyerName);
+        Assert.Null(order.BuyerName);
+    }
+
+    [Fact]
+    public async Task BuyerAndSellerListsNameTheEvent()
+    {
+        var competitionId = await CompetitionAsync();
+        var (seller, _) = await _f.SignupAsync();
+        var listing = await ApprovedListingAsync(seller, competitionId, "Named event item");
+        var (buyer, _) = await _f.SignupAsync();
+        var order = await CreateOrderAsync(buyer, competitionId, "event-name", (listing.Id, 1));
+
+        var bought = await (await buyer.GetAsync("/api/commerce/orders/mine")).ReadAsync<List<EventOrderDto>>();
+        var one = await (await buyer.GetAsync($"/api/commerce/orders/{order.Id}")).ReadAsync<EventOrderDto>();
+        var sold = await (await seller.GetAsync("/api/commerce/sales/mine")).ReadAsync<List<SellerSaleDto>>();
+
+        Assert.False(string.IsNullOrWhiteSpace(bought.Single(x => x.Id == order.Id).CompetitionName));
+        Assert.Equal(bought.Single(x => x.Id == order.Id).CompetitionName, one.CompetitionName);
+        Assert.Equal(one.CompetitionName, sold.Single(x => x.OrderId == order.Id).CompetitionName);
+    }
+
+    [Fact]
     public async Task RealOrderRejectsFakeActions_AndNeedsExplicitManualConfirmation()
     {
         var competitionId = await CompetitionAsync();

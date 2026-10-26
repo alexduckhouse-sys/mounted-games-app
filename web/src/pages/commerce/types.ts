@@ -34,6 +34,8 @@ export interface CompetitionListing {
   item: CatalogueItem;
   createdAt: string;
   updatedAt: string;
+  /** Who is selling it. Only the organiser's list (`listings/manage`) fills this in. */
+  sellerName?: string | null;
 }
 
 export interface PublicCompetitionListing {
@@ -106,6 +108,10 @@ export interface EventOrder {
   testPayments: TestPayment[];
   createdAt: string;
   updatedAt: string;
+  /** Who ordered. Only the organiser's list of event orders fills this in. */
+  buyerName?: string | null;
+  /** The event it was for. The buyer's own lists fill this in. */
+  competitionName?: string | null;
 }
 
 export interface SellerSale {
@@ -117,6 +123,7 @@ export interface SellerSale {
   isTestOrder: boolean;
   lines: EventOrderLine[];
   createdAt: string;
+  competitionName?: string | null;
 }
 
 export interface DemoOrderPaymentResult {

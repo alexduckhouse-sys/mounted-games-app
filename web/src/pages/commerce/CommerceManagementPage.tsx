@@ -1,18 +1,41 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, X } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { CardDropdownRow } from '../../components/CardDropdownRow';
+import { usePageHeader } from '../../components/CompactPageBarContext';
+import { confirmDialog } from '../../components/ConfirmDialog';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useCompetition } from '../competition/context';
-import { LoadError, StatusPill } from './commerceUi';
-import { CATEGORY_LABEL, LISTING_LABEL, ORDER_LABEL, errorMessage, orderLineText, pounds } from './commerceFormat';
-import type { CompetitionListing, EventCommerceSettings, EventOrder } from './types';
+import { Chip, FormSheet, SheetField, type ChipTone } from '../clubShop/ui';
+import { LoadError } from './commerceUi';
+import { errorMessage, orderLineText, pounds } from './commerceFormat';
+import type { CommerceOrderStatus, CompetitionListing, EventCommerceSettings, EventOrder } from './types';
 import './commerce.css';
+import '../../components/sitePages.css';
+import '../clubShop/clubShop.css';
 
-type ManagementView = 'listings' | 'orders' | 'settings';
+type ManagementView = 'items' | 'orders' | 'payments';
+
+/** What the organiser sees for an order: whether the money has arrived. */
+const ORDER_STATUS: Record<CommerceOrderStatus, { text: string; tone: ChipTone }> = {
+  0: { text: 'Not paid', tone: 'warn' },
+  1: { text: 'Payment due', tone: 'warn' },
+  2: { text: 'Paid', tone: 'good' },
+  3: { text: 'Declined', tone: 'bad' },
+  4: { text: 'Cancelled', tone: 'grey' },
+  5: { text: 'Refunded', tone: 'grey' },
+};
+
+const PAY_OPTIONS = [
+  { value: 'manual', label: 'Pay the organiser' },
+  { value: 'demo', label: 'Demo (no money taken)' },
+];
+
+const stockText = (listing: CompetitionListing) => (listing.item.stockQuantity == null ? 'Unlimited' : `${listing.item.stockQuantity} available`);
+const sellerText = (listing: CompetitionListing) => listing.sellerName || 'A seller';
 
 export function CommerceManagementPage() {
-  usePageWidth('wide');
+  usePageWidth('narrow');
   const { competition } = useCompetition();
   const { user } = useAuth();
   return <CommerceManagementContent key={`${competition.id}:${user?.id ?? 'signed-out'}`} />;
@@ -24,42 +47,54 @@ function CommerceManagementContent() {
   const [listings, setListings] = useState<CompetitionListing[] | null>(null);
   const [orders, setOrders] = useState<EventOrder[] | null>(null);
   const [settings, setSettings] = useState<EventCommerceSettings | null>(null);
-  const [view, setView] = useState<ManagementView>('listings');
+  const [view, setView] = useState<ManagementView>('items');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [declining, setDeclining] = useState<CompetitionListing | null>(null);
+  usePageHeader({ title: 'Event shop', subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: 'Back to details' });
 
   const load = useCallback(() => {
     if (!canOrganise(competition)) return Promise.resolve();
     return Promise.all([
-        api.get<CompetitionListing[]>(`/commerce/competitions/${competition.id}/listings/manage`),
-        api.get<EventOrder[]>(`/commerce/competitions/${competition.id}/orders`),
-        api.get<EventCommerceSettings>(`/commerce/competitions/${competition.id}/settings`),
-      ])
+      api.get<CompetitionListing[]>(`/commerce/competitions/${competition.id}/listings/manage`),
+      api.get<EventOrder[]>(`/commerce/competitions/${competition.id}/orders`),
+      api.get<EventCommerceSettings>(`/commerce/competitions/${competition.id}/settings`),
+    ])
       .then(([listingResponse, orderResponse, settingsResponse]) => {
-      setError(null);
-      setListings(listingResponse.data);
-      setOrders(orderResponse.data);
-      setSettings(settingsResponse.data);
+        setError(null);
+        setListings(listingResponse.data);
+        setOrders(orderResponse.data);
+        setSettings(settingsResponse.data);
       })
       .catch((requestError: unknown) => {
-      setError(errorMessage(requestError, 'Couldn’t load the shop controls. Check your signal and try again.'));
+        setError(errorMessage(requestError, 'Couldn’t load the shop. Check your signal and try again.'));
       });
   }, [canOrganise, competition]);
 
   useEffect(() => { void load(); }, [load]);
 
-  async function review(id: number, status: 1 | 2) {
+  /** Runs a write, then reloads. Returns the problem to show, or null when it worked. */
+  async function run(action: () => Promise<unknown>, failure: string): Promise<string | null> {
     setBusy(true);
     setError(null);
     try {
-      await api.put(`/commerce/listings/${id}/approval`, { status, reviewNote: null });
+      await action();
       await load();
+      return null;
     } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t update the listing. Check your signal and try again.'));
+      const message = errorMessage(requestError, failure);
+      setError(message);
+      return message;
     } finally {
       setBusy(false);
     }
   }
+
+  const approve = (listing: CompetitionListing) =>
+    run(() => api.put(`/commerce/listings/${listing.id}/approval`, { status: 1, reviewNote: null }), 'Couldn’t approve the item. Check your signal and try again.');
+
+  const decline = (listing: CompetitionListing, reason: string) =>
+    run(() => api.put(`/commerce/listings/${listing.id}/approval`, { status: 2, reviewNote: reason.trim() || null }), 'Couldn’t decline the item. Check your signal and try again.');
 
   async function setDemo(isDemo: boolean) {
     setBusy(true);
@@ -68,96 +103,161 @@ function CommerceManagementContent() {
       const { data } = await api.put<EventCommerceSettings>(`/commerce/competitions/${competition.id}/settings`, { isDemo });
       setSettings(data);
     } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t change the payment mode. Check your signal and try again.'));
+      setError(errorMessage(requestError, 'Couldn’t change how people pay. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
   }
 
   async function manualAction(order: EventOrder, action: 'manual-payment' | 'manual-refund') {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.post(`/commerce/orders/${order.id}/${action}`, { confirmedExternally: true });
-      await load();
-    } catch (requestError) {
-      setError(errorMessage(requestError, action === 'manual-payment' ? 'Couldn’t mark the order paid. Check your signal and try again.' : 'Couldn’t mark the refund. Check your signal and try again.'));
-    } finally {
-      setBusy(false);
-    }
+    if (action === 'manual-refund' && !(await confirmDialog({
+      title: `Mark order ${order.id} refunded?`,
+      message: 'Only do this once the money has gone back to the buyer.',
+      confirmLabel: 'Mark refunded',
+      cancelLabel: 'Not yet',
+      destructive: true,
+    }))) return;
+    await run(
+      () => api.post(`/commerce/orders/${order.id}/${action}`, { confirmedExternally: true }),
+      action === 'manual-payment' ? 'Couldn’t mark the order paid. Check your signal and try again.' : 'Couldn’t mark the order refunded. Check your signal and try again.',
+    );
   }
 
-  if (!canOrganise(competition)) return <div className="skin mg-card p-5">Only this competition’s organiser can manage its shop.</div>;
+  if (!canOrganise(competition)) return <div className="skin cs-page"><p className="sp-note">Only this competition’s organiser can manage its shop.</p></div>;
 
-  const pending = listings?.filter((listing) => listing.status === 0) ?? [];
-  const reviewed = listings?.filter((listing) => listing.status !== 0) ?? [];
+  const waiting = listings?.filter((listing) => listing.status === 0) ?? [];
+  const onSale = listings?.filter((listing) => listing.status === 1) ?? [];
+  const notOnSale = listings?.filter((listing) => listing.status === 2 || listing.status === 3) ?? [];
+  const tabs: { id: ManagementView; label: string }[] = [
+    { id: 'items', label: `Items${waiting.length > 0 ? ` (${waiting.length})` : ''}` },
+    { id: 'orders', label: 'Orders' },
+    { id: 'payments', label: 'Payments' },
+  ];
 
   return (
-    <div className="skin commerce-page mx-auto w-full max-w-4xl pb-6">
-      <header className="commerce-title-block"><p className="mg-eyebrow">{competition.name}</p><h1 className="mg-h1">Manage shop</h1><p className="mg-lede">Listings, orders and payment mode.</p></header>
-      <div className="mg-seg w-full" aria-label="Shop management view">
-        <button type="button" aria-pressed={view === 'listings'} onClick={() => setView('listings')}>Listings{pending.length > 0 ? ` (${pending.length})` : ''}</button>
-        <button type="button" aria-pressed={view === 'orders'} onClick={() => setView('orders')}>Orders{orders?.length ? ` (${orders.length})` : ''}</button>
-        <button type="button" aria-pressed={view === 'settings'} onClick={() => setView('settings')}>Settings</button>
+    <div className="skin cs-page">
+      <h1 className="sr-only">Event shop</h1>
+      <div className="sp-seg" role="tablist" aria-label="Event shop">
+        {tabs.map((tab) => (
+          <button key={tab.id} type="button" role="tab" aria-selected={view === tab.id} onClick={() => setView(tab.id)}>{tab.label}</button>
+        ))}
       </div>
-      {error && <LoadError message={error} onRetry={() => void load()} />}
+      {error && <div className="cs-gap"><LoadError message={error} onRetry={() => void load()} /></div>}
 
-      {view === 'settings' && <section className="flex flex-col gap-4" aria-labelledby="payment-mode-title">
-        <div>
-          <h2 id="payment-mode-title" className="mg-h2">Payment mode</h2>
-          <p className="mg-meta mt-1">Manual logs external payments. Demo is for testing.</p>
-        </div>
-        {settings == null ? <p role="status">Loading payment mode…</p> : (
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusPill tone={settings.isDemo ? 'test' : 'neutral'}>{settings.isDemo ? 'DEMO · no money is taken' : 'Manual payments'}</StatusPill>
-            <div className="mg-toggle">
-              <button type="button" aria-pressed={!settings.isDemo} disabled={busy || settings.isLocked} onClick={() => void setDemo(false)}>Manual</button>
-              <button type="button" aria-pressed={settings.isDemo} disabled={busy || settings.isLocked} onClick={() => void setDemo(true)}>Demo</button>
+      {view === 'items' && (
+        listings == null ? <p role="status" className="sp-note">Loading items…</p> : (
+          <>
+            <h2 className="sp-sec">To approve <small>{waiting.length}</small></h2>
+            <div className="sp-card">
+              {waiting.map((listing) => (
+                <div key={listing.id} className="cs-row cs-stack">
+                  <span className="cs-line">
+                    <span className="sp-grow"><span className="sp-t1">{listing.item.title}</span><span className="sp-t2">{sellerText(listing)} · {stockText(listing)}</span></span>
+                    <span className="sp-price !text-[18px]">{pounds(listing.item.priceMinor)}</span>
+                  </span>
+                  <span className="cs-end">
+                    <button type="button" className="kit-redtext cs-redtext-s" disabled={busy} aria-label={`Decline ${listing.item.title}`} onClick={() => setDeclining(listing)}>Decline</button>
+                    <button type="button" className="kit-pill kit-pill-fill cs-pill-s" disabled={busy} aria-label={`Approve ${listing.item.title}`} onClick={() => { void approve(listing); }}>Approve</button>
+                  </span>
+                </div>
+              ))}
+              {waiting.length === 0 && <p className="cs-row sp-t2 m-0">Nothing waiting.</p>}
             </div>
-            {settings.isLocked && <p className="mg-meta">Locked because an order or test payment exists.</p>}
-          </div>
-        )}
-      </section>}
 
-      {view === 'listings' && <section className="flex flex-col gap-3" aria-labelledby="approval-title">
-        <div className="mg-section-head"><h2 id="approval-title">Approval queue</h2><span>{pending.length}</span></div>
-        {listings == null && <p role="status" className="mg-card p-4">Loading listings…</p>}
-        {listings && pending.length === 0 && <p className="mg-card p-5">There are no seller items waiting for approval.</p>}
-        {pending.length > 0 && <div className="commerce-rows">{pending.map((listing) => (
-          <article key={listing.id} className="commerce-order-row">
-            <div className="flex flex-wrap items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <h3 className="mg-h2">{listing.item.title}</h3>
-                <p className="mt-1 text-sm text-[rgb(var(--mg-body))]">{listing.item.description}</p>
-                <p className="mt-1 text-sm font-bold">{pounds(listing.item.priceMinor)} · {CATEGORY_LABEL[listing.item.category]} · {listing.item.stockQuantity == null ? 'Unlimited stock' : `${listing.item.stockQuantity} available`}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="mg-btn mg-btn-primary" disabled={busy} onClick={() => void review(listing.id, 1)}><Check className="h-4 w-4" /> Approve</button>
-                <button type="button" className="mg-btn mg-btn-secondary" disabled={busy} onClick={() => void review(listing.id, 2)}><X className="h-4 w-4" /> Reject</button>
-              </div>
+            <h2 className="sp-sec">On sale <small>{onSale.length}</small></h2>
+            <div className="sp-card">
+              {onSale.map((listing) => (
+                <div key={listing.id} className="cs-row">
+                  <span className="sp-grow"><span className="sp-t1">{listing.item.title}</span><span className="sp-t2">{sellerText(listing)} · {pounds(listing.item.priceMinor)}</span></span>
+                  <Chip tone="good">On sale</Chip>
+                </div>
+              ))}
+              {onSale.length === 0 && <p className="cs-row sp-t2 m-0">Nothing on sale yet.</p>}
             </div>
-          </article>
-        ))}</div>}
-        {reviewed.length > 0 && <details className="commerce-rows px-4"><summary className="cursor-pointer py-3 font-bold text-[rgb(var(--mg-heading))]">Reviewed listings ({reviewed.length})</summary><ul className="flex flex-col gap-2 pb-3">{reviewed.map((listing) => <li key={listing.id} className="flex flex-wrap items-center gap-2 border-t border-[rgb(var(--mg-rule-soft))] pt-2"><span className="flex-1">{listing.item.title}</span><StatusPill tone={listing.status === 1 ? 'good' : 'neutral'}>{LISTING_LABEL[listing.status]}</StatusPill></li>)}</ul></details>}
-      </section>}
 
-      {view === 'orders' && <section className="flex flex-col gap-3" aria-labelledby="orders-title">
-        <div className="mg-section-head"><h2 id="orders-title">Event orders</h2><span>{orders?.length ?? 0}</span></div>
-        {orders == null && <p role="status" className="mg-card p-4">Loading orders…</p>}
-        {orders?.length === 0 && <p className="mg-card p-5">No one has ordered from this event shop yet.</p>}
-        {orders && orders.length > 0 && <div className="commerce-rows">{orders.map((order) => (
-          <article key={order.id} className="commerce-order-row">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="mg-h2">Order #{order.id}</h3>
-              <StatusPill tone={order.isTestOrder ? 'test' : order.status === 2 ? 'good' : 'neutral'}>{order.isTestOrder ? `Demo · ${ORDER_LABEL[order.status]}` : ORDER_LABEL[order.status]}</StatusPill>
-              <strong className="ml-auto">{pounds(order.totalMinor)}</strong>
+            {notOnSale.length > 0 && (
+              <>
+                <h2 className="sp-sec">Not on sale <small>{notOnSale.length}</small></h2>
+                <div className="sp-card">
+                  {notOnSale.map((listing) => (
+                    <div key={listing.id} className="cs-row">
+                      <span className="sp-grow"><span className="sp-t1">{listing.item.title}</span><span className="sp-t2">{sellerText(listing)} · {pounds(listing.item.priceMinor)}</span></span>
+                      <Chip tone={listing.status === 2 ? 'bad' : 'grey'}>{listing.status === 2 ? 'Declined' : 'Withdrawn'}</Chip>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )
+      )}
+
+      {view === 'orders' && (
+        orders == null ? <p role="status" className="sp-note">Loading orders…</p> : (
+          <>
+            <h2 className="sp-sec">Orders <small>{orders.length}</small></h2>
+            <div className="sp-card">
+              {orders.map((order) => {
+                const status = ORDER_STATUS[order.status];
+                const canMarkPaid = !order.isTestOrder && order.status === 0;
+                const canMarkRefunded = !order.isTestOrder && order.status === 2;
+                return (
+                  <div key={order.id} className="cs-row cs-stack">
+                    <span className="cs-line">
+                      <span className="sp-grow">
+                        <span className="sp-t1">Order {order.id} · {order.buyerName || 'Buyer'}</span>
+                        <span className="sp-t2">{order.lines.map(orderLineText).join(', ')}</span>
+                      </span>
+                      <span className="cs-right">
+                        <span className="sp-price !text-[18px]">{pounds(order.totalMinor)}</span>
+                        <Chip tone={status.tone}>{order.isTestOrder ? `Demo · ${status.text}` : status.text}</Chip>
+                      </span>
+                    </span>
+                    {(canMarkPaid || canMarkRefunded) && (
+                      <span className="cs-end">
+                        {canMarkPaid && <button type="button" className="kit-pill kit-pill-fill cs-pill-s" disabled={busy} aria-label={`Mark order ${order.id} paid`} onClick={() => { void manualAction(order, 'manual-payment'); }}>Mark paid</button>}
+                        {canMarkRefunded && <button type="button" className="kit-pill cs-pill-s" disabled={busy} aria-label={`Mark order ${order.id} refunded`} onClick={() => { void manualAction(order, 'manual-refund'); }}>Mark refunded</button>}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              {orders.length === 0 && <p className="cs-row sp-t2 m-0">No orders yet.</p>}
             </div>
-            <p className="text-sm text-[rgb(var(--mg-body))]">{order.lines.map(orderLineText).join(', ')}</p>
-            {!order.isTestOrder && order.status === 0 && <button type="button" className="mg-btn mg-btn-primary self-start" disabled={busy} onClick={() => void manualAction(order, 'manual-payment')}>Mark external payment received</button>}
-            {!order.isTestOrder && order.status === 2 && <button type="button" className="mg-btn mg-btn-secondary self-start" disabled={busy} onClick={() => void manualAction(order, 'manual-refund')}>Mark external refund sent</button>}
-          </article>
-        ))}</div>}
-      </section>}
+          </>
+        )
+      )}
+
+      {view === 'payments' && (
+        settings == null ? <p role="status" className="sp-note">Loading…</p> : (
+          <>
+            <h2 className="sp-sec">Payments</h2>
+            <div className="sp-card">
+              <CardDropdownRow label="How people pay" value={settings.isDemo ? 'demo' : 'manual'} options={PAY_OPTIONS} disabled={busy || settings.isLocked}
+                onChange={(value) => { if ((value === 'demo') !== settings.isDemo) void setDemo(value === 'demo'); }} />
+            </div>
+            <p className="sp-note">{settings.isLocked ? 'Fixed once anyone has ordered.' : 'Demo takes no money. Use it to try the shop.'}</p>
+          </>
+        )
+      )}
+
+      {declining && (
+        <DeclineSheet listing={declining} onClose={() => setDeclining(null)} onDecline={(reason) => decline(declining, reason)} />
+      )}
     </div>
+  );
+}
+
+/** Asks why, so the seller sees a reason next to "Declined". */
+function DeclineSheet({ listing, onClose, onDecline }: { listing: CompetitionListing; onClose: () => void; onDecline: (reason: string) => Promise<string | null> }) {
+  const [reason, setReason] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
+  return (
+    <FormSheet title="Decline this item?" description={`${listing.item.title} from ${sellerText(listing)}. They see your reason.`} saveLabel="Decline" onClose={onClose} error={problem}
+      onSave={async () => { const message = await onDecline(reason); setProblem(message); return message == null; }}>
+      <SheetField label="Reason">
+        <textarea rows={3} maxLength={500} placeholder="e.g. Only stabling and hook-ups at this event." value={reason} onChange={(event) => setReason(event.target.value)} />
+      </SheetField>
+    </FormSheet>
   );
 }

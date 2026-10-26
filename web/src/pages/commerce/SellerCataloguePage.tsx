@@ -1,40 +1,55 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { MoreHorizontal } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { ChevronRight, Minus, Plus } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { Chevron, RefineDisclosure, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet, RefineStatus, type StatusTone } from '../refine/Refine';
-import { Notice } from '../../components/Notice';
-import { LoadError } from './commerceUi';
-import { CATEGORY_LABEL, errorMessage, pounds } from './commerceFormat';
-import type { CatalogueItem, CommerceItemCategory, CommerceListingStatus, CompetitionChoice, CompetitionChoicePage, CompetitionListing } from './types';
-import './commerce.css';
-import { NumberField } from '../../components/NumberField';
-import { SelectField } from '../../components/SelectField';
+import { CardDropdownRow } from '../../components/CardDropdownRow';
+import { usePageHeader } from '../../components/CompactPageBarContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { LazyImage } from '../../components/LazyImage';
+import { NumberField } from '../../components/NumberField';
+import { initialsOf } from '../../lib/profile';
+import { Chip, FormSheet, SheetField, type ChipTone } from '../clubShop/ui';
+import { LoadError } from './commerceUi';
+import { errorMessage, pounds } from './commerceFormat';
+import type { CatalogueItem, CommerceItemCategory, CommerceListingStatus, CompetitionChoice, CompetitionChoicePage, CompetitionListing } from './types';
+import '../../components/sitePages.css';
+import '../clubShop/clubShop.css';
 
 interface ItemForm {
   title: string;
   description: string;
   price: string;
   category: CommerceItemCategory;
-  stock: string;
+  /** 0 means "No limit". */
+  stock: number;
+  /** An item that has sold out keeps its 0 left until the stepper is touched. */
+  soldOut: boolean;
   imageUrl: string;
   /** What the buyer is asked for with this item ("Stable number"), and the example shown in the box. */
   detailPrompt: string;
   detailHint: string;
 }
 
-const EMPTY_FORM: ItemForm = { title: '', description: '', price: '', category: 0, stock: '', imageUrl: '', detailPrompt: '', detailHint: '' };
+const EMPTY_FORM: ItemForm = { title: '', description: '', price: '', category: 0, stock: 0, soldOut: false, imageUrl: '', detailPrompt: '', detailHint: '' };
 const PICKER_PAGE_SIZE = 50;
 const MAX_PICKER_PAGES = 10_000;
 
-/** Status word and colour for one event's listing of an item. */
-const LISTING_STATUS: Record<CommerceListingStatus, { text: string; tone: StatusTone }> = {
-  0: { text: 'Pending', tone: 'warn' },
-  1: { text: 'Approved', tone: 'ok' },
+/** The category names the seller picks from. */
+const CATEGORY_CHOICES: { value: CommerceItemCategory; label: string }[] = [
+  { value: 0, label: 'Merchandise' },
+  { value: 1, label: 'Tickets' },
+  { value: 2, label: 'Camping and stabling' },
+  { value: 3, label: 'Other' },
+];
+const categoryName = (category: CommerceItemCategory) => CATEGORY_CHOICES.find((c) => c.value === category)?.label ?? 'Other';
+
+/** The word and colour for one event's listing of an item. */
+const LISTING_STATUS: Record<CommerceListingStatus, { text: string; tone: ChipTone }> = {
+  0: { text: 'Waiting', tone: 'warn' },
+  1: { text: 'On sale', tone: 'good' },
   2: { text: 'Declined', tone: 'bad' },
-  3: { text: 'Withdrawn', tone: 'mut' },
+  3: { text: 'Withdrawn', tone: 'grey' },
 };
 
 async function loadUpcomingCompetitions(): Promise<CompetitionChoice[]> {
@@ -55,16 +70,18 @@ const eventDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { w
 const countText = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 /** One-line summary of where an item is on offer. Colour is only used when something needs attention. */
-function itemSummary(item: CatalogueItem, listings: CompetitionListing[]) {
-  if (!item.isActive) return { text: 'Archived', tone: 'mut' as StatusTone };
-  if (listings.length === 0) return { text: 'Draft · not offered', tone: 'mut' as StatusTone };
-  const pending = listings.filter((listing) => listing.status === 0).length;
+function itemSummary(item: CatalogueItem, listings: CompetitionListing[]): { text: string; tone: 'amber' | 'red' | null } {
+  if (!item.isActive) return { text: 'Archived', tone: null };
+  if (listings.length === 0) return { text: 'Not offered anywhere', tone: null };
+  const waiting = listings.filter((listing) => listing.status === 0).length;
   const declined = listings.filter((listing) => listing.status === 2).length;
   const live = listings.filter((listing) => listing.status === 0 || listing.status === 1).length;
-  if (pending > 0) return { text: `${countText(live, 'event')} · ${pending} pending`, tone: 'warn' as StatusTone };
-  if (declined > 0 && live === 0) return { text: `Declined at ${countText(declined, 'event')}`, tone: 'bad' as StatusTone };
-  return { text: live === 0 ? 'Not offered' : countText(live, 'event'), tone: 'mut' as StatusTone };
+  if (waiting > 0) return { text: `${countText(live, 'event')} · ${waiting} waiting`, tone: 'amber' };
+  if (declined > 0 && live === 0) return { text: `Declined at ${countText(declined, 'event')}`, tone: 'red' };
+  return { text: live === 0 ? 'Not offered anywhere' : countText(live, 'event'), tone: null };
 }
+
+const stockText = (item: CatalogueItem) => (item.stockQuantity == null ? 'No limit' : item.stockQuantity === 0 ? 'Sold out' : `${item.stockQuantity} left`);
 
 export function SellerCataloguePage() {
   const { user } = useAuth();
@@ -73,15 +90,18 @@ export function SellerCataloguePage() {
 
 function SellerCatalogueContent() {
   const { user } = useAuth();
+  const [params, setParams] = useSearchParams();
   const [items, setItems] = useState<CatalogueItem[] | null>(null);
   const [listings, setListings] = useState<CompetitionListing[]>([]);
   const [competitions, setCompetitions] = useState<CompetitionChoice[]>([]);
-  const [activeId, setActiveId] = useState<number | null>(null);
-  const [sheet, setSheet] = useState<'add' | 'edit' | 'more' | null>(null);
-  const [form, setForm] = useState<ItemForm>(EMPTY_FORM);
+  const [sheet, setSheet] = useState<'add' | 'edit' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
+  const activeId = Number(params.get('item')) || null;
+  const active = items?.find((item) => item.id === activeId) ?? null;
+  usePageHeader(active
+    ? { title: active.title, plain: true, backTo: '/me/catalogue', backLabel: 'Back to things I sell' }
+    : { title: 'Things I sell', plain: true, backTo: '/me', backLabel: 'Back to my profile' });
 
   const load = useCallback(() => {
     if (!user) return Promise.resolve();
@@ -97,7 +117,7 @@ function SellerCatalogueContent() {
         setCompetitions(competitionChoices);
       })
       .catch((requestError: unknown) => {
-        setError(errorMessage(requestError, 'Couldn’t load your catalogue. Check your signal and try again.'));
+        setError(errorMessage(requestError, 'Couldn’t load your items. Check your signal and try again.'));
       });
   }, [user]);
 
@@ -109,10 +129,8 @@ function SellerCatalogueContent() {
     return grouped;
   }, [listings]);
 
-  const active = items?.find((item) => item.id === activeId) ?? null;
-
   /** Runs a write, then reloads. Returns whether it worked, so callers can close sheets or move on. */
-  async function run<T>(action: () => Promise<T>, failure: string): Promise<{ ok: true; value: T } | { ok: false }> {
+  async function run<T>(action: () => Promise<T>, failure: string): Promise<{ ok: true; value: T } | { ok: false; message: string }> {
     setBusy(true);
     setError(null);
     try {
@@ -120,50 +138,25 @@ function SellerCatalogueContent() {
       await load();
       return { ok: true, value };
     } catch (requestError) {
-      setError(errorMessage(requestError, failure));
-      return { ok: false };
+      const message = errorMessage(requestError, failure);
+      setError(message);
+      return { ok: false, message };
     } finally {
       setBusy(false);
     }
   }
 
-  function openAdd() {
-    setForm(EMPTY_FORM);
-    setFormError(null);
-    setSheet('add');
-  }
-
-  function openEdit(item: CatalogueItem) {
-    setForm({
-      title: item.title,
-      description: item.description,
-      price: (item.priceMinor / 100).toFixed(2),
-      category: item.category,
-      stock: item.stockQuantity?.toString() ?? '',
-      imageUrl: item.imageUrl ?? '',
-      detailPrompt: item.detailPrompt ?? '',
-      detailHint: item.detailHint ?? '',
-    });
-    setFormError(null);
-    setSheet('edit');
-  }
-
-  /** Saves the form as a new item or as changes to the open one. Returns the saved item, or null if the form was invalid or the call failed. */
-  async function save(): Promise<CatalogueItem | null> {
+  /** Saves the sheet as a new item or as changes to the open one. Returns a problem to show, or null when it saved. */
+  async function save(form: ItemForm, editing: CatalogueItem | null): Promise<string | null> {
     const price = Number(form.price);
-    const stock = form.stock.trim() === '' ? null : Number(form.stock);
-    if (!form.title.trim() || !form.description.trim() || form.price.trim() === '' || !Number.isFinite(price) || price < 0 ||
-      (stock !== null && (!Number.isInteger(stock) || stock < 0))) {
-      setFormError('Add a name and description, then check the price and stock.');
-      return null;
+    if (!form.title.trim() || !form.description.trim() || form.price.trim() === '' || !Number.isFinite(price) || price < 0) {
+      return 'Add a name and description, then check the price.';
     }
-    setFormError(null);
-    const editing = sheet === 'edit' ? active : null;
     const body = {
       title: form.title.trim(),
       description: form.description.trim(),
       priceMinor: Math.round(price * 100),
-      stockQuantity: stock,
+      stockQuantity: form.soldOut ? 0 : form.stock === 0 ? null : form.stock,
       category: form.category,
       imageUrl: form.imageUrl.trim() || null,
       detailPrompt: form.detailPrompt.trim() || null,
@@ -176,270 +169,209 @@ function SellerCatalogueContent() {
       if (editing) return (await api.put<CatalogueItem>(`/commerce/catalogue/${editing.id}`, body)).data;
       return (await api.post<CatalogueItem>('/commerce/catalogue', body)).data;
     }, 'Couldn’t save the item. Check your signal and try again.');
-    if (!result.ok) return null;
-    setSheet(null);
-    return result.value ?? editing;
+    if (!result.ok) return result.message;
+    // A new item opens on its own page, ready to be offered at an event.
+    if (!editing && result.value?.id != null) setParams({ item: String(result.value.id) });
+    return null;
   }
 
-  async function saveDraft(event: FormEvent) {
-    event.preventDefault();
-    await save();
+  async function withdraw(listing: CompetitionListing) {
+    if (!(await confirmDialog({ title: 'Withdraw this listing?', message: 'Buyers stop seeing it in the shop.', confirmLabel: 'Withdraw listing', destructive: true }))) return;
+    await run(() => api.delete(`/commerce/listings/${listing.id}`), 'Couldn’t withdraw the listing. Check your signal and try again.');
   }
 
-  async function saveAndChoose() {
-    const saved = await save();
-    if (saved?.id != null) setActiveId(saved.id);
+  async function offer(item: CatalogueItem, competition: CompetitionChoice) {
+    await run(() => api.post(`/commerce/competitions/${competition.id}/listings`, { catalogueItemId: item.id }), `Couldn’t offer this at ${competition.name}. Check your signal and try again.`);
   }
 
-  if (!user) return <RefinePage><p className="rf-note py-6">Sign in to manage your event catalogue.</p></RefinePage>;
+  async function archive(item: CatalogueItem) {
+    if (!(await confirmDialog({ title: 'Archive this item?', message: `${item.title} is hidden from your items. You can bring it back later.`, confirmLabel: 'Archive item', destructive: true }))) return;
+    await run(() => api.delete(`/commerce/catalogue/${item.id}`), 'Couldn’t archive the item. Check your signal and try again.');
+  }
+
+  async function restore(item: CatalogueItem) {
+    await run(() => api.put(`/commerce/catalogue/${item.id}`, {
+      title: item.title, description: item.description, priceMinor: item.priceMinor, stockQuantity: item.stockQuantity,
+      category: item.category, imageUrl: item.imageUrl, detailPrompt: item.detailPrompt ?? null, detailHint: item.detailHint ?? null, isActive: true, expectedVersion: item.version,
+    }), 'Couldn’t bring the item back. Refresh and try again.');
+  }
+
+  if (!user) return <div className="skin cs-page"><p className="sp-note">Sign in to manage the things you sell.</p></div>;
+
+  const problem = error && <div className="cs-gap"><LoadError message={error} onRetry={() => void load()} /></div>;
+
+  if (activeId != null && items == null && !error) return <div className="skin cs-page"><p className="sp-note" role="status">Loading…</p></div>;
 
   if (active) {
     const itemListings = listingsByItem.get(active.id) ?? [];
-    const offered = new Set(itemListings.filter((listing) => listing.status === 0 || listing.status === 1).map((listing) => listing.competitionId));
-    const others = competitions.filter((competition) => !offered.has(competition.id));
+    const withListing = new Set(itemListings.map((listing) => listing.competitionId));
+    const notOffered = competitions.filter((competition) => !withListing.has(competition.id));
     const nameOf = (id: number) => competitions.find((competition) => competition.id === id);
     return (
-      <RefinePage>
-        <RefineHeader
-          onBack={() => setActiveId(null)}
-          backLabel="Back to catalogue"
-          context="Catalogue"
-          actions={<button type="button" className="rf-ib" aria-label="More actions for this item" onClick={() => setSheet('more')}><MoreHorizontal className="h-5 w-5" aria-hidden="true" /></button>}
-          title={active.title}
-        />
-        {error && <LoadError message={error} onRetry={() => void load()} />}
-        <div className="mt-3">
-          <RefineList label="Item details">
-            <li>
-              <button type="button" className="rf-row" onClick={() => openEdit(active)}>
-                <span className="rf-grow">
-                  <span className="rf-t1">{pounds(active.priceMinor)} · {CATEGORY_LABEL[active.category]}</span>
-                  <span className="rf-t2">{active.stockQuantity == null ? 'Unlimited stock' : `${active.stockQuantity} available`}{!active.isActive && ' · Archived'}</span>
-                </span>
-                <span className="rf-st" style={{ color: 'rgb(var(--mg-heading))' }}>Edit</span>
-              </button>
-            </li>
-          </RefineList>
+      <div className="skin cs-page">
+        <h1 className="sr-only">{active.title}</h1>
+        {problem}
+        <h2 className="sp-sec">Details</h2>
+        <div className="sp-card">
+          <div className="sp-row"><span className="sp-t1 sp-grow">Price</span><span className="sp-val">{pounds(active.priceMinor)}</span></div>
+          <div className="sp-row"><span className="sp-t1 sp-grow">Category</span><span className="sp-val">{categoryName(active.category)}</span></div>
+          <div className="sp-row"><span className="sp-t1 sp-grow">Stock</span><span className="sp-val">{stockText(active)}</span></div>
+          <button type="button" className="sp-add cs-addbar cs-addbar-plain" disabled={busy} onClick={() => setSheet('edit')}>Edit details</button>
         </div>
 
-        <RefineSection title="Events for this item" />
-        {itemListings.length === 0 ? <RefineNote>Not offered anywhere yet. Pick an event below.</RefineNote> : (
-          <RefineList label="Events for this item">
-            {itemListings.map((listing) => {
-              const status = LISTING_STATUS[listing.status];
-              const event = nameOf(listing.competitionId);
-              const detail = event ? eventDate(event.startDate) : '';
-              const row = (
-                <>
-                  <span className="rf-grow"><span className="rf-t1">{event?.name ?? `Event #${listing.competitionId}`}</span>{detail && <span className="rf-t2">{detail}</span>}</span>
-                  <RefineStatus tone={status.tone}>{status.text}</RefineStatus>
-                </>
-              );
-              if (listing.status === 2 && listing.reviewNote) {
-                return (
-                  <li key={listing.id}>
-                    <details>
-                      <summary className="rf-row">{row}<Chevron down /></summary>
-                      <p className="rf-note px-4 pt-0">Organiser: “{listing.reviewNote}”</p>
-                    </details>
-                  </li>
-                );
-              }
-              return (
-                <li key={listing.id} className="rf-row">
-                  {row}
-                  {listing.status === 0 && <button type="button" className="rf-btn" disabled={busy} onClick={async () => { if (await confirmDialog({ title: 'Withdraw this listing?', message: 'Buyers stop seeing it in the shop.', confirmLabel: 'Withdraw listing', destructive: true })) void run(() => api.delete(`/commerce/listings/${listing.id}`), 'Couldn’t withdraw the listing. Check your signal and try again.'); }}>Withdraw</button>}
-                </li>
-              );
-            })}
-          </RefineList>
-        )}
-
-        {active.isActive && (
-          <div className="mt-3 rf-list">
-            <RefineDisclosure title="Offer at another event" defaultOpen={itemListings.length === 0}>
-              {others.length === 0 ? <p className="rf-note px-4">There are no other upcoming events to choose from.</p> : (
-                <ul className="m-0 list-none p-0">
-                  {others.map((competition) => (
-                    <li key={competition.id} className="rf-row" style={{ borderTop: '1px solid rgb(var(--mg-rule-soft))' }}>
-                      <span className="rf-grow"><span className="rf-t1">{competition.name}</span><span className="rf-t2">{eventDate(competition.startDate)}</span></span>
-                      <button type="button" className="rf-btn" disabled={busy} aria-label={`Request ${competition.name}`} onClick={() => void run(() => api.post(`/commerce/competitions/${competition.id}/listings`, { catalogueItemId: active.id }), 'Couldn’t send this item for approval. Check your signal and try again.')}>Request</button>
-                    </li>
-                  ))}
-                </ul>
+        <h2 className="sp-sec">Events</h2>
+        <div className="sp-card">
+          {itemListings.map((listing) => {
+            const status = LISTING_STATUS[listing.status];
+            const event = nameOf(listing.competitionId);
+            const eventName = event?.name ?? `Event ${listing.competitionId}`;
+            return (
+              <div key={listing.id} className="cs-row cs-row-wrap">
+                <span className="sp-grow"><span className="sp-t1">{eventName}</span>{event && <span className="sp-t2">{eventDate(event.startDate)}</span>}</span>
+                <Chip tone={status.tone}>{status.text}</Chip>
+                {listing.status === 0 && (
+                  <button type="button" className="kit-redtext cs-redtext-s" disabled={busy} aria-label={`Withdraw from ${eventName}`} onClick={() => { void withdraw(listing); }}>Withdraw</button>
+                )}
+                {active.isActive && (listing.status === 2 || listing.status === 3) && event && (
+                  <button type="button" className="kit-pill cs-pill-s" disabled={busy} aria-label={`Offer at ${eventName}`} onClick={() => { void offer(active, event); }}>Offer here</button>
+                )}
+                {listing.status === 2 && listing.reviewNote && <span className="sp-t2 cs-note-red">Organiser: {listing.reviewNote}</span>}
+              </div>
+            );
+          })}
+          {notOffered.map((competition) => (
+            <div key={competition.id} className="cs-row cs-row-wrap">
+              <span className="sp-grow"><span className="sp-t1">{competition.name}</span><span className="sp-t2">{eventDate(competition.startDate)}</span></span>
+              <Chip tone="grey">Not offered</Chip>
+              {active.isActive && (
+                <button type="button" className="kit-pill cs-pill-s" disabled={busy} aria-label={`Offer at ${competition.name}`} onClick={() => { void offer(active, competition); }}>Offer here</button>
               )}
-            </RefineDisclosure>
-          </div>
-        )}
-        <RefineNote>Each organiser approves items for their own event. Changing the price sends approved events back to pending.</RefineNote>
-
-        {sheet === 'more' && (
-          <RefineSheet title="This item" onClose={() => setSheet(null)}>
-            <div className="flex flex-col gap-2">
-              <button type="button" className="rf-btn rf-wide" onClick={() => openEdit(active)}>Edit details</button>
-              {active.isActive
-                ? <button type="button" className="rf-btn rf-wide" aria-label={`Archive ${active.title}`} disabled={busy} onClick={async () => { if (!(await confirmDialog({ title: 'Archive this item?', message: `${active.title} is hidden from your catalogue. You can restore it later.`, confirmLabel: 'Archive item', destructive: true }))) return; void run(() => api.delete(`/commerce/catalogue/${active.id}`), 'Couldn’t archive the item. Check your signal and try again.').then((result) => { if (result.ok) setSheet(null); }); }}>Archive item</button>
-                : <button type="button" className="rf-btn rf-wide" disabled={busy} onClick={() => void run(() => api.put(`/commerce/catalogue/${active.id}`, { title: active.title, description: active.description, priceMinor: active.priceMinor, stockQuantity: active.stockQuantity, category: active.category, imageUrl: active.imageUrl, detailPrompt: active.detailPrompt ?? null, detailHint: active.detailHint ?? null, isActive: true, expectedVersion: active.version }), 'Couldn’t restore the item. Refresh the catalogue and try again.').then((result) => { if (result.ok) setSheet(null); })}>Restore item</button>}
             </div>
-          </RefineSheet>
-        )}
-        {sheet === 'edit' && <ItemSheet title="Edit item" form={form} setForm={setForm} busy={busy} error={formError ?? error} onClose={() => setSheet(null)} onSubmit={saveDraft} primaryLabel="Save changes" />}
-      </RefinePage>
+          ))}
+          {itemListings.length === 0 && notOffered.length === 0 && <p className="cs-row sp-t2 m-0">No upcoming events.</p>}
+        </div>
+
+        <div className="kit-acts cs-gap">
+          {active.isActive
+            ? <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void archive(active); }}>Archive this item</button>
+            : <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void restore(active); }}>Bring it back</button>}
+        </div>
+
+        {sheet === 'edit' && <ItemSheet item={active} onSave={(form) => save(form, active)} onClose={() => setSheet(null)} />}
+      </div>
     );
   }
 
   return (
-    <RefinePage>
-      <RefineHeader
-        context="Selling at events"
-        actions={<button type="button" className="rf-btn" onClick={openAdd}>+ Add item</button>}
-        title="Catalogue"
-      />
-      {error && <LoadError message={error} onRetry={() => void load()} />}
-      {items == null && !error && <p className="rf-note" role="status">Loading your catalogue…</p>}
-      {items?.length === 0 && <p className="rf-note">Your catalogue is empty. Add an item once, then reuse it at future events.</p>}
-      {items && items.length > 0 && (
-        <RefineList label="Catalogue items">
-          {items.map((item) => {
-            const summary = itemSummary(item, listingsByItem.get(item.id) ?? []);
-            return (
-              <li key={item.id}>
-                <button type="button" className="rf-row" aria-label={item.title} onClick={() => setActiveId(item.id)} style={item.isActive ? undefined : { opacity: 0.65 }}>
-                  <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className={`rf-t2 ${summary.tone === 'mut' ? '' : `rf-${summary.tone}`}`}>{summary.text}</span></span>
-                  <span className="rf-price">{pounds(item.priceMinor)}</span>
-                  <Chevron />
+    <div className="skin cs-page">
+      <h1 className="sr-only">Things I sell</h1>
+      {problem}
+      {items == null && !error && <p className="sp-note" role="status">Loading your items…</p>}
+      {items && (
+        <>
+          <h2 className="sp-sec">Your items <small>{items.length}</small></h2>
+          <div className="sp-card">
+            {items.map((item) => {
+              const summary = itemSummary(item, listingsByItem.get(item.id) ?? []);
+              return (
+                <button key={item.id} type="button" className={`sp-row${item.isActive ? '' : ' cs-faded'}`} aria-label={item.title} onClick={() => setParams({ item: String(item.id) })}>
+                  {item.imageUrl
+                    ? <LazyImage src={item.imageUrl} alt="" compact className="cs-ava cs-thumb" />
+                    : <span aria-hidden="true" className="cs-ava cs-thumb">{initialsOf(item.title)}</span>}
+                  <span className="sp-grow">
+                    <span className="sp-t1">{item.title}</span>
+                    <span className={`sp-t2${summary.tone === 'amber' ? ' cs-amber' : summary.tone === 'red' ? ' cs-red' : ''}`}>{summary.text}</span>
+                  </span>
+                  <span className="sp-price !text-[18px]">{pounds(item.priceMinor)}</span>
+                  <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
                 </button>
-              </li>
-            );
-          })}
-        </RefineList>
+              );
+            })}
+            <button type="button" className="sp-add cs-addbar" onClick={() => setSheet('add')}><Plus aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={2.75} />Add an item</button>
+          </div>
+        </>
       )}
-      <RefineNote>Orders for your items appear under <Link to="/me/orders">Orders</Link>.</RefineNote>
-
-      {sheet === 'add' && (
-        <ItemSheet
-          title="Add item"
-          form={form}
-          setForm={setForm}
-          busy={busy}
-          error={formError ?? error}
-          onClose={() => setSheet(null)}
-          onSubmit={saveDraft}
-          primaryLabel="Save draft"
-          onChoose={() => void saveAndChoose()}
-        />
-      )}
-    </RefinePage>
+      {sheet === 'add' && <ItemSheet item={null} onSave={(form) => save(form, null)} onClose={() => setSheet(null)} />}
+    </div>
   );
 }
 
-interface ItemSheetProps {
-  title: string;
-  form: ItemForm;
-  setForm: (form: ItemForm) => void;
-  busy: boolean;
-  error: string | null;
-  onClose: () => void;
-  onSubmit: (event: FormEvent) => void;
-  primaryLabel: string;
-  /** Adding only: save, then go straight to choosing events. */
-  onChoose?: () => void;
-}
-
 const STABLING_PRESETS: { label: string; title: string; category: CommerceItemCategory; description: string; defaultPrice: string }[] = [
-  {
-    label: 'Weekend Stabling',
-    title: 'Weekend Stabling',
-    category: 2,
-    description: 'Temporary event stable box for the weekend. Collect stable allocation from the secretary on arrival.',
-    defaultPrice: '65.00',
-  },
-  {
-    label: 'Electric Hook-Up',
-    title: 'Electric Hook-Up',
-    category: 2,
-    description: '16A lorry or caravan electric hook-up pitch for the event weekend.',
-    defaultPrice: '45.00',
-  },
-  {
-    label: 'Shavings Bale',
-    title: 'Shavings Bale',
-    category: 2,
-    description: 'Dust-extracted wood shavings bale for event stabling. Collect at the stable compound.',
-    defaultPrice: '10.00',
-  },
-  {
-    label: 'Haylage Bale',
-    title: 'Haylage Bale',
-    category: 2,
-    description: 'Small bale of haylage for event stabling. Collect at the stable compound.',
-    defaultPrice: '12.00',
-  },
+  { label: 'Weekend stabling', title: 'Weekend stabling', category: 2, description: 'Temporary event stable box for the weekend. Collect stable allocation from the secretary on arrival.', defaultPrice: '65.00' },
+  { label: 'Electric hook-up', title: 'Electric hook-up', category: 2, description: '16A lorry or caravan electric hook-up pitch for the event weekend.', defaultPrice: '45.00' },
+  { label: 'Shavings bale', title: 'Shavings bale', category: 2, description: 'Dust-extracted wood shavings bale for event stabling. Collect at the stable compound.', defaultPrice: '10.00' },
+  { label: 'Haylage bale', title: 'Haylage bale', category: 2, description: 'Small bale of haylage for event stabling. Collect at the stable compound.', defaultPrice: '12.00' },
 ];
 
-function ItemSheet({ title, form, setForm, busy, error, onClose, onSubmit, primaryLabel, onChoose }: ItemSheetProps) {
+function formFor(item: CatalogueItem | null): ItemForm {
+  if (!item) return EMPTY_FORM;
+  return {
+    title: item.title,
+    description: item.description,
+    price: (item.priceMinor / 100).toFixed(2),
+    category: item.category,
+    stock: item.stockQuantity ?? 0,
+    soldOut: item.stockQuantity === 0,
+    imageUrl: item.imageUrl ?? '',
+    detailPrompt: item.detailPrompt ?? '',
+    detailHint: item.detailHint ?? '',
+  };
+}
+
+/** Add an item, or edit one. A new item can start from a stabling preset. */
+function ItemSheet({ item, onSave, onClose }: { item: CatalogueItem | null; onSave: (form: ItemForm) => Promise<string | null>; onClose: () => void }) {
+  const [form, setForm] = useState<ItemForm>(() => formFor(item));
+  const [preset, setPreset] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
+  const change = (patch: Partial<ItemForm>) => { setForm((current) => ({ ...current, ...patch })); setProblem(null); };
+
+  function startFrom(label: string) {
+    setPreset(label);
+    const found = STABLING_PRESETS.find((p) => p.label === label);
+    if (found) change({ title: found.title, category: found.category, description: found.description, price: form.price.trim() || found.defaultPrice });
+  }
+
+  const stockLabel = form.soldOut ? 'Sold out' : form.stock === 0 ? 'No limit' : String(form.stock);
   return (
-    <RefineSheet title={title} onClose={onClose}>
-      <form className="flex flex-col gap-3" onSubmit={onSubmit} noValidate>
-        {onChoose && (
-          <div className="flex flex-col gap-1.5" role="group" aria-label="Quick presets">
-            <span className="text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-              1-tap stabling &amp; hook-up presets
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {STABLING_PRESETS.map((preset) => (
-                <button
-                  key={preset.label}
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    setForm({
-                      ...form,
-                      title: preset.title,
-                      category: preset.category,
-                      description: preset.description,
-                      price: form.price.trim() || preset.defaultPrice,
-                    })
-                  }
-                  className="mg-chip !min-h-8 !px-2.5 !py-1 text-xs font-semibold"
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <label className="rf-fld">Name<input maxLength={200} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-        <div className="grid grid-cols-2 gap-2.5">
-          <label className="rf-fld">Price (£)<NumberField decimal min={0} step="0.01" placeholder="12.00" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></label>
-          <label className="rf-fld">Category
-            <SelectField value={form.category} onChange={(event) => setForm({ ...form, category: Number(event.target.value) as CommerceItemCategory })}>
-              {([0, 1, 2, 3] as CommerceItemCategory[]).map((category) => <option key={category} value={category}>{category === 2 ? 'Camping & stabling' : CATEGORY_LABEL[category]}</option>)}
-            </SelectField>
-          </label>
+    <FormSheet title={item ? 'Edit item' : 'Add an item'} saveLabel={item ? 'Save' : 'Add'} onClose={onClose} error={problem}
+      onSave={async () => { const message = await onSave(form); setProblem(message); return message == null; }}>
+      {!item && (
+        <div className="sp-card">
+          <CardDropdownRow label="Start from" value={preset} options={[{ value: '', label: 'Blank' }, ...STABLING_PRESETS.map((p) => ({ value: p.label, label: p.label }))]} onChange={startFrom} />
         </div>
-        <label className="rf-fld">Description<textarea rows={3} maxLength={4000} style={{ padding: 10 }} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-        <details>
-          <summary className="rf-btn rf-btn-text" style={{ justifyContent: 'flex-start', padding: 0, listStyle: 'none' }}>+ Stock and image</summary>
-          <div className="mt-2 flex flex-col gap-3">
-            <label className="rf-fld">Stock <span className="font-normal">Blank means unlimited</span><NumberField min={0} step={1} value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} /></label>
-            <label className="rf-fld">Image link <span className="font-normal">Optional HTTPS link</span><input type="url" placeholder="https://…" value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} /></label>
-          </div>
-        </details>
-        <details open={form.detailPrompt.trim() !== ''}>
-          <summary className="rf-btn rf-btn-text" style={{ justifyContent: 'flex-start', padding: 0, listStyle: 'none' }}>+ Ask the buyer for something</summary>
-          <div className="mt-2 flex flex-col gap-3">
-            <label className="rf-fld">Ask the buyer for <span className="font-normal">Optional. Shown when they add this item, such as “Stable number”</span><input maxLength={60} value={form.detailPrompt} onChange={(event) => setForm({ ...form, detailPrompt: event.target.value })} /></label>
-            <label className="rf-fld">Hint <span className="font-normal">Optional example inside the box</span><input maxLength={80} placeholder="e.g. B12" value={form.detailHint} onChange={(event) => setForm({ ...form, detailHint: event.target.value })} /></label>
-          </div>
-        </details>
-        {error && <Notice>{error}</Notice>}
-        {onChoose && <p className="rf-note !py-0">You’ll choose events for this item after saving.</p>}
-        <div className="rf-actions">
-          <button type="submit" className={`rf-btn ${onChoose ? '' : 'rf-btn-primary rf-grow'}`} disabled={busy}>{busy ? 'Saving…' : primaryLabel}</button>
-          {onChoose && <button type="button" className="rf-btn rf-btn-primary rf-grow" disabled={busy} onClick={onChoose}>Save and choose events</button>}
-        </div>
-      </form>
-    </RefineSheet>
+      )}
+      <SheetField label="Name">
+        <input maxLength={200} placeholder="e.g. Weekend stabling" value={form.title} onChange={(event) => change({ title: event.target.value })} />
+      </SheetField>
+      <SheetField label="Price (£)">
+        <NumberField decimal min={0} step="0.01" placeholder="0.00" value={form.price} onChange={(event) => change({ price: event.target.value })} />
+      </SheetField>
+      <div className="cs-sheet-row">
+        <span id="stock-label">Stock</span>
+        <span className="sp-stepper" role="group" aria-labelledby="stock-label">
+          <button type="button" aria-label="Less stock" disabled={!form.soldOut && form.stock === 0} onClick={() => change({ stock: Math.max(0, form.stock - 1), soldOut: false })}><Minus aria-hidden="true" className="h-4 w-4" /></button>
+          <output aria-live="polite">{stockLabel}</output>
+          <button type="button" aria-label="More stock" onClick={() => change({ stock: form.soldOut ? 1 : form.stock + 1, soldOut: false })}><Plus aria-hidden="true" className="h-4 w-4" /></button>
+        </span>
+      </div>
+      <div className="sp-card">
+        <CardDropdownRow label="Category" value={String(form.category)} options={CATEGORY_CHOICES.map((c) => ({ value: String(c.value), label: c.label }))}
+          onChange={(value) => change({ category: Number(value) as CommerceItemCategory })} />
+      </div>
+      <SheetField label="Description">
+        <textarea rows={3} maxLength={4000} placeholder="What buyers get" value={form.description} onChange={(event) => change({ description: event.target.value })} />
+      </SheetField>
+      <SheetField label="Ask the buyer for (optional)" hint="Shown when they add this item, such as “Stable number”.">
+        <input maxLength={60} value={form.detailPrompt} onChange={(event) => change({ detailPrompt: event.target.value })} />
+      </SheetField>
+      {form.detailPrompt.trim() !== '' && (
+        <SheetField label="Hint (optional)">
+          <input maxLength={80} placeholder="e.g. B12" value={form.detailHint} onChange={(event) => change({ detailHint: event.target.value })} />
+        </SheetField>
+      )}
+      <SheetField label="Image link (optional)">
+        <input type="url" placeholder="https://…" value={form.imageUrl} onChange={(event) => change({ imageUrl: event.target.value })} />
+      </SheetField>
+    </FormSheet>
   );
 }

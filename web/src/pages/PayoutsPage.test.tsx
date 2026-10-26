@@ -29,6 +29,8 @@ const complete = (extra: Partial<ClubPayouts> = {}): ClubPayouts => blank({
   statementDescriptor: 'STOCKPORT PC', bank: { accountHolder: 'Stockport PC', bankName: 'Barclays', sortCode: '20-12-34', maskedAccount: `${BULLETS}1234`, ibanCountry: null },
   missing: [], ...extra,
 });
+/** Details all in and the account finished. */
+const ready = (extra: Partial<ClubPayouts> = {}) => complete({ status: 2, ...extra });
 
 function mount(options: { roles?: string[]; clubId?: number | null } = {}) {
   const auth: StoredAuth = {
@@ -47,9 +49,17 @@ function mount(options: { roles?: string[]; clubId?: number | null } = {}) {
 }
 
 let loaded: ClubPayouts;
-const typeInto = async (label: string | RegExp, text: string) => userEvent.type(screen.getByLabelText(label), text);
-const next = () => userEvent.click(screen.getByRole('button', { name: 'Continue' }));
 const errorResponse = (errors: Record<string, string>) => Object.assign(new Error('bad'), { response: { status: 400, data: { message: Object.values(errors)[0], errors } } });
+const status = () => waitFor(() => { const el = document.querySelector<HTMLElement>('.cs-status'); if (!el) throw new Error('no status line yet'); return el; });
+const row = (label: string) => screen.findByRole('button', { name: new RegExp(`^${label}`) });
+const dropdown = (label: string) => screen.findByRole('combobox', { name: new RegExp(`^${label}`) });
+const sheet = () => within(screen.getByRole('dialog'));
+const typeInto = async (label: string | RegExp, text: string) => userEvent.type(sheet().getByLabelText(label), text);
+const done = (name = 'Done') => userEvent.click(sheet().getByRole('button', { name }));
+const choose = async (label: string, option: string | RegExp) => {
+  await userEvent.click(await dropdown(label));
+  await userEvent.click(await screen.findByRole('option', { name: option }));
+};
 
 beforeEach(() => {
   loaded = blank();
@@ -60,40 +70,94 @@ beforeEach(() => {
     throw new Error(`unexpected GET ${url}`);
   });
   vi.mocked(api.put).mockImplementation(async (_url, body) => ({ data: { ...loaded, ...(body as object), status: 1 } }));
-  vi.mocked(api.post).mockResolvedValue({ data: complete({ status: 2 }) });
+  vi.mocked(api.post).mockResolvedValue({ data: ready() });
 });
 
-describe('PayoutsPage: the stepped flow', () => {
-  it('opens on step 1 with the test-mode note and six steps', async () => {
+describe('PayoutsPage: one page', () => {
+  it('says what is left in amber, and shows the two cards with the plain online-payments note', async () => {
+    loaded = complete({ bank: null, missing: ['bank'] });
     mount();
-    expect(await screen.findByText('Step 1 of 6:')).toBeInTheDocument();
-    expect(screen.getByText(/Test mode: no real money moves yet/)).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /^Go to step/ })).toHaveLength(6);
-    expect(screen.getByRole('radio', { name: /Registered charity/ })).toBeInTheDocument();
+    expect(await status()).toHaveTextContent('One thing left: add the club’s bank account.');
+    expect(await status()).toHaveAttribute('data-tone', 'warn');
+    expect(screen.getByRole('heading', { name: 'Who gets paid' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Money' })).toBeInTheDocument();
+    for (const label of ['Paid to', 'Country', 'Legal name and address', 'Responsible person', 'Bank account', 'Name on statements', 'When you get paid']) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    expect(screen.getByText('Add')).toHaveTextContent('Add');
+    expect(screen.getByRole('button', { name: /^Bank account/ })).toContainElement(screen.getByText('Add'));
+    expect(screen.getByText('Online payments aren’t switched on yet. Entries are paid to you directly until they are.')).toBeInTheDocument();
+    expect(screen.queryByText(/Test mode/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Step \d of 6/)).not.toBeInTheDocument();
   });
 
-  it('asks for who is being paid before moving on, then saves it', async () => {
+  it('shows the saved values on the rows', async () => {
+    loaded = ready();
     mount();
-    await screen.findByText('Step 1 of 6:');
-    await next();
-    expect(screen.getByText('Pick who is being paid.')).toBeInTheDocument();
+    expect(await status()).toHaveTextContent('Ready. Money from entries goes to account ending 1234.');
+    expect(await status()).toHaveAttribute('data-tone', 'good');
+    expect(await dropdown('Paid to')).toHaveTextContent('Club or association');
+    expect(screen.getByRole('combobox', { name: /^Country/ })).toHaveTextContent('United Kingdom (£)');
+    expect(screen.getByRole('button', { name: /^Legal name and address/ })).toHaveTextContent('Stockport Pony Club');
+    expect(screen.getByRole('button', { name: /^Responsible person/ })).toHaveTextContent('Ann Smith');
+    expect(screen.getByRole('button', { name: /^Bank account/ })).toHaveTextContent(`Barclays ${BULLETS}1234`);
+    expect(screen.getByRole('button', { name: /^Name on statements/ })).toHaveTextContent('STOCKPORT PC');
+    expect(screen.getByRole('combobox', { name: /^When you get paid/ })).toHaveTextContent('Weekly');
+  });
+
+  it('counts several missing things in words', async () => {
+    loaded = blank({ status: 1, businessType: 1, missing: ['legalName', 'personFullName', 'bank'] });
+    mount();
+    expect(await status()).toHaveTextContent('Three things left: add the legal name and address, the responsible person and the club’s bank account.');
+  });
+});
+
+describe('PayoutsPage: choices save from the row', () => {
+  it('saves who is being paid', async () => {
+    mount();
+    await choose('Paid to', 'Registered charity');
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', { businessType: 2 }));
+  });
+
+  it('saves the country, and the schedule', async () => {
+    loaded = complete({ bank: null, missing: ['bank'] });
+    mount();
+    await choose('Country', 'Ireland or the EU (€)');
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', { region: 1 }));
+    await choose('When you get paid', 'After each event');
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', { schedule: 2 }));
+  });
+
+  it('does nothing when the choice is the one already made', async () => {
+    loaded = ready();
+    mount();
+    await choose('When you get paid', 'Weekly');
     expect(api.put).not.toHaveBeenCalled();
-
-    await userEvent.click(screen.getByRole('radio', { name: /Club or association/ }));
-    await userEvent.click(screen.getByRole('button', { name: /Ireland or the EU/ }));
-    await next();
-
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', { businessType: 1, region: 1 }));
-    expect(await screen.findByText('Step 2 of 6:')).toBeInTheDocument();
   });
 
-  it('checks the business details as the server does, and sends them', async () => {
+  it('says why when a choice cannot be saved', async () => {
+    vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
+    mount();
+    await choose('Paid to', 'Company');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save the payout details. Check your signal and try again.');
+  });
+
+  it('shows the API\'s field problem when a choice is refused', async () => {
+    vi.mocked(api.put).mockRejectedValueOnce(errorResponse({ region: 'Pick a region.' }));
+    mount();
+    await choose('Country', 'Ireland or the EU (€)');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pick a region.');
+  });
+});
+
+describe('PayoutsPage: legal name and address', () => {
+  it('checks the details as the server does, and sends them', async () => {
     loaded = blank({ status: 1, businessType: 2, missing: ['legalName'] });
     mount();
-    await screen.findByText('Step 2 of 6:');
-    await next();
-    expect(screen.getByText('Enter the legal name.')).toBeInTheDocument();
-    expect(screen.getByText('Enter the charity number.')).toBeInTheDocument();
+    await userEvent.click(await row('Legal name and address'));
+    await done();
+    expect(sheet().getByText('Enter the legal name.')).toBeInTheDocument();
+    expect(sheet().getByText('Enter the charity number.')).toBeInTheDocument();
 
     await typeInto('Legal name', 'Stockport Pony Club');
     await typeInto('Address line 1', '1 High St');
@@ -102,199 +166,221 @@ describe('PayoutsPage: the stepped flow', () => {
     await typeInto('Contact email', 'a@example.org');
     await typeInto('Contact phone', '+44 7700 900123');
     await typeInto('Charity number', '1234567');
-    await next();
-    expect(screen.getByText('Enter a UK postcode, like SW1A 1AA.')).toBeInTheDocument();
-    await userEvent.clear(screen.getByLabelText('Postcode'));
+    await done();
+    expect(sheet().getByText('Enter a UK postcode, like SW1A 1AA.')).toBeInTheDocument();
+    await userEvent.clear(sheet().getByLabelText('Postcode'));
     await typeInto('Postcode', 'sk1 1aa');
-    await userEvent.type(screen.getByLabelText(/VAT number/), 'GB123456789');
-    await next();
+    await typeInto(/VAT number/, 'GB123456789');
+    await done();
 
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', expect.objectContaining({
       legalName: 'Stockport Pony Club', postcode: 'SK1 1AA', registrationNumber: '1234567', vatNumber: 'GB123456789', tradingName: '',
     })));
-    expect(await screen.findByText('Step 3 of 6:')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
-  it('takes the responsible person, rejecting someone under 18', async () => {
+  it('only asks for a company number when the payee is a company', async () => {
+    loaded = complete({ businessType: 3, registrationNumber: '12345678' });
+    mount();
+    await userEvent.click(await row('Legal name and address'));
+    expect(sheet().getByLabelText('Company number')).toHaveValue('12345678');
+  });
+
+  it('leaves out the registration box for a club', async () => {
+    loaded = complete();
+    mount();
+    await userEvent.click(await row('Legal name and address'));
+    expect(sheet().queryByLabelText(/number$/i)).not.toBeInTheDocument();
+    expect(sheet().getByLabelText('Legal name')).toHaveValue('Stockport Pony Club');
+  });
+
+  it('keeps the sheet open with the API\'s field errors', async () => {
+    loaded = complete();
+    vi.mocked(api.put).mockRejectedValueOnce(errorResponse({ contactEmail: 'Enter a valid email address.' }));
+    mount();
+    await userEvent.click(await row('Legal name and address'));
+    await done();
+    expect(await sheet().findByText('Enter a valid email address.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Legal name and address' })).toBeInTheDocument();
+  });
+
+  it('shows a message when saving fails without field errors', async () => {
+    loaded = complete();
+    vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
+    mount();
+    await userEvent.click(await row('Legal name and address'));
+    await done();
+    expect(await sheet().findByText('Couldn’t save the payout details. Check your signal and try again.')).toBeInTheDocument();
+  });
+});
+
+describe('PayoutsPage: responsible person', () => {
+  it('rejects someone under 18, then saves', async () => {
     loaded = blank({ status: 1, businessType: 1, legalName: 'x', addressLine1: 'x', city: 'x', postcode: 'SK1 1AA', contactEmail: 'a@b.co', contactPhone: '01234567890', missing: ['personFullName'] });
     mount();
-    await screen.findByText('Step 3 of 6:');
-    await next();
-    expect(screen.getByText("Enter the responsible person's full name.")).toBeInTheDocument();
+    await userEvent.click(await row('Responsible person'));
+    await done();
+    expect(sheet().getByText('Enter the responsible person\'s full name.')).toBeInTheDocument();
     await typeInto('Full name', 'Ann Smith');
     await typeInto('Date of birth', '2020-01-01');
-    await next();
-    expect(screen.getByText('They must be at least 18.')).toBeInTheDocument();
-    await userEvent.clear(screen.getByLabelText('Date of birth'));
+    await done();
+    expect(sheet().getByText('They must be at least 18.')).toBeInTheDocument();
+    await userEvent.clear(sheet().getByLabelText('Date of birth'));
     await typeInto('Date of birth', '1985-03-14');
-    await next();
+    await done();
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', { personFullName: 'Ann Smith', personDateOfBirth: '1985-03-14' }));
   });
 
   it('explicitly removes a saved birth date while keeping the responsible person', async () => {
-    loaded = complete({ status: 2, personFullName: 'Fake Responsible Person', personDateOfBirth: '2000-01-01' });
+    loaded = ready({ personFullName: 'Fake Responsible Person', personDateOfBirth: '2000-01-01' });
     vi.mocked(api.put).mockResolvedValue({ data: { ...loaded, status: 1, personDateOfBirth: null, missing: ['personDateOfBirth'] } });
     mount();
-    await screen.findByText('Payouts are ready', { exact: false });
-    await userEvent.click(screen.getByRole('button', { name: 'Go to step 3: Responsible person' }));
-    await userEvent.clear(screen.getByLabelText('Date of birth'));
-    await next();
+    await userEvent.click(await row('Responsible person'));
+    await userEvent.clear(sheet().getByLabelText('Date of birth'));
+    await done();
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', {
       personFullName: 'Fake Responsible Person', personDateOfBirth: null, clearPersonDateOfBirth: true,
     }));
-    expect(await screen.findByText('Step 4 of 6:')).toBeInTheDocument();
-    expect(screen.queryByText('Payouts are ready', { exact: false })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Go to step 3: Responsible person' }));
-    expect(screen.getByLabelText('Date of birth')).toHaveValue('');
-    await next();
-    expect(screen.getByText('Enter their date of birth.')).toBeInTheDocument();
+    expect(await status()).toHaveTextContent('One thing left: add the responsible person.');
   });
+});
 
+describe('PayoutsPage: bank account', () => {
   it('takes a UK bank account with numeric boxes, shows the sort code as 12-34-56, and clears the numbers once sent', async () => {
     loaded = complete({ bank: null, missing: ['bank'] });
-    vi.mocked(api.put).mockResolvedValue({ data: complete() });
+    vi.mocked(api.put).mockResolvedValue({ data: complete({ missing: [] }) });
     mount();
-    await screen.findByText('Step 4 of 6:');
-    await next();
-    expect(screen.getByText('Enter the name on the account.')).toBeInTheDocument();
-    expect(screen.getByText('A sort code has 6 digits.')).toBeInTheDocument();
-    expect(screen.getByText('An account number has 8 digits.')).toBeInTheDocument();
+    await userEvent.click(await row('Bank account'));
+    await done('Save');
+    expect(sheet().getByText('Enter the name on the account.')).toBeInTheDocument();
+    expect(sheet().getByText('A sort code has 6 digits.')).toBeInTheDocument();
+    expect(sheet().getByText('An account number has 8 digits.')).toBeInTheDocument();
 
-    expect(screen.getByLabelText('Sort code')).toHaveAttribute('inputmode', 'numeric');
-    expect(screen.getByLabelText('Account number')).toHaveAttribute('inputmode', 'numeric');
+    expect(sheet().getByLabelText('Sort code')).toHaveAttribute('inputmode', 'numeric');
+    expect(sheet().getByLabelText('Account number')).toHaveAttribute('inputmode', 'numeric');
     await typeInto('Name on the account', 'Stockport PC');
     await typeInto('Sort code', '20e1234');
     await typeInto('Account number', '1234-5e678x9');
-    expect(screen.getByLabelText('Sort code')).toHaveValue('20-12-34');
-    expect(screen.getByLabelText('Account number')).toHaveValue('12345678');
-    await next();
+    expect(sheet().getByLabelText('Sort code')).toHaveValue('20-12-34');
+    expect(sheet().getByLabelText('Account number')).toHaveValue('12345678');
+    await done('Save');
 
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts/bank', { accountHolder: 'Stockport PC', sortCode: '20-12-34', accountNumber: '12345678' }));
-    expect(await screen.findByText('Step 5 of 6:')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(document.body.textContent).not.toContain('12345678');
   });
 
-  it('shows saved bank details masked only, with a way to change them', async () => {
-    loaded = complete();
+  it('shows saved bank details masked only', async () => {
+    loaded = ready();
     mount();
-    await screen.findByText('Step 6 of 6:');
-    await userEvent.click(screen.getByRole('button', { name: 'Go to step 4: Bank account' }));
-    expect(screen.getByText(`Barclays ${BULLETS}1234`)).toBeInTheDocument();
-    expect(screen.queryByLabelText('Account number')).not.toBeInTheDocument();
-    await next();
-    expect(await screen.findByText('Step 5 of 6:')).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Go to step 4: Bank account' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Change' }));
-    expect(screen.getByLabelText('Account number')).toHaveValue('');
+    await userEvent.click(await row('Bank account'));
+    expect(screen.getByRole('dialog', { name: 'Bank account' })).toHaveAccessibleDescription(`Now Barclays ${BULLETS}1234. We check the numbers and keep the last 4 digits only.`);
+    expect(sheet().getByLabelText('Account number')).toHaveValue('');
   });
 
   it('asks Ireland and EU clubs for an IBAN and a BIC, in groups of four', async () => {
     loaded = complete({ region: 1, currency: 'EUR', bank: null, missing: ['bank'], postcode: 'D02 X285' });
     mount();
-    await screen.findByText('Step 4 of 6:');
+    await userEvent.click(await row('Bank account'));
     await typeInto('Name on the account', 'Stockport PC');
     await typeInto('IBAN', 'ie29aibk93115212345679');
     await typeInto(/^BIC/, 'nope');
-    await next();
-    expect(screen.getByText("That IBAN doesn't look right. Check it and try again.")).toBeInTheDocument();
-    expect(screen.getByText('A BIC has 8 or 11 letters and numbers.')).toBeInTheDocument();
-    await userEvent.clear(screen.getByLabelText('IBAN'));
+    await done('Save');
+    expect(sheet().getByText('That IBAN doesn\'t look right. Check it and try again.')).toBeInTheDocument();
+    expect(sheet().getByText('A BIC has 8 or 11 letters and numbers.')).toBeInTheDocument();
+    await userEvent.clear(sheet().getByLabelText('IBAN'));
     await typeInto('IBAN', 'ie29aibk93115212345678');
-    expect(screen.getByLabelText('IBAN')).toHaveValue('IE29 AIBK 9311 5212 3456 78');
-    await userEvent.clear(screen.getByLabelText(/^BIC/));
-    await next();
+    expect(sheet().getByLabelText('IBAN')).toHaveValue('IE29 AIBK 9311 5212 3456 78');
+    await userEvent.clear(sheet().getByLabelText(/^BIC/));
+    await done('Save');
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts/bank', { accountHolder: 'Stockport PC', iban: 'IE29 AIBK 9311 5212 3456 78', bic: null }));
   });
 
-  it('keeps the statement descriptor to capitals, letters and numbers, and picks a schedule', async () => {
+  it('says so when the bank account cannot be saved', async () => {
+    loaded = complete({ bank: null, missing: ['bank'] });
+    vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
+    mount();
+    await userEvent.click(await row('Bank account'));
+    await typeInto('Name on the account', 'Stockport PC');
+    await typeInto('Sort code', '201234');
+    await typeInto('Account number', '12345678');
+    await done('Save');
+    expect(await sheet().findByText('Couldn’t save the bank account. Check your signal and try again.')).toBeInTheDocument();
+  });
+
+  it('shows the API\'s bank field errors', async () => {
+    loaded = complete({ bank: null, missing: ['bank'] });
+    vi.mocked(api.put).mockRejectedValueOnce(errorResponse({ sortCode: 'That sort code does not exist.' }));
+    mount();
+    await userEvent.click(await row('Bank account'));
+    await typeInto('Name on the account', 'Stockport PC');
+    await typeInto('Sort code', '201234');
+    await typeInto('Account number', '12345678');
+    await done('Save');
+    expect(await sheet().findByText('That sort code does not exist.')).toBeInTheDocument();
+  });
+});
+
+describe('PayoutsPage: name on statements', () => {
+  it('keeps it to capitals, letters and numbers, and sends only that', async () => {
     loaded = complete({ statementDescriptor: null, missing: ['statementDescriptor'] });
     mount();
-    await screen.findByText('Step 5 of 6:');
-    await next();
-    expect(screen.getByText('Enter a statement descriptor.')).toBeInTheDocument();
-    await typeInto('Statement descriptor', 'abc*');
-    expect(screen.getByLabelText('Statement descriptor')).toHaveValue('ABC');
-    await next();
-    expect(screen.getByText('Use 5 to 22 letters, numbers or spaces, with at least one letter.')).toBeInTheDocument();
-    await typeInto('Statement descriptor', 'de pc');
-    await userEvent.click(screen.getByRole('combobox', { name: 'Payout schedule' }));
-    await userEvent.click(screen.getByRole('option', { name: /After each event/ }));
-    await next();
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', { statementDescriptor: 'ABCDE PC', schedule: 2 }));
+    await userEvent.click(await row('Name on statements'));
+    await done();
+    expect(sheet().getByText('Enter a statement descriptor.')).toBeInTheDocument();
+    await typeInto('Name', 'abc*');
+    expect(sheet().getByLabelText('Name')).toHaveValue('ABC');
+    await done();
+    expect(sheet().getByText('Use 5 to 22 letters, numbers or spaces, with at least one letter.')).toBeInTheDocument();
+    await typeInto('Name', 'de pc');
+    await done();
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/clubs/7/payouts', { statementDescriptor: 'ABCDE PC' }));
+  });
+});
+
+describe('PayoutsPage: finishing', () => {
+  it('finishes the set-up on its own once nothing is missing', async () => {
+    loaded = complete({ statementDescriptor: null, missing: ['statementDescriptor'] });
+    vi.mocked(api.put).mockResolvedValue({ data: complete() });
+    mount();
+    await userEvent.click(await row('Name on statements'));
+    await typeInto('Name', 'stockport pc');
+    await done();
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/clubs/7/payouts/finish'));
+    await waitFor(() => expect(document.querySelector('.cs-status')).toHaveTextContent('Ready. Money from entries goes to account ending 1234.'));
   });
 
-  it('shows the API\'s field errors and the next step on a failed save', async () => {
-    loaded = blank({ status: 1, businessType: 1, missing: ['legalName'] });
-    vi.mocked(api.put).mockRejectedValueOnce(errorResponse({ contactEmail: 'Enter a valid email address.' }));
+  it('does not finish while something is missing', async () => {
+    loaded = complete({ statementDescriptor: null, missing: ['statementDescriptor', 'bank'], bank: null });
     mount();
-    await screen.findByText('Step 2 of 6:');
-    await typeInto('Legal name', 'Club');
-    await typeInto('Address line 1', '1 High St');
-    await typeInto('Town or city', 'Stockport');
-    await typeInto('Postcode', 'SK1 1AA');
-    await typeInto('Contact email', 'a@example.org');
-    await typeInto('Contact phone', '01234567890');
-    await next();
-    expect(await screen.findByText('Enter a valid email address.')).toBeInTheDocument();
-    expect(screen.getByText('Step 2 of 6:')).toBeInTheDocument();
+    await userEvent.click(await row('Name on statements'));
+    await typeInto('Name', 'stockport pc');
+    await done();
+    await waitFor(() => expect(api.put).toHaveBeenCalled());
+    expect(api.post).not.toHaveBeenCalled();
   });
 
-  it('reviews the details with edit links, then finishes', async () => {
-    loaded = complete();
+  it('says so when it saved but could not finish', async () => {
+    loaded = complete({ statementDescriptor: null, missing: ['statementDescriptor'] });
+    vi.mocked(api.put).mockResolvedValue({ data: complete() });
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
     mount();
-    await screen.findByText('Step 6 of 6:');
-    const review = within(screen.getByRole('region', { name: 'Review and finish' }));
-    expect(review.getByText('Stockport Pony Club')).toBeInTheDocument();
-    expect(review.getByText('Ann Smith · 14 March 1985')).toBeInTheDocument();
-    expect(review.getByText(`Barclays ${BULLETS}1234`)).toBeInTheDocument();
-    expect(review.getByText('STOCKPORT PC')).toBeInTheDocument();
-    await userEvent.click(review.getByRole('button', { name: 'Edit legal name' }));
-    expect(await screen.findByText('Step 2 of 6:')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Go to step 6: Review and finish' }));
-
-    await userEvent.click(screen.getByRole('button', { name: 'Finish' }));
-    expect(await screen.findByRole('status')).toHaveTextContent(`Payouts are ready · Barclays ${BULLETS}1234`);
-    expect(api.post).toHaveBeenCalledWith('/clubs/7/payouts/finish');
-    expect(screen.getByRole('button', { name: 'Finished' })).toBeDisabled();
-  });
-
-  it('says what is still missing when finishing fails', async () => {
-    loaded = complete({ status: 1, missing: ['statementDescriptor'], statementDescriptor: null });
-    vi.mocked(api.post).mockRejectedValueOnce(errorResponse({ statementDescriptor: 'Enter a statement descriptor.' }));
-    mount();
-    await screen.findByText('Step 5 of 6:');
-    await userEvent.click(screen.getByRole('button', { name: 'Go to step 6: Review and finish' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Finish' }));
-    expect(await screen.findByText('Some details are missing. Fix them to finish.')).toBeInTheDocument();
-    expect(screen.getByText(/Still to do: statement and schedule/)).toBeInTheDocument();
-    expect(screen.getByText('Needs attention')).toBeInTheDocument();
-  });
-
-  it('goes back a step', async () => {
-    loaded = blank({ status: 1, businessType: 1, missing: ['legalName'] });
-    mount();
-    await screen.findByText('Step 2 of 6:');
-    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
-    expect(await screen.findByText('Step 1 of 6:')).toBeInTheDocument();
-  });
-
-  it('shows a message when saving fails without field errors', async () => {
-    loaded = blank({ status: 1, businessType: 1, missing: ['legalName'] });
-    mount();
-    await screen.findByText('Step 2 of 6:');
-    await userEvent.click(screen.getByRole('button', { name: 'Go to step 1: Who\'s being paid' }));
-    vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
-    await next();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save the payout details. Check your signal and try again.');
+    await userEvent.click(await row('Name on statements'));
+    await typeInto('Name', 'stockport pc');
+    await done();
+    expect(await screen.findByText('Saved, but couldn’t finish the set-up. Check your signal and try again.')).toBeInTheDocument();
   });
 });
 
 describe('PayoutsPage: access and loading', () => {
-  it('shows a message when the details cannot be loaded', async () => {
-    vi.mocked(api.get).mockRejectedValue(new Error('down'));
+  it('shows a message when the details cannot be loaded, and tries again', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('down'));
     mount();
     expect(await screen.findByText('Couldn’t load the payout details. Check your signal and try again.')).toBeInTheDocument();
+    loaded = ready();
+    vi.mocked(api.get).mockImplementation(async () => ({ data: loaded }));
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await status()).toHaveTextContent('Ready.');
   });
 
   it('refuses an odd response', async () => {
@@ -305,13 +391,20 @@ describe('PayoutsPage: access and loading', () => {
 
   it('lets an admin pick any club', async () => {
     mount({ roles: ['Admin'], clubId: null });
-    await userEvent.selectOptions(await screen.findByLabelText('Club'), 'Other PC');
-    expect(await screen.findByText('Step 1 of 6:')).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/clubs'));
+    await choose('Club', 'Other PC');
+    expect(await status()).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/clubs/9/payouts');
   });
 
   it('tells someone with no club to join one', async () => {
     mount({ clubId: null });
     expect(await screen.findByText('Payouts belong to a club. Join a club first.')).toBeInTheDocument();
+  });
+
+  it('renders nothing when nobody is signed in', () => {
+    localStorage.clear();
+    const { container } = render(<MemoryRouter><AuthProvider><PayoutsPage /></AuthProvider></MemoryRouter>);
+    expect(container).toBeEmptyDOMElement();
   });
 });

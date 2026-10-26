@@ -25,13 +25,6 @@ export const SCHEDULES: { value: PayoutSchedule; label: string; hint: string }[]
   { value: 2, label: 'After each event', hint: 'When an event finishes' },
 ];
 
-export const STEPS = [
-  "Who's being paid", 'Business details', 'Responsible person', 'Bank account', 'Statement and schedule', 'Review and finish',
-] as const;
-
-export const businessTypeLabel = (value: number | null | undefined) => BUSINESS_TYPES.find((t) => t.value === value)?.label ?? '';
-export const regionLabel = (value: number) => REGIONS.find((r) => r.value === value)?.label ?? '';
-export const scheduleLabel = (value: number) => SCHEDULES.find((s) => s.value === value)?.label ?? '';
 export const needsRegistrationNumber = (type: number | null) => type === 2 || type === 3;
 export const registrationLabel = (type: number | null) => (type === 2 ? 'Charity number' : 'Company number');
 
@@ -209,28 +202,29 @@ export function bankProblems(f: BankForm, region: PayoutRegion): Problems {
   return p;
 }
 
-/** Which step holds a field the API reported, so the page can take the person back to it. */
-export function stepOfField(key: string): number {
-  if (key === 'businessType' || key === 'region') return 1;
-  if (key === 'personFullName' || key === 'personDateOfBirth') return 3;
-  if (key === 'bank' || key === 'accountHolder' || key === 'sortCode' || key === 'accountNumber' || key === 'iban' || key === 'bic') return 4;
-  if (key === 'statementDescriptor' || key === 'schedule') return 5;
-  return 2;
-}
+/** What a club still has to add, in the words the Payouts page uses. Each group of keys is one thing. */
+const MISSING_THINGS: { keys: string[]; noun: string }[] = [
+  { keys: ['businessType'], noun: 'who gets paid' },
+  { keys: ['legalName', 'tradingName', 'addressLine1', 'addressLine2', 'city', 'postcode', 'contactEmail', 'contactPhone', 'registrationNumber', 'vatNumber'], noun: 'the legal name and address' },
+  { keys: ['personFullName', 'personDateOfBirth'], noun: 'the responsible person' },
+  { keys: ['bank', 'accountHolder', 'sortCode', 'accountNumber', 'iban', 'bic'], noun: 'the club’s bank account' },
+  { keys: ['statementDescriptor', 'schedule'], noun: 'the name on statements' },
+];
+const COUNT_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five'];
 
-/** The step to open on: the review when the account is ready, else the first step with something missing. */
-export function firstOpenStep(p: ClubPayouts): number {
-  if (p.status === 2) return 6;
-  if (p.status === 0) return 1;
-  const steps = p.missing.map(stepOfField);
-  return steps.length ? Math.min(...steps) : 6;
-}
-
-/** Turns "2004-02-30" style text into a friendly date for the review, e.g. "14 March 1985". */
-export function friendlyDate(iso: string | null): string {
-  const m = iso ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso) : null;
-  if (!m) return '';
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+/**
+ * The status line at the top of Payouts: "One thing left: add the club’s bank account." while something is missing,
+ * and "Ready. Money from entries goes to account ending 1234." once it is finished.
+ */
+export function payoutStatusLine(p: Pick<ClubPayouts, 'status' | 'missing' | 'bank'>): { text: string; ready: boolean } {
+  if (p.status === 2) {
+    const last4 = (p.bank?.maskedAccount ?? '').replace(/\D/g, '').slice(-4);
+    return { ready: true, text: `Ready. Money from entries goes to ${last4 ? `account ending ${last4}` : 'the club’s bank account'}.` };
+  }
+  const things = MISSING_THINGS.filter((thing) => thing.keys.some((key) => p.missing.includes(key))).map((thing) => thing.noun);
+  if (things.length === 0) return { ready: false, text: 'Nearly there. Finishing set-up…' };
+  const list = things.length === 1 ? things[0] : `${things.slice(0, -1).join(', ')} and ${things[things.length - 1]}`;
+  return { ready: false, text: `${COUNT_WORDS[things.length] ?? things.length} ${things.length === 1 ? 'thing' : 'things'} left: add ${list}.` };
 }
 
 /** The line the competition editor shows: "Entry fees are paid out to Ashdown PC: ••••1234 · Ready". */

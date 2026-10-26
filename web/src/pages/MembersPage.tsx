@@ -1,22 +1,22 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, ChevronUp, UserMinus } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { CardDropdownRow } from '../components/CardDropdownRow';
+import { usePageHeader } from '../components/CompactPageBarContext';
+import { confirmDialog } from '../components/ConfirmDialog';
+import { Notice } from '../components/Notice';
 import { PageSkeleton } from '../components/Skeletons';
 import { apiErrorMessage } from '../lib/apiError';
 import { applyRoleChange, canEditMember, groupMembers, memberSubline, MEMBER_GROUPS, ROLE_LABEL, withoutMember, wantsToJoinAs } from '../lib/members';
-import { initialsOf } from '../lib/profile';
-import type { Club, ClubMembers, ClubRoleChange, MemberRole, TrainerRequest } from '../types';
-import { Field } from './auth/Field';
+import type { Club, ClubMember, ClubMembers, ClubRoleChange, MemberRole, TrainerRequest } from '../types';
+import { Avatar, Chip, PickSheet } from './clubShop/ui';
 import { useNeedsYou } from './profile/needsYou';
-import { SelectField } from '../components/SelectField';
-import { confirmDialog } from '../components/ConfirmDialog';
-import { Notice } from '../components/Notice';
+import '../components/sitePages.css';
+import './clubShop/clubShop.css';
 
 /**
- * The club's people, for its team manager (their own club) or an admin (any club): who is waiting to join,
- * and everyone else by role, with a role switch and Remove from club on each row (docs/designs/members-handoff.md).
+ * The club's people, for its club manager (their own club) or an admin (any club): who is waiting to join, and
+ * everyone else by role. A ⋯ on each row opens a sheet to change their role or remove them from the club.
  */
 export function MembersPage() {
   const { user, hasRole } = useAuth();
@@ -28,9 +28,11 @@ export function MembersPage() {
   // Remember which club the list is for, so a slow answer for the last one is never shown under the next.
   const [loaded, setLoaded] = useState<{ clubId: number; data: ClubMembers } | null>(null);
   const [loadFailed, setLoadFailed] = useState<number | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const data = loaded && loaded.clubId === clubId ? loaded.data : null;
+  usePageHeader({ title: 'Club members', subtitle: data?.clubName ?? user?.clubName ?? undefined, plain: true, backTo: '/me', backLabel: 'Back to my profile' });
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -44,17 +46,16 @@ export function MembersPage() {
   useEffect(() => {
     if (clubId == null) return;
     let cancelled = false;
-    api.get<ClubMembers>(`/clubs/${clubId}/members`).then(({ data }) => {
+    api.get<ClubMembers>(`/clubs/${clubId}/members`).then(({ data: d }) => {
       if (cancelled) return;
-      if (!data || !Array.isArray(data.members) || !Array.isArray(data.pending)) throw new Error('unexpected response');
-      setLoaded({ clubId, data });
+      if (!d || !Array.isArray(d.members) || !Array.isArray(d.pending)) throw new Error('unexpected response');
+      setLoaded({ clubId, data: d });
       setLoadFailed(null);
     }).catch(() => { if (!cancelled) setLoadFailed(clubId); });
     return () => { cancelled = true; };
   }, [clubId, version]);
 
   if (!user) return null;
-  const data = loaded && loaded.clubId === clubId ? loaded.data : null;
 
   function edit(change: (current: ClubMembers) => ClubMembers) {
     setLoaded((cur) => (cur && cur.clubId === clubId ? { ...cur, data: change(cur.data) } : cur));
@@ -84,129 +85,105 @@ export function MembersPage() {
     }
   }
 
-  async function remove(userId: string, name: string) {
-    if (clubId == null || busy) return;
-    if (!(await confirmDialog({ title: 'Remove from club?', message: `${name} stops being a member of ${data?.clubName ?? 'the club'}.`, confirmLabel: 'Remove from club', destructive: true }))) return;
+  /** Asks first. Returns whether they were removed, so the sheet can slide away. */
+  async function remove(member: ClubMember): Promise<boolean> {
+    if (clubId == null || busy) return false;
+    if (!(await confirmDialog({ title: 'Remove from club?', message: `${member.fullName} stops being a member of ${data?.clubName ?? 'the club'}.`, confirmLabel: 'Remove from club', destructive: true }))) return false;
     setBusy(true);
     setNotice(null);
     try {
-      await api.delete(`/clubs/${clubId}/members/${encodeURIComponent(userId)}`);
-      edit((cur) => ({ ...cur, members: withoutMember(cur.members, userId) }));
-      setOpen(null);
+      await api.delete(`/clubs/${clubId}/members/${encodeURIComponent(member.userId)}`);
+      edit((cur) => ({ ...cur, members: withoutMember(cur.members, member.userId) }));
+      return true;
     } catch (err) {
       setNotice(apiErrorMessage(err, 'Couldn’t remove them. Check your signal and try again.'));
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
   const groups = data ? groupMembers(data.members) : [];
+  const menuMember = data?.members.find((m) => m.userId === menuFor) ?? null;
 
   return (
-    <div className="flex flex-col gap-6 pt-4">
-      <div className="flex items-center gap-3">
-        <Link to="/me" className="mg-icon-btn" aria-label="Back to my profile"><ChevronLeft aria-hidden="true" className="h-5 w-5" /></Link>
-        <div className="min-w-0 flex-1">
-          <h1 className="mg-display text-[26px] font-bold leading-none text-[rgb(var(--mg-heading))]">Members</h1>
-          {(data?.clubName ?? user.clubName) && <p className="mg-meta mt-1 truncate !text-sm">{data?.clubName ?? user.clubName}</p>}
-        </div>
-      </div>
+    <div className="skin cs-page">
+      <h1 className="sr-only">Club members</h1>
 
       {isAdmin && (
-        <Field label="Club">
-          {({ id }) => (
-            <div className="mg-field">
-              <SelectField id={id} value={clubId ?? ''} onChange={(e) => { setPicked(e.target.value ? Number(e.target.value) : null); setOpen(null); setNotice(null); }}>
-                <option value="">Choose a club</option>
-                {clubs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </SelectField>
-            </div>
-          )}
-        </Field>
+        <div className="sp-card">
+          <CardDropdownRow label="Club" value={clubId == null ? '' : String(clubId)}
+            options={[{ value: '', label: 'Choose a club' }, ...clubs.map((c) => ({ value: String(c.id), label: c.name }))]}
+            onChange={(value) => { setPicked(value ? Number(value) : null); setMenuFor(null); setNotice(null); }} />
+        </div>
       )}
 
-      {notice && <Notice>{notice}</Notice>}
-      {clubId != null && !data && (loadFailed === clubId
-        ? <Notice actionLabel="Try again" onAction={() => { setLoadFailed(null); setVersion((v) => v + 1); }}>Couldn’t load the members. Check your signal and try again.</Notice>
-        : <PageSkeleton />)}
+      {notice && <div className="cs-gap"><Notice>{notice}</Notice></div>}
+      {clubId != null && !data && (
+        <div className="cs-gap">
+          {loadFailed === clubId
+            ? <Notice actionLabel="Try again" onAction={() => { setLoadFailed(null); setVersion((v) => v + 1); }}>Couldn’t load the members. Check your signal and try again.</Notice>
+            : <PageSkeleton />}
+        </div>
+      )}
 
       {data && data.pending.length > 0 && (
-        <Section title="Waiting for you" aside={String(data.pending.length)}>
-          {data.pending.map((request) => (
-            <div key={request.userId} className="mg-card flex flex-col gap-2.5 px-3.5 py-3">
-              <div className="flex items-center gap-3">
-                <span aria-hidden="true" className="mg-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-late-bg))] text-[15px] font-bold text-[rgb(var(--mg-late-ink))]">
-                  {initialsOf(request.fullName, request.email)}
+        <section aria-label="Waiting for you">
+          <h2 className="sp-sec">Waiting for you <small>{data.pending.length}</small></h2>
+          <div className="sp-card">
+            {data.pending.map((request) => (
+              <div key={request.userId} className="cs-row">
+                <Avatar name={request.fullName} />
+                <span className="sp-grow">
+                  <span className="sp-t1">{request.fullName}</span>
+                  <span className="sp-t2">Wants to join as {wantsToJoinAs(request)}</span>
                 </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-base font-semibold leading-tight">{request.fullName}</div>
-                  <div className="text-sm text-[rgb(var(--mg-muted))]">Wants to join as {wantsToJoinAs(request)}</div>
-                </div>
+                <button type="button" className="kit-redtext cs-redtext-s" aria-label={`Decline ${request.fullName}`} onClick={() => { void decide(request, 'decline'); }}>Decline</button>
+                <button type="button" className="kit-pill kit-pill-fill cs-pill-s" aria-label={`Approve ${request.fullName}`} onClick={() => { void decide(request, 'approve'); }}>Approve</button>
               </div>
-              <div className="flex gap-2">
-                <button type="button" className="mg-btn mg-btn-primary !min-h-11 flex-1 !text-[15px]" onClick={() => { void decide(request, 'approve'); }}>Approve</button>
-                <button type="button" className="mg-btn mg-btn-secondary !min-h-11 flex-1 !text-[15px]" onClick={() => { void decide(request, 'decline'); }}>Decline</button>
-              </div>
-            </div>
-          ))}
-        </Section>
+            ))}
+          </div>
+        </section>
       )}
 
       {groups.map((group) => (
-        <Section key={group.role} title={group.title} aside={String(group.people.length)}>
-          <div className="mg-card mg-list">
+        <section key={group.role} aria-label={group.title}>
+          <h2 className="sp-sec">{group.title} <small>{group.people.length}</small></h2>
+          <div className="sp-card">
             {group.people.map((member) => {
               const you = member.userId === user.id;
               const editable = canEditMember(member, user.id, isAdmin);
-              const expanded = open === member.userId && editable;
               const sub = memberSubline(member);
               return (
-                <div key={member.userId}>
-                  <button type="button" className="mg-row !min-h-[60px] !gap-3 !px-3.5" aria-expanded={editable ? expanded : undefined} disabled={!editable && !you}
-                    onClick={() => { if (editable) setOpen(expanded ? null : member.userId); }}>
-                    <span aria-hidden="true" className="mg-display flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-tint))] text-sm font-bold text-[rgb(var(--mg-heading))]">
-                      {initialsOf(member.fullName)}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-base font-semibold leading-tight">{member.fullName}</span>
-                      {sub && <span className="block truncate text-sm text-[rgb(var(--mg-muted))]">{sub}</span>}
-                    </span>
-                    {you && <span className="text-sm text-[rgb(var(--mg-muted))]">You</span>}
-                    {editable && (expanded
-                      ? <ChevronUp aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))]" />
-                      : <ChevronDown aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))]" />)}
-                  </button>
-                  {expanded && (
-                    <div className="flex flex-col gap-2.5 px-3.5 pb-3.5 pt-1">
-                      <div role="group" aria-label={`Role for ${member.fullName}`} className="mg-seg !grid-cols-3">
-                        {MEMBER_GROUPS.map(({ role }) => (
-                          <button key={role} type="button" aria-pressed={member.role === role} disabled={busy}
-                            onClick={() => { if (member.role !== role) void setRole(member.userId, role); }}>
-                            {ROLE_LABEL[role]}
-                          </button>
-                        ))}
-                      </div>
-                      <button type="button" disabled={busy} onClick={() => { void remove(member.userId, member.fullName); }}
-                        className="flex min-h-11 items-center gap-2 text-[15px] font-semibold text-[rgb(var(--mg-elim))] disabled:opacity-50">
-                        <UserMinus aria-hidden="true" className="h-[18px] w-[18px]" />Remove from club
-                      </button>
-                    </div>
-                  )}
+                <div key={member.userId} className="cs-row">
+                  <Avatar name={member.fullName} />
+                  <span className="sp-grow">
+                    <span className="sp-t1">{member.fullName}</span>
+                    {sub && <span className="sp-t2">{sub}</span>}
+                  </span>
+                  {you && <Chip tone="grey">You</Chip>}
+                  {editable && <button type="button" className="cs-more" aria-label={`More for ${member.fullName}`} onClick={() => setMenuFor(member.userId)}>⋯</button>}
                 </div>
               );
             })}
           </div>
-        </Section>
+        </section>
       ))}
-    </div>
-  );
-}
 
-function Section({ title, aside, children }: { title: string; aside?: string; children: ReactNode }) {
-  return (
-    <section aria-label={title} className="flex flex-col gap-2">
-      <div className="mg-section-head"><h2>{title}</h2>{aside && <span>{aside}</span>}</div>
-      {children}
-    </section>
+      {menuMember && (
+        <PickSheet
+          title={menuMember.fullName}
+          options={MEMBER_GROUPS.filter(({ role }) => isAdmin || role !== 'Manager').map(({ role }) => ({ value: role, label: ROLE_LABEL[role] }))}
+          value={menuMember.role}
+          onClose={() => setMenuFor(null)}
+          onPick={(role) => { if (role !== menuMember.role) void setRole(menuMember.userId, role as MemberRole); }}
+          footer={(close) => (
+            <div className="kit-acts">
+              <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void remove(menuMember).then((removed) => { if (removed) close(); }); }}>Remove from club</button>
+            </div>
+          )}
+        />
+      )}
+    </div>
   );
 }
