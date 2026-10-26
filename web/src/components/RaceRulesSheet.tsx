@@ -40,6 +40,9 @@ export function normaliseBodyName(body: string): GoverningBody {
   return 'EGUK';
 }
 
+/** The edition shown for a governing body whose own rules have not been added. It says nothing a reader can use, so it is not shown. */
+export const UNVERIFIED_EDITION = 'App race guide · body-specific rules not verified';
+
 export function buildRaceRulebooks(template: RaceTemplateDetail | RaceTemplate): GoverningBodyRulebook[] {
   const existing = new Map<GoverningBody, GoverningBodyRulebook>();
   if ('rulebooks' in template && Array.isArray(template.rulebooks)) {
@@ -60,7 +63,7 @@ export function buildRaceRulebooks(template: RaceTemplateDetail | RaceTemplate):
   return GOVERNING_BODIES.map((body) => existing.get(body) ?? {
     body,
     title: `${body} — ${template.name}`,
-    edition: 'App race guide · body-specific rules not verified',
+    edition: UNVERIFIED_EDITION,
     equipment: equipmentStr,
     setup: firstSentence,
     howToRide: rulesText,
@@ -165,7 +168,7 @@ export function RaceRulebookSection({
       >
         <div className="flex flex-wrap items-baseline justify-between gap-1 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
           <div className="font-bold text-[rgb(var(--mg-heading))]">{current.title}</div>
-          <span className="text-xs text-[rgb(var(--mg-muted))]">{current.edition}</span>
+          {current.edition !== UNVERIFIED_EDITION && <span className="text-xs text-[rgb(var(--mg-muted))]">{current.edition}</span>}
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2">

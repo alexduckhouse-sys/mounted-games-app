@@ -16,13 +16,14 @@ const state = vi.hoisted(() => ({
   put: vi.fn(),
   del: vi.fn(),
   download: vi.fn(),
+  organise: false,
 }));
 
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({
     user: state.user,
     hasRole: (role: Role) => !!state.user?.roles.includes(role),
-    canOrganise: () => false,
+    canOrganise: () => state.organise,
   }),
 }));
 vi.mock('../../api', () => ({ api: { get: state.get, post: state.post, put: state.put, delete: state.del } }));
@@ -69,6 +70,7 @@ async function fillPanel(user: ReturnType<typeof userEvent.setup>, v: { name: st
 beforeEach(() => {
   state.user = { id: 'u1', fullName: 'Alex Morgan', email: 'alex@example.com', clubId: 1, clubName: 'Stockport PC', roles: ['Trainer'] };
   forms = [];
+  state.organise = false;
   savedRiders = saved;
   state.get.mockImplementation(async (url: string) => {
     if (url === '/declaration-forms') return { data: forms };
@@ -527,11 +529,26 @@ describe('DeclarationsTab: drafts', () => {
 });
 
 describe('DeclarationsTab: around the form', () => {
-  it('asks a visitor to sign in', async () => {
+  it('asks a visitor to sign in with one plain line and an outlined pill, not a banner', async () => {
     state.user = null;
     mount();
-    expect(await screen.findByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    const pill = await screen.findByRole('link', { name: 'Sign in' });
+    expect(pill).toHaveAttribute('href', '/login');
+    expect(pill).toHaveClass('sp-pill');
+    expect(screen.getByText('Trainers sign in to send dec forms for their teams.')).toBeInTheDocument();
+    expect(document.querySelector('.mg-notice')).toBeNull();
     expect(screen.queryByLabelText('Team name')).not.toBeInTheDocument();
+  });
+
+  it('leaves Export CSV off the public page, and keeps it for organisers', async () => {
+    forms = [{ id: 9, teamId: 70, teamName: 'Other Club A', competitionId: 4, competitionName: 'x', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] }];
+    const view = mount();
+    await screen.findByRole('button', { name: /^Other Club A/ });
+    expect(screen.queryByRole('button', { name: /Export CSV/ })).not.toBeInTheDocument();
+    view.unmount();
+    state.organise = true;
+    mount();
+    expect(await screen.findByRole('button', { name: /Export CSV \(1\)/ })).toBeInTheDocument();
   });
 
   it('says so when the person has no team here', async () => {
@@ -539,7 +556,7 @@ describe('DeclarationsTab: around the form', () => {
     expect(await screen.findByText('You have no teams in this competition.')).toBeInTheDocument();
   });
 
-  it('lists the forms already sent, without a captain star, with height and trainer', async () => {
+  it('lists the forms already sent, and opens one in place to show its riders and ponies, with no captain star', async () => {
     forms = [{
       id: 9, teamId: 70, teamName: 'Other Club A', competitionId: 4, competitionName: 'Cheshire Area MG', submittedByName: 'Pat Lee', trainerName: 'Jo Hughes',
       submittedByPhone: '0777', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, bibDescription: 'Red bibs', notes: 'Hello',
@@ -548,14 +565,55 @@ describe('DeclarationsTab: around the form', () => {
         { id: 2, fullName: 'Rita Reserve', isCaptain: false, isReserve: true, orderIndex: 1 },
       ],
     }];
+    const user = userEvent.setup();
     mount();
-    const card = (await screen.findByRole('heading', { name: 'Other Club A' })).closest('div.card') as HTMLElement;
-    expect(within(card).getByText('Jo Hughes')).toBeInTheDocument();
-    expect(within(card).getByText('Pickle · 13.2 hh')).toBeInTheDocument();
-    expect(within(card).getByText('Guest')).toBeInTheDocument();
-    expect(within(card).getByLabelText('Reserve')).toBeInTheDocument();
-    expect(within(card).getByText('Bibs: Red bibs')).toBeInTheDocument();
-    expect(card.querySelector('.fill-amber-500')).toBeNull();
+    const row = await screen.findByRole('button', { name: /^Other Club A/ });
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(row).toHaveTextContent('Sent 20 Oct');
+    expect(screen.queryByText('Ella Hughes')).not.toBeInTheDocument();
+    await user.click(row);
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    const panel = document.getElementById(row.getAttribute('aria-controls')!) as HTMLElement;
+    expect(within(panel).getByText('Ella Hughes')).toBeInTheDocument();
+    expect(within(panel).getByText('Pickle · 13.2 hh')).toBeInTheDocument();
+    expect(within(panel).getByText('Guest')).toBeInTheDocument();
+    expect(within(panel).getByLabelText('Reserve')).toBeInTheDocument();
+    expect(within(panel).getByText('Bibs: Red bibs')).toBeInTheDocument();
+    expect(within(panel).getByText('Jo Hughes')).toBeInTheDocument();
+    expect(within(panel).getByText('“Hello”')).toBeInTheDocument();
+    expect(panel.querySelector('.fill-amber-500')).toBeNull();
+    await user.click(row);
+    expect(screen.queryByText('Ella Hughes')).not.toBeInTheDocument();
+  });
+
+  it('groups the forms by age group and searches by team, rider or pony', async () => {
+    const form = (id: number, teamId: number, teamName: string, rider: string, pony: string): DeclarationForm => ({
+      id, teamId, teamName, competitionId: 4, competitionName: 'x', submittedAt: '2026-10-20T09:00:00Z', isLocked: true,
+      riders: [{ id, fullName: rider, horseName: pony, isCaptain: false, isReserve: false, orderIndex: 0 }],
+    });
+    forms = [form(1, 71, 'Zebras', 'Ann Lee', 'Toffee'), form(2, 72, 'Aardvarks', 'Bo Park', 'Dandy'), form(3, 73, 'Lone Rangers', 'Cy Ford', 'Pip')];
+    const user = userEvent.setup();
+    mount({
+      teams: [team(71, { competitionSectionId: 5 }), team(72, { competitionSectionId: 5 }), team(73, { competitionSectionId: 6 }), team(7, { competitionId: 4, competitionSectionId: 5, clubId: 1, displayName: 'Stockport C', trainerUserId: 'u1' })],
+    });
+    const u10 = await screen.findByRole('region', { name: 'U10' });
+    expect(within(u10).getAllByRole('button').map((b) => b.textContent)).toEqual(['AardvarksSent 20 Oct', 'ZebrasSent 20 Oct']);
+    expect(within(screen.getByRole('region', { name: 'U12 Pairs' })).getByRole('button', { name: /^Lone Rangers/ })).toBeInTheDocument();
+
+    const search = screen.getByRole('searchbox', { name: 'Find a team, rider or pony' });
+    await user.type(search, 'dandy');
+    expect(screen.getByRole('button', { name: /^Aardvarks/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Zebras/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'U12 Pairs' })).not.toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, 'nobody');
+    expect(screen.getByText('No dec form matches “nobody”.')).toBeInTheDocument();
+  });
+
+  it('puts a form for a team that is not in the list under Other', async () => {
+    forms = [{ id: 1, teamId: 999, teamName: 'Lost Team', competitionId: 4, competitionName: 'x', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] }];
+    mount();
+    expect(within(await screen.findByRole('region', { name: 'Other' })).getByRole('button', { name: /^Lost Team/ })).toBeInTheDocument();
   });
 
   it('says so before any form has been sent', async () => {
@@ -570,8 +628,9 @@ describe('DeclarationsTab: around the form', () => {
       { id: 10, teamId: 70, teamName: 'Other Club A', competitionId: 4, competitionName: 'x', submittedByUserId: 'u-other', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] },
     ];
     mount();
-    expect(await screen.findByRole('heading', { name: 'Other Club A' })).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: /^Other Club A/ }));
     expect(screen.queryByRole('button', { name: 'Delete the dec form for Other Club A' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Stockport C.*Sent/ }));
     const asked = autoConfirm([false, true]);
     await user.click(await screen.findByRole('button', { name: 'Delete the dec form for Stockport C' }));
     await waitFor(() => expect(asked).toHaveBeenCalledWith('Delete the dec form for Stockport C? This can’t be undone.'));
@@ -591,6 +650,7 @@ describe('DeclarationsTab: around the form', () => {
         { id: 2, fullName: 'Rita Reserve', isCaptain: false, isReserve: true, orderIndex: 1 },
       ],
     }];
+    state.organise = true;
     mount();
     await user.click(await screen.findByRole('button', { name: /Export CSV \(1\)/ }));
     const [filename, csv] = state.download.mock.calls[0];

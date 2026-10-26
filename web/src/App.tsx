@@ -42,7 +42,6 @@ const AnnouncementsPage = lazy(() => import('./pages/competition/AnnouncementsPa
 const MessageThreadPage = lazy(() => import('./pages/competition/MessageThreadPage').then((module) => ({ default: module.MessageThreadPage })));
 const ContactOrganisersPage = lazy(() => import('./pages/competition/ContactOrganisersPage').then((module) => ({ default: module.ContactOrganisersPage })));
 const EntryPage = lazy(() => import('./pages/competition/EntryPage').then((module) => ({ default: module.EntryPage })));
-const SectionEntryPage = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.SectionEntryPage })));
 const DetailsTab = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.DetailsTab })));
 const FollowingPage = lazy(() => import('./pages/FollowingPage').then((module) => ({ default: module.FollowingPage })));
 const SponsorsPage = lazy(() => import('./pages/competition/SponsorsPage').then((module) => ({ default: module.SponsorsPage })));
@@ -122,8 +121,7 @@ export default function App() {
               <Route path="competitions/past" element={<CompetitionsPage past />} />
               <Route path="competitions/:id" element={<CompetitionPage />}>
                 <Route index element={<CompetitionHome />} />
-                <Route path="enter" element={<EntryPage />} />
-                <Route path="enter/:sectionId" element={<SectionEntryPage />} />
+                <Route path="enter/*" element={<EntryPage />} />
                 <Route path="scoring" element={<AfterDrawOnly><ScoringTab /></AfterDrawOnly>} />
                 <Route path="toplists" element={<AfterDrawOnly><ScoringTab key="toplists" startOn="toplist" /></AfterDrawOnly>} />
                 <Route path="tv" element={<TvKioskPage />} />

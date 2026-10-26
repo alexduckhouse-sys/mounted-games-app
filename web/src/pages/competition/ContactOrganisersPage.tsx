@@ -1,17 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Lock, Send, Shield, Trash2, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ArrowUp, Lock, Shield, Trash2, X } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import { useLiveHub } from '../../live/useLiveHub';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
+import { usePageHeader } from '../../components/CompactPageBarContext';
+import { usePageWidth } from '../../components/pageWidthState';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import type { ChatMessage } from '../../types';
 import './chat.css';
+import '../../components/sitePages.css';
+import '../../components/eventPages.css';
 
 const messageTime = (message: ChatMessage) =>
   new Date(message.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+/** "Today", "Yesterday" or "Mon 26 Oct": the heading above a day's messages in the thread. */
+function dayHeading(iso: string, now = new Date()): string {
+  const day = new Date(iso);
+  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diff = Math.round((startOf(now) - startOf(day)) / 86_400_000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return day.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
 
 export function ContactOrganisersPage() {
   const { user } = useAuth();
@@ -23,12 +37,22 @@ function ContactOrganisersSession() {
   const { competition, reload } = useCompetition();
   const { user, canEdit, hasRole } = useAuth();
   const isAdmin = hasRole('Admin');
-  const isTrainer = hasRole('Trainer');
-  const canPost = isAdmin || isTrainer;
   const canModerate = canEdit();
   const privateMessagingAvailable = competition.staffChatEnabled === true;
   const canMessageOrganisers = !!user && !isAdmin;
   const desktop = useIsDesktop();
+  const location = useLocation();
+  const navigate = useNavigate();
+  usePageWidth('narrow');
+  usePageHeader({
+    title: isAdmin ? 'Organiser messages' : 'Message the organisers',
+    subtitle: competition.name,
+    plain: true,
+    backTo: `/competitions/${competition.id}/details`,
+    backLabel: 'Back to details',
+  });
+  // Go back to where you came from, or to the details when this page was opened directly.
+  const goBack = () => (location.key === 'default' ? navigate(`/competitions/${competition.id}/details`) : navigate(-1));
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(true);
@@ -139,16 +163,39 @@ function ContactOrganisersSession() {
     }
   }
 
-  return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pb-24 pt-2">
-      <div className="live-page-band mg-band">
-        <Link to={`/competitions/${competition.id}/chat`} className="mg-icon-btn !h-9 !w-9" aria-label="Back to live stream">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        </Link>
-        <h1 className="mg-h1 mg-h1-sm">{isAdmin ? 'Organiser messages' : 'Message organisers'}</h1>
-        {canPost && <span className="live-role-badge">Private</span>}
+  const composer = canCompose && (
+    <div id="chat-composer" className="ev-composer">
+      {replyTo && (
+        <div className="live-composer-label">
+          Private reply to {replyTo.name}
+          <button type="button" className="live-reply-cancel" onClick={() => setReplyTo(null)}>Cancel</button>
+        </div>
+      )}
+      <div className="flex items-end gap-2">
+        <label className="ev-compose-field">
+          <span className="sr-only">{replyTo ? `Reply to ${replyTo.name}` : 'Message organisers'}</span>
+          <textarea
+            rows={desktop ? 2 : 1}
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                if (body.trim()) void send();
+              }
+            }}
+            placeholder={replyTo ? 'Write a private reply…' : 'Message the organisers…'}
+          />
+        </label>
+        <button type="button" className="ev-send" aria-label="Send" disabled={!body.trim() || sending} onClick={() => void send()}>
+          <ArrowUp aria-hidden="true" className="h-5 w-5" strokeWidth={2.4} />
+        </button>
       </div>
+    </div>
+  );
 
+  const notices = (
+    <>
       {actionError && (
         <div className="live-action-error" role="alert">
           <span>{actionError}</span>
@@ -161,119 +208,128 @@ function ContactOrganisersSession() {
           <button type="button" aria-label="Dismiss notice" onClick={() => setActionNotice(null)}><X aria-hidden="true" /></button>
         </div>
       )}
+    </>
+  );
 
-      {!user && (
-        <div className="live-composer-locked" role="status">
-          <Lock aria-hidden="true" />
-          <span><Link to="/login" className="underline font-semibold">Sign in</Link> to message the organisers privately.</span>
+  // Signed out: one plain line and two pills.
+  if (!user) {
+    return (
+      <div className="rf-page mx-auto flex w-full max-w-xl flex-col gap-3 pb-6 pt-4">
+        <h1 className="sr-only">Message the organisers</h1>
+        <p className="ev-body !text-[16px] !text-[rgb(var(--mg-ink))]">Sign in to message the organisers. Only they can read what you send.</p>
+        <div className="sp-acts">
+          <Link to="/login" state={{ from: location.pathname }} className="sp-pill sp-pill-fill">Sign in</Link>
+          <button type="button" className="sp-pill" onClick={goBack}>Go back</button>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {canMessageOrganisers && !privateMessagingAvailable && (
-        <div className="live-composer-locked" role="status">
-          <Lock aria-hidden="true" />Messaging the organisers isn’t available for this event yet.
-        </div>
-      )}
-
-      {canCompose && (
-        <div id="chat-composer" className="live-composer">
-          {replyTo ? (
-            <div className="live-composer-label">
-              <Lock aria-hidden="true" /> Private reply to {replyTo.name}
-              <button type="button" className="live-reply-cancel" onClick={() => setReplyTo(null)}>Cancel</button>
+  // Organisers keep the list of incoming messages, with Reply privately, Block and Delete.
+  if (isAdmin) {
+    return (
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pb-24 pt-3">
+        <h1 className="sr-only">Organiser messages</h1>
+        {notices}
+        {composer}
+        <section className="live-announcements" aria-labelledby="organiser-messages-title">
+          <div className="mg-section-head">
+            <h2 id="organiser-messages-title">Incoming messages</h2>
+          </div>
+          {messagesError && (
+            <div className="live-feed-error" role="alert">
+              <span>{messagesError}</span>
+              <button type="button" onClick={loadMessages}>Try again</button>
             </div>
-          ) : (
-            <div className="live-composer-label"><Lock aria-hidden="true" /> Seen only by you and the organisers</div>
           )}
-          <div className="live-compose-row">
-            <label className="mg-field live-compose-field">
-              <span className="sr-only">{replyTo ? `Reply to ${replyTo.name}` : 'Message organisers'}</span>
-              <textarea
-                rows={desktop ? 3 : 2}
-                value={body}
-                onChange={(event) => setBody(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    if (body.trim()) void send();
-                  }
-                }}
-                placeholder={replyTo ? 'Write a private reply…' : 'Message the organisers…'}
-              />
-            </label>
-            <button type="button" className="live-send" aria-label="Send" disabled={!body.trim() || sending} onClick={() => void send()}>
-              <Send aria-hidden="true" />
-            </button>
-          </div>
+          {messagesLoading && messages.length === 0 ? (
+            <div className="live-feed-state mg-card" role="status">Loading messages…</div>
+          ) : (
+            <div className="live-announcement-list live-announcement-list-full mg-card mg-list">
+              {privateMessages.map((message) => (
+                <div key={message.id} className={`live-announcement-row ${canModerate ? 'live-announcement-row-staff' : ''}`}>
+                  <time dateTime={message.createdAt}>{messageTime(message)}</time>
+                  <div className="live-announcement-copy">
+                    <span>{message.body}</span>
+                    <small>
+                      <Lock aria-hidden="true" /> {message.authorName || 'Entrant'}
+                      {message.recipientUserId ? ' · Organiser reply' : ' · Private to organisers'}
+                    </small>
+                  </div>
+                  {!message.recipientUserId && message.userId && (
+                    <button
+                      type="button"
+                      className="live-reply"
+                      onClick={() => setReplyTo({ userId: message.userId!, name: message.authorName })}
+                    >
+                      Reply privately<span className="sr-only"> to {message.authorName}</span>
+                    </button>
+                  )}
+                  {canModerate && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="live-delete"
+                        aria-label={`Block sender: ${message.body}`}
+                        title="Block sender"
+                        onClick={() => void blockMessageAuthor(message.id)}
+                      >
+                        <Shield aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="live-delete"
+                        aria-label={`Delete: ${message.body}`}
+                        onClick={() => void removeMessage(message.id)}
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {privateMessages.length === 0 && (
+                <p className="live-empty">No private messages from entrants or trainers yet. Select “Reply privately” on any message when one arrives.</p>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  // Signed in: one thread, like a chat, with the box at the bottom.
+  return (
+    <div className="ev-thread rf-page mx-auto flex w-full max-w-xl flex-col gap-2 pb-3 pt-4">
+      <h1 className="sr-only">Message the organisers</h1>
+      {notices}
+      {!privateMessagingAvailable && <p role="status" className="ev-body">Messaging the organisers isn’t available for this event yet.</p>}
+      {messagesError && (
+        <div className="live-feed-error" role="alert">
+          <span>{messagesError}</span>
+          <button type="button" onClick={loadMessages}>Try again</button>
         </div>
       )}
-
-      <section className="live-announcements" aria-labelledby="organiser-messages-title">
-        <div className="mg-section-head">
-          <h2 id="organiser-messages-title">{isAdmin ? 'Incoming messages' : 'Your messages'}</h2>
-        </div>
-        {messagesError && (
-          <div className="live-feed-error" role="alert">
-            <span>{messagesError}</span>
-            <button type="button" onClick={loadMessages}>Try again</button>
+      {messagesLoading && messages.length === 0 && <p role="status" className="sp-note text-center">Loading messages…</p>}
+      {!messagesLoading && privateMessages.length === 0 && privateMessagingAvailable && !messagesError && (
+        <p className="sp-note text-center">No messages yet. Write to the organisers below.</p>
+      )}
+      {privateMessages.map((message, index) => {
+        const day = dayHeading(message.createdAt);
+        const heading = index === 0 || dayHeading(privateMessages[index - 1].createdAt) !== day ? day : null;
+        const mine = message.userId === user.id;
+        return (
+          <div key={message.id} className="flex flex-col gap-2">
+            {heading && <span className="ev-day">{heading}</span>}
+            <div className={`ev-bub ${mine ? 'ev-bub-me' : 'ev-bub-them'}`}>
+              {!mine && <b className="ev-bub-from">{message.authorName || 'Organiser'}</b>}
+              {message.body}
+              <time dateTime={message.createdAt}>{messageTime(message)}</time>
+            </div>
           </div>
-        )}
-        {messagesLoading && messages.length === 0 ? (
-          <div className="live-feed-state mg-card" role="status">Loading messages…</div>
-        ) : (
-          <div className="live-announcement-list live-announcement-list-full mg-card mg-list">
-            {privateMessages.map((message) => (
-              <div key={message.id} className={`live-announcement-row ${canModerate ? 'live-announcement-row-staff' : ''}`}>
-                <time dateTime={message.createdAt}>{messageTime(message)}</time>
-                <div className="live-announcement-copy">
-                  <span>{message.body}</span>
-                  <small>
-                    <Lock aria-hidden="true" /> {message.authorName || 'Entrant'}
-                    {message.recipientUserId ? ' · Organiser reply' : ' · Private to organisers'}
-                  </small>
-                </div>
-                {isAdmin && !message.recipientUserId && message.userId && (
-                  <button
-                    type="button"
-                    className="live-reply"
-                    onClick={() => setReplyTo({ userId: message.userId!, name: message.authorName })}
-                  >
-                    Reply privately<span className="sr-only"> to {message.authorName}</span>
-                  </button>
-                )}
-                {canModerate && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      className="live-delete"
-                      aria-label={`Block sender: ${message.body}`}
-                      title="Block sender"
-                      onClick={() => void blockMessageAuthor(message.id)}
-                    >
-                      <Shield aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className="live-delete"
-                      aria-label={`Delete: ${message.body}`}
-                      onClick={() => void removeMessage(message.id)}
-                    >
-                      <Trash2 aria-hidden="true" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-            {privateMessages.length === 0 && (
-              <p className="live-empty">
-                {isAdmin
-                  ? 'No private messages from entrants or trainers yet. Select “Reply privately” on any message when one arrives.'
-                  : 'No messages yet.'}
-              </p>
-            )}
-          </div>
-        )}
-      </section>
+        );
+      })}
+      {composer}
     </div>
   );
 }

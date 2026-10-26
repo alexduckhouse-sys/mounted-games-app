@@ -67,7 +67,7 @@ describe('WeatherPage', () => {
     expect(screen.queryByText(/Friday 31 May/)).toBeNull();
   });
 
-  it('renders the top daily weather summary card with high/low temp, rain chance, and hourly rain strip', async () => {
+  it('renders the Now card with the temperature, the weather in words, the rain chance and the wind', async () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url === '/weather/current') {
         return {
@@ -142,30 +142,23 @@ describe('WeatherPage', () => {
 
     const summary = screen.getByRole('region', { name: 'Day weather summary' });
     await waitFor(() => {
-      expect(within(summary).getByText('12°C')).toBeInTheDocument();
+      expect(within(summary).getByText('12°')).toBeInTheDocument();
     });
 
     expect(within(summary).getByText('Light rain')).toBeInTheDocument();
-    expect(within(summary).getByText(/H: 20°C · L: 11°C/)).toBeInTheDocument();
-    expect(within(summary).getByText('75% max rain')).toBeInTheDocument();
-    expect(within(summary).getByText('Wind up to 24 km/h')).toBeInTheDocument();
-    expect(
-      within(summary).getByText(/Chance of showers around 14:00 \(75%\) · Rain likely — bring wet-weather kit/),
-    ).toBeInTheDocument();
-
-    const strip = within(summary).getByLabelText('Hourly rain and temperature');
-    expect(within(strip).queryByText('07:00')).not.toBeInTheDocument();
-    expect(within(strip).getByText('10:00')).toBeInTheDocument();
-    expect(within(strip).getByText('45% · 0.6mm')).toBeInTheDocument();
-    expect(within(strip).getByText('75% · 1.8mm')).toBeInTheDocument();
-    expect(within(strip).queryByText('19:00')).not.toBeInTheDocument();
+    expect(within(summary).getByText('75% chance of rain · Wind up to 24 km/h')).toBeInTheDocument();
+    expect(within(summary).getByText(/Saturday 1 Jun/)).toBeInTheDocument();
+    expect(summary.querySelector('svg[data-kind="rain"]')).not.toBeNull();
+    // No hourly strip, rain chips or high and low any more.
+    expect(screen.queryByLabelText('Hourly rain and temperature')).toBeNull();
+    expect(screen.queryByText(/H: 20/)).toBeNull();
 
     expect(screen.getByTestId('page-header')).toHaveTextContent('Weather');
     expect(screen.getByTestId('page-header')).toHaveTextContent('Hartpury Area Festival');
     expect(screen.getByTestId('page-header')).toHaveTextContent('/competitions/7');
   });
 
-  it('renders timetable rows with per-hour temperature, rain badge, wind, and session links', async () => {
+  it('renders one row per session with the weather in words, the temperature and a link to its heat', async () => {
     vi.mocked(api.get).mockResolvedValue({
       data: { utc_offset_seconds: localOffset,
         daily: {
@@ -230,25 +223,26 @@ describe('WeatherPage', () => {
 
     const timetable = screen.getByRole('region', { name: 'Timetable with weather' });
     await waitFor(() => {
-      expect(within(timetable).getByText('55% rain')).toBeInTheDocument();
+      expect(within(timetable).getByText('Light rain, 55% chance of rain')).toBeInTheDocument();
     });
 
     const heat1Link = within(timetable).getByRole('link', { name: /09:00.*Heat 1/ });
     expect(heat1Link).toHaveAttribute('href', '/competitions/4/session/10?heat=101');
-    expect(heat1Link).toHaveTextContent('On now');
-    expect(heat1Link).toHaveTextContent('13°C');
-    expect(heat1Link).toHaveTextContent('Dry');
-    expect(heat1Link).toHaveTextContent('9 km/h');
+    expect(heat1Link).toHaveTextContent('Seniors · Heat 1');
+    expect(heat1Link).toHaveTextContent('Mainly clear');
+    expect(heat1Link).toHaveTextContent('13°');
+    expect(heat1Link).not.toHaveTextContent('chance of rain');
 
     const heat2Link = within(timetable).getByRole('link', { name: /11:00.*Heat 2/ });
     expect(heat2Link).toHaveAttribute('href', '/competitions/4/session/20?heat=202');
-    expect(heat2Link).toHaveTextContent('On time');
-    expect(heat2Link).toHaveTextContent('16°C');
-    expect(heat2Link).toHaveTextContent('55% rain');
-    expect(heat2Link).toHaveTextContent('20 km/h');
+    expect(heat2Link).toHaveTextContent('Juniors · Heat 2');
+    expect(heat2Link).toHaveTextContent('16°');
+    expect(heat2Link).toHaveTextContent('Light rain, 55% chance of rain');
 
+    // A break has its weather too, but no heat to open.
     expect(within(timetable).getByText('Lunch Break')).toBeInTheDocument();
-    expect(within(timetable).getByText('18°C')).toBeInTheDocument();
+    expect(within(timetable).getByText('18°')).toBeInTheDocument();
+    expect(within(timetable).queryByRole('link', { name: /Lunch Break/ })).toBeNull();
   });
 
   it('switches between days on a multi-day competition and updates the forecast and timetable', async () => {
@@ -330,32 +324,32 @@ describe('WeatherPage', () => {
 
     renderWeatherPage();
 
-    const dayPicker = screen.getByRole('group', { name: 'Choose day' });
-    const day1Btn = within(dayPicker).getByRole('button', { name: /Day 1 · Sat/ });
-    const day2Btn = within(dayPicker).getByRole('button', { name: /Day 2 · Sun/ });
-    expect(day1Btn).toHaveAttribute('aria-pressed', 'true');
-    expect(day2Btn).toHaveAttribute('aria-pressed', 'false');
+    const dayPicker = screen.getByRole('tablist', { name: 'Choose day' });
+    const day1Btn = within(dayPicker).getByRole('tab', { name: /Day 1 · Sat/ });
+    const day2Btn = within(dayPicker).getByRole('tab', { name: /Day 2 · Sun/ });
+    expect(day1Btn).toHaveAttribute('aria-selected', 'true');
+    expect(day2Btn).toHaveAttribute('aria-selected', 'false');
 
     const summary = screen.getByRole('region', { name: 'Day weather summary' });
     const timetable = screen.getByRole('region', { name: 'Timetable with weather' });
 
     await waitFor(() => {
-      expect(within(summary).getByText(/H: 15°C · L: 9°C/)).toBeInTheDocument();
+      expect(within(summary).getByText('40% chance of rain · Wind up to 18 km/h')).toBeInTheDocument();
     });
-    expect(within(summary).getByText('Chance of showers around 09:00 (40%)')).toBeInTheDocument();
-    expect(within(timetable).getByText('Saturday Heat 1')).toBeInTheDocument();
-    expect(within(timetable).queryByText('Sunday A Final')).not.toBeInTheDocument();
+    expect(within(summary).getByText('14°')).toBeInTheDocument();
+    expect(within(timetable).getByText('Seniors · Saturday Heat 1')).toBeInTheDocument();
+    expect(within(timetable).queryByText('Seniors · Sunday A Final')).not.toBeInTheDocument();
 
     fireEvent.click(day2Btn);
 
-    expect(day2Btn).toHaveAttribute('aria-pressed', 'true');
+    expect(day2Btn).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => {
-      expect(within(summary).getByText(/H: 23°C · L: 12°C/)).toBeInTheDocument();
+      expect(within(summary).getByText('22°')).toBeInTheDocument();
     });
     expect(within(summary).getByText('Sunny')).toBeInTheDocument();
-    expect(within(summary).getByText('Low chance of rain')).toBeInTheDocument();
-    expect(within(timetable).getByText('Sunday A Final')).toBeInTheDocument();
-    expect(within(timetable).queryByText('Saturday Heat 1')).not.toBeInTheDocument();
+    expect(within(summary).getByText('5% chance of rain · Wind up to 11 km/h')).toBeInTheDocument();
+    expect(within(timetable).getByText('Seniors · Sunday A Final')).toBeInTheDocument();
+    expect(within(timetable).queryByText('Seniors · Saturday Heat 1')).not.toBeInTheDocument();
   });
 
   it('shows missing location instead of invented weather when the competition has no coordinates', () => {
@@ -378,7 +372,7 @@ describe('WeatherPage', () => {
     expect(api.get).not.toHaveBeenCalled();
     const summary = screen.getByRole('region', { name: 'Day weather summary' });
     expect(within(summary).getByText('Weather is unavailable because this venue has no map location.')).toBeInTheDocument();
-    expect(within(summary).queryByText(/°C|Dry all day|Low chance of rain/)).toBeNull();
+    expect(within(summary).queryByText(/°|chance of rain/)).toBeNull();
     expect(screen.getByText('Nothing scheduled for this day.')).toBeInTheDocument();
   });
 
@@ -420,7 +414,7 @@ describe('WeatherPage', () => {
     await waitFor(() => {
       expect(within(summary).getByText('Weather is unavailable for this day. Try refreshing.')).toBeInTheDocument();
     });
-    expect(within(summary).queryByText(/°C|Dry all day|Low chance of rain/)).toBeNull();
+    expect(within(summary).queryByText(/°|chance of rain/)).toBeNull();
   });
   it('keeps future forecasts separate from current observations and leaves missing hours unavailable', async () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/weather/current'
@@ -432,9 +426,9 @@ describe('WeatherPage', () => {
       sessions: [session(1, { scheduledStart: `${day1}T09:00:00`, heats: [heat(1)] })] }), reload };
     renderWeatherPage();
     const summary = screen.getByRole('region', { name: 'Day weather summary' });
-    await waitFor(() => expect(within(summary).getByText('11°C')).toBeInTheDocument());
+    await waitFor(() => expect(within(summary).getByText('11°')).toBeInTheDocument());
     expect(api.get).not.toHaveBeenCalledWith('/weather/current', expect.anything());
-    expect(within(summary).getByText('Wind up to 8 km/h')).toBeInTheDocument();
+    expect(within(summary).getByText(/Wind up to 8 km\/h/)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Timetable with weather' })).toHaveTextContent('Weather unavailable');
   });
 
@@ -448,12 +442,10 @@ describe('WeatherPage', () => {
       temperature_2m_max: [12], temperature_2m_min: [4], weather_code: [3],
     } } });
     fireEvent.click(screen.getByRole('button', { name: 'Refresh weather' }));
-    await waitFor(() => expect(screen.getByText(/H: 12°C · L: 4°C/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('12°')).toBeInTheDocument());
     expect(reload).toHaveBeenCalledOnce();
     expect(api.get).toHaveBeenCalledTimes(2);
-    expect(screen.getByText('Rain forecast unavailable')).toBeInTheDocument();
-    expect(screen.getByText('Hourly forecast unavailable.')).toBeInTheDocument();
-    expect(screen.queryByText('Low chance of rain')).toBeNull();
+    expect(screen.getByText('Rain and wind forecast unavailable')).toBeInTheDocument();
   });
 
   it('matches venue hours to real instants and excludes samples outside the selected device day', async () => {
@@ -477,15 +469,15 @@ describe('WeatherPage', () => {
     }), reload };
     renderWeatherPage();
     const morning = screen.getByRole('link', { name: /Morning heat/ });
-    await waitFor(() => expect(morning).toHaveTextContent('22°C'));
-    expect(morning).toHaveTextContent('60% rain');
-    expect(morning).not.toHaveTextContent('11°C');
-    expect(screen.getByRole('link', { name: /Midnight heat/ })).toHaveTextContent('8°C');
+    await waitFor(() => expect(morning).toHaveTextContent('22°'));
+    expect(morning).toHaveTextContent('60% chance of rain');
+    expect(morning).not.toHaveTextContent('11°');
+    expect(screen.getByRole('link', { name: /Midnight heat/ })).toHaveTextContent('8°');
     expect(screen.getByRole('link', { name: /Late heat/ })).toHaveTextContent('Weather unavailable');
     const summary = screen.getByRole('region', { name: 'Day weather summary' });
-    expect(summary).toHaveTextContent('H: 22°C · L: 8°C');
-    expect(summary).toHaveTextContent('Chance of showers around 09:00 (60%)');
-    expect(within(summary).queryByText(/95%|99°C|90°C|80°C/)).toBeNull();
+    expect(summary).toHaveTextContent('8°');
+    expect(summary).toHaveTextContent('60% chance of rain · Wind up to 12 km/h');
+    expect(within(summary).queryByText(/95%|99°|90°|80°/)).toBeNull();
     expect(api.get).toHaveBeenCalledTimes(1);
   });
 
@@ -498,7 +490,7 @@ describe('WeatherPage', () => {
       sessions: [session(1, { scheduledStart: `${day1}T09:00:00`, heats: [heat(1)] })] }), reload };
     renderWeatherPage();
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Weather is unavailable for this day'));
-    expect(screen.queryByText('22°C')).toBeNull();
+    expect(screen.queryByText('22°')).toBeNull();
     expect(screen.getByRole('region', { name: 'Timetable with weather' })).toHaveTextContent('Weather unavailable');
   });
 
@@ -511,7 +503,6 @@ describe('WeatherPage', () => {
     state.value = { competition: competition({ startDate: day1, latitude: 51, longitude: 0,
       sessions: [session(1, { scheduledStart: `${day1}T09:15:00`, heats: [heat(1)] })] }), reload };
     renderWeatherPage();
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Timetable with weather' })).toHaveTextContent('22°C'));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Timetable with weather' })).toHaveTextContent('22°'));
   });
-
 });

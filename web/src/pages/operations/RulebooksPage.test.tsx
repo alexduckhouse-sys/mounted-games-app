@@ -82,7 +82,17 @@ describe('RulebooksPage', () => {
   it('shows a note when no rulebooks exist', async () => {
     serve([]);
     mount();
-    expect(await screen.findByText('No rulebooks have been published yet.')).toBeInTheDocument();
+    expect(await screen.findByText(/No rulebook has been added yet\./)).toHaveTextContent('See Game rules for how each race is ridden. Use Add rulebook to publish one.');
+  });
+
+  it('tells a visitor what to do when there is no rulebook, and the Game rules link opens that tab', async () => {
+    serve([]);
+    auth.admin = false;
+    const user = userEvent.setup();
+    mount();
+    expect(await screen.findByText(/No rulebook has been added yet\./)).not.toHaveTextContent('Add rulebook');
+    await user.click(screen.getByRole('button', { name: 'Game rules' }));
+    expect(screen.getByRole('tab', { name: 'Game rules' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('opens an admin editor with plain-text fields', async () => {
@@ -162,17 +172,55 @@ describe('RulebooksPage', () => {
     expect(screen.queryByRole('button', { name: 'Delete Event handbook' })).not.toBeInTheDocument();
   });
 
-  it('switches to the Game rules tab to browse individual race rules and diagrams', async () => {
-    vi.mocked(api.get).mockImplementation(async (url: string) => ({
-      data: url === '/rulebooks' ? [handbook] : url === '/race-templates' ? [
-        { id: 1, name: 'Speed Weave', category: 'Bending', summary: 'Weave the poles.', rules: 'Weave out and back.', diagramJson: '[]', isBuiltIn: true },
-      ] : texts[url],
-    }));
+  const races = [
+    { id: 1, name: 'Speed Weave', category: 'Bending', summary: 'Weave the poles.', rules: 'Weave out and back.', diagramJson: '[]', isBuiltIn: true },
+    { id: 2, name: 'Mug Shuffle', category: 'Mugs', summary: 'Move the mugs.', rules: 'Move them.', diagramJson: '[]', isBuiltIn: true },
+  ];
+  const serveRaces = () => vi.mocked(api.get).mockImplementation(async (url: string) => ({
+    data: url === '/rulebooks' ? [handbook] : url === '/race-templates' ? races : url.startsWith('/race-templates/by-name/') ? races[0] : texts[url],
+  }));
+
+  it('puts the tabs under the header, and Game rules is a searchable list of races', async () => {
+    serveRaces();
     const user = userEvent.setup();
     mount();
     await screen.findByRole('button', { name: /^Event handbook/ });
+    expect(screen.getByRole('heading', { name: 'Rules' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Rulebooks' })).toHaveAttribute('aria-selected', 'true');
     await user.click(screen.getByRole('tab', { name: 'Game rules' }));
-    expect(await screen.findByText('Speed Weave')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Game rules' })).toBeInTheDocument();
+    const list = await screen.findByRole('list', { name: 'Races' });
+    expect(within(list).getAllByRole('listitem').map((row) => row.textContent)).toEqual(['Mug Shuffle', 'Speed Weave']);
+    await user.type(screen.getByRole('searchbox', { name: 'Find a race' }), 'weave');
+    expect(within(screen.getByRole('list', { name: 'Races' })).getAllByRole('listitem')).toHaveLength(1);
+    await user.clear(screen.getByRole('searchbox', { name: 'Find a race' }));
+    await user.type(screen.getByRole('searchbox', { name: 'Find a race' }), 'zzz');
+    expect(screen.getByText('No race matches “zzz”.')).toBeInTheDocument();
+  });
+
+  it('opens a race in the rules sheet', async () => {
+    serveRaces();
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole('tab', { name: 'Game rules' }));
+    await user.click(await screen.findByRole('button', { name: 'Speed Weave' }));
+    expect(await screen.findByRole('dialog', { name: 'Speed Weave' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Close rules' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('says so when the game rules cannot be loaded or there are none', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url === '/race-templates') throw new Error('offline');
+      return { data: url === '/rulebooks' ? [handbook] : null };
+    });
+    const user = userEvent.setup();
+    const view = mount();
+    await user.click(await screen.findByRole('tab', { name: 'Game rules' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the game rules');
+    view.unmount();
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/rulebooks' ? [handbook] : url === '/race-templates' ? [] : null }));
+    mount();
+    await user.click(await screen.findByRole('tab', { name: 'Game rules' }));
+    expect(await screen.findByText('No game rules have been added yet.')).toBeInTheDocument();
   });
 });

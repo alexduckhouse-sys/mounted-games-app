@@ -79,9 +79,13 @@ function testPayment(status: 0 | 1 | 2 | 3) {
   };
 }
 
-async function addCampingAndReview() {
+async function addCamping() {
   await userEvent.click(await screen.findByRole('button', { name: 'Add one Weekend camping' }));
-  await userEvent.click(screen.getByRole('button', { name: 'Review order' }));
+}
+
+async function addCampingAndOrder() {
+  await addCamping();
+  await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
 }
 
 describe('EventShopPage', () => {
@@ -94,15 +98,14 @@ describe('EventShopPage', () => {
     expect(screen.getByRole('navigation', { name: 'Shop switcher' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Tack & kit classifieds' })).toHaveAttribute('href', '/shop');
     expect(screen.getByRole('link', { name: 'Your orders' })).toHaveAttribute('href', '/me/orders');
-    expect(screen.getByText('One pitch beside the main arena. · 4 left')).toBeInTheDocument();
+    expect(screen.getByText('£25 · One pitch beside the main arena. · 4 left')).toBeInTheDocument();
+    expect(screen.queryByText(/Collect at the event/)).not.toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Camping', 'Merchandise']);
     expect(screen.getByRole('list', { name: 'Camping for sale' })).toHaveTextContent('Weekend camping');
     expect(screen.getByRole('list', { name: 'Merchandise for sale' })).toHaveTextContent('Event hoodie');
+    expect(screen.queryByRole('button', { name: /^Order:/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Add one Weekend camping' }));
-    expect(screen.getByRole('region', { name: 'Basket summary' })).toHaveTextContent('1 item');
-    await userEvent.click(screen.getByRole('button', { name: 'Review order' }));
-    expect(screen.getByText(/Your total is confirmed when you place the order/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
 
     expect(await screen.findByRole('heading', { name: 'Order #33' })).toBeInTheDocument();
     expect(screen.getAllByText('£25.00').length).toBeGreaterThan(0);
@@ -118,20 +121,19 @@ describe('EventShopPage', () => {
     expect(await screen.findByText('Sold out')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Add one Pony hay' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add one Pony hay' }));
-    expect(screen.getByRole('region', { name: 'Basket summary' })).toHaveTextContent('2 items');
+    expect(screen.getByRole('button', { name: 'Order: £50' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Remove one Pony hay' }));
     await userEvent.click(screen.getByRole('button', { name: 'Remove one Pony hay' }));
-    expect(screen.queryByRole('region', { name: 'Basket summary' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Order:/ })).not.toBeInTheDocument();
   });
 
   it('reuses the order key when a lost response is retried with the same basket', async () => {
     shopGet(manualSettings);
     post.mockRejectedValueOnce(new Error('response lost')).mockResolvedValueOnce({ data: orderOf({ id: 35, lines: [] }) } as never);
     render(<MemoryRouter><EventShopPage /></MemoryRouter>);
-    await addCampingAndReview();
-    await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
+    await addCampingAndOrder();
     await screen.findByText(/Couldn’t place your order/);
-    await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
     await screen.findByRole('heading', { name: 'Order #35' });
 
     const firstBody = post.mock.calls[0][1] as { idempotencyKey: string };
@@ -145,8 +147,7 @@ describe('EventShopPage', () => {
     post.mockReturnValue(pendingOrder.promise as never);
     render(<MemoryRouter><EventShopPage /></MemoryRouter>);
 
-    await addCampingAndReview();
-    await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
+    await addCampingAndOrder();
 
     expect(screen.getByRole('button', { name: 'Remove one Weekend camping' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Add one Weekend camping' })).toBeDisabled();
@@ -163,8 +164,9 @@ describe('EventShopPage', () => {
     auth.mockReturnValue({ ...viewer, user: null } as unknown as ReturnType<typeof useAuth>);
     shopGet(manualSettings);
     render(<MemoryRouter><EventShopPage /></MemoryRouter>);
-    await addCampingAndReview();
+    await addCamping();
     expect(screen.getByRole('link', { name: 'Sign in to order' })).toHaveAttribute('href', '/login');
+    expect(screen.queryByRole('button', { name: /^Order:/ })).not.toBeInTheDocument();
   });
 
   describe('demo checkout', () => {
@@ -174,9 +176,9 @@ describe('EventShopPage', () => {
       shopGet(demoSettings);
       post.mockResolvedValueOnce({ data: demoOrder } as never);
       render(<MemoryRouter><EventShopPage /></MemoryRouter>);
-      await addCampingAndReview();
-      expect(screen.getByRole('heading', { name: /Basket/ })).toHaveTextContent('DEMO');
-      await userEvent.click(screen.getByRole('button', { name: 'Continue to payment' }));
+      await addCamping();
+      expect(screen.getByText(/This is a demo event/)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
       expect(await screen.findByRole('heading', { name: /Payment/ })).toHaveTextContent('DEMO');
       expect(screen.getByLabelText('Card number')).toHaveValue('4242 4242 4242 4242');
     }
@@ -190,7 +192,7 @@ describe('EventShopPage', () => {
       expect(screen.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', '/me/orders?order=34');
       await userEvent.click(screen.getByRole('button', { name: 'Shop' }));
       expect(screen.getByText('Weekend camping')).toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'Basket summary' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Order:/ })).not.toBeInTheDocument();
     });
 
     it('keeps the basket after a declined payment and offers another try', async () => {
@@ -202,7 +204,7 @@ describe('EventShopPage', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Nothing was charged. Order #34 is waiting for payment.');
       await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
       expect(screen.getByLabelText('Card number')).toHaveValue('4242 4242 4242 4242');
-      await userEvent.click(screen.getByRole('button', { name: 'Back to basket' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Back to shop' }));
       expect(screen.getByText('Weekend camping')).toBeInTheDocument();
     });
 
@@ -214,16 +216,66 @@ describe('EventShopPage', () => {
       expect(screen.getByText(/Order #34 was cancelled and nothing was charged/)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Pay now' })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Back to shop' }));
-      expect(screen.getByRole('region', { name: 'Basket summary' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Order: £25' })).toBeInTheDocument();
 
       post.mockResolvedValueOnce({ data: { ...demoOrder, id: 35 } } as never);
-      await userEvent.click(screen.getByRole('button', { name: 'Review order' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Continue to payment' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
       expect(await screen.findByRole('heading', { name: /Payment/ })).toBeInTheDocument();
       const firstKey = (post.mock.calls[0][1] as { idempotencyKey: string }).idempotencyKey;
       const secondCall = post.mock.calls.find((call) => call[0] === '/commerce/competitions/5/orders' && call !== post.mock.calls[0]);
       expect((secondCall![1] as { idempotencyKey: string }).idempotencyKey).not.toBe(firstKey);
     });
+  });
+
+  it('shows the question an item asks once it is in the order, and sends the answer with it', async () => {
+    shopGet(manualSettings, [{ ...listing, detailPrompt: 'Stable number', detailHint: 'e.g. B12' }, { ...listing, id: 11, title: 'Pony hay', category: 0 as const, stockQuantity: null }]);
+    post.mockResolvedValue({ data: orderOf() } as never);
+    render(<MemoryRouter><EventShopPage /></MemoryRouter>);
+    await screen.findByText('Weekend camping');
+    expect(screen.queryByLabelText('Stable number')).toBeNull();
+    await addCamping();
+    expect(screen.getByLabelText('Stable number')).toBeInTheDocument();
+    // Only the item that asks has a question: hay adds none.
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Pony hay' }));
+    expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    await userEvent.type(screen.getByLabelText('Stable number'), 'B12');
+    await userEvent.click(screen.getByRole('button', { name: 'Order: £50' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/competitions/5/orders', expect.objectContaining({
+      items: [{ listingId: 10, quantity: 1, detail: 'B12' }, { listingId: 11, quantity: 1 }],
+    })));
+  });
+
+  it('asks nothing extra while the API sends no question, and drops it when the count goes back to none', async () => {
+    shopGet(manualSettings, [{ ...listing, detailPrompt: 'Number plate' }]);
+    render(<MemoryRouter><EventShopPage /></MemoryRouter>);
+    expect(screen.queryByLabelText('Number plate')).toBeNull();
+    await addCamping();
+    expect(screen.getByLabelText('Number plate')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove one Weekend camping' }));
+    expect(screen.queryByLabelText('Number plate')).toBeNull();
+  });
+
+  it('uses a fresh order key when the answer to an item’s question changes', async () => {
+    shopGet(manualSettings, [{ ...listing, detailPrompt: 'Stable number' }]);
+    post.mockRejectedValue(new Error('lost'));
+    render(<MemoryRouter><EventShopPage /></MemoryRouter>);
+    await addCamping();
+    await userEvent.type(screen.getByLabelText('Stable number'), 'A1');
+    await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
+    await screen.findByText(/Couldn’t place your order/);
+    await userEvent.type(screen.getByLabelText('Stable number'), '2');
+    await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    expect((post.mock.calls[1][1] as { idempotencyKey: string }).idempotencyKey).not.toBe((post.mock.calls[0][1] as { idempotencyKey: string }).idempotencyKey);
+  });
+
+  it('has tabs for the event shop and the tack and kit classifieds, and no small print about collecting or paying', async () => {
+    shopGet(manualSettings);
+    render(<MemoryRouter><EventShopPage /></MemoryRouter>);
+    await screen.findByText('Weekend camping');
+    const tabs = screen.getByRole('navigation', { name: 'Shop switcher' });
+    expect(within(tabs).getByRole('link', { name: 'Event shop' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByText(/Listings approved by the organiser/)).toBeNull();
   });
 
   it('drops an old event response and checks out only against the new event', async () => {
@@ -252,8 +304,7 @@ describe('EventShopPage', () => {
 
     expect(screen.queryByText('Weekend camping')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Add one New event camping' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Review order' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Place order' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/competitions/6/orders',
       expect.objectContaining({ items: [{ listingId: 60, quantity: 1 }] })));
   });

@@ -13,10 +13,11 @@ const state = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   download: vi.fn(),
+  organise: false,
 }));
 
 vi.mock('../../auth/AuthContext', () => ({
-  useAuth: () => ({ user: state.user, hasRole: (r: Role) => state.user.roles.includes(r), canOrganise: () => false }),
+  useAuth: () => ({ user: state.user, hasRole: (r: Role) => state.user.roles.includes(r), canOrganise: () => state.organise }),
 }));
 vi.mock('../../api', () => ({ api: { get: state.get, post: state.post, delete: vi.fn() } }));
 vi.mock('../../lib/csv', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/csv')>()), downloadCsv: state.download }));
@@ -47,6 +48,7 @@ function mount() {
 beforeEach(() => {
   state.user = { id: 'u1', fullName: 'Alex Morgan', email: 'a@example.com', clubId: 1, clubName: 'Stockport PC', roles: ['Trainer'] };
   forms = [];
+  state.organise = false;
   config = setup;
   state.get.mockImplementation(async (url: string) => {
     if (url === '/declaration-forms') return { data: forms };
@@ -148,10 +150,13 @@ describe('the dec form list for organisers', () => {
     ...extra,
   });
 
+  const openForm = async (user: ReturnType<typeof userEvent.setup>) => user.click(await screen.findByRole('button', { name: /^Stockport C.*Sent/ }));
+
   it('shows the flag, the flagged sentence, the extra answers and the name given at entry', async () => {
     forms = [submitted()];
     mount();
     expect(await screen.findByText('1 flagged')).toBeInTheDocument();
+    await openForm(userEvent.setup());
     expect(screen.getByText('Ella Hughes: Girth is 95 cm, over the limit of 90 cm.')).toBeInTheDocument();
     expect(screen.getByText(/31.5 kg · medical: Asthma · Girth: 95 cm/)).toBeInTheDocument();
     expect(screen.getByText('Entered as Welsh Dragons')).toBeInTheDocument();
@@ -165,6 +170,7 @@ describe('the dec form list for organisers', () => {
       riders: [{ id: 1, fullName: 'Ella H.', horseName: 'Pickle', isCaptain: false, isReserve: false, orderIndex: 0 }],
     })];
     mount();
+    await openForm(userEvent.setup());
     await screen.findAllByText('Ella H.');
     expect(screen.queryByText(/flagged/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Entered as/)).not.toBeInTheDocument();
@@ -173,6 +179,7 @@ describe('the dec form list for organisers', () => {
 
   it('adds the extra answers to the CSV only when there are some', async () => {
     const user = userEvent.setup();
+    state.organise = true;
     forms = [submitted()];
     mount();
     await screen.findByText('1 flagged');
@@ -187,10 +194,10 @@ describe('the dec form list for organisers', () => {
 
   it('keeps the CSV as it was when no one gave an extra answer', async () => {
     const user = userEvent.setup();
+    state.organise = true;
     forms = [submitted({ flagCount: 0, riders: [{ id: 1, fullName: 'Ella H.', horseName: 'Pickle', isCaptain: false, isReserve: false, orderIndex: 0 }] })];
     mount();
-    await screen.findAllByText('Ella H.');
-    await user.click(screen.getByRole('button', { name: /Export CSV/ }));
+    await user.click(await screen.findByRole('button', { name: /Export CSV/ }));
     const [, csv] = state.download.mock.calls[0];
     expect((csv as string).split(/\r?\n/)[0]).toBe('Team,Rider,Reserve,Guest,DOB,Pony,Height (hh),Bibs,Trainer,Phone,Submitted by,Terms agreed,Submitted at,Notes');
   });

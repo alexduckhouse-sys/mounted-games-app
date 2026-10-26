@@ -1,0 +1,79 @@
+/* Bodies of the event's own pages: Details, Enter, Weather, Arena setup, Rules, Message the organisers, Event shop and
+   Dec forms. They build on the sp-* rows, pills and search in sitePages.css and read --mg-* tokens, so every theme works. */
+
+/* One white page with no grey bands. The pages that use it put .ev-white inside <main>, so the ground is white too. */
+body:has(.ev-white) { background: rgb(var(--mg-surface)); }
+/* Lists run edge to edge: they cancel the page's side padding. No line above or below, only between rows. */
+.ev-flat { margin-inline: -16px; }
+.ev-flat > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.ev-flat .sp-row { padding-left: 16px; padding-right: 16px; }
+.ev-flat .sp-fact { padding-left: 16px; padding-right: 16px; }
+.ev-facts .sp-fact dt { width: 96px; }
+.ev-white .sp-sec { margin-inline: 0; }
+
+/* A plain card for a form: unlike .sp-card its children get no rule between them. */
+.ev-card { background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); box-shadow: var(--mg-shadow-sm); }
+
+/* The main action on an entry or checkout step: one full-width navy bar. */
+.ev-bar { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 52px; margin-top: 16px; border: 0; border-radius: 10px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)) !important; font: 700 16px/1.1 var(--mg-font); text-decoration: none !important; cursor: pointer; }
+.ev-bar:hover:not(:disabled) { filter: brightness(1.12); }
+.ev-bar:disabled { opacity: .45; cursor: default; }
+.ev-bar:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+
+/* A red underlined action, for anything destructive. */
+.ev-danger { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; border: 0; background: transparent; color: rgb(var(--mg-elim)) !important; font: 600 15px/1 var(--mg-font); text-decoration: underline !important; text-decoration-thickness: 1.5px; text-underline-offset: 4px; cursor: pointer; }
+.ev-danger:disabled { opacity: .5; cursor: default; }
+
+/* Page and step headings */
+.ev-title { margin: 0; font: 800 30px/1.02 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.ev-step-title { margin: 4px 2px 12px; font: 800 28px/1.05 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.ev-sub { font: 500 15px/1.3 var(--mg-font); color: rgb(var(--mg-muted)); }
+.ev-body { margin: 0; font: 500 15.5px/1.5 var(--mg-font); color: rgb(var(--mg-body)); }
+.ev-price { flex: none; font: 800 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.ev-link { color: rgb(var(--mg-heading)); font-weight: 700; }
+.ev-text-btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; border: 0; background: transparent; color: rgb(var(--mg-heading)); font: 700 15px/1 var(--mg-font); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+
+/* The entry stepper: numbered circles joined by a line. The line fills, the current circle pops and finished
+   steps get a tick. */
+.ev-stepper { position: relative; display: grid; margin: 2px 0 18px; padding: 0; list-style: none; }
+.ev-step { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ev-dot { width: 34px; height: 34px; border-radius: 17px; border: 2px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-faint)); display: flex; align-items: center; justify-content: center; font: 800 16px/1 var(--mg-font-display); transition: background-color .3s, border-color .3s, color .3s; }
+.ev-step[data-state="cur"] .ev-dot { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); box-shadow: 0 0 0 5px rgb(var(--mg-heading) / .14); animation: ev-pop .5s cubic-bezier(.34, 1.56, .64, 1); }
+.ev-step[data-state="done"] .ev-dot { border-color: rgb(var(--mg-heading)); color: rgb(var(--mg-heading)); }
+.ev-step-label { font: 600 13px/1.1 var(--mg-font); color: rgb(var(--mg-faint)); text-align: center; }
+.ev-step[data-state="cur"] .ev-step-label { color: rgb(var(--mg-heading)); font-weight: 700; }
+.ev-step[data-state="done"] .ev-step-label { color: rgb(var(--mg-heading)); }
+.ev-line { position: absolute; top: 16px; height: 3px; border-radius: 2px; background: rgb(var(--mg-rule)); }
+.ev-fill { display: block; height: 100%; border-radius: 2px; background: rgb(var(--mg-heading)); transition: width .55s cubic-bezier(.22, 1, .36, 1); }
+@keyframes ev-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .ev-fill, .ev-dot { transition: none; }
+  .ev-step[data-state="cur"] .ev-dot { animation: none; }
+}
+/* Lite mode stills every animation and transition already (see skin.css), so the stepper needs nothing more. */
+
+/* Arrows either side of a title (race before and after) and small plain chips */
+.ev-arrow { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 22px; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer; }
+.ev-arrow:hover:not(:disabled) { background: rgb(var(--mg-subtle)); }
+.ev-arrow:disabled { opacity: .3; cursor: default; }
+.ev-arrow:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.ev-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: 999px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 700 13px/1 var(--mg-font); }
+
+/* A chat thread, like WhatsApp: a pale ground, bubbles, and a box with a round send arrow at the bottom. */
+body:has(.ev-thread) { background: color-mix(in srgb, rgb(var(--mg-tint)) 55%, rgb(var(--mg-surface))); }
+/* The box sits at the bottom of the screen even when there is little to read. */
+.ev-thread { min-height: calc(100dvh - 230px); }
+.ev-thread > .ev-composer { margin-top: auto; }
+.ev-day { align-self: center; font: 600 12.5px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
+.ev-bub { max-width: 82%; padding: 9px 12px; border-radius: 16px; font: 500 15px/1.4 var(--mg-font); color: rgb(var(--mg-ink)); overflow-wrap: anywhere; white-space: pre-wrap; }
+.ev-bub time { display: block; margin-top: 3px; text-align: right; font: 500 11.5px/1 var(--mg-font); color: rgb(var(--mg-faint)); }
+.ev-bub-from { display: block; margin-bottom: 2px; font: 700 12.5px/1.2 var(--mg-font); color: rgb(var(--mg-heading)); }
+.ev-bub-them { align-self: flex-start; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-bottom-left-radius: 6px; }
+.ev-bub-me { align-self: flex-end; background: rgb(var(--mg-tint)); border-bottom-right-radius: 6px; }
+.ev-composer { position: sticky; bottom: 78px; z-index: 10; display: flex; flex-direction: column; gap: 6px; margin: 8px -16px -34px; padding: 8px 10px 8px 14px; background: rgb(var(--mg-surface)); border-top: 1px solid rgb(var(--mg-line)); }
+.ev-compose-field { flex: 1 1 auto; min-width: 0; }
+.ev-compose-field textarea { display: block; width: 100%; min-height: 44px; max-height: 110px; padding: 11px 14px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 22px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 500 16px/1.3 var(--mg-font); resize: none; box-sizing: border-box; }
+.ev-compose-field textarea:focus { outline: 0; border-color: rgb(var(--mg-heading)); }
+.ev-send { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 22px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); cursor: pointer; transition: opacity var(--mg-dur-fast) var(--mg-ease-out); }
+.ev-send:disabled { opacity: .35; cursor: default; }
+.ev-send:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }

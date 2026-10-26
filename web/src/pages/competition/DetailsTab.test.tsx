@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
-import { DetailsTab, SectionEntryPage } from './DetailsTab';
+import { DetailsTab } from './DetailsTab';
 import { useCompetition } from './context';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
@@ -48,7 +48,8 @@ const renderTab = (initialPath = '/competitions/5/details') => render(
       <HeaderProbe />
       <Routes>
         <Route path="/competitions/:id/details" element={<DetailsTab />} />
-        <Route path="/competitions/:id/enter/:sectionId" element={<SectionEntryPage />} />
+        <Route path="/competitions/:id/enter/*" element={<p>Entry page</p>} />
+        <Route path="/login" element={<p>Login page</p>} />
       </Routes>
     </MemoryRouter>
   </CompactPageBarProvider>,
@@ -69,51 +70,113 @@ describe('DetailsTab', () => {
     expect(screen.getByRole('button', { name: 'Less' })).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('shows prices and the place limit to entrants without claiming how many are left', () => {
+  it('lists each age group with its fees and one Enter bar, with no counts or progress bars', () => {
     renderTab();
-    expect(screen.getByText('Up to 16 places')).toBeInTheDocument();
-    expect(screen.getByText('No limit')).toBeInTheDocument();
-    expect(screen.getByText('£45.00')).toBeInTheDocument();
-    expect(screen.getByText('Free')).toBeInTheDocument();
-    expect(screen.getByText(/Pay to/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Arena setup & race diagrams/ })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /Join/ })).toHaveLength(2);
+    expect(screen.getByRole('list', { name: 'Age groups and fees' })).toHaveTextContent('Under 10Individual £45');
+    expect(screen.getByRole('list', { name: 'Age groups and fees' })).toHaveTextContent('Under 12Individual Free');
+    expect(screen.queryByText(/places left|Up to 16 places|No limit|entered/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Pay the organiser by bank transfer|Pay to/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Enter' })).toHaveAttribute('href', '/competitions/5/enter');
+    expect(screen.getByRole('link', { name: /Arena setup and race diagrams/ })).toBeInTheDocument();
   });
 
-  it('hides bank payment details from signed-out visitors on DetailsTab and SectionEntryPage', () => {
+  it('puts At the event, Share and print and Enter in that order', () => {
+    renderTab();
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(headings.indexOf('At the event')).toBeLessThan(headings.indexOf('Share and print'));
+    expect(headings.indexOf('Share and print')).toBeLessThan(headings.indexOf('Enter'));
+    expect(screen.getByRole('link', { name: 'Weather' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Message the organisers' })).toBeInTheDocument();
+  });
+
+  it('shows the venue, a maps link and the what3words, and leaves out facts it does not have', () => {
+    vi.mocked(useCompetition).mockReturnValue({
+      competition: { ...competition, what3Words: 'gravel.pony.flag', latitude: 51.9, longitude: -2.3 }, reload,
+    } as unknown as ReturnType<typeof useCompetition>);
+    renderTab();
+    expect(screen.getByLabelText('Event facts')).toHaveTextContent('VenueHartpury');
+    expect(screen.getByRole('link', { name: 'Open in Maps' })).toHaveAttribute('href', 'https://www.google.com/maps/search/?api=1&query=51.9,-2.3');
+    expect(screen.getByRole('link', { name: '///gravel.pony.flag' })).toHaveAttribute('href', 'https://what3words.com/gravel.pony.flag');
+    expect(screen.queryByText('Postcode')).not.toBeInTheDocument();
+    expect(screen.queryByText('Comp no.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Email')).not.toBeInTheDocument();
+  });
+
+  it('uses the organiser’s own map link, and shows the postcode, competition number and email when the API sends them', () => {
+    vi.mocked(useCompetition).mockReturnValue({
+      competition: { ...competition, appleMapsUrl: 'https://maps.apple.com/?q=Hartpury', postcode: 'GL19 3BE', competitionNumber: '2026-041', contactEmail: 'entries@example.org' }, reload,
+    } as unknown as ReturnType<typeof useCompetition>);
+    renderTab();
+    expect(screen.getByRole('link', { name: 'Open in Maps' })).toHaveAttribute('href', 'https://maps.apple.com/?q=Hartpury');
+    expect(screen.getByText('GL19 3BE')).toBeInTheDocument();
+    expect(screen.getByText('2026-041')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'entries@example.org' })).toHaveAttribute('href', 'mailto:entries@example.org');
+  });
+
+  it('shows Sign in to enter to a signed-out visitor, and it comes back to the entry page', () => {
     viewer({ user: null });
-    const view = renderTab();
-    expect(screen.queryByText(/Pay to/)).not.toBeInTheDocument();
-    view.unmount();
-
-    renderTab('/competitions/5/enter/1');
-    expect(screen.queryByText(/Pay to/)).not.toBeInTheDocument();
+    renderTab();
+    const bar = screen.getByRole('link', { name: 'Sign in to enter' });
+    expect(bar).toHaveAttribute('href', '/login');
   });
 
-  it('shows places left and a Full tile to organisers, who receive the signup list', async () => {
-    viewer({ canOrganise: () => true, canManage: () => true });
-    const signups = Array.from({ length: 16 }, (_, index) => ({ id: index + 1, competitionSectionId: 1, status: 1, fullName: `Rider ${index}`, amountMinor: 4500 }));
-    vi.mocked(api.get).mockImplementation(async (url) => (String(url).endsWith('/signups') ? { data: signups } : { data: [] }) as never);
+  it('says Enter a team when the event has team age groups', () => {
+    vi.mocked(useCompetition).mockReturnValue({
+      competition: { ...competition, sections: [{ id: 3, competitionId: 5, format: 2, ageGroup: 'U12', displayName: 'Under 12', priceMinor: 1000 }] }, reload,
+    } as unknown as ReturnType<typeof useCompetition>);
     renderTab();
-    expect((await screen.findAllByText('Full')).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: /Join/ })).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'Enter a team' })).toBeInTheDocument();
+  });
+
+  it('says full age groups are full, and leaves the Enter bar out once entries are closed', () => {
+    vi.mocked(useCompetition).mockReturnValue({
+      competition: {
+        ...competition, signupsLocked: true,
+        sections: [{ id: 3, competitionId: 5, format: 2, ageGroup: 'U12', displayName: 'Under 12', priceMinor: 1000, maxParticipants: 2, activeSignupsCount: 2 }],
+      }, reload,
+    } as unknown as ReturnType<typeof useCompetition>);
+    renderTab();
+    expect(screen.getByRole('list', { name: 'Age groups and fees' })).toHaveTextContent('Full · Waiting list · Guest rider Free');
+    expect(screen.getByText('Entries are closed.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Enter a team' })).not.toBeInTheDocument();
+  });
+
+  it('leaves out the Enter section when there are no age groups', () => {
+    vi.mocked(useCompetition).mockReturnValue({ competition: { ...competition, sections: [] }, reload } as unknown as ReturnType<typeof useCompetition>);
+    renderTab();
+    expect(screen.queryByRole('heading', { name: 'Enter' })).not.toBeInTheDocument();
+  });
+
+  it('gives organisers their own pages and tools', async () => {
+    viewer({ canOrganise: () => true, canManage: () => true });
+    vi.mocked(api.get).mockImplementation(async (url) => (String(url).endsWith('/signups') ? { data: [] } : { data: [] }) as never);
+    renderTab();
+    expect(await screen.findByRole('link', { name: 'Manage entries and equipment' })).toHaveAttribute('href', '/competitions/5/operations');
     expect(screen.getByRole('link', { name: /Scorer QR codes/ })).toHaveAttribute('href', '#scorer-links');
     expect(screen.getByRole('link', { name: /Go live & stream/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Print venue poster' })).toBeInTheDocument();
   });
 
-  it('opens the entry form on its own page and returns on Cancel', async () => {
+  it('shows the equipment list to signed-in people and opens it on demand', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (String(url).endsWith('/equipment')
+      ? { data: { sessions: 2, racesCounted: 3, lines: [{ bucket: 'Lane', kind: 'Pole', count: 5 }] } } : { data: [] }) as never);
     renderTab();
-    await userEvent.click(screen.getAllByRole('button', { name: /Join/ })[0]);
-    expect(screen.getByRole('heading', { name: 'Enter Under 10' })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Your full name')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByPlaceholderText('Your full name')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Details & entries', level: 1 })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Equipment required' }));
+    expect(await screen.findByText('Pole')).toBeInTheDocument();
+    expect(screen.getByText('×5')).toBeInTheDocument();
   });
 
-  it('shows Section not found when the sectionId in the URL does not exist', () => {
-    renderTab('/competitions/5/enter/999');
-    expect(screen.getByRole('alert')).toHaveTextContent('Section not found.');
-    expect(screen.queryByPlaceholderText('Your full name')).not.toBeInTheDocument();
+  it('says so when the equipment list cannot be loaded', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => { if (String(url).endsWith('/equipment')) throw new Error('offline'); return { data: [] } as never; });
+    renderTab();
+    await userEvent.click(screen.getByRole('button', { name: 'Equipment required' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load equipment.');
+  });
+
+  it('says there is nothing to count when no races are set up', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (String(url).endsWith('/equipment') ? { data: { sessions: 0, racesCounted: 0, lines: [] } } : { data: [] }) as never);
+    renderTab();
+    await userEvent.click(screen.getByRole('button', { name: 'Equipment required' }));
+    expect(await screen.findByText(/No races set up yet/)).toBeInTheDocument();
   });
 });

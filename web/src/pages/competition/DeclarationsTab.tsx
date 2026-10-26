@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Check, Download, Flag, LogIn, Shield, Trash2 } from 'lucide-react';
+import { Check, Download } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import type { DeclarationForm, RiderEntry, SectionSignup, Team } from '../../types';
+import type { DeclarationForm, SectionSignup, Team } from '../../types';
 import { downloadCsv, safeFilename } from '../../lib/csv';
 import { decFormsCsv } from '../../lib/decFormCsv';
-import { parseBibAndFlag } from '../../lib/bib';
-import { decDraftKey, heightText, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
+import { decDraftKey, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
 import { DecFormEditor } from './decform/DecFormEditor';
+import { DecFormList } from './DecFormList';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { parseConfigResponse, STANDARD_CONFIG, type DecFormConfig } from '../../lib/decFormConfig';
+import '../../components/sitePages.css';
+import '../../components/eventPages.css';
 
 interface LockTimeInfo {
   competitionId: number;
@@ -177,12 +179,14 @@ export function DeclarationsTab() {
       priorPhone={priorPhone} onSaved={saved} config={config} />
   );
   const cards = (
-    <div className={`grid grid-cols-1 gap-2 ${teamRail ? 'xl:grid-cols-2' : 'lg:grid-cols-2'}`}>
-      {forms?.length === 0 && (
-        <div className="mg-card p-3 text-xs text-[rgb(var(--mg-muted))]">No declaration forms submitted yet.</div>
-      )}
-      {forms?.map((f) => <DecFormCard key={f.id} f={f} config={config ?? STANDARD_CONFIG} onDelete={() => remove(f.id)} canDelete={isOrganiser || (!declarationsClosed && user != null && (f.submittedByUserId === user.id || myTeams.some((t) => t.id === f.teamId)))} />)}
-    </div>
+    <DecFormList
+      forms={forms ?? []}
+      teams={competition.teams}
+      sections={competition.sections}
+      config={config ?? STANDARD_CONFIG}
+      canDelete={(f) => isOrganiser || (!declarationsClosed && user != null && (f.submittedByUserId === user.id || myTeams.some((t) => t.id === f.teamId)))}
+      onDelete={(f) => void remove(f.id)}
+    />
   );
   const rail = (
     <nav aria-label="Teams" className="mg-card overflow-hidden">
@@ -243,7 +247,7 @@ export function DeclarationsTab() {
             )}
           </div>
         ) : <div />}
-        {exportButton}
+        {isOrganiser && exportButton}
       </div>
       {lockInfo?.declarationsCloseAt && (
         <div role="status" className="mg-notice flex items-center justify-between gap-2 text-xs">
@@ -280,10 +284,9 @@ export function DeclarationsTab() {
       {deadlineHeader}
 
       {!user ? (
-        <div className="mg-notice flex items-center gap-2.5">
-          <LogIn aria-hidden="true" className="h-4 w-4 shrink-0" />
-          <span className="flex-1">Sign in as a trainer to submit declaration forms for your teams.</span>
-          <Link to="/login" className="mg-btn mg-btn-primary !min-h-11 !text-sm">Sign in</Link>
+        <div className="flex items-center gap-3">
+          <p className="ev-body m-0 flex-1 !text-[15px] !text-[rgb(var(--mg-ink))]">Trainers sign in to send dec forms for their teams.</p>
+          <Link to="/login" state={{ from: `/competitions/${competition.id}/declarations` }} className="sp-pill !min-h-9 !px-3.5 !text-sm">Sign in</Link>
         </div>
       ) : declarationsClosed && !isOrganiser ? (
         <p className="text-sm font-medium text-[rgb(var(--mg-muted))]">Declarations are locked for this competition.</p>
@@ -306,79 +309,6 @@ export function DeclarationsTab() {
       )}
 
       {cards}
-    </div>
-  );
-}
-
-interface CardProps { f: DeclarationForm; config: DecFormConfig; onDelete: () => void; canDelete: boolean }
-
-/** The extra answers a rider gave, as one quiet line. Only staff and the submitter are ever sent them. */
-function detailLine(r: RiderEntry, config: DecFormConfig): string {
-  const parts = [
-    r.birthYear != null ? `born ${r.birthYear}` : null,
-    r.ageGroup,
-    r.weightKg != null ? `${r.weightKg} kg` : null,
-    r.ponyAge != null ? `pony ${r.ponyAge} yrs` : null,
-    r.ponyPassportNumber ? `passport ${r.ponyPassportNumber}` : null,
-    r.ponyOwnerFullName ? `owner ${r.ponyOwnerFullName}` : null,
-    r.membershipNumber ? `member ${r.membershipNumber}` : null,
-    r.emergencyContactName ? `emergency: ${r.emergencyContactName}${r.emergencyContactPhone ? ` ${r.emergencyContactPhone}` : ''}` : null,
-    r.medicalNotes ? `medical: ${r.medicalNotes}` : null,
-    ...config.customFields.map((c) => (r.customValues?.[c.id] ? `${c.label}: ${r.customValues[c.id]}${c.unit ? ` ${c.unit}` : ''}` : null)),
-  ];
-  return parts.filter(Boolean).join(' · ');
-}
-
-function DecFormCard({ f, config, onDelete, canDelete }: CardProps) {
-  const parsedBib = parseBibAndFlag(f.bibDescription);
-  return (
-    <div className="mg-card card p-3">
-      <div className="mb-2 flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-[rgb(var(--mg-heading))]">
-            {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
-            <span className="truncate">{f.teamName}</span>
-            {(f.flagCount ?? 0) > 0 && (
-              <span className="mg-flag inline-flex shrink-0 items-center gap-1 !px-1.5 !py-0.5 !text-[11px]" title="Someone's answer is outside the limits set for this event">
-                <Flag aria-hidden="true" className="h-3 w-3" />{f.flagCount} flagged
-              </span>
-            )}
-          </h3>
-          {f.entryTeamName && f.entryTeamName.trim().toLowerCase() !== f.teamName.trim().toLowerCase() && (
-            <p className="text-[11px] text-[rgb(var(--mg-muted))]">Entered as {f.entryTeamName}</p>
-          )}
-          <p className="text-[11px] text-[rgb(var(--mg-muted))]">
-            Trainer: <span className="font-medium text-[rgb(var(--mg-ink))]">{f.trainerName ?? f.submittedByName ?? '—'}</span>
-            {(f.trainerPhone ?? f.submittedByPhone) && <span className="ml-1"> · {f.trainerPhone ?? f.submittedByPhone}</span>}
-          </p>
-          <p className="text-[10px] text-[rgb(var(--mg-faint))]">
-            Submitted {new Date(f.submittedAt).toLocaleString()}
-          </p>
-        </div>
-        {canDelete && onDelete && (
-          <button onClick={onDelete} className="text-[rgb(var(--mg-elim))] hover:opacity-80" title="Delete" aria-label={`Delete the dec form for ${f.teamName}`}>
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-      {parsedBib.bib && <p className="mb-2 text-[11px] text-[rgb(var(--mg-body))]">Bibs: {parsedBib.bib}</p>}
-      <ol className="space-y-1">
-        {f.riders.map((r) => (
-          <li key={r.id} className="flex flex-wrap items-center gap-x-2 text-xs">
-            <span className="flex-1 truncate font-medium text-[rgb(var(--mg-ink))]">
-              {r.fullName}
-              {r.isReserve && <Shield aria-label="Reserve" className="ml-1 inline h-3 w-3 text-[rgb(var(--mg-heading))]" />}
-              {r.isGuestRider && <span className="mg-tag mg-tag-ok ml-1.5 !px-1 !py-0.5 !text-[9px] font-bold uppercase">Guest</span>}
-            </span>
-            <span className="truncate text-[rgb(var(--mg-muted))]">
-              {r.horseName ?? '—'}{r.ponyHeightHands != null ? ` · ${heightText(r.ponyHeightHands)} hh` : ''}
-            </span>
-            {detailLine(r, config) && <span className="basis-full text-[11px] text-[rgb(var(--mg-muted))]">{detailLine(r, config)}</span>}
-            {r.flags?.map((flag) => <span key={flag} className="mg-flag basis-full">{flag}</span>)}
-          </li>
-        ))}
-      </ol>
-      {f.notes && <p className="mt-2 text-[11px] italic text-[rgb(var(--mg-muted))]">"{f.notes}"</p>}
     </div>
   );
 }
